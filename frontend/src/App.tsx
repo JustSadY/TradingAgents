@@ -14,6 +14,8 @@ import Chart from './pages/Chart'
 import Performance from './pages/Performance'
 import Alerts from './pages/Alerts'
 
+import { LanguageProvider } from './contexts/LanguageContext'
+
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated } = useAuth()
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />
@@ -54,8 +56,10 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <AppRoutes />
-    </BrowserRouter>
+    <LanguageProvider>
+      <BrowserRouter>
+        <AppRoutes />
+      </BrowserRouter>
+    </LanguageProvider>
   )
 }

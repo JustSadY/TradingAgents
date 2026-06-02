@@ -3,6 +3,7 @@ import axios from 'axios'
 import { TrendingUp, TrendingDown, DollarSign, Activity, ArrowRight, Target, ExternalLink } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useMeta } from '../hooks/useMeta'
+import { useTranslation } from '../contexts/LanguageContext'
 
 interface NewsItem { title: string; url: string; source: string; published_at: string; ticker: string }
 
@@ -45,6 +46,7 @@ export default function Dashboard() {
   const [perf, setPerf] = useState<{ win_rate: number | null; avg_raw_return: number | null; total: number } | null>(null)
   const [news, setNews] = useState<NewsItem[]>([])
   const navigate = useNavigate()
+  const { language, t } = useTranslation()
 
   useEffect(() => {
     Promise.all([
@@ -91,12 +93,12 @@ export default function Dashboard() {
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">Dashboard</h2>
+        <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">{t('dashboard.title')}</h2>
         <button
           onClick={() => navigate('/analysis')}
           className="flex items-center gap-1.5 text-sm text-violet-400 hover:text-violet-300 transition-colors"
         >
-          Yeni Analiz <ArrowRight size={14} />
+          {t('dashboard.new_analysis')} <ArrowRight size={14} />
         </button>
       </div>
 
@@ -104,13 +106,13 @@ export default function Dashboard() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
         <KpiCard
           icon={<DollarSign size={18} />}
-          label="Portföy Değeri"
-          value={sim ? `$${sim.current_balance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}
+          label={t('dashboard.portfolio_value')}
+          value={sim ? `$${sim.current_balance.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}` : '—'}
           color="text-white"
         />
         <KpiCard
           icon={pnl >= 0 ? <TrendingUp size={18} /> : <TrendingDown size={18} />}
-          label="Toplam Getiri"
+          label={t('dashboard.total_return')}
           value={`${pnl >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%`}
           sub={`${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`}
           color={pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}
@@ -118,13 +120,13 @@ export default function Dashboard() {
         />
         <KpiCard
           icon={<DollarSign size={18} />}
-          label="Nakit"
-          value={sim ? `$${sim.cash_available.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}` : '—'}
+          label={t('dashboard.cash')}
+          value={sim ? `$${sim.cash_available.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}` : '—'}
           color="text-white"
         />
         <KpiCard
           icon={<Activity size={18} />}
-          label="Gerçekleşmemiş K/Z"
+          label={t('dashboard.unrealized_pnl')}
           value={`${totalUnrealized >= 0 ? '+' : ''}$${totalUnrealized.toFixed(2)}`}
           color={totalUnrealized >= 0 ? 'text-emerald-400' : 'text-red-400'}
           accent={totalUnrealized >= 0 ? 'from-emerald-500/10' : 'from-red-500/10'}
@@ -132,9 +134,9 @@ export default function Dashboard() {
         {perf && perf.total > 0 && (
           <KpiCard
             icon={<Target size={18} />}
-            label="Sinyal Kazanma Oranı"
+            label={t('dashboard.win_rate')}
             value={perf.win_rate !== null ? `${perf.win_rate}%` : '—'}
-            sub={`${perf.total} analiz`}
+            sub={`${perf.total} ${t('dashboard.analyses')}`}
             color={perf.win_rate !== null && perf.win_rate >= 50 ? 'text-emerald-400' : 'text-red-400'}
             accent={perf.win_rate !== null && perf.win_rate >= 50 ? 'from-emerald-500/10' : 'from-red-500/10'}
           />
@@ -145,22 +147,22 @@ export default function Dashboard() {
         {/* Recent analyses */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-4 border-b border-gray-800">
-            <h3 className="text-sm font-semibold text-gray-300">Son Analizler</h3>
+            <h3 className="text-sm font-semibold text-gray-300">{t('dashboard.recent_analyses')}</h3>
             <button onClick={() => navigate('/analysis')} className="text-xs text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1">
-              Tümü <ArrowRight size={11} />
+              {t('dashboard.all')} <ArrowRight size={11} />
             </button>
           </div>
           {recentAnalysis.length === 0 ? (
-            <p className="px-5 py-8 text-gray-600 text-sm text-center">Henüz analiz yapılmadı.</p>
+            <p className="px-5 py-8 text-gray-600 text-sm text-center">{t('dashboard.no_analyses')}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[360px]">
                 <thead>
                   <tr className="text-gray-600 text-xs uppercase tracking-wider bg-gray-800/30">
-                    <th className="px-4 py-2.5 text-left">Sembol</th>
-                    <th className="px-4 py-2.5 text-left">Tarih</th>
-                    <th className="px-4 py-2.5 text-left">Sinyal</th>
-                    <th className="px-4 py-2.5 text-right">Süre</th>
+                    <th className="px-4 py-2.5 text-left">{t('dashboard.ticker')}</th>
+                    <th className="px-4 py-2.5 text-left">{t('dashboard.date')}</th>
+                    <th className="px-4 py-2.5 text-left">{t('dashboard.signal')}</th>
+                    <th className="px-4 py-2.5 text-right">{t('dashboard.duration')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -183,22 +185,22 @@ export default function Dashboard() {
         {/* Holdings */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 md:px-5 py-3 md:py-4 border-b border-gray-800">
-            <h3 className="text-sm font-semibold text-gray-300">Açık Pozisyonlar</h3>
+            <h3 className="text-sm font-semibold text-gray-300">{t('dashboard.open_positions')}</h3>
             <button onClick={() => navigate('/portfolio')} className="text-xs text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1">
-              Portföy <ArrowRight size={11} />
+              {t('nav.portfolio')} <ArrowRight size={11} />
             </button>
           </div>
           {!sim?.holdings?.length ? (
-            <p className="px-5 py-8 text-gray-600 text-sm text-center">Açık pozisyon yok.</p>
+            <p className="px-5 py-8 text-gray-600 text-sm text-center">{t('dashboard.no_open_positions')}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm min-w-[320px]">
                 <thead>
                   <tr className="text-gray-600 text-xs uppercase tracking-wider bg-gray-800/30">
-                    <th className="px-4 py-2.5 text-left">Sembol</th>
-                    <th className="px-4 py-2.5 text-right">Miktar</th>
-                    <th className="px-4 py-2.5 text-right">Fiyat</th>
-                    <th className="px-4 py-2.5 text-right">K/Z</th>
+                    <th className="px-4 py-2.5 text-left">{t('dashboard.ticker')}</th>
+                    <th className="px-4 py-2.5 text-right">{t('dashboard.quantity')}</th>
+                    <th className="px-4 py-2.5 text-right">{t('dashboard.price')}</th>
+                    <th className="px-4 py-2.5 text-right">{t('dashboard.pnl')}</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -223,7 +225,7 @@ export default function Dashboard() {
       {news.length > 0 && (
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
           <div className="px-4 md:px-5 py-3 md:py-4 border-b border-gray-800">
-            <h3 className="text-sm font-semibold text-gray-300">İzleme Listesi Haberleri</h3>
+            <h3 className="text-sm font-semibold text-gray-300">{t('dashboard.watchlist_news')}</h3>
           </div>
           <div className="divide-y divide-gray-800">
             {news.map((item, i) => (
@@ -233,7 +235,7 @@ export default function Dashboard() {
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xs font-mono font-bold text-violet-400">{item.ticker}</span>
                       <span className="text-xs text-gray-600">{item.source}</span>
-                      <span className="text-xs text-gray-700">{new Date(item.published_at).toLocaleDateString('tr-TR')}</span>
+                      <span className="text-xs text-gray-700">{new Date(item.published_at).toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US')}</span>
                     </div>
                     <p className="text-sm text-gray-300 line-clamp-2">{item.title}</p>
                   </div>

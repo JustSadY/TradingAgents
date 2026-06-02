@@ -1,5 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { useTranslation } from '../contexts/LanguageContext'
 import {
   LayoutDashboard, Search, BookMarked, Briefcase,
   Settings, ScrollText, TrendingUp, LogOut, Clock,
@@ -15,22 +16,23 @@ import UpdateBanner from './UpdateBanner'
 interface RunningTask { ticker: string; taskId: string; startedAt: string }
 
 const NAV = [
-  { to: '/dashboard',  label: 'Dashboard',       icon: LayoutDashboard },
-  { to: '/analysis',   label: 'Analiz',           icon: Search },
-  { to: '/chart',      label: 'Grafik',           icon: TrendingUp },
-  { to: '/trading',    label: 'Simülasyon',        icon: FlaskConical },
-  { to: '/portfolio',  label: 'Portföy',           icon: PieChart },
-  { to: '/watchlist',  label: 'İzleme Listesi',    icon: BookMarked },
-  { to: '/orders',     label: 'Emirler',           icon: Briefcase },
-  { to: '/performance', label: 'Performans',       icon: BarChart2 },
-  { to: '/alerts',     label: 'Alarmlar',          icon: Bell },
-  { to: '/settings',   label: 'Ayarlar',           icon: Settings },
-  { to: '/logs',       label: 'Loglar',            icon: ScrollText },
+  { to: '/dashboard',  key: 'nav.dashboard',       icon: LayoutDashboard },
+  { to: '/analysis',   key: 'nav.analysis',        icon: Search },
+  { to: '/chart',      key: 'nav.chart',           icon: TrendingUp },
+  { to: '/trading',    key: 'nav.simulation',      icon: FlaskConical },
+  { to: '/portfolio',  key: 'nav.portfolio',       icon: PieChart },
+  { to: '/watchlist',  key: 'nav.watchlist',       icon: BookMarked },
+  { to: '/orders',     key: 'nav.orders',          icon: Briefcase },
+  { to: '/performance', key: 'nav.performance',     icon: BarChart2 },
+  { to: '/alerts',     key: 'nav.alerts',          icon: Bell },
+  { to: '/settings',   key: 'nav.settings',        icon: Settings },
+  { to: '/logs',       key: 'nav.logs',            icon: ScrollText },
 ]
 
 export default function Layout({ children }: { children: React.ReactNode }) {
   const { user, logout } = useAuth()
   const navigate = useNavigate()
+  const { language, setLanguage, t } = useTranslation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [cronStatus, setCronStatus] = useState<{ next_run_time: string | null }>({ next_run_time: null })
   const [runningTask, setRunningTask] = useState<RunningTask | null>(() => {
@@ -166,7 +168,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         {/* Nav */}
         <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-          {NAV.map(({ to, label, icon: Icon }) => (
+          {NAV.map(({ to, key, icon: Icon }) => (
             <NavLink
               key={to}
               to={to}
@@ -181,7 +183,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               {({ isActive }) => (
                 <>
                   <Icon size={16} className={isActive ? 'text-violet-400' : 'text-gray-500 group-hover:text-gray-300'} />
-                  <span className="flex-1">{label}</span>
+                  <span className="flex-1">{t(key)}</span>
                   {isActive && <ChevronRight size={12} className="text-violet-500 opacity-60" />}
                 </>
               )}
@@ -199,8 +201,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               </span>
               <Loader2 size={12} className="text-emerald-400 animate-spin" />
               <div className="flex-1 min-w-0">
-                <p className="text-emerald-300 text-xs font-semibold truncate">{runningTask.ticker} analiz ediliyor</p>
-                <p className="text-emerald-600 text-xs">Arka planda çalışıyor...</p>
+                <p className="text-emerald-300 text-xs font-semibold truncate">{runningTask.ticker} {t('nav.analyzing')}</p>
+                <p className="text-emerald-600 text-xs">{t('nav.running_in_bg')}</p>
               </div>
             </div>
           </div>
@@ -211,13 +213,37 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <div className="mx-3 mb-2 px-3 py-2 rounded-xl bg-gray-800/50">
             <div className="flex items-center gap-1.5 text-xs text-gray-500">
               <Clock size={11} />
-              <span>Sonraki: {new Date(cronStatus.next_run_time).toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' })}</span>
+              <span>{t('nav.next_run')} {new Date(cronStatus.next_run_time).toLocaleTimeString(language === 'tr' ? 'tr-TR' : 'en-US', { hour: '2-digit', minute: '2-digit' })}</span>
             </div>
           </div>
         )}
 
-        {/* User */}
-        <div className="px-3 py-3 border-t border-gray-800">
+        {/* Language & User */}
+        <div className="px-3 py-3 border-t border-gray-800 space-y-2">
+          {/* Language Selector */}
+          <div className="flex items-center justify-between px-3 py-1 text-xs text-gray-500">
+            <span>{t('settings.language')}</span>
+            <div className="flex gap-1.5">
+              <button
+                onClick={() => setLanguage('en')}
+                className={`px-1.5 py-0.5 rounded transition-colors text-[10px] font-bold ${
+                  language === 'en' ? 'bg-violet-600 text-white shadow-sm' : 'hover:bg-gray-800 hover:text-gray-300'
+                }`}
+              >
+                EN
+              </button>
+              <button
+                onClick={() => setLanguage('tr')}
+                className={`px-1.5 py-0.5 rounded transition-colors text-[10px] font-bold ${
+                  language === 'tr' ? 'bg-violet-600 text-white shadow-sm' : 'hover:bg-gray-800 hover:text-gray-300'
+                }`}
+              >
+                TR
+              </button>
+            </div>
+          </div>
+
+          {/* User Card */}
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-800 transition-colors group cursor-default">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
               {user?.charAt(0).toUpperCase() || 'U'}
@@ -226,7 +252,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <button
               onClick={handleLogout}
               className="text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-              title="Çıkış"
+              title={t('nav.logout')}
             >
               <LogOut size={14} />
             </button>

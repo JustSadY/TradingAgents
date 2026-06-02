@@ -18,6 +18,7 @@ The platform supports technical analysis, market sentiment (Reddit/StockTwits), 
 *   **Simulation & Paper Trading:** Track portfolios, cash balances, manage open orders, view transaction histories, and test agent strategies in a safe sandbox.
 *   **Cron Scheduler & Alerts:** Set recurring background runs for watchlist assets via APScheduler, and trigger alerts or webhooks based on signal changes.
 *   **Linux Installation & Self-Updater:** Fully automated shell setup script for system dependencies, PostgreSQL, Python venv, and systemd. Includes a secure one-click web update mechanism that runs Git pull, re-compiles the frontend, and restarts services.
+*   **Frontend Localization (i18n):** Built-in multi-language dashboard interface supporting English (default) and Turkish with an easy-to-use toggle component, persisting language choice in `localStorage`.
 
 ---
 

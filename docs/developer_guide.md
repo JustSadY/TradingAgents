@@ -103,3 +103,37 @@ The platform uses `APScheduler` to run periodic background analyses for assets o
 *   **Database Synchronization:** The scheduler reads cron intervals and settings directly from the PostgreSQL settings tables.
 *   **Execution Flow:** When a scheduled event triggers, it queries the database for assets in the user's watchlist, starts a background task using `run_analysis` with `triggered_by="cron"`, and evaluates the resulting signal.
 *   **Alert Notifications:** If the agent's final decision signal shifts (e.g. from `Hold` to `Sell`), it triggers alerts or webhooks, notifying the user.
+
+---
+
+## 🌐 4. Frontend Localization (i18n)
+
+The React client supports runtime multi-language localization (defaulting to English, with Turkish support). It operates through a custom, lightweight React Context instead of bulky third-party libraries.
+
+### A. The Translation Hook and Context
+All translation dictionaries are managed in [LanguageContext.tsx](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/contexts/LanguageContext.tsx). To use translations in any React component:
+
+1.  **Import the Translation Hook:**
+    ```typescript
+    import { useTranslation } from '../contexts/LanguageContext'
+    ```
+2.  **Extract the Variables:**
+    ```typescript
+    const { language, setLanguage, t } = useTranslation();
+    ```
+3.  **Perform Translations in JSX:**
+    ```typescript
+    <h2>{t('dashboard.title')}</h2>
+    ```
+4.  **Perform Dynamic Locale-based Formatting:**
+    ```typescript
+    // Format currencies using the correct decimal character (e.g. 1,000.50 vs 1.000,50)
+    const formatted = val.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US');
+    ```
+
+### B. Registering New Localization Strings
+To register new translation properties:
+1.  Open [LanguageContext.tsx](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/contexts/LanguageContext.tsx).
+2.  Navigate to the `TRANSLATIONS` map.
+3.  Append your key and corresponding text translations to both the `en` and `tr` maps.
+4.  The system stores the user selection in `localStorage` under the key `ta_language` (with options `'en'` or `'tr'`), which is loaded automatically when the SPA boots up.
