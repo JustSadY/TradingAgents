@@ -91,8 +91,7 @@ def _build_config(settings: AppSettings) -> dict:
         "memory_log_path": _os.path.join(_tmp, "ta_memory.md"),
         # LLM
         "llm_provider": settings.llm_provider,
-        "deep_think_llm": settings.deep_think_llm,
-        "quick_think_llm": settings.quick_think_llm,
+        "llm_model": settings.llm_model or "gpt-4o-mini",
         # Debate / graph behaviour
         "max_debate_rounds": settings.max_debate_rounds,
         "max_risk_discuss_rounds": settings.max_risk_rounds,
@@ -341,7 +340,7 @@ async def run_analysis(
 
         # Background tasks: chart annotations + webhook notification
         asyncio.create_task(_extract_and_save_annotations(
-            row.id, result.market_report, result.final_decision, ta.quick_thinking_llm
+            row.id, result.market_report, result.final_decision, ta.thinking_llm
         ))
         asyncio.create_task(_send_analysis_webhook(
             ticker, trade_date, signal, result.final_decision, settings
@@ -440,9 +439,8 @@ async def run_portfolio_analysis(
                 config=config,
             )
             from tradingagents.agents.managers.super_portfolio_manager import create_super_portfolio_manager
-            # The graph stores the deep-think LLM as deep_thinking_llm (there is
-            # no deep_client attribute). Run the (blocking) LLM call off-loop.
-            spm_node = create_super_portfolio_manager(ta.deep_thinking_llm)
+            # The graph stores the resolved default LLM as thinking_llm. Run the (blocking) LLM call off-loop.
+            spm_node = create_super_portfolio_manager(ta.thinking_llm)
             state_out = await asyncio.to_thread(spm_node, {"ticker_reports": ticker_reports})
             super_report = state_out.get("super_portfolio_report", "")
         except Exception as e:

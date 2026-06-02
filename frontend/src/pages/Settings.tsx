@@ -12,8 +12,7 @@ interface Settings {
   cron_schedule: string
   price_tolerance_pct: number
   llm_provider: string
-  deep_think_llm: string
-  quick_think_llm: string
+  llm_model: string
   backend_url: string | null
   openai_reasoning_effort: string | null
   anthropic_effort: string | null
@@ -225,16 +224,15 @@ export default function Settings() {
   const languages = meta?.languages ?? [{ value: 'English', label: 'English' }, { value: 'Turkish', label: 'Türkçe' }]
   const analysts = meta?.analysts ?? []
 
-  // Single setS call to avoid double render (bug fix)
   const handleProviderChange = (provider: string) => {
     const modes = catalog[provider]
     setS(prev => {
       if (!prev) return prev
+      const defaultModel = modes?.quick?.[0]?.value || modes?.deep?.[0]?.value || prev.llm_model
       return {
         ...prev,
         llm_provider: provider,
-        deep_think_llm: modes?.deep?.[0]?.value || prev.deep_think_llm,
-        quick_think_llm: modes?.quick?.[0]?.value || prev.quick_think_llm,
+        llm_model: defaultModel,
       }
     })
   }
@@ -306,19 +304,19 @@ export default function Settings() {
               ...(currentProviderModels.quick || []),
               ...(currentProviderModels.deep || [])
             ]}
-            value={s.quick_think_llm}
+            value={s.llm_model}
             onChange={v => {
-              setS(prev => prev ? { ...prev, quick_think_llm: v, deep_think_llm: v } : prev)
+              setS(prev => prev ? { ...prev, llm_model: v } : prev)
             }}
           />
         ) : (
           <Row label="Varsayılan Model">
             <input
               className={Input}
-              value={s.quick_think_llm}
+              value={s.llm_model}
               onChange={e => {
                 const v = e.target.value
-                setS(prev => prev ? { ...prev, quick_think_llm: v, deep_think_llm: v } : prev)
+                setS(prev => prev ? { ...prev, llm_model: v } : prev)
               }}
               placeholder="Model ID"
             />
@@ -468,10 +466,7 @@ export default function Settings() {
                           }}
                         >
                           {currentProvider === 'default' && (
-                            <>
-                              <option value="">Varsayılan Model</option>
-                              <option value="deep">Derin Düşünce</option>
-                            </>
+                            <option value="">Varsayılan Model</option>
                           )}
                           {currentProvider !== 'default' && (
                             <option value="">Model Seçin...</option>

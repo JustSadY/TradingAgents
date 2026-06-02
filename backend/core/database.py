@@ -39,6 +39,7 @@ async def _migrate_add_columns(conn):
     }
     new_columns = [
         ("app_settings", "backend_url",                "VARCHAR(500)"),
+        ("app_settings", "llm_model",                  "VARCHAR(100) DEFAULT 'gpt-4o-mini'"),
         ("app_settings", "openai_reasoning_effort",    "VARCHAR(20)"),
         ("app_settings", "anthropic_effort",           "VARCHAR(20)"),
         ("app_settings", "google_thinking_level",      "VARCHAR(20)"),

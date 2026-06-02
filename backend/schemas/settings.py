@@ -12,8 +12,7 @@ class SettingsRead(BaseModel):
     watchlist: list[str]
     selected_analysts: list[str]
     llm_provider: str
-    deep_think_llm: str
-    quick_think_llm: str
+    llm_model: str
     backend_url: str | None = None
     openai_reasoning_effort: str | None = None
     anthropic_effort: str | None = None
@@ -57,8 +56,7 @@ class SettingsUpdate(BaseModel):
     watchlist: list[str] | None = None
     selected_analysts: list[str] | None = None
     llm_provider: str | None = None
-    deep_think_llm: str | None = None
-    quick_think_llm: str | None = None
+    llm_model: str | None = None
     backend_url: str | None = None
     openai_reasoning_effort: str | None = None
     anthropic_effort: str | None = None

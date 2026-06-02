@@ -37,8 +37,7 @@ class AppSettings(Base):
 
     # LLM
     llm_provider: Mapped[str] = mapped_column(String(50), default="openai")
-    deep_think_llm: Mapped[str] = mapped_column(String(100), default="gpt-4o")
-    quick_think_llm: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini")
+    llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini")
     backend_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
 
     # Provider-specific thinking/reasoning settings

@@ -63,8 +63,7 @@ class TradingAgentsConfig(BaseSettings):
 
     # ── LLM settings ───────────────────────────────────────────────────────────
     llm_provider: str = "openai"
-    deep_think_llm: str = "gpt-5.4"
-    quick_think_llm: str = "gpt-5.4-mini"
+    llm_model: str = "gpt-4o-mini"
     backend_url: Optional[str] = Field(
         default=None,
         # legacy: TRADINGAGENTS_LLM_BACKEND_URL

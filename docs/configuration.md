@@ -108,9 +108,8 @@ These environment variables can override the default parameters defined in [defa
 # Select default LLM Provider (openai, anthropic, google, etc.)
 TRADINGAGENTS_LLM_PROVIDER=openai
 
-# Define default model name (quick_think_llm and deep_think_llm are kept in sync by default)
-TRADINGAGENTS_QUICK_THINK_LLM=gpt-4o-mini
-TRADINGAGENTS_DEEP_THINK_LLM=gpt-4o-mini
+# Define default model name
+TRADINGAGENTS_LLM_MODEL=gpt-4o-mini
 
 # Language for generated markdown reports (e.g. English, Turkish)
 TRADINGAGENTS_OUTPUT_LANGUAGE=English

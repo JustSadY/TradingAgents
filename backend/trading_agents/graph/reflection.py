@@ -6,9 +6,9 @@ from typing import Any
 class Reflector:
     """Handles reflection on trading decisions."""
 
-    def __init__(self, quick_thinking_llm: Any):
+    def __init__(self, llm: Any):
         """Initialize the reflector with an LLM."""
-        self.quick_thinking_llm = quick_thinking_llm
+        self.llm = llm
         self.log_reflection_prompt = self._get_log_reflection_prompt()
 
     def _get_log_reflection_prompt(self) -> str:
@@ -54,4 +54,4 @@ class Reflector:
                 ),
             ),
         ]
-        return self.quick_thinking_llm.invoke(messages).content
+        return self.llm.invoke(messages).content
