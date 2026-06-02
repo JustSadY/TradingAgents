@@ -352,6 +352,7 @@ async def run_analysis(
         await ws_manager.send(task_id, {
             "type": "complete",
             "analysis_id": row.id,
+            "signal": signal,
             "duration_seconds": round(duration, 2),
             "llm_calls": stats.get("llm_calls", 0),
         })

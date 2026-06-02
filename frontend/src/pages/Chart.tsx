@@ -188,15 +188,25 @@ export default function ChartPage() {
     candleSeriesRef.current = candleSeries
     volSeriesRef.current = volSeries
 
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth })
-      }
+    const applyWidth = () => {
+      const w = chartContainerRef.current?.clientWidth ?? 0
+      if (w > 0) chart.applyOptions({ width: w })
     }
-    window.addEventListener('resize', handleResize)
+    window.addEventListener('resize', applyWidth)
+
+    // The container often has width 0 at mount inside a flex layout — the chart
+    // would then render invisibly until a window resize. A ResizeObserver picks
+    // up the real width as soon as layout settles and on any container change.
+    let ro: ResizeObserver | null = null
+    if (typeof ResizeObserver !== 'undefined' && chartContainerRef.current) {
+      ro = new ResizeObserver(applyWidth)
+      ro.observe(chartContainerRef.current)
+    }
+    applyWidth()
 
     return () => {
-      window.removeEventListener('resize', handleResize)
+      window.removeEventListener('resize', applyWidth)
+      ro?.disconnect()
       chart.remove()
       chartRef.current = null
       candleSeriesRef.current = null
@@ -309,8 +319,8 @@ export default function ChartPage() {
     : []
 
   return (
-    <div className="p-6 space-y-5 max-w-7xl">
-      <h2 className="text-xl font-bold text-white tracking-tight">Trading Grafik</h2>
+    <div className="p-4 md:p-6 space-y-5 max-w-7xl">
+      <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">Trading Grafik</h2>
 
       {/* Search bar */}
       <div className="flex items-center gap-3">
@@ -360,7 +370,7 @@ export default function ChartPage() {
       )}
 
       {/* Main layout: chart + side panel */}
-      <div className="flex gap-5">
+      <div className="flex flex-col lg:flex-row gap-5">
         {/* Chart */}
         <div className="flex-1 min-w-0">
           <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
@@ -399,7 +409,7 @@ export default function ChartPage() {
 
         {/* Side panel */}
         {activeTicker && (
-          <div className="w-72 flex-shrink-0 space-y-4">
+          <div className="w-full lg:w-72 lg:flex-shrink-0 space-y-4">
             {/* Analysis list */}
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-800">

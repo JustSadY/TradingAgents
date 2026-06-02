@@ -54,10 +54,22 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       }
     }
     window.addEventListener('storage', onStorage)
+    // Safety valve: a task should never stay "running" for more than this.
+    // If a WebSocket drops or the backend hangs, the completion event may
+    // never clear ta_task_running — this self-heals the sidebar indicator so
+    // it can't get stuck on "analiz ediliyor" forever.
+    const MAX_TASK_AGE_MS = 30 * 60 * 1000  // 30 minutes
     const id = setInterval(() => {
       try {
         const raw = localStorage.getItem('ta_task_running')
-        const val: RunningTask | null = raw ? JSON.parse(raw) : null
+        let val: RunningTask | null = raw ? JSON.parse(raw) : null
+        if (val?.startedAt) {
+          const age = Date.now() - new Date(val.startedAt).getTime()
+          if (!Number.isNaN(age) && age > MAX_TASK_AGE_MS) {
+            localStorage.removeItem('ta_task_running')
+            val = null
+          }
+        }
         setRunningTask(prev => {
           const prevJson = JSON.stringify(prev)
           const nextJson = JSON.stringify(val)
