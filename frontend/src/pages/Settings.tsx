@@ -410,7 +410,8 @@ export default function Settings() {
                 ...(providerModels?.quick?.map(o => o.value) || []),
                 ...(providerModels?.deep?.map(o => o.value) || [])
               ]
-              const selectVal = (modelVal === '' || modelVal === 'deep' || allModelValues.includes(modelVal)) ? modelVal : 'custom'
+              const isCustomMode = modelVal === 'custom' || (modelVal !== '' && modelVal !== 'deep' && !allModelValues.includes(modelVal))
+              const selectVal = isCustomMode ? 'custom' : modelVal
 
               return (
                 <div key={a.key} title={a.description} className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-800/40 pb-2 gap-2 sm:gap-4 last:border-b-0 last:pb-0">
@@ -436,11 +437,11 @@ export default function Settings() {
                         value={selectVal}
                         onChange={e => {
                           const val = e.target.value
-                          const nextModels = { ...(s.analyst_models || {}), [a.key]: val === 'custom' ? '' : val }
+                          const nextModels = { ...(s.analyst_models || {}), [a.key]: val === 'custom' ? 'custom' : val }
                           update('analyst_models', nextModels)
                         }}
                       >
-                        <option value="">Varsayılan (Hızlı)</option>
+                        <option value="">Varsayılan</option>
                         <option value="deep">Derin Düşünce</option>
                         {providerModels?.quick?.map(o => (
                           <option key={o.value} value={o.value}>{o.label} (Hızlı)</option>
@@ -457,7 +458,8 @@ export default function Settings() {
                           placeholder="Model ID (örn: gpt-4o)"
                           value={modelVal === 'custom' ? '' : modelVal}
                           onChange={e => {
-                            const nextModels = { ...(s.analyst_models || {}), [a.key]: e.target.value }
+                            const val = e.target.value
+                            const nextModels = { ...(s.analyst_models || {}), [a.key]: val.trim() === '' ? 'custom' : val }
                             update('analyst_models', nextModels)
                           }}
                         />

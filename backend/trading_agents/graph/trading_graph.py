@@ -129,6 +129,8 @@ class TradingAgentsGraph:
             if not model_str or not model_str.strip():
                 continue
             model_str_clean = model_str.strip()
+            if model_str_clean == "custom":
+                continue
             if model_str_clean in ("deep", "deep_think_llm"):
                 analyst_llms[analyst_key] = self.deep_thinking_llm
             elif model_str_clean in ("quick", "quick_think_llm"):
