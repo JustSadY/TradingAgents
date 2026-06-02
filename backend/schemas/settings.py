@@ -1,0 +1,84 @@
+from datetime import datetime
+from pydantic import BaseModel, Field
+
+
+class SettingsRead(BaseModel):
+    trading_mode: str
+    active_broker: str
+    active_data_vendor: str
+    cron_enabled: bool
+    cron_schedule: str
+    price_tolerance_pct: float
+    watchlist: list[str]
+    selected_analysts: list[str]
+    llm_provider: str
+    deep_think_llm: str
+    quick_think_llm: str
+    backend_url: str | None = None
+    openai_reasoning_effort: str | None = None
+    anthropic_effort: str | None = None
+    google_thinking_level: str | None = None
+    output_language: str = "English"
+    analyst_concurrency_limit: int = 1
+    checkpoint_enabled: bool = False
+    max_recur_limit: int = 1000
+    news_article_limit: int = 20
+    global_news_article_limit: int = 10
+    global_news_lookback_days: int = 7
+    benchmark_ticker: str | None = None
+    azure_deployment: str | None = None
+    data_vendor_core_stock: str = "yfinance"
+    data_vendor_technicals: str = "yfinance"
+    data_vendor_fundamentals: str = "yfinance"
+    data_vendor_news: str = "yfinance"
+    max_debate_rounds: int
+    max_risk_rounds: int
+    max_position_size_pct: float
+    max_risk_per_trade_pct: float
+    include_historical_analyses: bool = False
+    webhook_url: str | None = None
+    webhook_enabled: bool = False
+    webhook_events: str = '["analysis_complete"]'
+    updated_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+
+class SettingsUpdate(BaseModel):
+    trading_mode: str | None = None
+    active_broker: str | None = None
+    active_data_vendor: str | None = None
+    cron_enabled: bool | None = None
+    cron_schedule: str | None = None
+    price_tolerance_pct: float | None = Field(default=None, ge=0, le=50)
+    watchlist: list[str] | None = None
+    selected_analysts: list[str] | None = None
+    llm_provider: str | None = None
+    deep_think_llm: str | None = None
+    quick_think_llm: str | None = None
+    backend_url: str | None = None
+    openai_reasoning_effort: str | None = None
+    anthropic_effort: str | None = None
+    google_thinking_level: str | None = None
+    output_language: str | None = None
+    analyst_concurrency_limit: int | None = Field(default=None, ge=1, le=16)
+    checkpoint_enabled: bool | None = None
+    max_recur_limit: int | None = Field(default=None, ge=100, le=5000)
+    news_article_limit: int | None = Field(default=None, ge=1, le=100)
+    global_news_article_limit: int | None = Field(default=None, ge=1, le=50)
+    global_news_lookback_days: int | None = Field(default=None, ge=1, le=30)
+    benchmark_ticker: str | None = None
+    azure_deployment: str | None = None
+    data_vendor_core_stock: str | None = None
+    data_vendor_technicals: str | None = None
+    data_vendor_fundamentals: str | None = None
+    data_vendor_news: str | None = None
+    max_debate_rounds: int | None = Field(default=None, ge=1, le=10)
+    max_risk_rounds: int | None = Field(default=None, ge=1, le=10)
+    max_position_size_pct: float | None = Field(default=None, ge=1, le=100)
+    max_risk_per_trade_pct: float | None = Field(default=None, ge=0.1, le=50)
+    include_historical_analyses: bool | None = None
+    webhook_url: str | None = None
+    webhook_enabled: bool | None = None
+    webhook_events: str | None = None
