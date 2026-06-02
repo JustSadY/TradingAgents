@@ -37,6 +37,7 @@ interface Settings {
   max_risk_per_trade_pct: number
   include_historical_analyses: boolean
   historical_analyses_limit: number
+  analyst_models: Record<string, string>
   webhook_url: string | null
   webhook_enabled: boolean
   webhook_events: string
@@ -400,23 +401,72 @@ export default function Settings() {
         {analysts.length === 0 ? (
           <p className="text-gray-600 text-sm">Yükleniyor...</p>
         ) : (
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
-            {analysts.map(a => (
-              <label key={a.key} title={a.description} className="flex items-center gap-2 text-sm cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="accent-indigo-600"
-                  checked={s.selected_analysts.includes(a.key)}
-                  onChange={e => {
-                    const next = e.target.checked
-                      ? [...s.selected_analysts, a.key]
-                      : s.selected_analysts.filter(x => x !== a.key)
-                    update('selected_analysts', next)
-                  }}
-                />
-                <span className="text-slate-300">{a.label}</span>
-              </label>
-            ))}
+          <div className="flex flex-col gap-3.5 pt-1">
+            {analysts.map(a => {
+              const isActive = s.selected_analysts.includes(a.key)
+              const modelVal = s.analyst_models?.[a.key] || ''
+              const providerModels = catalog[s.llm_provider]
+              const allModelValues = [
+                ...(providerModels?.quick?.map(o => o.value) || []),
+                ...(providerModels?.deep?.map(o => o.value) || [])
+              ]
+              const selectVal = (modelVal === '' || modelVal === 'deep' || allModelValues.includes(modelVal)) ? modelVal : 'custom'
+
+              return (
+                <div key={a.key} title={a.description} className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-800/40 pb-2 gap-2 sm:gap-4 last:border-b-0 last:pb-0">
+                  <label className="flex items-center gap-2 text-sm cursor-pointer shrink-0 py-1">
+                    <input
+                      type="checkbox"
+                      className="w-4.5 h-4.5 accent-indigo-600 rounded"
+                      checked={isActive}
+                      onChange={e => {
+                        const next = e.target.checked
+                          ? [...s.selected_analysts, a.key]
+                          : s.selected_analysts.filter(x => x !== a.key)
+                        update('selected_analysts', next)
+                      }}
+                    />
+                    <span className="font-medium text-slate-300">{a.label}</span>
+                  </label>
+
+                  {isActive && (
+                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:max-w-xs shrink-0">
+                      <select
+                        className={`${Input} text-xs py-1`}
+                        value={selectVal}
+                        onChange={e => {
+                          const val = e.target.value
+                          const nextModels = { ...(s.analyst_models || {}), [a.key]: val === 'custom' ? '' : val }
+                          update('analyst_models', nextModels)
+                        }}
+                      >
+                        <option value="">Varsayılan (Hızlı)</option>
+                        <option value="deep">Derin Düşünce</option>
+                        {providerModels?.quick?.map(o => (
+                          <option key={o.value} value={o.value}>{o.label} (Hızlı)</option>
+                        ))}
+                        {providerModels?.deep?.map(o => (
+                          <option key={o.value} value={o.value}>{o.label} (Derin)</option>
+                        ))}
+                        <option value="custom">Özel model...</option>
+                      </select>
+
+                      {selectVal === 'custom' && (
+                        <input
+                          className={`${Input} text-xs py-1 placeholder:text-gray-600`}
+                          placeholder="Model ID (örn: gpt-4o)"
+                          value={modelVal === 'custom' ? '' : modelVal}
+                          onChange={e => {
+                            const nextModels = { ...(s.analyst_models || {}), [a.key]: e.target.value }
+                            update('analyst_models', nextModels)
+                          }}
+                        />
+                      )}
+                    </div>
+                  )}
+                </div>
+              )
+            })}
           </div>
         )}
       </Section>

@@ -97,6 +97,7 @@ class TradingAgentsConfig(BaseSettings):
     analyst_concurrency_limit: int = Field(default=1, ge=1)
     include_historical_analyses: bool = False
     historical_analyses_limit: int = Field(default=5, ge=1, le=50)
+    analyst_models: dict[str, str] = Field(default_factory=dict)
 
     # ── Prompt configuration ───────────────────────────────────────────────────
     super_portfolio_manager_prompt: str = (

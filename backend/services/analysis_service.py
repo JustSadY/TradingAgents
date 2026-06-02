@@ -112,6 +112,8 @@ def _build_config(settings: AppSettings) -> dict:
             "fundamental_data": getattr(settings, "data_vendor_fundamentals", None) or settings.active_data_vendor,
             "news_data": getattr(settings, "data_vendor_news", None) or settings.active_data_vendor,
         },
+        # Per-analyst AI models
+        "analyst_models": getattr(settings, "analyst_models", {}) or {},
     }
     # Optional fields — only add when set to avoid overriding library defaults
     if getattr(settings, "backend_url", None):

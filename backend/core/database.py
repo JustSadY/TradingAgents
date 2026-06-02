@@ -70,6 +70,7 @@ async def _migrate_add_columns(conn):
         # Eskiye dönük analiz seçeneği
         ("app_settings", "include_historical_analyses",     "BOOLEAN DEFAULT FALSE"),
         ("app_settings", "historical_analyses_limit",       "INTEGER DEFAULT 5"),
+        ("app_settings", "analyst_models",                  "TEXT DEFAULT '{}'"),
         # Webhook bildirimleri
         ("app_settings", "webhook_url",                     "VARCHAR(500)"),
         ("app_settings", "webhook_enabled",                 "BOOLEAN DEFAULT FALSE"),

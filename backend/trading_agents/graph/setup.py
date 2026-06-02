@@ -45,6 +45,7 @@ class GraphSetup:
         tool_nodes: Dict[str, ToolNode],
         conditional_logic: ConditionalLogic,
         analyst_concurrency_limit: int = 1,
+        analyst_llms: Dict[str, Any] = None,
     ):
         """Initialize with required components."""
         self.quick_thinking_llm = quick_thinking_llm
@@ -52,6 +53,7 @@ class GraphSetup:
         self.tool_nodes = tool_nodes
         self.conditional_logic = conditional_logic
         self.analyst_concurrency_limit = analyst_concurrency_limit
+        self.analyst_llms = analyst_llms or {}
 
     def setup_graph(
         self, selected_analysts=["market", "social", "news", "fundamentals"]
@@ -80,7 +82,7 @@ class GraphSetup:
         # available here without modifying this file.
         analyst_factories = {
             spec.key: (
-                lambda k=spec.key: get_factory(k)(self.quick_thinking_llm)
+                lambda k=spec.key: get_factory(k)(self.analyst_llms.get(k, self.quick_thinking_llm))
             )
             for spec in plan.specs
         }

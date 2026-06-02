@@ -53,6 +53,17 @@ from .reflection import Reflector
 from .signal_processing import SignalProcessor
 
 
+def _resolve_provider_and_model(model_str: str, default_provider: str) -> Tuple[str, str]:
+    model_str = model_str.strip()
+    if ":" in model_str:
+        parts = model_str.split(":", 1)
+        return parts[0].strip(), parts[1].strip()
+    if "/" in model_str and not model_str.startswith("http://") and not model_str.startswith("https://"):
+        parts = model_str.split("/", 1)
+        return parts[0].strip(), parts[1].strip()
+    return default_provider, model_str
+
+
 class TradingAgentsGraph:
     """Main class that orchestrates the trading agents framework."""
 
@@ -104,7 +115,40 @@ class TradingAgentsGraph:
 
         self.deep_thinking_llm = deep_client.get_llm()
         self.quick_thinking_llm = quick_client.get_llm()
-        
+
+        # Resolve analyst-specific LLMs
+        analyst_llms = {}
+        analyst_models = self.config.get("analyst_models") or {}
+        if isinstance(analyst_models, str):
+            try:
+                analyst_models = json.loads(analyst_models)
+            except Exception:
+                analyst_models = {}
+
+        for analyst_key, model_str in analyst_models.items():
+            if not model_str or not model_str.strip():
+                continue
+            model_str_clean = model_str.strip()
+            if model_str_clean in ("deep", "deep_think_llm"):
+                analyst_llms[analyst_key] = self.deep_thinking_llm
+            elif model_str_clean in ("quick", "quick_think_llm"):
+                analyst_llms[analyst_key] = self.quick_thinking_llm
+            else:
+                prov, model_name = _resolve_provider_and_model(model_str_clean, self.config["llm_provider"])
+                try:
+                    client = create_llm_client(
+                        provider=prov,
+                        model=model_name,
+                        base_url=self.config.get("backend_url"),
+                        **llm_kwargs,
+                    )
+                    analyst_llms[analyst_key] = client.get_llm()
+                except Exception as e:
+                    logger.warning(
+                        "Could not create custom LLM client for analyst %s using %s: %s",
+                        analyst_key, model_str, e,
+                    )
+
         self.memory_log = TradingMemoryLog(self.config)
 
         # Create tool nodes
@@ -121,6 +165,7 @@ class TradingAgentsGraph:
             self.tool_nodes,
             self.conditional_logic,
             analyst_concurrency_limit=self.config.get("analyst_concurrency_limit", 1),
+            analyst_llms=analyst_llms,
         )
 
         self.propagator = Propagator(

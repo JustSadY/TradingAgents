@@ -127,4 +127,9 @@ TRADINGAGENTS_INCLUDE_HISTORICAL_ANALYSES=false
 
 # Number of historical reports to fetch and include in context (1-50)
 TRADINGAGENTS_HISTORICAL_ANALYSES_LIMIT=5
+
+# JSON dictionary mapping analyst keys to specific AI models.
+# Example: {"market": "google/gemini-2.5-flash", "news": "deep", "social": "quick"}
+# Special model choices: "deep" uses deep_think_llm, "quick" or "" uses quick_think_llm.
+TRADINGAGENTS_ANALYST_MODELS={}
 ```
