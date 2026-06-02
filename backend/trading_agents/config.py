@@ -95,6 +95,8 @@ class TradingAgentsConfig(BaseSettings):
     )
     max_recur_limit: int = Field(default=1000, ge=1)
     analyst_concurrency_limit: int = Field(default=1, ge=1)
+    include_historical_analyses: bool = False
+    historical_analyses_limit: int = Field(default=5, ge=1, le=50)
 
     # ── Prompt configuration ───────────────────────────────────────────────────
     super_portfolio_manager_prompt: str = (

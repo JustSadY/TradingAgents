@@ -75,10 +75,18 @@ async def _migrate_add_columns(conn):
         ("app_settings", "webhook_enabled",                 "BOOLEAN DEFAULT FALSE"),
         ("app_settings", "webhook_events",                  "TEXT DEFAULT '[\"analysis_complete\"]'"),
     ]
-    from sqlalchemy import text
+    from sqlalchemy import text, inspect
     for table, column, col_type in new_columns:
         if table not in _ALLOWED:
             raise ValueError(f"Unknown table in migration: {table!r}")
-        await conn.execute(text(
-            f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"
-        ))
+        if conn.dialect.name == "sqlite":
+            def add_col_sqlite(sync_conn):
+                inspector = inspect(sync_conn)
+                cols = [c["name"] for c in inspector.get_columns(table)]
+                if column not in cols:
+                    sync_conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))
+            await conn.run_sync(add_col_sqlite)
+        else:
+            await conn.execute(text(
+                f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"
+            ))

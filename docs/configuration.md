@@ -121,4 +121,10 @@ TRADINGAGENTS_MAX_RISK_DISCUSS_ROUNDS=2
 
 # Concurrency limits for analyst nodes (concurrency > 1 starts nodes in parallel)
 TRADINGAGENTS_ANALYST_CONCURRENCY_LIMIT=2
+
+# Include previous DB analysis reports in the AI graph context
+TRADINGAGENTS_INCLUDE_HISTORICAL_ANALYSES=false
+
+# Number of historical reports to fetch and include in context (1-50)
+TRADINGAGENTS_HISTORICAL_ANALYSES_LIMIT=5
 ```
