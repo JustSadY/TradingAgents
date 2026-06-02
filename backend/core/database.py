@@ -69,6 +69,7 @@ async def _migrate_add_columns(conn):
         ("analysis_results", "holding_days",                "INTEGER"),
         # Eskiye dönük analiz seçeneği
         ("app_settings", "include_historical_analyses",     "BOOLEAN DEFAULT FALSE"),
+        ("app_settings", "historical_analyses_limit",       "INTEGER DEFAULT 5"),
         # Webhook bildirimleri
         ("app_settings", "webhook_url",                     "VARCHAR(500)"),
         ("app_settings", "webhook_enabled",                 "BOOLEAN DEFAULT FALSE"),

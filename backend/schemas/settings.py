@@ -36,6 +36,7 @@ class SettingsRead(BaseModel):
     max_position_size_pct: float
     max_risk_per_trade_pct: float
     include_historical_analyses: bool = False
+    historical_analyses_limit: int = 5
     webhook_url: str | None = None
     webhook_enabled: bool = False
     webhook_events: str = '["analysis_complete"]'
@@ -79,6 +80,7 @@ class SettingsUpdate(BaseModel):
     max_position_size_pct: float | None = Field(default=None, ge=1, le=100)
     max_risk_per_trade_pct: float | None = Field(default=None, ge=0.1, le=50)
     include_historical_analyses: bool | None = None
+    historical_analyses_limit: int | None = Field(default=None, ge=1, le=50)
     webhook_url: str | None = None
     webhook_enabled: bool | None = None
     webhook_events: str | None = None

@@ -249,7 +249,8 @@ async def run_analysis(
         await ws_manager.send(task_id, {"type": "status", "status": "starting", "agent": "LLM istemcisi hazırlanıyor..."})
         config = _build_config(settings)
         if getattr(settings, "include_historical_analyses", False):
-            hist_ctx = await _get_historical_analyses_context(ticker, trade_date, db)
+            limit = getattr(settings, "historical_analyses_limit", 5) or 5
+            hist_ctx = await _get_historical_analyses_context(ticker, trade_date, db, limit=limit)
             if hist_ctx:
                 config["historical_context"] = hist_ctx
         ta = TradingAgentsGraph(

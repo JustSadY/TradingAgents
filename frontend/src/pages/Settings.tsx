@@ -36,6 +36,7 @@ interface Settings {
   max_position_size_pct: number
   max_risk_per_trade_pct: number
   include_historical_analyses: boolean
+  historical_analyses_limit: number
   webhook_url: string | null
   webhook_enabled: boolean
   webhook_events: string
@@ -442,14 +443,29 @@ export default function Settings() {
           <input type="checkbox" checked={s.checkpoint_enabled} onChange={e => update('checkpoint_enabled', e.target.checked)} className="w-5 h-5 accent-indigo-600" />
         </Row>
         <Row label="Eskiye Dönük Analizler">
-          <div className="flex items-center gap-2">
-            <input
-              type="checkbox"
-              checked={s.include_historical_analyses}
-              onChange={e => update('include_historical_analyses', e.target.checked)}
-              className="w-5 h-5 accent-indigo-600"
-            />
-            <span className="text-xs text-gray-500">Önceki raporları AI'ya dahil et (son 5 analiz)</span>
+          <div className="flex flex-col gap-2">
+            <label className="flex items-center gap-2 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={s.include_historical_analyses}
+                onChange={e => update('include_historical_analyses', e.target.checked)}
+                className="w-5 h-5 accent-indigo-600"
+              />
+              <span className="text-xs text-gray-500">Önceki raporları AI'ya dahil et</span>
+            </label>
+            {s.include_historical_analyses && (
+              <div className="flex items-center gap-2 pt-0.5">
+                <span className="text-xs text-gray-400">Dahil edilecek son analiz sayısı:</span>
+                <input
+                  type="number"
+                  min="1"
+                  max="50"
+                  className="bg-gray-800 border border-gray-700 text-white rounded-xl px-2 py-0.5 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-xs w-16 text-center transition"
+                  value={s.historical_analyses_limit ?? 5}
+                  onChange={e => update('historical_analyses_limit', parseInt(e.target.value) || 1)}
+                />
+              </div>
+            )}
           </div>
         </Row>
         <Row label="Haber Sayısı (Ticker)">

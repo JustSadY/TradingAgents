@@ -79,6 +79,7 @@ class AppSettings(Base):
 
     # Eskiye dönük analizleri dahil et: önceki DB raporlarını past_context'e ekler
     include_historical_analyses: Mapped[bool] = mapped_column(Boolean, default=False)
+    historical_analyses_limit: Mapped[int] = mapped_column(Integer, default=5)
 
     # Webhook bildirimleri
     webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
