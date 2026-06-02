@@ -29,6 +29,9 @@ export function sendBrowserNotification(title: string, body: string, icon = '/fa
   try {
     if (!isBrowserNotifyEnabled()) return
     if (document.visibilityState === 'visible') return  // already in focus
-    new Notification(title, { body, icon })
+    const notification = new Notification(title, { body, icon })
+    notification.onclick = () => {
+      window.focus()
+    }
   } catch { /* ignore — never let a notification failure break the caller */ }
 }
