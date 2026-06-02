@@ -300,30 +300,29 @@ export default function Settings() {
         </Row>
 
         {currentProviderModels ? (
-          <>
-            <ModelSelect
-              label="Derin Düşünce Modeli"
-              options={currentProviderModels.deep || []}
-              value={s.deep_think_llm}
-              onChange={v => update('deep_think_llm', v)}
-            />
-            <ModelSelect
-              label="Hızlı Düşünce Modeli"
-              options={currentProviderModels.quick || []}
-              value={s.quick_think_llm}
-              onChange={v => update('quick_think_llm', v)}
-            />
-          </>
+          <ModelSelect
+            label="Varsayılan Model"
+            options={[
+              ...(currentProviderModels.quick || []),
+              ...(currentProviderModels.deep || [])
+            ]}
+            value={s.quick_think_llm}
+            onChange={v => {
+              setS(prev => prev ? { ...prev, quick_think_llm: v, deep_think_llm: v } : prev)
+            }}
+          />
         ) : (
-          // Providers like azure/openrouter not in catalog: free text
-          <>
-            <Row label="Derin Düşünce Modeli">
-              <input className={Input} value={s.deep_think_llm} onChange={e => update('deep_think_llm', e.target.value)} placeholder="Model ID" />
-            </Row>
-            <Row label="Hızlı Düşünce Modeli">
-              <input className={Input} value={s.quick_think_llm} onChange={e => update('quick_think_llm', e.target.value)} placeholder="Model ID" />
-            </Row>
-          </>
+          <Row label="Varsayılan Model">
+            <input
+              className={Input}
+              value={s.quick_think_llm}
+              onChange={e => {
+                const v = e.target.value
+                setS(prev => prev ? { ...prev, quick_think_llm: v, deep_think_llm: v } : prev)
+              }}
+              placeholder="Model ID"
+            />
+          </Row>
         )}
 
         {/* Backend URL — show for Ollama, LiteLLM, Azure, custom endpoints */}
@@ -405,65 +404,103 @@ export default function Settings() {
             {analysts.map(a => {
               const isActive = s.selected_analysts.includes(a.key)
               const modelVal = s.analyst_models?.[a.key] || ''
-              const providerModels = catalog[s.llm_provider]
+              
+              let currentProvider = 'default'
+              let currentModel = modelVal
+              if (modelVal.includes(':')) {
+                const parts = modelVal.split(':')
+                currentProvider = parts[0]
+                currentModel = parts[1] || ''
+              }
+
+              const activeProvider = currentProvider === 'default' ? s.llm_provider : currentProvider
+              const providerModels = catalog[activeProvider]
               const allModelValues = [
                 ...(providerModels?.quick?.map(o => o.value) || []),
                 ...(providerModels?.deep?.map(o => o.value) || [])
               ]
-              const isCustomMode = modelVal === 'custom' || (modelVal !== '' && modelVal !== 'deep' && !allModelValues.includes(modelVal))
-              const selectVal = isCustomMode ? 'custom' : modelVal
+              const isCustomMode = currentModel === 'custom' || (currentModel !== '' && currentModel !== 'deep' && !allModelValues.includes(currentModel))
+              const selectModelVal = isCustomMode ? 'custom' : currentModel
 
               return (
-                <div key={a.key} title={a.description} className="flex flex-col sm:flex-row sm:items-center justify-between border-b border-gray-800/40 pb-2 gap-2 sm:gap-4 last:border-b-0 last:pb-0">
-                  <label className="flex items-center gap-2 text-sm cursor-pointer shrink-0 py-1">
-                    <input
-                      type="checkbox"
-                      className="w-4.5 h-4.5 accent-indigo-600 rounded"
-                      checked={isActive}
-                      onChange={e => {
-                        const next = e.target.checked
-                          ? [...s.selected_analysts, a.key]
-                          : s.selected_analysts.filter(x => x !== a.key)
-                        update('selected_analysts', next)
-                      }}
-                    />
-                    <span className="font-medium text-slate-300">{a.label}</span>
-                  </label>
-
-                  {isActive && (
-                    <div className="flex flex-col sm:flex-row gap-2 w-full sm:max-w-xs shrink-0">
-                      <select
-                        className={`${Input} text-xs py-1`}
-                        value={selectVal}
+                <div key={a.key} title={a.description} className="flex flex-col border-b border-gray-800/40 pb-2.5 last:border-b-0 last:pb-0">
+                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                    <label className="flex items-center gap-2 text-sm cursor-pointer shrink-0 py-1">
+                      <input
+                        type="checkbox"
+                        className="w-4.5 h-4.5 accent-indigo-600 rounded"
+                        checked={isActive}
                         onChange={e => {
-                          const val = e.target.value
-                          const nextModels = { ...(s.analyst_models || {}), [a.key]: val === 'custom' ? 'custom' : val }
-                          update('analyst_models', nextModels)
+                          const next = e.target.checked
+                            ? [...s.selected_analysts, a.key]
+                            : s.selected_analysts.filter(x => x !== a.key)
+                          update('selected_analysts', next)
                         }}
-                      >
-                        <option value="">Varsayılan</option>
-                        <option value="deep">Derin Düşünce</option>
-                        {providerModels?.quick?.map(o => (
-                          <option key={o.value} value={o.value}>{o.label} (Hızlı)</option>
-                        ))}
-                        {providerModels?.deep?.map(o => (
-                          <option key={o.value} value={o.value}>{o.label} (Derin)</option>
-                        ))}
-                        <option value="custom">Özel model...</option>
-                      </select>
+                      />
+                      <span className="font-medium text-slate-300">{a.label}</span>
+                    </label>
 
-                      {selectVal === 'custom' && (
-                        <input
-                          className={`${Input} text-xs py-1 placeholder:text-gray-600`}
-                          placeholder="Model ID (örn: gpt-4o)"
-                          value={modelVal === 'custom' ? '' : modelVal}
+                    {isActive && (
+                      <div className="flex flex-col sm:flex-row gap-2 w-full sm:max-w-md shrink-0">
+                        <select
+                          className={`${Input} text-xs py-1 flex-1`}
+                          value={currentProvider}
+                          onChange={e => {
+                            const newProv = e.target.value
+                            const nextVal = newProv === 'default' ? '' : `${newProv}:`
+                            update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
+                          }}
+                        >
+                          <option value="default">Varsayılan Sağlayıcı</option>
+                          {providerList.map(p => (
+                            <option key={p} value={p}>{providerLabels[p] || p}</option>
+                          ))}
+                        </select>
+
+                        <select
+                          className={`${Input} text-xs py-1 flex-1`}
+                          value={selectModelVal}
                           onChange={e => {
                             const val = e.target.value
-                            const nextModels = { ...(s.analyst_models || {}), [a.key]: val.trim() === '' ? 'custom' : val }
-                            update('analyst_models', nextModels)
+                            const prefix = currentProvider === 'default' ? '' : `${currentProvider}:`
+                            const nextVal = prefix + (val === 'custom' ? 'custom' : val)
+                            update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
                           }}
-                        />
-                      )}
+                        >
+                          {currentProvider === 'default' && (
+                            <>
+                              <option value="">Varsayılan Model</option>
+                              <option value="deep">Derin Düşünce</option>
+                            </>
+                          )}
+                          {currentProvider !== 'default' && (
+                            <option value="">Model Seçin...</option>
+                          )}
+                          {providerModels?.quick?.map(o => (
+                            <option key={o.value} value={o.value}>{o.label} (Hızlı)</option>
+                          ))}
+                          {providerModels?.deep?.map(o => (
+                            <option key={o.value} value={o.value}>{o.label} (Derin)</option>
+                          ))}
+                          <option value="custom">Özel model...</option>
+                        </select>
+                      </div>
+                    )}
+                  </div>
+
+                  {isActive && selectModelVal === 'custom' && (
+                    <div className="flex justify-end pt-1.5">
+                      <input
+                        className={`${Input} text-xs py-1 placeholder:text-gray-600 w-full sm:max-w-xs`}
+                        placeholder="Model ID (örn: gpt-4o)"
+                        value={currentModel === 'custom' ? '' : currentModel}
+                        onChange={e => {
+                          const val = e.target.value
+                          const prefix = currentProvider === 'default' ? '' : `${currentProvider}:`
+                          const nextVal = prefix + (val.trim() === '' ? 'custom' : val)
+                          update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
+                        }}
+                      />
                     </div>
                   )}
                 </div>

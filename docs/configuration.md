@@ -108,9 +108,9 @@ These environment variables can override the default parameters defined in [defa
 # Select default LLM Provider (openai, anthropic, google, etc.)
 TRADINGAGENTS_LLM_PROVIDER=openai
 
-# Define default model names for deep and quick tasks
-TRADINGAGENTS_DEEP_THINK_LLM=gpt-4o
+# Define default model name (quick_think_llm and deep_think_llm are kept in sync by default)
 TRADINGAGENTS_QUICK_THINK_LLM=gpt-4o-mini
+TRADINGAGENTS_DEEP_THINK_LLM=gpt-4o-mini
 
 # Language for generated markdown reports (e.g. English, Turkish)
 TRADINGAGENTS_OUTPUT_LANGUAGE=English
@@ -128,8 +128,8 @@ TRADINGAGENTS_INCLUDE_HISTORICAL_ANALYSES=false
 # Number of historical reports to fetch and include in context (1-50)
 TRADINGAGENTS_HISTORICAL_ANALYSES_LIMIT=5
 
-# JSON dictionary mapping analyst keys to specific AI models.
-# Example: {"market": "google/gemini-2.5-flash", "news": "deep", "social": "quick"}
-# Special model choices: "deep" uses deep_think_llm, "quick" or "" uses quick_think_llm.
+# JSON dictionary mapping analyst keys to specific provider-model strings.
+# Example: {"market": "google:gemini-2.5-flash", "news": "deep", "social": "quick"}
+# Special model choices: "deep" uses default deep model, "quick" or "" uses default model.
 TRADINGAGENTS_ANALYST_MODELS={}
 ```
