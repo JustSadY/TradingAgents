@@ -6,7 +6,7 @@ from datetime import datetime, timedelta
 import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from backend.core.security import get_current_user
+from backend.api.deps import get_current_user
 
 _logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/market", tags=["market"])
