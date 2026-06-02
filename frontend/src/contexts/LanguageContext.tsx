@@ -76,6 +76,11 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'settings.watchlist': 'Watchlist Assets',
     'settings.save_success': 'Settings saved successfully.',
     'settings.save_error': 'Failed to save settings.',
+
+    // Logs
+    'logs.title': 'System Logs',
+    'logs.all_levels': 'All Levels',
+    'logs.no_logs': 'No logs available.',
   },
   tr: {
     // Nav
@@ -144,6 +149,11 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'settings.watchlist': 'İzlenecek Varlıklar',
     'settings.save_success': 'Ayarlar başarıyla kaydedildi.',
     'settings.save_error': 'Ayarlar kaydedilemedi.',
+
+    // Logs
+    'logs.title': 'Sistem Logları',
+    'logs.all_levels': 'Tüm Seviyeler',
+    'logs.no_logs': 'Log yok.',
   }
 }
 
