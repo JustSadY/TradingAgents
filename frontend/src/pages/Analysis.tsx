@@ -5,6 +5,7 @@ import { useMeta } from '../hooks/useMeta'
 import { notify } from '../utils/notify'
 import { exportMarkdown, exportPDF } from '../utils/exportReport'
 import { sendBrowserNotification } from '../utils/browserNotify'
+import { useTranslation } from '../contexts/LanguageContext'
 import {
   Loader2, CheckCircle, AlertCircle, History,
   X, BarChart2, Terminal, FileText, Zap, Square,
@@ -16,7 +17,7 @@ interface WsEvent {
   type: string; section?: string; content?: string; signal?: string
   final_decision?: string; message?: string; duration_seconds?: number
   llm_calls?: number; status?: string; agent?: string; analysis_id?: number
-  label?: string; stage?: string; node?: string  // type === 'progress'
+  label?: string; stage?: string; node?: string
 }
 interface HistoryItem {
   id: number; ticker: string; trade_date: string; asset_type: string
@@ -46,25 +47,22 @@ const STORAGE_KEY = 'ta_last_run'
 const TASK_KEY = 'ta_task_running'
 
 const SECTION_LABELS: Record<string, string> = {
-  market_report: 'Piyasa Analizi', sentiment_report: 'Duygu Analizi',
-  news_report: 'Haber Analizi', fundamentals_report: 'Temel Analiz',
-  macro_report: 'Makro Analiz', options_report: 'Opsiyon Analizi',
-  quant_report: 'Kantitatif Analiz', earnings_report: 'Kazanç Analizi',
-  review_report: 'Performans İnceleme', investment_plan: 'Yatırım Planı',
-  trader_investment_plan: 'Trader Planı', final_trade_decision: 'PM Kararı',
-  bull_history: 'Boğa Argümanları', bear_history: 'Ayı Argümanları',
-  investment_debate_history: 'Tartışma', risk_debate_history: 'Risk Tartışması',
-  judge_decision: 'Hakem Kararı',
+  market_report: 'Market', sentiment_report: 'Sentiment',
+  news_report: 'News', fundamentals_report: 'Fundamentals',
+  macro_report: 'Macro', options_report: 'Options',
+  quant_report: 'Quant', earnings_report: 'Earnings',
+  review_report: 'Review', investment_plan: 'Investment Plan',
+  trader_investment_plan: 'Trader Plan', final_trade_decision: 'PM Decision',
+  bull_history: 'Bull', bear_history: 'Bear',
+  investment_debate_history: 'Debate', risk_debate_history: 'Risk Debate',
+  judge_decision: 'Judge',
 }
 
-// Signal styling lives in the frontend (presentation), but the semantic tone
-// + Turkish label come from the backend (/api/meta). tone → Tailwind classes:
 const TONE_CLASSES: Record<string, { bg: string; text: string; border: string }> = {
   positive: { bg: 'bg-emerald-500/15', text: 'text-emerald-300', border: 'border-emerald-500/30' },
   neutral:  { bg: 'bg-yellow-500/15',  text: 'text-yellow-300',  border: 'border-yellow-500/30' },
   negative: { bg: 'bg-red-500/15',     text: 'text-red-300',     border: 'border-red-500/30' },
 }
-// Fallback value→tone used only until /api/meta has loaded.
 const FALLBACK_TONE: Record<string, string> = {
   Buy: 'positive', Overweight: 'positive', Hold: 'neutral', Underweight: 'negative', Sell: 'negative',
 }
@@ -86,14 +84,15 @@ function SignalBadge({ signal, large }: { signal: string | null; large?: boolean
 }
 
 function ReportCard({ label, content, defaultOpen }: { label: string; content: string; defaultOpen?: boolean }) {
+  const { t } = useTranslation()
   if (!content) return null
   return (
     <details open={defaultOpen} className="group">
       <summary className="flex items-center gap-2 cursor-pointer select-none px-4 py-3 rounded-xl bg-gray-800/60 hover:bg-gray-800 transition-colors border border-gray-700/50 list-none">
         <FileText size={13} className="text-violet-400 shrink-0" />
         <span className="text-sm font-medium text-gray-200 flex-1">{label}</span>
-        <span className="text-xs text-gray-500 group-open:hidden">Göster</span>
-        <span className="text-xs text-gray-500 hidden group-open:inline">Gizle</span>
+        <span className="text-xs text-gray-500 group-open:hidden">{t('analysis.report_card.show')}</span>
+        <span className="text-xs text-gray-500 hidden group-open:inline">{t('analysis.report_card.hide')}</span>
       </summary>
       <pre className="text-xs text-gray-300 whitespace-pre-wrap bg-gray-900/80 rounded-xl p-4 mt-1.5 max-h-72 overflow-y-auto border border-gray-700/30 font-mono leading-relaxed">
         {content}
@@ -125,6 +124,7 @@ function loadRunState() {
 }
 
 function RunTab() {
+  const { t } = useTranslation()
   const saved = loadRunState()
   const [ticker, setTicker] = useState(saved.ticker)
   const [date, setDate] = useState(saved.date)
@@ -141,16 +141,13 @@ function RunTab() {
 
   const meta = useMeta()
   const sectionLabels = meta?.section_labels ?? SECTION_LABELS
-  const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Hisse' }, { value: 'crypto', label: 'Kripto' }]
+  const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Stock' }, { value: 'crypto', label: 'Crypto' }]
   const [currentStep, setCurrentStep] = useState<{ label: string; stage: string } | null>(null)
 
-  // Cost estimate (MOD8)
   const [costEstimate, setCostEstimate] = useState<{ min_usd: number; max_usd: number } | null>(null)
-  // Re-analysis warning (MOD8)
   const [existingId, setExistingId] = useState<number | null>(null)
   const [showRerunModal, setShowRerunModal] = useState(false)
 
-  // Persist state to localStorage on every change
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ticker, date, assetType, runStatus, signal, reports, log, activeSection }))
   }, [ticker, date, assetType, runStatus, signal, reports, log, activeSection])
@@ -163,7 +160,8 @@ function RunTab() {
     }
   }
 
-  // ── Shared WS attachment (used by handleRun AND auto-reconnect) ─────────────
+  // ── Shared WS attachment ─────────────────────────────────────────────────────
+  // t is captured as stale closure — acceptable since language rarely changes mid-analysis
   const attachWs = useCallback((taskId: string, isReconnect = false) => {
     taskIdRef.current = taskId
     const token = getAccessToken()
@@ -178,7 +176,6 @@ function RunTab() {
           preRefreshLogRef.current.shift()
           return
         } else {
-          // Clear deduplication if mismatch or sequence completed/diverged
           preRefreshLogRef.current = []
         }
       }
@@ -190,7 +187,6 @@ function RunTab() {
       if (ev.type === 'status') {
         appendLog(`${ev.agent}`)
       } else if (ev.type === 'progress') {
-        // Live "which agent is running now" feedback.
         setCurrentStep({ label: ev.label || '', stage: ev.stage || '' })
         appendLog(`▸ ${ev.label}`)
       } else if (ev.type === 'report' && ev.section && ev.content) {
@@ -204,43 +200,44 @@ function RunTab() {
         setRunStatus('done')
         setRunning_(false)
         setCurrentStep(null)
-        appendLog(`— Tamamlandı ${ev.duration_seconds}s / ${ev.llm_calls} LLM çağrısı`)
-        sendBrowserNotification(`${ticker.toUpperCase()} analizi tamamlandı`, `Sinyal: ${ev.signal ?? 'N/A'} • ${ev.duration_seconds?.toFixed(0)}s`)
+        appendLog(`${t('analysis.ws.complete')} ${ev.duration_seconds}s / ${ev.llm_calls} ${t('analysis.ws.llm_calls')}`)
+        sendBrowserNotification(
+          `${ticker.toUpperCase()} ${t('analysis.ws.analysis_complete_notif')}`,
+          `${t('analysis.ws.signal_label')} ${ev.signal ?? 'N/A'} • ${ev.duration_seconds?.toFixed(0)}s`
+        )
       } else if (ev.type === 'error') {
         finished = true
         setRunStatus('error')
         setRunning_(false)
         setCurrentStep(null)
-        appendLog(`✗ HATA: ${ev.message}`)
-        notify('error', ev.message ?? 'Analiz başarısız.', 'Analiz Hatası')
+        appendLog(`${t('analysis.ws.error_prefix')} ${ev.message}`)
+        notify('error', ev.message ?? t('analysis.ws.analysis_failed'), t('analysis.ws.analysis_error_title'))
       }
     }
     ws.onerror = () => {
       if (!finished) {
         setRunStatus('error'); setRunning_(false)
-        setLog(l => [...l, '✗ Bağlantı hatası.'])
-        notify('error', 'WebSocket bağlantısı kesildi.', 'Analiz Hatası')
+        setLog(l => [...l, t('analysis.ws.conn_error')])
+        notify('error', t('analysis.ws.conn_error'), t('analysis.ws.analysis_error_title'))
       }
     }
     ws.onclose = () => {
       if (!finished) {
         if (isReconnect) {
-          // Task likely completed while page was refreshed
           setRunStatus('idle')
           setRunning_(false)
-          setLog(l => [...l, '— Analiz tamamlanmış veya bağlantı kesildi. Geçmiş sekmesini kontrol et.'])
+          setLog(l => [...l, t('analysis.ws.conn_closed_reconnect')])
         } else {
           setRunStatus('error')
           setRunning_(false)
-          const msg = 'Bağlantı kapandı — backend hatası veya LLM API anahtarı eksik olabilir.'
-          setLog(l => [...l, `✗ ${msg}`])
-          notify('error', msg, 'Analiz Kesildi')
+          setLog(l => [...l, t('analysis.ws.conn_closed')])
+          notify('error', t('analysis.ws.conn_closed'), t('analysis.ws.analysis_interrupted'))
         }
       }
     }
   }, []) // eslint-disable-line react-hooks/exhaustive-deps
 
-  // ── Auto-reconnect on page refresh if task was running ──────────────────────
+  // ── Auto-reconnect on page refresh ──────────────────────────────────────────
   useEffect(() => {
     const raw = localStorage.getItem(TASK_KEY)
     if (!raw) return
@@ -280,14 +277,13 @@ function RunTab() {
     return () => clearTimeout(tid)
   }, [ticker, date])
 
-  // Stop: close WS + cancel backend task
   const handleStop = async () => {
     const tid = taskIdRef.current
     wsRef.current?.close()
     wsRef.current = null
     setRunStatus('idle')
     setRunning_(false)
-    setLog(l => [...l, '— Analiz durduruldu.'])
+    setLog(l => [...l, t('analysis.ws.stopped')])
     if (tid) {
       try { await axios.post(`/api/analysis/${tid}/cancel`) } catch { /* ignore */ }
     }
@@ -314,7 +310,7 @@ function RunTab() {
     } catch (err: any) {
       setRunStatus('error')
       setRunning_(false)
-      setLog(l => [...l, `✗ ${err.response?.data?.detail || 'Başlatılamadı'}`])
+      setLog(l => [...l, `✗ ${err.response?.data?.detail || t('analysis.ws.failed_to_start')}`])
     }
   }
 
@@ -336,7 +332,7 @@ function RunTab() {
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5">
         <div className="flex flex-wrap gap-3 items-end">
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">Sembol</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.symbol')}</label>
             <input
               className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 w-28 uppercase font-mono text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
               value={ticker}
@@ -346,7 +342,7 @@ function RunTab() {
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">Tarih</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.date')}</label>
             <input
               type="date"
               className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
@@ -356,7 +352,7 @@ function RunTab() {
             />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">Tür</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.type')}</label>
             <select
               className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
               value={assetType}
@@ -373,14 +369,14 @@ function RunTab() {
               disabled={!ticker.trim()}
               className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-violet-500/20 transition-all"
             >
-              <Zap size={15} /> Analiz Başlat
+              <Zap size={15} /> {t('analysis.btn.start')}
             </button>
           ) : (
             <button
               onClick={handleStop}
               className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white bg-red-600/80 hover:bg-red-600 border border-red-500/40 shadow-lg shadow-red-500/20 transition-all"
             >
-              <Square size={13} fill="currentColor" /> Durdur
+              <Square size={13} fill="currentColor" /> {t('analysis.btn.stop')}
             </button>
           )}
 
@@ -399,11 +395,11 @@ function RunTab() {
           <div className="flex items-center gap-4 mt-2">
             {costEstimate && (
               <span className="text-xs text-gray-600">
-                Tahmini maliyet: ~${costEstimate.min_usd.toFixed(3)}–${costEstimate.max_usd.toFixed(3)}
+                {t('analysis.cost_estimate')}{costEstimate.min_usd.toFixed(3)}–${costEstimate.max_usd.toFixed(3)}
               </span>
             )}
             {existingId && (
-              <span className="text-xs text-yellow-500">⚠ Bu tarih için kayıtlı analiz var — yeniden çalıştıracaksınız</span>
+              <span className="text-xs text-yellow-500">{t('analysis.existing_analysis')}</span>
             )}
           </div>
         )}
@@ -413,11 +409,13 @@ function RunTab() {
       {showRerunModal && (
         <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 max-w-sm w-full space-y-4">
-            <h3 className="text-white font-semibold">Mevcut Analiz Var</h3>
-            <p className="text-gray-400 text-sm">{ticker.toUpperCase()} için {date} tarihli bir analiz zaten mevcut. Yeni analiz daha fazla API kredisi harcayacak.</p>
+            <h3 className="text-white font-semibold">{t('analysis.rerun.title')}</h3>
+            <p className="text-gray-400 text-sm">
+              {t('analysis.rerun.body').replace('{ticker}', ticker.toUpperCase()).replace('{date}', date)}
+            </p>
             <div className="flex gap-3">
-              <button onClick={doRun} className="flex-1 bg-violet-600 hover:bg-violet-500 text-white text-sm py-2 rounded-xl transition">Yeniden Çalıştır</button>
-              <button onClick={() => setShowRerunModal(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm py-2 rounded-xl transition">İptal</button>
+              <button onClick={doRun} className="flex-1 bg-violet-600 hover:bg-violet-500 text-white text-sm py-2 rounded-xl transition">{t('analysis.btn.rerun')}</button>
+              <button onClick={() => setShowRerunModal(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm py-2 rounded-xl transition">{t('analysis.btn.cancel')}</button>
             </div>
           </div>
         </div>
@@ -432,7 +430,7 @@ function RunTab() {
           </span>
           <Loader2 size={14} className="text-violet-400 animate-spin" />
           <p className="text-violet-300 text-sm font-medium">
-            <span className="font-bold">{ticker}</span> analiz ediliyor
+            <span className="font-bold">{ticker}</span> {t('analysis.running')}
             {currentStep
               ? <span className="text-white ml-2 font-semibold">→ {currentStep.label}</span>
               : <span className="text-violet-500 ml-2 font-normal">{log.at(-1)}</span>}
@@ -447,8 +445,8 @@ function RunTab() {
           <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800 bg-gray-800/40">
               <Terminal size={13} className="text-gray-500" />
-              <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Canlı Log</span>
-              <span className="ml-auto text-xs text-gray-600">{log.length} satır</span>
+              <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">{t('analysis.log.title')}</span>
+              <span className="ml-auto text-xs text-gray-600">{log.length} {t('analysis.log.lines')}</span>
             </div>
             <div className="px-4 py-3 space-y-1 max-h-48 md:max-h-80 overflow-y-auto">
               {log.map((line, i) => (
@@ -468,12 +466,12 @@ function RunTab() {
           <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
             <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800 bg-gray-800/40">
               <FileText size={13} className="text-gray-500" />
-              <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Raporlar</span>
-              <span className="ml-auto text-xs text-gray-600">{reportEntries.length} bölüm</span>
+              <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">{t('analysis.reports.title')}</span>
+              <span className="ml-auto text-xs text-gray-600">{reportEntries.length} {t('analysis.reports.sections')}</span>
             </div>
             <div className="p-4 space-y-1.5 max-h-64 md:max-h-80 overflow-y-auto">
               {reportEntries.length === 0 && (
-                <p className="text-gray-600 text-sm text-center py-8">Raporlar analiz sırasında burada görünecek.</p>
+                <p className="text-gray-600 text-sm text-center py-8">{t('analysis.reports.empty')}</p>
               )}
               {reportEntries.map(([section, content]) => (
                 <ReportCard key={section} label={sectionLabels[section] || section} content={content} defaultOpen={section === activeSection} />
@@ -488,6 +486,7 @@ function RunTab() {
 
 // ── Tab: Multi-ticker portfolio run ──────────────────────────────────────────
 function MultiTab() {
+  const { t } = useTranslation()
   const [tickers, setTickers] = useState<string[]>([])
   const [input, setInput] = useState('')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
@@ -496,11 +495,11 @@ function MultiTab() {
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const meta = useMeta()
-  const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Hisse' }, { value: 'crypto', label: 'Kripto' }]
+  const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Stock' }, { value: 'crypto', label: 'Crypto' }]
 
   const addTicker = () => {
-    const t = input.trim().toUpperCase()
-    if (t && !tickers.includes(t) && tickers.length < 10) setTickers(prev => [...prev, t])
+    const tk = input.trim().toUpperCase()
+    if (tk && !tickers.includes(tk) && tickers.length < 10) setTickers(prev => [...prev, tk])
     setInput('')
   }
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTicker() } }
@@ -512,22 +511,22 @@ function MultiTab() {
       await axios.post('/api/analysis/run-portfolio', { tickers, trade_date: date, asset_type: assetType })
       setDone(true)
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Portföy analizi başlatılamadı.')
+      setError(err.response?.data?.detail || t('analysis.multi.error_default'))
     } finally { setRunning(false) }
   }
 
   return (
     <div className="space-y-4">
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
-        <p className="text-gray-500 text-sm">En az 2, en fazla 10 hisse. SuperPortfolioManager tüm hisseleri analiz edip portföy dağılımı önerir.</p>
+        <p className="text-gray-500 text-sm">{t('analysis.multi.description')}</p>
 
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">Semboller</label>
+          <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.multi.label_symbols')}</label>
           <div className="flex flex-wrap gap-2 min-h-11 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 focus-within:border-violet-500 transition-colors">
-            {tickers.map(t => (
-              <span key={t} className="flex items-center gap-1 bg-violet-500/20 border border-violet-500/30 text-violet-300 text-xs font-mono px-2 py-0.5 rounded-lg">
-                {t}
-                <button onClick={() => setTickers(p => p.filter(x => x !== t))} className="hover:text-red-400 transition-colors"><X size={10} /></button>
+            {tickers.map(tk => (
+              <span key={tk} className="flex items-center gap-1 bg-violet-500/20 border border-violet-500/30 text-violet-300 text-xs font-mono px-2 py-0.5 rounded-lg">
+                {tk}
+                <button onClick={() => setTickers(p => p.filter(x => x !== tk))} className="hover:text-red-400 transition-colors"><X size={10} /></button>
               </span>
             ))}
             {tickers.length < 10 && (
@@ -545,11 +544,11 @@ function MultiTab() {
 
         <div className="flex flex-wrap gap-3 items-end">
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">Tarih</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.date')}</label>
             <input type="date" className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition" value={date} onChange={e => setDate(e.target.value)} disabled={running} />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">Tür</label>
+            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.type')}</label>
             <select className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-500 transition" value={assetType} onChange={e => setAssetType(e.target.value)} disabled={running}>
               {assetTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
@@ -560,11 +559,11 @@ function MultiTab() {
             className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 shadow-lg shadow-violet-500/20 transition-all"
           >
             {running ? <Loader2 size={15} className="animate-spin" /> : <BarChart2 size={15} />}
-            {running ? 'Çalışıyor...' : 'Portföy Analizi Başlat'}
+            {running ? t('analysis.multi.running') : t('analysis.multi.btn_start')}
           </button>
         </div>
 
-        {done && <div className="flex items-center gap-2 text-emerald-400 text-sm"><CheckCircle size={15} /> Arka planda başlatıldı — "Portföy Geçmişi" tabından takip edebilirsiniz.</div>}
+        {done && <div className="flex items-center gap-2 text-emerald-400 text-sm"><CheckCircle size={15} /> {t('analysis.multi.started')}</div>}
         {error && <div className="flex items-center gap-2 text-red-400 text-sm"><AlertCircle size={15} /> {error}</div>}
       </div>
       <PortfolioHistorySection />
@@ -573,6 +572,7 @@ function MultiTab() {
 }
 
 function PortfolioHistorySection() {
+  const { t } = useTranslation()
   const [items, setItems] = useState<PortfolioHistoryItem[]>([])
   const [detail, setDetail] = useState<PortfolioDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -581,12 +581,12 @@ function PortfolioHistorySection() {
     axios.get('/api/analysis/portfolio-history').then(r => setItems(r.data)).finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="text-gray-500 text-sm px-1">Yükleniyor...</div>
+  if (loading) return <div className="text-gray-500 text-sm px-1">{t('analysis.portfolio_history.loading')}</div>
 
   return (
     <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-      <h3 className="text-sm font-semibold text-gray-300 mb-3">Portföy Analizi Geçmişi</h3>
-      {items.length === 0 ? <p className="text-gray-600 text-sm">Henüz portföy analizi yok.</p> : (
+      <h3 className="text-sm font-semibold text-gray-300 mb-3">{t('analysis.portfolio_history.title')}</h3>
+      {items.length === 0 ? <p className="text-gray-600 text-sm">{t('analysis.portfolio_history.empty')}</p> : (
         <div className="space-y-1.5">
           {items.map(item => (
             <div key={item.id} onClick={() => axios.get(`/api/analysis/portfolio/${item.id}`).then(r => setDetail(r.data))}
@@ -595,7 +595,7 @@ function PortfolioHistorySection() {
                 <span className="text-white font-mono text-sm font-semibold">{item.tickers.join(', ')}</span>
                 <span className="text-gray-600 text-xs">{item.trade_date}</span>
               </div>
-              <span className="text-gray-600 text-xs">{new Date(item.created_at).toLocaleDateString('tr-TR')}</span>
+              <span className="text-gray-600 text-xs">{new Date(item.created_at).toLocaleDateString()}</span>
             </div>
           ))}
         </div>
@@ -607,9 +607,9 @@ function PortfolioHistorySection() {
               <h3 className="text-lg font-bold text-white">{detail.tickers.join(', ')}</h3>
               <button onClick={() => setDetail(null)} className="text-gray-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-gray-800"><X size={18} /></button>
             </div>
-            <p className="text-gray-600 text-xs">{detail.trade_date} • {new Date(detail.created_at).toLocaleString('tr-TR')}</p>
+            <p className="text-gray-600 text-xs">{detail.trade_date} • {new Date(detail.created_at).toLocaleString()}</p>
             <pre className="text-sm text-gray-200 whitespace-pre-wrap bg-gray-950 rounded-xl p-5 max-h-96 overflow-y-auto border border-gray-800 font-mono leading-relaxed">
-              {detail.super_portfolio_report || 'Rapor henüz hazır değil.'}
+              {detail.super_portfolio_report || t('analysis.portfolio_history.report_not_ready')}
             </pre>
           </div>
         </div>
@@ -620,6 +620,7 @@ function PortfolioHistorySection() {
 
 // ── Tab: History ──────────────────────────────────────────────────────────────
 function HistoryTab() {
+  const { t } = useTranslation()
   const [items, setItems] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState<AnalysisDetail | null>(null)
@@ -637,24 +638,24 @@ function HistoryTab() {
     finally { setDetailLoading(false) }
   }, [])
 
-  if (loading) return <div className="p-8 text-gray-500 text-sm">Yükleniyor...</div>
+  if (loading) return <div className="p-8 text-gray-500 text-sm">{t('analysis.history.loading')}</div>
 
   return (
     <div className="space-y-4">
       <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
         {items.length === 0 ? (
-          <p className="p-6 text-gray-600 text-sm">Henüz analiz geçmişi yok.</p>
+          <p className="p-6 text-gray-600 text-sm">{t('analysis.history.empty')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm min-w-[480px]">
               <thead>
                 <tr className="text-gray-600 text-xs uppercase tracking-wider border-b border-gray-800 bg-gray-800/30">
-                  <th className="px-4 py-3 text-left">Sembol</th>
-                  <th className="px-4 py-3 text-left">Tarih</th>
-                  <th className="px-4 py-3 text-left">Sinyal</th>
-                  <th className="px-4 py-3 text-left">Süre</th>
-                  <th className="px-4 py-3 text-left hidden sm:table-cell">Kaynak</th>
-                  <th className="px-4 py-3 text-left hidden md:table-cell">Zaman</th>
+                  <th className="px-4 py-3 text-left">{t('analysis.history.col_symbol')}</th>
+                  <th className="px-4 py-3 text-left">{t('analysis.history.col_date')}</th>
+                  <th className="px-4 py-3 text-left">{t('analysis.history.col_signal')}</th>
+                  <th className="px-4 py-3 text-left">{t('analysis.history.col_duration')}</th>
+                  <th className="px-4 py-3 text-left hidden sm:table-cell">{t('analysis.history.col_source')}</th>
+                  <th className="px-4 py-3 text-left hidden md:table-cell">{t('analysis.history.col_time')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -666,7 +667,7 @@ function HistoryTab() {
                     <td className="px-4 py-3"><SignalBadge signal={item.signal} /></td>
                     <td className="px-4 py-3 text-gray-500 text-xs">{item.duration_seconds.toFixed(1)}s</td>
                     <td className="px-4 py-3 text-gray-600 text-xs hidden sm:table-cell">{item.triggered_by}</td>
-                    <td className="px-4 py-3 text-gray-600 text-xs hidden md:table-cell">{new Date(item.created_at).toLocaleString('tr-TR')}</td>
+                    <td className="px-4 py-3 text-gray-600 text-xs hidden md:table-cell">{new Date(item.created_at).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -679,7 +680,7 @@ function HistoryTab() {
         <div className="fixed inset-0 bg-black/80 z-50 flex items-start justify-center p-3 md:p-4 overflow-y-auto backdrop-blur-sm">
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-6 w-full max-w-4xl my-4 md:my-8 space-y-4">
             {detailLoading ? (
-              <div className="flex items-center gap-2 text-gray-400"><Loader2 className="animate-spin" size={16} /> Yükleniyor...</div>
+              <div className="flex items-center gap-2 text-gray-400"><Loader2 className="animate-spin" size={16} /> {t('analysis.history.detail_loading')}</div>
             ) : detail ? (
               <>
                 <div className="flex items-start justify-between">
@@ -691,10 +692,10 @@ function HistoryTab() {
                     <p className="text-gray-500 text-xs">{detail.trade_date} • {detail.duration_seconds.toFixed(1)}s • {detail.llm_calls} LLM • {(detail.tokens_in + detail.tokens_out).toLocaleString()} token</p>
                   </div>
                   <div className="flex items-center gap-2 ml-4">
-                    <button onClick={() => exportMarkdown(detail)} className="flex items-center gap-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg transition" title="Markdown İndir">
+                    <button onClick={() => exportMarkdown(detail)} className="flex items-center gap-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg transition" title={t('analysis.history.btn_download_md')}>
                       <Download size={12} /> MD
                     </button>
-                    <button onClick={() => exportPDF(detail)} className="flex items-center gap-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg transition" title="PDF İndir">
+                    <button onClick={() => exportPDF(detail)} className="flex items-center gap-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg transition" title={t('analysis.history.btn_download_pdf')}>
                       <FileDown size={12} /> PDF
                     </button>
                     <button onClick={() => setDetail(null)} className="text-gray-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-gray-800"><X size={18} /></button>
@@ -725,29 +726,30 @@ function HistoryTab() {
 type Tab = 'run' | 'multi' | 'history'
 
 export default function Analysis() {
+  const { t } = useTranslation()
   const [tab, setTab] = useState<Tab>('run')
 
   const tabs = [
-    { id: 'run' as Tab,     label: 'Tek Hisse',       icon: <Zap size={13} /> },
-    { id: 'multi' as Tab,   label: 'Çoklu Hisse',     icon: <BarChart2 size={13} /> },
-    { id: 'history' as Tab, label: 'Geçmiş',          icon: <History size={13} /> },
+    { id: 'run' as Tab,     label: t('analysis.tab.single'), icon: <Zap size={13} /> },
+    { id: 'multi' as Tab,   label: t('analysis.tab.multi'),  icon: <BarChart2 size={13} /> },
+    { id: 'history' as Tab, label: t('analysis.tab.history'), icon: <History size={13} /> },
   ]
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-5">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">Analiz</h2>
+        <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">{t('analysis.title')}</h2>
       </div>
 
       {/* Tab bar */}
       <div className="flex gap-1 p-1 bg-gray-900 border border-gray-800 rounded-2xl w-fit">
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+        {tabs.map(tb => (
+          <button key={tb.id} onClick={() => setTab(tb.id)}
             className={`flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-              tab === t.id ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20' : 'text-gray-500 hover:text-white'
+              tab === tb.id ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20' : 'text-gray-500 hover:text-white'
             }`}
           >
-            {t.icon} <span className="hidden sm:inline">{t.label}</span>
+            {tb.icon} <span className="hidden sm:inline">{tb.label}</span>
           </button>
         ))}
       </div>

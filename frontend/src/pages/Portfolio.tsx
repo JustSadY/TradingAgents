@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 import { TrendingUp, TrendingDown, DollarSign, Briefcase, Loader2, AlertCircle } from 'lucide-react'
+import { useTranslation } from '../contexts/LanguageContext'
 
 interface Holding {
   id: number
@@ -23,6 +24,7 @@ interface PortfolioRow {
 }
 
 export default function Portfolio() {
+  const { t, language } = useTranslation()
   const [holdings, setHoldings] = useState<Holding[]>([])
   const [portfolios, setPortfolios] = useState<PortfolioRow[]>([])
   const [loading, setLoading] = useState(true)
@@ -42,7 +44,7 @@ export default function Portfolio() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-slate-400">
-        <Loader2 className="animate-spin mr-2" size={20} /> Yükleniyor...
+        <Loader2 className="animate-spin mr-2" size={20} /> {t('portfolio.loading')}
       </div>
     )
   }
@@ -51,14 +53,14 @@ export default function Portfolio() {
     return (
       <div className="p-6 flex flex-col items-center gap-3 text-center">
         <AlertCircle size={32} className="text-red-400" />
-        <p className="text-slate-300">Portföy verileri yüklenemedi.</p>
+        <p className="text-slate-300">{t('portfolio.error')}</p>
       </div>
     )
   }
 
   return (
     <div className="p-6 space-y-6">
-      <h2 className="text-2xl font-bold text-white">Portföy</h2>
+      <h2 className="text-2xl font-bold text-white">{t('portfolio.title')}</h2>
 
       {/* Portfolio summary cards */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -77,7 +79,7 @@ export default function Portfolio() {
               <div className="flex items-center gap-2">
                 <DollarSign size={18} className="text-indigo-400" />
                 <span className="text-2xl font-bold text-white">
-                  ${p.current_balance.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                  ${p.current_balance.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}
                 </span>
               </div>
               <div className="flex items-center gap-2">
@@ -87,8 +89,8 @@ export default function Portfolio() {
                 </span>
               </div>
               <div className="text-xs text-slate-500">
-                Başlangıç: ${p.initial_capital.toLocaleString('tr-TR')} •
-                Nakit: ${p.cash_available.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}
+                {t('portfolio.initial')}: ${p.initial_capital.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US')} •
+                {t('portfolio.cash')}: ${p.cash_available.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}
               </div>
             </div>
           )
@@ -98,21 +100,21 @@ export default function Portfolio() {
       {/* Holdings table */}
       <div className="bg-slate-800 rounded-xl p-5">
         <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
-          <Briefcase size={16} className="text-indigo-400" /> Tüm Pozisyonlar
+          <Briefcase size={16} className="text-indigo-400" /> {t('portfolio.all_positions')}
         </h3>
         {holdings.length === 0 ? (
-          <p className="text-slate-500 text-sm">Henüz açık pozisyon yok.</p>
+          <p className="text-slate-500 text-sm">{t('portfolio.no_positions')}</p>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead>
                 <tr className="text-slate-400 text-left text-xs border-b border-slate-700">
-                  <th className="pb-2 px-1">Sembol</th>
-                  <th className="pb-2 px-1 text-right">Adet</th>
-                  <th className="pb-2 px-1 text-right">Ort. Maliyet</th>
-                  <th className="pb-2 px-1 text-right">Güncel Fiyat</th>
-                  <th className="pb-2 px-1 text-right">Piyasa Değeri</th>
-                  <th className="pb-2 px-1 text-right">Gerçekleşmemiş K/Z</th>
+                  <th className="pb-2 px-1">{t('portfolio.col_symbol')}</th>
+                  <th className="pb-2 px-1 text-right">{t('portfolio.col_quantity')}</th>
+                  <th className="pb-2 px-1 text-right">{t('portfolio.col_avg_cost')}</th>
+                  <th className="pb-2 px-1 text-right">{t('portfolio.col_current_price')}</th>
+                  <th className="pb-2 px-1 text-right">{t('portfolio.col_market_value')}</th>
+                  <th className="pb-2 px-1 text-right">{t('portfolio.col_unrealized_pnl')}</th>
                 </tr>
               </thead>
               <tbody>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
+import { useTranslation } from '../contexts/LanguageContext'
 
 interface Order {
   id: number
@@ -28,6 +29,7 @@ const ACTION_COLORS: Record<string, string> = {
 }
 
 export default function Orders() {
+  const { t, language } = useTranslation()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [mode, setMode] = useState<string>('')
@@ -42,29 +44,29 @@ export default function Orders() {
   return (
     <div className="p-6 space-y-4">
       <div className="flex items-center justify-between">
-        <h2 className="text-2xl font-bold text-white">Emir Geçmişi</h2>
+        <h2 className="text-2xl font-bold text-white">{t('orders.title')}</h2>
         <select className="bg-slate-700 text-white rounded-lg px-3 py-1.5 text-sm outline-none" value={mode} onChange={e => setMode(e.target.value)}>
-          <option value="">Tümü</option>
-          <option value="simulation">Simülasyon</option>
-          <option value="live">Canlı</option>
+          <option value="">{t('orders.filter_all')}</option>
+          <option value="simulation">{t('orders.filter_simulation')}</option>
+          <option value="live">{t('orders.filter_live')}</option>
         </select>
       </div>
 
-      {loading ? <p className="text-slate-400">Yükleniyor...</p> : (
-        orders.length === 0 ? <p className="text-slate-500">Henüz emir yok.</p> : (
+      {loading ? <p className="text-slate-400">{t('orders.loading')}</p> : (
+        orders.length === 0 ? <p className="text-slate-500">{t('orders.empty')}</p> : (
           <div className="bg-slate-800 rounded-xl overflow-hidden">
             <table className="w-full text-sm">
               <thead className="bg-slate-700">
                 <tr className="text-slate-300 text-left">
-                  <th className="px-4 py-3">Sembol</th>
-                  <th className="px-4 py-3">Yön</th>
-                  <th className="px-4 py-3">Miktar</th>
-                  <th className="px-4 py-3">Fiyat</th>
-                  <th className="px-4 py-3">Toplam</th>
-                  <th className="px-4 py-3">Durum</th>
-                  <th className="px-4 py-3">Sinyal</th>
-                  <th className="px-4 py-3">Mod</th>
-                  <th className="px-4 py-3">Tarih</th>
+                  <th className="px-4 py-3">{t('orders.col_symbol')}</th>
+                  <th className="px-4 py-3">{t('orders.col_direction')}</th>
+                  <th className="px-4 py-3">{t('orders.col_quantity')}</th>
+                  <th className="px-4 py-3">{t('orders.col_price')}</th>
+                  <th className="px-4 py-3">{t('orders.col_total')}</th>
+                  <th className="px-4 py-3">{t('orders.col_status')}</th>
+                  <th className="px-4 py-3">{t('orders.col_signal')}</th>
+                  <th className="px-4 py-3">{t('orders.col_mode')}</th>
+                  <th className="px-4 py-3">{t('orders.col_date')}</th>
                 </tr>
               </thead>
               <tbody>

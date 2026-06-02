@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import axios from 'axios'
 import { BarChart2, TrendingUp, TrendingDown, Target } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { useTranslation } from '../contexts/LanguageContext'
 
 interface PerfData {
   total: number
@@ -24,18 +25,19 @@ function ReturnCell({ value }: { value: number | null }) {
 }
 
 export default function Performance() {
+  const { t } = useTranslation()
   const [perf, setPerf] = useState<PerfData | null>(null)
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [ticker, setTicker] = useState('')
   const [filterTicker, setFilterTicker] = useState('')
   const [loading, setLoading] = useState(true)
 
-  const load = async (t?: string) => {
+  const load = async (ti?: string) => {
     setLoading(true)
     try {
       const [p, h] = await Promise.all([
-        axios.get('/api/analysis/performance', { params: t ? { ticker: t } : {} }).then(r => r.data),
-        axios.get('/api/analysis/history', { params: { limit: 100, ...(t ? { ticker: t } : {}) } }).then(r => r.data),
+        axios.get('/api/analysis/performance', { params: ti ? { ticker: ti } : {} }).then(r => r.data),
+        axios.get('/api/analysis/history', { params: { limit: 100, ...(ti ? { ticker: ti } : {}) } }).then(r => r.data),
       ])
       setPerf(p)
       setHistory(h.filter((x: HistoryItem) => x.raw_return !== null))
@@ -53,12 +55,12 @@ export default function Performance() {
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-6xl">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">Sinyal Performansı</h2>
+        <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">{t('performance.title')}</h2>
         <div className="flex items-center gap-2">
           <input className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-1.5 text-sm w-24 uppercase font-mono outline-none focus:ring-2 focus:ring-violet-500"
             placeholder="AAPL" value={ticker} onChange={e => setTicker(e.target.value.toUpperCase())} onKeyDown={e => e.key === 'Enter' && handleFilter()} />
-          <button onClick={handleFilter} className="bg-violet-600 hover:bg-violet-500 text-white text-sm px-3 py-1.5 rounded-xl transition">Filtrele</button>
-          {filterTicker && <button onClick={() => { setTicker(''); setFilterTicker(''); load() }} className="text-gray-500 hover:text-white text-xs">Temizle</button>}
+          <button onClick={handleFilter} className="bg-violet-600 hover:bg-violet-500 text-white text-sm px-3 py-1.5 rounded-xl transition">{t('performance.filter_btn')}</button>
+          {filterTicker && <button onClick={() => { setTicker(''); setFilterTicker(''); load() }} className="text-gray-500 hover:text-white text-xs">{t('performance.filter_clear')}</button>}
         </div>
       </div>
 
@@ -68,14 +70,14 @@ export default function Performance() {
         <>
           {/* KPI Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-            <StatCard icon={<BarChart2 size={18} />} label="Toplam Analiz" value={String(perf.total)} />
-            <StatCard icon={<Target size={18} />} label="Kazanma Oranı"
+            <StatCard icon={<BarChart2 size={18} />} label={t('performance.stat_total')} value={String(perf.total)} />
+            <StatCard icon={<Target size={18} />} label={t('performance.stat_win_rate')}
               value={perf.win_rate !== null ? `${perf.win_rate}%` : '—'}
               color={perf.win_rate !== null && perf.win_rate >= 50 ? 'text-emerald-400' : 'text-red-400'} />
-            <StatCard icon={<TrendingUp size={18} />} label="Ort. Ham Getiri"
+            <StatCard icon={<TrendingUp size={18} />} label={t('performance.stat_avg_raw_return')}
               value={perf.avg_raw_return !== null ? `${perf.avg_raw_return >= 0 ? '+' : ''}${perf.avg_raw_return}%` : '—'}
               color={perf.avg_raw_return !== null && perf.avg_raw_return >= 0 ? 'text-emerald-400' : 'text-red-400'} />
-            <StatCard icon={<TrendingDown size={18} />} label="Ort. Alpha"
+            <StatCard icon={<TrendingDown size={18} />} label={t('performance.stat_avg_alpha')}
               value={perf.avg_alpha_return !== null ? `${perf.avg_alpha_return >= 0 ? '+' : ''}${perf.avg_alpha_return}%` : '—'}
               color={perf.avg_alpha_return !== null && perf.avg_alpha_return >= 0 ? 'text-emerald-400' : 'text-red-400'} />
           </div>
@@ -84,7 +86,7 @@ export default function Performance() {
           {bySignalData.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5">
-                <h3 className="text-sm font-semibold text-gray-300 mb-4">Sinyal Bazında Win Rate (%)</h3>
+                <h3 className="text-sm font-semibold text-gray-300 mb-4">{t('performance.chart_win_rate_title')}</h3>
                 <ResponsiveContainer width="100%" height={180}>
                   <BarChart data={bySignalData}>
                     <XAxis dataKey="signal" stroke="#6b7280" tick={{ fontSize: 11 }} />
@@ -99,7 +101,7 @@ export default function Performance() {
                 </ResponsiveContainer>
               </div>
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5">
-                <h3 className="text-sm font-semibold text-gray-300 mb-4">Sinyal Bazında Ort. Getiri (%)</h3>
+                <h3 className="text-sm font-semibold text-gray-300 mb-4">{t('performance.chart_avg_return_title')}</h3>
                 <ResponsiveContainer width="100%" height={180}>
                   <BarChart data={bySignalData}>
                     <XAxis dataKey="signal" stroke="#6b7280" tick={{ fontSize: 11 }} />
@@ -120,18 +122,18 @@ export default function Performance() {
           {history.length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
               <div className="px-4 md:px-5 py-3 md:py-4 border-b border-gray-800">
-                <h3 className="text-sm font-semibold text-gray-300">Geçmiş Sinyaller ve Gerçekleşen Getiriler</h3>
+                <h3 className="text-sm font-semibold text-gray-300">{t('performance.history_title')}</h3>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-sm min-w-[400px]">
                   <thead>
                     <tr className="text-gray-600 text-xs uppercase tracking-wider bg-gray-800/30">
-                      <th className="px-4 py-3 text-left">Sembol</th>
-                      <th className="px-4 py-3 text-left">Tarih</th>
-                      <th className="px-4 py-3 text-left">Sinyal</th>
-                      <th className="px-4 py-3 text-right">Ham Getiri</th>
-                      <th className="px-4 py-3 text-right hidden sm:table-cell">Alpha</th>
-                      <th className="px-4 py-3 text-right hidden sm:table-cell">Gün</th>
+                      <th className="px-4 py-3 text-left">{t('performance.col_symbol')}</th>
+                      <th className="px-4 py-3 text-left">{t('performance.col_date')}</th>
+                      <th className="px-4 py-3 text-left">{t('performance.col_signal')}</th>
+                      <th className="px-4 py-3 text-right">{t('performance.col_raw_return')}</th>
+                      <th className="px-4 py-3 text-right hidden sm:table-cell">{t('performance.col_alpha')}</th>
+                      <th className="px-4 py-3 text-right hidden sm:table-cell">{t('performance.col_days')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -159,8 +161,8 @@ export default function Performance() {
       ) : (
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 md:p-12 text-center">
           <BarChart2 size={36} className="mx-auto text-gray-700 mb-3" />
-          <p className="text-gray-500 text-sm">Henüz gerçekleşen getiri verisi yok.</p>
-          <p className="text-gray-600 text-xs mt-1">Analizler sinyal tarihinden 5 iş günü sonra otomatik güncellenir.</p>
+          <p className="text-gray-500 text-sm">{t('performance.empty_title')}</p>
+          <p className="text-gray-600 text-xs mt-1">{t('performance.empty_subtitle')}</p>
         </div>
       )}
     </div>
