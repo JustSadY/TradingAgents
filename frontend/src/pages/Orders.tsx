@@ -29,7 +29,7 @@ const ACTION_COLORS: Record<string, string> = {
 }
 
 export default function Orders() {
-  const { t, language } = useTranslation()
+  const { t } = useTranslation()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [mode, setMode] = useState<string>('')
