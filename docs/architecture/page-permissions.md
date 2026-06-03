@@ -2,8 +2,7 @@
 
 ## Overview
 
-Each non-admin user starts with access to **no pages** (except Settings, which is
-always accessible for API key entry). Admins explicitly grant access per page.
+Each regular user starts with access to **no pages** (except Preferences and Account & API Keys, which are always accessible). Admins/Owners explicitly grant access per page.
 
 ## Page Keys
 
@@ -22,7 +21,7 @@ always accessible for API key entry). Admins explicitly grant access per page.
 | `logs` | System Logs |
 | `settings` | Settings (always allowed) |
 
-Admin users implicitly have access to all pages plus `/admin`.
+Admin and Owner users implicitly have access to all pages plus `/admin`.
 
 ## Database
 
@@ -41,8 +40,8 @@ CREATE TABLE user_page_permissions (
 | Endpoint | Who | Description |
 |----------|-----|-------------|
 | `GET /api/users/me/permissions` | Any auth user | Own allowed page list |
-| `GET /api/users/{id}/permissions` | Admin | Per-user page permission map |
-| `PUT /api/users/{id}/permissions` | Admin | Update page permissions |
+| `GET /api/users/{id}/permissions` | Admin/Owner | Per-user page permission map |
+| `PUT /api/users/{id}/permissions` | Admin/Owner | Update page permissions |
 
 `GET /api/users/me/permissions` returns:
 ```json
@@ -51,10 +50,8 @@ CREATE TABLE user_page_permissions (
 
 ## Frontend
 
-`Layout.tsx` fetches `/api/users/me/permissions` on mount and filters the sidebar
-nav to only show allowed pages. The profile link and admin link are always shown
-(filtered by role in the admin case).
+`Layout.tsx` fetches `/api/users/me/permissions` on mount and filters the sidebar nav to only show allowed pages. The preferences link and admin link are always shown (filtered by role in the admin/owner case).
 
-`RequireAdmin` component in `App.tsx` redirects non-admin users away from `/admin`.
+`RequireAdmin` component in `App.tsx` redirects non-admin/non-owner users away from `/admin`.
 
 Backend `require_page(key)` dependency provides authoritative server-side enforcement.

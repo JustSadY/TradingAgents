@@ -9,7 +9,7 @@ from backend.api.deps import get_current_user, require_admin, get_db
 from backend.core.config import get_settings as _get_settings
 from backend.core.security import hash_password
 from backend.models.user import User
-from backend.models.page_permission import UserPagePermission, ALL_PAGE_KEYS
+from backend.models.page_permission import UserPagePermission, UserSettingPermission, ALL_PAGE_KEYS
 from backend.schemas.user import (
     UserCreate, UserRead, ProfileUpdate, UserAdminUpdate,
     ApiKeySet, PagePermissionsUpdate, PagePermissionsRead,
@@ -129,6 +129,17 @@ async def create_user(
         result = await db.execute(select(User).where(User.email == body.email))
         if result.scalar_one_or_none():
             raise HTTPException(status_code=400, detail="Email already in use")
+    if body.role == "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Assigning the Server Owner role is prohibited."
+        )
+    if body.role != "user" and _.role != "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the Server Owner can create administrator accounts."
+        )
+
     user = User(
         username=body.username,
         hashed_password=hash_password(body.password),
@@ -141,6 +152,9 @@ async def create_user(
     # Auto-enable dashboard and portfolio page permissions for new user
     db.add(UserPagePermission(user_id=user.id, page_key="dashboard", allowed=True))
     db.add(UserPagePermission(user_id=user.id, page_key="portfolio", allowed=True))
+    # Auto-enable settings section permissions for new user
+    for s_key in ["general", "llm", "risk", "webhooks", "presets"]:
+        db.add(UserSettingPermission(user_id=user.id, setting_key=s_key, allowed=True))
     await db.flush()
     return user
 
@@ -156,8 +170,35 @@ async def update_user(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    if user.role == "owner":
+        # 1. Owner account details and role cannot be changed by anyone
+        if body.role is not None and body.role != "owner":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="The Server Owner role is immutable and cannot be demoted."
+            )
+        if body.is_active is not None and body.is_active != user.is_active:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="The Server Owner account cannot be deactivated."
+            )
+
     if body.role is not None:
+        # 2. Prevent promoting anyone to owner
+        if body.role == "owner" and user.role != "owner":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Assigning the Server Owner role is prohibited."
+            )
+        # 3. Admins cannot change anyone's role. Only the owner can promote/demote.
+        if admin.role != "owner":
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Only the Server Owner can modify user roles or promote/demote administrators."
+            )
         user.role = body.role
+
     if body.is_active is not None:
         user.is_active = body.is_active
     if body.email is not None:
@@ -179,6 +220,14 @@ async def delete_user(
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+
+    # 4. Owner account cannot be deleted
+    if user.role == "owner":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="The Server Owner account cannot be deleted."
+        )
+
     await db.delete(user)
 
 
@@ -280,3 +329,80 @@ async def delete_user_api_key_endpoint(
         raise HTTPException(status_code=404, detail=f"No key found for provider '{provider}'")
     await db.flush()
     return {"detail": f"API key for '{provider}' deleted for user {user.username}"}
+
+
+# ── Settings permissions ──────────────────────────────────────────────────────
+
+@router.get("/me/setting-permissions")
+async def get_my_setting_permissions(
+    current_user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    if current_user.is_admin:
+        # Admin is allowed to edit all settings
+        return {"allowed_settings": ["general", "llm", "risk", "webhooks", "presets"]}
+
+    result = await db.execute(
+        select(UserSettingPermission)
+        .where(UserSettingPermission.user_id == current_user.id)
+        .where(UserSettingPermission.allowed == True)
+    )
+    perms = result.scalars().all()
+    allowed = [p.setting_key for p in perms]
+    return {"allowed_settings": allowed}
+
+
+@router.get("/{user_id}/setting-permissions")
+async def get_user_setting_permissions(
+    user_id: int,
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    # Validate target user exists
+    result = await db.execute(select(User).where(User.id == user_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="User not found")
+
+    result = await db.execute(
+        select(UserSettingPermission).where(UserSettingPermission.user_id == user_id)
+    )
+    perms = {p.setting_key: p.allowed for p in result.scalars().all()}
+    full = {k: perms.get(k, False) for k in ["general", "llm", "risk", "webhooks", "presets"]}
+    return {"user_id": user_id, "permissions": full}
+
+
+from pydantic import BaseModel
+
+class SettingPermissionsUpdate(BaseModel):
+    permissions: dict[str, bool]
+
+
+@router.put("/{user_id}/setting-permissions")
+async def set_user_setting_permissions(
+    user_id: int,
+    body: SettingPermissionsUpdate,
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    # Validate target user exists
+    result = await db.execute(select(User).where(User.id == user_id))
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=404, detail="User not found")
+
+    for setting_key, allowed in body.permissions.items():
+        if setting_key not in ["general", "llm", "risk", "webhooks", "presets"]:
+            continue
+        result = await db.execute(
+            select(UserSettingPermission)
+            .where(UserSettingPermission.user_id == user_id)
+            .where(UserSettingPermission.setting_key == setting_key)
+        )
+        perm = result.scalar_one_or_none()
+        if perm is None:
+            perm = UserSettingPermission(user_id=user_id, setting_key=setting_key, allowed=allowed)
+            db.add(perm)
+        else:
+            perm.allowed = allowed
+    await db.flush()
+    return {"detail": "Setting permissions updated"}
+

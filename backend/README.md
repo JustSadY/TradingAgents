@@ -28,7 +28,7 @@ backend/
 │   ├── log_handler.py    # DB logging handler (pushes logs to database asynchronously)
 │   └── websocket.py      # WS connection manager for real-time progress feeds
 ├── models/               # SQLAlchemy asynchronous DB models
-│   ├── user.py           # User profiles (RBAC roles: user, admin)
+│   ├── user.py           # User profiles (RBAC roles: user, admin, owner)
 │   ├── portfolio.py      # Portfolios, cash, and performance indicators
 │   ├── order.py          # Simulated paper trade records
 │   ├── analysis.py       # Archived multi-agent output reports

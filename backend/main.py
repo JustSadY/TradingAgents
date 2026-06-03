@@ -148,13 +148,13 @@ async def _seed_admin_user():
         existing = result.scalar_one_or_none()
         if existing is None:
             hashed = settings.ADMIN_PASSWORD_HASH or hash_password("changeme")
-            db.add(User(username=settings.ADMIN_USERNAME, hashed_password=hashed, role="admin"))
+            db.add(User(username=settings.ADMIN_USERNAME, hashed_password=hashed, role="owner"))
             await db.commit()
-            _logger.info("Admin user created: %s", settings.ADMIN_USERNAME)
-        elif existing.role != "admin":
-            existing.role = "admin"
+            _logger.info("Owner user created: %s", settings.ADMIN_USERNAME)
+        elif existing.role != "owner":
+            existing.role = "owner"
             await db.commit()
-            _logger.info("Admin role set for existing user: %s", settings.ADMIN_USERNAME)
+            _logger.info("Owner role set for existing user: %s", settings.ADMIN_USERNAME)
 
 
 async def _load_cron_settings(cron):

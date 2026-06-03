@@ -15,19 +15,55 @@ import UpdateBanner from './UpdateBanner'
 
 interface RunningTask { ticker: string; taskId: string; startedAt: string }
 
-const ALL_NAV = [
-  { to: '/dashboard',   key: 'nav.dashboard',    page: 'dashboard',   icon: LayoutDashboard },
-  { to: '/analysis',    key: 'nav.analysis',     page: 'analysis',    icon: Search },
-  { to: '/chart',       key: 'nav.chart',        page: 'chart',       icon: TrendingUp },
-  { to: '/trading',     key: 'nav.simulation',   page: 'trading',     icon: FlaskConical },
-  { to: '/portfolio',   key: 'nav.portfolio',    page: 'portfolio',   icon: PieChart },
-  { to: '/watchlist',   key: 'nav.watchlist',    page: 'watchlist',   icon: BookMarked },
-  { to: '/orders',      key: 'nav.orders',       page: 'orders',      icon: Briefcase },
-  { to: '/performance', key: 'nav.performance',  page: 'performance', icon: BarChart2 },
-  { to: '/alerts',      key: 'nav.alerts',       page: 'alerts',      icon: Bell },
-  { to: '/settings',    key: 'nav.settings',     page: 'settings',    icon: Settings },
-  { to: '/ab-testing',  key: 'nav.ab_testing',   page: 'ab-testing',  icon: GitCompare },
-  { to: '/logs',        key: 'nav.logs',         page: 'logs',        icon: ScrollText },
+interface NavItem {
+  to: string
+  key: string
+  page: string
+  icon: any
+  adminOnly?: boolean
+  isProfile?: boolean
+}
+
+interface NavSection {
+  sectionKey: string
+  items: NavItem[]
+}
+
+const NAV_SECTIONS: NavSection[] = [
+  {
+    sectionKey: 'nav.section.trading_desk',
+    items: [
+      { to: '/dashboard',   key: 'nav.dashboard',    page: 'dashboard',   icon: LayoutDashboard },
+      { to: '/analysis',    key: 'nav.analysis',     page: 'analysis',    icon: Search },
+      { to: '/chart',       key: 'nav.chart',        page: 'chart',       icon: TrendingUp },
+      { to: '/ab-testing',  key: 'nav.ab_testing',   page: 'ab-testing',  icon: GitCompare },
+    ]
+  },
+  {
+    sectionKey: 'nav.section.portfolio_trading',
+    items: [
+      { to: '/portfolio',   key: 'nav.portfolio',    page: 'portfolio',   icon: PieChart },
+      { to: '/trading',     key: 'nav.simulation',   page: 'trading',     icon: FlaskConical },
+      { to: '/orders',      key: 'nav.orders',       page: 'orders',      icon: Briefcase },
+      { to: '/performance', key: 'nav.performance',  page: 'performance', icon: BarChart2 },
+    ]
+  },
+  {
+    sectionKey: 'nav.section.market_tools',
+    items: [
+      { to: '/watchlist',   key: 'nav.watchlist',    page: 'watchlist',   icon: BookMarked },
+      { to: '/alerts',      key: 'nav.alerts',       page: 'alerts',      icon: Bell },
+    ]
+  },
+  {
+    sectionKey: 'nav.section.system_config',
+    items: [
+      { to: '/settings',    key: 'nav.settings',     page: 'settings',    icon: Settings },
+      { to: '/profile',     key: 'nav.profile',      page: 'profile',     icon: UserCircle, isProfile: true },
+      { to: '/logs',        key: 'nav.logs',         page: 'logs',        icon: ScrollText },
+      { to: '/admin',       key: 'nav.admin',        page: 'admin',       icon: Shield, adminOnly: true },
+    ]
+  }
 ]
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -48,10 +84,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       .catch(() => setAllowedPages(['settings']))
   }, [])
 
-  // Filter nav items based on permissions (admin sees all)
-  const NAV = ALL_NAV.filter(item =>
-    isAdmin || allowedPages.includes(item.page)
-  )
 
   // Poll cron status
   useEffect(() => {
@@ -181,70 +213,65 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         {/* Nav */}
-        <nav className="flex-1 px-3 py-3 space-y-0.5 overflow-y-auto">
-          {NAV.map(({ to, key, icon: Icon }) => (
-            <NavLink
-              key={to}
-              to={to}
-              onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group ` +
-                (isActive
-                  ? 'bg-violet-500/10 text-violet-300 border border-violet-500/20 shadow-sm'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800')
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <Icon size={16} className={isActive ? 'text-violet-400' : 'text-gray-500 group-hover:text-gray-300'} />
-                  <span className="flex-1">{t(key)}</span>
-                  {isActive && <ChevronRight size={12} className="text-violet-500 opacity-60" />}
-                </>
-              )}
-            </NavLink>
-          ))}
+        <nav className="flex-1 px-3 py-3 space-y-4 overflow-y-auto">
+          {NAV_SECTIONS.map(section => {
+            // Filter items in the section
+            const visibleItems = section.items.filter(item => {
+              if (item.adminOnly) return isAdmin
+              if (item.isProfile) return true
+              return isAdmin || allowedPages.includes(item.page)
+            })
 
-          {/* Profile link — always visible */}
-          <NavLink
-            to="/profile"
-            onClick={() => setSidebarOpen(false)}
-            className={({ isActive }) =>
-              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group ` +
-              (isActive
-                ? 'bg-violet-500/10 text-violet-300 border border-violet-500/20 shadow-sm'
-                : 'text-gray-400 hover:text-white hover:bg-gray-800')
-            }
-          >
-            {({ isActive }) => (
-              <>
-                <UserCircle size={16} className={isActive ? 'text-violet-400' : 'text-gray-500 group-hover:text-gray-300'} />
-                <span className="flex-1">{t('nav.profile')}</span>
-                {isActive && <ChevronRight size={12} className="text-violet-500 opacity-60" />}
-              </>
-            )}
-          </NavLink>
+            if (visibleItems.length === 0) return null
 
-          {/* Admin panel — admin only */}
-          {isAdmin && (
-            <NavLink
-              to="/admin"
-              onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group ` +
-                (isActive
-                  ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20 shadow-sm'
-                  : 'text-gray-400 hover:text-white hover:bg-gray-800')
-              }
-            >
-              {({ isActive }) => (
-                <>
-                  <Shield size={16} className={isActive ? 'text-amber-400' : 'text-gray-500 group-hover:text-gray-300'} />
-                  <span className="flex-1">{t('nav.admin')}</span>
-                  {isActive && <ChevronRight size={12} className="text-amber-500 opacity-60" />}
-                </>
-              )}
-            </NavLink>
-          )}
+            return (
+              <div key={section.sectionKey} className="space-y-1">
+                {/* Section Header */}
+                <h3 className="px-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider select-none mb-1 opacity-70">
+                  {t(section.sectionKey)}
+                </h3>
+                
+                {/* Section Items */}
+                <div className="space-y-0.5">
+                  {visibleItems.map(({ to, key, icon: Icon, adminOnly }) => (
+                    <NavLink
+                      key={to}
+                      to={to}
+                      onClick={() => setSidebarOpen(false)}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 group ` +
+                        (isActive
+                          ? adminOnly 
+                            ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20 shadow-sm'
+                            : 'bg-violet-500/10 text-violet-300 border border-violet-500/20 shadow-sm'
+                          : 'text-gray-400 hover:text-white hover:bg-gray-800/40')
+                      }
+                    >
+                      {({ isActive }) => (
+                        <>
+                          <Icon 
+                            size={15} 
+                            className={
+                              isActive 
+                                ? adminOnly ? 'text-amber-400' : 'text-violet-400' 
+                                : 'text-gray-500 group-hover:text-gray-300'
+                            } 
+                          />
+                          <span className="flex-1">{t(key)}</span>
+                          {isActive && (
+                            <ChevronRight 
+                              size={11} 
+                              className={adminOnly ? 'text-amber-500 opacity-60' : 'text-violet-500 opacity-60'} 
+                            />
+                          )}
+                        </>
+                      )}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+            )
+          })}
         </nav>
 
         {/* Running analysis indicator */}

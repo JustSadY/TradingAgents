@@ -1,6 +1,9 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
-import { Save, BookmarkPlus, Trash2, Play, Bell } from 'lucide-react'
+import {
+  Save, BookmarkPlus, Trash2, Play, Bell,
+  Settings as SettingsIcon, Brain, ShieldAlert, Sliders
+} from 'lucide-react'
 import { useMeta } from '../hooks/useMeta'
 import { useAuth } from '../hooks/useAuth'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
@@ -52,7 +55,6 @@ interface Preset { id: number; name: string; description: string | null; created
 interface ModelOption { label: string; value: string }
 type Catalog = Record<string, { quick: ModelOption[]; deep: ModelOption[] }>
 
-// Fallback provider names — used only until /api/meta loads (provider_labels).
 const PROVIDER_LABELS: Record<string, string> = {
   openai: 'OpenAI',
   anthropic: 'Anthropic (Claude)',
@@ -69,6 +71,26 @@ const PROVIDER_LABELS: Record<string, string> = {
   nvidia: 'NVIDIA NIM',
   litellm: 'LiteLLM Proxy',
   azure: 'Azure OpenAI',
+}
+
+const Input = "bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-sm w-full transition"
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 space-y-4 shadow-sm">
+      <h3 className="text-xs font-bold text-violet-400 uppercase tracking-wider border-b border-gray-800/60 pb-2">{title}</h3>
+      <div className="space-y-3.5 pt-1">{children}</div>
+    </div>
+  )
+}
+
+function Row({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1.5 sm:gap-4">
+      <span className="text-sm text-gray-400 whitespace-nowrap sm:pt-2 min-w-0 shrink-0 font-medium">{label}</span>
+      <div className="flex-1 sm:max-w-xs w-full">{children}</div>
+    </div>
+  )
 }
 
 function ModelSelect({
@@ -105,7 +127,7 @@ function ModelSelect({
 
   return (
     <Row label={label}>
-      <div className="space-y-1">
+      <div className="space-y-1.5 w-full">
         <select
           className={Input}
           value={showCustom ? 'custom' : value}
@@ -114,7 +136,6 @@ function ModelSelect({
           {options.map(o => (
             <option key={o.value} value={o.value}>{o.label}</option>
           ))}
-          {/* Ensure "Custom" option is present even if catalog already has it */}
           {!options.some(o => o.value === 'custom') && (
             <option value="custom">{t('settings.custom_model_id')}</option>
           )}
@@ -148,19 +169,32 @@ export default function Settings() {
   const [browserNotify, setBrowserNotify] = useState(isBrowserNotifyEnabled())
   const [webhookTesting, setWebhookTesting] = useState(false)
   const [webhookTestResult, setWebhookTestResult] = useState<string | null>(null)
+  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'risk' | 'webhooks' | 'presets' | 'advanced'>('general')
+  const [allowedSettings, setAllowedSettings] = useState<string[]>([])
   const meta = useMeta()
 
   useEffect(() => {
     Promise.all([
       axios.get('/api/settings').then(r => r.data),
       axios.get('/api/settings/llm-catalog').then(r => r.data),
-      axios.get('/api/presets').then(r => r.data),
-    ]).then(([settings, cat, presetList]) => {
+      axios.get('/api/presets').then(r => r.data).catch(() => []),
+      axios.get('/api/users/me/setting-permissions').then(r => r.data.allowed_settings).catch(() => []),
+    ]).then(([settings, cat, presetList, allowedSet]) => {
       setS(settings)
       setCatalog(cat)
       setPresets(presetList)
+      setAllowedSettings(allowedSet)
+      
+      // Auto-select first permitted tab
+      const defaultTabs = ['general', 'llm', 'risk', 'webhooks', 'presets']
+      const activeDefault = defaultTabs.find(tab => allowedSet.includes(tab))
+      if (activeDefault) {
+        setActiveTab(activeDefault as any)
+      } else if (isAdmin) {
+        setActiveTab('advanced')
+      }
     })
-  }, [])
+  }, [isAdmin])
 
   const loadPresets = () => axios.get('/api/presets').then(r => setPresets(r.data))
 
@@ -222,7 +256,6 @@ export default function Settings() {
   const providerList = Object.keys(catalog)
   const currentProviderModels = catalog[s.llm_provider]
 
-  // Backend-driven choice lists (fall back to minimal defaults until meta loads)
   const providerLabels = meta?.provider_labels ?? PROVIDER_LABELS
   const tradingModes = meta?.trading_modes ?? [{ value: 'simulation', label: 'Simulation' }, { value: 'live', label: 'Live' }]
   const brokers = meta?.brokers ?? [{ value: 'simulation', label: 'Simulation' }]
@@ -243,248 +276,203 @@ export default function Settings() {
     })
   }
 
+  const TABS = [
+    { key: 'general',  label: t('settings.general') || 'Preferences',      icon: <SettingsIcon size={16} /> },
+    { key: 'llm',      label: t('settings.llm_settings') || 'AI Engine',   icon: <Brain size={16} /> },
+    { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety', icon: <ShieldAlert size={16} /> },
+    { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={16} /> },
+    { key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={16} /> },
+    ...(isAdmin ? [{ key: 'advanced', label: t('settings.section_advanced') || 'Advanced', icon: <Sliders size={16} /> }] : []),
+  ].filter(tab => isAdmin || tab.key === 'advanced' || allowedSettings.includes(tab.key))
+
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-2xl">
-      <h2 className="text-xl font-bold text-white tracking-tight">{t('settings.title')}</h2>
+    <div className="p-4 md:p-6 space-y-5 max-w-5xl">
+      {/* Premium Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-800 pb-4 gap-3">
+        <div>
+          <h2 className="text-xl font-bold text-white tracking-tight">{t('settings.title')}</h2>
+          <p className="text-xs text-gray-500 mt-1">Configure your personal trading agent preferences and models</p>
+        </div>
+        <div className="flex items-center gap-3">
+          {saveError && <span className="text-red-400 text-xs font-medium">{saveError}</span>}
+          <button onClick={save} className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl px-5 py-2.5 text-sm font-semibold shadow-lg shadow-violet-500/20 transition-all shrink-0">
+            <Save size={15} /> {saved ? t('settings.save_button_saved') : t('settings.save_button')}
+          </button>
+        </div>
+      </div>
 
-      <Section title={t('settings.section_working_mode')}>
-        <Row label={t('settings.row_mode')}>
-          <select className={Input} value={s.trading_mode} onChange={e => update('trading_mode', e.target.value)}>
-            {tradingModes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </Row>
-        <Row label={t('settings.row_active_broker')}>
-          <select className={Input} value={s.active_broker} onChange={e => update('active_broker', e.target.value)}>
-            {brokers.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </Row>
-        <Row label={t('settings.row_data_source')}>
-          <select className={Input} value={s.active_data_vendor} onChange={e => update('active_data_vendor', e.target.value)}>
-            {dataVendors.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </Row>
-      </Section>
+      <div className="flex flex-col md:flex-row gap-6 items-start">
+        {/* Left Side: Navigation Tabs List */}
+        <div className="w-full md:w-56 flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-x-visible pb-2.5 md:pb-0 shrink-0 border-b md:border-b-0 md:border-r border-gray-800/80 pr-0 md:pr-4">
+          {TABS.map(tb => {
+            const isActive = activeTab === tb.key
+            return (
+              <button
+                key={tb.key}
+                onClick={() => setActiveTab(tb.key as any)}
+                className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap text-left w-full ${
+                  isActive
+                    ? 'bg-violet-500/10 text-violet-300 border border-violet-500/20 shadow-sm'
+                    : 'text-gray-400 hover:text-white hover:bg-gray-800/60'
+                }`}
+              >
+                {tb.icon}
+                <span>{tb.label}</span>
+              </button>
+            )
+          })}
+        </div>
 
-      {isAdmin && (
-        <Section title={t('settings.section_cron')}>
-          <Row label={t('settings.row_active')}>
-            <input type="checkbox" checked={s.cron_enabled} onChange={e => update('cron_enabled', e.target.checked)} className="w-5 h-5 accent-indigo-600" />
-          </Row>
-          <Row label={t('settings.row_schedule')}>
-            <input className={Input} value={s.cron_schedule} onChange={e => update('cron_schedule', e.target.value)} placeholder="0 9 * * 1-5" />
-          </Row>
-          <Row label={t('settings.row_price_tolerance')}>
-            <input type="number" step="0.1" min="0" max="50" className={Input} value={s.price_tolerance_pct} onChange={e => update('price_tolerance_pct', parseFloat(e.target.value))} />
-          </Row>
-        </Section>
-      )}
+        {/* Right Side: Settings Fields panel */}
+        <div className="flex-1 space-y-4 min-w-0 w-full">
+          
+          {/* TAB: General / Preferences */}
+          {activeTab === 'general' && (
+            <Section title={t('settings.general') || 'Preferences'}>
+              <Row label={t('settings.row_mode')}>
+                <select className={Input} value={s.trading_mode} onChange={e => update('trading_mode', e.target.value)}>
+                  {tradingModes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Row>
+              <Row label={t('settings.row_active_broker')}>
+                <select className={Input} value={s.active_broker} onChange={e => update('active_broker', e.target.value)}>
+                  {brokers.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Row>
+              <Row label={t('settings.row_data_source')}>
+                <select className={Input} value={s.active_data_vendor} onChange={e => update('active_data_vendor', e.target.value)}>
+                  {dataVendors.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Row>
+              <Row label={t('settings.row_output_language')}>
+                <select className={Input} value={s.output_language} onChange={e => update('output_language', e.target.value)}>
+                  {languages.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Row>
+              <Row label={t('settings.row_investor_persona')}>
+                <select className={Input} value={s.investor_persona} onChange={e => update('investor_persona', e.target.value)}>
+                  <option value="conservative">{t('settings.persona_conservative')}</option>
+                  <option value="risk_loving">{t('settings.persona_risk_loving')}</option>
+                  <option value="esg_focused">{t('settings.persona_esg_focused')}</option>
+                </select>
+              </Row>
+              <Row label={t('settings.row_benchmark_symbol')}>
+                <input className={Input} value={s.benchmark_ticker || ''} onChange={e => update('benchmark_ticker', e.target.value || null)} placeholder={t('settings.benchmark_placeholder')} />
+              </Row>
+            </Section>
+          )}
 
-      <Section title={t('settings.llm_settings')}>
-        <Row label="Provider">
-          <select
-            className={Input}
-            value={s.llm_provider}
-            onChange={e => handleProviderChange(e.target.value)}
-          >
-            {providerList.length > 0
-              ? providerList.map(p => (
-                  <option key={p} value={p}>{providerLabels[p] || p}</option>
-                ))
-              : (
-                // Fallback if catalog not loaded
-                <>
-                  <option value="openai">OpenAI</option>
-                  <option value="anthropic">Anthropic (Claude)</option>
-                  <option value="google">Google (Gemini)</option>
-                  <option value="xai">xAI (Grok)</option>
-                  <option value="deepseek">DeepSeek</option>
-                  <option value="ollama">Ollama (Local)</option>
-                </>
-              )
-            }
-          </select>
-        </Row>
+          {/* TAB: AI Engine / LLM Settings */}
+          {activeTab === 'llm' && (
+            <div className="space-y-4">
+              <Section title={t('settings.llm_settings') || 'LLM Settings'}>
+                <Row label="LLM Provider">
+                  <select
+                    className={Input}
+                    value={s.llm_provider}
+                    onChange={e => handleProviderChange(e.target.value)}
+                  >
+                    {providerList.length > 0 ? (
+                      providerList.map(p => (
+                        <option key={p} value={p}>{providerLabels[p] || p}</option>
+                      ))
+                    ) : (
+                      <>
+                        <option value="openai">OpenAI</option>
+                        <option value="anthropic">Anthropic (Claude)</option>
+                        <option value="google">Google (Gemini)</option>
+                        <option value="xai">xAI (Grok)</option>
+                        <option value="deepseek">DeepSeek</option>
+                        <option value="ollama">Ollama (Local)</option>
+                      </>
+                    )}
+                  </select>
+                </Row>
 
-        {currentProviderModels ? (
-          <ModelSelect
-            label={t('settings.row_default_model')}
-            options={[
-              ...(currentProviderModels.quick || []),
-              ...(currentProviderModels.deep || [])
-            ]}
-            value={s.llm_model}
-            onChange={v => {
-              setS(prev => prev ? { ...prev, llm_model: v } : prev)
-            }}
-          />
-        ) : (
-          <Row label={t('settings.row_default_model')}>
-            <input
-              className={Input}
-              value={s.llm_model}
-              onChange={e => {
-                const v = e.target.value
-                setS(prev => prev ? { ...prev, llm_model: v } : prev)
-              }}
-              placeholder="Model ID"
-            />
-          </Row>
-        )}
+                {currentProviderModels ? (
+                  <ModelSelect
+                    label={t('settings.row_default_model')}
+                    options={[
+                      ...(currentProviderModels.quick || []),
+                      ...(currentProviderModels.deep || [])
+                    ]}
+                    value={s.llm_model}
+                    onChange={v => update('llm_model', v)}
+                  />
+                ) : (
+                  <Row label={t('settings.row_default_model')}>
+                    <input
+                      className={Input}
+                      value={s.llm_model}
+                      onChange={e => update('llm_model', e.target.value)}
+                      placeholder="Model ID"
+                    />
+                  </Row>
+                )}
 
-        {/* Backend URL — show for Ollama, LiteLLM, Azure, custom endpoints */}
-        {['ollama', 'litellm', 'azure', 'nvidia'].includes(s.llm_provider) && (
-          <Row label="API Base URL">
-            <input
-              className={Input}
-              value={s.backend_url || ''}
-              onChange={e => update('backend_url', e.target.value || null)}
-              placeholder="http://localhost:11434"
-            />
-          </Row>
-        )}
+                {/* API Base URL */}
+                {['ollama', 'litellm', 'azure', 'nvidia'].includes(s.llm_provider) && (
+                  <Row label="API Base URL">
+                    <input
+                      className={Input}
+                      value={s.backend_url || ''}
+                      onChange={e => update('backend_url', e.target.value || null)}
+                      placeholder="http://localhost:11434"
+                    />
+                  </Row>
+                )}
 
-        {/* Provider-specific reasoning settings */}
-        {s.llm_provider === 'openai' && (
-          <Row label="Reasoning Effort">
-            <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>
-              <option value="">{t('settings.effort_default')}</option>
-              <option value="low">{t('settings.effort_low_fast_cheap')}</option>
-              <option value="medium">{t('settings.effort_medium_balanced')}</option>
-              <option value="high">{t('settings.effort_high_deep')}</option>
-            </select>
-          </Row>
-        )}
-        {s.llm_provider === 'anthropic' && (
-          <Row label="Thinking Effort">
-            <select className={Input} value={s.anthropic_effort || ''} onChange={e => update('anthropic_effort', e.target.value || null)}>
-              <option value="">{t('settings.effort_default')}</option>
-              <option value="low">{t('settings.effort_low_fast')}</option>
-              <option value="medium">{t('settings.effort_medium_balanced')}</option>
-              <option value="high">{t('settings.effort_high_extended')}</option>
-            </select>
-          </Row>
-        )}
-        {s.llm_provider === 'google' && (
-          <Row label="Thinking Level">
-            <select className={Input} value={s.google_thinking_level || ''} onChange={e => update('google_thinking_level', e.target.value || null)}>
-              <option value="">{t('settings.effort_default')}</option>
-              <option value="minimal">{t('settings.effort_minimal_fastest')}</option>
-              <option value="low">Low</option>
-              <option value="medium">Medium</option>
-              <option value="high">{t('settings.effort_high_deepest')}</option>
-            </select>
-          </Row>
-        )}
+                {/* Provider-specific settings */}
+                {s.llm_provider === 'openai' && (
+                  <Row label="Reasoning Effort">
+                    <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>
+                      <option value="">{t('settings.effort_default')}</option>
+                      <option value="low">{t('settings.effort_low_fast_cheap')}</option>
+                      <option value="medium">{t('settings.effort_medium_balanced')}</option>
+                      <option value="high">{t('settings.effort_high_deep')}</option>
+                    </select>
+                  </Row>
+                )}
+                {s.llm_provider === 'anthropic' && (
+                  <Row label="Thinking Effort">
+                    <select className={Input} value={s.anthropic_effort || ''} onChange={e => update('anthropic_effort', e.target.value || null)}>
+                      <option value="">{t('settings.effort_default')}</option>
+                      <option value="low">{t('settings.effort_low_fast')}</option>
+                      <option value="medium">{t('settings.effort_medium_balanced')}</option>
+                      <option value="high">{t('settings.effort_high_extended')}</option>
+                    </select>
+                  </Row>
+                )}
+                {s.llm_provider === 'google' && (
+                  <Row label="Thinking Level">
+                    <select className={Input} value={s.google_thinking_level || ''} onChange={e => update('google_thinking_level', e.target.value || null)}>
+                      <option value="">{t('settings.effort_default')}</option>
+                      <option value="minimal">{t('settings.effort_minimal_fastest')}</option>
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">{t('settings.effort_high_deepest')}</option>
+                    </select>
+                  </Row>
+                )}
+              </Section>
 
-        <Row label={t('settings.row_output_language')}>
-          <select className={Input} value={s.output_language} onChange={e => update('output_language', e.target.value)}>
-            {languages.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-          </select>
-        </Row>
+              <Section title={t('settings.section_active_analysts') || 'Active Analysts'}>
+                {analysts.length === 0 ? (
+                  <p className="text-gray-600 text-sm">{t('settings.analysts_loading')}</p>
+                ) : (
+                  <div className="flex flex-col gap-3.5 pt-1">
+                    {analysts.map(a => {
+                      const isActive = s.selected_analysts.includes(a.key)
+                      const modelVal = s.analyst_models?.[a.key] || ''
 
-        <Row label={t('settings.row_debate_rounds')}>
-          <input type="number" min="1" max="10" className={Input} value={s.max_debate_rounds} onChange={e => update('max_debate_rounds', parseInt(e.target.value))} />
-        </Row>
-        <Row label={t('settings.row_risk_rounds')}>
-          <input type="number" min="1" max="10" className={Input} value={s.max_risk_rounds} onChange={e => update('max_risk_rounds', parseInt(e.target.value))} />
-        </Row>
-        <Row label={t('settings.row_parallel_analysts')}>
-          <input type="number" min="1" max="16" className={Input} value={s.analyst_concurrency_limit} onChange={e => update('analyst_concurrency_limit', parseInt(e.target.value))} />
-        </Row>
-      </Section>
-
-      <Section title={t('settings.section_risk')}>
-        <Row label={t('settings.row_investor_persona')}>
-          <select className={Input} value={s.investor_persona} onChange={e => update('investor_persona', e.target.value)}>
-            <option value="conservative">{t('settings.persona_conservative')}</option>
-            <option value="risk_loving">{t('settings.persona_risk_loving')}</option>
-            <option value="esg_focused">{t('settings.persona_esg_focused')}</option>
-          </select>
-        </Row>
-        <Row label={t('settings.row_max_position_size')}>
-          <input type="number" step="1" min="1" max="100" className={Input} value={s.max_position_size_pct} onChange={e => update('max_position_size_pct', parseFloat(e.target.value))} />
-        </Row>
-        <Row label={t('settings.row_risk_per_trade')}>
-          <input type="number" step="0.1" min="0.1" max="50" className={Input} value={s.max_risk_per_trade_pct} onChange={e => update('max_risk_per_trade_pct', parseFloat(e.target.value))} />
-        </Row>
-      </Section>
-
-      <Section title={t('settings.section_active_analysts')}>
-        {analysts.length === 0 ? (
-          <p className="text-gray-600 text-sm">{t('settings.analysts_loading')}</p>
-        ) : (
-          <div className="flex flex-col gap-3.5 pt-1">
-            {analysts.map(a => {
-              const isActive = s.selected_analysts.includes(a.key)
-              const modelVal = s.analyst_models?.[a.key] || ''
-
-              let currentProvider = 'default'
-              let currentModel = modelVal
-              if (modelVal.includes(':')) {
-                const parts = modelVal.split(':')
-                currentProvider = parts[0]
-                currentModel = parts[1] || ''
-              }
-
-              const activeProvider = currentProvider === 'default' ? s.llm_provider : currentProvider
-              const providerModels = catalog[activeProvider]
-              const allModelValues = [
-                ...(providerModels?.quick?.map(o => o.value) || []),
-                ...(providerModels?.deep?.map(o => o.value) || [])
-              ]
-              const isCustomMode = currentModel === 'custom' || (currentModel !== '' && currentModel !== 'deep' && !allModelValues.includes(currentModel))
-              const selectModelVal = isCustomMode ? 'custom' : currentModel
-
-              return (
-                <div key={a.key} title={a.description} className="flex flex-col border-b border-gray-800/40 pb-2.5 last:border-b-0 last:pb-0">
-                  <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                    <label className="flex items-center gap-2 text-sm cursor-pointer shrink-0 py-1">
-                      <input
-                        type="checkbox"
-                        className="w-4.5 h-4.5 accent-indigo-600 rounded"
-                        checked={isActive}
-                        onChange={e => {
-                          const next = e.target.checked
-                            ? [...s.selected_analysts, a.key]
-                            : s.selected_analysts.filter(x => x !== a.key)
-                          update('selected_analysts', next)
-                        }}
-                      />
-                      <span className="font-medium text-slate-300">{a.label}</span>
-                    </label>
-
-                    {isActive && (
-                      <div className="flex flex-col sm:flex-row gap-2 w-full sm:max-w-md shrink-0">
-                        <select
-                          className={`${Input} text-xs py-1 flex-1`}
-                          value={currentProvider}
-                          onChange={e => {
-                            const newProv = e.target.value
-                            const nextVal = newProv === 'default' ? '' : `${newProv}:`
-                            update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
-                          }}
-                        >
-                          <option value="default">{t('settings.analyst_default_provider')}</option>
-                          {providerList.map(p => (
-                            <option key={p} value={p}>{providerLabels[p] || p}</option>
-                          ))}
-                        </select>
-
-                        <select
-                          className={`${Input} text-xs py-1 flex-1`}
-                          value={selectModelVal}
-                          onChange={e => {
-                            const val = e.target.value
-                            const prefix = currentProvider === 'default' ? '' : `${currentProvider}:`
-                            const nextVal = prefix + (val === 'custom' ? 'custom' : val)
-                            update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
-                          }}
-                        >
-                          {currentProvider === 'default' && (
-                            <option value="">{t('settings.analyst_default_model')}</option>
-                          )}
-                          {currentProvider !== 'default' && (
-                            <option value="">{t('settings.analyst_select_model')}</option>
+                      let currentProvider = 'default'
+                      let currentModel = modelVal
+                      if (modelVal.includes(':')) {
+                        const parts = modelVal.split(':')
+                        currentProvider = parts[0]
+                        currentModel = parts[1] || ''
+                                    </>
+                          {isActive && selectModelVal === 'custom' && (
                           )}
                           {providerModels?.quick?.map(o => (
                             <option key={o.value} value={o.value}>{o.label} ({t('settings.model_quick_suffix')})</option>
@@ -496,10 +484,16 @@ export default function Settings() {
                         </select>
                       </div>
                     )}
+                      )
                   </div>
 
                   {isActive && selectModelVal === 'custom' && (
                     <div className="flex justify-end pt-1.5">
+                    checked={s.webhook_enabled}
+                      disabled={webhookTesting}
+                      {webhookTestResult}
+                    </span>
+                  {([
                       <input
                         className={`${Input} text-xs py-1 placeholder:text-gray-600 w-full sm:max-w-xs`}
                         placeholder={t('settings.custom_model_placeholder')}
@@ -603,10 +597,8 @@ export default function Settings() {
             onChange={e => setPresetName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && savePreset()}
           />
-          <button
             onClick={savePreset}
             disabled={presetSaving || !presetName.trim()}
-            className="flex items-center gap-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm px-3 py-1.5 rounded-xl transition whitespace-nowrap"
           >
             <BookmarkPlus size={14} /> {t('settings.preset_save_button')}
           </button>
@@ -638,98 +630,112 @@ export default function Settings() {
             <input
               className={Input}
               placeholder="https://hooks.slack.com/..."
-              value={s.webhook_url || ''}
               onChange={e => update('webhook_url', e.target.value || null)}
             />
           </Row>
           <Row label={t('settings.row_webhook_active')}>
             <div className="flex items-center gap-3">
               <input
-                type="checkbox"
                 checked={s.webhook_enabled}
                 onChange={e => update('webhook_enabled', e.target.checked)}
-                className="w-5 h-5 accent-indigo-600"
               />
               {s.webhook_url && (
                 <button
                   onClick={testWebhook}
-                  disabled={webhookTesting}
                   className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-2 py-1 rounded-lg transition"
                 >
                   {webhookTesting ? '...' : t('settings.webhook_test_button')}
                 </button>
+                    <div key={p.id} className="flex items-center justify-between bg-gray-800 border border-gray-700/40 rounded-xl px-3.5 py-2.5">
+                      <span className="text-sm text-gray-300 font-medium">{p.name}</span>
+                      <div className="flex items-center gap-2">
+                        <button onClick={() => applyPreset(p.id)} className="text-violet-400 hover:text-violet-300 p-1 transition-colors" title={t('settings.preset_apply_title')}>
+                          <Play size={14} fill="currentColor" />
+                        </button>
+                        <button onClick={() => deletePreset(p.id)} className="text-gray-500 hover:text-red-400 p-1 transition-colors">
+                          <Trash2 size={14} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               )}
-              {webhookTestResult && (
-                <span className={`text-xs ${webhookTestResult.startsWith('✓') ? 'text-emerald-400' : 'text-red-400'}`}>
-                  {webhookTestResult}
-                </span>
-              )}
-            </div>
-          </Row>
-          <Row label={t('settings.row_notification_events')}>
-            <div className="flex flex-col gap-1.5">
-              {([
-                ['analysis_complete', t('settings.event_analysis_complete')],
-                ['trade_executed', t('settings.event_trade_executed')],
-                ['alert_triggered', t('settings.event_alert_triggered')],
-              ] as [string, string][]).map(([key, label]) => (
-                <label key={key} className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    className="accent-indigo-600"
-                    checked={s.webhook_events.includes(key)}
-                    onChange={e => {
-                      const events = s.webhook_events ? s.webhook_events.split(',').filter(Boolean) : []
-                      const next = e.target.checked ? [...events, key] : events.filter(x => x !== key)
-                      update('webhook_events', next.join(','))
-                    }}
-                  />
-                  {label}
-                </label>
-              ))}
-            </div>
-          </Row>
-          <Row label={t('settings.row_browser_notifications')}>
-            <div className="flex items-center gap-3">
-              <button
-                onClick={toggleBrowserNotify}
-                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${browserNotify ? 'bg-violet-600' : 'bg-gray-700'}`}
-              >
-                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${browserNotify ? 'translate-x-6' : 'translate-x-1'}`} />
-              </button>
-              <Bell size={14} className={browserNotify ? 'text-violet-400' : 'text-gray-600'} />
-              <span className="text-xs text-gray-500">{browserNotify ? t('settings.browser_notify_on') : t('settings.browser_notify_off')}</span>
-            </div>
-          </Row>
-        </Section>
-      )}
+            </Section>
+          )}
 
-      <div className="flex items-center gap-3">
-        <button onClick={save} className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl px-5 py-2.5 text-sm font-semibold shadow-lg shadow-violet-500/20 transition-all">
-          <Save size={15} /> {saved ? t('settings.save_button_saved') : t('settings.save_button')}
-        </button>
-        {saveError && <span className="text-red-400 text-sm">{saveError}</span>}
+          {/* TAB: Advanced Settings (Admin Only) */}
+          {activeTab === 'advanced' && isAdmin && (
+            <div className="space-y-4">
+              <Section title={t('settings.section_data_sources') || 'Data Sources Routing'}>
+                {(
+                  [
+                    ['data_vendor_core_stock', t('settings.data_core_stock')],
+                    ['data_vendor_technicals', t('settings.data_technicals')],
+                    ['data_vendor_fundamentals', t('settings.data_fundamentals')],
+                    ['data_vendor_news', t('settings.data_news')],
+                  ] as [keyof Settings, string][]
+                ).map(([field, label]) => (
+                  <Row key={field} label={label}>
+                    <select className={Input} value={s[field] as string} onChange={e => update(field, e.target.value)}>
+                      {dataVendors.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </Row>
+                ))}
+              </Section>
+
+              <Section title={t('settings.section_advanced') || 'Engine Core Settings'}>
+                <Row label={t('settings.row_checkpoint')}>
+                  <input type="checkbox" checked={s.checkpoint_enabled} onChange={e => update('checkpoint_enabled', e.target.checked)} className="w-5 h-5 accent-indigo-600 cursor-pointer" />
+                </Row>
+                <Row label={t('settings.row_historical_analyses')}>
+                  <div className="flex flex-col gap-2 pt-1">
+                    <label className="flex items-center gap-2.5 cursor-pointer text-gray-300 hover:text-white">
+                      <input
+                        type="checkbox"
+                        checked={s.include_historical_analyses}
+                        onChange={e => update('include_historical_analyses', e.target.checked)}
+                        className="w-4.5 h-4.5 accent-indigo-600 rounded"
+                      />
+                      <span className="text-sm font-medium">{t('settings.historical_analyses_hint')}</span>
+                    </label>
+                    {s.include_historical_analyses && (
+                      <div className="flex items-center gap-2 pt-1 pl-7">
+                        <span className="text-xs text-gray-500">{t('settings.historical_limit_label')}</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="50"
+                          className="bg-gray-800 border border-gray-700 text-white rounded-xl px-2 py-0.5 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-xs w-16 text-center transition"
+                          value={s.historical_analyses_limit ?? 5}
+                          onChange={e => update('historical_analyses_limit', parseInt(e.target.value) || 1)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </Row>
+                <Row label={t('settings.row_news_limit_ticker')}>
+                  <input type="number" min="1" max="100" className={Input} value={s.news_article_limit} onChange={e => update('news_article_limit', parseInt(e.target.value))} />
+                </Row>
+                <Row label={t('settings.row_global_news_limit')}>
+                  <input type="number" min="1" max="50" className={Input} value={s.global_news_article_limit} onChange={e => update('global_news_article_limit', parseInt(e.target.value))} />
+                </Row>
+                <Row label={t('settings.row_global_news_lookback')}>
+                  <input type="number" min="1" max="30" className={Input} value={s.global_news_lookback_days} onChange={e => update('global_news_lookback_days', parseInt(e.target.value))} />
+                </Row>
+                <Row label={t('settings.row_max_recursion')}>
+                  <input type="number" min="100" max="5000" className={Input} value={s.max_recur_limit} onChange={e => update('max_recur_limit', parseInt(e.target.value))} />
+                </Row>
+                {s.llm_provider === 'azure' && (
+                  <Row label={t('settings.row_azure_deployment')}>
+                    <input className={Input} value={s.azure_deployment || ''} onChange={e => update('azure_deployment', e.target.value || null)} placeholder="gpt-4o" />
+                  </Row>
+                )}
+              </Section>
+            </div>
+          )}
+
+        </div>
       </div>
-    </div>
-  )
-}
-
-const Input = "bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-sm w-full transition"
-
-function Section({ title, children }: { title: string; children: React.ReactNode }) {
-  return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 space-y-3">
-      <h3 className="text-sm font-semibold text-violet-400 uppercase tracking-wider mb-1">{title}</h3>
-      {children}
-    </div>
-  )
-}
-
-function Row({ label, children }: { label: string; children: React.ReactNode }) {
-  return (
-    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1.5 sm:gap-4">
-      <span className="text-sm text-gray-400 whitespace-nowrap sm:pt-2 min-w-0 shrink-0">{label}</span>
-      <div className="flex-1 sm:max-w-xs">{children}</div>
     </div>
   )
 }

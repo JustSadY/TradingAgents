@@ -201,7 +201,20 @@ export default function Profile() {
         </div>
         <div>
           <h2 className="text-xl font-bold text-white tracking-tight">{t('profile.title')}</h2>
-          <p className="text-sm text-gray-500">@{profile.username} · <span className={`${profile.role === 'admin' ? 'text-amber-400' : 'text-violet-400'}`}>{profile.role}</span></p>
+          <p className="text-sm text-gray-500">
+            @{profile.username} ·{' '}
+            <span
+              className={
+                profile.role === 'owner'
+                  ? 'text-amber-400 font-semibold'
+                  : profile.role === 'admin'
+                  ? 'text-amber-300'
+                  : 'text-violet-400'
+              }
+            >
+              {t(`admin.role_${profile.role}`)}
+            </span>
+          </p>
         </div>
       </div>
 

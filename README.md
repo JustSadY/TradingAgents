@@ -41,7 +41,7 @@ For in-depth developer information, check out the documentation files inside eac
 ```text
 TradingAgents/
 ├── backend/                  # FastAPI web server and database logic
-│   ├── api/                  # API endpoints (Auth, Portfolio, Watchlist, Trading, Settings, etc.)
+│   ├── api/                  # API endpoints (Auth, Portfolio, Watchlist, Paper Trading, Preferences, etc.)
 │   ├── core/                 # Database initialization, security, web catalog, WS manager
 │   ├── models/               # SQLAlchemy async database models
 │   ├── services/             # Core business services (Analysis, Cron, Alerts, Paper trading, etc.)
@@ -52,7 +52,7 @@ TradingAgents/
 ├── frontend/                 # React SPA user interface
 │   ├── src/
 │   │   ├── components/       # Reusable UI widgets (Charts, Analysis panels, Log streams)
-│   │   ├── pages/            # Core views (Dashboard, Watchlist, Performance, Settings)
+│   │   ├── pages/            # Core views (Dashboard, Watchlist, Performance, Preferences, Account & API Keys)
 │   │   └── hooks/            # Custom React hooks (WS handlers and API queries)
 │   └── Dockerfile.frontend
 ├── deploy/                   # Automated deployment scripts for Linux environments

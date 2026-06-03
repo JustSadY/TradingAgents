@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
 import { Save, Trash2, Plus, UserCog, ShieldCheck, Globe, CheckCircle2, Key } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
+import { useAuth } from '../hooks/useAuth'
 
 interface UserRecord {
   id: number
@@ -54,10 +55,12 @@ type Tab = 'users' | 'permissions' | 'system' | 'api-keys'
 
 export default function Admin() {
   const { t } = useTranslation()
+  const { isOwner } = useAuth()
   const [tab, setTab] = useState<Tab>('users')
   const [users, setUsers] = useState<UserRecord[]>([])
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
   const [permissions, setPermissions] = useState<Record<string, boolean>>({})
+  const [settingPermissions, setSettingPermissions] = useState<Record<string, boolean>>({})
   const [permSaved, setPermSaved] = useState(false)
   const [sysSettings, setSysSettings] = useState<SystemSettings | null>(null)
   const [sysSaved, setSysSaved] = useState(false)
@@ -87,8 +90,12 @@ export default function Admin() {
   }, [loadUsers, loadSystemSettings])
 
   const loadUserPermissions = async (userId: number) => {
-    const r = await axios.get(`/api/users/${userId}/permissions`)
-    setPermissions(r.data.permissions)
+    const [pRes, sRes] = await Promise.all([
+      axios.get(`/api/users/${userId}/permissions`),
+      axios.get(`/api/users/${userId}/setting-permissions`),
+    ])
+    setPermissions(pRes.data.permissions)
+    setSettingPermissions(sRes.data.permissions)
     setSelectedUserId(userId)
   }
 
@@ -122,7 +129,10 @@ export default function Admin() {
 
   const savePermissions = async () => {
     if (!selectedUserId) return
-    await axios.put(`/api/users/${selectedUserId}/permissions`, { permissions })
+    await Promise.all([
+      axios.put(`/api/users/${selectedUserId}/permissions`, { permissions }),
+      axios.put(`/api/users/${selectedUserId}/setting-permissions`, { permissions: settingPermissions }),
+    ])
     setPermSaved(true)
     setTimeout(() => setPermSaved(false), 2500)
   }
@@ -183,10 +193,10 @@ export default function Admin() {
   }
 
   const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
-    { key: 'users',       label: t('admin.tab_users'),       icon: <UserCog size={15} /> },
-    { key: 'permissions', label: t('admin.tab_permissions'),  icon: <ShieldCheck size={15} /> },
-    { key: 'system',      label: t('admin.tab_system'),       icon: <Globe size={15} /> },
-    { key: 'api-keys',    label: 'User API Keys',            icon: <Key size={15} /> },
+    { key: 'users',       label: t('admin.tab_users') || 'User Management',       icon: <UserCog size={15} /> },
+    { key: 'permissions', label: t('admin.tab_permissions') || 'Access Control',  icon: <ShieldCheck size={15} /> },
+    { key: 'system',      label: t('admin.tab_system') || 'Global Settings',       icon: <Globe size={15} /> },
+    { key: 'api-keys',    label: t('admin.tab_apikeys') || 'User API Keys',        icon: <Key size={15} /> },
   ]
 
   return (
@@ -236,14 +246,20 @@ export default function Admin() {
                 value={newUser.email}
                 onChange={e => setNewUser(f => ({ ...f, email: e.target.value }))}
               />
-              <select
-                className={Input}
-                value={newUser.role}
-                onChange={e => setNewUser(f => ({ ...f, role: e.target.value }))}
-              >
-                <option value="user">User</option>
-                <option value="admin">Admin</option>
-              </select>
+              {isOwner ? (
+                <select
+                  className={Input}
+                  value={newUser.role}
+                  onChange={e => setNewUser(f => ({ ...f, role: e.target.value }))}
+                >
+                  <option value="user">{t('admin.role_user')}</option>
+                  <option value="admin">{t('admin.role_admin')}</option>
+                </select>
+              ) : (
+                <div className="flex items-center bg-gray-800/40 border border-gray-700 text-gray-500 rounded-xl px-3 py-1.5 text-sm w-full select-none">
+                  {t('admin.default_role_label')}: {t('admin.role_user')}
+                </div>
+              )}
             </div>
             <div className="flex items-center gap-3 pt-1">
               <button
@@ -256,7 +272,7 @@ export default function Admin() {
               {createError && <span className="text-red-400 text-sm">{createError}</span>}
             </div>
           </Section>
-
+ 
           <Section title={t('admin.section_user_list')}>
             {users.length === 0 ? (
               <p className="text-gray-600 text-sm">{t('admin.no_users')}</p>
@@ -286,36 +302,58 @@ export default function Admin() {
                         </td>
                         <td className="py-2.5 pr-4 text-gray-400">{u.email || '—'}</td>
                         <td className="py-2.5 pr-4">
-                          <button
-                            onClick={() => toggleRole(u)}
-                            className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                          {u.role === 'owner' ? (
+                            <span className="text-xs px-2.5 py-0.5 rounded-full border bg-amber-500/10 text-amber-300 border-amber-500/20 font-bold uppercase tracking-wider select-none shadow-sm shadow-amber-500/5">
+                              {t('admin.role_owner')}
+                            </span>
+                          ) : isOwner ? (
+                            <button
+                              onClick={() => toggleRole(u)}
+                              className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                                u.role === 'admin'
+                                  ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                                  : 'bg-violet-500/10 text-violet-400 border-violet-500/20 hover:bg-violet-500/20'
+                              }`}
+                            >
+                              {t(`admin.role_${u.role}`)}
+                            </button>
+                          ) : (
+                            <span className={`text-xs px-2 py-0.5 rounded-full border select-none ${
                               u.role === 'admin'
-                                ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
-                                : 'bg-violet-500/10 text-violet-400 border-violet-500/20 hover:bg-violet-500/20'
-                            }`}
-                          >
-                            {u.role}
-                          </button>
+                                ? 'bg-amber-500/5 text-amber-400/60 border-amber-500/10'
+                                : 'bg-violet-500/5 text-violet-400/60 border-violet-500/10'
+                            }`}>
+                              {t(`admin.role_${u.role}`)}
+                            </span>
+                          )}
                         </td>
                         <td className="py-2.5 pr-4">
-                          <button
-                            onClick={() => toggleActive(u)}
-                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${u.is_active ? 'bg-emerald-600' : 'bg-gray-700'}`}
-                          >
-                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${u.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
-                          </button>
+                          {u.role === 'owner' ? (
+                            <div className="relative inline-flex h-5 w-9 items-center rounded-full bg-emerald-600/50 cursor-not-allowed select-none">
+                              <span className="inline-block h-3.5 w-3.5 transform rounded-full bg-white/70 translate-x-5" />
+                            </div>
+                          ) : (
+                            <button
+                              onClick={() => toggleActive(u)}
+                              className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${u.is_active ? 'bg-emerald-600' : 'bg-gray-700'}`}
+                            >
+                              <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${u.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                            </button>
+                          )}
                         </td>
                         <td className="py-2.5 pr-4 text-gray-500 text-xs">
                           {new Date(u.created_at).toLocaleDateString()}
                         </td>
                         <td className="py-2.5">
-                          <button
-                            onClick={() => deleteUser(u.id)}
-                            className="text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
-                            title={t('admin.delete_user')}
-                          >
-                            <Trash2 size={14} />
-                          </button>
+                          {u.role !== 'owner' && (
+                            <button
+                              onClick={() => deleteUser(u.id)}
+                              className="text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                              title={t('admin.delete_user')}
+                            >
+                              <Trash2 size={14} />
+                            </button>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -340,7 +378,7 @@ export default function Admin() {
               }}
             >
               <option value="">{t('admin.select_user')}</option>
-              {users.filter(u => u.role !== 'admin').map(u => (
+              {users.filter(u => u.role === 'user').map(u => (
                 <option key={u.id} value={u.id}>{u.username}</option>
               ))}
             </select>
@@ -356,19 +394,48 @@ export default function Admin() {
           </div>
 
           {selectedUserId && (
-            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-              {ALL_PAGE_KEYS.map(key => (
-                <label key={key} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer bg-gray-800 hover:bg-gray-750 rounded-xl px-3 py-2 transition-colors">
-                  <input
-                    type="checkbox"
-                    className="accent-violet-600 w-4 h-4 rounded"
-                    checked={permissions[key] ?? false}
-                    onChange={e => setPermissions(prev => ({ ...prev, [key]: e.target.checked }))}
-                  />
-                  {PAGE_LABELS[key] || key}
-                </label>
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                {ALL_PAGE_KEYS.map(key => (
+                  <label key={key} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer bg-gray-800 hover:bg-gray-750 rounded-xl px-3 py-2 transition-colors">
+                    <input
+                      type="checkbox"
+                      className="accent-violet-600 w-4 h-4 rounded"
+                      checked={permissions[key] ?? false}
+                      onChange={e => setPermissions(prev => ({ ...prev, [key]: e.target.checked }))}
+                    />
+                    {PAGE_LABELS[key] || key}
+                  </label>
+                ))}
+              </div>
+
+              {/* Settings Section Permissions */}
+              <div className="border-t border-gray-800 mt-5 pt-4 space-y-2">
+                <h4 className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
+                  {t('admin.section_settings_permissions') || 'Settings Edit Permissions'}
+                </h4>
+                <p className="text-xs text-gray-500 mb-1">Select which settings tabs this user is permitted to edit:</p>
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {[
+                    { key: 'general',  label: t('settings.general') || 'Preferences' },
+                    { key: 'llm',      label: t('settings.llm_settings') || 'AI Engine' },
+                    { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety' },
+                    { key: 'webhooks', label: t('settings.section_notifications') || 'Personal Webhooks' },
+                    { key: 'presets',  label: t('settings.section_presets') || 'Configuration Templates' },
+                  ].map(s => (
+                    <label key={s.key} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer bg-gray-800 hover:bg-gray-750 rounded-xl px-3 py-2 transition-colors">
+                      <input
+                        type="checkbox"
+                        className="accent-amber-500 w-4 h-4 rounded"
+                        checked={settingPermissions[s.key] ?? false}
+                        onChange={e => setSettingPermissions(prev => ({ ...prev, [s.key]: e.target.checked }))}
+                      />
+                      {s.label}
+                    </label>
+                  ))}
+                </div>
+              </div>
+            </>
           )}
         </Section>
       )}
@@ -518,7 +585,7 @@ export default function Admin() {
 
       {/* ── API Keys tab ────────────────────────────────────────────────────────── */}
       {tab === 'api-keys' && (
-        <Section title="User API Keys">
+        <Section title={t('admin.tab_apikeys') || 'User API Keys'}>
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
             <select
               className={`${Input} sm:max-w-xs`}
@@ -531,7 +598,7 @@ export default function Admin() {
             >
               <option value="">{t('admin.select_user')}</option>
               {users.map(u => (
-                <option key={u.id} value={u.id}>{u.username} ({u.role})</option>
+                <option key={u.id} value={u.id}>{u.username} ({t(`admin.role_${u.role}`)})</option>
               ))}
             </select>
             {keySaved && <span className="text-emerald-400 text-sm">✓ Key saved successfully</span>}

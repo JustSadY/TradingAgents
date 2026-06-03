@@ -56,7 +56,8 @@ export function useAuth() {
   return {
     user,
     role,
-    isAdmin: role === 'admin',
+    isAdmin: role === 'admin' || role === 'owner',
+    isOwner: role === 'owner',
     login,
     logout,
     isAuthenticated: !!user,

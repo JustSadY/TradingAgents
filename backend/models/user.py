@@ -23,4 +23,8 @@ class User(Base):
 
     @property
     def is_admin(self) -> bool:
-        return self.role == "admin"
+        return self.role in ("admin", "owner")
+
+    @property
+    def is_owner(self) -> bool:
+        return self.role == "owner"

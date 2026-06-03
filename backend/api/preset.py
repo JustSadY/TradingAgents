@@ -29,12 +29,27 @@ async def list_presets(
     return result.scalars().all()
 
 
+async def _check_presets_permission(user: User, db: AsyncSession):
+    if user.is_admin:
+        return
+    from backend.models.page_permission import UserSettingPermission
+    result = await db.execute(
+        select(UserSettingPermission)
+        .where(UserSettingPermission.user_id == user.id)
+        .where(UserSettingPermission.setting_key == "presets")
+        .where(UserSettingPermission.allowed == True)
+    )
+    if not result.scalar_one_or_none():
+        raise HTTPException(status_code=403, detail="You do not have permission to manage preset templates.")
+
+
 @router.post("", response_model=PresetRead)
 async def create_preset(
     body: PresetCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await _check_presets_permission(current_user, db)
     existing = await db.execute(
         select(ConfigPreset)
         .where(ConfigPreset.name == body.name)
@@ -59,6 +74,7 @@ async def delete_preset(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await _check_presets_permission(current_user, db)
     q = select(ConfigPreset).where(ConfigPreset.id == preset_id)
     if not current_user.is_admin:
         q = q.where(ConfigPreset.user_id == current_user.id)
@@ -76,6 +92,7 @@ async def apply_preset(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await _check_presets_permission(current_user, db)
     """Apply a preset's settings to the current user's AppSettings row."""
     q = select(ConfigPreset).where(ConfigPreset.id == preset_id)
     if not current_user.is_admin:

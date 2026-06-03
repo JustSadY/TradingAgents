@@ -4,14 +4,14 @@ const translations = {
     'settings.loading': 'Loading...',
 
     // Section titles
-    'settings.section_working_mode': 'Working Mode',
+    'settings.section_working_mode': 'Trading Mode Preferences',
     'settings.section_cron': 'Cron / Auto Scan',
-    'settings.section_risk': 'Risk Management',
-    'settings.section_active_analysts': 'Active Analysts',
-    'settings.section_data_sources': 'Data Sources (By Category)',
-    'settings.section_advanced': 'Advanced Settings',
-    'settings.section_presets': 'Setting Templates',
-    'settings.section_notifications': 'Notifications',
+    'settings.section_risk': 'Risk & Safety',
+    'settings.section_active_analysts': 'Active Analysts & Models',
+    'settings.section_data_sources': 'Data Sources Routing',
+    'settings.section_advanced': 'Admin Engine Routing',
+    'settings.section_presets': 'Configuration Templates',
+    'settings.section_notifications': 'Personal Webhooks',
 
     // Row labels — Working Mode
     'settings.row_mode': 'Mode',
@@ -117,14 +117,14 @@ const translations = {
     'settings.loading': 'Yükleniyor...',
 
     // Section titles
-    'settings.section_working_mode': 'Çalışma Modu',
+    'settings.section_working_mode': 'İşlem Modu Tercihleri',
     'settings.section_cron': 'Cron / Otomatik Tarama',
-    'settings.section_risk': 'Risk Yönetimi',
-    'settings.section_active_analysts': 'Aktif Analistler',
-    'settings.section_data_sources': 'Veri Kaynakları (Kategori Bazlı)',
-    'settings.section_advanced': 'Gelişmiş Ayarlar',
+    'settings.section_risk': 'Risk ve Güvenlik Limitleri',
+    'settings.section_active_analysts': 'Aktif Analistler & Modeller',
+    'settings.section_data_sources': 'Veri Kaynağı Yönlendirmeleri',
+    'settings.section_advanced': 'Yönetici Motor Yönlendirmeleri',
     'settings.section_presets': 'Ayar Şablonları',
-    'settings.section_notifications': 'Bildirimler',
+    'settings.section_notifications': 'Kişisel Webhooklar',
 
     // Row labels — Working Mode
     'settings.row_mode': 'Mod',

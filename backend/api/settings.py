@@ -104,6 +104,43 @@ async def update_settings(
 ):
     settings = await _get_or_create_settings(db, _)
 
+    # Validate settings section permissions for non-admin users
+    if not _.is_admin:
+        from backend.models.page_permission import UserSettingPermission, SECTION_FIELDS
+        from fastapi import status
+        
+        # Fetch the user's enabled settings sections
+        result = await db.execute(
+            select(UserSettingPermission)
+            .where(UserSettingPermission.user_id == _.id)
+            .where(UserSettingPermission.allowed == True)
+        )
+        allowed_sections = {p.setting_key for p in result.scalars().all()}
+        
+        # Check which fields are modified in this request
+        attempted_updates = body.model_dump(exclude_unset=True)
+        
+        for section, fields in SECTION_FIELDS.items():
+            if any(f in attempted_updates for f in fields):
+                if section not in allowed_sections:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail=f"You do not have permission to modify settings in section: {section}"
+                    )
+        
+        # Protect advanced admin-only settings fields
+        advanced_fields = [
+            "checkpoint_enabled", "include_historical_analyses", "historical_analyses_limit",
+            "news_article_limit", "global_news_article_limit", "global_news_lookback_days",
+            "max_recur_limit", "azure_deployment", "data_vendor_core_stock",
+            "data_vendor_technicals", "data_vendor_fundamentals", "data_vendor_news"
+        ]
+        if any(f in attempted_updates for f in advanced_fields):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Advanced engine settings can only be modified by administrators."
+            )
+
     has_changes = False
     for field, value in body.model_dump(exclude_unset=True).items():
         if field == "active_preset_name":
