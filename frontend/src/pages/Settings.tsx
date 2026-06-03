@@ -471,181 +471,227 @@ export default function Settings() {
                         const parts = modelVal.split(':')
                         currentProvider = parts[0]
                         currentModel = parts[1] || ''
+                      }
+
+                      const activeProvider = currentProvider === 'default' ? s.llm_provider : currentProvider
+                      const providerModels = catalog[activeProvider]
+                      const allModelValues = [
+                        ...(providerModels?.quick?.map(o => o.value) || []),
+                        ...(providerModels?.deep?.map(o => o.value) || [])
+                      ]
+                      const isCustomMode = currentModel === 'custom' || (currentModel !== '' && currentModel !== 'deep' && !allModelValues.includes(currentModel))
+                      const selectModelVal = isCustomMode ? 'custom' : currentModel
+
+                      return (
+                        <div key={a.key} title={a.description} className="flex flex-col border-b border-gray-800/40 pb-2.5 last:border-b-0 last:pb-0">
+                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+                            <label className="flex items-center gap-2 text-sm cursor-pointer shrink-0 py-1 font-medium">
+                              <input
+                                type="checkbox"
+                                className="w-4.5 h-4.5 accent-indigo-600 rounded"
+                                checked={isActive}
+                                onChange={e => {
+                                  const next = e.target.checked
+                                    ? [...s.selected_analysts, a.key]
+                                    : s.selected_analysts.filter(x => x !== a.key)
+                                  update('selected_analysts', next)
+                                }}
+                              />
+                              {a.label}
+                            </label>
+
+                            {isActive && (
+                              <div className="flex items-center gap-2 w-full sm:max-w-xs">
+                                {/* Provider Select */}
+                                <select
+                                  className={`${Input} text-xs py-1`}
+                                  value={currentProvider}
+                                  onChange={e => {
+                                    const nextProv = e.target.value
+                                    const nextModel = nextProv === 'default' ? '' : 'deep'
+                                    const nextVal = nextProv === 'default' ? '' : `${nextProv}:${nextModel}`
+                                    update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
+                                  }}
+                                >
+                                  <option value="default">{t('settings.analyst_default_provider')}</option>
+                                  {providerList.map(p => (
+                                    <option key={p} value={p}>{providerLabels[p] || p}</option>
+                                  ))}
+                                </select>
+
+                                {/* Model Select */}
+                                <select
+                                  className={`${Input} text-xs py-1`}
+                                  value={selectModelVal}
+                                  onChange={e => {
+                                    const val = e.target.value
+                                    const prefix = currentProvider === 'default' ? '' : `${currentProvider}:`
+                                    const nextVal = val === '' ? '' : prefix + val
+                                    update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
+                                  }}
+                                >
+                                  {currentProvider === 'default' ? (
+                                    <option value="">{t('settings.analyst_default_model')}</option>
+                                  ) : (
+                                    <>
+                                      <option value="quick">{t('settings.model_quick_suffix')}</option>
+                                      <option value="deep">{t('settings.model_deep_suffix')}</option>
                                     </>
+                                  )}
+                                  {providerModels?.quick?.map(o => (
+                                    <option key={o.value} value={o.value}>{o.label} ({t('settings.model_quick_suffix')})</option>
+                                  ))}
+                                  {providerModels?.deep?.map(o => (
+                                    <option key={o.value} value={o.value}>{o.label} ({t('settings.model_deep_suffix')})</option>
+                                  ))}
+                                  <option value="custom">{t('settings.custom_model_option')}</option>
+                                </select>
+                              </div>
+                            )}
+                          </div>
+
                           {isActive && selectModelVal === 'custom' && (
+                            <div className="flex justify-end pt-1.5">
+                              <input
+                                className={`${Input} text-xs py-1 placeholder:text-gray-600 w-full sm:max-w-xs`}
+                                placeholder={t('settings.custom_model_placeholder')}
+                                value={currentModel === 'custom' ? '' : currentModel}
+                                onChange={e => {
+                                  const val = e.target.value
+                                  const prefix = currentProvider === 'default' ? '' : `${currentProvider}:`
+                                  const nextVal = prefix + (val.trim() === '' ? 'custom' : val)
+                                  update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
+                                }}
+                              />
+                            </div>
                           )}
-                          {providerModels?.quick?.map(o => (
-                            <option key={o.value} value={o.value}>{o.label} ({t('settings.model_quick_suffix')})</option>
-                          ))}
-                          {providerModels?.deep?.map(o => (
-                            <option key={o.value} value={o.value}>{o.label} ({t('settings.model_deep_suffix')})</option>
-                          ))}
-                          <option value="custom">{t('settings.custom_model_option')}</option>
-                        </select>
-                      </div>
-                    )}
+                        </div>
                       )
-                  </div>
-
-                  {isActive && selectModelVal === 'custom' && (
-                    <div className="flex justify-end pt-1.5">
-                    checked={s.webhook_enabled}
-                      disabled={webhookTesting}
-                      {webhookTestResult}
-                    </span>
-                  {([
-                      <input
-                        className={`${Input} text-xs py-1 placeholder:text-gray-600 w-full sm:max-w-xs`}
-                        placeholder={t('settings.custom_model_placeholder')}
-                        value={currentModel === 'custom' ? '' : currentModel}
-                        onChange={e => {
-                          const val = e.target.value
-                          const prefix = currentProvider === 'default' ? '' : `${currentProvider}:`
-                          const nextVal = prefix + (val.trim() === '' ? 'custom' : val)
-                          update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
-                        }}
-                      />
-                    </div>
-                  )}
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </Section>
-
-      {isAdmin && (
-        <>
-          <Section title={t('settings.section_data_sources')}>
-            {(
-              [
-                ['data_vendor_core_stock', t('settings.data_core_stock')],
-                ['data_vendor_technicals', t('settings.data_technicals')],
-                ['data_vendor_fundamentals', t('settings.data_fundamentals')],
-                ['data_vendor_news', t('settings.data_news')],
-              ] as [keyof Settings, string][]
-            ).map(([field, label]) => (
-              <Row key={field} label={label}>
-                <select className={Input} value={s[field] as string} onChange={e => update(field, e.target.value)}>
-                  {dataVendors.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </Row>
-            ))}
-          </Section>
-
-          <Section title={t('settings.section_advanced')}>
-            <Row label={t('settings.row_checkpoint')}>
-              <input type="checkbox" checked={s.checkpoint_enabled} onChange={e => update('checkpoint_enabled', e.target.checked)} className="w-5 h-5 accent-indigo-600" />
-            </Row>
-            <Row label={t('settings.row_historical_analyses')}>
-              <div className="flex flex-col gap-2">
-                <label className="flex items-center gap-2 cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={s.include_historical_analyses}
-                    onChange={e => update('include_historical_analyses', e.target.checked)}
-                    className="w-5 h-5 accent-indigo-600"
-                  />
-                  <span className="text-xs text-gray-500">{t('settings.historical_analyses_hint')}</span>
-                </label>
-                {s.include_historical_analyses && (
-                  <div className="flex items-center gap-2 pt-0.5">
-                    <span className="text-xs text-gray-400">{t('settings.historical_limit_label')}</span>
-                    <input
-                      type="number"
-                      min="1"
-                      max="50"
-                      className="bg-gray-800 border border-gray-700 text-white rounded-xl px-2 py-0.5 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-xs w-16 text-center transition"
-                      value={s.historical_analyses_limit ?? 5}
-                      onChange={e => update('historical_analyses_limit', parseInt(e.target.value) || 1)}
-                    />
+                    })}
                   </div>
                 )}
-              </div>
-            </Row>
-            <Row label={t('settings.row_news_limit_ticker')}>
-              <input type="number" min="1" max="100" className={Input} value={s.news_article_limit} onChange={e => update('news_article_limit', parseInt(e.target.value))} />
-            </Row>
-            <Row label={t('settings.row_global_news_limit')}>
-              <input type="number" min="1" max="50" className={Input} value={s.global_news_article_limit} onChange={e => update('global_news_article_limit', parseInt(e.target.value))} />
-            </Row>
-            <Row label={t('settings.row_global_news_lookback')}>
-              <input type="number" min="1" max="30" className={Input} value={s.global_news_lookback_days} onChange={e => update('global_news_lookback_days', parseInt(e.target.value))} />
-            </Row>
-            <Row label={t('settings.row_max_recursion')}>
-              <input type="number" min="100" max="5000" className={Input} value={s.max_recur_limit} onChange={e => update('max_recur_limit', parseInt(e.target.value))} />
-            </Row>
-            <Row label={t('settings.row_benchmark_symbol')}>
-              <input className={Input} value={s.benchmark_ticker || ''} onChange={e => update('benchmark_ticker', e.target.value || null)} placeholder={t('settings.benchmark_placeholder')} />
-            </Row>
-            {s.llm_provider === 'azure' && (
-              <Row label={t('settings.row_azure_deployment')}>
-                <input className={Input} value={s.azure_deployment || ''} onChange={e => update('azure_deployment', e.target.value || null)} placeholder="gpt-4o" />
+              </Section>
+            </div>
+          )}
+
+          {/* TAB: Risk & Safety */}
+          {activeTab === 'risk' && (
+            <Section title={t('settings.section_risk') || 'Risk Management'}>
+              <Row label={t('settings.row_risk_per_trade')}>
+                <input type="number" step="0.1" min="0.1" max="50" className={Input} value={s.max_risk_per_trade_pct} onChange={e => update('max_risk_per_trade_pct', parseFloat(e.target.value))} />
               </Row>
-            )}
-          </Section>
-        </>
-      )}
+              <Row label={t('settings.row_max_position_size')}>
+                <input type="number" step="1" min="1" max="100" className={Input} value={s.max_position_size_pct} onChange={e => update('max_position_size_pct', parseFloat(e.target.value))} />
+              </Row>
+              <Row label={t('settings.row_debate_rounds')}>
+                <input type="number" min="1" max="10" className={Input} value={s.max_debate_rounds} onChange={e => update('max_debate_rounds', parseInt(e.target.value))} />
+              </Row>
+              <Row label={t('settings.row_risk_rounds')}>
+                <input type="number" min="1" max="10" className={Input} value={s.max_risk_rounds} onChange={e => update('max_risk_rounds', parseInt(e.target.value))} />
+              </Row>
+              <Row label={t('settings.row_parallel_analysts')}>
+                <input type="number" min="1" max="16" className={Input} value={s.analyst_concurrency_limit} onChange={e => update('analyst_concurrency_limit', parseInt(e.target.value))} />
+              </Row>
+            </Section>
+          )}
 
-      {/* Preset Management (MOD2) */}
-      <Section title={t('settings.section_presets')}>
-        <div className="flex gap-2">
-          <input
-            className={Input}
-            placeholder={t('settings.preset_name_placeholder')}
-            value={presetName}
-            onChange={e => setPresetName(e.target.value)}
-            onKeyDown={e => e.key === 'Enter' && savePreset()}
-          />
-            onClick={savePreset}
-            disabled={presetSaving || !presetName.trim()}
-          >
-            <BookmarkPlus size={14} /> {t('settings.preset_save_button')}
-          </button>
-        </div>
-        {presets.length === 0 ? (
-          <p className="text-gray-600 text-xs">{t('settings.preset_no_presets')}</p>
-        ) : (
-          <div className="space-y-1.5 pt-1">
-            {presets.map(p => (
-              <div key={p.id} className="flex items-center justify-between bg-gray-800 rounded-xl px-3 py-2">
-                <span className="text-sm text-gray-300">{p.name}</span>
-                <div className="flex items-center gap-2">
-                  <button onClick={() => applyPreset(p.id)} className="text-violet-400 hover:text-violet-300 transition-colors" title={t('settings.preset_apply_title')}>
-                    <Play size={13} />
-                  </button>
-                  <button onClick={() => deletePreset(p.id)} className="text-gray-600 hover:text-red-400 transition-colors">
-                    <Trash2 size={13} />
-                  </button>
+          {/* TAB: Webhooks & Alerts */}
+          {activeTab === 'webhooks' && (
+            <Section title={t('settings.section_notifications') || 'Alerts & Webhooks'}>
+              <Row label={t('settings.row_webhook_url')}>
+                <input
+                  className={Input}
+                  placeholder="https://hooks.slack.com/..."
+                  value={s.webhook_url || ''}
+                  onChange={e => update('webhook_url', e.target.value || null)}
+                />
+              </Row>
+              <Row label={t('settings.row_webhook_active')}>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    checked={s.webhook_enabled}
+                    onChange={e => update('webhook_enabled', e.target.checked)}
+                    className="w-5 h-5 accent-indigo-600 cursor-pointer"
+                  />
+                  {s.webhook_url && (
+                    <button
+                      onClick={testWebhook}
+                      disabled={webhookTesting}
+                      className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg transition"
+                    >
+                      {webhookTesting ? '...' : t('settings.webhook_test_button')}
+                    </button>
+                  )}
+                  {webhookTestResult && (
+                    <span className={`text-xs ${webhookTestResult.startsWith('✓') ? 'text-emerald-400' : 'text-red-400'}`}>
+                      {webhookTestResult}
+                    </span>
+                  )}
                 </div>
-              </div>
-            ))}
-          </div>
-        )}
-      </Section>
+              </Row>
+              <Row label={t('settings.row_notification_events')}>
+                <div className="flex flex-col gap-1.5 pt-1">
+                  {([
+                    ['analysis_complete', t('settings.event_analysis_complete')],
+                    ['trade_executed', t('settings.event_trade_executed')],
+                    ['alert_triggered', t('settings.event_alert_triggered')],
+                  ] as [string, string][]).map(([key, label]) => (
+                    <label key={key} className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300">
+                      <input
+                        type="checkbox"
+                        className="accent-indigo-600 rounded w-4.5 h-4.5"
+                        checked={s.webhook_events.includes(key)}
+                        onChange={e => {
+                          const events = s.webhook_events ? s.webhook_events.split(',').filter(Boolean) : []
+                          const next = e.target.checked ? [...events, key] : events.filter(x => x !== key)
+                          update('webhook_events', next.join(','))
+                        }}
+                      />
+                      {label}
+                    </label>
+                  ))}
+                </div>
+              </Row>
+              <Row label={t('settings.row_browser_notifications')}>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={toggleBrowserNotify}
+                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${browserNotify ? 'bg-violet-600' : 'bg-gray-700'}`}
+                  >
+                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${browserNotify ? 'translate-x-6' : 'translate-x-1'}`} />
+                  </button>
+                  <Bell size={14} className={browserNotify ? 'text-violet-400' : 'text-gray-600'} />
+                  <span className="text-xs text-gray-500">{browserNotify ? t('settings.browser_notify_on') : t('settings.browser_notify_off')}</span>
+                </div>
+              </Row>
+            </Section>
+          )}
 
-      {isAdmin && (
-        <Section title={t('settings.section_notifications')}>
-          <Row label={t('settings.row_webhook_url')}>
-            <input
-              className={Input}
-              placeholder="https://hooks.slack.com/..."
-              onChange={e => update('webhook_url', e.target.value || null)}
-            />
-          </Row>
-          <Row label={t('settings.row_webhook_active')}>
-            <div className="flex items-center gap-3">
-              <input
-                checked={s.webhook_enabled}
-                onChange={e => update('webhook_enabled', e.target.checked)}
-              />
-              {s.webhook_url && (
+          {/* TAB: Presets Templates */}
+          {activeTab === 'presets' && (
+            <Section title={t('settings.section_presets') || 'Presets Templates'}>
+              <div className="flex gap-2">
+                <input
+                  className={Input}
+                  placeholder={t('settings.preset_name_placeholder')}
+                  value={presetName}
+                  onChange={e => setPresetName(e.target.value)}
+                  onKeyDown={e => e.key === 'Enter' && savePreset()}
+                />
                 <button
-                  onClick={testWebhook}
-                  className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-2 py-1 rounded-lg transition"
+                  onClick={savePreset}
+                  disabled={presetSaving || !presetName.trim()}
+                  className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-xl transition whitespace-nowrap font-medium"
                 >
-                  {webhookTesting ? '...' : t('settings.webhook_test_button')}
+                  <BookmarkPlus size={14} /> {t('settings.preset_save_button')}
                 </button>
+              </div>
+              {presets.length === 0 ? (
+                <p className="text-gray-600 text-xs text-center py-4">{t('settings.preset_no_presets')}</p>
+              ) : (
+                <div className="space-y-1.5 pt-1">
+                  {presets.map(p => (
                     <div key={p.id} className="flex items-center justify-between bg-gray-800 border border-gray-700/40 rounded-xl px-3.5 py-2.5">
                       <span className="text-sm text-gray-300 font-medium">{p.name}</span>
                       <div className="flex items-center gap-2">
