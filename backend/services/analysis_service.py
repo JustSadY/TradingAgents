@@ -96,6 +96,7 @@ def _build_config(settings: AppSettings) -> dict:
         "max_debate_rounds": settings.max_debate_rounds,
         "max_risk_discuss_rounds": settings.max_risk_rounds,
         "output_language": settings.output_language or "English",
+        "investor_persona": settings.investor_persona or "conservative",
         "analyst_concurrency_limit": settings.analyst_concurrency_limit or 1,
         "skip_disk_log": True,   # DB is source of truth; skip redundant JSON writes
         "checkpoint_enabled": getattr(settings, "checkpoint_enabled", False),
@@ -276,6 +277,8 @@ async def run_analysis(
 
             prev_state: dict = {}
             final: dict = {}
+            prev_inv_count = 0
+            prev_risk_count = 0
             for mode, chunk in ta.graph.stream(
                 state, stream_mode=["updates", "values"], config=cfg, **kwargs
             ):
@@ -285,6 +288,23 @@ async def run_analysis(
                         if prog:
                             _emit(prog)
                 else:  # "values": full cumulative state
+                    # Intercept live debate bubbles
+                    inv_state = chunk.get("investment_debate_state") or {}
+                    if inv_state and inv_state.get("count", 0) > prev_inv_count:
+                        prev_inv_count = inv_state.get("count", 0)
+                        history = inv_state.get("history", "")
+                        lines = [line.strip() for line in history.split("\n") if line.strip()]
+                        if lines:
+                            _emit({"type": "debate_bubble", "debate_type": "investment", "message": lines[-1]})
+
+                    risk_state = chunk.get("risk_debate_state") or {}
+                    if risk_state and risk_state.get("count", 0) > prev_risk_count:
+                        prev_risk_count = risk_state.get("count", 0)
+                        history = risk_state.get("history", "")
+                        lines = [line.strip() for line in history.split("\n") if line.strip()]
+                        if lines:
+                            _emit({"type": "debate_bubble", "debate_type": "risk", "message": lines[-1]})
+
                     for key, value in chunk.items():
                         if key in _REPORT_FIELDS and value and value != prev_state.get(key):
                             _emit({"type": "report", "section": key, "content": value})

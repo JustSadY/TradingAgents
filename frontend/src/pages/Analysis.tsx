@@ -8,7 +8,7 @@ import { sendBrowserNotification } from '../utils/browserNotify'
 import { useTranslation } from '../contexts/LanguageContext'
 import {
   Loader2, CheckCircle, AlertCircle, History,
-  X, BarChart2, Terminal, FileText, Zap, Square,
+  X, BarChart2, FileText, Zap, Square,
   Download, FileDown,
 } from 'lucide-react'
 
@@ -107,6 +107,7 @@ const EMPTY_RUN = {
   runStatus: 'idle' as 'idle' | 'running' | 'done' | 'error',
   signal: null as string | null, reports: {} as Record<string, string>,
   log: [] as string[], activeSection: null as string | null,
+  analysisId: null as number | null,
 }
 
 function loadRunState() {
@@ -135,6 +136,12 @@ function RunTab() {
   const [reports, setReports] = useState<Record<string, string>>(saved.reports)
   const [log, setLog] = useState<string[]>(saved.log)
   const [activeSection, setActiveSection] = useState<string | null>(saved.activeSection)
+  const [analysisId, setAnalysisId] = useState<number | null>(saved.analysisId || null)
+  const [detail, setDetail] = useState<AnalysisDetail | null>(null)
+  const [activeDetailTab, setActiveDetailTab] = useState<'reports' | 'debate' | 'chat'>('reports')
+  const [leftTab, setLeftTab] = useState<'log' | 'debate'>('log')
+  const [liveDebate, setLiveDebate] = useState<{ sender: string; content: string }[]>([])
+
   const wsRef = useRef<WebSocket | null>(null)
   const taskIdRef = useRef<string | null>(null)
   const preRefreshLogRef = useRef<string[] | null>(null)
@@ -149,8 +156,14 @@ function RunTab() {
   const [showRerunModal, setShowRerunModal] = useState(false)
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ticker, date, assetType, runStatus, signal, reports, log, activeSection }))
-  }, [ticker, date, assetType, runStatus, signal, reports, log, activeSection])
+    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ticker, date, assetType, runStatus, signal, reports, log, activeSection, analysisId }))
+  }, [ticker, date, assetType, runStatus, signal, reports, log, activeSection, analysisId])
+
+  useEffect(() => {
+    if (analysisId && runStatus === 'done' && !detail) {
+      axios.get(`/api/analysis/${analysisId}`).then(r => setDetail(r.data)).catch(() => {})
+    }
+  }, [analysisId, runStatus, detail])
 
   const setRunning_ = (v: boolean) => {
     setRunning(v)
@@ -193,6 +206,9 @@ function RunTab() {
         setReports(r => ({ ...r, [ev.section!]: ev.content! }))
         setActiveSection(ev.section)
         appendLog(`✓ ${SECTION_LABELS[ev.section!] || ev.section}`)
+      } else if (ev.type === 'debate_bubble' && ev.message) {
+        const parsed = parseDebateMessage(ev.message)
+        setLiveDebate(prev => [...prev, parsed])
       } else if (ev.type === 'decision') {
         setSignal(ev.signal || null)
       } else if (ev.type === 'complete') {
@@ -205,6 +221,10 @@ function RunTab() {
           `${ticker.toUpperCase()} ${t('analysis.ws.analysis_complete_notif')}`,
           `${t('analysis.ws.signal_label')} ${ev.signal ?? 'N/A'} • ${ev.duration_seconds?.toFixed(0)}s`
         )
+        if (ev.analysis_id) {
+          setAnalysisId(ev.analysis_id)
+          axios.get(`/api/analysis/${ev.analysis_id}`).then(r => setDetail(r.data)).catch(() => {})
+        }
       } else if (ev.type === 'error') {
         finished = true
         setRunStatus('error')
@@ -296,6 +316,9 @@ function RunTab() {
     setSignal(null)
     setReports({})
     setLog([])
+    setLiveDebate([])
+    setAnalysisId(null)
+    setDetail(null)
     setActiveSection(null)
     setCurrentStep(null)
     preRefreshLogRef.current = null
@@ -322,6 +345,7 @@ function RunTab() {
 
   const handleClear = () => {
     setRunStatus('idle'); setSignal(null); setReports({}); setLog([]); setActiveSection(null); setCurrentStep(null)
+    setAnalysisId(null); setDetail(null); setLiveDebate([])
   }
 
   const reportEntries = Object.entries(reports)
@@ -438,45 +462,129 @@ function RunTab() {
         </div>
       )}
 
-      {/* Content: log + reports */}
+      {/* Content: log/debate + reports/chat */}
       {(log.length > 0 || reportEntries.length > 0) && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Terminal log */}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800 bg-gray-800/40">
-              <Terminal size={13} className="text-gray-500" />
-              <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">{t('analysis.log.title')}</span>
-              <span className="ml-auto text-xs text-gray-600">{log.length} {t('analysis.log.lines')}</span>
+          {/* Left Panel: Log & Live Debate */}
+          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden flex flex-col h-[60vh] lg:h-[70vh]">
+            <div className="flex items-center gap-1 p-1 bg-gray-800/40 border-b border-gray-800">
+              <button
+                onClick={() => setLeftTab('log')}
+                className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
+                  leftTab === 'log' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                }`}
+              >
+                {t('analysis.log.title')}
+              </button>
+              <button
+                onClick={() => setLeftTab('debate')}
+                className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
+                  leftTab === 'debate' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                }`}
+              >
+                {t('analysis.tab.live_debate')}
+              </button>
             </div>
-            <div className="px-4 py-3 space-y-1 max-h-48 md:max-h-80 overflow-y-auto">
-              {log.map((line, i) => (
-                <p key={i} className={`text-xs font-mono leading-relaxed ${
-                  line.startsWith('✗') ? 'text-red-400' :
-                  line.startsWith('✓') ? 'text-emerald-400' :
-                  line.startsWith('—') ? 'text-violet-400 font-semibold' : 'text-gray-500'
-                }`}>
-                  {line}
-                </p>
-              ))}
-              {running && <p className="text-xs text-gray-600 animate-pulse font-mono">▋</p>}
+            <div className="flex-1 p-4 overflow-y-auto min-h-0">
+              {leftTab === 'log' ? (
+                <div className="space-y-1 font-mono text-xs">
+                  {log.map((line, i) => (
+                    <p key={i} className={`leading-relaxed ${
+                      line.startsWith('✗') ? 'text-red-400' :
+                      line.startsWith('✓') ? 'text-emerald-400' :
+                      line.startsWith('—') ? 'text-violet-400 font-semibold' : 'text-gray-500'
+                    }`}>
+                      {line}
+                    </p>
+                  ))}
+                  {running && <p className="text-gray-600 animate-pulse">▋</p>}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {liveDebate.length === 0 && (
+                    <p className="text-gray-600 text-xs text-center py-12">Tartışma henüz başlamadı veya bekleniyor...</p>
+                  )}
+                  {liveDebate.map((m, idx) => {
+                    const styles = getSenderStyles(m.sender)
+                    return (
+                      <div key={idx} className={`flex ${styles.side}`}>
+                        <div className={`border rounded-2xl px-3 py-2 text-[11px] flex flex-col gap-0.5 ${styles.bg}`}>
+                          <span className="font-bold uppercase tracking-wider text-[9px] opacity-75">{m.sender}</span>
+                          <span className="leading-normal whitespace-pre-wrap">{m.content}</span>
+                        </div>
+                      </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
           </div>
 
-          {/* Reports */}
-          <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800 bg-gray-800/40">
-              <FileText size={13} className="text-gray-500" />
-              <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">{t('analysis.reports.title')}</span>
-              <span className="ml-auto text-xs text-gray-600">{reportEntries.length} {t('analysis.reports.sections')}</span>
-            </div>
-            <div className="p-4 space-y-1.5 max-h-64 md:max-h-80 overflow-y-auto">
-              {reportEntries.length === 0 && (
-                <p className="text-gray-600 text-sm text-center py-8">{t('analysis.reports.empty')}</p>
-              )}
-              {reportEntries.map(([section, content]) => (
-                <ReportCard key={section} label={sectionLabels[section] || section} content={content} defaultOpen={section === activeSection} />
-              ))}
-            </div>
+          {/* Right Panel: Reports, Debate, Q&A */}
+          <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden flex flex-col h-[60vh] lg:h-[70vh]">
+            {detail ? (
+              // If analysis completed, show tab navigation for Reports, Debate logs, and Q&A chat
+              <>
+                <div className="flex items-center gap-1 p-1 bg-gray-800/40 border-b border-gray-800">
+                  <button
+                    onClick={() => setActiveDetailTab('reports')}
+                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
+                      activeDetailTab === 'reports' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                    }`}
+                  >
+                    {t('analysis.tab.reports')}
+                  </button>
+                  <button
+                    onClick={() => setActiveDetailTab('debate')}
+                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
+                      activeDetailTab === 'debate' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                    }`}
+                  >
+                    {t('analysis.tab.debate')}
+                  </button>
+                  <button
+                    onClick={() => setActiveDetailTab('chat')}
+                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
+                      activeDetailTab === 'chat' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                    }`}
+                  >
+                    {t('analysis.tab.qa')}
+                  </button>
+                </div>
+                <div className="flex-1 p-4 overflow-y-auto min-h-0">
+                  {activeDetailTab === 'reports' && (
+                    <div className="space-y-1.5">
+                      {reportEntries.map(([section, content]) => (
+                        <ReportCard key={section} label={sectionLabels[section] || section} content={content} defaultOpen={section === activeSection} />
+                      ))}
+                    </div>
+                  )}
+                  {activeDetailTab === 'debate' && (
+                    <DebateHistoryWidget investmentHistory={detail.investment_debate_history} riskHistory={detail.risk_debate_history} />
+                  )}
+                  {activeDetailTab === 'chat' && (
+                    <AnalysisChatWidget analysisId={detail.id} />
+                  )}
+                </div>
+              </>
+            ) : (
+              // Real-time compiling mode
+              <>
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800 bg-gray-800/40">
+                  <FileText size={13} className="text-gray-500" />
+                  <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">{t('analysis.reports.title')}</span>
+                  <span className="ml-auto text-xs text-gray-600">{reportEntries.length} {t('analysis.reports.sections')}</span>
+                </div>
+                <div className="flex-1 p-4 overflow-y-auto min-h-0 space-y-1.5">
+                  {reportEntries.length === 0 && (
+                    <p className="text-gray-600 text-sm text-center py-8">{t('analysis.reports.empty')}</p>
+                  )}
+                  {reportEntries.map(([section, content]) => (
+                    <ReportCard key={section} label={sectionLabels[section] || section} content={content} defaultOpen={section === activeSection} />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -625,6 +733,7 @@ function HistoryTab() {
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState<AnalysisDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [activeDetailTab, setActiveDetailTab] = useState<'reports' | 'debate' | 'chat'>('reports')
   const meta = useMeta()
   const sectionLabels = meta?.section_labels ?? SECTION_LABELS
 
@@ -634,6 +743,7 @@ function HistoryTab() {
 
   const openDetail = useCallback(async (id: number) => {
     setDetailLoading(true)
+    setActiveDetailTab('reports')
     try { const { data } = await axios.get(`/api/analysis/${id}`); setDetail(data) }
     finally { setDetailLoading(false) }
   }, [])
@@ -701,17 +811,55 @@ function HistoryTab() {
                     <button onClick={() => setDetail(null)} className="text-gray-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-gray-800"><X size={18} /></button>
                   </div>
                 </div>
-                <div className="space-y-1.5 max-h-[60vh] md:max-h-[65vh] overflow-y-auto pr-1">
-                  {([
-                    ['market_report', detail.market_report], ['sentiment_report', detail.sentiment_report],
-                    ['news_report', detail.news_report], ['fundamentals_report', detail.fundamentals_report],
-                    ['macro_report', detail.macro_report], ['options_report', detail.options_report],
-                    ['quant_report', detail.quant_report], ['earnings_report', detail.earnings_report],
-                    ['review_report', detail.review_report], ['investment_plan', detail.investment_plan],
-                    ['trader_plan', detail.trader_plan], ['final_decision', detail.final_decision],
-                    ['bull_history', detail.bull_history], ['bear_history', detail.bear_history],
-                    ['judge_decision', detail.judge_decision],
-                  ] as [string, string][]).map(([k, v]) => <ReportCard key={k} label={sectionLabels[k] || k} content={v} />)}
+
+                <div className="flex items-center gap-1 p-1 bg-gray-800/40 border border-gray-800/80 rounded-xl">
+                  <button
+                    onClick={() => setActiveDetailTab('reports')}
+                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
+                      activeDetailTab === 'reports' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                    }`}
+                  >
+                    {t('analysis.tab.reports')}
+                  </button>
+                  <button
+                    onClick={() => setActiveDetailTab('debate')}
+                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
+                      activeDetailTab === 'debate' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                    }`}
+                  >
+                    {t('analysis.tab.debate')}
+                  </button>
+                  <button
+                    onClick={() => setActiveDetailTab('chat')}
+                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
+                      activeDetailTab === 'chat' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                    }`}
+                  >
+                    {t('analysis.tab.qa')}
+                  </button>
+                </div>
+
+                <div className="flex-1 min-h-0">
+                  {activeDetailTab === 'reports' && (
+                    <div className="space-y-1.5 max-h-[50vh] md:max-h-[55vh] overflow-y-auto pr-1">
+                      {([
+                        ['market_report', detail.market_report], ['sentiment_report', detail.sentiment_report],
+                        ['news_report', detail.news_report], ['fundamentals_report', detail.fundamentals_report],
+                        ['macro_report', detail.macro_report], ['options_report', detail.options_report],
+                        ['quant_report', detail.quant_report], ['earnings_report', detail.earnings_report],
+                        ['review_report', detail.review_report], ['investment_plan', detail.investment_plan],
+                        ['trader_plan', detail.trader_plan], ['final_decision', detail.final_decision],
+                        ['bull_history', detail.bull_history], ['bear_history', detail.bear_history],
+                        ['judge_decision', detail.judge_decision],
+                      ] as [string, string][]).map(([k, v]) => <ReportCard key={k} label={sectionLabels[k] || k} content={v} />)}
+                    </div>
+                  )}
+                  {activeDetailTab === 'debate' && (
+                    <DebateHistoryWidget investmentHistory={detail.investment_debate_history} riskHistory={detail.risk_debate_history} />
+                  )}
+                  {activeDetailTab === 'chat' && (
+                    <AnalysisChatWidget analysisId={detail.id} />
+                  )}
                 </div>
               </>
             ) : null}
@@ -760,3 +908,189 @@ export default function Analysis() {
     </div>
   )
 }
+
+// ── Debate & Q&A Chat Widgets ──────────────────────────────────────────────────
+
+interface DebateMessage {
+  sender: string
+  content: string
+}
+
+function parseDebateMessage(msg: string): DebateMessage {
+  const parts = msg.split(': ')
+  if (parts.length >= 2) {
+    const sender = parts[0].trim()
+    const content = parts.slice(1).join(': ').trim()
+    return { sender, content }
+  }
+  return { sender: 'System', content: msg }
+}
+
+function getSenderStyles(sender: string) {
+  switch (sender) {
+    case 'Bull Analyst':
+      return { bg: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300', side: 'justify-start' }
+    case 'Bear Analyst':
+      return { bg: 'bg-rose-500/10 border-rose-500/20 text-rose-300', side: 'justify-end' }
+    case 'Aggressive Analyst':
+      return { bg: 'bg-amber-500/10 border-amber-500/20 text-amber-300', side: 'justify-start' }
+    case 'Conservative Analyst':
+      return { bg: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300', side: 'justify-end' }
+    case 'Neutral Analyst':
+      return { bg: 'bg-slate-500/10 border-slate-500/20 text-slate-300', side: 'justify-center mx-auto max-w-[90%]' }
+    default:
+      return { bg: 'bg-gray-800/40 border-gray-700/30 text-gray-400', side: 'justify-center mx-auto' }
+  }
+}
+
+function DebateHistoryWidget({ investmentHistory, riskHistory }: { investmentHistory: string; riskHistory: string }) {
+  const { t } = useTranslation()
+  const [activeTab, setActiveTab] = useState<'inv' | 'risk'>('inv')
+
+  const parseLines = (historyStr: string) => {
+    if (!historyStr) return []
+    if (historyStr.trim().startsWith('[')) {
+      try {
+        const parsed = JSON.parse(historyStr)
+        if (Array.isArray(parsed)) return parsed.map(msg => parseDebateMessage(msg))
+      } catch { /* fallback */ }
+    }
+    return historyStr
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0)
+      .map(line => parseDebateMessage(line))
+  }
+
+  const activeHistory = activeTab === 'inv' ? parseLines(investmentHistory) : parseLines(riskHistory)
+
+  return (
+    <div className="flex flex-col bg-gray-950 border border-gray-800/80 rounded-2xl overflow-hidden p-4 space-y-4">
+      <div className="flex gap-2 p-1 bg-gray-900 border border-gray-800/80 rounded-xl w-fit self-center">
+        <button
+          onClick={() => setActiveTab('inv')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+            activeTab === 'inv' ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/10' : 'text-gray-500 hover:text-white'
+          }`}
+        >
+          {t('analysis.tab.live_debate')} (Bull & Bear)
+        </button>
+        <button
+          onClick={() => setActiveTab('risk')}
+          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
+            activeTab === 'risk' ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/10' : 'text-gray-500 hover:text-white'
+          }`}
+        >
+          {t('analysis.section.risk_debate_history')}
+        </button>
+      </div>
+
+      <div className="flex-1 overflow-y-auto space-y-3 max-h-[50vh] pr-1">
+        {activeHistory.length === 0 && (
+          <p className="text-gray-600 text-xs text-center py-12">{t('analysis.reports.empty')}</p>
+        )}
+        {activeHistory.map((m, idx) => {
+          const styles = getSenderStyles(m.sender)
+          return (
+            <div key={idx} className={`flex ${styles.side}`}>
+              <div className={`border rounded-2xl px-4 py-2.5 text-xs flex flex-col gap-1 ${styles.bg}`}>
+                <span className="font-bold uppercase tracking-wider text-[10px] opacity-75">{m.sender}</span>
+                <span className="leading-relaxed whitespace-pre-wrap">{m.content}</span>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+    </div>
+  )
+}
+
+function AnalysisChatWidget({ analysisId }: { analysisId: number }) {
+  const { t } = useTranslation()
+  const [messages, setMessages] = useState<{ id: number; role: 'user' | 'assistant'; content: string }[]>([])
+  const [input, setInput] = useState('')
+  const [loading, setLoading] = useState(false)
+  const messagesEndRef = useRef<HTMLDivElement>(null)
+
+  useEffect(() => {
+    axios.get(`/api/analysis/${analysisId}/chat`)
+      .then(r => setMessages(r.data))
+      .catch(() => {})
+  }, [analysisId])
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
+  }, [messages])
+
+  const handleSend = async (e?: React.FormEvent) => {
+    e?.preventDefault()
+    const msg = input.trim()
+    if (!msg || loading) return
+    setInput('')
+
+    const tempUserMsg = { id: Date.now(), role: 'user' as const, content: msg }
+    setMessages(prev => [...prev, tempUserMsg])
+    setLoading(true)
+
+    try {
+      const { data } = await axios.post(`/api/analysis/${analysisId}/chat`, { message: msg })
+      setMessages(prev => [...prev, data])
+    } catch {
+      notify('error', t('analysis.chat.error'), 'Hata')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return (
+    <div className="flex flex-col h-[50vh] md:h-[60vh] bg-gray-950 border border-gray-800/80 rounded-2xl overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
+        {messages.length === 0 && (
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-gray-500">
+            <Zap size={24} className="text-violet-500/40 mb-2 animate-pulse" />
+            <p className="text-sm font-medium text-gray-400">{t('analysis.chat.welcome_title')}</p>
+            <p className="text-xs text-gray-600 max-w-xs mt-1">{t('analysis.chat.welcome_desc')}</p>
+          </div>
+        )}
+        {messages.map(m => (
+          <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
+            <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs line-clamp-none break-words ${
+              m.role === 'user'
+                ? 'bg-violet-600 text-white rounded-tr-none'
+                : 'bg-gray-850 text-gray-200 border border-gray-700/50 rounded-tl-none'
+            }`}>
+              {m.content}
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-gray-850 text-gray-400 border border-gray-700/50 rounded-2xl rounded-tl-none px-4 py-2.5 text-xs flex items-center gap-2">
+              <Loader2 className="animate-spin" size={12} />
+              {t('analysis.chat.thinking')}
+            </div>
+          </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
+
+      <form onSubmit={handleSend} className="p-3 border-t border-gray-800 bg-gray-900/40 flex gap-2">
+        <input
+          className="flex-1 bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
+          placeholder={t('analysis.chat.placeholder')}
+          value={input}
+          onChange={e => setInput(e.target.value)}
+          disabled={loading}
+        />
+        <button
+          type="submit"
+          disabled={loading || !input.trim()}
+          className="bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-semibold px-4 py-2 rounded-xl transition"
+        >
+          {t('analysis.chat.send')}
+        </button>
+      </form>
+    </div>
+  )
+}
+

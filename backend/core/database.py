@@ -44,6 +44,7 @@ async def _migrate_add_columns(conn):
         ("app_settings", "anthropic_effort",           "VARCHAR(20)"),
         ("app_settings", "google_thinking_level",      "VARCHAR(20)"),
         ("app_settings", "output_language",            "VARCHAR(50) DEFAULT 'English'"),
+        ("app_settings", "investor_persona",           "VARCHAR(50) DEFAULT 'conservative'"),
         ("app_settings", "analyst_concurrency_limit",  "INTEGER DEFAULT 1"),
         ("app_settings", "checkpoint_enabled",         "BOOLEAN DEFAULT FALSE"),
         ("app_settings", "max_recur_limit",            "INTEGER DEFAULT 1000"),

@@ -2,7 +2,7 @@ from .user import User
 from .settings import AppSettings
 from .portfolio import Portfolio, Holding
 from .order import Order
-from .analysis import AnalysisResult
+from .analysis import AnalysisResult, AnalysisChat
 from .log import SystemLog
 
 __all__ = [
@@ -12,5 +12,6 @@ __all__ = [
     "Holding",
     "Order",
     "AnalysisResult",
+    "AnalysisChat",
     "SystemLog",
 ]

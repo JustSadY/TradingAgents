@@ -58,6 +58,7 @@ async def get_settings(
         anthropic_effort=settings.anthropic_effort,
         google_thinking_level=settings.google_thinking_level,
         output_language=settings.output_language or "English",
+        investor_persona=settings.investor_persona or "conservative",
         analyst_concurrency_limit=settings.analyst_concurrency_limit or 1,
         checkpoint_enabled=getattr(settings, "checkpoint_enabled", False) or False,
         max_recur_limit=getattr(settings, "max_recur_limit", 1000) or 1000,

@@ -111,7 +111,9 @@ The platform uses `APScheduler` to run periodic background analyses for assets o
 The React client supports runtime multi-language localization (defaulting to English, with Turkish support). It operates through a custom, lightweight React Context instead of bulky third-party libraries.
 
 ### A. The Translation Hook and Context
-All translation dictionaries are managed in [LanguageContext.tsx](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/contexts/LanguageContext.tsx). To use translations in any React component:
+Common navigation and general strings are managed directly in [LanguageContext.tsx](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/contexts/LanguageContext.tsx). Page/module-specific translations are modularized under the [i18n/](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/i18n/) directory. At runtime, the context uses Vite's `import.meta.glob` to automatically discover and merge all translation files into a single active dictionary.
+
+To use translations in any React component:
 
 1.  **Import the Translation Hook:**
     ```typescript
@@ -133,7 +135,139 @@ All translation dictionaries are managed in [LanguageContext.tsx](file:///c:/Use
 
 ### B. Registering New Localization Strings
 To register new translation properties:
-1.  Open [LanguageContext.tsx](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/contexts/LanguageContext.tsx).
-2.  Navigate to the `TRANSLATIONS` map.
-3.  Append your key and corresponding text translations to both the `en` and `tr` maps.
+1.  **For Common/Shared Labels:** Open [LanguageContext.tsx](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/contexts/LanguageContext.tsx), locate the `TRANSLATIONS` map, and add your key to both the `en` and `tr` blocks.
+2.  **For Page/Feature-Specific Labels:** Open the relevant translation file in [frontend/src/i18n/](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/i18n/) (e.g., [settings.ts](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/i18n/settings.ts)) and append your keys.
+3.  **For a New Page/Feature:** Create a new `.ts` file in [frontend/src/i18n/](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/i18n/) that default-exports a translations object structure:
+    ```typescript
+    const translations = {
+      en: {
+        'my_feature.title': 'My Feature',
+      },
+      tr: {
+        'my_feature.title': 'Özelliğim',
+      }
+    }
+    export default translations
+    ```
+    This file will be automatically merged into the global translations at load time.
 4.  The system stores the user selection in `localStorage` under the key `ta_language` (with options `'en'` or `'tr'`), which is loaded automatically when the SPA boots up.
+
+---
+
+## 🛠️ 5. Implementation & Extension Guides for Advanced Features
+
+This section provides technical guidance and code blueprints for developers implementing or extending the 16 advanced AI, visualization, and automated trading features.
+
+### A. Setting Up Interactive Q&A Handler (Feature 1)
+To handle interactive questions on completed reports, create a new router under [backend/api/analysis.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/api/analysis.py):
+
+```python
+from fastapi import APIRouter, Depends
+from backend.services.analysis_service import get_analysis_by_id
+from backend.trading_agents.llm_clients.factory import get_llm_client
+
+router = APIRouter()
+
+@router.post("/{analysis_id}/chat")
+async def chat_with_report(analysis_id: int, user_message: str, db=Depends(get_db)):
+    # 1. Fetch historical analysis report
+    analysis = await get_analysis_by_id(analysis_id, db)
+    report_content = analysis.markdown_report
+    
+    # 2. Construct LLM client and system instructions loaded with the report
+    llm = get_llm_client(provider="openai", model="gpt-4o-mini")
+    system_prompt = (
+        f"You are the Portfolio Manager agent of TradingAgents. The user wants to discuss the "
+        f"following analysis report they generated.\n\nReport Content:\n{report_content}\n\n"
+        f"Answer their questions concisely, matching your analysis findings."
+    )
+    
+    # 3. Request LLM response
+    response = await llm.generate(
+        system_instruction=system_prompt,
+        messages=[{"role": "user", "content": user_message}]
+    )
+    return {"reply": response}
+```
+
+### B. Streaming Live Bull & Bear Debate Exchanges (Feature 2)
+To push live debate bubble flows over WebSockets, hook into the node loop in [backend/trading_agents/graph/trading_graph.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/graph/trading_graph.py):
+
+```python
+# During the debate node processing, send intermediate outputs to the WebSocket manager
+async def debate_step_callback(agent_name: str, message: str, task_id: str):
+    from backend.core.websocket import manager
+    await manager.send_to_task(
+        task_id,
+        {
+            "type": "debate_bubble",
+            "agent": agent_name,  # "BullResearcher" or "BearResearcher"
+            "message": message,
+            "timestamp": datetime.utcnow().isoformat()
+        }
+    )
+```
+
+### C. Registering a New Investor Persona (Feature 4)
+Personas govern LLM advisory behaviors. Add options to [backend/trading_agents/config.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/config.py) and map them inside [backend/trading_agents/agents/managers/portfolio_manager.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/agents/managers/portfolio_manager.py):
+
+```python
+# 1. In backend/trading_agents/config.py
+investor_persona: str = "conservative"  # Choices: conservative, risk_loving, esg_focused
+
+# 2. In backend/trading_agents/agents/managers/portfolio_manager.py
+PERSONA_PROMPTS = {
+    "conservative": "Prioritize high-yield dividend stocks, cash conservation, and blue-chips. Avoid leverage.",
+    "risk_loving": "Seek high beta, cryptocurrency assets, and swing options setups. Prioritize growth.",
+    "esg_focused": "Filter allocations to prioritize high ESG scores and sustainable companies."
+}
+
+def get_portfolio_manager_prompt(persona: str) -> str:
+    persona_instruction = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS["conservative"])
+    return f"You are the Portfolio Manager. Persona instructions: {persona_instruction}"
+```
+
+### D. Implementing the Analyst Success Scorecard (Feature 3)
+Track the performance of individual analysts by comparing their signals against actual prices. Define the SQL model in [backend/models/portfolio_analysis.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/models/portfolio_analysis.py):
+
+```python
+from sqlalchemy import Column, String, Float, Integer
+from backend.core.database import Base
+
+class AnalystScorecard(Base):
+    __tablename__ = "analyst_scorecards"
+    
+    id = Column(Integer, primary_key=True)
+    analyst_key = Column(String, unique=True, index=True)  # e.g., "market", "news"
+    total_predictions = Column(Integer, default=0)
+    correct_predictions = Column(Integer, default=0)
+    success_rate = Column(Float, default=1.0)  # Total correct / Total predictions
+```
+
+A daily task runs in `backend/services/stats_handler.py` to update these values using yFinance actual closing prices after 7 days and 30 days. In `portfolio_manager.py`, apply these as node weights:
+```python
+def weigh_analysts(signals: dict, scorecards: dict[str, float]) -> dict:
+    weighted_signals = {}
+    for analyst, signal in signals.items():
+        weight = scorecards.get(analyst, 1.0)
+        weighted_signals[analyst] = signal * weight
+    return weighted_signals
+```
+
+### E. Enabling Fractional Share Orders (Feature 16)
+To support small account sizes, upgrade the order managers to support floating-point quantities. 
+
+1.  **Modify Table Models:** Change quantities in `backend/models/order.py` from `Integer` to `Float`:
+    ```python
+    quantity = Column(Float, nullable=False)  # Supports fractional values (e.g. 0.05)
+    ```
+2.  **Adjust Simulation Routing:** Update `backend/services/execution/simulation.py` to perform operations on float quantities:
+    ```python
+    def execute_simulated_buy(portfolio, ticker, quantity, price):
+        cost = quantity * price
+        if portfolio.cash >= cost:
+            portfolio.cash -= cost
+            # Add or update asset holding with fractional float addition
+            portfolio.holdings[ticker] = portfolio.holdings.get(ticker, 0.0) + quantity
+    ```
+

@@ -18,6 +18,7 @@ class SettingsRead(BaseModel):
     anthropic_effort: str | None = None
     google_thinking_level: str | None = None
     output_language: str = "English"
+    investor_persona: str = "conservative"
     analyst_concurrency_limit: int = 1
     checkpoint_enabled: bool = False
     max_recur_limit: int = 1000
@@ -62,6 +63,7 @@ class SettingsUpdate(BaseModel):
     anthropic_effort: str | None = None
     google_thinking_level: str | None = None
     output_language: str | None = None
+    investor_persona: str | None = None
     analyst_concurrency_limit: int | None = Field(default=None, ge=1, le=16)
     checkpoint_enabled: bool | None = None
     max_recur_limit: int | None = Field(default=None, ge=100, le=5000)

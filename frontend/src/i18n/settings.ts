@@ -53,6 +53,12 @@ const translations = {
     'settings.effort_minimal_fastest': 'Minimal — Fastest',
     'settings.effort_high_deepest': 'High — Deepest',
 
+    // Investor Personas
+    'settings.row_investor_persona': 'Investor Persona',
+    'settings.persona_conservative': 'Conservative Dividend Investor',
+    'settings.persona_risk_loving': 'Risk-Loving Crypto/Growth Trader',
+    'settings.persona_esg_focused': 'Sustainability/ESG-Focused',
+
     // Row labels — Risk Management
     'settings.row_max_position_size': 'Max Position Size (%)',
     'settings.row_risk_per_trade': 'Risk Per Trade (%)',
@@ -159,6 +165,12 @@ const translations = {
     'settings.effort_high_extended': 'High — Extended thinking',
     'settings.effort_minimal_fastest': 'Minimal — En hızlı',
     'settings.effort_high_deepest': 'High — En derin',
+
+    // Investor Personas
+    'settings.row_investor_persona': 'Yatırımcı Kişiliği',
+    'settings.persona_conservative': 'Muhafazakar Temettü Yatırımcısı',
+    'settings.persona_risk_loving': 'Risk Sever Kripto/Büyüme Traderı',
+    'settings.persona_esg_focused': 'Sürdürülebilirlik/ESG Odaklı',
 
     // Row labels — Risk Management
     'settings.row_max_position_size': 'Maks. Pozisyon Büyüklüğü (%)',

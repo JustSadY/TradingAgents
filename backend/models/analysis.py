@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
-from sqlalchemy import DateTime, Float, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
 
@@ -54,3 +54,24 @@ class AnalysisResult(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
     )
+
+    chats: Mapped[list["AnalysisChat"]] = relationship(
+        "AnalysisChat", back_populates="analysis", cascade="all, delete-orphan"
+    )
+
+
+class AnalysisChat(Base):
+    __tablename__ = "analysis_chats"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    analysis_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("analysis_results.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)  # user | assistant
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    )
+
+    analysis: Mapped[AnalysisResult] = relationship("AnalysisResult", back_populates="chats")
+

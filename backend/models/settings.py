@@ -47,6 +47,7 @@ class AppSettings(Base):
 
     # Output & graph behaviour
     output_language: Mapped[str] = mapped_column(String(50), default="English")
+    investor_persona: Mapped[str] = mapped_column(String(50), default="conservative")
     analyst_concurrency_limit: Mapped[int] = mapped_column(Integer, default=1)
     checkpoint_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     max_recur_limit: Mapped[int] = mapped_column(Integer, default=1000)

@@ -81,6 +81,7 @@ class TradingAgentsConfig(BaseSettings):
     # ── Graph behaviour ────────────────────────────────────────────────────────
     checkpoint_enabled: bool = False
     output_language: str = "English"
+    investor_persona: str = "conservative"  # conservative | risk_loving | esg_focused
     max_debate_rounds: int = Field(default=1, ge=1, le=10)
     max_risk_discuss_rounds: int = Field(
         default=1,

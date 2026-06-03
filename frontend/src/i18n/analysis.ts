@@ -101,6 +101,16 @@ const analysis = {
     'analysis.section.investment_debate_history': 'Debate',
     'analysis.section.risk_debate_history': 'Risk Debate',
     'analysis.section.judge_decision': 'Judge Decision',
+    'analysis.tab.reports': 'Reports',
+    'analysis.tab.debate': 'Debate Logs',
+    'analysis.tab.qa': 'Q&A Chat',
+    'analysis.tab.live_debate': 'Live Debate',
+    'analysis.chat.welcome_title': 'Start a conversation with the analyst on this report.',
+    'analysis.chat.welcome_desc': 'You can ask questions about stock comparisons or macro interest rate effects.',
+    'analysis.chat.thinking': 'Thinking...',
+    'analysis.chat.placeholder': 'Ask a question about the report...',
+    'analysis.chat.send': 'Send',
+    'analysis.chat.error': 'Failed to get chat response.',
   },
   tr: {
     // Page title
@@ -204,6 +214,16 @@ const analysis = {
     'analysis.section.investment_debate_history': 'Tartışma',
     'analysis.section.risk_debate_history': 'Risk Tartışması',
     'analysis.section.judge_decision': 'Hakem Kararı',
+    'analysis.tab.reports': 'Raporlar',
+    'analysis.tab.debate': 'Tartışma Kayıtları',
+    'analysis.tab.qa': 'Yapay Zeka Sohbet',
+    'analysis.tab.live_debate': 'Canlı Tartışma',
+    'analysis.chat.welcome_title': 'Rapor özelinde analistle sohbete başlayın.',
+    'analysis.chat.welcome_desc': 'Hisse kıyaslamaları veya makro faiz etkileri hakkında sorular sorabilirsiniz.',
+    'analysis.chat.thinking': 'Düşünüyor...',
+    'analysis.chat.placeholder': 'Rapor hakkında soru sorun...',
+    'analysis.chat.send': 'Gönder',
+    'analysis.chat.error': 'Sohbet yanıtı alınamadı.',
   },
 }
 

@@ -19,6 +19,7 @@ interface Settings {
   anthropic_effort: string | null
   google_thinking_level: string | null
   output_language: string
+  investor_persona: string
   analyst_concurrency_limit: number
   checkpoint_enabled: boolean
   max_recur_limit: number
@@ -389,6 +390,13 @@ export default function Settings() {
       </Section>
 
       <Section title={t('settings.section_risk')}>
+        <Row label={t('settings.row_investor_persona')}>
+          <select className={Input} value={s.investor_persona} onChange={e => update('investor_persona', e.target.value)}>
+            <option value="conservative">{t('settings.persona_conservative')}</option>
+            <option value="risk_loving">{t('settings.persona_risk_loving')}</option>
+            <option value="esg_focused">{t('settings.persona_esg_focused')}</option>
+          </select>
+        </Row>
         <Row label={t('settings.row_max_position_size')}>
           <input type="number" step="1" min="1" max="100" className={Input} value={s.max_position_size_pct} onChange={e => update('max_position_size_pct', parseFloat(e.target.value))} />
         </Row>
