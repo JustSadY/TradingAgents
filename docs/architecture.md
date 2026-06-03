@@ -83,7 +83,7 @@ The source code is organized into three major system boundaries:
 ### A. The Backend Web Shell (`backend/`)
 *   `api/`: Defines endpoints for user authentication, managing portfolios, watchlists, editing platform settings, querying logs, and manual analysis triggers. *Integrates A/B testing queries, QnA chat message routing, and scorecard lookups.*
 *   `core/`: Core setup logic for SQLAlchemy connections, Fernet-based API key encryption/decryption, logging scrubbing/redaction to prevent keys from leaking into stdout/database, and the WebSocket registry (`ws_manager`).
-*   `services/`: Business services (managing simulated trades, cron job assignments, sending alert/slack notifications, updating chart annotations, and spawning the graph wrapper). *Integrates the Auto-Rebalancing scheduler and the Analyst Success Scorecard background tracking service.*
+*   `services/`: Business services (managing simulated trades, user-specific cron job assignments, sending alert/slack notifications, updating chart annotations, and spawning the graph wrapper). *Integrates the per-user watchlist scheduler and the Analyst Success Scorecard background tracking service.*
 
 ### B. The AI Multi-Agent Core (`backend/trading_agents/`)
 This is a self-contained AI module that imports itself as the `tradingagents` top-level namespace:

@@ -47,8 +47,21 @@ On startup, `_seed_admin_user()` in `main.py` reads `ADMIN_USERNAME` from `.env`
 | Allowed page | ✓ | ✓ | ✓ | ✗ (403) |
 | Preferences page | ✓ | ✓ | ✓ | ✓ (always open) |
 | Admin page (`/admin`) | ✓ | ✓ | ✗ | ✗ |
+| User-specific Cron | ✓ | ✓ | ✓ (if permitted) | ✗ |
+| Global System Cron | ✗ | ✗ | ✗ | ✗ (Removed) |
 
-## Notification Visibility
+## Settings Permission System
+
+Administrators can granularly control which parts of the "Settings" page a user can modify. This is managed via the **Access Control** tab in the Admin panel.
+
+| Section | Key | Controlled Fields |
+|---------|-----|-------------------|
+| Preferences | `general` | Mode, Broker, Language, Persona, Benchmark |
+| AI Engine | `llm` | Provider, Model, API URL, Analysts |
+| Risk & Safety | `risk` | Position limits, Risk per trade, Debate rounds |
+| Alerts | `webhooks` | Webhook URL and notification events |
+| Scheduler | `cron` | **User-specific** automated scan schedule |
+| Templates | `presets` | Saving and applying configuration presets |
 
 System notifications (toasts) and banners are filtered based on the active session role:
 

@@ -98,11 +98,12 @@ The frontend tracks the graph's execution using a persistent WebSocket connectio
 
 ## ⏰ 3. Managing Background Cron Services
 
-The platform uses `APScheduler` to run periodic background analyses for assets on the user's watchlist:
-*   **Initialization:** The cron scheduler initializes in [backend/main.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/main.py) during the FastAPI startup event loop.
-*   **Database Synchronization:** The scheduler reads cron intervals and settings directly from the PostgreSQL settings tables.
-*   **Execution Flow:** When a scheduled event triggers, it queries the database for assets in the user's watchlist, starts a background task using `run_analysis` with `triggered_by="cron"`, and evaluates the resulting signal.
-*   **Alert Notifications:** If the agent's final decision signal shifts (e.g. from `Hold` to `Sell`), it triggers alerts or webhooks, notifying the user.
+The platform uses `APScheduler` to run periodic background analyses for assets on a per-user basis:
+*   **Initialization:** The global cron scheduler initializes in [backend/main.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/main.py) during startup.
+*   **User Configuration:** Each user can configure their own schedule and toggle status in the **Settings > Cron / Auto Scan** tab.
+*   **Database Synchronization:** The `CronService` reads active schedules from `AppSettings` and assigns unique job IDs (`watchlist_scan_user_{id}`) for each user.
+*   **Execution Flow:** When a user's cron triggers, it iterates through that specific user's **Watchlist**, starts background tasks using `run_analysis` with the user's active AI settings, and evaluates results.
+*   **Permissions:** Administrators can toggle a user's ability to manage their own cron via the **Admin > Access Control** panel (`cron` key).
 
 ---
 

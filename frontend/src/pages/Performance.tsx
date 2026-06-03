@@ -65,31 +65,31 @@ export default function Performance() {
   })) : []
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-6xl">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-6 max-w-6xl">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 md:gap-4">
         <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">{t('performance.title')}</h2>
         <div className="flex items-center gap-2">
-          <input className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-1.5 text-sm w-24 uppercase font-mono outline-none focus:ring-2 focus:ring-violet-500"
+          <input className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-1.5 text-xs md:text-sm w-20 md:w-24 uppercase font-mono outline-none focus:ring-2 focus:ring-violet-500"
             placeholder="AAPL" value={ticker} onChange={e => setTicker(e.target.value.toUpperCase())} onKeyDown={e => e.key === 'Enter' && handleFilter()} />
-          <button onClick={handleFilter} className="bg-violet-600 hover:bg-violet-500 text-white text-sm px-3 py-1.5 rounded-xl transition">{t('performance.filter_btn')}</button>
-          {filterTicker && <button onClick={() => { setTicker(''); setFilterTicker(''); load() }} className="text-gray-500 hover:text-white text-xs">{t('performance.filter_clear')}</button>}
+          <button onClick={handleFilter} className="bg-violet-600 hover:bg-violet-500 text-white text-xs md:text-sm px-3 py-1.5 rounded-xl transition font-semibold">{t('performance.filter_btn')}</button>
+          {filterTicker && <button onClick={() => { setTicker(''); setFilterTicker(''); load() }} className="text-gray-500 hover:text-white text-[10px] md:text-xs">{t('performance.filter_clear')}</button>}
         </div>
       </div>
 
       {loading ? (
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">{[...Array(4)].map((_, i) => <div key={i} className="h-20 md:h-24 bg-gray-800 rounded-2xl animate-pulse" />)}</div>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">{[...Array(4)].map((_, i) => <div key={i} className="h-20 md:h-24 bg-gray-800 rounded-2xl animate-pulse" />)}</div>
       ) : perf && perf.total > 0 ? (
         <>
           {/* KPI Cards */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
-            <StatCard icon={<BarChart2 size={18} />} label={t('performance.stat_total')} value={String(perf.total)} />
-            <StatCard icon={<Target size={18} />} label={t('performance.stat_win_rate')}
+            <StatCard icon={<BarChart2 size={16} />} label={t('performance.stat_total')} value={String(perf.total)} />
+            <StatCard icon={<Target size={16} />} label={t('performance.stat_win_rate')}
               value={perf.win_rate !== null ? `${perf.win_rate}%` : '—'}
               color={perf.win_rate !== null && perf.win_rate >= 50 ? 'text-emerald-400' : 'text-red-400'} />
-            <StatCard icon={<TrendingUp size={18} />} label={t('performance.stat_avg_raw_return')}
+            <StatCard icon={<TrendingUp size={16} />} label={t('performance.stat_avg_raw_return')}
               value={perf.avg_raw_return !== null ? `${perf.avg_raw_return >= 0 ? '+' : ''}${perf.avg_raw_return}%` : '—'}
               color={perf.avg_raw_return !== null && perf.avg_raw_return >= 0 ? 'text-emerald-400' : 'text-red-400'} />
-            <StatCard icon={<TrendingDown size={18} />} label={t('performance.stat_avg_alpha')}
+            <StatCard icon={<TrendingDown size={16} />} label={t('performance.stat_avg_alpha')}
               value={perf.avg_alpha_return !== null ? `${perf.avg_alpha_return >= 0 ? '+' : ''}${perf.avg_alpha_return}%` : '—'}
               color={perf.avg_alpha_return !== null && perf.avg_alpha_return >= 0 ? 'text-emerald-400' : 'text-red-400'} />
           </div>
@@ -97,13 +97,13 @@ export default function Performance() {
           {/* Charts */}
           {bySignalData.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5">
-                <h3 className="text-sm font-semibold text-gray-300 mb-4">{t('performance.chart_win_rate_title')}</h3>
-                <ResponsiveContainer width="100%" height={180}>
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 h-[280px] md:h-auto">
+                <h3 className="text-xs md:text-sm font-semibold text-gray-300 mb-4">{t('performance.chart_win_rate_title')}</h3>
+                <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={bySignalData}>
-                    <XAxis dataKey="signal" stroke="#6b7280" tick={{ fontSize: 11 }} />
-                    <YAxis stroke="#6b7280" tick={{ fontSize: 11 }} domain={[0, 100]} />
-                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8 }} labelStyle={{ color: '#fff' }} />
+                    <XAxis dataKey="signal" stroke="#6b7280" tick={{ fontSize: 9 }} />
+                    <YAxis stroke="#6b7280" tick={{ fontSize: 9 }} domain={[0, 100]} />
+                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8, fontSize: 10 }} labelStyle={{ color: '#fff' }} />
                     <Bar dataKey="win_rate" radius={[4, 4, 0, 0]}>
                       {bySignalData.map(d => (
                         <Cell key={d.signal} fill={d.win_rate >= 50 ? '#10b981' : '#ef4444'} />
@@ -112,13 +112,13 @@ export default function Performance() {
                   </BarChart>
                 </ResponsiveContainer>
               </div>
-              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5">
-                <h3 className="text-sm font-semibold text-gray-300 mb-4">{t('performance.chart_avg_return_title')}</h3>
-                <ResponsiveContainer width="100%" height={180}>
+              <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 h-[280px] md:h-auto">
+                <h3 className="text-xs md:text-sm font-semibold text-gray-300 mb-4">{t('performance.chart_avg_return_title')}</h3>
+                <ResponsiveContainer width="100%" height={200}>
                   <BarChart data={bySignalData}>
-                    <XAxis dataKey="signal" stroke="#6b7280" tick={{ fontSize: 11 }} />
-                    <YAxis stroke="#6b7280" tick={{ fontSize: 11 }} />
-                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8 }} labelStyle={{ color: '#fff' }} />
+                    <XAxis dataKey="signal" stroke="#6b7280" tick={{ fontSize: 9 }} />
+                    <YAxis stroke="#6b7280" tick={{ fontSize: 9 }} />
+                    <Tooltip contentStyle={{ background: '#111827', border: '1px solid #374151', borderRadius: 8, fontSize: 10 }} labelStyle={{ color: '#fff' }} />
                     <Bar dataKey="avg_return" radius={[4, 4, 0, 0]}>
                       {bySignalData.map(d => (
                         <Cell key={d.signal} fill={d.avg_return >= 0 ? '#10b981' : '#ef4444'} />
@@ -135,12 +135,12 @@ export default function Performance() {
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden mt-6">
               <div className="px-4 md:px-5 py-3 md:py-4 border-b border-gray-800">
                 <h3 className="text-sm font-semibold text-gray-300">{t('performance.analyst_title')}</h3>
-                <p className="text-xs text-gray-500 mt-0.5">{t('performance.analyst_subtitle')}</p>
+                <p className="text-[11px] md:text-xs text-gray-500 mt-0.5 leading-relaxed">{t('performance.analyst_subtitle')}</p>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-800">
                 <table className="w-full text-sm min-w-[500px]">
                   <thead>
-                    <tr className="text-gray-600 text-xs uppercase tracking-wider bg-gray-800/30">
+                    <tr className="text-gray-600 text-[10px] uppercase tracking-wider bg-gray-800/30">
                       <th className="px-4 py-3 text-left">{t('performance.col_analyst')}</th>
                       <th className="px-4 py-3 text-center">{t('performance.col_predictions')}</th>
                       <th className="px-4 py-3 text-left">{t('performance.col_accuracy')}</th>
@@ -150,18 +150,18 @@ export default function Performance() {
                   <tbody>
                     {attribution.map(item => (
                       <tr key={item.key} className="border-t border-gray-800 hover:bg-gray-800/40 transition-colors">
-                        <td className="px-4 py-3 font-semibold text-white">{item.label}</td>
-                        <td className="px-4 py-3 text-center text-gray-400 font-mono">{item.total_predictions}</td>
+                        <td className="px-4 py-3 font-semibold text-white text-xs md:text-sm">{item.label}</td>
+                        <td className="px-4 py-3 text-center text-gray-400 font-mono text-xs md:text-sm">{item.total_predictions}</td>
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
-                            <span className="text-emerald-400 font-mono w-10 text-right">{item.win_rate}%</span>
-                            <div className="w-24 bg-gray-800 rounded-full h-1.5 overflow-hidden">
-                              <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${item.win_rate}%` }} />
+                          <div className="flex items-center gap-3">
+                            <span className="text-emerald-400 font-mono w-10 text-right text-xs md:text-sm">{item.win_rate}%</span>
+                            <div className="hidden sm:block w-24 bg-gray-800 rounded-full h-1 overflow-hidden shrink-0">
+                              <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${item.win_rate}%` }} />
                             </div>
                           </div>
                         </td>
                         <td className="px-4 py-3 text-right">
-                          <span className="inline-flex items-center text-xs font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">
+                          <span className="inline-flex items-center text-[10px] md:text-xs font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">
                             {item.weight}%
                           </span>
                         </td>
@@ -175,14 +175,14 @@ export default function Performance() {
 
           {/* History table with returns */}
           {history.length > 0 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden mt-6">
               <div className="px-4 md:px-5 py-3 md:py-4 border-b border-gray-800">
                 <h3 className="text-sm font-semibold text-gray-300">{t('performance.history_title')}</h3>
               </div>
-              <div className="overflow-x-auto">
+              <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-800">
                 <table className="w-full text-sm min-w-[400px]">
                   <thead>
-                    <tr className="text-gray-600 text-xs uppercase tracking-wider bg-gray-800/30">
+                    <tr className="text-gray-600 text-[10px] uppercase tracking-wider bg-gray-800/30">
                       <th className="px-4 py-3 text-left">{t('performance.col_symbol')}</th>
                       <th className="px-4 py-3 text-left">{t('performance.col_date')}</th>
                       <th className="px-4 py-3 text-left">{t('performance.col_signal')}</th>
@@ -194,17 +194,17 @@ export default function Performance() {
                   <tbody>
                     {history.slice(0, 50).map(item => (
                       <tr key={item.id} className="border-t border-gray-800 hover:bg-gray-800/40 transition-colors">
-                        <td className="px-4 py-3 font-mono font-bold text-white">{item.ticker}</td>
-                        <td className="px-4 py-3 text-gray-400 text-xs">{item.trade_date}</td>
+                        <td className="px-4 py-3 font-mono font-bold text-white text-xs md:text-sm">{item.ticker}</td>
+                        <td className="px-4 py-3 text-gray-400 text-[11px] md:text-xs">{item.trade_date}</td>
                         <td className="px-4 py-3">
-                          <span className={`text-xs font-semibold ${
+                          <span className={`text-[11px] font-bold ${
                             ['Buy','Overweight'].includes(item.signal||'') ? 'text-emerald-400' :
                             ['Sell','Underweight'].includes(item.signal||'') ? 'text-red-400' : 'text-yellow-400'
                           }`}>{item.signal ?? '—'}</span>
                         </td>
-                        <td className="px-4 py-3 text-right"><ReturnCell value={item.raw_return} /></td>
-                        <td className="px-4 py-3 text-right hidden sm:table-cell"><ReturnCell value={item.alpha_return} /></td>
-                        <td className="px-4 py-3 text-right text-gray-500 text-xs hidden sm:table-cell">{item.holding_days ?? '—'}</td>
+                        <td className="px-4 py-3 text-right text-xs md:text-sm font-medium"><ReturnCell value={item.raw_return} /></td>
+                        <td className="px-4 py-3 text-right hidden sm:table-cell text-xs md:text-sm font-medium"><ReturnCell value={item.alpha_return} /></td>
+                        <td className="px-4 py-3 text-right text-gray-500 text-[11px] hidden sm:table-cell">{item.holding_days ?? '—'}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -214,10 +214,10 @@ export default function Performance() {
           )}
         </>
       ) : (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-8 md:p-12 text-center">
-          <BarChart2 size={36} className="mx-auto text-gray-700 mb-3" />
-          <p className="text-gray-500 text-sm">{t('performance.empty_title')}</p>
-          <p className="text-gray-600 text-xs mt-1">{t('performance.empty_subtitle')}</p>
+        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-10 md:p-16 text-center shadow-inner">
+          <BarChart2 size={40} className="mx-auto text-gray-700 mb-4 opacity-50" />
+          <p className="text-gray-400 text-sm font-medium">{t('performance.empty_title')}</p>
+          <p className="text-gray-600 text-xs mt-1.5">{t('performance.empty_subtitle')}</p>
         </div>
       )}
     </div>
@@ -226,11 +226,11 @@ export default function Performance() {
 
 function StatCard({ icon, label, value, color = 'text-white' }: { icon: React.ReactNode; label: string; value: string; color?: string }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 flex items-start gap-2.5 md:gap-3">
-      <div className="p-1.5 md:p-2 rounded-xl bg-gray-800 text-violet-400 shrink-0">{icon}</div>
-      <div>
-        <p className="text-gray-500 text-xs font-medium uppercase tracking-wider mb-1">{label}</p>
-        <p className={`text-lg md:text-xl font-bold ${color} leading-none`}>{value}</p>
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3.5 md:p-5 flex items-start gap-2.5 md:gap-3 shadow-sm">
+      <div className="p-1.5 md:p-2 rounded-xl bg-gray-800 text-violet-400 shrink-0 shadow-inner">{icon}</div>
+      <div className="min-w-0">
+        <p className="text-gray-500 text-[10px] md:text-xs font-medium uppercase tracking-wider mb-1 leading-tight truncate">{label}</p>
+        <p className={`text-base md:text-xl font-bold ${color} leading-none truncate`}>{value}</p>
       </div>
     </div>
   )

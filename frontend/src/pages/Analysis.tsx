@@ -353,32 +353,32 @@ function RunTab() {
   return (
     <div className="space-y-4">
       {/* Form card */}
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5">
+      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3.5 md:p-5">
         <div className="flex flex-wrap gap-3 items-end">
-          <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.symbol')}</label>
+          <div className="flex-1 min-w-[120px]">
+            <label className="text-[10px] md:text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.symbol')}</label>
             <input
-              className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 w-28 uppercase font-mono text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
+              className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 w-full uppercase font-mono text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
               value={ticker}
               onChange={e => setTicker(e.target.value.toUpperCase())}
               placeholder="AAPL"
               disabled={running}
             />
           </div>
-          <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.date')}</label>
+          <div className="flex-1 min-w-[140px]">
+            <label className="text-[10px] md:text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.date')}</label>
             <input
               type="date"
-              className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
+              className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm w-full focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
               value={date}
               onChange={e => setDate(e.target.value)}
               disabled={running}
             />
           </div>
-          <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.type')}</label>
+          <div className="flex-1 min-w-[100px]">
+            <label className="text-[10px] md:text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.type')}</label>
             <select
-              className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
+              className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm w-full focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
               value={assetType}
               onChange={e => setAssetType(e.target.value)}
               disabled={running}
@@ -387,43 +387,45 @@ function RunTab() {
             </select>
           </div>
 
-          {!running ? (
-            <button
-              onClick={handleRun}
-              disabled={!ticker.trim()}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-violet-500/20 transition-all"
-            >
-              <Zap size={15} /> {t('analysis.btn.start')}
-            </button>
-          ) : (
-            <button
-              onClick={handleStop}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white bg-red-600/80 hover:bg-red-600 border border-red-500/40 shadow-lg shadow-red-500/20 transition-all"
-            >
-              <Square size={13} fill="currentColor" /> {t('analysis.btn.stop')}
-            </button>
-          )}
+          <div className="w-full sm:w-auto flex items-center gap-2 mt-1 sm:mt-0">
+            {!running ? (
+              <button
+                onClick={handleRun}
+                disabled={!ticker.trim()}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-violet-500/20 transition-all"
+              >
+                <Zap size={15} /> {t('analysis.btn.start')}
+              </button>
+            ) : (
+              <button
+                onClick={handleStop}
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white bg-red-600/80 hover:bg-red-600 border border-red-500/40 shadow-lg shadow-red-500/20 transition-all"
+              >
+                <Square size={13} fill="currentColor" /> {t('analysis.btn.stop')}
+              </button>
+            )}
 
-          {runStatus !== 'idle' && !running && (
-            <button onClick={handleClear} className="text-gray-600 hover:text-gray-400 transition-colors p-2 rounded-lg hover:bg-gray-800">
-              <X size={14} />
-            </button>
-          )}
+            {runStatus !== 'idle' && !running && (
+              <button onClick={handleClear} className="text-gray-600 hover:text-gray-400 transition-colors p-2 rounded-lg hover:bg-gray-800 shrink-0">
+                <X size={14} />
+              </button>
+            )}
+          </div>
 
-          {runStatus === 'done' && <CheckCircle size={18} className="text-emerald-400" />}
-          {runStatus === 'error' && <AlertCircle size={18} className="text-red-400" />}
-          {signal && <SignalBadge signal={signal} large />}
+          {runStatus === 'done' && <CheckCircle size={18} className="text-emerald-400 mb-2.5 hidden sm:block" />}
+          {runStatus === 'error' && <AlertCircle size={18} className="text-red-400 mb-2.5 hidden sm:block" />}
+          {signal && <div className="mb-1.5"><SignalBadge signal={signal} large /></div>}
         </div>
         {/* Cost estimate + existing analysis hint */}
         {!running && (
-          <div className="flex items-center gap-4 mt-2">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5">
             {costEstimate && (
-              <span className="text-xs text-gray-600">
-                {t('analysis.cost_estimate')}{costEstimate.min_usd.toFixed(3)}–${costEstimate.max_usd.toFixed(3)}
+              <span className="text-[10px] md:text-xs text-gray-500 font-medium">
+                {t('analysis.cost_estimate')}${costEstimate.min_usd.toFixed(3)}–${costEstimate.max_usd.toFixed(3)}
               </span>
             )}
             {existingId && (
-              <span className="text-xs text-yellow-500">{t('analysis.existing_analysis')}</span>
+              <span className="text-[10px] md:text-xs text-amber-500 font-medium">{t('analysis.existing_analysis')}</span>
             )}
           </div>
         )}
@@ -431,15 +433,17 @@ function RunTab() {
 
       {/* Re-run warning modal */}
       {showRerunModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 max-w-sm w-full space-y-4">
-            <h3 className="text-white font-semibold">{t('analysis.rerun.title')}</h3>
-            <p className="text-gray-400 text-sm">
-              {t('analysis.rerun.body').replace('{ticker}', ticker.toUpperCase()).replace('{date}', date)}
-            </p>
+        <div className="fixed inset-0 bg-black/75 z-[60] flex items-center justify-center p-5 backdrop-blur-md">
+          <div className="bg-gray-900 border border-gray-800 rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
+            <div className="space-y-2">
+              <h3 className="text-white text-lg font-bold">{t('analysis.rerun.title')}</h3>
+              <p className="text-gray-400 text-sm leading-relaxed">
+                {t('analysis.rerun.body').replace('{ticker}', ticker.toUpperCase()).replace('{date}', date)}
+              </p>
+            </div>
             <div className="flex gap-3">
-              <button onClick={doRun} className="flex-1 bg-violet-600 hover:bg-violet-500 text-white text-sm py-2 rounded-xl transition">{t('analysis.btn.rerun')}</button>
-              <button onClick={() => setShowRerunModal(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm py-2 rounded-xl transition">{t('analysis.btn.cancel')}</button>
+              <button onClick={doRun} className="flex-1 bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold py-2.5 rounded-xl transition shadow-lg shadow-violet-600/20">{t('analysis.btn.rerun')}</button>
+              <button onClick={() => setShowRerunModal(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-bold py-2.5 rounded-xl transition">{t('analysis.btn.cancel')}</button>
             </div>
           </div>
         </div>
@@ -447,13 +451,13 @@ function RunTab() {
 
       {/* Running status banner */}
       {running && (
-        <div className="flex items-center gap-3 px-5 py-3 bg-violet-500/10 border border-violet-500/20 rounded-2xl">
-          <span className="relative flex h-2.5 w-2.5 shrink-0">
+        <div className="flex items-center gap-3 px-4 py-3 bg-violet-500/10 border border-violet-500/20 rounded-2xl">
+          <span className="relative flex h-2 w-2 shrink-0">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-500" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
           </span>
-          <Loader2 size={14} className="text-violet-400 animate-spin" />
-          <p className="text-violet-300 text-sm font-medium">
+          <Loader2 size={13} className="text-violet-400 animate-spin" />
+          <p className="text-violet-300 text-xs md:text-sm font-medium truncate">
             <span className="font-bold">{ticker}</span> {t('analysis.running')}
             {currentStep
               ? <span className="text-white ml-2 font-semibold">→ {currentStep.label}</span>
