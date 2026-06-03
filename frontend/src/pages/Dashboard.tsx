@@ -99,7 +99,7 @@ export default function Dashboard() {
   const sim = portfolios.find(p => p.mode === 'simulation') || portfolios[0]
   const pnl = sim ? sim.current_balance - sim.initial_capital : 0
   const pnlPct = sim?.initial_capital ? (pnl / sim.initial_capital * 100) : 0
-  const totalUnrealized = sim?.holdings.reduce((s, h) => s + h.unrealized_pnl, 0) ?? 0
+  const totalUnrealized = (sim?.holdings || []).reduce((s, h) => s + (h.unrealized_pnl || 0), 0)
 
   const ALLOCATION_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6']
 
@@ -112,11 +112,14 @@ export default function Dashboard() {
     
     const pnlByDay: Record<number, number> = {}
     orders.forEach(o => {
+      if (!o || !o.executed_at) return
       const date = new Date(o.executed_at)
+      if (Number.isNaN(date.getTime())) return
       const diffTime = Math.abs(now.getTime() - date.getTime())
       const diffDays = Math.floor(diffTime / (1000 * 60 * 60 * 24))
       if (diffDays >= 0 && diffDays < 30) {
-        const value = o.total_value * (o.action === 'BUY' ? 1 : -1)
+        const totalVal = o.total_value ?? 0
+        const value = totalVal * (o.action === 'BUY' ? 1 : -1)
         pnlByDay[diffDays] = (pnlByDay[diffDays] || 0) + (value * 0.05)
       }
     })
@@ -144,10 +147,10 @@ export default function Dashboard() {
   const allocationData = useMemo(() => {
     if (!sim) return []
     const data = [
-      { name: language === 'tr' ? 'Nakit' : 'Cash', value: sim.cash_available },
+      { name: language === 'tr' ? 'Nakit' : 'Cash', value: sim.cash_available || 0 },
     ]
     ;(sim.holdings || []).forEach(h => {
-      const marketValue = h.quantity * (h.current_price || h.avg_buy_price || 0)
+      const marketValue = (h.quantity || 0) * (h.current_price || h.avg_buy_price || 0)
       if (marketValue > 0) {
         data.push({
           name: h.ticker,
@@ -345,13 +348,13 @@ export default function Dashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {sim.holdings.map(h => (
+                  {(sim.holdings || []).map(h => (
                     <tr key={h.ticker} className="border-t border-gray-800/60 hover:bg-gray-800/40 transition-colors">
                       <td className="px-4 py-2.5 font-mono font-bold text-white text-sm">{h.ticker}</td>
-                      <td className="px-4 py-2.5 text-gray-400 text-right text-xs">{h.quantity.toFixed(4)}</td>
+                      <td className="px-4 py-2.5 text-gray-400 text-right text-xs">{(h.quantity ?? 0).toFixed(4)}</td>
                       <td className="px-4 py-2.5 text-gray-400 text-right text-xs">${h.current_price?.toFixed(2) ?? '—'}</td>
-                      <td className={`px-4 py-2.5 text-right text-xs font-semibold ${h.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {h.unrealized_pnl >= 0 ? '+' : ''}${h.unrealized_pnl.toFixed(2)}
+                      <td className={`px-4 py-2.5 text-right text-xs font-semibold ${(h.unrealized_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                        {(h.unrealized_pnl ?? 0) >= 0 ? '+' : ''}${(h.unrealized_pnl ?? 0).toFixed(2)}
                       </td>
                     </tr>
                   ))}
