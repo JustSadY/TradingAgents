@@ -105,8 +105,8 @@ export default function Dashboard() {
 
   const navTimelineData = useMemo(() => {
     if (!sim) return []
-    const initial = sim.initial_capital
-    const current = sim.current_balance
+    const initial = sim.initial_capital || 100000
+    const current = sim.current_balance || 100000
     const dataPoints = []
     const now = new Date()
     
@@ -138,7 +138,7 @@ export default function Dashboard() {
       dataPoints.push({
         date: date.toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US', { month: 'short', day: 'numeric' }),
         Balance: Math.round(dayBalance * 100) / 100,
-        Return: Math.round(((dayBalance - initial) / initial) * 100 * 100) / 100,
+        Return: initial > 0 ? Math.round(((dayBalance - initial) / initial) * 100 * 100) / 100 : 0,
       })
     }
     return dataPoints
@@ -178,7 +178,7 @@ export default function Dashboard() {
         <KpiCard
           icon={<DollarSign size={18} />}
           label={t('dashboard.portfolio_value')}
-          value={sim ? `$${sim.current_balance.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}` : '—'}
+          value={sim ? `$${(sim.current_balance || 0).toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}` : '—'}
           color="text-white"
         />
         <KpiCard
@@ -192,7 +192,7 @@ export default function Dashboard() {
         <KpiCard
           icon={<DollarSign size={18} />}
           label={t('dashboard.cash')}
-          value={sim ? `$${sim.cash_available.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}` : '—'}
+          value={sim ? `$${(sim.cash_available || 0).toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}` : '—'}
           color="text-white"
         />
         <KpiCard
@@ -233,12 +233,12 @@ export default function Dashboard() {
                     </linearGradient>
                   </defs>
                   <XAxis dataKey="date" stroke="#4b5563" tick={{ fontSize: 10 }} />
-                  <YAxis stroke="#4b5563" tick={{ fontSize: 10 }} domain={['auto', 'auto']} tickFormatter={val => `$${val.toLocaleString()}`} />
+                  <YAxis stroke="#4b5563" tick={{ fontSize: 10 }} domain={['auto', 'auto']} tickFormatter={val => `$${(val || 0).toLocaleString()}`} />
                   <Tooltip
                     contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px' }}
                     labelStyle={{ color: '#9ca3af', fontSize: '11px' }}
                     itemStyle={{ color: '#8b5cf6', fontSize: '11px' }}
-                    formatter={(value: any) => [`$${value.toLocaleString()}`, 'NAV']}
+                    formatter={(value: any) => [`$${(value || 0).toLocaleString()}`, 'NAV']}
                   />
                   <Area type="monotone" dataKey="Balance" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorBalance)" />
                 </AreaChart>
@@ -271,7 +271,7 @@ export default function Dashboard() {
                   <Tooltip
                     contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px' }}
                     itemStyle={{ fontSize: '11px' }}
-                    formatter={(value: any) => [`$${value.toLocaleString()}`, '']}
+                    formatter={(value: any) => [`$${(value || 0).toLocaleString()}`, '']}
                   />
                   <Legend 
                     verticalAlign="bottom" 
@@ -379,7 +379,12 @@ export default function Dashboard() {
                     <div className="flex items-center gap-2 mb-1">
                       <span className="text-xs font-mono font-bold text-violet-400">{item.ticker}</span>
                       <span className="text-xs text-gray-600">{item.source}</span>
-                      <span className="text-xs text-gray-700">{new Date(item.published_at).toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US')}</span>
+                      <span className="text-xs text-gray-700">
+                        {(() => {
+                          const d = new Date(item.published_at)
+                          return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US')
+                        })()}
+                      </span>
                     </div>
                     <p className="text-sm text-gray-300 line-clamp-2">{item.title}</p>
                   </div>
