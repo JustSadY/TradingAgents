@@ -18,6 +18,12 @@ const translations = {
     'performance.col_days': 'Days',
     'performance.empty_title': 'No realized return data yet.',
     'performance.empty_subtitle': 'Analyses are automatically updated 5 business days after the signal date.',
+    'performance.analyst_title': 'Analyst Performance Attribution',
+    'performance.analyst_subtitle': 'Win rates and normalized voting weights assigned to each analyst',
+    'performance.col_analyst': 'Analyst',
+    'performance.col_predictions': 'Predictions',
+    'performance.col_accuracy': 'Accuracy',
+    'performance.col_weight': 'Decision Weight',
   },
   tr: {
     'performance.title': 'Sinyal Performansı',
@@ -38,6 +44,12 @@ const translations = {
     'performance.col_days': 'Gün',
     'performance.empty_title': 'Henüz gerçekleşen getiri verisi yok.',
     'performance.empty_subtitle': 'Analizler sinyal tarihinden 5 iş günü sonra otomatik güncellenir.',
+    'performance.analyst_title': 'Analist Başarı Karnesi',
+    'performance.analyst_subtitle': 'Her analiste atanan win rate ve normalize edilmiş oy ağırlıkları',
+    'performance.col_analyst': 'Analist',
+    'performance.col_predictions': 'Tahminler',
+    'performance.col_accuracy': 'Başarı Oranı',
+    'performance.col_weight': 'Karar Ağırlığı',
   },
 }
 

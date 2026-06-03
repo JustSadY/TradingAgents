@@ -18,6 +18,15 @@ interface HistoryItem {
   duration_seconds: number; created_at: string
 }
 
+interface AttributionItem {
+  key: string
+  label: string
+  total_predictions: number
+  correct_predictions: number
+  win_rate: number
+  weight: number
+}
+
 function ReturnCell({ value }: { value: number | null }) {
   if (value === null) return <span className="text-gray-600">—</span>
   const pct = (value * 100).toFixed(2)
@@ -28,6 +37,7 @@ export default function Performance() {
   const { t } = useTranslation()
   const [perf, setPerf] = useState<PerfData | null>(null)
   const [history, setHistory] = useState<HistoryItem[]>([])
+  const [attribution, setAttribution] = useState<AttributionItem[]>([])
   const [ticker, setTicker] = useState('')
   const [filterTicker, setFilterTicker] = useState('')
   const [loading, setLoading] = useState(true)
@@ -35,12 +45,14 @@ export default function Performance() {
   const load = async (ti?: string) => {
     setLoading(true)
     try {
-      const [p, h] = await Promise.all([
+      const [p, h, attr] = await Promise.all([
         axios.get('/api/analysis/performance', { params: ti ? { ticker: ti } : {} }).then(r => r.data),
         axios.get('/api/analysis/history', { params: { limit: 100, ...(ti ? { ticker: ti } : {}) } }).then(r => r.data),
+        axios.get('/api/analysis/performance-attribution').then(r => r.data).catch(() => ({ attribution: [] })),
       ])
       setPerf(p)
       setHistory(h.filter((x: HistoryItem) => x.raw_return !== null))
+      setAttribution(attr.attribution || [])
     } finally { setLoading(false) }
   }
 
@@ -114,6 +126,49 @@ export default function Performance() {
                     </Bar>
                   </BarChart>
                 </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Analyst Performance Attribution */}
+          {attribution.length > 0 && (
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden mt-6">
+              <div className="px-4 md:px-5 py-3 md:py-4 border-b border-gray-800">
+                <h3 className="text-sm font-semibold text-gray-300">{t('performance.analyst_title')}</h3>
+                <p className="text-xs text-gray-500 mt-0.5">{t('performance.analyst_subtitle')}</p>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm min-w-[500px]">
+                  <thead>
+                    <tr className="text-gray-600 text-xs uppercase tracking-wider bg-gray-800/30">
+                      <th className="px-4 py-3 text-left">{t('performance.col_analyst')}</th>
+                      <th className="px-4 py-3 text-center">{t('performance.col_predictions')}</th>
+                      <th className="px-4 py-3 text-left">{t('performance.col_accuracy')}</th>
+                      <th className="px-4 py-3 text-right">{t('performance.col_weight')}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attribution.map(item => (
+                      <tr key={item.key} className="border-t border-gray-800 hover:bg-gray-800/40 transition-colors">
+                        <td className="px-4 py-3 font-semibold text-white">{item.label}</td>
+                        <td className="px-4 py-3 text-center text-gray-400 font-mono">{item.total_predictions}</td>
+                        <td className="px-4 py-3">
+                          <div className="flex items-center gap-2">
+                            <span className="text-emerald-400 font-mono w-10 text-right">{item.win_rate}%</span>
+                            <div className="w-24 bg-gray-800 rounded-full h-1.5 overflow-hidden">
+                              <div className="bg-emerald-500 h-1.5 rounded-full" style={{ width: `${item.win_rate}%` }} />
+                            </div>
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 text-right">
+                          <span className="inline-flex items-center text-xs font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">
+                            {item.weight}%
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           )}

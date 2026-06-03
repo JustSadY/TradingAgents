@@ -250,11 +250,25 @@ async def run_analysis(
         # (missing API key, bad config, import error) reaches the WS error handler.
         await ws_manager.send(task_id, {"type": "status", "status": "starting", "agent": "LLM istemcisi hazırlanıyor..."})
         config = _build_config(settings)
+
+        # Load and append analyst attribution weights to past context
+        from backend.services.performance_service import get_analyst_attribution_stats
+        attribution_data = await get_analyst_attribution_stats(db)
+        attribution_md = "=== ANALYST PERFORMANCE ATTRIBUTION & WEIGHTS ===\n"
+        attribution_md += "Below are the historical win rates and normalized voting weights assigned to each analyst based on empirical accuracy:\n"
+        for att in attribution_data["attribution"]:
+            attribution_md += f"- {att['label']}: Win Rate = {att['win_rate']}%, Assigned Weight = {att['weight']}%\n"
+        attribution_md += "\n[IMPORTANT] During decision synthesis, discount opinions of analysts with lower weights and heavily prioritize opinions of analysts with higher weights.\n\n"
+
+        hist_ctx = ""
         if getattr(settings, "include_historical_analyses", False):
             limit = getattr(settings, "historical_analyses_limit", 5) or 5
-            hist_ctx = await _get_historical_analyses_context(ticker, trade_date, db, limit=limit)
-            if hist_ctx:
-                config["historical_context"] = hist_ctx
+            db_ctx = await _get_historical_analyses_context(ticker, trade_date, db, limit=limit)
+            if db_ctx:
+                hist_ctx = db_ctx
+
+        config["historical_context"] = attribution_md + hist_ctx
+
         ta = TradingAgentsGraph(
             selected_analysts=settings.selected_analysts,
             debug=False,

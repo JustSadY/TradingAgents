@@ -333,6 +333,16 @@ async def get_performance(
     }
 
 
+@router.get("/performance-attribution")
+async def get_performance_attribution(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    """Return performance metrics and decision weights for each individual analyst."""
+    from backend.services.performance_service import get_analyst_attribution_stats
+    return await get_analyst_attribution_stats(db)
+
+
 # ── Multi-ticker (portfolio) analysis ────────────────────────────────────────
 
 @router.post("/run-portfolio", response_model=MultiTickerRunResponse)
