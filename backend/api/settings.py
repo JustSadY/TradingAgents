@@ -18,11 +18,8 @@ async def get_llm_catalog(_: User = Depends(get_current_user)):
     """Return all providers and their available models from the model catalog."""
     from tradingagents.llm_clients.model_catalog import MODEL_OPTIONS
     catalog = {}
-    for provider, modes in MODEL_OPTIONS.items():
-        catalog[provider] = {
-            mode: [{"label": label, "value": value} for label, value in opts]
-            for mode, opts in modes.items()
-        }
+    for provider, opts in MODEL_OPTIONS.items():
+        catalog[provider] = [{"label": label, "value": value} for label, value in opts]
     return catalog
 
 

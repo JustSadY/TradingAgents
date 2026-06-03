@@ -53,7 +53,7 @@ interface Settings {
 interface Preset { id: number; name: string; description: string | null; created_at: string }
 
 interface ModelOption { label: string; value: string }
-type Catalog = Record<string, { quick: ModelOption[]; deep: ModelOption[] }>
+type Catalog = Record<string, ModelOption[]>
 
 const PROVIDER_LABELS: Record<string, string> = {
   openai: 'OpenAI',
@@ -267,10 +267,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const analysts = meta?.analysts ?? []
 
   const handleProviderChange = (provider: string) => {
-    const modes = catalog[provider]
+    const models = catalog[provider]
     setS(prev => {
       if (!prev) return prev
-      const defaultModel = modes?.quick?.[0]?.value || modes?.deep?.[0]?.value || prev.llm_model
+      const defaultModel = models?.[0]?.value || prev.llm_model
       return {
         ...prev,
         llm_provider: provider,
@@ -396,10 +396,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 {currentProviderModels ? (
                   <ModelSelect
                     label={t('settings.row_default_model')}
-                    options={[
-                      ...(currentProviderModels.quick || []),
-                      ...(currentProviderModels.deep || [])
-                    ]}
+                    options={currentProviderModels}
                     value={s.llm_model}
                     onChange={v => update('llm_model', v)}
                   />
@@ -479,11 +476,8 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
                       const activeProvider = currentProvider === 'default' ? s.llm_provider : currentProvider
                       const providerModels = catalog[activeProvider]
-                      const allModelValues = [
-                        ...(providerModels?.quick?.map(o => o.value) || []),
-                        ...(providerModels?.deep?.map(o => o.value) || [])
-                      ]
-                      const isCustomMode = currentModel === 'custom' || (currentModel !== '' && currentModel !== 'deep' && !allModelValues.includes(currentModel))
+                      const allModelValues = providerModels?.map(o => o.value) || []
+                      const isCustomMode = currentModel === 'custom' || (currentModel !== '' && !allModelValues.includes(currentModel))
                       const selectModelVal = isCustomMode ? 'custom' : currentModel
 
                       return (
@@ -512,8 +506,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                                   value={currentProvider}
                                   onChange={e => {
                                     const nextProv = e.target.value
-                                    const nextModel = nextProv === 'default' ? '' : 'deep'
-                                    const nextVal = nextProv === 'default' ? '' : `${nextProv}:${nextModel}`
+                                    const nextVal = nextProv === 'default' ? '' : 'custom'
                                     update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
                                   }}
                                 >
@@ -534,19 +527,11 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                                     update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
                                   }}
                                 >
-                                  {currentProvider === 'default' ? (
+                                  {currentProvider === 'default' && (
                                     <option value="">{t('settings.analyst_default_model')}</option>
-                                  ) : (
-                                    <>
-                                      <option value="quick">{t('settings.model_quick_suffix')}</option>
-                                      <option value="deep">{t('settings.model_deep_suffix')}</option>
-                                    </>
                                   )}
-                                  {providerModels?.quick?.map(o => (
-                                    <option key={o.value} value={o.value}>{o.label} ({t('settings.model_quick_suffix')})</option>
-                                  ))}
-                                  {providerModels?.deep?.map(o => (
-                                    <option key={o.value} value={o.value}>{o.label} ({t('settings.model_deep_suffix')})</option>
+                                  {providerModels?.map(o => (
+                                    <option key={o.value} value={o.value}>{o.label}</option>
                                   ))}
                                   <option value="custom">{t('settings.custom_model_option')}</option>
                                 </select>
