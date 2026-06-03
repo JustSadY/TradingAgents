@@ -216,7 +216,7 @@ else
         psql_admin -c "CREATE ROLE \"$DB_USER\" LOGIN PASSWORD '$DB_PASS';"
     fi
     if ! psql_admin -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
-        runuser -u postgres -- createdb -d template1 -O "$DB_USER" "$DB_NAME"
+        runuser -u postgres -- createdb --maintenance-db=template1 -O "$DB_USER" "$DB_NAME"
     fi
     ok "PostgreSQL hazır (db=$DB_NAME, user=$DB_USER)."
 fi
