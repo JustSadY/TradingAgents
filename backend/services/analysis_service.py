@@ -253,12 +253,22 @@ async def run_analysis(
 
         # Load and append analyst attribution weights to past context
         from backend.services.performance_service import get_analyst_attribution_stats
-        attribution_data = await get_analyst_attribution_stats(db)
-        attribution_md = "=== ANALYST PERFORMANCE ATTRIBUTION & WEIGHTS ===\n"
-        attribution_md += "Below are the historical win rates and normalized voting weights assigned to each analyst based on empirical accuracy:\n"
-        for att in attribution_data["attribution"]:
-            attribution_md += f"- {att['label']}: Win Rate = {att['win_rate']}%, Assigned Weight = {att['weight']}%\n"
-        attribution_md += "\n[IMPORTANT] During decision synthesis, discount opinions of analysts with lower weights and heavily prioritize opinions of analysts with higher weights.\n\n"
+        from sqlalchemy.exc import PendingRollbackError
+        attribution_md = ""
+        try:
+            try:
+                attribution_data = await get_analyst_attribution_stats(db)
+            except PendingRollbackError:
+                await db.rollback()
+                attribution_data = await get_analyst_attribution_stats(db)
+            if attribution_data.get("attribution"):
+                attribution_md = "=== ANALYST PERFORMANCE ATTRIBUTION & WEIGHTS ===\n"
+                attribution_md += "Below are the historical win rates and normalized voting weights assigned to each analyst based on empirical accuracy:\n"
+                for att in attribution_data["attribution"]:
+                    attribution_md += f"- {att['label']}: Win Rate = {att['win_rate']}%, Assigned Weight = {att['weight']}%\n"
+                attribution_md += "\n[IMPORTANT] During decision synthesis, discount opinions of analysts with lower weights and heavily prioritize opinions of analysts with higher weights.\n\n"
+        except Exception as _attr_exc:
+            _logger.warning("Could not load analyst attribution stats (skipping): %s", _attr_exc)
 
         hist_ctx = ""
         if getattr(settings, "include_historical_analyses", False):

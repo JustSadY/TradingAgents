@@ -115,8 +115,13 @@ async def get_portfolio_with_live_prices(db: AsyncSession) -> dict:
     total_pnl = total_value - portfolio.initial_capital
     total_pnl_pct = (total_pnl / portfolio.initial_capital * 100) if portfolio.initial_capital else 0.0
 
+    # Persist cached balance and holding prices — wrapped to survive concurrent
+    # request lock contention (statement_timeout) without failing the GET response.
     portfolio.current_balance = total_value
-    await db.flush()
+    try:
+        await db.flush()
+    except Exception:
+        await db.rollback()
 
     return {
         "id": portfolio.id,
