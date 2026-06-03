@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import axios from 'axios'
 import { Download, Loader2, X, RefreshCw } from 'lucide-react'
 import { notify } from '../utils/notify'
+import { useAuth } from '../hooks/useAuth'
 
 interface UpdateStatus {
   git: boolean
@@ -21,6 +22,7 @@ const POLL_MS = 10_000
 // repo has new commits every logged-in user sees the bar and can click "Güncelle"
 // to update + restart the app in place.
 export default function UpdateBanner() {
+  const { isOwner } = useAuth()
   const [st, setSt] = useState<UpdateStatus | null>(null)
   const [busy, setBusy] = useState(false)        // this client triggered the update
   const [dismissed, setDismissed] = useState(false)
@@ -37,7 +39,8 @@ export default function UpdateBanner() {
 
       if (data.update_available && !data.updating && !seenRef.current) {
         seenRef.current = true
-        notify('info', `Yeni güncelleme mevcut (${data.behind} commit).`, 'Güncelleme')
+        // Only notify Owner about available updates
+        notify('info', `Yeni güncelleme mevcut (${data.behind} commit).`, 'Güncelleme', 'owner')
       }
       if (!data.update_available) seenRef.current = false
 
@@ -45,7 +48,7 @@ export default function UpdateBanner() {
       if (busyRef.current && !data.updating) {
         if (data.last_update?.state === 'failed') {
           setBusy(false); sawDownRef.current = false
-          notify('error', data.last_update?.error || 'Güncelleme başarısız oldu.', 'Güncelleme')
+          notify('error', data.last_update?.error || 'Güncelleme başarısız oldu.', 'Güncelleme', 'owner')
         } else if (sawDownRef.current && !data.update_available) {
           // The service went down (restart) and is back on the new commit → reload UI.
           window.location.reload()
@@ -68,17 +71,22 @@ export default function UpdateBanner() {
     setBusy(true); busyRef.current = true; sawDownRef.current = false
     try {
       await axios.post('/api/update/apply')
-      notify('info', 'Güncelleme başlatıldı — lütfen bekleyin, sayfa otomatik yenilenecek.', 'Güncelleme')
+      notify('info', 'Güncelleme başlatıldı — lütfen bekleyin, sayfa otomatik yenilenecek.', 'Güncelleme', 'owner')
       poll()
     } catch (e: any) {
       setBusy(false)
-      notify('error', e?.response?.data?.detail || 'Güncelleme başlatılamadı.', 'Güncelleme')
+      notify('error', e?.response?.data?.detail || 'Güncelleme başlatılamadı.', 'Güncelleme', 'owner')
     }
   }
 
   if (!st || !st.update_supported) return null
   const updating = busy || st.updating
-  if (!updating && (!st.update_available || dismissed)) return null
+
+  // "Updating..." is visible to everyone.
+  // "New version available" is only for the Owner.
+  if (!updating) {
+    if (!isOwner || !st.update_available || dismissed) return null
+  }
 
   return (
     <div
@@ -99,7 +107,7 @@ export default function UpdateBanner() {
           </span>
         )}
       </div>
-      {!updating && (
+      {!updating && isOwner && (
         <>
           <button
             onClick={doUpdate}

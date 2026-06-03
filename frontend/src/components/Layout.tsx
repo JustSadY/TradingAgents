@@ -132,6 +132,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   // ── Global notification toast stack ────────────────────────────────────────
   const [toasts, setToasts] = useState<Notification[]>([])
+  const { isOwner, isAdmin: isAtLeastAdmin } = useAuth()
 
   const dismiss = useCallback((id: string) => {
     setToasts(prev => prev.filter(t => t.id !== id))
@@ -140,13 +141,23 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const handler = (e: Event) => {
       const n = (e as CustomEvent<Notification>).detail
+      
+      // Role-based visibility filtering
+      const vis = n.visibility || 'all'
+      let visible = false
+      if (vis === 'all') visible = true
+      else if (vis === 'admin') visible = isAtLeastAdmin
+      else if (vis === 'owner') visible = isOwner
+
+      if (!visible) return
+
       setToasts(prev => [...prev.slice(-4), n])
       const ms = n.type === 'error' ? 6000 : 4000
       setTimeout(() => dismiss(n.id), ms)
     }
     window.addEventListener('ta-notify', handler)
     return () => window.removeEventListener('ta-notify', handler)
-  }, [dismiss])
+  }, [dismiss, isAtLeastAdmin, isOwner])
   // ──────────────────────────────────────────────────────────────────────────
 
   return (
