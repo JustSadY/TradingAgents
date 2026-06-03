@@ -213,10 +213,10 @@ async def get_ab_comparison(
     comparison = []
     for preset, runs in groups.items():
         total = len(runs)
-        durations = [r.duration_seconds for r in runs if r.duration_seconds > 0]
+        durations = [(r.duration_seconds or 0.0) for r in runs if (r.duration_seconds or 0.0) > 0]
         avg_dur = sum(durations) / len(durations) if durations else 0.0
 
-        total_tokens = [r.tokens_in + r.tokens_out for r in runs]
+        total_tokens = [((r.tokens_in or 0) + (r.tokens_out or 0)) for r in runs]
         avg_tok = sum(total_tokens) / total if total_tokens else 0.0
 
         # Calculate cost for each run
@@ -224,7 +224,7 @@ async def get_ab_comparison(
         for r in runs:
             model = (r.llm_model or "gpt-4o").lower()
             rate = next((v for k, v in cost_map.items() if k in model), 0.002)
-            costs.append((r.tokens_in + r.tokens_out) / 1000 * rate)
+            costs.append(((r.tokens_in or 0) + (r.tokens_out or 0)) / 1000 * rate)
         avg_cost = sum(costs) / total if costs else 0.0
 
         # Calculate win rate based on raw_return direction relative to signal
