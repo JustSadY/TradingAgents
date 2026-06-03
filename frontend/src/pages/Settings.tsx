@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import axios from 'axios'
 import { Save, BookmarkPlus, Trash2, Play, Bell } from 'lucide-react'
 import { useMeta } from '../hooks/useMeta'
+import { useAuth } from '../hooks/useAuth'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
 import { useTranslation } from '../contexts/LanguageContext'
 
@@ -136,6 +137,7 @@ function ModelSelect({
 
 export default function Settings() {
   const { t } = useTranslation()
+  const { isAdmin } = useAuth()
   const [s, setS] = useState<Settings | null>(null)
   const [catalog, setCatalog] = useState<Catalog>({})
   const [saved, setSaved] = useState(false)
@@ -263,17 +265,19 @@ export default function Settings() {
         </Row>
       </Section>
 
-      <Section title={t('settings.section_cron')}>
-        <Row label={t('settings.row_active')}>
-          <input type="checkbox" checked={s.cron_enabled} onChange={e => update('cron_enabled', e.target.checked)} className="w-5 h-5 accent-indigo-600" />
-        </Row>
-        <Row label={t('settings.row_schedule')}>
-          <input className={Input} value={s.cron_schedule} onChange={e => update('cron_schedule', e.target.value)} placeholder="0 9 * * 1-5" />
-        </Row>
-        <Row label={t('settings.row_price_tolerance')}>
-          <input type="number" step="0.1" min="0" max="50" className={Input} value={s.price_tolerance_pct} onChange={e => update('price_tolerance_pct', parseFloat(e.target.value))} />
-        </Row>
-      </Section>
+      {isAdmin && (
+        <Section title={t('settings.section_cron')}>
+          <Row label={t('settings.row_active')}>
+            <input type="checkbox" checked={s.cron_enabled} onChange={e => update('cron_enabled', e.target.checked)} className="w-5 h-5 accent-indigo-600" />
+          </Row>
+          <Row label={t('settings.row_schedule')}>
+            <input className={Input} value={s.cron_schedule} onChange={e => update('cron_schedule', e.target.value)} placeholder="0 9 * * 1-5" />
+          </Row>
+          <Row label={t('settings.row_price_tolerance')}>
+            <input type="number" step="0.1" min="0" max="50" className={Input} value={s.price_tolerance_pct} onChange={e => update('price_tolerance_pct', parseFloat(e.target.value))} />
+          </Row>
+        </Section>
+      )}
 
       <Section title={t('settings.llm_settings')}>
         <Row label="Provider">
@@ -516,74 +520,78 @@ export default function Settings() {
         )}
       </Section>
 
-      <Section title={t('settings.section_data_sources')}>
-        {(
-          [
-            ['data_vendor_core_stock', t('settings.data_core_stock')],
-            ['data_vendor_technicals', t('settings.data_technicals')],
-            ['data_vendor_fundamentals', t('settings.data_fundamentals')],
-            ['data_vendor_news', t('settings.data_news')],
-          ] as [keyof Settings, string][]
-        ).map(([field, label]) => (
-          <Row key={field} label={label}>
-            <select className={Input} value={s[field] as string} onChange={e => update(field, e.target.value)}>
-              {dataVendors.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </Row>
-        ))}
-      </Section>
+      {isAdmin && (
+        <>
+          <Section title={t('settings.section_data_sources')}>
+            {(
+              [
+                ['data_vendor_core_stock', t('settings.data_core_stock')],
+                ['data_vendor_technicals', t('settings.data_technicals')],
+                ['data_vendor_fundamentals', t('settings.data_fundamentals')],
+                ['data_vendor_news', t('settings.data_news')],
+              ] as [keyof Settings, string][]
+            ).map(([field, label]) => (
+              <Row key={field} label={label}>
+                <select className={Input} value={s[field] as string} onChange={e => update(field, e.target.value)}>
+                  {dataVendors.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                </select>
+              </Row>
+            ))}
+          </Section>
 
-      <Section title={t('settings.section_advanced')}>
-        <Row label={t('settings.row_checkpoint')}>
-          <input type="checkbox" checked={s.checkpoint_enabled} onChange={e => update('checkpoint_enabled', e.target.checked)} className="w-5 h-5 accent-indigo-600" />
-        </Row>
-        <Row label={t('settings.row_historical_analyses')}>
-          <div className="flex flex-col gap-2">
-            <label className="flex items-center gap-2 cursor-pointer">
-              <input
-                type="checkbox"
-                checked={s.include_historical_analyses}
-                onChange={e => update('include_historical_analyses', e.target.checked)}
-                className="w-5 h-5 accent-indigo-600"
-              />
-              <span className="text-xs text-gray-500">{t('settings.historical_analyses_hint')}</span>
-            </label>
-            {s.include_historical_analyses && (
-              <div className="flex items-center gap-2 pt-0.5">
-                <span className="text-xs text-gray-400">{t('settings.historical_limit_label')}</span>
-                <input
-                  type="number"
-                  min="1"
-                  max="50"
-                  className="bg-gray-800 border border-gray-700 text-white rounded-xl px-2 py-0.5 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-xs w-16 text-center transition"
-                  value={s.historical_analyses_limit ?? 5}
-                  onChange={e => update('historical_analyses_limit', parseInt(e.target.value) || 1)}
-                />
+          <Section title={t('settings.section_advanced')}>
+            <Row label={t('settings.row_checkpoint')}>
+              <input type="checkbox" checked={s.checkpoint_enabled} onChange={e => update('checkpoint_enabled', e.target.checked)} className="w-5 h-5 accent-indigo-600" />
+            </Row>
+            <Row label={t('settings.row_historical_analyses')}>
+              <div className="flex flex-col gap-2">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={s.include_historical_analyses}
+                    onChange={e => update('include_historical_analyses', e.target.checked)}
+                    className="w-5 h-5 accent-indigo-600"
+                  />
+                  <span className="text-xs text-gray-500">{t('settings.historical_analyses_hint')}</span>
+                </label>
+                {s.include_historical_analyses && (
+                  <div className="flex items-center gap-2 pt-0.5">
+                    <span className="text-xs text-gray-400">{t('settings.historical_limit_label')}</span>
+                    <input
+                      type="number"
+                      min="1"
+                      max="50"
+                      className="bg-gray-800 border border-gray-700 text-white rounded-xl px-2 py-0.5 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-xs w-16 text-center transition"
+                      value={s.historical_analyses_limit ?? 5}
+                      onChange={e => update('historical_analyses_limit', parseInt(e.target.value) || 1)}
+                    />
+                  </div>
+                )}
               </div>
+            </Row>
+            <Row label={t('settings.row_news_limit_ticker')}>
+              <input type="number" min="1" max="100" className={Input} value={s.news_article_limit} onChange={e => update('news_article_limit', parseInt(e.target.value))} />
+            </Row>
+            <Row label={t('settings.row_global_news_limit')}>
+              <input type="number" min="1" max="50" className={Input} value={s.global_news_article_limit} onChange={e => update('global_news_article_limit', parseInt(e.target.value))} />
+            </Row>
+            <Row label={t('settings.row_global_news_lookback')}>
+              <input type="number" min="1" max="30" className={Input} value={s.global_news_lookback_days} onChange={e => update('global_news_lookback_days', parseInt(e.target.value))} />
+            </Row>
+            <Row label={t('settings.row_max_recursion')}>
+              <input type="number" min="100" max="5000" className={Input} value={s.max_recur_limit} onChange={e => update('max_recur_limit', parseInt(e.target.value))} />
+            </Row>
+            <Row label={t('settings.row_benchmark_symbol')}>
+              <input className={Input} value={s.benchmark_ticker || ''} onChange={e => update('benchmark_ticker', e.target.value || null)} placeholder={t('settings.benchmark_placeholder')} />
+            </Row>
+            {s.llm_provider === 'azure' && (
+              <Row label={t('settings.row_azure_deployment')}>
+                <input className={Input} value={s.azure_deployment || ''} onChange={e => update('azure_deployment', e.target.value || null)} placeholder="gpt-4o" />
+              </Row>
             )}
-          </div>
-        </Row>
-        <Row label={t('settings.row_news_limit_ticker')}>
-          <input type="number" min="1" max="100" className={Input} value={s.news_article_limit} onChange={e => update('news_article_limit', parseInt(e.target.value))} />
-        </Row>
-        <Row label={t('settings.row_global_news_limit')}>
-          <input type="number" min="1" max="50" className={Input} value={s.global_news_article_limit} onChange={e => update('global_news_article_limit', parseInt(e.target.value))} />
-        </Row>
-        <Row label={t('settings.row_global_news_lookback')}>
-          <input type="number" min="1" max="30" className={Input} value={s.global_news_lookback_days} onChange={e => update('global_news_lookback_days', parseInt(e.target.value))} />
-        </Row>
-        <Row label={t('settings.row_max_recursion')}>
-          <input type="number" min="100" max="5000" className={Input} value={s.max_recur_limit} onChange={e => update('max_recur_limit', parseInt(e.target.value))} />
-        </Row>
-        <Row label={t('settings.row_benchmark_symbol')}>
-          <input className={Input} value={s.benchmark_ticker || ''} onChange={e => update('benchmark_ticker', e.target.value || null)} placeholder={t('settings.benchmark_placeholder')} />
-        </Row>
-        {s.llm_provider === 'azure' && (
-          <Row label={t('settings.row_azure_deployment')}>
-            <input className={Input} value={s.azure_deployment || ''} onChange={e => update('azure_deployment', e.target.value || null)} placeholder="gpt-4o" />
-          </Row>
-        )}
-      </Section>
+          </Section>
+        </>
+      )}
 
       {/* Preset Management (MOD2) */}
       <Section title={t('settings.section_presets')}>
@@ -624,76 +632,77 @@ export default function Settings() {
         )}
       </Section>
 
-      {/* Notifications (MOD4) */}
-      <Section title={t('settings.section_notifications')}>
-        <Row label={t('settings.row_webhook_url')}>
-          <input
-            className={Input}
-            placeholder="https://hooks.slack.com/..."
-            value={s.webhook_url || ''}
-            onChange={e => update('webhook_url', e.target.value || null)}
-          />
-        </Row>
-        <Row label={t('settings.row_webhook_active')}>
-          <div className="flex items-center gap-3">
+      {isAdmin && (
+        <Section title={t('settings.section_notifications')}>
+          <Row label={t('settings.row_webhook_url')}>
             <input
-              type="checkbox"
-              checked={s.webhook_enabled}
-              onChange={e => update('webhook_enabled', e.target.checked)}
-              className="w-5 h-5 accent-indigo-600"
+              className={Input}
+              placeholder="https://hooks.slack.com/..."
+              value={s.webhook_url || ''}
+              onChange={e => update('webhook_url', e.target.value || null)}
             />
-            {s.webhook_url && (
+          </Row>
+          <Row label={t('settings.row_webhook_active')}>
+            <div className="flex items-center gap-3">
+              <input
+                type="checkbox"
+                checked={s.webhook_enabled}
+                onChange={e => update('webhook_enabled', e.target.checked)}
+                className="w-5 h-5 accent-indigo-600"
+              />
+              {s.webhook_url && (
+                <button
+                  onClick={testWebhook}
+                  disabled={webhookTesting}
+                  className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-2 py-1 rounded-lg transition"
+                >
+                  {webhookTesting ? '...' : t('settings.webhook_test_button')}
+                </button>
+              )}
+              {webhookTestResult && (
+                <span className={`text-xs ${webhookTestResult.startsWith('✓') ? 'text-emerald-400' : 'text-red-400'}`}>
+                  {webhookTestResult}
+                </span>
+              )}
+            </div>
+          </Row>
+          <Row label={t('settings.row_notification_events')}>
+            <div className="flex flex-col gap-1.5">
+              {([
+                ['analysis_complete', t('settings.event_analysis_complete')],
+                ['trade_executed', t('settings.event_trade_executed')],
+                ['alert_triggered', t('settings.event_alert_triggered')],
+              ] as [string, string][]).map(([key, label]) => (
+                <label key={key} className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    className="accent-indigo-600"
+                    checked={s.webhook_events.includes(key)}
+                    onChange={e => {
+                      const events = s.webhook_events ? s.webhook_events.split(',').filter(Boolean) : []
+                      const next = e.target.checked ? [...events, key] : events.filter(x => x !== key)
+                      update('webhook_events', next.join(','))
+                    }}
+                  />
+                  {label}
+                </label>
+              ))}
+            </div>
+          </Row>
+          <Row label={t('settings.row_browser_notifications')}>
+            <div className="flex items-center gap-3">
               <button
-                onClick={testWebhook}
-                disabled={webhookTesting}
-                className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-2 py-1 rounded-lg transition"
+                onClick={toggleBrowserNotify}
+                className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${browserNotify ? 'bg-violet-600' : 'bg-gray-700'}`}
               >
-                {webhookTesting ? '...' : t('settings.webhook_test_button')}
+                <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${browserNotify ? 'translate-x-6' : 'translate-x-1'}`} />
               </button>
-            )}
-            {webhookTestResult && (
-              <span className={`text-xs ${webhookTestResult.startsWith('✓') ? 'text-emerald-400' : 'text-red-400'}`}>
-                {webhookTestResult}
-              </span>
-            )}
-          </div>
-        </Row>
-        <Row label={t('settings.row_notification_events')}>
-          <div className="flex flex-col gap-1.5">
-            {([
-              ['analysis_complete', t('settings.event_analysis_complete')],
-              ['trade_executed', t('settings.event_trade_executed')],
-              ['alert_triggered', t('settings.event_alert_triggered')],
-            ] as [string, string][]).map(([key, label]) => (
-              <label key={key} className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
-                <input
-                  type="checkbox"
-                  className="accent-indigo-600"
-                  checked={s.webhook_events.includes(key)}
-                  onChange={e => {
-                    const events = s.webhook_events ? s.webhook_events.split(',').filter(Boolean) : []
-                    const next = e.target.checked ? [...events, key] : events.filter(x => x !== key)
-                    update('webhook_events', next.join(','))
-                  }}
-                />
-                {label}
-              </label>
-            ))}
-          </div>
-        </Row>
-        <Row label={t('settings.row_browser_notifications')}>
-          <div className="flex items-center gap-3">
-            <button
-              onClick={toggleBrowserNotify}
-              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${browserNotify ? 'bg-violet-600' : 'bg-gray-700'}`}
-            >
-              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${browserNotify ? 'translate-x-6' : 'translate-x-1'}`} />
-            </button>
-            <Bell size={14} className={browserNotify ? 'text-violet-400' : 'text-gray-600'} />
-            <span className="text-xs text-gray-500">{browserNotify ? t('settings.browser_notify_on') : t('settings.browser_notify_off')}</span>
-          </div>
-        </Row>
-      </Section>
+              <Bell size={14} className={browserNotify ? 'text-violet-400' : 'text-gray-600'} />
+              <span className="text-xs text-gray-500">{browserNotify ? t('settings.browser_notify_on') : t('settings.browser_notify_off')}</span>
+            </div>
+          </Row>
+        </Section>
+      )}
 
       <div className="flex items-center gap-3">
         <button onClick={save} className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl px-5 py-2.5 text-sm font-semibold shadow-lg shadow-violet-500/20 transition-all">

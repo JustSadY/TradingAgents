@@ -10,9 +10,11 @@ _logger = logging.getLogger(__name__)
 
 API_BASE_URL = "https://www.alphavantage.co/query"
 
+from tradingagents.dataflows.config import get_config
+
 def get_api_key() -> str:
-    """Retrieve the API key for Alpha Vantage from environment variables."""
-    api_key = os.getenv("ALPHA_VANTAGE_API_KEY")
+    """Retrieve the API key for Alpha Vantage from config or environment variables."""
+    api_key = get_config().get("alpha_vantage_api_key") or os.getenv("ALPHA_VANTAGE_API_KEY")
     if not api_key:
         raise ValueError("ALPHA_VANTAGE_API_KEY environment variable is not set.")
     return api_key

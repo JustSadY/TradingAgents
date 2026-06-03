@@ -370,7 +370,8 @@ async def run_portfolio(
         except ValueError as e:
             raise HTTPException(status_code=422, detail=f"Invalid ticker {ticker}: {e}")
 
-    settings = await _get_or_create_settings(db)
+    settings = await _get_or_create_settings(db, _)
+    current_user = _
 
     import uuid
     task_id = str(uuid.uuid4())
@@ -379,7 +380,7 @@ async def run_portfolio(
         async with __import__("backend.core.database", fromlist=["AsyncSessionLocal"]).AsyncSessionLocal() as bg_db:
             try:
                 from backend.services.analysis_service import run_portfolio_analysis
-                await run_portfolio_analysis(tickers, body.trade_date, body.asset_type, settings, bg_db, "manual")
+                await run_portfolio_analysis(tickers, body.trade_date, body.asset_type, settings, bg_db, "manual", user=current_user)
                 await bg_db.commit()
             except Exception as exc:
                 _logger.error("Portfolio analysis failed: %s", exc, exc_info=True)
@@ -475,7 +476,7 @@ async def ask_analysis_report(
         raise HTTPException(status_code=404, detail="Analysis report not found")
 
     # 2. Get active configuration
-    settings = await _get_or_create_settings(db)
+    settings = await _get_or_create_settings(db, _)
 
     # 3. Construct a concise context summary from the report
     reports = []
@@ -533,10 +534,27 @@ async def ask_analysis_report(
     messages_payload.append(HumanMessage(content=body.message))
 
     # 7. Execute LLM call using the configured provider & model
+    from backend.core.config import get_settings as _cfg
+    from backend.services.user_service import get_user_api_key
+    user_key = None
+    if _ is not None:
+        try:
+            fernet = _cfg().get_fernet()
+            user_key = get_user_api_key(_, settings.llm_provider, fernet)
+        except Exception:
+            user_key = None
+
+    if not user_key and not getattr(_, "is_admin", False):
+        raise HTTPException(
+            status_code=400,
+            detail=f"No API key set for provider '{settings.llm_provider}'. Please add your API key in Settings."
+        )
+
     client = create_llm_client(
         provider=settings.llm_provider,
         model=settings.llm_model,
         base_url=settings.backend_url,
+        api_key=user_key,
     )
     llm = client.get_llm()
 

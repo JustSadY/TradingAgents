@@ -48,6 +48,16 @@ async def update_system_settings(
         ss.webhook_enabled = body.webhook_enabled
     if body.webhook_events is not None:
         ss.webhook_events = body.webhook_events
+    if body.searxng_url is not None:
+        ss.searxng_url = body.searxng_url
+    if body.reddit_client_id is not None:
+        ss.reddit_client_id = body.reddit_client_id
+    if body.reddit_client_secret is not None:
+        ss.reddit_client_secret = body.reddit_client_secret
+    if body.reddit_user_agent is not None:
+        ss.reddit_user_agent = body.reddit_user_agent
+    if body.alpha_vantage_api_key is not None:
+        ss.alpha_vantage_api_key = body.alpha_vantage_api_key
 
     # Re-apply cron job with new schedule
     try:

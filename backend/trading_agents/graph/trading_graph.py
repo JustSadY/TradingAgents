@@ -94,17 +94,16 @@ class TradingAgentsGraph:
         os.makedirs(self.config["results_dir"], exist_ok=True)
 
         # Initialize LLMs with provider-specific thinking configuration
-        llm_kwargs = self._get_provider_kwargs()
-
-        # Add callbacks to kwargs if provided (passed to LLM constructor)
+        main_prov = self.config["llm_provider"]
+        main_kwargs = self._get_provider_kwargs(main_prov)
         if self.callbacks:
-            llm_kwargs["callbacks"] = self.callbacks
+            main_kwargs["callbacks"] = self.callbacks
 
         client = create_llm_client(
-            provider=self.config["llm_provider"],
+            provider=main_prov,
             model=self.config["llm_model"],
             base_url=self.config.get("backend_url"),
-            **llm_kwargs,
+            **main_kwargs,
         )
  
         self.thinking_llm = client.get_llm()
@@ -129,11 +128,14 @@ class TradingAgentsGraph:
             else:
                 prov, model_name = _resolve_provider_and_model(model_str_clean, self.config["llm_provider"])
                 try:
+                    analyst_kwargs = self._get_provider_kwargs(prov)
+                    if self.callbacks:
+                        analyst_kwargs["callbacks"] = self.callbacks
                     client = create_llm_client(
                         provider=prov,
                         model=model_name,
                         base_url=self.config.get("backend_url"),
-                        **llm_kwargs,
+                        **analyst_kwargs,
                     )
                     analyst_llms[analyst_key] = client.get_llm()
                 except Exception as e:
@@ -176,29 +178,43 @@ class TradingAgentsGraph:
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None
 
-    def _get_provider_kwargs(self) -> Dict[str, Any]:
+    def _get_provider_kwargs(self, provider: str = None) -> Dict[str, Any]:
         """Get provider-specific kwargs for LLM client creation."""
         kwargs = {}
-        provider = self.config.get("llm_provider", "").lower()
+        prov_lower = (provider or self.config.get("llm_provider", "")).lower()
 
-        if provider == "google":
+        if prov_lower == "google":
             thinking_level = self.config.get("google_thinking_level")
             if thinking_level:
                 kwargs["thinking_level"] = thinking_level
 
-        elif provider == "openai":
+        elif prov_lower == "openai":
             reasoning_effort = self.config.get("openai_reasoning_effort")
             if reasoning_effort:
                 kwargs["reasoning_effort"] = reasoning_effort
 
-        elif provider == "anthropic":
+        elif prov_lower == "anthropic":
             effort = self.config.get("anthropic_effort")
             if effort:
                 kwargs["effort"] = effort
 
-        # Per-user API key injected by analysis_service via config["api_key"]
-        if self.config.get("api_key"):
+        # Resolve user-specific API key for this provider
+        user_keys = self.config.get("user_api_keys") or {}
+        user_key = user_keys.get(prov_lower)
+        if user_key:
+            kwargs["api_key"] = user_key
+        elif self.config.get("api_key") and prov_lower == self.config.get("llm_provider", "").lower():
             kwargs["api_key"] = self.config["api_key"]
+
+        # Enforce that normal users must set an API key if required
+        if not kwargs.get("api_key") and self.config.get("has_user", False) and not self.config.get("is_admin", False):
+            from tradingagents.llm_clients.api_key_env import get_api_key_env
+            api_key_env = get_api_key_env(prov_lower)
+            if api_key_env:
+                raise ValueError(
+                    f"No API key set for provider '{prov_lower}'. "
+                    "Go to Profile → API Keys to add your key."
+                )
 
         return kwargs
 

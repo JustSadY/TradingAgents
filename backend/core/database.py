@@ -48,6 +48,7 @@ async def _migrate_add_columns(conn):
     _ALLOWED = {
         "users", "app_settings", "analysis_results", "portfolios", "orders",
         "holdings", "multi_ticker_analyses", "config_presets", "price_alerts",
+        "system_settings",
     }
     new_columns = [
         # ── Multi-tenant: users table ──────────────────────────────────────────
@@ -55,6 +56,12 @@ async def _migrate_add_columns(conn):
         ("users", "role",          "VARCHAR(20) DEFAULT 'user'"),
         ("users", "display_name",  "VARCHAR(100)"),
         ("users", "api_keys_enc",  "TEXT"),
+        # ── Global settings configured via Web UI ─────────────────────────────
+        ("system_settings", "searxng_url",             "VARCHAR(500)"),
+        ("system_settings", "reddit_client_id",         "VARCHAR(255)"),
+        ("system_settings", "reddit_client_secret",     "VARCHAR(255)"),
+        ("system_settings", "reddit_user_agent",        "VARCHAR(255)"),
+        ("system_settings", "alpha_vantage_api_key",    "VARCHAR(255)"),
         # ── Per-user settings ─────────────────────────────────────────────────
         ("app_settings", "user_id", "INTEGER REFERENCES users(id)"),
         # ── Data isolation: user_id on all core tables ─────────────────────────

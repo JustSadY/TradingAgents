@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
-import { Save, Trash2, Plus, UserCog, ShieldCheck, Globe, CheckCircle2 } from 'lucide-react'
+import { Save, Trash2, Plus, UserCog, ShieldCheck, Globe, CheckCircle2, Key } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 
 interface UserRecord {
@@ -20,6 +20,11 @@ interface SystemSettings {
   webhook_url: string | null
   webhook_enabled: boolean
   webhook_events: string
+  searxng_url: string | null
+  reddit_client_id: string | null
+  reddit_client_secret: string | null
+  reddit_user_agent: string | null
+  alpha_vantage_api_key: string | null
 }
 
 const ALL_PAGE_KEYS = [
@@ -45,7 +50,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-type Tab = 'users' | 'permissions' | 'system'
+type Tab = 'users' | 'permissions' | 'system' | 'api-keys'
 
 export default function Admin() {
   const { t } = useTranslation()
@@ -61,6 +66,9 @@ export default function Admin() {
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [watchlistInput, setWatchlistInput] = useState('')
+  const [userKeyProviders, setUserKeyProviders] = useState<string[]>([])
+  const [keySaved, setKeySaved] = useState(false)
+  const [keyError, setKeyError] = useState<string | null>(null)
 
   const loadUsers = useCallback(async () => {
     const r = await axios.get('/api/users')
@@ -82,6 +90,34 @@ export default function Admin() {
     const r = await axios.get(`/api/users/${userId}/permissions`)
     setPermissions(r.data.permissions)
     setSelectedUserId(userId)
+  }
+
+  const loadUserApiKeys = async (userId: number) => {
+    setSelectedUserId(userId)
+    const r = await axios.get(`/api/users/${userId}/api-keys`)
+    setUserKeyProviders(r.data.providers)
+  }
+
+  const saveUserApiKey = async (userId: number, provider: string, apiKey: string) => {
+    setKeyError(null)
+    try {
+      await axios.put(`/api/users/${userId}/api-keys`, { provider, api_key: apiKey })
+      setKeySaved(true)
+      setTimeout(() => setKeySaved(false), 2000)
+      await loadUserApiKeys(userId)
+    } catch (err: any) {
+      setKeyError(err.response?.data?.detail || 'Key could not be saved')
+    }
+  }
+
+  const deleteUserApiKey = async (userId: number, provider: string) => {
+    setKeyError(null)
+    try {
+      await axios.delete(`/api/users/${userId}/api-keys/${provider}`)
+      await loadUserApiKeys(userId)
+    } catch (err: any) {
+      setKeyError(err.response?.data?.detail || 'Key could not be deleted')
+    }
   }
 
   const savePermissions = async () => {
@@ -150,6 +186,7 @@ export default function Admin() {
     { key: 'users',       label: t('admin.tab_users'),       icon: <UserCog size={15} /> },
     { key: 'permissions', label: t('admin.tab_permissions'),  icon: <ShieldCheck size={15} /> },
     { key: 'system',      label: t('admin.tab_system'),       icon: <Globe size={15} /> },
+    { key: 'api-keys',    label: 'User API Keys',            icon: <Key size={15} /> },
   ]
 
   return (
@@ -398,6 +435,73 @@ export default function Admin() {
               />
             </div>
 
+            {/* SearXNG URL */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
+              <span className="text-sm text-gray-400">SearXNG URL</span>
+              <div className="flex-1 sm:max-w-xs">
+                <input
+                  className={Input}
+                  value={sysSettings.searxng_url || ''}
+                  onChange={e => setSysSettings(s => s ? { ...s, searxng_url: e.target.value || null } : s)}
+                  placeholder="http://localhost:8080"
+                />
+              </div>
+            </div>
+
+            {/* Reddit Client ID */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
+              <span className="text-sm text-gray-400">Reddit Client ID</span>
+              <div className="flex-1 sm:max-w-xs">
+                <input
+                  className={Input}
+                  value={sysSettings.reddit_client_id || ''}
+                  onChange={e => setSysSettings(s => s ? { ...s, reddit_client_id: e.target.value || null } : s)}
+                  placeholder="Reddit Client ID"
+                />
+              </div>
+            </div>
+
+            {/* Reddit Client Secret */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
+              <span className="text-sm text-gray-400">Reddit Client Secret</span>
+              <div className="flex-1 sm:max-w-xs">
+                <input
+                  className={Input}
+                  type="password"
+                  value={sysSettings.reddit_client_secret || ''}
+                  onChange={e => setSysSettings(s => s ? { ...s, reddit_client_secret: e.target.value || null } : s)}
+                  placeholder="Reddit Client Secret"
+                />
+              </div>
+            </div>
+
+            {/* Reddit User Agent */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
+              <span className="text-sm text-gray-400">Reddit User Agent</span>
+              <div className="flex-1 sm:max-w-xs">
+                <input
+                  className={Input}
+                  value={sysSettings.reddit_user_agent || ''}
+                  onChange={e => setSysSettings(s => s ? { ...s, reddit_user_agent: e.target.value || null } : s)}
+                  placeholder="TradingAgents/1.0"
+                />
+              </div>
+            </div>
+
+            {/* Alpha Vantage API Key */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
+              <span className="text-sm text-gray-400">Alpha Vantage API Key</span>
+              <div className="flex-1 sm:max-w-xs">
+                <input
+                  className={Input}
+                  type="password"
+                  value={sysSettings.alpha_vantage_api_key || ''}
+                  onChange={e => setSysSettings(s => s ? { ...s, alpha_vantage_api_key: e.target.value || null } : s)}
+                  placeholder="Alpha Vantage API Key"
+                />
+              </div>
+            </div>
+
             <div className="flex items-center gap-3 pt-1">
               <button
                 onClick={saveSystemSettings}
@@ -410,6 +514,157 @@ export default function Admin() {
             </div>
           </div>
         </Section>
+      )}
+
+      {/* ── API Keys tab ────────────────────────────────────────────────────────── */}
+      {tab === 'api-keys' && (
+        <Section title="User API Keys">
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <select
+              className={`${Input} sm:max-w-xs`}
+              value={selectedUserId ?? ''}
+              onChange={e => {
+                const id = parseInt(e.target.value)
+                if (!isNaN(id)) loadUserApiKeys(id)
+                else setSelectedUserId(null)
+              }}
+            >
+              <option value="">{t('admin.select_user')}</option>
+              {users.map(u => (
+                <option key={u.id} value={u.id}>{u.username} ({u.role})</option>
+              ))}
+            </select>
+            {keySaved && <span className="text-emerald-400 text-sm">✓ Key saved successfully</span>}
+            {keyError && <span className="text-red-400 text-sm">{keyError}</span>}
+          </div>
+
+          {selectedUserId && (
+            <div className="space-y-4 mt-4">
+              <p className="text-xs text-gray-500 pb-1">
+                Admins cannot see existing API key characters, but can define/set or delete them.
+              </p>
+              <div className="space-y-3 bg-gray-800 border border-gray-700/50 p-4 rounded-2xl">
+                {[
+                  { key: 'openai',       label: 'OpenAI' },
+                  { key: 'anthropic',    label: 'Anthropic (Claude)' },
+                  { key: 'google',       label: 'Google (Gemini)' },
+                  { key: 'xai',          label: 'xAI (Grok)' },
+                  { key: 'deepseek',     label: 'DeepSeek' },
+                  { key: 'qwen',         label: 'Qwen (Global)' },
+                  { key: 'glm',          label: 'GLM / Z.AI' },
+                  { key: 'minimax',      label: 'MiniMax' },
+                  { key: 'ollama',       label: 'Ollama (Local)' },
+                  { key: 'nvidia',       label: 'NVIDIA NIM' },
+                  { key: 'litellm',      label: 'LiteLLM Proxy' },
+                  { key: 'azure',        label: 'Azure OpenAI' },
+                ].map(p => {
+                  const hasKey = userKeyProviders.includes(p.key)
+                  return (
+                    <AdminApiKeyRow
+                      key={p.key}
+                      providerKey={p.key}
+                      label={p.label}
+                      hasKey={hasKey}
+                      onSave={async (prov, val) => saveUserApiKey(selectedUserId, prov, val)}
+                      onDelete={async (prov) => deleteUserApiKey(selectedUserId, prov)}
+                    />
+                  )
+                })}
+              </div>
+            </div>
+          )}
+        </Section>
+      )}
+    </div>
+  )
+}
+
+function AdminApiKeyRow({ providerKey, label, hasKey, onSave, onDelete }: {
+  providerKey: string
+  label: string
+  hasKey: boolean
+  onSave: (provider: string, key: string) => Promise<void>
+  onDelete: (provider: string) => Promise<void>
+}) {
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState('')
+  const [show, setShow] = useState(false)
+  const [saving, setSaving] = useState(false)
+
+  const handleSave = async () => {
+    if (!value.trim()) return
+    setSaving(true)
+    try {
+      await onSave(providerKey, value.trim())
+      setValue('')
+      setEditing(false)
+      setShow(false)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const handleDelete = async () => {
+    await onDelete(providerKey)
+  }
+
+  return (
+    <div className="flex flex-col gap-1.5 border-b border-gray-800/50 pb-3 last:border-b-0 last:pb-0">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2">
+          <span className="text-sm text-gray-300 font-medium">{label}</span>
+          {hasKey && (
+            <span className="text-xs bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 rounded-full px-2 py-0.5">
+              Configured
+            </span>
+          )}
+        </div>
+        <div className="flex items-center gap-1.5">
+          {hasKey && (
+            <button
+              onClick={handleDelete}
+              className="text-xs text-gray-500 hover:text-red-400 transition-colors p-1"
+              title="Delete Key"
+            >
+              <Trash2 size={13} />
+            </button>
+          )}
+          <button
+            onClick={() => setEditing(e => !e)}
+            className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white px-2.5 py-1 rounded-lg transition-colors font-medium"
+          >
+            {editing ? 'Cancel' : hasKey ? 'Update Key' : 'Add Key'}
+          </button>
+        </div>
+      </div>
+      {editing && (
+        <div className="flex gap-2 mt-0.5">
+          <div className="relative flex-1">
+            <input
+              className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-sm w-full transition"
+              type={show ? 'text' : 'password'}
+              placeholder="Enter API key"
+              value={value}
+              onChange={e => setValue(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleSave()}
+              autoFocus
+            />
+            <button
+              type="button"
+              onClick={() => setShow(s => !s)}
+              className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300 text-xs font-semibold select-none"
+            >
+              {show ? 'Hide' : 'Show'}
+            </button>
+          </div>
+          <button
+            onClick={handleSave}
+            disabled={saving || !value.trim()}
+            className="flex items-center gap-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm px-3 py-1.5 rounded-xl transition whitespace-nowrap font-medium"
+          >
+            <Save size={13} /> Save
+          </button>
+        </div>
       )}
     </div>
   )

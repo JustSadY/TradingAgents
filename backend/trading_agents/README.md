@@ -1,0 +1,129 @@
+# 🤖 TradingAgents AI: Multi-Agent Decision Engine
+
+This directory contains the core multi-agent AI system designed to analyze securities, conduct investment thesis debates, negotiate position sizing parameters under risk constraints, and execute final trades. 
+
+Built using **LangGraph** and **LangChain Core**, the system models complex financial decision-making as a state machine with asynchronous execution, self-correction reflection loops, and streaming updates.
+
+---
+
+## 🧭 Multi-Agent Workflow Architecture
+
+Instead of relying on a single, general-purpose LLM prompt to make investment decisions, TradingAgents splits work among specialized AI personas. The execution flow is structured as follows:
+
+```mermaid
+graph TD
+    Start([Start Run]) --> InitState[Initialize State]
+    InitState --> AnalystExecution[Analyst Execution Node]
+    
+    subgraph Analysts [9 Specialized Analyst Plugins]
+        AnalystExecution --> A1[Technical / Market]
+        AnalystExecution --> A2[Social Sentiment]
+        AnalystExecution --> A3[Global News]
+        AnalystExecution --> A4[Fundamental Balance Sheet]
+        AnalystExecution --> A5[Macroeconomics]
+        AnalystExecution --> A6[Options Chain]
+        AnalystExecution --> A7[Quantitative Factor]
+        AnalystExecution --> A8[Earnings Call Transcript]
+        AnalystExecution --> A9[Performance Review]
+    end
+    
+    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 --> DebatePhase{Debate Judge Node}
+    
+    subgraph Debate [The Thesis Debate Loop]
+        DebatePhase --> Bull[Bull Researcher]
+        DebatePhase --> Bear[Bear Researcher]
+        Bull & Bear --> Judge[Research Manager]
+    end
+    
+    Judge --> RiskDebate{Risk Debate Node}
+    
+    subgraph Risk [Position Sizing & Safety Negotiation]
+        RiskDebate --> RA[Aggressive Risk Agent]
+        RiskDebate --> RC[Conservative Risk Agent]
+        RiskDebate --> RN[Neutral Risk Agent]
+    end
+    
+    RA & RC & RN --> FinalExecution[Portfolio Manager Decision Node]
+    FinalExecution --> Reflection{Reflection & Correction Loop}
+    Reflection -->|Validation Failed| AnalystExecution
+    Reflection -->|Validation Approved| EndNode([Final Output & Execution])
+```
+
+---
+
+## 📁 Package Layout
+
+```text
+trading_agents/
+├── agents/                  # Prompt engineering, agent behaviors, and schemas
+│   ├── analyst_registry.py   # Registry manager to load and execute analyst plugins
+│   ├── schemas.py           # Structured output schemas (Pydantic models)
+│   ├── analysts/            # Implementation of the 9 analyst plugins
+│   ├── researchers/         # Bull & Bear thesis builders
+│   ├── managers/            # Research Manager / Judge prompts and logic
+│   ├── risk_mgmt/           # Risk analyst personalities (Aggressive, Conservative, Neutral)
+│   └── trader/              # Portfolio Manager (executes final buys/sells and sizes)
+├── graph/                   # State machine structure (LangGraph engine)
+│   ├── setup.py             # Instantiates, compiles, and chains StateGraph nodes
+│   ├── checkpointer.py      # Persists conversation states and node states
+│   ├── analyst_execution.py  # Coordinates parallel mapping execution of active analysts
+│   ├── conditional_logic.py # Defines dynamic routing criteria between nodes
+│   ├── reflection.py        # Logic to review outputs for hallucination or errors
+│   └── trading_graph.py     # Graph entry runner with stream event hooks
+├── llm_clients/             # Unified API clients for LLMs
+│   └── client.py            # Adapts OpenAI, Claude, Gemini, DeepSeek, Grok, and Ollama
+└── mock_trading/            # Internal mock accounts database / orders sandbox
+```
+
+---
+
+## 🔬 Core Components
+
+### 1. Dynamic Analyst Registry
+All analyst plugins inherit from a base analyst class and register dynamically via [analyst_registry.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/agents/analyst_registry.py). Each analyst is given access to tools (e.g. `yfinance`, web search via SearXNG, social media APIs) to compile an isolated PDF/text report and extract key quantitative signal metrics.
+
+The 9 analysts are:
+1.  **Market Analyst:** Pulls historical stock prices, calculates MACD, RSI, Moving Averages, and visualizes trends.
+2.  **Social Sentiment Analyst:** Mines Reddit (e.g., r/wallstreetbets) and StockTwits for bullish/bearish mentions and volumes.
+3.  **News Analyst:** Fetches global news feeds and ranks general news sentiment.
+4.  **Fundamentals Analyst:** Downloads income statements, balance sheets, and cash flow statements to assess corporate health.
+5.  **Macroeconomics Analyst:** Examines interest rates, inflation metrics, and GDP indicators.
+6.  **Options Chain Analyst:** Analyzes open interest, call/put volume ratios, and implied volatility curves.
+7.  **Quantitative Factor Analyst:** Executes statistical models, factor loadings, and returns anomalies.
+8.  **Earnings Call Analyst:** Summarizes corporate earnings calls, management tone, and guidance changes.
+9.  **Performance Review Analyst:** Compares historical agent suggestions against simulated returns to optimize weights.
+
+### 2. The Thesis Debate Loop
+To avoid LLM bias, the output from the Analysts is fed to the **Bull Researcher** and **Bear Researcher**.
+*   **Bull Researcher:** Tasks itself with finding arguments for buying the security, ignoring negative news.
+*   **Bear Researcher:** Tasks itself with identifying risks, debt concerns, headwinds, and bearish trends.
+*   **Research Manager:** Reviews both arguments, acts as a judge, and summarizes verified claims, leaving out unsubstantiated claims.
+
+### 3. Risk Management & Portfolio Allocation
+The Research Manager's summary is evaluated by three risk personas:
+*   **Aggressive Risk Agent:** Argues for larger position sizing and wider stop-losses to capture maximum upside.
+*   **Conservative Risk Agent:** Focuses on downside risk, urging tight stop-losses, hedging strategies, or skipping the trade entirely.
+*   **Neutral Risk Agent:** Seeks a balanced allocation target.
+They negotiate a compromise on:
+- **Signal Strength:** (Buy / Sell / Hold / Avoid)
+- **Position Allocation Size:** Percentage of total available cash.
+- **Stop Loss & Take Profit Levels.**
+
+### 4. Self-Correcting Reflection Loop
+Before publishing the final report, the **Reflection Node** checks the generated output:
+- It verifies that the recommended actions comply with the portfolio limits.
+- It scans for hallucinations (e.g., mismatched prices or tickers).
+- If validation fails, it loops back to the analyst or researcher nodes with a refinement request.
+
+---
+
+## 🔌 LLM Provider Integration
+
+The system uses [llm_clients/](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/llm_clients/) to abstract away API differences. It supports:
+- **OpenAI:** `gpt-4o`, `o1`, `o3-mini`, etc. (Supports structured Pydantic output parsing).
+- **Anthropic Claude:** `claude-3-5-sonnet-latest`.
+- **Google Gemini:** `gemini-2.0-flash`, `gemini-2.5-pro` via native google SDK.
+- **DeepSeek:** Native API support (`deepseek-chat`, `deepseek-reasoner`).
+- **xAI Grok:** Grok API endpoint.
+- **Ollama:** Enables running local models (like `llama3`, `mistral`, or `qwen`) for local development without API costs.
+- **Azure OpenAI:** Enterprise private endpoints.

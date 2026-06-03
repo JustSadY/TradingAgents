@@ -22,8 +22,17 @@ from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 
+from tradingagents.dataflows.config import get_config
+
 _API = "https://www.reddit.com/r/{sub}/search.json?{qs}"
-_UA = "tradingagents/0.2 (+https://github.com/TauricResearch/TradingAgents)"
+_DEFAULT_UA = "tradingagents/0.2 (+https://github.com/TauricResearch/TradingAgents)"
+
+def _get_user_agent() -> str:
+    import os
+    cfg_ua = get_config().get("reddit_user_agent")
+    if cfg_ua:
+        return cfg_ua
+    return os.getenv("REDDIT_USER_AGENT", _DEFAULT_UA)
 
 # Default subreddits ordered roughly by signal density for ticker-specific
 # discussion. wallstreetbets has the most volume but most noise; stocks /
@@ -45,7 +54,7 @@ def _fetch_subreddit(
         "limit": limit,
     })
     url = _API.format(sub=sub, qs=qs)
-    req = Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
+    req = Request(url, headers={"User-Agent": _get_user_agent(), "Accept": "application/json"})
     try:
         with urlopen(req, timeout=timeout) as resp:
             payload = json.loads(resp.read())

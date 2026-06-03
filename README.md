@@ -32,6 +32,12 @@ The platform supports technical analysis, market sentiment (Reddit/StockTwits), 
 
 ## 📁 Directory Layout
 
+For in-depth developer information, check out the documentation files inside each sub-module:
+*   🖥️ **[backend/README.md](file:///c:/Users/JustS/Desktop/TradingAgents/backend/README.md):** FastAPI web server architecture, API routing, asynchronous database logging, and service layout.
+*   🤖 **[backend/trading_agents/README.md](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/README.md):** LangGraph multi-agent orchestration, dynamic analyst plugins registry, and unified LLM clients.
+*   🎨 **[frontend/README.md](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/README.md):** React + TS SPA layout, Tailwind styling, localized translation dictionaries (i18n), and Vite proxy setup.
+*   📦 **[deploy/README.md](file:///c:/Users/JustS/Desktop/TradingAgents/deploy/README.md):** Single-command Linux deployment script, self-updater structure, and systemd management.
+
 ```text
 TradingAgents/
 ├── backend/                  # FastAPI web server and database logic

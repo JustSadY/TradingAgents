@@ -138,6 +138,10 @@ async def create_user(
     )
     db.add(user)
     await db.flush()
+    # Auto-enable dashboard and portfolio page permissions for new user
+    db.add(UserPagePermission(user_id=user.id, page_key="dashboard", allowed=True))
+    db.add(UserPagePermission(user_id=user.id, page_key="portfolio", allowed=True))
+    await db.flush()
     return user
 
 
@@ -223,3 +227,56 @@ async def set_user_permissions(
             perm.allowed = allowed
     await db.flush()
     return {"detail": "Permissions updated"}
+
+
+# ── Admin: user API keys management ─────────────────────────────────────────
+
+@router.get("/{user_id}/api-keys")
+async def list_user_api_keys(
+    user_id: int,
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    fernet = _get_settings().get_fernet()
+    providers = list_user_api_key_providers(user, fernet)
+    return {"providers": providers}
+
+
+@router.put("/{user_id}/api-keys")
+async def set_user_api_key_endpoint(
+    user_id: int,
+    body: ApiKeySet,
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    fernet = _get_settings().get_fernet()
+    set_user_api_key(user, body.provider, body.api_key, fernet)
+    await db.flush()
+    return {"detail": f"API key for '{body.provider}' saved for user {user.username}"}
+
+
+@router.delete("/{user_id}/api-keys/{provider}")
+async def delete_user_api_key_endpoint(
+    user_id: int,
+    provider: str,
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(status_code=404, detail="User not found")
+    fernet = _get_settings().get_fernet()
+    deleted = delete_user_api_key(user, provider, fernet)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=f"No key found for provider '{provider}'")
+    await db.flush()
+    return {"detail": f"API key for '{provider}' deleted for user {user.username}"}

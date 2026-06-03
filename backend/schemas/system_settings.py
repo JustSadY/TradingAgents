@@ -9,6 +9,11 @@ class SystemSettingsRead(BaseModel):
     webhook_url: str | None = None
     webhook_enabled: bool
     webhook_events: str
+    searxng_url: str | None = None
+    reddit_client_id: str | None = None
+    reddit_client_secret: str | None = None
+    reddit_user_agent: str | None = None
+    alpha_vantage_api_key: str | None = None
     updated_at: datetime | None = None
 
     class Config:
@@ -22,3 +27,8 @@ class SystemSettingsUpdate(BaseModel):
     webhook_url: str | None = None
     webhook_enabled: bool | None = None
     webhook_events: str | None = None
+    searxng_url: str | None = None
+    reddit_client_id: str | None = None
+    reddit_client_secret: str | None = None
+    reddit_user_agent: str | None = None
+    alpha_vantage_api_key: str | None = None

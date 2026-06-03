@@ -78,7 +78,7 @@ async def _get_historical_analyses_context(
     return "\n".join(parts)
 
 
-def _build_config(settings: AppSettings, user=None) -> dict:
+def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
     """Convert AppSettings → TradingAgentsGraph-compatible config dict."""
     from tradingagents.graph.trading_graph import DEFAULT_CONFIG
 
@@ -114,6 +114,8 @@ def _build_config(settings: AppSettings, user=None) -> dict:
         },
         # Per-analyst AI models
         "analyst_models": getattr(settings, "analyst_models", {}) or {},
+        "is_admin": getattr(user, "is_admin", False) if user is not None else False,
+        "has_user": user is not None,
     }
     # Optional fields — only add when set to avoid overriding library defaults
     if getattr(settings, "backend_url", None):
@@ -130,15 +132,33 @@ def _build_config(settings: AppSettings, user=None) -> dict:
     if getattr(settings, "google_thinking_level", None):
         cfg["google_thinking_level"] = settings.google_thinking_level
 
+    # System settings config overrides
+    if sys_settings:
+        if getattr(sys_settings, "searxng_url", None):
+            cfg["searxng_url"] = sys_settings.searxng_url
+        if getattr(sys_settings, "reddit_client_id", None):
+            cfg["reddit_client_id"] = sys_settings.reddit_client_id
+        if getattr(sys_settings, "reddit_client_secret", None):
+            cfg["reddit_client_secret"] = sys_settings.reddit_client_secret
+        if getattr(sys_settings, "reddit_user_agent", None):
+            cfg["reddit_user_agent"] = sys_settings.reddit_user_agent
+        if getattr(sys_settings, "alpha_vantage_api_key", None):
+            cfg["alpha_vantage_api_key"] = sys_settings.alpha_vantage_api_key
+
     # ── Per-user API key injection ────────────────────────────────────────────
     if user is not None:
         from backend.core.config import get_settings as _cfg
-        from backend.services.user_service import get_user_api_key
+        from backend.services.user_service import get_user_api_key, decrypt_api_keys
         try:
             fernet = _cfg().get_fernet()
             user_key = get_user_api_key(user, settings.llm_provider, fernet)
+            if user.api_keys_enc:
+                cfg["user_api_keys"] = decrypt_api_keys(user.api_keys_enc, fernet)
+            else:
+                cfg["user_api_keys"] = {}
         except Exception:
             user_key = None
+            cfg["user_api_keys"] = {}
 
         if user_key:
             cfg["api_key"] = user_key
@@ -267,10 +287,15 @@ async def run_analysis(
 
     start = time.time()
     try:
+        from sqlalchemy import select
+        from backend.models.system_settings import SystemSettings
+        sys_res = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
+        sys_settings = sys_res.scalar_one_or_none()
+
         # Build config and construct graph INSIDE the try so any failure
         # (missing API key, bad config, import error) reaches the WS error handler.
         await ws_manager.send(task_id, {"type": "status", "status": "starting", "agent": "LLM istemcisi hazırlanıyor..."})
-        config = _build_config(settings, user=user)
+        config = _build_config(settings, user=user, sys_settings=sys_settings)
 
         # Load and append analyst attribution weights to past context
         from backend.services.performance_service import get_analyst_attribution_stats
@@ -449,6 +474,7 @@ async def run_portfolio_analysis(
     settings: AppSettings,
     db: AsyncSession,
     triggered_by: str = "manual",
+    user=None,
 ):
     """Run individual analyses for each ticker then synthesize via SuperPortfolioManager.
 
@@ -457,8 +483,13 @@ async def run_portfolio_analysis(
     from tradingagents.graph.trading_graph import TradingAgentsGraph
     from backend.models.portfolio_analysis import MultiTickerAnalysis
     from backend.core.database import AsyncSessionLocal
+    from sqlalchemy import select
+    from backend.models.system_settings import SystemSettings
 
-    config = _build_config(settings)
+    sys_res = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
+    sys_settings = sys_res.scalar_one_or_none()
+
+    config = _build_config(settings, user=user, sys_settings=sys_settings)
     concurrency = settings.analyst_concurrency_limit or 1
 
     # Run each ticker — respect analyst_concurrency_limit for parallel runs
@@ -471,7 +502,7 @@ async def run_portfolio_analysis(
             # not safe for use by multiple coroutines at once, and the previous
             # shared-session version raced under concurrency_limit > 1.
             async with AsyncSessionLocal() as t_db:
-                _, row = await run_analysis(ticker, trade_date, asset_type, settings, t_db, triggered_by)
+                _, row = await run_analysis(ticker, trade_date, asset_type, settings, t_db, triggered_by, user=user)
                 # Capture primitives before commit so nothing depends on the
                 # session/ORM identity once this coroutine returns.
                 data = {
