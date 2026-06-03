@@ -41,7 +41,8 @@ async def run_analysis(
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
-    settings = await _get_or_create_settings(db)
+    settings = await _get_or_create_settings(db, _)
+    current_user = _  # captured for background task
 
     import uuid
     task_id = str(uuid.uuid4())
@@ -54,8 +55,12 @@ async def run_analysis(
                 from backend.services.execution.factory import get_trader
                 task_id_out, row = await _run(
                     body.ticker, body.trade_date, body.asset_type, settings, bg_db, "manual",
-                    task_id=task_id,   # ← same id client's WS is connected to
+                    task_id=task_id,
+                    user=current_user,
                 )
+                # Tag the result with the user who ran it
+                if row.user_id is None and current_user is not None:
+                    row.user_id = current_user.id
                 await bg_db.commit()
 
                 # Execute trade if warranted
@@ -110,11 +115,13 @@ async def list_analysis(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     q = select(AnalysisResult).order_by(desc(AnalysisResult.created_at)).limit(limit).offset(offset)
     if ticker:
         q = q.where(AnalysisResult.ticker == ticker.upper())
+    if not current_user.is_admin:
+        q = q.where(AnalysisResult.user_id == current_user.id)
     result = await db.execute(q)
     return result.scalars().all()
 
@@ -134,9 +141,12 @@ async def cancel_analysis(
 async def get_analysis(
     analysis_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(AnalysisResult).where(AnalysisResult.id == analysis_id))
+    q = select(AnalysisResult).where(AnalysisResult.id == analysis_id)
+    if not current_user.is_admin:
+        q = q.where(AnalysisResult.user_id == current_user.id)
+    result = await db.execute(q)
     row = result.scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Analysis not found")

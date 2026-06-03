@@ -26,11 +26,22 @@ async def get_llm_catalog(_: User = Depends(get_current_user)):
     return catalog
 
 
-async def _get_or_create_settings(db: AsyncSession) -> AppSettings:
-    result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
+async def _get_or_create_settings(db: AsyncSession, current_user: User | None = None) -> AppSettings:
+    if current_user is not None:
+        result = await db.execute(
+            select(AppSettings).where(AppSettings.user_id == current_user.id)
+        )
+        settings = result.scalar_one_or_none()
+        if settings is None:
+            settings = AppSettings(user_id=current_user.id)
+            db.add(settings)
+            await db.flush()
+        return settings
+    # Fallback: legacy single-row (id=1) for internal callers without user context
+    result = await db.execute(select(AppSettings).where(AppSettings.user_id.is_(None)).limit(1))
     settings = result.scalar_one_or_none()
     if settings is None:
-        settings = AppSettings(id=1)
+        settings = AppSettings()
         db.add(settings)
         await db.flush()
     return settings
@@ -41,7 +52,7 @@ async def get_settings(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    settings = await _get_or_create_settings(db)
+    settings = await _get_or_create_settings(db, _)
     return SettingsRead(
         trading_mode=settings.trading_mode,
         active_broker=settings.active_broker,
@@ -91,7 +102,7 @@ async def update_settings(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    settings = await _get_or_create_settings(db)
+    settings = await _get_or_create_settings(db, _)
 
     has_changes = False
     for field, value in body.model_dump(exclude_unset=True).items():

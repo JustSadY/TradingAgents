@@ -38,12 +38,16 @@ class CronService:
             self._running = False
 
     async def apply_settings(self, settings):
-        """Re-configure the watchlist scan job from AppSettings."""
+        """Re-configure the watchlist scan job from SystemSettings or AppSettings."""
         self.scheduler.remove_job("watchlist_scan") if self.scheduler.get_job("watchlist_scan") else None
 
-        if settings.cron_enabled and settings.watchlist:
+        cron_enabled = getattr(settings, "cron_enabled", False)
+        cron_schedule = getattr(settings, "cron_schedule", "0 9 * * 1-5") or "0 9 * * 1-5"
+        watchlist = getattr(settings, "watchlist", [])
+
+        if cron_enabled and watchlist:
             try:
-                trigger = CronTrigger.from_crontab(settings.cron_schedule, timezone="UTC")
+                trigger = CronTrigger.from_crontab(cron_schedule, timezone="UTC")
                 self.scheduler.add_job(
                     self._run_watchlist_scan,
                     trigger,
@@ -51,7 +55,7 @@ class CronService:
                     replace_existing=True,
                     misfire_grace_time=300,
                 )
-                _logger.info("Cron job configured: %s", settings.cron_schedule)
+                _logger.info("Cron job configured: %s", cron_schedule)
             except Exception as e:
                 _logger.error("Failed to configure cron job: %s", e)
 

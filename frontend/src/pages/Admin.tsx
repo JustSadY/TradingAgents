@@ -1,0 +1,416 @@
+import { useEffect, useState, useCallback } from 'react'
+import axios from 'axios'
+import { Save, Trash2, Plus, UserCog, ShieldCheck, Globe, CheckCircle2 } from 'lucide-react'
+import { useTranslation } from '../contexts/LanguageContext'
+
+interface UserRecord {
+  id: number
+  username: string
+  email: string | null
+  display_name: string | null
+  role: string
+  is_active: boolean
+  created_at: string
+}
+
+interface SystemSettings {
+  cron_enabled: boolean
+  cron_schedule: string
+  watchlist: string[]
+  webhook_url: string | null
+  webhook_enabled: boolean
+  webhook_events: string
+}
+
+const ALL_PAGE_KEYS = [
+  'dashboard', 'analysis', 'chart', 'trading', 'portfolio',
+  'watchlist', 'orders', 'performance', 'alerts', 'ab-testing', 'logs',
+]
+
+const PAGE_LABELS: Record<string, string> = {
+  dashboard: 'Dashboard', analysis: 'Analysis', chart: 'Charts',
+  trading: 'Simulation', portfolio: 'Portfolio', watchlist: 'Watchlist',
+  orders: 'Orders', performance: 'Performance', alerts: 'Alerts',
+  'ab-testing': 'A/B Testing', logs: 'Logs',
+}
+
+const Input = "bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-sm w-full transition"
+
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 space-y-3">
+      <h3 className="text-sm font-semibold text-amber-400 uppercase tracking-wider mb-1">{title}</h3>
+      {children}
+    </div>
+  )
+}
+
+type Tab = 'users' | 'permissions' | 'system'
+
+export default function Admin() {
+  const { t } = useTranslation()
+  const [tab, setTab] = useState<Tab>('users')
+  const [users, setUsers] = useState<UserRecord[]>([])
+  const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
+  const [permissions, setPermissions] = useState<Record<string, boolean>>({})
+  const [permSaved, setPermSaved] = useState(false)
+  const [sysSettings, setSysSettings] = useState<SystemSettings | null>(null)
+  const [sysSaved, setSysSaved] = useState(false)
+  const [sysError, setSysError] = useState<string | null>(null)
+  const [newUser, setNewUser] = useState({ username: '', password: '', email: '', role: 'user' })
+  const [creating, setCreating] = useState(false)
+  const [createError, setCreateError] = useState<string | null>(null)
+  const [watchlistInput, setWatchlistInput] = useState('')
+
+  const loadUsers = useCallback(async () => {
+    const r = await axios.get('/api/users')
+    setUsers(r.data)
+  }, [])
+
+  const loadSystemSettings = useCallback(async () => {
+    const r = await axios.get('/api/system-settings')
+    setSysSettings(r.data)
+    setWatchlistInput(r.data.watchlist?.join(', ') || '')
+  }, [])
+
+  useEffect(() => {
+    loadUsers()
+    loadSystemSettings()
+  }, [loadUsers, loadSystemSettings])
+
+  const loadUserPermissions = async (userId: number) => {
+    const r = await axios.get(`/api/users/${userId}/permissions`)
+    setPermissions(r.data.permissions)
+    setSelectedUserId(userId)
+  }
+
+  const savePermissions = async () => {
+    if (!selectedUserId) return
+    await axios.put(`/api/users/${selectedUserId}/permissions`, { permissions })
+    setPermSaved(true)
+    setTimeout(() => setPermSaved(false), 2500)
+  }
+
+  const createUser = async () => {
+    setCreateError(null)
+    if (!newUser.username.trim() || !newUser.password.trim()) {
+      setCreateError(t('admin.create_user_required'))
+      return
+    }
+    setCreating(true)
+    try {
+      await axios.post('/api/users', {
+        username: newUser.username.trim(),
+        password: newUser.password.trim(),
+        email: newUser.email.trim() || null,
+        role: newUser.role,
+      })
+      setNewUser({ username: '', password: '', email: '', role: 'user' })
+      await loadUsers()
+    } catch (err: any) {
+      setCreateError(err.response?.data?.detail || t('admin.create_user_error'))
+    } finally {
+      setCreating(false)
+    }
+  }
+
+  const toggleRole = async (u: UserRecord) => {
+    const newRole = u.role === 'admin' ? 'user' : 'admin'
+    await axios.put(`/api/users/${u.id}`, { role: newRole })
+    setUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: newRole } : x))
+  }
+
+  const toggleActive = async (u: UserRecord) => {
+    await axios.put(`/api/users/${u.id}`, { is_active: !u.is_active })
+    setUsers(prev => prev.map(x => x.id === u.id ? { ...x, is_active: !u.is_active } : x))
+  }
+
+  const deleteUser = async (id: number) => {
+    if (!window.confirm(t('admin.delete_user_confirm'))) return
+    await axios.delete(`/api/users/${id}`)
+    setUsers(prev => prev.filter(u => u.id !== id))
+    if (selectedUserId === id) setSelectedUserId(null)
+  }
+
+  const saveSystemSettings = async () => {
+    if (!sysSettings) return
+    setSysError(null)
+    try {
+      const watchlist = watchlistInput.split(',').map(s => s.trim()).filter(Boolean)
+      const body = { ...sysSettings, watchlist }
+      await axios.put('/api/system-settings', body)
+      setSysSaved(true)
+      setTimeout(() => setSysSaved(false), 2500)
+    } catch (err: any) {
+      setSysError(err.response?.data?.detail || t('admin.save_error'))
+    }
+  }
+
+  const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
+    { key: 'users',       label: t('admin.tab_users'),       icon: <UserCog size={15} /> },
+    { key: 'permissions', label: t('admin.tab_permissions'),  icon: <ShieldCheck size={15} /> },
+    { key: 'system',      label: t('admin.tab_system'),       icon: <Globe size={15} /> },
+  ]
+
+  return (
+    <div className="p-4 md:p-6 space-y-4 max-w-4xl">
+      <h2 className="text-xl font-bold text-white tracking-tight">{t('admin.title')}</h2>
+
+      {/* Tab bar */}
+      <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-2xl p-1 w-fit">
+        {TABS.map(tb => (
+          <button
+            key={tb.key}
+            onClick={() => setTab(tb.key)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-xl text-sm font-medium transition-all ${
+              tab === tb.key
+                ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800'
+            }`}
+          >
+            {tb.icon} {tb.label}
+          </button>
+        ))}
+      </div>
+
+      {/* ── Users tab ─────────────────────────────────────────────────────────── */}
+      {tab === 'users' && (
+        <>
+          <Section title={t('admin.section_create_user')}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <input
+                className={Input}
+                placeholder={t('admin.username_placeholder')}
+                value={newUser.username}
+                onChange={e => setNewUser(f => ({ ...f, username: e.target.value }))}
+              />
+              <input
+                className={Input}
+                type="password"
+                placeholder={t('admin.password_placeholder')}
+                value={newUser.password}
+                onChange={e => setNewUser(f => ({ ...f, password: e.target.value }))}
+                autoComplete="new-password"
+              />
+              <input
+                className={Input}
+                type="email"
+                placeholder={t('admin.email_placeholder')}
+                value={newUser.email}
+                onChange={e => setNewUser(f => ({ ...f, email: e.target.value }))}
+              />
+              <select
+                className={Input}
+                value={newUser.role}
+                onChange={e => setNewUser(f => ({ ...f, role: e.target.value }))}
+              >
+                <option value="user">User</option>
+                <option value="admin">Admin</option>
+              </select>
+            </div>
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                onClick={createUser}
+                disabled={creating}
+                className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-xl transition"
+              >
+                <Plus size={14} /> {t('admin.create_user_button')}
+              </button>
+              {createError && <span className="text-red-400 text-sm">{createError}</span>}
+            </div>
+          </Section>
+
+          <Section title={t('admin.section_user_list')}>
+            {users.length === 0 ? (
+              <p className="text-gray-600 text-sm">{t('admin.no_users')}</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-sm">
+                  <thead>
+                    <tr className="text-left text-gray-500 text-xs uppercase tracking-wider border-b border-gray-800">
+                      <th className="pb-2 pr-4">{t('admin.col_username')}</th>
+                      <th className="pb-2 pr-4">{t('admin.col_email')}</th>
+                      <th className="pb-2 pr-4">{t('admin.col_role')}</th>
+                      <th className="pb-2 pr-4">{t('admin.col_active')}</th>
+                      <th className="pb-2 pr-4">{t('admin.col_created')}</th>
+                      <th className="pb-2"></th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-gray-800/50">
+                    {users.map(u => (
+                      <tr key={u.id} className="group">
+                        <td className="py-2.5 pr-4">
+                          <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
+                              {u.username.charAt(0).toUpperCase()}
+                            </div>
+                            <span className="text-gray-200 font-medium">{u.username}</span>
+                          </div>
+                        </td>
+                        <td className="py-2.5 pr-4 text-gray-400">{u.email || '—'}</td>
+                        <td className="py-2.5 pr-4">
+                          <button
+                            onClick={() => toggleRole(u)}
+                            className={`text-xs px-2 py-0.5 rounded-full border transition-colors ${
+                              u.role === 'admin'
+                                ? 'bg-amber-500/10 text-amber-400 border-amber-500/20 hover:bg-amber-500/20'
+                                : 'bg-violet-500/10 text-violet-400 border-violet-500/20 hover:bg-violet-500/20'
+                            }`}
+                          >
+                            {u.role}
+                          </button>
+                        </td>
+                        <td className="py-2.5 pr-4">
+                          <button
+                            onClick={() => toggleActive(u)}
+                            className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors ${u.is_active ? 'bg-emerald-600' : 'bg-gray-700'}`}
+                          >
+                            <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${u.is_active ? 'translate-x-5' : 'translate-x-0.5'}`} />
+                          </button>
+                        </td>
+                        <td className="py-2.5 pr-4 text-gray-500 text-xs">
+                          {new Date(u.created_at).toLocaleDateString()}
+                        </td>
+                        <td className="py-2.5">
+                          <button
+                            onClick={() => deleteUser(u.id)}
+                            className="text-gray-600 hover:text-red-400 transition-colors opacity-0 group-hover:opacity-100"
+                            title={t('admin.delete_user')}
+                          >
+                            <Trash2 size={14} />
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Section>
+        </>
+      )}
+
+      {/* ── Permissions tab ───────────────────────────────────────────────────── */}
+      {tab === 'permissions' && (
+        <Section title={t('admin.section_page_permissions')}>
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+            <select
+              className={`${Input} sm:max-w-xs`}
+              value={selectedUserId ?? ''}
+              onChange={e => {
+                const id = parseInt(e.target.value)
+                if (!isNaN(id)) loadUserPermissions(id)
+              }}
+            >
+              <option value="">{t('admin.select_user')}</option>
+              {users.filter(u => u.role !== 'admin').map(u => (
+                <option key={u.id} value={u.id}>{u.username}</option>
+              ))}
+            </select>
+            {selectedUserId && (
+              <button
+                onClick={savePermissions}
+                className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-sm px-4 py-2 rounded-xl transition"
+              >
+                {permSaved ? <CheckCircle2 size={14} className="text-emerald-300" /> : <Save size={14} />}
+                {permSaved ? t('admin.saved') : t('admin.save_permissions')}
+              </button>
+            )}
+          </div>
+
+          {selectedUserId && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+              {ALL_PAGE_KEYS.map(key => (
+                <label key={key} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer bg-gray-800 hover:bg-gray-750 rounded-xl px-3 py-2 transition-colors">
+                  <input
+                    type="checkbox"
+                    className="accent-violet-600 w-4 h-4 rounded"
+                    checked={permissions[key] ?? false}
+                    onChange={e => setPermissions(prev => ({ ...prev, [key]: e.target.checked }))}
+                  />
+                  {PAGE_LABELS[key] || key}
+                </label>
+              ))}
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* ── System settings tab ───────────────────────────────────────────────── */}
+      {tab === 'system' && sysSettings && (
+        <Section title={t('admin.section_system_settings')}>
+          <div className="space-y-3">
+            {/* Cron */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
+              <span className="text-sm text-gray-400">{t('admin.cron_enabled')}</span>
+              <input
+                type="checkbox"
+                checked={sysSettings.cron_enabled}
+                onChange={e => setSysSettings(s => s ? { ...s, cron_enabled: e.target.checked } : s)}
+                className="w-5 h-5 accent-amber-500"
+              />
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
+              <span className="text-sm text-gray-400">{t('admin.cron_schedule')}</span>
+              <div className="flex-1 sm:max-w-xs">
+                <input
+                  className={Input}
+                  value={sysSettings.cron_schedule}
+                  onChange={e => setSysSettings(s => s ? { ...s, cron_schedule: e.target.value } : s)}
+                  placeholder="0 9 * * 1-5"
+                />
+              </div>
+            </div>
+
+            {/* Watchlist */}
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1.5 sm:gap-4">
+              <span className="text-sm text-gray-400 sm:pt-2">{t('admin.watchlist')}</span>
+              <div className="flex-1 sm:max-w-xs">
+                <input
+                  className={Input}
+                  value={watchlistInput}
+                  onChange={e => setWatchlistInput(e.target.value)}
+                  placeholder="AAPL, MSFT, TSLA"
+                />
+                <p className="text-xs text-gray-600 mt-1">{t('admin.watchlist_hint')}</p>
+              </div>
+            </div>
+
+            {/* Webhook */}
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
+              <span className="text-sm text-gray-400">{t('admin.webhook_url')}</span>
+              <div className="flex-1 sm:max-w-xs">
+                <input
+                  className={Input}
+                  value={sysSettings.webhook_url || ''}
+                  onChange={e => setSysSettings(s => s ? { ...s, webhook_url: e.target.value || null } : s)}
+                  placeholder="https://hooks.slack.com/..."
+                />
+              </div>
+            </div>
+            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
+              <span className="text-sm text-gray-400">{t('admin.webhook_enabled')}</span>
+              <input
+                type="checkbox"
+                checked={sysSettings.webhook_enabled}
+                onChange={e => setSysSettings(s => s ? { ...s, webhook_enabled: e.target.checked } : s)}
+                className="w-5 h-5 accent-amber-500"
+              />
+            </div>
+
+            <div className="flex items-center gap-3 pt-1">
+              <button
+                onClick={saveSystemSettings}
+                className="flex items-center gap-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl px-5 py-2.5 text-sm font-semibold shadow-lg shadow-amber-500/20 transition-all"
+              >
+                {sysSaved ? <CheckCircle2 size={15} className="text-emerald-200" /> : <Save size={15} />}
+                {sysSaved ? t('admin.saved') : t('admin.save_system')}
+              </button>
+              {sysError && <span className="text-red-400 text-sm">{sysError}</span>}
+            </div>
+          </div>
+        </Section>
+      )}
+    </div>
+  )
+}

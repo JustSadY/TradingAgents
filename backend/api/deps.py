@@ -30,3 +30,41 @@ async def get_current_user(
     if user is None or not user.is_active:
         raise credentials_exc
     return user
+
+
+async def require_admin(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    if not current_user.is_admin:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
+    return current_user
+
+
+def require_page(page_key: str):
+    """Dependency factory — checks per-user page permission.
+
+    Admin always passes. 'settings' always passes (needed to set API keys).
+    All others require an explicit allowed=True row in user_page_permissions.
+    """
+    async def _check(
+        current_user: User = Depends(get_current_user),
+        db: AsyncSession = Depends(get_db),
+    ) -> User:
+        if current_user.is_admin:
+            return current_user
+        if page_key == "settings":
+            return current_user
+        from backend.models.page_permission import UserPagePermission
+        result = await db.execute(
+            select(UserPagePermission)
+            .where(UserPagePermission.user_id == current_user.id)
+            .where(UserPagePermission.page_key == page_key)
+        )
+        perm = result.scalar_one_or_none()
+        if not perm or not perm.allowed:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail=f"Access to page '{page_key}' is not permitted",
+            )
+        return current_user
+    return _check

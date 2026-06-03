@@ -196,6 +196,10 @@ class TradingAgentsGraph:
             if effort:
                 kwargs["effort"] = effort
 
+        # Per-user API key injected by analysis_service via config["api_key"]
+        if self.config.get("api_key"):
+            kwargs["api_key"] = self.config["api_key"]
+
         return kwargs
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:

@@ -15,6 +15,8 @@ import Chart from './pages/Chart'
 import Performance from './pages/Performance'
 import Alerts from './pages/Alerts'
 import ABTesting from './pages/ABTesting'
+import Profile from './pages/Profile'
+import Admin from './pages/Admin'
 
 import { LanguageProvider } from './contexts/LanguageContext'
 
@@ -57,6 +59,12 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
   return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />
 }
 
+function RequireAdmin({ children }: { children: React.ReactNode }) {
+  const { isAdmin, isAuthenticated } = useAuth()
+  if (!isAuthenticated) return <Navigate to="/login" replace />
+  return isAdmin ? <>{children}</> : <Navigate to="/dashboard" replace />
+}
+
 function AppRoutes() {
   const { isAuthenticated } = useAuth()
 
@@ -81,6 +89,8 @@ function AppRoutes() {
                 <Route path="/alerts" element={<Alerts />} />
                 <Route path="/ab-testing" element={<ABTesting />} />
                 <Route path="/logs" element={<Logs />} />
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/admin" element={<RequireAdmin><Admin /></RequireAdmin>} />
                 <Route path="*" element={<Navigate to="/dashboard" />} />
               </Routes>
             </Layout>

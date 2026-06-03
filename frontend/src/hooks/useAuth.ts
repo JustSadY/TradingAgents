@@ -9,29 +9,58 @@ export function getAccessToken() {
   return localStorage.getItem(TOKEN_KEY)
 }
 
+interface JwtPayload {
+  sub: string
+  role?: string
+  type: string
+  exp: number
+}
+
+function decodeToken(token: string): JwtPayload | null {
+  try {
+    return JSON.parse(atob(token.split('.')[1])) as JwtPayload
+  } catch {
+    return null
+  }
+}
+
 export function useAuth() {
   const [user, setUser] = useState<string | null>(() => {
     const t = localStorage.getItem(TOKEN_KEY)
     if (!t) return null
-    try {
-      return JSON.parse(atob(t.split('.')[1])).sub as string
-    } catch { return null }
+    return decodeToken(t)?.sub ?? null
+  })
+
+  const [role, setRole] = useState<string | null>(() => {
+    const t = localStorage.getItem(TOKEN_KEY)
+    if (!t) return null
+    return decodeToken(t)?.role ?? 'user'
   })
 
   const login = useCallback(async (username: string, password: string) => {
     const res = await axios.post('/auth/login', { username, password })
     localStorage.setItem(TOKEN_KEY, res.data.access_token)
     localStorage.setItem(REFRESH_KEY, res.data.refresh_token)
-    setUser(username)
+    const payload = decodeToken(res.data.access_token)
+    setUser(payload?.sub ?? username)
+    setRole(payload?.role ?? 'user')
   }, [])
 
   const logout = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(REFRESH_KEY)
     setUser(null)
+    setRole(null)
   }, [])
 
-  return { user, login, logout, isAuthenticated: !!user }
+  return {
+    user,
+    role,
+    isAdmin: role === 'admin',
+    login,
+    logout,
+    isAuthenticated: !!user,
+  }
 }
 
 // Axios interceptor: attach Bearer token automatically

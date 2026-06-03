@@ -78,7 +78,7 @@ async def _get_historical_analyses_context(
     return "\n".join(parts)
 
 
-def _build_config(settings: AppSettings) -> dict:
+def _build_config(settings: AppSettings, user=None) -> dict:
     """Convert AppSettings → TradingAgentsGraph-compatible config dict."""
     from tradingagents.graph.trading_graph import DEFAULT_CONFIG
 
@@ -129,6 +129,26 @@ def _build_config(settings: AppSettings) -> dict:
         cfg["anthropic_effort"] = settings.anthropic_effort
     if getattr(settings, "google_thinking_level", None):
         cfg["google_thinking_level"] = settings.google_thinking_level
+
+    # ── Per-user API key injection ────────────────────────────────────────────
+    if user is not None:
+        from backend.core.config import get_settings as _cfg
+        from backend.services.user_service import get_user_api_key
+        try:
+            fernet = _cfg().get_fernet()
+            user_key = get_user_api_key(user, settings.llm_provider, fernet)
+        except Exception:
+            user_key = None
+
+        if user_key:
+            cfg["api_key"] = user_key
+        elif not getattr(user, "is_admin", False):
+            raise ValueError(
+                f"No API key set for provider '{settings.llm_provider}'. "
+                "Go to Settings → API Keys to add your key."
+            )
+        # Admin: user_key=None → falls back to os.environ in the LLM client
+
     return cfg
 
 
@@ -201,6 +221,7 @@ async def run_analysis(
     db: AsyncSession,
     triggered_by: str = "manual",
     task_id: str | None = None,
+    user=None,
 ) -> tuple[str, AnalysisResult]:
     """Run a full TradingAgents analysis and stream progress via WebSocket.
 
@@ -249,7 +270,7 @@ async def run_analysis(
         # Build config and construct graph INSIDE the try so any failure
         # (missing API key, bad config, import error) reaches the WS error handler.
         await ws_manager.send(task_id, {"type": "status", "status": "starting", "agent": "LLM istemcisi hazırlanıyor..."})
-        config = _build_config(settings)
+        config = _build_config(settings, user=user)
 
         # Load and append analyst attribution weights to past context
         from backend.services.performance_service import get_analyst_attribution_stats

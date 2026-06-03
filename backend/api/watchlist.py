@@ -15,9 +15,9 @@ router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 @router.get("", response_model=list[str])
 async def get_watchlist(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    settings = await _get_or_create_settings(db)
+    settings = await _get_or_create_settings(db, current_user)
     return settings.watchlist
 
 
@@ -25,7 +25,7 @@ async def get_watchlist(
 async def add_to_watchlist(
     ticker: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     try:
         safe_ticker_component(ticker)
@@ -33,7 +33,7 @@ async def add_to_watchlist(
         raise HTTPException(status_code=422, detail=str(e))
 
     ticker = ticker.upper()
-    settings = await _get_or_create_settings(db)
+    settings = await _get_or_create_settings(db, current_user)
     wl = settings.watchlist
     if ticker not in wl:
         wl.append(ticker)
@@ -46,10 +46,10 @@ async def add_to_watchlist(
 async def remove_from_watchlist(
     ticker: str,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     ticker = ticker.upper()
-    settings = await _get_or_create_settings(db)
+    settings = await _get_or_create_settings(db, current_user)
     wl = [t for t in settings.watchlist if t != ticker]
     settings.watchlist = wl
     await db.flush()

@@ -6,7 +6,7 @@ import {
   Settings, ScrollText, TrendingUp, LogOut, Clock,
   FlaskConical, PieChart, Loader2, ChevronRight,
   AlertCircle, AlertTriangle, CheckCircle, Info, X,
-  BarChart2, Bell, Menu, GitCompare,
+  BarChart2, Bell, Menu, GitCompare, Shield, UserCircle,
 } from 'lucide-react'
 import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
@@ -15,23 +15,24 @@ import UpdateBanner from './UpdateBanner'
 
 interface RunningTask { ticker: string; taskId: string; startedAt: string }
 
-const NAV = [
-  { to: '/dashboard',  key: 'nav.dashboard',       icon: LayoutDashboard },
-  { to: '/analysis',   key: 'nav.analysis',        icon: Search },
-  { to: '/chart',      key: 'nav.chart',           icon: TrendingUp },
-  { to: '/trading',    key: 'nav.simulation',      icon: FlaskConical },
-  { to: '/portfolio',  key: 'nav.portfolio',       icon: PieChart },
-  { to: '/watchlist',  key: 'nav.watchlist',       icon: BookMarked },
-  { to: '/orders',     key: 'nav.orders',          icon: Briefcase },
-  { to: '/performance', key: 'nav.performance',     icon: BarChart2 },
-  { to: '/alerts',     key: 'nav.alerts',          icon: Bell },
-  { to: '/settings',   key: 'nav.settings',        icon: Settings },
-  { to: '/ab-testing', key: 'nav.ab_testing',      icon: GitCompare },
-  { to: '/logs',       key: 'nav.logs',            icon: ScrollText },
+const ALL_NAV = [
+  { to: '/dashboard',   key: 'nav.dashboard',    page: 'dashboard',   icon: LayoutDashboard },
+  { to: '/analysis',    key: 'nav.analysis',     page: 'analysis',    icon: Search },
+  { to: '/chart',       key: 'nav.chart',        page: 'chart',       icon: TrendingUp },
+  { to: '/trading',     key: 'nav.simulation',   page: 'trading',     icon: FlaskConical },
+  { to: '/portfolio',   key: 'nav.portfolio',    page: 'portfolio',   icon: PieChart },
+  { to: '/watchlist',   key: 'nav.watchlist',    page: 'watchlist',   icon: BookMarked },
+  { to: '/orders',      key: 'nav.orders',       page: 'orders',      icon: Briefcase },
+  { to: '/performance', key: 'nav.performance',  page: 'performance', icon: BarChart2 },
+  { to: '/alerts',      key: 'nav.alerts',       page: 'alerts',      icon: Bell },
+  { to: '/settings',    key: 'nav.settings',     page: 'settings',    icon: Settings },
+  { to: '/ab-testing',  key: 'nav.ab_testing',   page: 'ab-testing',  icon: GitCompare },
+  { to: '/logs',        key: 'nav.logs',         page: 'logs',        icon: ScrollText },
 ]
 
 export default function Layout({ children }: { children: React.ReactNode }) {
-  const { user, logout } = useAuth()
+  const { user, isAdmin, logout } = useAuth()
+  const [allowedPages, setAllowedPages] = useState<string[]>([])
   const navigate = useNavigate()
   const { language, setLanguage, t } = useTranslation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -39,6 +40,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [runningTask, setRunningTask] = useState<RunningTask | null>(() => {
     try { return JSON.parse(localStorage.getItem('ta_task_running') || 'null') } catch { return null }
   })
+
+  // Fetch allowed pages for the current user
+  useEffect(() => {
+    axios.get('/api/users/me/permissions')
+      .then(r => setAllowedPages(r.data.allowed_pages ?? []))
+      .catch(() => setAllowedPages(['settings']))
+  }, [])
+
+  // Filter nav items based on permissions (admin sees all)
+  const NAV = ALL_NAV.filter(item =>
+    isAdmin || allowedPages.includes(item.page)
+  )
 
   // Poll cron status
   useEffect(() => {
@@ -190,6 +203,48 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               )}
             </NavLink>
           ))}
+
+          {/* Profile link — always visible */}
+          <NavLink
+            to="/profile"
+            onClick={() => setSidebarOpen(false)}
+            className={({ isActive }) =>
+              `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group ` +
+              (isActive
+                ? 'bg-violet-500/10 text-violet-300 border border-violet-500/20 shadow-sm'
+                : 'text-gray-400 hover:text-white hover:bg-gray-800')
+            }
+          >
+            {({ isActive }) => (
+              <>
+                <UserCircle size={16} className={isActive ? 'text-violet-400' : 'text-gray-500 group-hover:text-gray-300'} />
+                <span className="flex-1">{t('nav.profile')}</span>
+                {isActive && <ChevronRight size={12} className="text-violet-500 opacity-60" />}
+              </>
+            )}
+          </NavLink>
+
+          {/* Admin panel — admin only */}
+          {isAdmin && (
+            <NavLink
+              to="/admin"
+              onClick={() => setSidebarOpen(false)}
+              className={({ isActive }) =>
+                `flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-150 group ` +
+                (isActive
+                  ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20 shadow-sm'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-800')
+              }
+            >
+              {({ isActive }) => (
+                <>
+                  <Shield size={16} className={isActive ? 'text-amber-400' : 'text-gray-500 group-hover:text-gray-300'} />
+                  <span className="flex-1">{t('nav.admin')}</span>
+                  {isActive && <ChevronRight size={12} className="text-amber-500 opacity-60" />}
+                </>
+              )}
+            </NavLink>
+          )}
         </nav>
 
         {/* Running analysis indicator */}

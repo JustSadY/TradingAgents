@@ -2,7 +2,7 @@ import json
 from datetime import datetime, timezone
 from typing import Any
 
-from sqlalchemy import Boolean, DateTime, Float, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
@@ -15,7 +15,8 @@ def _json_default(value: Any) -> str:
 class AppSettings(Base):
     __tablename__ = "app_settings"
 
-    id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     # Trading mode
     trading_mode: Mapped[str] = mapped_column(String(20), default="simulation")

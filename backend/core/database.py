@@ -24,6 +24,18 @@ async def get_db() -> AsyncSession:
 
 
 async def create_all_tables():
+    # Import all models so SQLAlchemy knows about them before create_all
+    import backend.models.user  # noqa: F401
+    import backend.models.settings  # noqa: F401
+    import backend.models.system_settings  # noqa: F401
+    import backend.models.page_permission  # noqa: F401
+    import backend.models.analysis  # noqa: F401
+    import backend.models.portfolio  # noqa: F401
+    import backend.models.order  # noqa: F401
+    import backend.models.log  # noqa: F401
+    import backend.models.alert  # noqa: F401
+    import backend.models.preset  # noqa: F401
+    import backend.models.portfolio_analysis  # noqa: F401
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await _migrate_add_columns(conn)
@@ -34,10 +46,23 @@ async def _migrate_add_columns(conn):
     # NOTE: These migrations are outside Alembic. After adding new entries here,
     # run `alembic revision --autogenerate` to keep migration history in sync.
     _ALLOWED = {
-        "app_settings", "analysis_results", "portfolios", "orders",
+        "users", "app_settings", "analysis_results", "portfolios", "orders",
         "holdings", "multi_ticker_analyses", "config_presets", "price_alerts",
     }
     new_columns = [
+        # ── Multi-tenant: users table ──────────────────────────────────────────
+        ("users", "email",         "VARCHAR(255)"),
+        ("users", "role",          "VARCHAR(20) DEFAULT 'user'"),
+        ("users", "display_name",  "VARCHAR(100)"),
+        ("users", "api_keys_enc",  "TEXT"),
+        # ── Per-user settings ─────────────────────────────────────────────────
+        ("app_settings", "user_id", "INTEGER REFERENCES users(id)"),
+        # ── Data isolation: user_id on all core tables ─────────────────────────
+        ("analysis_results",      "user_id", "INTEGER REFERENCES users(id)"),
+        ("portfolios",            "user_id", "INTEGER REFERENCES users(id)"),
+        ("config_presets",        "user_id", "INTEGER REFERENCES users(id)"),
+        ("price_alerts",          "user_id", "INTEGER REFERENCES users(id)"),
+        ("multi_ticker_analyses", "user_id", "INTEGER REFERENCES users(id)"),
         ("app_settings", "backend_url",                "VARCHAR(500)"),
         ("app_settings", "llm_model",                  "VARCHAR(100) DEFAULT 'gpt-4o-mini'"),
         ("app_settings", "openai_reasoning_effort",    "VARCHAR(20)"),

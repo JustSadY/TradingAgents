@@ -87,11 +87,15 @@ from backend.api.market import router as market_router
 from backend.api.preset import router as preset_router
 from backend.api.alerts import router as alerts_router
 from backend.api.news import router as news_router
+from backend.api.users import router as users_router
+from backend.api.system_settings import router as system_settings_router
 
 # Ensure all models are registered with SQLAlchemy metadata before create_all_tables
 import backend.models.portfolio_analysis  # noqa: F401
 import backend.models.preset  # noqa: F401
 import backend.models.alert  # noqa: F401
+import backend.models.system_settings  # noqa: F401
+import backend.models.page_permission  # noqa: F401
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 _logger = logging.getLogger(__name__)
@@ -141,25 +145,30 @@ async def _seed_admin_user():
 
     async with AsyncSessionLocal() as db:
         result = await db.execute(select(User).where(User.username == settings.ADMIN_USERNAME))
-        if result.scalar_one_or_none() is None:
+        existing = result.scalar_one_or_none()
+        if existing is None:
             hashed = settings.ADMIN_PASSWORD_HASH or hash_password("changeme")
-            db.add(User(username=settings.ADMIN_USERNAME, hashed_password=hashed))
+            db.add(User(username=settings.ADMIN_USERNAME, hashed_password=hashed, role="admin"))
             await db.commit()
             _logger.info("Admin user created: %s", settings.ADMIN_USERNAME)
+        elif existing.role != "admin":
+            existing.role = "admin"
+            await db.commit()
+            _logger.info("Admin role set for existing user: %s", settings.ADMIN_USERNAME)
 
 
 async def _load_cron_settings(cron):
-    """Load cron config from DB on startup."""
+    """Load cron config from SystemSettings on startup."""
     try:
         from sqlalchemy import select
         from backend.core.database import AsyncSessionLocal
-        from backend.models.settings import AppSettings
+        from backend.models.system_settings import SystemSettings
 
         async with AsyncSessionLocal() as db:
-            result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
-            app_settings = result.scalar_one_or_none()
-            if app_settings:
-                await cron.apply_settings(app_settings)
+            result = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
+            sys_settings = result.scalar_one_or_none()
+            if sys_settings:
+                await cron.apply_settings(sys_settings)
     except Exception as e:
         _logger.warning("Could not load cron settings: %s", e)
 
@@ -194,6 +203,8 @@ app.include_router(market_router)
 app.include_router(preset_router)
 app.include_router(alerts_router)
 app.include_router(news_router)
+app.include_router(users_router)
+app.include_router(system_settings_router)
 
 
 @app.websocket("/ws/analysis/{task_id}")
