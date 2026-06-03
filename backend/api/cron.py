@@ -7,8 +7,8 @@ router = APIRouter(prefix="/api/cron", tags=["cron"])
 
 
 @router.get("/status")
-async def cron_status(_: User = Depends(get_current_user)):
+async def cron_status(user: User = Depends(get_current_user)):
     cron = get_cron_service()
     if cron is None:
         return {"running": False, "job_configured": False, "next_run_time": None}
-    return cron.get_status()
+    return cron.get_status(user_id=user.id)

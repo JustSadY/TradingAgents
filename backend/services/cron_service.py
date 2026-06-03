@@ -37,28 +37,6 @@ class CronService:
             self.scheduler.shutdown(wait=False)
             self._running = False
 
-    async def apply_settings(self, settings):
-        """Re-configure the watchlist scan job from SystemSettings or AppSettings."""
-        self.scheduler.remove_job("watchlist_scan") if self.scheduler.get_job("watchlist_scan") else None
-
-        cron_enabled = getattr(settings, "cron_enabled", False)
-        cron_schedule = getattr(settings, "cron_schedule", "0 9 * * 1-5") or "0 9 * * 1-5"
-        watchlist = getattr(settings, "watchlist", [])
-
-        if cron_enabled and watchlist:
-            try:
-                trigger = CronTrigger.from_crontab(cron_schedule, timezone="UTC")
-                self.scheduler.add_job(
-                    self._run_watchlist_scan,
-                    trigger,
-                    id="watchlist_scan",
-                    replace_existing=True,
-                    misfire_grace_time=300,
-                )
-                _logger.info("Cron job configured: %s", cron_schedule)
-            except Exception as e:
-                _logger.error("Failed to configure cron job: %s", e)
-
     async def apply_user_settings(self, settings):
         """Configure/re-configure a watchlist scan job for a specific user."""
         if not settings.user_id:
@@ -84,58 +62,6 @@ class CronService:
                 _logger.info("User cron job configured for user_id=%s: %s", settings.user_id, cron_schedule)
             except Exception as e:
                 _logger.error("Failed to configure user cron job for user_id=%s: %s", settings.user_id, e)
-
-    async def _run_watchlist_scan(self):
-        """Triggered by APScheduler — runs analysis for every ticker in watchlist."""
-        from backend.core.database import AsyncSessionLocal
-        from backend.models.system_settings import SystemSettings
-        from backend.models.settings import AppSettings
-        from backend.services.analysis_service import run_analysis
-        from backend.services.execution.factory import get_trader
-        from sqlalchemy import select
-
-        today = date.today().strftime("%Y-%m-%d")
-        _logger.info("Cron watchlist scan started for date=%s", today)
-
-        async with AsyncSessionLocal() as db:
-            # 1. Load system settings to get cron configuration and global watchlist
-            sys_res = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
-            sys_settings = sys_res.scalar_one_or_none()
-            if not sys_settings or not sys_settings.cron_enabled:
-                _logger.info("Cron is disabled or not configured in system settings, skipping scan")
-                return
-
-            # 2. Load the default application settings (owner/admin) for running parameters
-            app_res = await db.execute(select(AppSettings).where(AppSettings.id == 1))
-            app_settings = app_res.scalar_one_or_none()
-            if not app_settings:
-                _logger.error("No default AppSettings found (id=1), cannot run cron scan")
-                return
-
-            trader = get_trader(app_settings.trading_mode, app_settings.active_broker)
-
-            for ticker in sys_settings.watchlist:
-                try:
-                    _logger.info("Cron scanning ticker=%s", ticker)
-                    task_id, row = await run_analysis(
-                        ticker=ticker,
-                        trade_date=today,
-                        asset_type="stock",
-                        settings=app_settings,
-                        db=db,
-                        triggered_by="cron",
-                    )
-                    await db.commit()
-
-                    # Execute if signal warrants it
-                    if row.signal in ("Buy", "Overweight", "Sell", "Underweight"):
-                        await _maybe_execute(ticker, row, app_settings, trader, db)
-
-                except Exception as e:
-                    _logger.error("Cron scan failed for %s: %s", ticker, e, exc_info=True)
-                    await db.rollback()
-
-        _logger.info("Cron watchlist scan completed")
 
     async def _run_user_watchlist_scan(self, user_id: int):
         """Triggered by APScheduler — runs analysis for a specific user's watchlist."""
@@ -189,8 +115,13 @@ class CronService:
 
         _logger.info("User cron watchlist scan completed for user_id=%d", user_id)
 
-    def get_status(self) -> dict:
-        job = self.scheduler.get_job("watchlist_scan")
+    def get_status(self, user_id: Optional[int] = None) -> dict:
+        if not user_id:
+            return {"running": self._running, "job_configured": False, "next_run_time": None}
+
+        job_id = f"watchlist_scan_user_{user_id}"
+        job = self.scheduler.get_job(job_id)
+
         return {
             "running": self._running,
             "job_configured": job is not None,

@@ -48,3 +48,14 @@ On startup, `_seed_admin_user()` in `main.py` reads `ADMIN_USERNAME` from `.env`
 | Preferences page | ✓ | ✓ | ✓ | ✓ (always open) |
 | Admin page (`/admin`) | ✓ | ✓ | ✗ | ✗ |
 
+## Notification Visibility
+
+System notifications (toasts) and banners are filtered based on the active session role:
+
+| Notification Type | Visibility | Description |
+|-------------------|------------|-------------|
+| **General Alerts** | Everyone (`all`) | Task progress, successful saves, analysis completions. |
+| **System Admin Alerts** | `admin` + `owner` | Admin panel changes, system-level logs (if enabled). |
+| **Update Available** | `owner` Only | Notifications about new git commits/releases on the upstream repository. |
+| **System Updating...** | Everyone (`all`) | Active update process alerts informing users that the service is restarting. |
+

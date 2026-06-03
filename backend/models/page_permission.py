@@ -12,7 +12,7 @@ ALL_PAGE_KEYS = [
 # Pages always accessible regardless of permissions (settings = API key management)
 ALWAYS_ALLOWED = {"settings"}
 
-ALL_SETTING_KEYS = ["general", "llm", "risk", "webhooks", "presets"]
+ALL_SETTING_KEYS = ["general", "llm", "risk", "webhooks", "presets", "cron"]
 
 # Maps settings sections to fields they control for backend validation
 SECTION_FIELDS = {
@@ -45,6 +45,10 @@ SECTION_FIELDS = {
         "webhook_url",
         "webhook_enabled",
         "webhook_events",
+    ],
+    "cron": [
+        "cron_enabled",
+        "cron_schedule",
     ],
 }
 

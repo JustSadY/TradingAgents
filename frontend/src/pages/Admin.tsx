@@ -447,42 +447,6 @@ export default function Admin() {
       {tab === 'system' && sysSettings && (
         <Section title={t('admin.section_system_settings')}>
           <div className="space-y-3">
-            {/* Cron */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
-              <span className="text-sm text-gray-400">{t('admin.cron_enabled')}</span>
-              <input
-                type="checkbox"
-                checked={sysSettings.cron_enabled}
-                onChange={e => setSysSettings(s => s ? { ...s, cron_enabled: e.target.checked } : s)}
-                className="w-5 h-5 accent-amber-500"
-              />
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
-              <span className="text-sm text-gray-400">{t('admin.cron_schedule')}</span>
-              <div className="flex-1 sm:max-w-xs">
-                <input
-                  className={Input}
-                  value={sysSettings.cron_schedule}
-                  onChange={e => setSysSettings(s => s ? { ...s, cron_schedule: e.target.value } : s)}
-                  placeholder="0 9 * * 1-5"
-                />
-              </div>
-            </div>
-
-            {/* Watchlist */}
-            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1.5 sm:gap-4">
-              <span className="text-sm text-gray-400 sm:pt-2">{t('admin.watchlist')}</span>
-              <div className="flex-1 sm:max-w-xs">
-                <input
-                  className={Input}
-                  value={watchlistInput}
-                  onChange={e => setWatchlistInput(e.target.value)}
-                  placeholder="AAPL, MSFT, TSLA"
-                />
-                <p className="text-xs text-gray-600 mt-1">{t('admin.watchlist_hint')}</p>
-              </div>
-            </div>
-
             {/* Webhook */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
               <span className="text-sm text-gray-400">{t('admin.webhook_url')}</span>

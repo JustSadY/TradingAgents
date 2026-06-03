@@ -128,7 +128,7 @@ TRADINGAGENTS_INCLUDE_HISTORICAL_ANALYSES=false
 TRADINGAGENTS_HISTORICAL_ANALYSES_LIMIT=5
 
 # JSON dictionary mapping analyst keys to specific provider-model strings.
-# Example: {"market": "google:gemini-2.5-flash", "news": "deep", "social": "quick"}
-# Special model choices: "deep" uses default deep model, "quick" or "" uses default model.
+# Example: {"market": "google:gemini-3.1-flash-lite", "news": "anthropic:claude-sonnet-4-6"}
+# If a key is empty or missing, the default global provider/model is used.
 TRADINGAGENTS_ANALYST_MODELS={}
 ```
