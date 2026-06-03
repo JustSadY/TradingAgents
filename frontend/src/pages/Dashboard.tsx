@@ -86,17 +86,6 @@ export default function Dashboard() {
     return () => clearInterval(id)
   }, [])
 
-  if (loading) {
-    return (
-      <div className="p-4 md:p-6 space-y-4">
-        <div className="h-8 w-32 bg-gray-800 rounded-lg animate-pulse" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[...Array(4)].map((_, i) => <div key={i} className="h-20 md:h-24 bg-gray-800 rounded-2xl animate-pulse" />)}
-        </div>
-      </div>
-    )
-  }
-
   const sim = portfolios.find(p => p.mode === 'simulation') || portfolios[0]
   const pnl = sim ? sim.current_balance - sim.initial_capital : 0
   const pnlPct = sim?.initial_capital ? (pnl / sim.initial_capital * 100) : 0
@@ -161,6 +150,17 @@ export default function Dashboard() {
     })
     return data
   }, [sim, language])
+
+  if (loading) {
+    return (
+      <div className="p-4 md:p-6 space-y-4">
+        <div className="h-8 w-32 bg-gray-800 rounded-lg animate-pulse" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          {[...Array(4)].map((_, i) => <div key={i} className="h-20 md:h-24 bg-gray-800 rounded-2xl animate-pulse" />)}
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6">
