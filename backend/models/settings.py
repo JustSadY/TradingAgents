@@ -90,6 +90,8 @@ class AppSettings(Base):
     # Encrypted broker credentials (JSON string of {api_key, api_secret})
     broker_credentials_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
 
+    active_preset_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc),

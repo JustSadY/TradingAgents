@@ -13,6 +13,7 @@ import Portfolio from './pages/Portfolio'
 import Chart from './pages/Chart'
 import Performance from './pages/Performance'
 import Alerts from './pages/Alerts'
+import ABTesting from './pages/ABTesting'
 
 import { LanguageProvider } from './contexts/LanguageContext'
 
@@ -43,6 +44,7 @@ function AppRoutes() {
                 <Route path="/settings" element={<Settings />} />
                 <Route path="/performance" element={<Performance />} />
                 <Route path="/alerts" element={<Alerts />} />
+                <Route path="/ab-testing" element={<ABTesting />} />
                 <Route path="/logs" element={<Logs />} />
                 <Route path="*" element={<Navigate to="/dashboard" />} />
               </Routes>

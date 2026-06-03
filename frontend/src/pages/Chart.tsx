@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import {
@@ -6,11 +6,16 @@ import {
   ColorType,
   CandlestickSeries,
   HistogramSeries,
+  LineSeries,
   createSeriesMarkers,
 } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 import { Search, TrendingUp, TrendingDown, Minus, RefreshCw, ExternalLink } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
+import {
+  ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip,
+  ReferenceLine, Bar, Cell, ComposedChart, CartesianGrid
+} from 'recharts'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -21,6 +26,12 @@ interface Candle {
   low: number
   close: number
   volume: number
+  sma?: number | null
+  ema?: number | null
+  rsi?: number | null
+  macd_line?: number | null
+  macd_signal?: number | null
+  macd_hist?: number | null
 }
 
 interface KeyLevel { price: number; label: string; type: string }
@@ -95,6 +106,16 @@ export default function ChartPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
+  const [showSMA, setShowSMA] = useState(false)
+  const [showEMA, setShowEMA] = useState(false)
+  const [showRSI, setShowRSI] = useState(false)
+  const [showMACD, setShowMACD] = useState(false)
+  const [showSentiment, setShowSentiment] = useState(false)
+  const [sentimentHistory, setSentimentHistory] = useState<{ time: string; value: number }[]>([])
+
+  const smaSeriesRef = useRef<ISeriesApi<'Line', any> | null>(null)
+  const emaSeriesRef = useRef<ISeriesApi<'Line', any> | null>(null)
+
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
   const candleSeriesRef = useRef<ISeriesApi<'Candlestick', any> | null>(null)
@@ -112,12 +133,14 @@ export default function ChartPage() {
     setError(null)
     setSelected(null)
     try {
-      const [ohlcvRes, histRes] = await Promise.all([
+      const [ohlcvRes, histRes, sentRes] = await Promise.all([
         axios.get('/api/market/ohlcv', { params: { ticker, period: p } }),
         axios.get('/api/analysis/history', { params: { ticker, limit: 200 } }),
+        axios.get('/api/market/sentiment-history', { params: { ticker } }),
       ])
       setCandles(ohlcvRes.data.candles)
       setAnalyses(histRes.data)
+      setSentimentHistory(sentRes.data.history)
     } catch (e: any) {
       setError(e.response?.data?.detail ?? tRef.current('chart.error_load'))
     } finally {
@@ -186,9 +209,22 @@ export default function ChartPage() {
       scaleMargins: { top: 0, bottom: 0.25 },
     })
 
+    const smaSeries = chart.addSeries(LineSeries, {
+      color: '#f59e0b',
+      lineWidth: 2,
+      priceScaleId: 'right',
+    })
+    const emaSeries = chart.addSeries(LineSeries, {
+      color: '#a855f7',
+      lineWidth: 2,
+      priceScaleId: 'right',
+    })
+
     chartRef.current = chart
     candleSeriesRef.current = candleSeries
     volSeriesRef.current = volSeries
+    smaSeriesRef.current = smaSeries
+    emaSeriesRef.current = emaSeries
 
     const applyWidth = () => {
       const w = chartContainerRef.current?.clientWidth ?? 0
@@ -213,6 +249,8 @@ export default function ChartPage() {
       chartRef.current = null
       candleSeriesRef.current = null
       volSeriesRef.current = null
+      smaSeriesRef.current = null
+      emaSeriesRef.current = null
       markersRef.current = null
     }
   }, [])
@@ -235,6 +273,36 @@ export default function ChartPage() {
       value: c.volume,
       color: c.close >= c.open ? '#10b98133' : '#ef444433',
     })))
+
+    if (smaSeriesRef.current) {
+      if (showSMA) {
+        smaSeriesRef.current.setData(
+          candles
+            .filter(c => c.sma !== null && c.sma !== undefined)
+            .map(c => ({
+              time: c.time as any,
+              value: c.sma as number,
+            }))
+        )
+      } else {
+        smaSeriesRef.current.setData([])
+      }
+    }
+
+    if (emaSeriesRef.current) {
+      if (showEMA) {
+        emaSeriesRef.current.setData(
+          candles
+            .filter(c => c.ema !== null && c.ema !== undefined)
+            .map(c => ({
+              time: c.time as any,
+              value: c.ema as number,
+            }))
+        )
+      } else {
+        emaSeriesRef.current.setData([])
+      }
+    }
 
     priceLineRefs.current.forEach(pl => {
       try { candleSeriesRef.current?.removePriceLine(pl) } catch { /* ignore */ }
@@ -309,13 +377,31 @@ export default function ChartPage() {
     } catch { /* ignore */ }
 
     chartRef.current?.timeScale().fitContent()
-  }, [candles, analyses])
+  }, [candles, analyses, showSMA, showEMA])
 
   // ── Render ───────────────────────────────────────────────────────────────────
 
   const analysesInRange = activeTicker
     ? analyses.filter(a => candles.some(c => c.time === a.trade_date))
     : []
+
+  const sentimentChartData = useMemo(() => {
+    if (!candles.length) return []
+    const sentMap = new Map(sentimentHistory.map(item => [item.time, item.value]))
+    let lastSent = 0.0
+    return candles.map(c => {
+      const dbSent = sentMap.get(c.time)
+      const sentimentVal = dbSent !== undefined ? dbSent : lastSent
+      if (dbSent !== undefined) {
+        lastSent = dbSent
+      }
+      return {
+        time: c.time,
+        price: c.close,
+        sentiment: sentimentVal,
+      }
+    })
+  }, [candles, sentimentHistory])
 
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-7xl">
@@ -361,6 +447,58 @@ export default function ChartPage() {
         {loading && <RefreshCw size={16} className="text-violet-400 animate-spin" />}
       </div>
 
+      {/* Indicators panel */}
+      {activeTicker && (
+        <div className="flex flex-wrap items-center gap-4 bg-gray-900/50 border border-gray-800/80 px-4 py-3 rounded-xl">
+          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-2">{t('chart.indicators')}:</span>
+          <label className="flex items-center gap-2 text-xs text-gray-300 hover:text-white cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showSMA}
+              onChange={e => setShowSMA(e.target.checked)}
+              className="accent-violet-500 h-4 w-4 rounded border-gray-700 bg-gray-800"
+            />
+            SMA (20)
+          </label>
+          <label className="flex items-center gap-2 text-xs text-gray-300 hover:text-white cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showEMA}
+              onChange={e => setShowEMA(e.target.checked)}
+              className="accent-violet-500 h-4 w-4 rounded border-gray-700 bg-gray-800"
+            />
+            EMA (20)
+          </label>
+          <label className="flex items-center gap-2 text-xs text-gray-300 hover:text-white cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showRSI}
+              onChange={e => setShowRSI(e.target.checked)}
+              className="accent-violet-500 h-4 w-4 rounded border-gray-700 bg-gray-800"
+            />
+            RSI (14)
+          </label>
+          <label className="flex items-center gap-2 text-xs text-gray-300 hover:text-white cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showMACD}
+              onChange={e => setShowMACD(e.target.checked)}
+              className="accent-violet-500 h-4 w-4 rounded border-gray-700 bg-gray-800"
+            />
+            MACD
+          </label>
+          <label className="flex items-center gap-2 text-xs text-gray-300 hover:text-white cursor-pointer select-none">
+            <input
+              type="checkbox"
+              checked={showSentiment}
+              onChange={e => setShowSentiment(e.target.checked)}
+              className="accent-violet-500 h-4 w-4 rounded border-gray-700 bg-gray-800"
+            />
+            {t('chart.social_sentiment')}
+          </label>
+        </div>
+      )}
+
       {error && (
         <div className="bg-red-900/30 border border-red-700 text-red-300 text-sm rounded-xl px-4 py-3">
           {error}
@@ -401,6 +539,134 @@ export default function ChartPage() {
               <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5" style={{borderTop: '1px solid #ef4444'}} /> {t('chart.legend_stop_loss')}</span>
               <span className="flex items-center gap-1 text-emerald-400">{t('chart.legend_buy')}</span>
               <span className="flex items-center gap-1 text-red-400">{t('chart.legend_sell')}</span>
+            </div>
+          )}
+
+          {/* RSI subplot */}
+          {showRSI && candles.length > 0 && (
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mt-4">
+              <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">
+                RSI (14)
+              </h3>
+              <div className="h-36 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={candles} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 10 }} />
+                    <YAxis domain={[0, 100]} stroke="#4b5563" tick={{ fontSize: 10 }} ticks={[30, 50, 70]} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px' }}
+                      labelStyle={{ color: '#9ca3af', fontSize: '11px' }}
+                      itemStyle={{ color: '#a855f7', fontSize: '11px' }}
+                    />
+                    <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="3 3" label={{ value: 'Overbought (70)', fill: '#ef4444', fontSize: 9, position: 'insideTopLeft' }} />
+                    <ReferenceLine y={30} stroke="#10b981" strokeDasharray="3 3" label={{ value: 'Oversold (30)', fill: '#10b981', fontSize: 9, position: 'insideBottomLeft' }} />
+                    <Line
+                      type="monotone"
+                      dataKey="rsi"
+                      stroke="#a855f7"
+                      dot={false}
+                      strokeWidth={1.5}
+                      connectNulls
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* MACD subplot */}
+          {showMACD && candles.length > 0 && (
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mt-4">
+              <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">
+                MACD (12, 26, 9)
+              </h3>
+              <div className="h-44 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <ComposedChart data={candles} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 10 }} />
+                    <YAxis stroke="#4b5563" tick={{ fontSize: 10 }} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px' }}
+                      labelStyle={{ color: '#9ca3af', fontSize: '11px' }}
+                      itemStyle={{ fontSize: '11px' }}
+                    />
+                    <Bar dataKey="macd_hist" name="Histogram">
+                      {candles.map((entry, index) => {
+                        const val = entry.macd_hist ?? 0
+                        return (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={val >= 0 ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}
+                          />
+                        )
+                      })}
+                    </Bar>
+                    <Line
+                      type="monotone"
+                      dataKey="macd_line"
+                      stroke="#3b82f6"
+                      dot={false}
+                      strokeWidth={1.5}
+                      connectNulls
+                      name="MACD"
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="macd_signal"
+                      stroke="#f59e0b"
+                      dot={false}
+                      strokeWidth={1.5}
+                      connectNulls
+                      name="Signal"
+                    />
+                  </ComposedChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Sentiment Correlation subplot */}
+          {showSentiment && sentimentChartData.length > 0 && (
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mt-4">
+              <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">
+                {t('chart.sentiment_correlation')}
+              </h3>
+              <div className="h-48 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={sentimentChartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 10 }} />
+                    <YAxis yAxisId="left" stroke="#4b5563" tick={{ fontSize: 10 }} domain={['auto', 'auto']} label={{ value: 'Price (USD)', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10, offset: 10 }} />
+                    <YAxis yAxisId="right" orientation="right" stroke="#4b5563" tick={{ fontSize: 10 }} domain={[-1, 1]} ticks={[-1, -0.5, 0, 0.5, 1]} label={{ value: 'Sentiment', angle: 90, position: 'insideRight', fill: '#9ca3af', fontSize: 10, offset: 10 }} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px' }}
+                      labelStyle={{ color: '#9ca3af', fontSize: '11px' }}
+                      itemStyle={{ fontSize: '11px' }}
+                    />
+                    <Line
+                      yAxisId="left"
+                      type="monotone"
+                      dataKey="price"
+                      stroke="#10b981"
+                      dot={false}
+                      strokeWidth={1.5}
+                      name="Stock Price"
+                    />
+                    <Line
+                      yAxisId="right"
+                      type="monotone"
+                      dataKey="sentiment"
+                      stroke="#a855f7"
+                      dot={false}
+                      strokeWidth={2}
+                      name="Sentiment Score"
+                    />
+                    <ReferenceLine yAxisId="right" y={0} stroke="#4b5563" strokeDasharray="3 3" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
             </div>
           )}
         </div>

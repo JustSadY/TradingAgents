@@ -354,6 +354,9 @@ async def run_analysis(
             tokens_out=stats.get("tokens_out", 0),
             duration_seconds=duration,
             triggered_by=triggered_by,
+            llm_provider=settings.llm_provider,
+            llm_model=settings.llm_model,
+            preset_name=settings.active_preset_name or f"{settings.llm_provider}:{settings.llm_model}",
         )
         db.add(row)
         await db.flush()

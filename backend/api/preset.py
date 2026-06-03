@@ -64,4 +64,5 @@ async def apply_preset(preset_id: int, db: AsyncSession = Depends(get_db), _=Dep
             else:
                 setattr(settings, key, value)
 
+    settings.active_preset_name = preset.name
     return {"applied": True, "preset_name": preset.name}

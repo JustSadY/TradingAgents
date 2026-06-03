@@ -22,6 +22,9 @@ const chart = {
     'chart.reanalyze': 'Re-analyze This Date',
     'chart.price_line_target': 'Target',
     'chart.price_line_stop': 'Stop',
+    'chart.indicators': 'Indicators',
+    'chart.social_sentiment': 'Social Sentiment',
+    'chart.sentiment_correlation': 'Price & Social Sentiment Correlation',
   },
   tr: {
     'chart.title': 'Trading Grafik',
@@ -46,6 +49,9 @@ const chart = {
     'chart.reanalyze': 'Bu Tarihe Yeniden Analiz',
     'chart.price_line_target': 'Hedef',
     'chart.price_line_stop': 'Stop',
+    'chart.indicators': 'İndikatörler',
+    'chart.social_sentiment': 'Sosyal Medya Duyarlılık',
+    'chart.sentiment_correlation': 'Fiyat & Sosyal Medya Duyarlılık İlişkisi',
   },
 }
 

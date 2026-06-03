@@ -93,13 +93,23 @@ async def update_settings(
 ):
     settings = await _get_or_create_settings(db)
 
+    has_changes = False
     for field, value in body.model_dump(exclude_unset=True).items():
+        if field == "active_preset_name":
+            settings.active_preset_name = value
+            continue
+        if getattr(settings, field, None) != value:
+            has_changes = True
         if field == "watchlist":
             settings.watchlist = value
         elif field == "selected_analysts":
             settings.selected_analysts = value
         else:
             setattr(settings, field, value)
+
+    if has_changes:
+        settings.active_preset_name = None
+
     settings.updated_at = datetime.now(timezone.utc)
     await db.flush()
 

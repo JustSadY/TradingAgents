@@ -77,6 +77,11 @@ async def _migrate_add_columns(conn):
         ("app_settings", "webhook_url",                     "VARCHAR(500)"),
         ("app_settings", "webhook_enabled",                 "BOOLEAN DEFAULT FALSE"),
         ("app_settings", "webhook_events",                  "TEXT DEFAULT '[\"analysis_complete\"]'"),
+        # Phase 2: Preset ve LLM performans takibi
+        ("app_settings", "active_preset_name",              "VARCHAR(100)"),
+        ("analysis_results", "llm_provider",                "VARCHAR(50)"),
+        ("analysis_results", "llm_model",                   "VARCHAR(100)"),
+        ("analysis_results", "preset_name",                  "VARCHAR(100)"),
     ]
     from sqlalchemy import text, inspect
     for table, column, col_type in new_columns:

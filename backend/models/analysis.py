@@ -45,6 +45,10 @@ class AnalysisResult(Base):
     tokens_out: Mapped[int] = mapped_column(Integer, default=0)
     duration_seconds: Mapped[float] = mapped_column(Float, default=0.0)
 
+    llm_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    preset_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+
     triggered_by: Mapped[str] = mapped_column(String(20), default="manual")  # manual | cron
 
     # Post-analysis return tracking (filled async after holding_days have passed)

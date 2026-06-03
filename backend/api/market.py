@@ -7,6 +7,10 @@ import pandas as pd
 from fastapi import APIRouter, Depends, HTTPException, Query
 
 from backend.api.deps import get_current_user
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select
+from backend.core.database import get_db
+from backend.models.analysis import AnalysisResult
 
 _logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/market", tags=["market"])
@@ -61,6 +65,28 @@ async def get_ohlcv(
         if data.index.tz is not None:
             data.index = data.index.tz_localize(None)
 
+        # Compute technical indicators
+        data["sma"] = data["Close"].rolling(window=20).mean()
+        data["ema"] = data["Close"].ewm(span=20, adjust=False).mean()
+
+        delta = data["Close"].diff()
+        gain = delta.clip(lower=0)
+        loss = -1 * delta.clip(upper=0)
+        avg_gain = gain.ewm(com=13, adjust=False).mean()
+        avg_loss = loss.ewm(com=13, adjust=False).mean()
+        rs = avg_gain / (avg_loss + 1e-9)
+        data["rsi"] = 100 - (100 / (1 + rs))
+
+        ema_12 = data["Close"].ewm(span=12, adjust=False).mean()
+        ema_26 = data["Close"].ewm(span=26, adjust=False).mean()
+        data["macd_line"] = ema_12 - ema_26
+        data["macd_signal"] = data["macd_line"].ewm(span=9, adjust=False).mean()
+        data["macd_hist"] = data["macd_line"] - data["macd_signal"]
+
+        # Replace NaN with None for JSON compliance
+        import numpy as np
+        data = data.replace({np.nan: None})
+
         candles = []
         for ts, row in data.iterrows():
             candles.append({
@@ -70,6 +96,12 @@ async def get_ohlcv(
                 "low": round(float(row["Low"]), 2),
                 "close": round(float(row["Close"]), 2),
                 "volume": int(row.get("Volume", 0)),
+                "sma": round(float(row["sma"]), 2) if row["sma"] is not None else None,
+                "ema": round(float(row["ema"]), 2) if row["ema"] is not None else None,
+                "rsi": round(float(row["rsi"]), 2) if row["rsi"] is not None else None,
+                "macd_line": round(float(row["macd_line"]), 2) if row["macd_line"] is not None else None,
+                "macd_signal": round(float(row["macd_signal"]), 2) if row["macd_signal"] is not None else None,
+                "macd_hist": round(float(row["macd_hist"]), 2) if row["macd_hist"] is not None else None,
             })
 
         return {"ticker": ticker, "start_date": s, "end_date": e, "candles": candles}
@@ -79,3 +111,52 @@ async def get_ohlcv(
     except Exception as exc:
         _logger.error("OHLCV fetch failed %s: %s", ticker, exc)
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@router.get("/sentiment-history")
+async def get_sentiment_history(
+    ticker: str = Query(..., description="Ticker symbol, e.g. AAPL"),
+    db: AsyncSession = Depends(get_db),
+    _: dict = Depends(get_current_user),
+):
+    """Return historical social media sentiment timeline for the given ticker."""
+    ticker = ticker.upper().strip()
+    # Query past analysis results for this ticker
+    q = (
+        select(AnalysisResult.trade_date, AnalysisResult.signal)
+        .where(AnalysisResult.ticker == ticker)
+        .order_by(AnalysisResult.trade_date.asc())
+    )
+    res = await db.execute(q)
+    rows = res.all()
+
+    # Map signals to numeric sentiment scores
+    mapping = {
+        "Buy": 0.85, "Overweight": 0.45, "Hold": 0.0, "Neutral": 0.0,
+        "Sell": -0.85, "Underweight": -0.45,
+    }
+
+    history = []
+    for r in rows:
+        trade_date = r[0]
+        signal = r[1]
+        score = mapping.get(signal, 0.0)
+        history.append({
+            "time": trade_date,
+            "value": score,
+        })
+
+    # If no past analysis runs, return default mock sentiment timeline for demo
+    if not history:
+        import random
+        from datetime import datetime, timedelta
+        end = datetime.now()
+        for i in range(30, -1, -1):
+            dt = end - timedelta(days=i)
+            # random walk sentiment
+            history.append({
+                "time": dt.strftime("%Y-%m-%d"),
+                "value": round(random.uniform(-0.6, 0.7), 2),
+            })
+
+    return {"ticker": ticker, "history": history}

@@ -6,7 +6,7 @@ import {
   Settings, ScrollText, TrendingUp, LogOut, Clock,
   FlaskConical, PieChart, Loader2, ChevronRight,
   AlertCircle, AlertTriangle, CheckCircle, Info, X,
-  BarChart2, Bell, Menu,
+  BarChart2, Bell, Menu, GitCompare,
 } from 'lucide-react'
 import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
@@ -26,6 +26,7 @@ const NAV = [
   { to: '/performance', key: 'nav.performance',     icon: BarChart2 },
   { to: '/alerts',     key: 'nav.alerts',          icon: Bell },
   { to: '/settings',   key: 'nav.settings',        icon: Settings },
+  { to: '/ab-testing', key: 'nav.ab_testing',      icon: GitCompare },
   { to: '/logs',       key: 'nav.logs',            icon: ScrollText },
 ]
 

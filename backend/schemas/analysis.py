@@ -43,6 +43,9 @@ class AnalysisResultRead(BaseModel):
     tool_calls: int
     tokens_in: int
     tokens_out: int
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    preset_name: str | None = None
     duration_seconds: float
     triggered_by: str
     created_at: datetime
@@ -64,6 +67,9 @@ class AnalysisListItem(BaseModel):
     triggered_by: str
     created_at: datetime
     chart_annotations: str = ""
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    preset_name: str | None = None
 
     class Config:
         from_attributes = True
