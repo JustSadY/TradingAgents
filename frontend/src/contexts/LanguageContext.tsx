@@ -159,6 +159,22 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
+// ── Auto-merge per-page translation modules ─────────────────────────────────
+// Each file in src/i18n/*.ts default-exports `{ en: {...}, tr: {...} }`. They
+// are merged into the base TRANSLATIONS at module load so every page can own
+// its own translation file without touching this context. Vite resolves the
+// glob at build time; eager import means it's synchronous here.
+const _modules = import.meta.glob('../i18n/*.ts', { eager: true }) as Record<
+  string,
+  { default?: { en?: Record<string, string>; tr?: Record<string, string> } }
+>
+for (const mod of Object.values(_modules)) {
+  const data = mod.default
+  if (!data) continue
+  Object.assign(TRANSLATIONS.en, data.en || {})
+  Object.assign(TRANSLATIONS.tr, data.tr || {})
+}
+
 export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [language, setLanguageState] = useState<Language>(() => {
     return (localStorage.getItem('ta_language') as Language) || 'en'

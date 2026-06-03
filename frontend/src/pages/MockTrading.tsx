@@ -4,6 +4,7 @@ import {
   TrendingUp, TrendingDown, DollarSign, ShoppingCart, BarChart2,
   RefreshCw, RotateCcw, AlertCircle, CheckCircle, Loader2
 } from 'lucide-react'
+import { useTranslation } from '../contexts/LanguageContext'
 
 interface Holding {
   ticker: string
@@ -66,6 +67,7 @@ function StatCard({
 }
 
 export default function MockTrading() {
+  const { t, language } = useTranslation()
   const [portfolio, setPortfolio] = useState<PortfolioData | null>(null)
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -112,7 +114,7 @@ export default function MockTrading() {
       })
       setOrderResult({
         ok: true,
-        msg: `✓ ${data.action} ${data.quantity} ${data.ticker} @ $${data.price.toFixed(2)} — Toplam: $${data.total_value.toFixed(2)}`,
+        msg: `✓ ${data.action} ${data.quantity} ${data.ticker} @ $${data.price.toFixed(2)} — ${t('mocktrading.order_total_label')}: $${data.total_value.toFixed(2)}`,
       })
       setTicker('')
       setQuantity('')
@@ -120,7 +122,7 @@ export default function MockTrading() {
     } catch (err: any) {
       setOrderResult({
         ok: false,
-        msg: err.response?.data?.detail || 'Emir gönderilemedi.',
+        msg: err.response?.data?.detail || t('mocktrading.order_error_default'),
       })
     } finally {
       setSubmitting(false)
@@ -128,7 +130,7 @@ export default function MockTrading() {
   }
 
   const handleReset = async () => {
-    if (!confirm('Portföyü sıfırlamak istediğinizden emin misiniz? Tüm pozisyonlar silinecek.')) return
+    if (!confirm(t('mocktrading.reset_confirm'))) return
     setResetting(true)
     try {
       await axios.post('/api/trading/reset', { initial_capital: 100000 })
@@ -143,7 +145,7 @@ export default function MockTrading() {
   if (loading) {
     return (
       <div className="flex items-center justify-center h-64 text-slate-400">
-        <Loader2 className="animate-spin mr-2" size={20} /> Yükleniyor...
+        <Loader2 className="animate-spin mr-2" size={20} /> {t('mocktrading.loading')}
       </div>
     )
   }
@@ -151,15 +153,15 @@ export default function MockTrading() {
   if (fetchError || !portfolio) {
     return (
       <div className="p-6 space-y-4">
-        <h2 className="text-xl font-bold text-white tracking-tight">Simülasyon Trading</h2>
+        <h2 className="text-xl font-bold text-white tracking-tight">{t('mocktrading.error_title')}</h2>
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col items-center gap-3 text-center">
           <AlertCircle size={32} className="text-red-400" />
-          <p className="text-slate-300">Portföy yüklenemedi. Sunucu bağlantısını kontrol edin.</p>
+          <p className="text-slate-300">{t('mocktrading.error_msg')}</p>
           <button
             onClick={() => fetchPortfolio()}
             className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm transition"
           >
-            Tekrar Dene
+            {t('mocktrading.retry')}
           </button>
         </div>
       </div>
@@ -169,12 +171,13 @@ export default function MockTrading() {
   const p = portfolio
   const pnlPositive = p.total_pnl >= 0
   const alphaPositive = (p.alpha_pct ?? 0) >= 0
+  const locale = language === 'tr' ? 'tr-TR' : 'en-US'
 
   return (
     <div className="p-6 space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-white tracking-tight">Simülasyon Trading</h2>
+        <h2 className="text-xl font-bold text-white tracking-tight">{t('mocktrading.title')}</h2>
         <div className="flex gap-2">
           <button
             onClick={() => fetchPortfolio(true)}
@@ -182,7 +185,7 @@ export default function MockTrading() {
             className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 text-sm transition disabled:opacity-50"
           >
             <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
-            Güncelle
+            {t('mocktrading.refresh')}
           </button>
           <button
             onClick={handleReset}
@@ -190,7 +193,7 @@ export default function MockTrading() {
             className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-900/40 text-red-400 hover:bg-red-900/60 text-sm transition disabled:opacity-50"
           >
             <RotateCcw size={14} className={resetting ? 'animate-spin' : ''} />
-            Sıfırla
+            {t('mocktrading.reset')}
           </button>
         </div>
       </div>
@@ -199,20 +202,20 @@ export default function MockTrading() {
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           icon={<DollarSign size={20} />}
-          label="Toplam Değer"
-          value={`$${p.total_value.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`}
+          label={t('mocktrading.stat_total_value')}
+          value={`$${p.total_value.toLocaleString(locale, { minimumFractionDigits: 2 })}`}
         />
         <StatCard
           icon={pnlPositive ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
-          label="Toplam K/Z"
+          label={t('mocktrading.stat_total_pnl')}
           value={`${pnlPositive ? '+' : ''}$${p.total_pnl.toFixed(2)}`}
           sub={`${pnlPositive ? '+' : ''}${p.total_pnl_pct.toFixed(2)}%`}
           positive={pnlPositive}
         />
         <StatCard
           icon={<DollarSign size={20} />}
-          label="Nakit"
-          value={`$${p.cash_available.toLocaleString('tr-TR', { minimumFractionDigits: 2 })}`}
+          label={t('mocktrading.stat_cash')}
+          value={`$${p.cash_available.toLocaleString(locale, { minimumFractionDigits: 2 })}`}
         />
         <StatCard
           icon={<BarChart2 size={20} />}
@@ -235,7 +238,7 @@ export default function MockTrading() {
         {/* Order Form */}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
           <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <ShoppingCart size={18} className="text-indigo-400" /> Emir Ver
+            <ShoppingCart size={18} className="text-indigo-400" /> {t('mocktrading.order_title')}
           </h3>
           <form onSubmit={handleOrder} className="space-y-3">
             {/* Action tabs */}
@@ -249,7 +252,7 @@ export default function MockTrading() {
                     : 'bg-gray-800 text-gray-400 hover:text-white'
                 }`}
               >
-                Al
+                {t('mocktrading.order_buy')}
               </button>
               <button
                 type="button"
@@ -260,13 +263,13 @@ export default function MockTrading() {
                     : 'bg-gray-800 text-gray-400 hover:text-white'
                 }`}
               >
-                Sat
+                {t('mocktrading.order_sell')}
               </button>
             </div>
 
             <input
               type="text"
-              placeholder="Sembol (örn. AAPL)"
+              placeholder={t('mocktrading.order_symbol_placeholder')}
               value={ticker}
               onChange={e => setTicker(e.target.value.toUpperCase())}
               className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition"
@@ -274,7 +277,7 @@ export default function MockTrading() {
             />
             <input
               type="number"
-              placeholder="Adet"
+              placeholder={t('mocktrading.order_quantity_placeholder')}
               value={quantity}
               onChange={e => setQuantity(e.target.value)}
               min="0.0001"
@@ -291,9 +294,9 @@ export default function MockTrading() {
               }`}
             >
               {submitting ? (
-                <><Loader2 size={14} className="animate-spin" /> İşleniyor...</>
+                <><Loader2 size={14} className="animate-spin" /> {t('mocktrading.order_processing')}</>
               ) : (
-                `${action === 'BUY' ? 'Al' : 'Sat'} Emri Ver`
+                action === 'BUY' ? t('mocktrading.order_submit_buy') : t('mocktrading.order_submit_sell')
               )}
             </button>
 
@@ -316,21 +319,21 @@ export default function MockTrading() {
 
         {/* Holdings */}
         <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl p-5">
-          <h3 className="text-lg font-semibold text-white mb-4">Açık Pozisyonlar</h3>
+          <h3 className="text-lg font-semibold text-white mb-4">{t('mocktrading.positions_title')}</h3>
           {p.holdings.length === 0 ? (
-            <p className="text-slate-500 text-sm">Henüz pozisyon yok.</p>
+            <p className="text-slate-500 text-sm">{t('mocktrading.positions_empty')}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
                   <tr className="text-slate-400 text-left text-xs">
-                    <th className="pb-2">Sembol</th>
-                    <th className="pb-2 text-right">Adet</th>
-                    <th className="pb-2 text-right">Ort. Maliyet</th>
-                    <th className="pb-2 text-right">Güncel Fiyat</th>
-                    <th className="pb-2 text-right">Piyasa Değeri</th>
-                    <th className="pb-2 text-right">K/Z</th>
-                    <th className="pb-2 text-right">K/Z %</th>
+                    <th className="pb-2">{t('mocktrading.col_symbol')}</th>
+                    <th className="pb-2 text-right">{t('mocktrading.col_quantity')}</th>
+                    <th className="pb-2 text-right">{t('mocktrading.col_avg_cost')}</th>
+                    <th className="pb-2 text-right">{t('mocktrading.col_current_price')}</th>
+                    <th className="pb-2 text-right">{t('mocktrading.col_market_value')}</th>
+                    <th className="pb-2 text-right">{t('mocktrading.col_pnl')}</th>
+                    <th className="pb-2 text-right">{t('mocktrading.col_pnl_pct')}</th>
                   </tr>
                 </thead>
                 <tbody>

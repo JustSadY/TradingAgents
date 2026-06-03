@@ -3,6 +3,7 @@ import axios from 'axios'
 import { Save, BookmarkPlus, Trash2, Play, Bell } from 'lucide-react'
 import { useMeta } from '../hooks/useMeta'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
+import { useTranslation } from '../contexts/LanguageContext'
 
 interface Settings {
   trading_mode: string
@@ -79,6 +80,7 @@ function ModelSelect({
   value: string
   onChange: (v: string) => void
 }) {
+  const { t } = useTranslation()
   const isCustom = !options.some(o => o.value === value) || value === 'custom'
   const [showCustom, setShowCustom] = useState(isCustom)
   const [customVal, setCustomVal] = useState(isCustom ? value : '')
@@ -112,13 +114,13 @@ function ModelSelect({
           ))}
           {/* Ensure "Custom" option is present even if catalog already has it */}
           {!options.some(o => o.value === 'custom') && (
-            <option value="custom">Özel model ID</option>
+            <option value="custom">{t('settings.custom_model_id')}</option>
           )}
         </select>
         {showCustom && (
           <input
             className={Input}
-            placeholder="Model ID girin..."
+            placeholder={t('settings.model_id_placeholder')}
             value={customVal}
             onChange={e => {
               setCustomVal(e.target.value)
@@ -132,6 +134,7 @@ function ModelSelect({
 }
 
 export default function Settings() {
+  const { t } = useTranslation()
   const [s, setS] = useState<Settings | null>(null)
   const [catalog, setCatalog] = useState<Catalog>({})
   const [saved, setSaved] = useState(false)
@@ -183,8 +186,8 @@ export default function Settings() {
     setWebhookTesting(true); setWebhookTestResult(null)
     try {
       await axios.post('/api/settings/test-webhook', { url: s.webhook_url })
-      setWebhookTestResult('✓ Başarılı')
-    } catch { setWebhookTestResult('✗ Başarısız') }
+      setWebhookTestResult(t('settings.webhook_success'))
+    } catch { setWebhookTestResult(t('settings.webhook_failed')) }
     finally { setWebhookTesting(false) }
   }
 
@@ -205,11 +208,11 @@ export default function Settings() {
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err: any) {
-      setSaveError(err.response?.data?.detail || 'Kaydetme başarısız.')
+      setSaveError(err.response?.data?.detail || t('settings.save_error_default'))
     }
   }
 
-  if (!s) return <div className="p-8 text-slate-400">Yükleniyor...</div>
+  if (!s) return <div className="p-8 text-slate-400">{t('settings.loading')}</div>
 
   const update = (k: keyof Settings, v: any) => setS(prev => prev ? { ...prev, [k]: v } : prev)
 
@@ -218,8 +221,8 @@ export default function Settings() {
 
   // Backend-driven choice lists (fall back to minimal defaults until meta loads)
   const providerLabels = meta?.provider_labels ?? PROVIDER_LABELS
-  const tradingModes = meta?.trading_modes ?? [{ value: 'simulation', label: 'Simülasyon (Paper Trading)' }, { value: 'live', label: 'Canlı (Live)' }]
-  const brokers = meta?.brokers ?? [{ value: 'simulation', label: 'Simülasyon' }]
+  const tradingModes = meta?.trading_modes ?? [{ value: 'simulation', label: 'Simulation' }, { value: 'live', label: 'Live' }]
+  const brokers = meta?.brokers ?? [{ value: 'simulation', label: 'Simulation' }]
   const dataVendors = meta?.data_vendors ?? [{ value: 'yfinance', label: 'yFinance' }, { value: 'alpha_vantage', label: 'Alpha Vantage' }]
   const languages = meta?.languages ?? [{ value: 'English', label: 'English' }, { value: 'Turkish', label: 'Türkçe' }]
   const analysts = meta?.analysts ?? []
@@ -239,39 +242,39 @@ export default function Settings() {
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-5 max-w-2xl">
-      <h2 className="text-xl font-bold text-white tracking-tight">Ayarlar</h2>
+      <h2 className="text-xl font-bold text-white tracking-tight">{t('settings.title')}</h2>
 
-      <Section title="Çalışma Modu">
-        <Row label="Mod">
+      <Section title={t('settings.section_working_mode')}>
+        <Row label={t('settings.row_mode')}>
           <select className={Input} value={s.trading_mode} onChange={e => update('trading_mode', e.target.value)}>
             {tradingModes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </Row>
-        <Row label="Aktif Broker">
+        <Row label={t('settings.row_active_broker')}>
           <select className={Input} value={s.active_broker} onChange={e => update('active_broker', e.target.value)}>
             {brokers.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </Row>
-        <Row label="Veri Kaynağı">
+        <Row label={t('settings.row_data_source')}>
           <select className={Input} value={s.active_data_vendor} onChange={e => update('active_data_vendor', e.target.value)}>
             {dataVendors.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </Row>
       </Section>
 
-      <Section title="Cron / Otomatik Tarama">
-        <Row label="Aktif">
+      <Section title={t('settings.section_cron')}>
+        <Row label={t('settings.row_active')}>
           <input type="checkbox" checked={s.cron_enabled} onChange={e => update('cron_enabled', e.target.checked)} className="w-5 h-5 accent-indigo-600" />
         </Row>
-        <Row label="Zamanlama (Cron)">
+        <Row label={t('settings.row_schedule')}>
           <input className={Input} value={s.cron_schedule} onChange={e => update('cron_schedule', e.target.value)} placeholder="0 9 * * 1-5" />
         </Row>
-        <Row label="Fiyat Toleransı (%)">
+        <Row label={t('settings.row_price_tolerance')}>
           <input type="number" step="0.1" min="0" max="50" className={Input} value={s.price_tolerance_pct} onChange={e => update('price_tolerance_pct', parseFloat(e.target.value))} />
         </Row>
       </Section>
 
-      <Section title="LLM Ayarları">
+      <Section title={t('settings.llm_settings')}>
         <Row label="Provider">
           <select
             className={Input}
@@ -299,7 +302,7 @@ export default function Settings() {
 
         {currentProviderModels ? (
           <ModelSelect
-            label="Varsayılan Model"
+            label={t('settings.row_default_model')}
             options={[
               ...(currentProviderModels.quick || []),
               ...(currentProviderModels.deep || [])
@@ -310,7 +313,7 @@ export default function Settings() {
             }}
           />
         ) : (
-          <Row label="Varsayılan Model">
+          <Row label={t('settings.row_default_model')}>
             <input
               className={Input}
               value={s.llm_model}
@@ -339,70 +342,70 @@ export default function Settings() {
         {s.llm_provider === 'openai' && (
           <Row label="Reasoning Effort">
             <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>
-              <option value="">Varsayılan</option>
-              <option value="low">Low — Hızlı, ucuz</option>
-              <option value="medium">Medium — Dengeli</option>
-              <option value="high">High — En derin düşünce</option>
+              <option value="">{t('settings.effort_default')}</option>
+              <option value="low">{t('settings.effort_low_fast_cheap')}</option>
+              <option value="medium">{t('settings.effort_medium_balanced')}</option>
+              <option value="high">{t('settings.effort_high_deep')}</option>
             </select>
           </Row>
         )}
         {s.llm_provider === 'anthropic' && (
           <Row label="Thinking Effort">
             <select className={Input} value={s.anthropic_effort || ''} onChange={e => update('anthropic_effort', e.target.value || null)}>
-              <option value="">Varsayılan</option>
-              <option value="low">Low — Hızlı</option>
-              <option value="medium">Medium — Dengeli</option>
-              <option value="high">High — Extended thinking</option>
+              <option value="">{t('settings.effort_default')}</option>
+              <option value="low">{t('settings.effort_low_fast')}</option>
+              <option value="medium">{t('settings.effort_medium_balanced')}</option>
+              <option value="high">{t('settings.effort_high_extended')}</option>
             </select>
           </Row>
         )}
         {s.llm_provider === 'google' && (
           <Row label="Thinking Level">
             <select className={Input} value={s.google_thinking_level || ''} onChange={e => update('google_thinking_level', e.target.value || null)}>
-              <option value="">Varsayılan</option>
-              <option value="minimal">Minimal — En hızlı</option>
+              <option value="">{t('settings.effort_default')}</option>
+              <option value="minimal">{t('settings.effort_minimal_fastest')}</option>
               <option value="low">Low</option>
               <option value="medium">Medium</option>
-              <option value="high">High — En derin</option>
+              <option value="high">{t('settings.effort_high_deepest')}</option>
             </select>
           </Row>
         )}
 
-        <Row label="Çıktı Dili">
+        <Row label={t('settings.row_output_language')}>
           <select className={Input} value={s.output_language} onChange={e => update('output_language', e.target.value)}>
             {languages.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
           </select>
         </Row>
 
-        <Row label="Tartışma Turları">
+        <Row label={t('settings.row_debate_rounds')}>
           <input type="number" min="1" max="10" className={Input} value={s.max_debate_rounds} onChange={e => update('max_debate_rounds', parseInt(e.target.value))} />
         </Row>
-        <Row label="Risk Turları">
+        <Row label={t('settings.row_risk_rounds')}>
           <input type="number" min="1" max="10" className={Input} value={s.max_risk_rounds} onChange={e => update('max_risk_rounds', parseInt(e.target.value))} />
         </Row>
-        <Row label="Paralel Analist Sayısı">
+        <Row label={t('settings.row_parallel_analysts')}>
           <input type="number" min="1" max="16" className={Input} value={s.analyst_concurrency_limit} onChange={e => update('analyst_concurrency_limit', parseInt(e.target.value))} />
         </Row>
       </Section>
 
-      <Section title="Risk Yönetimi">
-        <Row label="Maks. Pozisyon Büyüklüğü (%)">
+      <Section title={t('settings.section_risk')}>
+        <Row label={t('settings.row_max_position_size')}>
           <input type="number" step="1" min="1" max="100" className={Input} value={s.max_position_size_pct} onChange={e => update('max_position_size_pct', parseFloat(e.target.value))} />
         </Row>
-        <Row label="Trade Başına Risk (%)">
+        <Row label={t('settings.row_risk_per_trade')}>
           <input type="number" step="0.1" min="0.1" max="50" className={Input} value={s.max_risk_per_trade_pct} onChange={e => update('max_risk_per_trade_pct', parseFloat(e.target.value))} />
         </Row>
       </Section>
 
-      <Section title="Aktif Analistler">
+      <Section title={t('settings.section_active_analysts')}>
         {analysts.length === 0 ? (
-          <p className="text-gray-600 text-sm">Yükleniyor...</p>
+          <p className="text-gray-600 text-sm">{t('settings.analysts_loading')}</p>
         ) : (
           <div className="flex flex-col gap-3.5 pt-1">
             {analysts.map(a => {
               const isActive = s.selected_analysts.includes(a.key)
               const modelVal = s.analyst_models?.[a.key] || ''
-              
+
               let currentProvider = 'default'
               let currentModel = modelVal
               if (modelVal.includes(':')) {
@@ -449,7 +452,7 @@ export default function Settings() {
                             update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
                           }}
                         >
-                          <option value="default">Varsayılan Sağlayıcı</option>
+                          <option value="default">{t('settings.analyst_default_provider')}</option>
                           {providerList.map(p => (
                             <option key={p} value={p}>{providerLabels[p] || p}</option>
                           ))}
@@ -466,18 +469,18 @@ export default function Settings() {
                           }}
                         >
                           {currentProvider === 'default' && (
-                            <option value="">Varsayılan Model</option>
+                            <option value="">{t('settings.analyst_default_model')}</option>
                           )}
                           {currentProvider !== 'default' && (
-                            <option value="">Model Seçin...</option>
+                            <option value="">{t('settings.analyst_select_model')}</option>
                           )}
                           {providerModels?.quick?.map(o => (
-                            <option key={o.value} value={o.value}>{o.label} (Hızlı)</option>
+                            <option key={o.value} value={o.value}>{o.label} ({t('settings.model_quick_suffix')})</option>
                           ))}
                           {providerModels?.deep?.map(o => (
-                            <option key={o.value} value={o.value}>{o.label} (Derin)</option>
+                            <option key={o.value} value={o.value}>{o.label} ({t('settings.model_deep_suffix')})</option>
                           ))}
-                          <option value="custom">Özel model...</option>
+                          <option value="custom">{t('settings.custom_model_option')}</option>
                         </select>
                       </div>
                     )}
@@ -487,7 +490,7 @@ export default function Settings() {
                     <div className="flex justify-end pt-1.5">
                       <input
                         className={`${Input} text-xs py-1 placeholder:text-gray-600 w-full sm:max-w-xs`}
-                        placeholder="Model ID (örn: gpt-4o)"
+                        placeholder={t('settings.custom_model_placeholder')}
                         value={currentModel === 'custom' ? '' : currentModel}
                         onChange={e => {
                           const val = e.target.value
@@ -505,13 +508,13 @@ export default function Settings() {
         )}
       </Section>
 
-      <Section title="Veri Kaynakları (Kategori Bazlı)">
+      <Section title={t('settings.section_data_sources')}>
         {(
           [
-            ['data_vendor_core_stock', 'Hisse Fiyatı'],
-            ['data_vendor_technicals', 'Teknik Göstergeler'],
-            ['data_vendor_fundamentals', 'Temel Veriler'],
-            ['data_vendor_news', 'Haber'],
+            ['data_vendor_core_stock', t('settings.data_core_stock')],
+            ['data_vendor_technicals', t('settings.data_technicals')],
+            ['data_vendor_fundamentals', t('settings.data_fundamentals')],
+            ['data_vendor_news', t('settings.data_news')],
           ] as [keyof Settings, string][]
         ).map(([field, label]) => (
           <Row key={field} label={label}>
@@ -522,11 +525,11 @@ export default function Settings() {
         ))}
       </Section>
 
-      <Section title="Gelişmiş Ayarlar">
-        <Row label="Checkpoint (Devam Etme)">
+      <Section title={t('settings.section_advanced')}>
+        <Row label={t('settings.row_checkpoint')}>
           <input type="checkbox" checked={s.checkpoint_enabled} onChange={e => update('checkpoint_enabled', e.target.checked)} className="w-5 h-5 accent-indigo-600" />
         </Row>
-        <Row label="Eskiye Dönük Analizler">
+        <Row label={t('settings.row_historical_analyses')}>
           <div className="flex flex-col gap-2">
             <label className="flex items-center gap-2 cursor-pointer">
               <input
@@ -535,11 +538,11 @@ export default function Settings() {
                 onChange={e => update('include_historical_analyses', e.target.checked)}
                 className="w-5 h-5 accent-indigo-600"
               />
-              <span className="text-xs text-gray-500">Önceki raporları AI'ya dahil et</span>
+              <span className="text-xs text-gray-500">{t('settings.historical_analyses_hint')}</span>
             </label>
             {s.include_historical_analyses && (
               <div className="flex items-center gap-2 pt-0.5">
-                <span className="text-xs text-gray-400">Dahil edilecek son analiz sayısı:</span>
+                <span className="text-xs text-gray-400">{t('settings.historical_limit_label')}</span>
                 <input
                   type="number"
                   min="1"
@@ -552,34 +555,34 @@ export default function Settings() {
             )}
           </div>
         </Row>
-        <Row label="Haber Sayısı (Ticker)">
+        <Row label={t('settings.row_news_limit_ticker')}>
           <input type="number" min="1" max="100" className={Input} value={s.news_article_limit} onChange={e => update('news_article_limit', parseInt(e.target.value))} />
         </Row>
-        <Row label="Global Haber Sayısı">
+        <Row label={t('settings.row_global_news_limit')}>
           <input type="number" min="1" max="50" className={Input} value={s.global_news_article_limit} onChange={e => update('global_news_article_limit', parseInt(e.target.value))} />
         </Row>
-        <Row label="Global Haber Geriye (Gün)">
+        <Row label={t('settings.row_global_news_lookback')}>
           <input type="number" min="1" max="30" className={Input} value={s.global_news_lookback_days} onChange={e => update('global_news_lookback_days', parseInt(e.target.value))} />
         </Row>
-        <Row label="Max Recursion Limiti">
+        <Row label={t('settings.row_max_recursion')}>
           <input type="number" min="100" max="5000" className={Input} value={s.max_recur_limit} onChange={e => update('max_recur_limit', parseInt(e.target.value))} />
         </Row>
-        <Row label="Benchmark Sembolü">
-          <input className={Input} value={s.benchmark_ticker || ''} onChange={e => update('benchmark_ticker', e.target.value || null)} placeholder="Boş bırakın = otomatik (SPY)" />
+        <Row label={t('settings.row_benchmark_symbol')}>
+          <input className={Input} value={s.benchmark_ticker || ''} onChange={e => update('benchmark_ticker', e.target.value || null)} placeholder={t('settings.benchmark_placeholder')} />
         </Row>
         {s.llm_provider === 'azure' && (
-          <Row label="Azure Deployment Adı">
+          <Row label={t('settings.row_azure_deployment')}>
             <input className={Input} value={s.azure_deployment || ''} onChange={e => update('azure_deployment', e.target.value || null)} placeholder="gpt-4o" />
           </Row>
         )}
       </Section>
 
       {/* Preset Management (MOD2) */}
-      <Section title="Ayar Şablonları">
+      <Section title={t('settings.section_presets')}>
         <div className="flex gap-2">
           <input
             className={Input}
-            placeholder="Şablon adı..."
+            placeholder={t('settings.preset_name_placeholder')}
             value={presetName}
             onChange={e => setPresetName(e.target.value)}
             onKeyDown={e => e.key === 'Enter' && savePreset()}
@@ -589,18 +592,18 @@ export default function Settings() {
             disabled={presetSaving || !presetName.trim()}
             className="flex items-center gap-1 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm px-3 py-1.5 rounded-xl transition whitespace-nowrap"
           >
-            <BookmarkPlus size={14} /> Kaydet
+            <BookmarkPlus size={14} /> {t('settings.preset_save_button')}
           </button>
         </div>
         {presets.length === 0 ? (
-          <p className="text-gray-600 text-xs">Henüz şablon yok.</p>
+          <p className="text-gray-600 text-xs">{t('settings.preset_no_presets')}</p>
         ) : (
           <div className="space-y-1.5 pt-1">
             {presets.map(p => (
               <div key={p.id} className="flex items-center justify-between bg-gray-800 rounded-xl px-3 py-2">
                 <span className="text-sm text-gray-300">{p.name}</span>
                 <div className="flex items-center gap-2">
-                  <button onClick={() => applyPreset(p.id)} className="text-violet-400 hover:text-violet-300 transition-colors" title="Uygula">
+                  <button onClick={() => applyPreset(p.id)} className="text-violet-400 hover:text-violet-300 transition-colors" title={t('settings.preset_apply_title')}>
                     <Play size={13} />
                   </button>
                   <button onClick={() => deletePreset(p.id)} className="text-gray-600 hover:text-red-400 transition-colors">
@@ -614,8 +617,8 @@ export default function Settings() {
       </Section>
 
       {/* Notifications (MOD4) */}
-      <Section title="Bildirimler">
-        <Row label="Webhook URL">
+      <Section title={t('settings.section_notifications')}>
+        <Row label={t('settings.row_webhook_url')}>
           <input
             className={Input}
             placeholder="https://hooks.slack.com/..."
@@ -623,7 +626,7 @@ export default function Settings() {
             onChange={e => update('webhook_url', e.target.value || null)}
           />
         </Row>
-        <Row label="Webhook Aktif">
+        <Row label={t('settings.row_webhook_active')}>
           <div className="flex items-center gap-3">
             <input
               type="checkbox"
@@ -637,7 +640,7 @@ export default function Settings() {
                 disabled={webhookTesting}
                 className="text-xs bg-gray-700 hover:bg-gray-600 text-gray-300 px-2 py-1 rounded-lg transition"
               >
-                {webhookTesting ? '...' : 'Test Et'}
+                {webhookTesting ? '...' : t('settings.webhook_test_button')}
               </button>
             )}
             {webhookTestResult && (
@@ -647,13 +650,13 @@ export default function Settings() {
             )}
           </div>
         </Row>
-        <Row label="Bildirim Olayları">
+        <Row label={t('settings.row_notification_events')}>
           <div className="flex flex-col gap-1.5">
-            {[
-              ['analysis_complete', 'Analiz tamamlandı'],
-              ['trade_executed', 'İşlem gerçekleşti'],
-              ['alert_triggered', 'Fiyat alarmı tetiklendi'],
-            ].map(([key, label]) => (
+            {([
+              ['analysis_complete', t('settings.event_analysis_complete')],
+              ['trade_executed', t('settings.event_trade_executed')],
+              ['alert_triggered', t('settings.event_alert_triggered')],
+            ] as [string, string][]).map(([key, label]) => (
               <label key={key} className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer">
                 <input
                   type="checkbox"
@@ -670,7 +673,7 @@ export default function Settings() {
             ))}
           </div>
         </Row>
-        <Row label="Tarayıcı Bildirimleri">
+        <Row label={t('settings.row_browser_notifications')}>
           <div className="flex items-center gap-3">
             <button
               onClick={toggleBrowserNotify}
@@ -679,14 +682,14 @@ export default function Settings() {
               <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${browserNotify ? 'translate-x-6' : 'translate-x-1'}`} />
             </button>
             <Bell size={14} className={browserNotify ? 'text-violet-400' : 'text-gray-600'} />
-            <span className="text-xs text-gray-500">{browserNotify ? 'Açık' : 'Kapalı'}</span>
+            <span className="text-xs text-gray-500">{browserNotify ? t('settings.browser_notify_on') : t('settings.browser_notify_off')}</span>
           </div>
         </Row>
       </Section>
 
       <div className="flex items-center gap-3">
         <button onClick={save} className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl px-5 py-2.5 text-sm font-semibold shadow-lg shadow-violet-500/20 transition-all">
-          <Save size={15} /> {saved ? 'Kaydedildi ✓' : 'Kaydet'}
+          <Save size={15} /> {saved ? t('settings.save_button_saved') : t('settings.save_button')}
         </button>
         {saveError && <span className="text-red-400 text-sm">{saveError}</span>}
       </div>

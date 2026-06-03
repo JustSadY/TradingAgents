@@ -10,6 +10,7 @@ import {
 } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 import { Search, TrendingUp, TrendingDown, Minus, RefreshCw, ExternalLink } from 'lucide-react'
+import { useTranslation } from '../contexts/LanguageContext'
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -83,6 +84,7 @@ const PERIODS = [
 export default function ChartPage() {
   const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const { t } = useTranslation()
 
   const [tickerInput, setTickerInput] = useState(searchParams.get('ticker') ?? '')
   const [activeTicker, setActiveTicker] = useState(searchParams.get('ticker') ?? '')
@@ -99,6 +101,8 @@ export default function ChartPage() {
   const volSeriesRef = useRef<ISeriesApi<'Histogram', any> | null>(null)
   const markersRef = useRef<ReturnType<typeof createSeriesMarkers> | null>(null)
   const priceLineRefs = useRef<any[]>([])
+  const tRef = useRef(t)
+  useEffect(() => { tRef.current = t })
 
   // ── Data fetching ────────────────────────────────────────────────────────────
 
@@ -115,18 +119,18 @@ export default function ChartPage() {
       setCandles(ohlcvRes.data.candles)
       setAnalyses(histRes.data)
     } catch (e: any) {
-      setError(e.response?.data?.detail ?? 'Veri alınamadı.')
+      setError(e.response?.data?.detail ?? tRef.current('chart.error_load'))
     } finally {
       setLoading(false)
     }
   }, [])
 
   const handleSearch = () => {
-    const t = tickerInput.trim().toUpperCase()
-    if (!t) return
-    setActiveTicker(t)
-    setSearchParams({ ticker: t, period })
-    load(t, period)
+    const tk = tickerInput.trim().toUpperCase()
+    if (!tk) return
+    setActiveTicker(tk)
+    setSearchParams({ ticker: tk, period })
+    load(tk, period)
   }
 
   const handlePeriod = (p: string) => {
@@ -160,7 +164,6 @@ export default function ChartPage() {
       height: 420,
     })
 
-    // Candlestick series (top 70%)
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#10b981',
       downColor: '#ef4444',
@@ -171,7 +174,6 @@ export default function ChartPage() {
       priceScaleId: 'right',
     })
 
-    // Volume histogram (bottom 30%)
     const volSeries = chart.addSeries(HistogramSeries, {
       color: '#374151',
       priceFormat: { type: 'volume' },
@@ -234,13 +236,11 @@ export default function ChartPage() {
       color: c.close >= c.open ? '#10b98133' : '#ef444433',
     })))
 
-    // Clear old price lines
     priceLineRefs.current.forEach(pl => {
       try { candleSeriesRef.current?.removePriceLine(pl) } catch { /* ignore */ }
     })
     priceLineRefs.current = []
 
-    // Add AI price level lines from ALL analyses in current range
     const tradeDatesInRange = new Set(candles.map(c => c.time))
 
     analyses.forEach(a => {
@@ -269,7 +269,7 @@ export default function ChartPage() {
         try {
           const pl = candleSeriesRef.current!.createPriceLine({
             price: ann.target_price, color: '#10b98199', lineWidth: 1, lineStyle: 3,
-            axisLabelVisible: true, title: 'Hedef',
+            axisLabelVisible: true, title: tRef.current('chart.price_line_target'),
           })
           priceLineRefs.current.push(pl)
         } catch { /* ignore */ }
@@ -278,14 +278,13 @@ export default function ChartPage() {
         try {
           const pl = candleSeriesRef.current!.createPriceLine({
             price: ann.stop_loss, color: '#ef444499', lineWidth: 1, lineStyle: 3,
-            axisLabelVisible: true, title: 'Stop',
+            axisLabelVisible: true, title: tRef.current('chart.price_line_stop'),
           })
           priceLineRefs.current.push(pl)
         } catch { /* ignore */ }
       }
     })
 
-    // Add signal markers (v5: createSeriesMarkers plugin)
     if (markersRef.current) {
       try { markersRef.current.setMarkers([]) } catch { /* ignore */ }
     }
@@ -320,7 +319,7 @@ export default function ChartPage() {
 
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-7xl">
-      <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">Trading Grafik</h2>
+      <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">{t('chart.title')}</h2>
 
       {/* Search bar */}
       <div className="flex items-center gap-3">
@@ -338,10 +337,9 @@ export default function ChartPage() {
           onClick={handleSearch}
           className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition"
         >
-          Göster
+          {t('chart.show_button')}
         </button>
 
-        {/* Period selector */}
         {activeTicker && (
           <div className="flex gap-1 ml-2">
             {PERIODS.map(p => (
@@ -388,8 +386,8 @@ export default function ChartPage() {
             {!activeTicker && (
               <div className="flex flex-col items-center justify-center h-[420px] text-gray-600">
                 <TrendingUp size={40} className="mb-3 opacity-30" />
-                <p className="text-sm">Bir hisse sembolü girin ve "Göster" tuşuna basın</p>
-                <p className="text-xs mt-1 opacity-60">AI sinyalleri grafik üzerinde işaretlenir</p>
+                <p className="text-sm">{t('chart.empty_hint')}</p>
+                <p className="text-xs mt-1 opacity-60">{t('chart.empty_hint_sub')}</p>
               </div>
             )}
           </div>
@@ -397,12 +395,12 @@ export default function ChartPage() {
           {/* Legend */}
           {activeTicker && (
             <div className="flex flex-wrap gap-4 mt-3 px-1 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5 bg-emerald-500 opacity-60" style={{borderTop: '2px dashed #10b981'}} /> Destek</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5" style={{borderTop: '2px dashed #3b82f6'}} /> Direnç</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5" style={{borderTop: '1px solid #10b981'}} /> Hedef</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5" style={{borderTop: '1px solid #ef4444'}} /> Stop-Loss</span>
-              <span className="flex items-center gap-1 text-emerald-400">▲ Al sinyali</span>
-              <span className="flex items-center gap-1 text-red-400">▼ Sat sinyali</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5 bg-emerald-500 opacity-60" style={{borderTop: '2px dashed #10b981'}} /> {t('chart.legend_support')}</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5" style={{borderTop: '2px dashed #3b82f6'}} /> {t('chart.legend_resistance')}</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5" style={{borderTop: '1px solid #10b981'}} /> {t('chart.legend_target')}</span>
+              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5" style={{borderTop: '1px solid #ef4444'}} /> {t('chart.legend_stop_loss')}</span>
+              <span className="flex items-center gap-1 text-emerald-400">{t('chart.legend_buy')}</span>
+              <span className="flex items-center gap-1 text-red-400">{t('chart.legend_sell')}</span>
             </div>
           )}
         </div>
@@ -414,12 +412,12 @@ export default function ChartPage() {
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-800">
                 <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider">
-                  AI Analizleri ({analysesInRange.length})
+                  {t('chart.ai_analyses')} ({analysesInRange.length})
                 </h3>
               </div>
               <div className="max-h-80 overflow-y-auto">
                 {analysesInRange.length === 0 && !loading && (
-                  <p className="text-gray-600 text-xs p-4">Bu aralıkta analiz yok</p>
+                  <p className="text-gray-600 text-xs p-4">{t('chart.no_analyses_range')}</p>
                 )}
                 {analysesInRange
                   .sort((a, b) => b.trade_date.localeCompare(a.trade_date))
@@ -466,6 +464,7 @@ function AnalysisDetail({
   onReanalyze: () => void
   onViewFull: () => void
 }) {
+  const { t } = useTranslation()
   const ann = parseAnnotations(analysis.chart_annotations)
   const hasAnnotations = (
     (ann.support_levels?.length ?? 0) > 0 ||
@@ -483,28 +482,28 @@ function AnalysisDetail({
 
       {hasAnnotations && (
         <div className="space-y-1.5">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">AI Fiyat Seviyeleri</p>
+          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('chart.ai_price_levels')}</p>
           {(ann.support_levels ?? []).map((p, i) => (
             <div key={i} className="flex justify-between text-xs">
-              <span className="text-red-400">Destek {i + 1}</span>
+              <span className="text-red-400">{t('chart.support_label')} {i + 1}</span>
               <span className="text-white font-mono">${p.toFixed(2)}</span>
             </div>
           ))}
           {(ann.resistance_levels ?? []).map((p, i) => (
             <div key={i} className="flex justify-between text-xs">
-              <span className="text-blue-400">Direnç {i + 1}</span>
+              <span className="text-blue-400">{t('chart.resistance_label')} {i + 1}</span>
               <span className="text-white font-mono">${p.toFixed(2)}</span>
             </div>
           ))}
           {ann.target_price && (
             <div className="flex justify-between text-xs">
-              <span className="text-emerald-400">Hedef</span>
+              <span className="text-emerald-400">{t('chart.target_label')}</span>
               <span className="text-white font-mono">${ann.target_price.toFixed(2)}</span>
             </div>
           )}
           {ann.stop_loss && (
             <div className="flex justify-between text-xs">
-              <span className="text-red-400">Stop-Loss</span>
+              <span className="text-red-400">{t('chart.stop_loss_label')}</span>
               <span className="text-white font-mono">${ann.stop_loss.toFixed(2)}</span>
             </div>
           )}
@@ -522,13 +521,13 @@ function AnalysisDetail({
           onClick={onViewFull}
           className="flex items-center justify-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 border border-violet-800 hover:border-violet-600 rounded-lg py-1.5 transition"
         >
-          <ExternalLink size={11} /> Tam Raporu Gör
+          <ExternalLink size={11} /> {t('chart.view_full_report')}
         </button>
         <button
           onClick={onReanalyze}
           className="flex items-center justify-center gap-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg py-1.5 transition"
         >
-          <RefreshCw size={11} /> Bu Tarihe Yeniden Analiz
+          <RefreshCw size={11} /> {t('chart.reanalyze')}
         </button>
       </div>
     </div>
