@@ -207,16 +207,16 @@ else
     systemctl enable --now postgresql >/dev/null 2>&1 || systemctl enable --now postgresql || die "postgresql başlatılamadı."
 
     # Soketin hazır olmasını bekle (root olduğumuz için runuser yeterli; sudo gerekmez)
-    for _ in $(seq 1 10); do runuser -u postgres -- psql -tAc 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
+    for _ in $(seq 1 10); do runuser -u postgres -- psql -d template1 -tAc 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
 
-    psql_admin() { runuser -u postgres -- psql -v ON_ERROR_STOP=1 "$@"; }
+    psql_admin() { runuser -u postgres -- psql -d template1 -v ON_ERROR_STOP=1 "$@"; }
     if psql_admin -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1; then
         psql_admin -c "ALTER ROLE \"$DB_USER\" LOGIN PASSWORD '$DB_PASS';"
     else
         psql_admin -c "CREATE ROLE \"$DB_USER\" LOGIN PASSWORD '$DB_PASS';"
     fi
     if ! psql_admin -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
-        runuser -u postgres -- createdb -O "$DB_USER" "$DB_NAME"
+        runuser -u postgres -- createdb -d template1 -O "$DB_USER" "$DB_NAME"
     fi
     ok "PostgreSQL hazır (db=$DB_NAME, user=$DB_USER)."
 fi
