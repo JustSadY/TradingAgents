@@ -551,6 +551,7 @@ async def run_portfolio_analysis(
         asset_type=asset_type,
         super_portfolio_report=super_report,
         triggered_by=triggered_by,
+        user_id=user.id if user is not None else None,
     )
     multi_row.tickers = tickers
     multi_row.analysis_ids = analysis_ids

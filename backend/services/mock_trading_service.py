@@ -37,13 +37,16 @@ async def _get_price(ticker: str) -> Optional[float]:
     return await asyncio.to_thread(_fetch)
 
 
-async def get_or_create_sim_portfolio(db: AsyncSession, initial_capital: float = 100_000.0) -> Portfolio:
+async def get_or_create_sim_portfolio(db: AsyncSession, initial_capital: float = 100_000.0, user=None) -> Portfolio:
     """Return the simulation portfolio, creating one if it doesn't exist."""
-    result = await db.execute(
-        select(Portfolio)
-        .where(Portfolio.mode == "simulation")
-        .options(selectinload(Portfolio.holdings))
-    )
+    user_id = getattr(user, "id", None) if user is not None else None
+    q = select(Portfolio).where(Portfolio.mode == "simulation")
+    if user_id is not None:
+        q = q.where(Portfolio.user_id == user_id)
+    else:
+        q = q.where(Portfolio.user_id.is_(None))
+
+    result = await db.execute(q.options(selectinload(Portfolio.holdings)))
     portfolio = result.scalar_one_or_none()
     if portfolio is None:
         portfolio = Portfolio(
@@ -53,6 +56,7 @@ async def get_or_create_sim_portfolio(db: AsyncSession, initial_capital: float =
             current_balance=initial_capital,
             cash_available=initial_capital,
             status="active",
+            user_id=user_id,
         )
         db.add(portfolio)
         await db.flush()
@@ -60,16 +64,19 @@ async def get_or_create_sim_portfolio(db: AsyncSession, initial_capital: float =
     return portfolio
 
 
-async def get_portfolio_with_live_prices(db: AsyncSession) -> dict:
+async def get_portfolio_with_live_prices(db: AsyncSession, user=None) -> dict:
     """Return simulation portfolio enriched with live prices and P&L."""
-    result = await db.execute(
-        select(Portfolio)
-        .where(Portfolio.mode == "simulation")
-        .options(selectinload(Portfolio.holdings))
-    )
+    user_id = getattr(user, "id", None) if user is not None else None
+    q = select(Portfolio).where(Portfolio.mode == "simulation")
+    if user_id is not None:
+        q = q.where(Portfolio.user_id == user_id)
+    else:
+        q = q.where(Portfolio.user_id.is_(None))
+
+    result = await db.execute(q.options(selectinload(Portfolio.holdings)))
     portfolio = result.scalar_one_or_none()
     if portfolio is None:
-        portfolio = await get_or_create_sim_portfolio(db)
+        portfolio = await get_or_create_sim_portfolio(db, user=user)
 
     # Fetch live prices for all holdings concurrently
     tickers = [h.ticker for h in portfolio.holdings]
@@ -142,6 +149,7 @@ async def execute_order(
     action: str,
     quantity: float,
     analysis_id: Optional[int] = None,
+    user=None,
 ) -> dict:
     """Execute a paper BUY or SELL order.
 
@@ -157,7 +165,7 @@ async def execute_order(
     if price is None:
         raise ValueError(f"Could not fetch price for {ticker}")
 
-    portfolio = await get_or_create_sim_portfolio(db)
+    portfolio = await get_or_create_sim_portfolio(db, user=user)
     total_cost = price * quantity
     commission = round(total_cost * 0.001, 4)  # 0.1% commission
 
@@ -242,13 +250,16 @@ async def execute_order(
     }
 
 
-async def reset_portfolio(db: AsyncSession, initial_capital: float = 100_000.0) -> dict:
+async def reset_portfolio(db: AsyncSession, initial_capital: float = 100_000.0, user=None) -> dict:
     """Reset simulation portfolio to initial state."""
-    result = await db.execute(
-        select(Portfolio)
-        .where(Portfolio.mode == "simulation")
-        .options(selectinload(Portfolio.holdings))
-    )
+    user_id = getattr(user, "id", None) if user is not None else None
+    q = select(Portfolio).where(Portfolio.mode == "simulation")
+    if user_id is not None:
+        q = q.where(Portfolio.user_id == user_id)
+    else:
+        q = q.where(Portfolio.user_id.is_(None))
+
+    result = await db.execute(q.options(selectinload(Portfolio.holdings)))
     portfolio = result.scalar_one_or_none()
 
     if portfolio:
@@ -266,6 +277,7 @@ async def reset_portfolio(db: AsyncSession, initial_capital: float = 100_000.0) 
             current_balance=initial_capital,
             cash_available=initial_capital,
             status="active",
+            user_id=user_id,
         )
         db.add(portfolio)
 
@@ -273,14 +285,19 @@ async def reset_portfolio(db: AsyncSession, initial_capital: float = 100_000.0) 
     return {"message": "Portföy sıfırlandı", "initial_capital": initial_capital}
 
 
-async def get_performance(db: AsyncSession) -> dict:
+async def get_performance(db: AsyncSession, user=None) -> dict:
     """Calculate performance metrics vs SPY benchmark."""
-    portfolio_data = await get_portfolio_with_live_prices(db)
+    portfolio_data = await get_portfolio_with_live_prices(db, user=user)
 
     # Fetch SPY return over same period as portfolio
-    result = await db.execute(
-        select(Portfolio).where(Portfolio.mode == "simulation")
-    )
+    user_id = getattr(user, "id", None) if user is not None else None
+    q = select(Portfolio).where(Portfolio.mode == "simulation")
+    if user_id is not None:
+        q = q.where(Portfolio.user_id == user_id)
+    else:
+        q = q.where(Portfolio.user_id.is_(None))
+
+    result = await db.execute(q)
     portfolio = result.scalar_one_or_none()
     if not portfolio:
         return portfolio_data

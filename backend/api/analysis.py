@@ -67,11 +67,13 @@ async def run_analysis(
                 if row.signal in ("Buy", "Overweight", "Sell", "Underweight"):
                     from backend.services.execution.factory import get_trader
                     from backend.services.execution.base import OrderRequest
+                    from backend.services.mock_trading_service import get_or_create_sim_portfolio
                     try:
+                        portfolio = await get_or_create_sim_portfolio(bg_db, user=current_user)
                         trader = get_trader(
                             mode=settings.trading_mode,
                             broker=settings.active_broker,
-                            portfolio_id=1,
+                            portfolio_id=portfolio.id,
                             initial_capital=100_000.0,
                             db=None,
                         )
@@ -395,9 +397,11 @@ async def list_portfolio_analyses(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     q = select(MultiTickerAnalysis).order_by(desc(MultiTickerAnalysis.created_at)).limit(limit).offset(offset)
+    if not current_user.is_admin:
+        q = q.where(MultiTickerAnalysis.user_id == current_user.id)
     result = await db.execute(q)
     rows = result.scalars().all()
     return [
@@ -417,9 +421,12 @@ async def list_portfolio_analyses(
 async def get_portfolio_analysis(
     portfolio_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(MultiTickerAnalysis).where(MultiTickerAnalysis.id == portfolio_id))
+    q = select(MultiTickerAnalysis).where(MultiTickerAnalysis.id == portfolio_id)
+    if not current_user.is_admin:
+        q = q.where(MultiTickerAnalysis.user_id == current_user.id)
+    result = await db.execute(q)
     row = result.scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="Portfolio analysis not found")

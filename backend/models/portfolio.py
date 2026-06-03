@@ -24,6 +24,8 @@ class Portfolio(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
     holdings: Mapped[list["Holding"]] = relationship("Holding", back_populates="portfolio")
     orders: Mapped[list["Order"]] = relationship("Order", back_populates="portfolio")
 

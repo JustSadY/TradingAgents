@@ -48,6 +48,7 @@ class AnalysisResult(Base):
     llm_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
     llm_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     preset_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     triggered_by: Mapped[str] = mapped_column(String(20), default="manual")  # manual | cron
 

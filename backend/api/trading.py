@@ -42,7 +42,7 @@ async def get_portfolio(
 ):
     """Simulation portfolio with live prices and P&L."""
     try:
-        return await svc.get_portfolio_with_live_prices(db)
+        return await svc.get_portfolio_with_live_prices(db, user=_)
     except Exception as exc:
         _logger.error("get_portfolio failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -62,6 +62,7 @@ async def create_order(
             action=req.action,
             quantity=req.quantity,
             analysis_id=req.analysis_id,
+            user=_,
         )
         await db.commit()
         return result
@@ -79,7 +80,7 @@ async def get_performance(
 ):
     """Portfolio performance metrics vs SPY benchmark."""
     try:
-        return await svc.get_performance(db)
+        return await svc.get_performance(db, user=_)
     except Exception as exc:
         _logger.error("get_performance failed: %s", exc, exc_info=True)
         raise HTTPException(status_code=500, detail="Internal server error")
@@ -93,7 +94,7 @@ async def reset_portfolio(
 ):
     """Reset simulation portfolio to initial capital."""
     try:
-        result = await svc.reset_portfolio(db, initial_capital=req.initial_capital)
+        result = await svc.reset_portfolio(db, initial_capital=req.initial_capital, user=_)
         await db.commit()
         return result
     except Exception as exc:

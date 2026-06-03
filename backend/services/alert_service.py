@@ -45,7 +45,7 @@ async def check_price_alerts() -> None:
 
             if alert.auto_analyze:
                 today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                asyncio.create_task(_auto_analyze(alert.ticker, today, settings, db))
+                asyncio.create_task(_auto_analyze(alert.ticker, today, alert.user_id))
 
         await db.commit()
 
@@ -79,15 +79,22 @@ def _fetch_prices(tickers: list[str]) -> dict[str, float]:
     return prices
 
 
-async def _auto_analyze(ticker: str, trade_date: str, settings, db) -> None:
+async def _auto_analyze(ticker: str, trade_date: str, user_id: int) -> None:
     try:
         from backend.core.database import AsyncSessionLocal
         from backend.services.analysis_service import run_analysis
+        from backend.api.settings import _get_or_create_settings
+        from backend.models.user import User
         import uuid
         async with AsyncSessionLocal() as new_db:
+            result = await new_db.execute(select(User).where(User.id == user_id))
+            user = result.scalar_one_or_none()
+            if not user:
+                return
+            settings = await _get_or_create_settings(new_db, user)
             task_id = str(uuid.uuid4())
             await run_analysis(ticker, trade_date, "stock", settings, new_db,
-                               triggered_by="alert", task_id=task_id)
+                               triggered_by="alert", task_id=task_id, user=user)
             await new_db.commit()
     except Exception as exc:
         _logger.error("Auto-analyze from alert failed %s: %s", ticker, exc)
