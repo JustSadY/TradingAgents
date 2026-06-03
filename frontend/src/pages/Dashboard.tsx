@@ -55,16 +55,17 @@ export default function Dashboard() {
 
   useEffect(() => {
     Promise.all([
-      axios.get('/api/portfolio').then(r => r.data),
-      axios.get('/api/analysis/history?limit=8').then(r => r.data),
+      axios.get('/api/portfolio').then(r => r.data).catch(() => []),
+      axios.get('/api/analysis/history?limit=8').then(r => r.data).catch(() => []),
       axios.get('/api/analysis/performance').then(r => r.data).catch(() => null),
-      axios.get('/api/portfolio/orders?limit=100').then(r => r.data).catch(() => []),
-    ]).then(([p, a, pf, ord]) => { 
-      setPortfolios(p)
-      setRecentAnalysis(a)
+      axios.get('/api/portfolio/orders?limit=100').then(r => Array.isArray(r.data) ? r.data : []).catch(() => []),
+    ]).then(([p, a, pf, ord]) => {
+      setPortfolios(Array.isArray(p) ? p : [])
+      setRecentAnalysis(Array.isArray(a) ? a : [])
       if (pf) setPerf(pf)
-      setOrders(ord)
+      setOrders(Array.isArray(ord) ? ord : [])
     })
+      .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
