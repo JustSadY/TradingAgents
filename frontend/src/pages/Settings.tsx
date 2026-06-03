@@ -156,7 +156,7 @@ function ModelSelect({
   )
 }
 
-export default function Settings() {
+export default function Settings({ userId }: { userId?: number } = {}) {
   const { t } = useTranslation()
   const { isAdmin } = useAuth()
   const [s, setS] = useState<Settings | null>(null)
@@ -174,27 +174,29 @@ export default function Settings() {
   const meta = useMeta()
 
   useEffect(() => {
+    const settingsUrl = userId ? `/api/settings/users/${userId}` : '/api/settings'
+    const permUrl = userId ? `/api/users/${userId}/setting-permissions` : '/api/users/me/setting-permissions'
     Promise.all([
-      axios.get('/api/settings').then(r => r.data),
+      axios.get(settingsUrl).then(r => r.data),
       axios.get('/api/settings/llm-catalog').then(r => r.data),
       axios.get('/api/presets').then(r => r.data).catch(() => []),
-      axios.get('/api/users/me/setting-permissions').then(r => r.data.allowed_settings).catch(() => []),
+      axios.get(permUrl).then(r => r.data.allowed_settings || r.data.permissions || []).catch(() => []),
     ]).then(([settings, cat, presetList, allowedSet]) => {
       setS(settings)
       setCatalog(cat)
       setPresets(presetList)
-      setAllowedSettings(allowedSet)
+      setAllowedSettings(userId ? ['general', 'llm', 'risk', 'webhooks', 'cron'] : allowedSet)
       
       // Auto-select first permitted tab
-      const defaultTabs = ['general', 'llm', 'risk', 'webhooks', 'presets', 'cron']
-      const activeDefault = defaultTabs.find(tab => allowedSet.includes(tab))
+      const defaultTabs = ['general', 'llm', 'risk', 'webhooks', 'cron']
+      const activeDefault = defaultTabs.find(tab => userId || allowedSet.includes(tab))
       if (activeDefault) {
         setActiveTab(activeDefault as any)
       } else if (isAdmin) {
         setActiveTab('advanced')
       }
     })
-  }, [isAdmin])
+  }, [isAdmin, userId])
 
   const loadPresets = () => axios.get('/api/presets').then(r => setPresets(r.data))
 
@@ -241,7 +243,8 @@ export default function Settings() {
   const save = async () => {
     setSaveError(null)
     try {
-      await axios.put('/api/settings', s)
+      const url = userId ? `/api/settings/users/${userId}` : '/api/settings'
+      await axios.put(url, s)
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err: any) {
@@ -282,7 +285,7 @@ export default function Settings() {
     { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety', icon: <ShieldAlert size={16} /> },
     { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={16} /> },
     { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={16} /> },
-    { key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={16} /> },
+    ...(userId ? [] : [{ key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={16} /> }]),
     ...(isAdmin ? [{ key: 'advanced', label: t('settings.section_advanced') || 'Advanced', icon: <Sliders size={16} /> }] : []),
   ].filter(tab => isAdmin || tab.key === 'advanced' || allowedSettings.includes(tab.key))
 
@@ -654,18 +657,20 @@ export default function Settings() {
                   ))}
                 </div>
               </Row>
-              <Row label={t('settings.row_browser_notifications')}>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={toggleBrowserNotify}
-                    className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${browserNotify ? 'bg-violet-600' : 'bg-gray-700'}`}
-                  >
-                    <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${browserNotify ? 'translate-x-6' : 'translate-x-1'}`} />
-                  </button>
-                  <Bell size={14} className={browserNotify ? 'text-violet-400' : 'text-gray-600'} />
-                  <span className="text-xs text-gray-500">{browserNotify ? t('settings.browser_notify_on') : t('settings.browser_notify_off')}</span>
-                </div>
-              </Row>
+              {!userId && (
+                <Row label={t('settings.row_browser_notifications')}>
+                  <div className="flex items-center gap-3">
+                    <button
+                      onClick={toggleBrowserNotify}
+                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${browserNotify ? 'bg-violet-600' : 'bg-gray-700'}`}
+                    >
+                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${browserNotify ? 'translate-x-6' : 'translate-x-1'}`} />
+                    </button>
+                    <Bell size={14} className={browserNotify ? 'text-violet-400' : 'text-gray-600'} />
+                    <span className="text-xs text-gray-500">{browserNotify ? t('settings.browser_notify_on') : t('settings.browser_notify_off')}</span>
+                  </div>
+                </Row>
+              )}
             </Section>
           )}
 

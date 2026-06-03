@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
-import { Save, Trash2, Plus, UserCog, ShieldCheck, Globe, CheckCircle2, Key } from 'lucide-react'
+import { Save, Trash2, Plus, UserCog, ShieldCheck, Globe, CheckCircle2, Key, Sliders } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { useAuth } from '../hooks/useAuth'
+import Settings from './Settings'
 
 interface UserRecord {
   id: number
@@ -51,7 +52,7 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-type Tab = 'users' | 'permissions' | 'system' | 'api-keys'
+type Tab = 'users' | 'permissions' | 'system' | 'api-keys' | 'user-settings'
 
 export default function Admin() {
   const { t } = useTranslation()
@@ -195,6 +196,7 @@ export default function Admin() {
   const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'users',       label: t('admin.tab_users') || 'User Management',       icon: <UserCog size={15} /> },
     { key: 'permissions', label: t('admin.tab_permissions') || 'Access Control',  icon: <ShieldCheck size={15} /> },
+    { key: 'user-settings', label: t('admin.tab_user_settings') || 'User Preferences', icon: <Sliders size={15} /> },
     { key: 'system',      label: t('admin.tab_system') || 'Global Settings',       icon: <Globe size={15} /> },
     { key: 'api-keys',    label: t('admin.tab_apikeys') || 'User API Keys',        icon: <Key size={15} /> },
   ]
@@ -639,6 +641,34 @@ export default function Admin() {
                   )
                 })}
               </div>
+            </div>
+          )}
+        </Section>
+      )}
+
+      {/* ── User Settings tab (Admin edit of other users' AppSettings) ────────── */}
+      {tab === 'user-settings' && (
+        <Section title={t('admin.tab_user_settings') || 'User Preferences'}>
+          <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center pb-2">
+            <select
+              className={`${Input} sm:max-w-xs`}
+              value={selectedUserId ?? ''}
+              onChange={e => {
+                const id = parseInt(e.target.value)
+                if (!isNaN(id)) setSelectedUserId(id)
+                else setSelectedUserId(null)
+              }}
+            >
+              <option value="">{t('admin.select_user')}</option>
+              {users.map(u => (
+                <option key={u.id} value={u.id}>{u.username} ({t(`admin.role_${u.role}`)})</option>
+              ))}
+            </select>
+          </div>
+
+          {selectedUserId && (
+            <div className="border-t border-gray-800 pt-4 mt-4">
+              <Settings userId={selectedUserId} />
             </div>
           )}
         </Section>
