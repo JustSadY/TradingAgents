@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import axios from 'axios'
 import {
   Save, BookmarkPlus, Trash2, Play, Bell,
-  Settings as SettingsIcon, Brain, ShieldAlert, Sliders
+  Settings as SettingsIcon, Brain, ShieldAlert, Sliders, Clock
 } from 'lucide-react'
 import { useMeta } from '../hooks/useMeta'
 import { useAuth } from '../hooks/useAuth'
@@ -169,7 +169,7 @@ export default function Settings() {
   const [browserNotify, setBrowserNotify] = useState(isBrowserNotifyEnabled())
   const [webhookTesting, setWebhookTesting] = useState(false)
   const [webhookTestResult, setWebhookTestResult] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'risk' | 'webhooks' | 'presets' | 'advanced'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'risk' | 'webhooks' | 'presets' | 'advanced' | 'cron'>('general')
   const [allowedSettings, setAllowedSettings] = useState<string[]>([])
   const meta = useMeta()
 
@@ -186,7 +186,7 @@ export default function Settings() {
       setAllowedSettings(allowedSet)
       
       // Auto-select first permitted tab
-      const defaultTabs = ['general', 'llm', 'risk', 'webhooks', 'presets']
+      const defaultTabs = ['general', 'llm', 'risk', 'webhooks', 'presets', 'cron']
       const activeDefault = defaultTabs.find(tab => allowedSet.includes(tab))
       if (activeDefault) {
         setActiveTab(activeDefault as any)
@@ -281,6 +281,7 @@ export default function Settings() {
     { key: 'llm',      label: t('settings.llm_settings') || 'AI Engine',   icon: <Brain size={16} /> },
     { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety', icon: <ShieldAlert size={16} /> },
     { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={16} /> },
+    { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={16} /> },
     { key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={16} /> },
     ...(isAdmin ? [{ key: 'advanced', label: t('settings.section_advanced') || 'Advanced', icon: <Sliders size={16} /> }] : []),
   ].filter(tab => isAdmin || tab.key === 'advanced' || allowedSettings.includes(tab.key))
@@ -706,6 +707,29 @@ export default function Settings() {
                   ))}
                 </div>
               )}
+            </Section>
+          )}
+
+          {/* TAB: Cron Scheduler */}
+          {activeTab === 'cron' && (
+            <Section title={t('settings.section_cron') || 'Cron / Auto Scan'}>
+              <Row label={t('settings.row_active') || 'Active'}>
+                <input
+                  type="checkbox"
+                  className="accent-violet-600 w-4 h-4 rounded cursor-pointer"
+                  checked={s.cron_enabled}
+                  onChange={e => update('cron_enabled', e.target.checked)}
+                />
+              </Row>
+              <Row label={t('settings.row_schedule') || 'Schedule (Cron)'}>
+                <input
+                  className={Input}
+                  value={s.cron_schedule}
+                  onChange={e => update('cron_schedule', e.target.value)}
+                  placeholder="e.g. 0 9 * * 1-5"
+                />
+                <p className="text-xs text-gray-500 mt-1">Standard 5-field cron schedule format (UTC time)</p>
+              </Row>
             </Section>
           )}
 

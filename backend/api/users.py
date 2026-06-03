@@ -153,7 +153,7 @@ async def create_user(
     db.add(UserPagePermission(user_id=user.id, page_key="dashboard", allowed=True))
     db.add(UserPagePermission(user_id=user.id, page_key="portfolio", allowed=True))
     # Auto-enable settings section permissions for new user
-    for s_key in ["general", "llm", "risk", "webhooks", "presets"]:
+    for s_key in ["general", "llm", "risk", "webhooks", "cron", "presets"]:
         db.add(UserSettingPermission(user_id=user.id, setting_key=s_key, allowed=True))
     await db.flush()
     return user

@@ -421,6 +421,7 @@ export default function Admin() {
                     { key: 'llm',      label: t('settings.llm_settings') || 'AI Engine' },
                     { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety' },
                     { key: 'webhooks', label: t('settings.section_notifications') || 'Personal Webhooks' },
+                    { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler' },
                     { key: 'presets',  label: t('settings.section_presets') || 'Configuration Templates' },
                   ].map(s => (
                     <label key={s.key} className="flex items-center gap-2 text-sm text-gray-300 cursor-pointer bg-gray-800 hover:bg-gray-750 rounded-xl px-3 py-2 transition-colors">

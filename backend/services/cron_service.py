@@ -59,34 +59,69 @@ class CronService:
             except Exception as e:
                 _logger.error("Failed to configure cron job: %s", e)
 
+    async def apply_user_settings(self, settings):
+        """Configure/re-configure a watchlist scan job for a specific user."""
+        if not settings.user_id:
+            return
+        job_id = f"watchlist_scan_user_{settings.user_id}"
+        self.scheduler.remove_job(job_id) if self.scheduler.get_job(job_id) else None
+
+        cron_enabled = getattr(settings, "cron_enabled", False)
+        cron_schedule = getattr(settings, "cron_schedule", "0 9 * * 1-5") or "0 9 * * 1-5"
+        watchlist = getattr(settings, "watchlist", [])
+
+        if cron_enabled and watchlist:
+            try:
+                trigger = CronTrigger.from_crontab(cron_schedule, timezone="UTC")
+                self.scheduler.add_job(
+                    self._run_user_watchlist_scan,
+                    trigger,
+                    args=[settings.user_id],
+                    id=job_id,
+                    replace_existing=True,
+                    misfire_grace_time=300,
+                )
+                _logger.info("User cron job configured for user_id=%s: %s", settings.user_id, cron_schedule)
+            except Exception as e:
+                _logger.error("Failed to configure user cron job for user_id=%s: %s", settings.user_id, e)
+
     async def _run_watchlist_scan(self):
         """Triggered by APScheduler — runs analysis for every ticker in watchlist."""
         from backend.core.database import AsyncSessionLocal
+        from backend.models.system_settings import SystemSettings
         from backend.models.settings import AppSettings
         from backend.services.analysis_service import run_analysis
         from backend.services.execution.factory import get_trader
-        from backend.services.execution.base import OrderRequest
         from sqlalchemy import select
 
         today = date.today().strftime("%Y-%m-%d")
         _logger.info("Cron watchlist scan started for date=%s", today)
 
         async with AsyncSessionLocal() as db:
-            result = await db.execute(select(AppSettings).where(AppSettings.id == 1))
-            settings = result.scalar_one_or_none()
-            if not settings:
+            # 1. Load system settings to get cron configuration and global watchlist
+            sys_res = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
+            sys_settings = sys_res.scalar_one_or_none()
+            if not sys_settings or not sys_settings.cron_enabled:
+                _logger.info("Cron is disabled or not configured in system settings, skipping scan")
                 return
 
-            trader = get_trader(settings.trading_mode, settings.active_broker)
+            # 2. Load the default application settings (owner/admin) for running parameters
+            app_res = await db.execute(select(AppSettings).where(AppSettings.id == 1))
+            app_settings = app_res.scalar_one_or_none()
+            if not app_settings:
+                _logger.error("No default AppSettings found (id=1), cannot run cron scan")
+                return
 
-            for ticker in settings.watchlist:
+            trader = get_trader(app_settings.trading_mode, app_settings.active_broker)
+
+            for ticker in sys_settings.watchlist:
                 try:
                     _logger.info("Cron scanning ticker=%s", ticker)
                     task_id, row = await run_analysis(
                         ticker=ticker,
                         trade_date=today,
                         asset_type="stock",
-                        settings=settings,
+                        settings=app_settings,
                         db=db,
                         triggered_by="cron",
                     )
@@ -94,13 +129,65 @@ class CronService:
 
                     # Execute if signal warrants it
                     if row.signal in ("Buy", "Overweight", "Sell", "Underweight"):
-                        await _maybe_execute(ticker, row, settings, trader, db)
+                        await _maybe_execute(ticker, row, app_settings, trader, db)
 
                 except Exception as e:
                     _logger.error("Cron scan failed for %s: %s", ticker, e, exc_info=True)
                     await db.rollback()
 
         _logger.info("Cron watchlist scan completed")
+
+    async def _run_user_watchlist_scan(self, user_id: int):
+        """Triggered by APScheduler — runs analysis for a specific user's watchlist."""
+        from backend.core.database import AsyncSessionLocal
+        from backend.models.settings import AppSettings
+        from backend.models.user import User
+        from backend.services.analysis_service import run_analysis
+        from backend.services.execution.factory import get_trader
+        from sqlalchemy import select
+
+        today = date.today().strftime("%Y-%m-%d")
+        _logger.info("User cron watchlist scan started for user_id=%d, date=%s", user_id, today)
+
+        async with AsyncSessionLocal() as db:
+            # 1. Load user record
+            u_res = await db.execute(select(User).where(User.id == user_id))
+            user = u_res.scalar_one_or_none()
+            if not user or not user.is_active:
+                _logger.warning("User with id=%d not found or inactive, skipping cron scan", user_id)
+                return
+
+            # 2. Load user's AppSettings
+            app_res = await db.execute(select(AppSettings).where(AppSettings.user_id == user_id))
+            app_settings = app_res.scalar_one_or_none()
+            if not app_settings or not app_settings.cron_enabled:
+                return
+
+            trader = get_trader(app_settings.trading_mode, app_settings.active_broker)
+
+            for ticker in app_settings.watchlist:
+                try:
+                    _logger.info("User=%s scanning ticker=%s", user.username, ticker)
+                    task_id, row = await run_analysis(
+                        ticker=ticker,
+                        trade_date=today,
+                        asset_type="stock",
+                        settings=app_settings,
+                        user=user,
+                        db=db,
+                        triggered_by="cron",
+                    )
+                    await db.commit()
+
+                    # Execute if signal warrants it
+                    if row.signal in ("Buy", "Overweight", "Sell", "Underweight"):
+                        await _maybe_execute_user(user_id, ticker, row, app_settings, trader, db)
+
+                except Exception as e:
+                    _logger.error("User cron scan failed for %s: %s", ticker, e, exc_info=True)
+                    await db.rollback()
+
+        _logger.info("User cron watchlist scan completed for user_id=%d", user_id)
 
     def get_status(self) -> dict:
         job = self.scheduler.get_job("watchlist_scan")
@@ -154,6 +241,62 @@ async def _maybe_execute(ticker: str, row, settings, trader, db):
     db.add(order_row)
     await db.flush()
     _logger.info("Order placed: %s %s %s → %s", action, qty, ticker, result.status)
+
+
+async def _maybe_execute_user(user_id: int, ticker: str, row, settings, trader, db):
+    """Execute trade if AI signal warrants and price is within tolerance, using user's portfolio."""
+    from backend.models.order import Order
+    from backend.models.user import User
+    from backend.services.execution.base import OrderRequest
+    from backend.services.mock_trading_service import get_or_create_sim_portfolio
+    from sqlalchemy import select
+
+    u_res = await db.execute(select(User).where(User.id == user_id))
+    user = u_res.scalar_one_or_none()
+    if not user:
+        return
+
+    portfolio = await get_or_create_sim_portfolio(db, user=user)
+
+    price = trader.get_current_price(ticker)
+    if not price or price <= 0:
+        _logger.warning("No price available for %s, skipping execution", ticker)
+        return
+
+    action = "BUY" if row.signal in ("Buy", "Overweight") else "SELL"
+    balance = portfolio.balance if portfolio.balance > 0 else 100_000.0
+    qty = (settings.max_risk_per_trade_pct / 100 * balance) / price
+
+    req = OrderRequest(
+        ticker=ticker,
+        action=action,
+        quantity=qty,
+        reference_price=price,
+        ai_signal=row.signal or "",
+        ai_reasoning=row.final_decision[:500],
+    )
+    result = trader.place_order(req)
+
+    order_row = Order(
+        portfolio_id=portfolio.id,
+        mode=settings.trading_mode,
+        broker=settings.active_broker,
+        ticker=ticker,
+        action=action,
+        quantity_requested=qty,
+        quantity_filled=result.filled_quantity or 0,
+        status=result.status,
+        price_per_share=result.filled_price,
+        total_value=(result.filled_price or 0) * (result.filled_quantity or 0),
+        commission=result.commission,
+        analysis_id=row.id,
+        ai_signal=row.signal or "",
+        ai_reasoning=row.final_decision[:500],
+        executed_at=result.executed_at,
+    )
+    db.add(order_row)
+    await db.flush()
+    _logger.info("User=%s Order placed: %s %s %s → %s", user.username, action, qty, ticker, result.status)
 
 
 async def _run_alert_checker():

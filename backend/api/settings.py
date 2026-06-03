@@ -161,11 +161,11 @@ async def update_settings(
     settings.updated_at = datetime.now(timezone.utc)
     await db.flush()
 
-    # Notify cron service to reconfigure if cron settings changed
+    # Notify cron service to reconfigure this user's job
     from backend.services.cron_service import get_cron_service
     cron = get_cron_service()
     if cron:
-        await cron.apply_settings(settings)
+        await cron.apply_user_settings(settings)
 
     return await get_settings(db=db, _=_)
 

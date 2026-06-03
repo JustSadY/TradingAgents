@@ -158,17 +158,23 @@ async def _seed_admin_user():
 
 
 async def _load_cron_settings(cron):
-    """Load cron config from SystemSettings on startup."""
+    """Load cron configs from SystemSettings and user AppSettings on startup."""
     try:
         from sqlalchemy import select
         from backend.core.database import AsyncSessionLocal
         from backend.models.system_settings import SystemSettings
+        from backend.models.settings import AppSettings
 
         async with AsyncSessionLocal() as db:
             result = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
             sys_settings = result.scalar_one_or_none()
             if sys_settings:
                 await cron.apply_settings(sys_settings)
+
+            # Load all active user crons
+            app_res = await db.execute(select(AppSettings).where(AppSettings.cron_enabled == True))
+            for app_settings in app_res.scalars():
+                await cron.apply_user_settings(app_settings)
     except Exception as e:
         _logger.warning("Could not load cron settings: %s", e)
 
