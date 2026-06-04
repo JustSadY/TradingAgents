@@ -110,44 +110,6 @@ class CronService:
             "job_configured": job is not None,
             "next_run_time": job.next_run_time.isoformat() if job and job.next_run_time else None,
         }
-async def _maybe_execute(ticker: str, row, settings, trader, db):
-    from backend.models.order import Order
-    from backend.services.execution.base import OrderRequest
-    price = trader.get_current_price(ticker)
-    if not price or price <= 0:
-        _logger.warning("No price available for %s, skipping execution", ticker)
-        return
-    action = "BUY" if row.signal in ("Buy", "Overweight") else "SELL"
-    qty = (settings.max_risk_per_trade_pct / 100 * 100_000) / price
-    req = OrderRequest(
-        ticker=ticker,
-        action=action,
-        quantity=qty,
-        reference_price=price,
-        ai_signal=row.signal or "",
-        ai_reasoning=row.final_decision[:500],
-    )
-    result = trader.place_order(req)
-    order_row = Order(
-        portfolio_id=1,
-        mode=settings.trading_mode,
-        broker=settings.active_broker,
-        ticker=ticker,
-        action=action,
-        quantity_requested=qty,
-        quantity_filled=result.filled_quantity or 0,
-        status=result.status,
-        price_per_share=result.filled_price,
-        total_value=(result.filled_price or 0) * (result.filled_quantity or 0),
-        commission=result.commission,
-        analysis_id=row.id,
-        ai_signal=row.signal or "",
-        ai_reasoning=row.final_decision[:500],
-        executed_at=result.executed_at,
-    )
-    db.add(order_row)
-    await db.flush()
-    _logger.info("Order placed: %s %s %s → %s", action, qty, ticker, result.status)
 async def _maybe_execute_user(user_id: int, ticker: str, row, settings, trader, db):
     from backend.models.order import Order
     from backend.models.user import User

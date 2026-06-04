@@ -1,5 +1,5 @@
-import asyncio
 import logging
+import uuid
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
@@ -28,68 +28,19 @@ async def run_analysis(
     body: AnalysisRunRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     try:
         safe_ticker_component(body.ticker)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    settings = await get_or_create_settings(db, _)
-    current_user = _
-    import uuid
+    settings = await get_or_create_settings(db, current_user)
     task_id = str(uuid.uuid4())
-    async def _bg():
-        async with __import__("backend.core.database", fromlist=["AsyncSessionLocal"]).AsyncSessionLocal() as bg_db:
-            try:
-                from backend.services.analysis_service import run_analysis as _run
-                from backend.services.execution.factory import get_trader
-                task_id_out, row = await _run(
-                    body.ticker, body.trade_date, body.asset_type, settings, bg_db, "manual",
-                    task_id=task_id,
-                    user=current_user,
-                )
-                if row.user_id is None and current_user is not None:
-                    row.user_id = current_user.id
-                await bg_db.commit()
-                if row.signal in ("Buy", "Overweight", "Sell", "Underweight"):
-                    from backend.services.execution.factory import get_trader
-                    from backend.services.execution.base import OrderRequest
-                    from backend.services.mock_trading_service import get_or_create_sim_portfolio
-                    try:
-                        portfolio = await get_or_create_sim_portfolio(bg_db, user=current_user)
-                        trader = get_trader(
-                            mode=settings.trading_mode,
-                            broker=settings.active_broker,
-                            portfolio_id=portfolio.id,
-                            initial_capital=100_000.0,
-                            db=None,
-                        )
-                        price = trader.get_current_price(body.ticker) or 0.0
-                        action = "BUY" if row.signal in ("Buy", "Overweight") else "SELL"
-                        if price > 0:
-                            quantity = (settings.max_risk_per_trade_pct / 100 * 100_000) / price
-                            req = OrderRequest(
-                                ticker=body.ticker,
-                                action=action,
-                                quantity=quantity,
-                                reference_price=price,
-                                ai_signal=row.signal or "",
-                                ai_reasoning=row.final_decision[:500],
-                            )
-                            result = trader.place_order(req)
-                            _logger.info("Order placed: %s", result)
-                    except Exception as e:
-                        _logger.warning("Order execution skipped: %s", e)
-            except Exception as exc:
-                _logger.error("Background analysis failed: %s", exc, exc_info=True)
-                try:
-                    from backend.core.websocket import ws_manager as _wm
-                    await _wm.send(task_id, {"type": "error", "message": f"Analiz hatası: {exc}"})
-                    await _wm.close_task(task_id)
-                except Exception:
-                    pass
-                await bg_db.rollback()
-    background_tasks.add_task(_bg)
+    from backend.services.analysis_service import run_analysis_task
+    background_tasks.add_task(
+        run_analysis_task,
+        body.ticker, body.trade_date, body.asset_type, settings, task_id, current_user,
+    )
     return AnalysisRunResponse(task_id=task_id, ticker=body.ticker, trade_date=body.trade_date)
 @router.get("/history", response_model=list[AnalysisListItem])
 async def list_analysis(
@@ -285,7 +236,7 @@ async def run_portfolio(
     body: MultiTickerRunRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     tickers = [t.upper() for t in body.tickers]
     for ticker in tickers:
@@ -293,20 +244,13 @@ async def run_portfolio(
             safe_ticker_component(ticker)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=f"Invalid ticker {ticker}: {e}")
-    settings = await get_or_create_settings(db, _)
-    current_user = _
-    import uuid
+    settings = await get_or_create_settings(db, current_user)
     task_id = str(uuid.uuid4())
-    async def _bg():
-        async with __import__("backend.core.database", fromlist=["AsyncSessionLocal"]).AsyncSessionLocal() as bg_db:
-            try:
-                from backend.services.analysis_service import run_portfolio_analysis
-                await run_portfolio_analysis(tickers, body.trade_date, body.asset_type, settings, bg_db, "manual", user=current_user)
-                await bg_db.commit()
-            except Exception as exc:
-                _logger.error("Portfolio analysis failed: %s", exc, exc_info=True)
-                await bg_db.rollback()
-    background_tasks.add_task(_bg)
+    from backend.services.analysis_service import run_portfolio_task
+    background_tasks.add_task(
+        run_portfolio_task,
+        tickers, body.trade_date, body.asset_type, settings, current_user,
+    )
     return MultiTickerRunResponse(task_id=task_id, tickers=tickers, trade_date=body.trade_date)
 @router.get("/portfolio-history", response_model=list[MultiTickerListItem])
 async def list_portfolio_analyses(
