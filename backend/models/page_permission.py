@@ -32,6 +32,8 @@ SECTION_FIELDS = {
         "max_debate_rounds",
         "max_risk_rounds",
         "analyst_concurrency_limit",
+        "node_retry_attempts",
+        "node_retry_base_delay",
     ],
     "webhooks": [
         "webhook_url",

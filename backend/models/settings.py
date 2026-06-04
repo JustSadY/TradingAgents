@@ -42,6 +42,8 @@ class AppSettings(Base):
     include_historical_analyses: Mapped[bool] = mapped_column(Boolean, default=False)
     historical_analyses_limit: Mapped[int] = mapped_column(Integer, default=5)
     strict_backtest_learning: Mapped[bool] = mapped_column(Boolean, default=True)
+    node_retry_attempts: Mapped[int] = mapped_column(Integer, default=2)
+    node_retry_base_delay: Mapped[float] = mapped_column(Float, default=1.0)
     _analyst_models: Mapped[str] = mapped_column("analyst_models", Text, default='{}')
     webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     webhook_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

@@ -39,6 +39,8 @@ interface Settings {
   webhook_events: string
   watchlist: string[]
   selected_analysts: string[]
+  node_retry_attempts: number
+  node_retry_base_delay: number
 }
 
 interface Preset { id: number; name: string; description: string | null; created_at: string }
@@ -201,8 +203,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   }
 
   const applyPreset = async (id: number) => {
-    const r = await axios.post(`/api/presets/${id}/apply`)
-    setS(r.data)
+    await axios.post(`/api/presets/${id}/apply`)
+    const settingsUrl = userId ? `/api/settings/users/${userId}` : '/api/settings'
+    const settingsRes = await axios.get(settingsUrl)
+    setS(settingsRes.data)
   }
 
   const deletePreset = async (id: number) => {
@@ -578,6 +582,16 @@ export default function Settings({ userId }: { userId?: number } = {}) {
               <Row label={t('settings.row_parallel_analysts')}>
                 <input type="number" min="1" max="16" className={Input} value={s.analyst_concurrency_limit} onChange={e => update('analyst_concurrency_limit', parseInt(e.target.value))} />
               </Row>
+
+              <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
+                <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Agent Run Resilience</h4>
+                <Row label={t('settings.row_node_retry_attempts') || 'Node Retry Attempts'}>
+                  <input type="number" min="1" max="10" className={Input} value={s.node_retry_attempts ?? 2} onChange={e => update('node_retry_attempts', parseInt(e.target.value))} />
+                </Row>
+                <Row label={t('settings.row_node_retry_base_delay') || 'Retry Base Delay (s)'}>
+                  <input type="number" step="0.1" min="0.1" max="10" className={Input} value={s.node_retry_base_delay ?? 1.0} onChange={e => update('node_retry_base_delay', parseFloat(e.target.value))} />
+                </Row>
+              </div>
 
               <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
                 <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Institutional Features</h4>

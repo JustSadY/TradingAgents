@@ -8,6 +8,7 @@ _VERBOSE_PREFIXES = (
     "backend.services.",
     "backend.api.",
     "backend.core.websocket",
+    "tradingagents.run",
 )
 class _BackendFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:

@@ -74,6 +74,8 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("app_settings", "max_position_size_pct",      "FLOAT DEFAULT 10.0"),
     ("app_settings", "max_risk_per_trade_pct",     "FLOAT DEFAULT 2.0"),
     ("app_settings", "strict_backtest_learning",   "BOOLEAN DEFAULT TRUE"),
+    ("app_settings", "node_retry_attempts",         "INTEGER DEFAULT 2"),
+    ("app_settings", "node_retry_base_delay",       "FLOAT DEFAULT 1.0"),
 ]
 
 

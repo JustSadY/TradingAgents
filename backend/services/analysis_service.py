@@ -89,6 +89,8 @@ def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
         "skip_disk_log": True,
         # Checkpoint (resume) is always enabled — no longer a user/admin setting.
         "checkpoint_enabled": True,
+        "node_retry_attempts": getattr(settings, "node_retry_attempts", 2) or 2,
+        "node_retry_base_delay": getattr(settings, "node_retry_base_delay", 1.0) or 1.0,
         "max_recur_limit": getattr(settings, "max_recur_limit", 1000) or 1000,
         "news_article_limit": getattr(settings, "news_article_limit", 20) or 20,
         "global_news_article_limit": getattr(settings, "global_news_article_limit", 10) or 10,
