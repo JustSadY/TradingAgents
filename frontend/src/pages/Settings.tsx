@@ -4,7 +4,7 @@ import {
   Save, BookmarkPlus, Trash2, Play, Bell,
   Settings as SettingsIcon, Brain, ShieldAlert, Sliders, Clock, Wrench
 } from 'lucide-react'
-import { useMeta } from '../hooks/useMeta'
+import { useMeta, triggerMetaRefetch } from '../hooks/useMeta'
 import { useAuth } from '../hooks/useAuth'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
 import { useTranslation } from '../contexts/LanguageContext'
@@ -251,6 +251,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     try {
       const url = userId ? `/api/settings/users/${userId}` : '/api/settings'
       await axios.put(url, s)
+      triggerMetaRefetch()
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err: any) {

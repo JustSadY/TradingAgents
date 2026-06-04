@@ -59,18 +59,39 @@ export interface Meta {
 
 let _cache: Meta | null = null
 let _inflight: Promise<Meta> | null = null
+const _listeners = new Set<(m: Meta | null) => void>()
+
+export function triggerMetaRefetch() {
+  _cache = null
+  _inflight = axios.get('/api/meta').then(r => {
+    _cache = r.data as Meta
+    _listeners.forEach(l => l(_cache))
+    return _cache
+  }).catch(err => {
+    _inflight = null
+    throw err
+  })
+}
 
 export function useMeta(): Meta | null {
   const [meta, setMeta] = useState<Meta | null>(_cache)
 
   useEffect(() => {
-    if (_cache) { setMeta(_cache); return }
-    if (!_inflight) {
-      _inflight = axios.get('/api/meta').then(r => { _cache = r.data as Meta; return _cache })
+    _listeners.add(setMeta)
+    if (_cache) {
+      setMeta(_cache)
+    } else if (!_inflight) {
+      _inflight = axios.get('/api/meta').then(r => {
+        _cache = r.data as Meta
+        _listeners.forEach(l => l(_cache))
+        return _cache
+      }).catch(() => {
+        _inflight = null
+      })
     }
-    let active = true
-    _inflight.then(m => { if (active) setMeta(m) }).catch(() => { _inflight = null })
-    return () => { active = false }
+    return () => {
+      _listeners.delete(setMeta)
+    }
   }, [])
 
   return meta

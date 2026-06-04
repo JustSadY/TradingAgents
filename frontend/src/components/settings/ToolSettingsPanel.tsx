@@ -50,7 +50,7 @@ export default function ToolSettingsPanel({ userId, serverScope = false }: ToolS
 
   useEffect(() => {
     fetchSettings()
-  }, [apiPath])
+  }, [apiPath, meta])
 
   const save = async () => {
     if (!settings) return
