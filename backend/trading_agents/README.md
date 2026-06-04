@@ -27,12 +27,13 @@ graph TD
         AnalystExecution --> A9[Performance Review]
     end
     
-    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 --> DebatePhase{Debate Judge Node}
+    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 --> SynthesisManager{Synthesis Manager}
     
     subgraph Debate [The Thesis Debate Loop]
-        DebatePhase --> Bull[Bull Researcher]
-        DebatePhase --> Bear[Bear Researcher]
-        Bull & Bear --> Judge[Research Manager]
+        SynthesisManager --> Bull[Bull Researcher]
+        SynthesisManager --> Bear[Bear Researcher]
+        Bull & Bear --> Auditor[Auditor Node]
+        Auditor --> Judge[Research Manager]
     end
     
     Judge --> RiskDebate{Risk Debate Node}
@@ -60,7 +61,7 @@ trading_agents/
 │   ├── schemas.py           # Structured output schemas (Pydantic models)
 │   ├── analysts/            # Implementation of the 9 analyst plugins
 │   ├── researchers/         # Bull & Bear thesis builders
-│   ├── managers/            # Research Manager / Judge prompts and logic
+│   ├── managers/            # Research, Synthesis, and Auditor managers
 │   ├── risk_mgmt/           # Risk analyst personalities (Aggressive, Conservative, Neutral)
 │   └── trader/              # Portfolio Manager (executes final buys/sells and sizes)
 ├── graph/                   # State machine structure (LangGraph engine)
@@ -93,11 +94,10 @@ The 9 analysts are:
 8.  **Earnings Call Analyst:** Summarizes corporate earnings calls, management tone, and guidance changes.
 9.  **Performance Review Analyst:** Compares historical agent suggestions against simulated returns to optimize weights.
 
-### 2. The Thesis Debate Loop
-To avoid LLM bias, the output from the Analysts is fed to the **Bull Researcher** and **Bear Researcher**.
-*   **Bull Researcher:** Tasks itself with finding arguments for buying the security, ignoring negative news.
-*   **Bear Researcher:** Tasks itself with identifying risks, debt concerns, headwinds, and bearish trends.
-*   **Research Manager:** Reviews both arguments, acts as a judge, and summarizes verified claims, leaving out unsubstantiated claims.
+### 2. The Thesis Debate & Synthesis
+To avoid LLM bias, analyst reports are synthesized by the **Synthesis Manager** to identify key conflicts. These are then debated by the **Bull Researcher** and **Bear Researcher**.
+*   **Auditor Node:** Before the final decision, an Auditor node fact-checks the debate transcript against original reports to prevent hallucinations.
+*   **Research Manager:** Reviews both arguments and the Auditor's report to summarize verified claims.
 
 ### 3. Risk Management & Portfolio Allocation
 The Research Manager's summary is evaluated by three risk personas:

@@ -28,19 +28,34 @@ def create_bull_researcher(llm):
             content = state.get(field, "")
             if content and content.strip():
                 resources.append(f"{label}:\n{content.strip()}")
+        
+        synthesis_report = state.get("synthesis_report", "No synthesis report available.")
         resources_text = "\n\n".join(resources)
-        prompt = f"""You are a Bull Analyst advocating for investing in the {target_label}. Your task is to build a strong, evidence-based case emphasizing growth potential, competitive advantages, and positive market indicators. Leverage the provided research and data to address concerns and counter bearish arguments effectively.
-Key points to focus on:
-- Growth Potential: Highlight the company's market opportunities, revenue projections, and scalability.
-- Competitive Advantages: Emphasize factors like unique products, strong branding, or dominant market positioning.
-- Positive Indicators: Use financial health, industry trends, and recent positive news as evidence.
-- Bear Counterpoints: Critically analyze the bear argument with specific data and sound reasoning, addressing concerns thoroughly and showing why the bull perspective holds stronger merit.
-- Engagement: Present your argument in a conversational style, engaging directly with the bear analyst's points and debating effectively rather than just listing data.
-Resources available:
+        
+        prompt = f"""You are a High-Conviction Bull Analyst advocating for a long position in the {target_label}. Your task is to build a rigorous, evidence-based case emphasizing growth potential and market strength.
+
+### Objective:
+- **Evidence-Based Case:** You MUST cite specific analyst reports and metrics (e.g., "According to the Market Analyst, the 50 SMA...") for every claim you make.
+- **Address Conflicts:** Review the **Synthesis Report** below. You must directly address the 'Critical Conflicts' identified and explain why the bullish perspective is more compelling despite these risks.
+- **Adversarial Debate:** Critically analyze the Bear Analyst's points. Do not just list data; dismantle their logic with specific data points.
+
+### Resources:
 {resources_text}
-Conversation history of the debate: {history}
-Last bear argument: {current_response}
-Use this information to deliver a compelling bull argument, refute the bear's concerns, and engage in a dynamic debate that demonstrates the strengths of the bull position.
+
+### Synthesis Report (Conflicts & Alignments):
+{synthesis_report}
+
+### Debate Context:
+- **Conversation History:** {history}
+- **Last Bear Argument:** {current_response}
+
+### Guidelines:
+- **Growth Potential:** Highlight market opportunities, revenue projections, and scalability.
+- **Competitive Advantages:** Emphasize unique products, branding, or market dominance.
+- **Positive Indicators:** Use financial health, industry trends, and technical breakouts as evidence.
+- **Tone:** Professional, analytical, and persuasive.
+
+Deliver a compelling bull argument that refutes the bear's concerns using specific citations.
 """ + get_language_instruction()
         response = llm.invoke(prompt)
         argument = f"Bull Analyst: {response.content}"

@@ -16,6 +16,8 @@ class StateKeys:
     QUANT_REPORT = "quant_report"
     EARNINGS_REPORT = "earnings_report"
     REVIEW_REPORT = "review_report"
+    SYNTHESIS_REPORT = "synthesis_report"
+    AUDIT_REPORT = "audit_report"
     INVESTMENT_DEBATE_STATE = "investment_debate_state"
     INVESTMENT_PLAN = "investment_plan"
     TRADER_INVESTMENT_PLAN = "trader_investment_plan"
@@ -31,6 +33,8 @@ class StateKeys:
         QUANT_REPORT,
         EARNINGS_REPORT,
         REVIEW_REPORT,
+        SYNTHESIS_REPORT,
+        AUDIT_REPORT,
         INVESTMENT_PLAN,
         TRADER_INVESTMENT_PLAN,
         FINAL_TRADE_DECISION,
@@ -85,6 +89,8 @@ class AgentState(MessagesState):
     quant_report: Annotated[str, "Report from the Quant Analyst"]
     earnings_report: Annotated[str, "Report from the Earnings Analyst"]
     review_report: Annotated[str, "Report from the Performance Review Analyst"]
+    synthesis_report: Annotated[str, "Report identifying alignments and conflicts between analyst reports"]
+    audit_report: Annotated[str, "Real-time audit report checking for hallucinations and reasoning gaps"]
     investment_debate_state: Annotated[
         InvestDebateState, "Current state of the debate on if to invest or not"
     ]

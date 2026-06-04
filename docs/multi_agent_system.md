@@ -12,18 +12,25 @@ stateDiagram-v2
     
     state Phase1_Analysts {
         [*] --> Fetch_Data : yFinance / API
-        Fetch_Data --> Run_Plugins : Parallel Execution
+        Fetch_Data --> Run_Plugins : Parallel Execution (with Chain-of-Thought)
         Run_Plugins --> Compile_Reports : Save State Dicts
     }
     
-    Phase1_Analysts --> Phase2_Debate : Send Pre-Reports
+    Phase1_Analysts --> Phase1_Synthesis : Send Pre-Reports
+    
+    state Phase1_Synthesis {
+        [*] --> Synthesis_Manager : Detect Alignments & Conflicts
+    }
+
+    Phase1_Synthesis --> Phase2_Debate : Send Synthesis Report
     
     state Phase2_Debate {
-        [*] --> Bull_Thesis : Argue Olumlu / Bull
-        Bull_Thesis --> Bear_Antithesis : Argue Risk / Bear
+        [*] --> Bull_Thesis : Argue Bull (with Citations)
+        Bull_Thesis --> Bear_Antithesis : Argue Bear (with Citations)
         Bear_Antithesis --> Check_Rounds : Max rounds reached?
         Check_Rounds --> Bull_Thesis : No
-        Check_Rounds --> Research_Manager : Yes
+        Check_Rounds --> Auditor_Node : Yes
+        Auditor_Node --> Research_Manager : Fact-Check Results
         Research_Manager --> Generate_Consensus : Write Judge Decision
     }
     
@@ -50,21 +57,23 @@ stateDiagram-v2
 
 ---
 
-## 2. Phase 1: Analyst Plugins (Fact-Finding)
+## 2. Phase 1: Analyst Plugins & Synthesis
 
 Each active analyst node queries third-party libraries (e.g. `yFinance`, `AlphaVantage`, or web searches) and processes the raw data.
-*   **Sequential vs. Parallel Execution:** In the configuration settings, the `analyst_concurrency_limit` determines the layout. If set to `1`, the graph sequences analysts one after another (connecting the `clear_node` of the first to the entry of the second). If set to `>1`, analysts start concurrently from the `START` node.
-*   **Tool Execution Loop:** Inside each analyst node, a conditional transition method (e.g. `should_continue_market`) checks if the model wants to call an external tool (like `get_indicators` or `get_fundamentals`). If yes, the state routes to the corresponding `ToolNode`, executes the call, and loops back to the analyst node to parse the results.
+*   **Chain-of-Thought (CoT):** Analysts are now instructed to follow a multi-step reasoning process (Data Extraction -> Metric Evaluation -> Contextual Synthesis) before producing their report.
+*   **Standardized Output:** All analyst reports follow a fixed structure: Executive Summary, Detailed Analysis, and a Data Table.
+*   **Synthesis Manager:** Before the debate begins, the Synthesis Manager reviews all analyst reports to identify **Alignments** (agreements) and **Conflicts** (contradictions). These conflicts set the primary agenda for the Bull vs. Bear debate.
 
 ---
 
-## 3. Phase 2: The Investment Debate (Bull vs. Bear)
+## 3. Phase 2: The Investment Debate & Audit
 
-To prevent confirmation bias, two opposing agents analyze the combined analyst reports:
-1.  **Bull Researcher (`bull_researcher.py`):** Acts as a high-conviction investor. It scans the files for undervalued indicators, positive growth triggers, market momentum, and technical breakouts.
-2.  **Bear Researcher (`bear_researcher.py`):** Acts as a short-seller. It highlights overhead resistance, macro headwinds, high debt structures, deteriorating sentiment, and technical weaknesses.
-3.  **The Debate Loop:** The state machine alternates between the Bull and Bear nodes, feeding the previous agent's response back as input. The loop runs for `max_debate_rounds` (defined in the configuration).
-4.  **Research Manager (`research_manager.py`):** Acts as the judge. It reads the entire debate transcript, extracts the verified arguments, resolves conflicting assertions, and produces a final consolidated thesis document.
+To prevent confirmation bias and ensure factual accuracy, the system employs an adversarial debate and a final audit:
+1.  **Bull Researcher (`bull_researcher.py`):** Acts as a high-conviction investor. It MUST cite specific metrics from the analyst reports and address the conflicts identified by the Synthesis Manager.
+2.  **Bear Researcher (`bear_researcher.py`):** Acts as a short-seller. It highlights risks and dismantles bullish assumptions using specific evidence and citations.
+3.  **The Debate Loop:** The state machine alternates between the Bull and Bear nodes for a configurable number of rounds.
+4.  **Auditor Node (`auditor_node.py`):** A real-time fact-checker that reviews the debate transcript against the original analyst reports. It identifies hallucinations or unsupported claims before the final decision is made.
+5.  **Research Manager (`research_manager.py`):** Acts as the judge. It reads the debate transcript AND the Auditor's report to produce a final consolidated thesis document.
 
 ---
 

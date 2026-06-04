@@ -12,6 +12,8 @@ from tradingagents.agents import (
     create_conservative_debator,
     create_neutral_debator,
     create_research_manager,
+    create_synthesis_manager,
+    create_auditor_node,
     create_portfolio_manager,
     create_trader,
 )
@@ -57,6 +59,8 @@ class GraphSetup:
         }
         bull_researcher_node = create_bull_researcher(self.llm)
         bear_researcher_node = create_bear_researcher(self.llm)
+        synthesis_manager_node = create_synthesis_manager(self.llm)
+        auditor_node = create_auditor_node(self.llm)
         research_manager_node = create_research_manager(self.llm)
         trader_node = create_trader(self.llm)
         aggressive_analyst = create_aggressive_debator(self.llm)
@@ -70,6 +74,8 @@ class GraphSetup:
             workflow.add_node(spec.tool_node, self.tool_nodes[spec.key])
         workflow.add_node("Bull Researcher", bull_researcher_node)
         workflow.add_node("Bear Researcher", bear_researcher_node)
+        workflow.add_node("Synthesis Manager", synthesis_manager_node)
+        workflow.add_node("Auditor", auditor_node)
         workflow.add_node("Research Manager", research_manager_node)
         workflow.add_node("Trader", trader_node)
         workflow.add_node("Aggressive Analyst", aggressive_analyst)
@@ -93,7 +99,7 @@ class GraphSetup:
                 )
                 workflow.add_edge(current_tools, current_analyst)
             if plan.specs:
-                workflow.add_edge(plan.specs[-1].clear_node, "Bull Researcher")
+                workflow.add_edge(plan.specs[-1].clear_node, "Synthesis Manager")
         else:
             for spec in plan.specs:
                 workflow.add_edge(START, spec.agent_node)
@@ -107,13 +113,15 @@ class GraphSetup:
                     [current_tools, current_clear],
                 )
                 workflow.add_edge(current_tools, current_analyst)
-                workflow.add_edge(current_clear, "Bull Researcher")
+                workflow.add_edge(current_clear, "Synthesis Manager")
+        
+        workflow.add_edge("Synthesis Manager", "Bull Researcher")
         workflow.add_conditional_edges(
             "Bull Researcher",
             self.conditional_logic.should_continue_debate,
             {
                 "Bear Researcher": "Bear Researcher",
-                "Research Manager": "Research Manager",
+                "Auditor": "Auditor",
             },
         )
         workflow.add_conditional_edges(
@@ -121,9 +129,10 @@ class GraphSetup:
             self.conditional_logic.should_continue_debate,
             {
                 "Bull Researcher": "Bull Researcher",
-                "Research Manager": "Research Manager",
+                "Auditor": "Auditor",
             },
         )
+        workflow.add_edge("Auditor", "Research Manager")
         workflow.add_edge("Research Manager", "Trader")
         workflow.add_edge("Trader", "Aggressive Analyst")
         workflow.add_conditional_edges(

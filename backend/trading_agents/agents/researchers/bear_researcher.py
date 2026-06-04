@@ -28,19 +28,34 @@ def create_bear_researcher(llm):
             content = state.get(field, "")
             if content and content.strip():
                 resources.append(f"{label}:\n{content.strip()}")
+        
+        synthesis_report = state.get("synthesis_report", "No synthesis report available.")
         resources_text = "\n\n".join(resources)
-        prompt = f"""You are a Bear Analyst making the case against investing in the {target_label}. Your goal is to present a well-reasoned argument emphasizing risks, challenges, and negative indicators. Leverage the provided research and data to highlight potential downsides and counter bullish arguments effectively.
-Key points to focus on:
-- Risks and Challenges: Highlight factors like market saturation, financial instability, or macroeconomic threats that could hinder the stock's performance.
-- Competitive Weaknesses: Emphasize vulnerabilities such as weaker market positioning, declining innovation, or threats from competitors.
-- Negative Indicators: Use evidence from financial data, market trends, or recent adverse news to support your position.
-- Bull Counterpoints: Critically analyze the bull argument with specific data and sound reasoning, exposing weaknesses or over-optimistic assumptions.
-- Engagement: Present your argument in a conversational style, directly engaging with the bull analyst's points and debating effectively rather than simply listing facts.
-Resources available:
+        
+        prompt = f"""You are a High-Conviction Bear Analyst making the case against investing in the {target_label}. Your goal is to present a rigorous, evidence-based argument emphasizing risks, structural challenges, and negative catalysts.
+
+### Objective:
+- **Evidence-Based Case:** You MUST cite specific analyst reports and metrics (e.g., "The Fundamentals report shows a high debt-to-equity...") for every claim you make.
+- **Address Conflicts:** Review the **Synthesis Report** below. You must directly address the 'Critical Conflicts' identified and explain why the bearish risks are too high to ignore.
+- **Adversarial Debate:** Critically analyze the Bull Analyst's points. Do not just list data; dismantle their growth assumptions with specific evidence.
+
+### Resources:
 {resources_text}
-Conversation history of the debate: {history}
-Last bull argument: {current_response}
-Use this information to deliver a compelling bear argument, refute the bull's claims, and engage in a dynamic debate that demonstrates the risks and weaknesses of investing in the {target_label}.
+
+### Synthesis Report (Conflicts & Alignments):
+{synthesis_report}
+
+### Debate Context:
+- **Conversation History:** {history}
+- **Last Bull Argument:** {current_response}
+
+### Guidelines:
+- **Risks and Challenges:** Highlight market saturation, financial instability, or macroeconomic threats.
+- **Competitive Weaknesses:** Emphasize declining innovation, weak market positioning, or competitive threats.
+- **Negative Indicators:** Use evidence from technical breakdowns, sentiment shifts, or adverse news.
+- **Tone:** Skeptical, analytical, and professional.
+
+Deliver a compelling bear argument that dismantling the bull case using specific citations.
 """ + get_language_instruction()
         response = llm.invoke(prompt)
         argument = f"Bear Analyst: {response.content}"
