@@ -47,8 +47,6 @@ def fetch_reddit_posts(
     timeout: float = 10.0,
     inter_request_delay: float = 0.4,
 ) -> str:
-    if not get_config().get("reddit_enabled", True):
-        return f"<Reddit data fetching is disabled in configuration settings>"
     blocks = []
     total_posts = 0
     for i, sub in enumerate(subreddits):
