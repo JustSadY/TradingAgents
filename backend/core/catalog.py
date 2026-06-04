@@ -1,31 +1,27 @@
 from __future__ import annotations
+from backend.trading_agents.analyst_catalog import list_analysts as _engine_analysts, label_for
 def _node_specs() -> dict:
     try:
         from backend.trading_agents.graph.analyst_execution import ANALYST_NODE_SPECS
         return ANALYST_NODE_SPECS
     except Exception:
         return {}
-_ANALYST_META: dict[str, tuple[str, str, bool]] = {
-    "market":       ("Piyasa",      "Teknik göstergeler, fiyat trendi ve momentum",      True),
-    "social":       ("Duygu",       "Sosyal medya, StockTwits ve Reddit duygu analizi",  True),
-    "news":         ("Haber",       "Şirkete özel ve sektörel haber akışı",              True),
-    "fundamentals": ("Temel",       "Bilanço, gelir tablosu ve değerleme",               True),
-    "macro":        ("Makro",       "Faiz, enflasyon ve genel ekonomik görünüm",         False),
-    "options":      ("Opsiyon",     "Opsiyon zinciri, implied volatility ve akış",       False),
-    "quant":        ("Kantitatif",  "İstatistiksel faktör ve nicel sinyaller",           False),
-    "earnings":     ("Kazanç",      "Kazanç çağrıları, tahminler ve sürprizler",         False),
-    "review":       ("İnceleme",    "Geçmiş kararların performans incelemesi",           False),
-}
 def available_analysts() -> list[dict]:
+    # Single source: the engine analyst catalog. When the graph is importable we
+    # only surface analysts that actually have a wired node spec.
     specs = _node_specs()
     out: list[dict] = []
-    for key, (label, desc, default) in _ANALYST_META.items():
-        if not specs or key in specs:
-            out.append({"key": key, "label": label, "description": desc, "default": default})
+    for info in _engine_analysts():
+        if not specs or info.key in specs:
+            out.append({
+                "key": info.key,
+                "label": info.label,
+                "description": info.description,
+                "default": info.default_on,
+            })
     return out
 def _analyst_label(key: str) -> str:
-    meta = _ANALYST_META.get(key)
-    return meta[0] if meta else key.title()
+    return label_for(key)
 SECTION_LABELS: dict[str, str] = {
     "market_report":             "Piyasa Analizi",
     "sentiment_report":          "Duygu Analizi",
