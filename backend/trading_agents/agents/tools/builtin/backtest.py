@@ -23,6 +23,15 @@ search_web_tool = FunctionToolAdapter(
     func=search_web,
     allowed_analysts=["market", "news", "macro"],
     default_enabled=True,
+    settings_schema=[
+        ToolSettingField(
+            key="searxng_url",
+            type="string",
+            scope="user",
+            label_key="tools.search_web.searxng_url",
+            default="http://localhost:8080",
+        )
+    ],
 )
 
 crypto_fear_greed_tool = FunctionToolAdapter(

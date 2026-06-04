@@ -15,6 +15,7 @@ const toolTranslations = {
     'tools.core_stock_data.label': 'Core Stock Data',
     'tools.core_stock_data.description': 'Fetches historical stock prices, volume, and open-high-low-close candles.',
     'tools.core_stock_data.default_lookback_days': 'Default Lookback Days',
+    'tools.core_stock_data.alpha_vantage_api_key': 'Alpha Vantage API Key',
 
     'tools.technical_indicators.label': 'Technical Indicators',
     'tools.technical_indicators.description': 'Calculates SMA, EMA, RSI, MACD, and Bollinger Bands.',
@@ -53,6 +54,9 @@ const toolTranslations = {
     'tools.reddit_sentiment.label': 'Reddit Sentiment',
     'tools.reddit_sentiment.description': 'Scrapes popular investment subreddits for stock mentions, upvotes, and sentiment ratios.',
     'tools.reddit_sentiment.limit': 'Post Scrape Limit',
+    'tools.reddit_sentiment.client_id': 'Reddit Client ID',
+    'tools.reddit_sentiment.client_secret': 'Reddit Client Secret',
+    'tools.reddit_sentiment.user_agent': 'Reddit User Agent',
 
     'tools.stocktwits_sentiment.label': 'StockTwits Sentiment',
     'tools.stocktwits_sentiment.description': 'Analyzes real-time retail message sentiment flow on StockTwits.',
@@ -84,6 +88,7 @@ const toolTranslations = {
 
     'tools.search_web.label': 'SearXNG Web Search',
     'tools.search_web.description': 'Performs active web searches using SearXNG for real-time validation.',
+    'tools.search_web.searxng_url': 'SearXNG URL',
 
     'tools.crypto_fear_greed.label': 'Crypto Fear & Greed Index',
     'tools.crypto_fear_greed.description': 'Pulls market sentiment indices for cryptocurrency assets.',
@@ -107,6 +112,7 @@ const toolTranslations = {
     'tools.core_stock_data.label': 'Temel Hisse Senedi Verileri',
     'tools.core_stock_data.description': 'Geçmiş hisse senedi fiyatlarını, hacmini ve açılış-yüksek-düşük-kapanış mumlarını çeker.',
     'tools.core_stock_data.default_lookback_days': 'Varsayılan Geriye Dönük Gün Sayısı',
+    'tools.core_stock_data.alpha_vantage_api_key': 'Alpha Vantage API Anahtarı (API Key)',
 
     'tools.technical_indicators.label': 'Teknik Göstergeler',
     'tools.technical_indicators.description': 'SMA, EMA, RSI, MACD ve Bollinger Bantlarını hesaplar.',
@@ -145,6 +151,9 @@ const toolTranslations = {
     'tools.reddit_sentiment.label': 'Reddit Duygu Analizi',
     'tools.reddit_sentiment.description': 'Popüler yatırım subredditlerini hisse mentions, upvote ve duygu oranları için tarar.',
     'tools.reddit_sentiment.limit': 'Gönderi Tarama Limiti',
+    'tools.reddit_sentiment.client_id': 'Reddit İstemci Kimliği (Client ID)',
+    'tools.reddit_sentiment.client_secret': 'Reddit İstemci Şifresi (Client Secret)',
+    'tools.reddit_sentiment.user_agent': 'Reddit Tarayıcı Kimliği (User Agent)',
 
     'tools.stocktwits_sentiment.label': 'StockTwits Duygu Analizi',
     'tools.stocktwits_sentiment.description': 'StockTwits üzerindeki gerçek zamanlı bireysel yatırımcı mesaj duygu akışını analiz eder.',
@@ -176,6 +185,7 @@ const toolTranslations = {
 
     'tools.search_web.label': 'SearXNG Web Arama',
     'tools.search_web.description': 'Gerçek zamanlı doğrulama sağlamak amacıyla SearXNG kullanarak aktif web aramaları gerçekleştirir.',
+    'tools.search_web.searxng_url': 'SearXNG Adresi (URL)',
 
     'tools.crypto_fear_greed.label': 'Kripto Korku ve Açgözlülük Endeksi',
     'tools.crypto_fear_greed.description': 'Kripto para varlıkları için piyasa duygu endekslerini çeker.',

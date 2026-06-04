@@ -21,7 +21,28 @@ reddit_sentiment_tool = FunctionToolAdapter(
             default=20.0,
             min=1.0,
             max=100.0,
-        )
+        ),
+        ToolSettingField(
+            key="reddit_client_id",
+            type="string",
+            scope="user",
+            label_key="tools.reddit_sentiment.client_id",
+            default="",
+        ),
+        ToolSettingField(
+            key="reddit_client_secret",
+            type="secret",
+            scope="user",
+            label_key="tools.reddit_sentiment.client_secret",
+            default="",
+        ),
+        ToolSettingField(
+            key="reddit_user_agent",
+            type="string",
+            scope="user",
+            label_key="tools.reddit_sentiment.user_agent",
+            default="TradingAgents/1.0",
+        ),
     ],
 )
 

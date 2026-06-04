@@ -11,11 +11,10 @@ from backend.trading_agents.dataflows.config import get_config
 _API = "https://www.reddit.com/r/{sub}/search.json?{qs}"
 _DEFAULT_UA = "tradingagents/0.2 (+https://github.com/TauricResearch/TradingAgents)"
 def _get_user_agent() -> str:
-    import os
     cfg_ua = get_config().get("reddit_user_agent")
     if cfg_ua:
         return cfg_ua
-    return os.getenv("REDDIT_USER_AGENT", _DEFAULT_UA)
+    return _DEFAULT_UA
 DEFAULT_SUBREDDITS = ("wallstreetbets", "stocks", "investing")
 def _fetch_subreddit(
     ticker: str,

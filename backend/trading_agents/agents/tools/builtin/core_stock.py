@@ -20,7 +20,14 @@ core_stock_tool = FunctionToolAdapter(
             default=365.0,
             min=30.0,
             max=1825.0,
-        )
+        ),
+        ToolSettingField(
+            key="alpha_vantage_api_key",
+            type="secret",
+            scope="server",
+            label_key="tools.core_stock_data.alpha_vantage_api_key",
+            default="",
+        ),
     ],
 )
 

@@ -41,6 +41,28 @@ async def _get_historical_analyses_context(
                 parts.append(f"{label}:\n{field[:400].strip()}...")
         parts.append("")
     return "\n".join(parts)
+def _inject_tool_credentials(config: dict) -> None:
+    runtime_tool_context = config.get("runtime_tool_context")
+    if not runtime_tool_context:
+        return
+    user_settings = runtime_tool_context.get("user_settings", {})
+    server_settings = runtime_tool_context.get("server_settings", {})
+    
+    # reddit_sentiment settings (strictly user scope)
+    reddit_user = user_settings.get("reddit_sentiment", {}).get("settings", {})
+    config["reddit_client_id"] = reddit_user.get("reddit_client_id")
+    config["reddit_client_secret"] = reddit_user.get("reddit_client_secret")
+    config["reddit_user_agent"] = reddit_user.get("reddit_user_agent")
+    
+    # search_web settings (strictly user scope)
+    search_user = user_settings.get("search_web", {}).get("settings", {})
+    config["searxng_url"] = search_user.get("searxng_url")
+    
+    # core_stock_data settings (server scope)
+    stock_server = server_settings.get("core_stock_data", {}).get("settings", {})
+    config["alpha_vantage_api_key"] = stock_server.get("alpha_vantage_api_key")
+
+
 def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
     from backend.trading_agents.graph.trading_graph import DEFAULT_CONFIG
     import tempfile, os as _os
@@ -85,17 +107,7 @@ def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
         cfg["anthropic_effort"] = settings.anthropic_effort
     if getattr(settings, "google_thinking_level", None):
         cfg["google_thinking_level"] = settings.google_thinking_level
-    if sys_settings:
-        if getattr(sys_settings, "searxng_url", None):
-            cfg["searxng_url"] = sys_settings.searxng_url
-        if getattr(sys_settings, "reddit_client_id", None):
-            cfg["reddit_client_id"] = sys_settings.reddit_client_id
-        if getattr(sys_settings, "reddit_client_secret", None):
-            cfg["reddit_client_secret"] = sys_settings.reddit_client_secret
-        if getattr(sys_settings, "reddit_user_agent", None):
-            cfg["reddit_user_agent"] = sys_settings.reddit_user_agent
-        if getattr(sys_settings, "alpha_vantage_api_key", None):
-            cfg["alpha_vantage_api_key"] = sys_settings.alpha_vantage_api_key
+
     if user is not None:
         from backend.core.config import get_settings as _cfg
         from backend.services.user_service import get_user_api_key, decrypt_api_keys
@@ -246,6 +258,7 @@ async def run_analysis(
         
         runtime_tool_context = await build_global_runtime_context(db, user_id)
         config["runtime_tool_context"] = runtime_tool_context
+        _inject_tool_credentials(config)
 
         ta = TradingAgentsGraph(
             selected_analysts=permitted_analysts,
@@ -435,6 +448,7 @@ async def run_portfolio_analysis(
             
             runtime_tool_context = await build_global_runtime_context(db, user_id)
             config["runtime_tool_context"] = runtime_tool_context
+            _inject_tool_credentials(config)
 
             ta = TradingAgentsGraph(
                 selected_analysts=permitted_analysts,

@@ -17,14 +17,6 @@ interface UserRecord {
   created_at: string
 }
 
-interface SystemSettings {
-  searxng_url: string | null
-  reddit_client_id: string | null
-  reddit_client_secret: string | null
-  reddit_user_agent: string | null
-  alpha_vantage_api_key: string | null
-}
-
 const ALL_PAGE_KEYS = [
   'dashboard', 'analysis', 'chart', 'trading', 'portfolio',
   'watchlist', 'orders', 'performance', 'alerts', 'ab-testing', 'logs',
@@ -62,9 +54,6 @@ export default function Admin() {
   const [agentAccess, setAgentAccess] = useState<Record<string, boolean>>({})
   const [toolAccess, setToolAccess] = useState<Record<string, Record<string, boolean>>>({})
   const [permSaved, setPermSaved] = useState(false)
-  const [sysSettings, setSysSettings] = useState<SystemSettings | null>(null)
-  const [sysSaved, setSysSaved] = useState(false)
-  const [sysError, setSysError] = useState<string | null>(null)
   const [newUser, setNewUser] = useState({ username: '', password: '', email: '', role: 'user' })
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
@@ -77,15 +66,9 @@ export default function Admin() {
     setUsers(r.data)
   }, [])
 
-  const loadSystemSettings = useCallback(async () => {
-    const r = await axios.get('/api/system-settings')
-    setSysSettings(r.data)
-  }, [])
-
   useEffect(() => {
     loadUsers()
-    loadSystemSettings()
-  }, [loadUsers, loadSystemSettings])
+  }, [loadUsers])
 
   const loadUserPermissions = async (userId: number) => {
     const [pRes, sRes, agentRes, toolRes] = await Promise.all([
@@ -182,17 +165,7 @@ export default function Admin() {
     if (selectedUserId === id) setSelectedUserId(null)
   }
 
-  const saveSystemSettings = async () => {
-    if (!sysSettings) return
-    setSysError(null)
-    try {
-      await axios.put('/api/system-settings', sysSettings)
-      setSysSaved(true)
-      setTimeout(() => setSysSaved(false), 2500)
-    } catch (err: any) {
-      setSysError(err.response?.data?.detail || t('admin.save_error'))
-    }
-  }
+
 
   const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
     { key: 'users',       label: t('admin.tab_users') || 'User Management',       icon: <UserCog size={14} /> },
@@ -547,85 +520,8 @@ export default function Admin() {
           </div>
         )}
 
-        {tab === 'system' && sysSettings && (
+        {tab === 'system' && (
           <div className="space-y-6">
-            <Section title={t('admin.section_system_settings')}>
-              <div className="space-y-4 pt-1">
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
-                  <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">SearXNG URL</span>
-                  <div className="flex-1 sm:max-w-xs">
-                    <input
-                      className={Input}
-                      value={sysSettings.searxng_url || ''}
-                      onChange={e => setSysSettings(s => s ? { ...s, searxng_url: e.target.value || null } : s)}
-                      placeholder="http://localhost:8080"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
-                  <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Reddit Client ID</span>
-                  <div className="flex-1 sm:max-w-xs">
-                    <input
-                      className={Input}
-                      value={sysSettings.reddit_client_id || ''}
-                      onChange={e => setSysSettings(s => s ? { ...s, reddit_client_id: e.target.value || null } : s)}
-                      placeholder="Reddit Client ID"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
-                  <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Reddit Client Secret</span>
-                  <div className="flex-1 sm:max-w-xs">
-                    <input
-                      className={Input}
-                      type="password"
-                      value={sysSettings.reddit_client_secret || ''}
-                      onChange={e => setSysSettings(s => s ? { ...s, reddit_client_secret: e.target.value || null } : s)}
-                      placeholder="Reddit Client Secret"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
-                  <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Reddit User Agent</span>
-                  <div className="flex-1 sm:max-w-xs">
-                    <input
-                      className={Input}
-                      value={sysSettings.reddit_user_agent || ''}
-                      onChange={e => setSysSettings(s => s ? { ...s, reddit_user_agent: e.target.value || null } : s)}
-                      placeholder="TradingAgents/1.0"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
-                  <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Alpha Vantage API Key</span>
-                  <div className="flex-1 sm:max-w-xs">
-                    <input
-                      className={Input}
-                      type="password"
-                      value={sysSettings.alpha_vantage_api_key || ''}
-                      onChange={e => setSysSettings(s => s ? { ...s, alpha_vantage_api_key: e.target.value || null } : s)}
-                      placeholder="Alpha Vantage API Key"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-3 pt-2">
-                  <button
-                    onClick={saveSystemSettings}
-                    className="flex items-center gap-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl px-5 py-2.5 text-xs font-semibold shadow-md shadow-amber-500/20 transition-all cursor-pointer"
-                  >
-                    {sysSaved ? <CheckCircle2 size={13} className="text-emerald-200" /> : <Save size={13} />}
-                    {sysSaved ? t('admin.saved') : t('admin.save_system')}
-                  </button>
-                  {sysError && <span className="text-rose-400 text-xs font-semibold">{sysError}</span>}
-                </div>
-              </div>
-            </Section>
-
             <ToolSettingsPanel serverScope={true} />
           </div>
         )}

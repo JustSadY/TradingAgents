@@ -13,7 +13,7 @@ from backend.trading_agents.dataflows.config import get_config
 class SearxNGSearchEngine(BaseSearchEngine):
     def __init__(self, base_url: str = None):
         cfg_url = get_config().get("searxng_url")
-        self.base_url = base_url or cfg_url or os.getenv("SEARXNG_URL", "http://localhost:8080")
+        self.base_url = base_url or cfg_url or "http://localhost:8080"
     def search(self, query: str, num_results: int = 5) -> List[Dict[str, str]]:
         try:
             url = f"{self.base_url}/search"
