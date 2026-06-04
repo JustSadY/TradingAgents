@@ -1,23 +1,13 @@
 import asyncio
 import logging
-import sys
-import os
 import time
 import uuid
+import backend.bootstrap  # noqa: F401  (engine env + import-finder setup)
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.websocket import ws_manager
 from backend.models.analysis import AnalysisResult
 from backend.models.settings import AppSettings
 _logger = logging.getLogger(__name__)
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
-import tempfile as _tf
-_TMP = _tf.gettempdir()
-os.environ.setdefault("TRADINGAGENTS_RESULTS_DIR",      os.path.join(_TMP, "ta_results"))
-os.environ.setdefault("TRADINGAGENTS_DATA_CACHE_DIR",   os.path.join(_TMP, "ta_cache"))
-os.environ.setdefault("TRADINGAGENTS_MEMORY_LOG_PATH",  os.path.join(_TMP, "ta_memory.md"))
-os.environ.setdefault("TRADINGAGENTS_LOG_DIR",          _TMP)
 _RUNNING_TASKS: dict[str, asyncio.Task] = {}
 _REPORT_FIELDS = (
     "market_report", "sentiment_report", "news_report", "fundamentals_report",
