@@ -7,9 +7,10 @@ class SystemSettingsRead(BaseModel):
     trading_mode: str = "simulation"
     active_broker: str = "simulation"
     active_data_vendor: str = "yfinance"
-    checkpoint_enabled: bool = False
-    include_historical_analyses: bool = False
-    historical_analyses_limit: int = 5
+    data_vendor_core_stock: str = "yfinance"
+    data_vendor_technicals: str = "yfinance"
+    data_vendor_fundamentals: str = "yfinance"
+    data_vendor_news: str = "yfinance"
     updated_at: datetime | None = None
 
     class Config:
@@ -20,6 +21,7 @@ class SystemSettingsUpdate(BaseModel):
     trading_mode: str | None = None
     active_broker: str | None = None
     active_data_vendor: str | None = None
-    checkpoint_enabled: bool | None = None
-    include_historical_analyses: bool | None = None
-    historical_analyses_limit: int | None = None
+    data_vendor_core_stock: str | None = None
+    data_vendor_technicals: str | None = None
+    data_vendor_fundamentals: str | None = None
+    data_vendor_news: str | None = None

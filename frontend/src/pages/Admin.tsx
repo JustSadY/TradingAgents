@@ -600,45 +600,27 @@ export default function Admin() {
                     </div>
                   </div>
 
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 border-b border-white/[0.01] pb-3">
-                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Checkpoint Enabled</span>
-                    <div className="flex-1 sm:max-w-xs w-full">
-                      <input
-                        type="checkbox"
-                        className="w-5 h-5 accent-violet-600 rounded cursor-pointer"
-                        checked={systemSettings.checkpoint_enabled || false}
-                        onChange={e => setSystemSettings({ ...systemSettings, checkpoint_enabled: e.target.checked })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 border-b border-white/[0.01] pb-3">
-                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Include Historical Analyses</span>
-                    <div className="flex-1 sm:max-w-xs w-full">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 accent-violet-600 rounded cursor-pointer"
-                        checked={systemSettings.include_historical_analyses || false}
-                        onChange={e => setSystemSettings({ ...systemSettings, include_historical_analyses: e.target.checked })}
-                      />
-                    </div>
-                  </div>
-
-                  {systemSettings.include_historical_analyses && (
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 border-b border-white/[0.01] pb-3 pl-6">
-                      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Historical Analyses Limit</span>
+                  {(
+                    [
+                      ['data_vendor_core_stock', 'Core Stock Data Vendor'],
+                      ['data_vendor_technicals', 'Technical Indicators Vendor'],
+                      ['data_vendor_fundamentals', 'Fundamentals Vendor'],
+                      ['data_vendor_news', 'News Vendor'],
+                    ] as [string, string][]
+                  ).map(([field, label]) => (
+                    <div key={field} className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 border-b border-white/[0.01] pb-3">
+                      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">{label}</span>
                       <div className="flex-1 sm:max-w-xs w-full">
-                        <input
-                          type="number"
-                          min="1"
-                          max="50"
-                          className={`${Input} w-32 py-1 font-mono`}
-                          value={systemSettings.historical_analyses_limit || 5}
-                          onChange={e => setSystemSettings({ ...systemSettings, historical_analyses_limit: parseInt(e.target.value) || 5 })}
-                        />
+                        <select
+                          className={Input}
+                          value={(systemSettings as any)[field] || 'yfinance'}
+                          onChange={e => setSystemSettings({ ...systemSettings, [field]: e.target.value })}
+                        >
+                          {meta?.data_vendors?.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                        </select>
                       </div>
                     </div>
-                  )}
+                  ))}
                 </div>
               )}
             </Section>
