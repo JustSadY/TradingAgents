@@ -16,9 +16,9 @@ graph TD
     end
 
     subgraph Persistence [2. Database & API]
-        Registry -->|Schema Metadata| MetaAPI[/api/meta]
+        Registry -->|Schema Metadata| MetaAPI[API: /api/meta]
         DB[(PostgreSQL)] -->|Persist Settings & Access| SettingsSvc[Tool Settings & Access Services]
-        SettingsSvc -->|REST APIs| SettingsAPI[/api/settings/tools]
+        SettingsSvc -->|REST APIs| SettingsAPI[API: /api/settings/tools]
     end
 
     subgraph Runtime [3. Execution Context]
