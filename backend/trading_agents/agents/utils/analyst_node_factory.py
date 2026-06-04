@@ -29,6 +29,13 @@ _COLLAB_SYSTEM = (
 
 def run_tool_analyst(llm, state, *, tools, system_message, report_key, instrument_context):
     """Run the standard tool-using analyst turn and return its state update."""
+    from backend.trading_agents.agents.utils.chart_tools import active_run_context
+    ctx = active_run_context.get(None)
+    if ctx and "graph" in ctx:
+        graph = ctx["graph"]
+        analyst_key = report_key.replace("_report", "")
+        tools = graph._filter_tools_for_analyst(analyst_key, tools)
+
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", _COLLAB_SYSTEM),
@@ -40,6 +47,12 @@ def run_tool_analyst(llm, state, *, tools, system_message, report_key, instrumen
     prompt = prompt.partial(current_date=state["trade_date"])
     prompt = prompt.partial(instrument_context=instrument_context)
 
-    result = (prompt | llm.bind_tools(tools)).invoke(state["messages"])
+    # Bind tools only if we have at least one tool
+    if tools:
+        bound_llm = llm.bind_tools(tools)
+    else:
+        bound_llm = llm
+
+    result = (prompt | bound_llm).invoke(state["messages"])
     report = result.content if len(result.tool_calls) == 0 else ""
     return {"messages": [result], report_key: report}

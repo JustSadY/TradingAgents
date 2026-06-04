@@ -5,6 +5,7 @@ from backend.api.deps import require_admin, get_db
 from backend.models.user import User
 from backend.models.system_settings import SystemSettings
 from backend.schemas.system_settings import SystemSettingsRead, SystemSettingsUpdate
+from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate
 router = APIRouter(prefix="/api/system-settings", tags=["system-settings"])
 async def _get_or_create_system_settings(db: AsyncSession) -> SystemSettings:
     result = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
@@ -38,3 +39,26 @@ async def update_system_settings(
     if body.alpha_vantage_api_key is not None:
         ss.alpha_vantage_api_key = body.alpha_vantage_api_key
     return ss
+
+
+@router.get("/tools", response_model=ToolSettingsRead)
+async def get_server_tools(
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.tool_settings_service import get_server_tool_settings
+    return await get_server_tool_settings(db)
+
+
+@router.put("/tools", response_model=ToolSettingsRead)
+async def update_server_tools(
+    body: ToolSettingsUpdate,
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.tool_settings_service import apply_server_tool_settings_update
+    from fastapi import HTTPException
+    try:
+        return await apply_server_tool_settings_update(db, body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

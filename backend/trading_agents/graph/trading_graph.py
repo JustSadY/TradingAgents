@@ -163,10 +163,54 @@ class TradingAgentsGraph:
                     "Go to Profile → API Keys to add your key."
                 )
         return kwargs
+    def _filter_tools_for_analyst(self, analyst_key: str, raw_tools: list) -> list:
+        runtime_ctx = self.config.get("runtime_tool_context")
+        if not runtime_ctx:
+            return raw_tools
+
+        from backend.trading_agents.agents.tools.registry import registry
+        
+        filtered = []
+        for tool_func in raw_tools:
+            tool_name = tool_func.name if hasattr(tool_func, "name") else tool_func.__name__
+            agent_tool_key = registry.get_agent_tool_key_for_langchain_tool(tool_name)
+            
+            if agent_tool_key is None:
+                filtered.append(tool_func)
+                continue
+                
+            agent_tool = registry.get(agent_tool_key)
+            if not agent_tool:
+                filtered.append(tool_func)
+                continue
+            
+            tool_access = runtime_ctx.get("access", {}).get("tool_access", {}).get(agent_tool_key, {})
+            can_use = tool_access.get("can_use", True)
+            if not can_use:
+                continue
+
+            user_state = runtime_ctx.get("user_settings", {}).get(agent_tool_key, {})
+            server_state = runtime_ctx.get("server_settings", {}).get(agent_tool_key, {})
+            
+            enabled = None
+            if user_state and user_state.get("enabled") is not None:
+                enabled = user_state["enabled"]
+            elif server_state and server_state.get("enabled") is not None:
+                enabled = server_state["enabled"]
+            else:
+                enabled = agent_tool.default_enabled
+                
+            if not enabled:
+                continue
+                
+            filtered.append(tool_func)
+            
+        return filtered
+
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
         from backend.trading_agents.agents.analyst_registry import get_tools, list_analysts
         return {
-            key: ToolNode(get_tools(key))
+            key: ToolNode(self._filter_tools_for_analyst(key, get_tools(key)))
             for key in list_analysts()
         }
     def _resolve_benchmark(self, ticker: str) -> str:

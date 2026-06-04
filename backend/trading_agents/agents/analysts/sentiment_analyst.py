@@ -24,9 +24,28 @@ def create_sentiment_analyst(llm):
         end_date = state["trade_date"]
         start_date = _seven_days_back(end_date)
         instrument_context = build_instrument_context(ticker)
+        from backend.trading_agents.agents.utils.chart_tools import active_run_context
+        ctx = active_run_context.get(None)
+        reddit_enabled = True
+        stocktwits_enabled = True
+        if ctx and "graph" in ctx:
+            graph = ctx["graph"]
+            filtered = graph._filter_tools_for_analyst("social", [fetch_reddit_posts, fetch_stocktwits_messages])
+            reddit_enabled = fetch_reddit_posts in filtered
+            stocktwits_enabled = fetch_stocktwits_messages in filtered
+
         news_block = get_news.func(ticker, start_date, end_date)
-        stocktwits_block = fetch_stocktwits_messages(ticker, limit=30)
-        reddit_block = fetch_reddit_posts(ticker)
+        
+        if reddit_enabled:
+            reddit_block = fetch_reddit_posts(ticker)
+        else:
+            reddit_block = "Reddit sentiment data source is disabled by user or server settings."
+
+        if stocktwits_enabled:
+            stocktwits_block = fetch_stocktwits_messages(ticker, limit=30)
+        else:
+            stocktwits_block = "StockTwits sentiment data source is disabled by user or server settings."
+
         system_message = _build_system_message(
             ticker=ticker,
             start_date=start_date,

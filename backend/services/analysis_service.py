@@ -231,8 +231,24 @@ async def run_analysis(
             if db_ctx:
                 hist_ctx = db_ctx
         config["historical_context"] = attribution_md + hist_ctx
+
+        from backend.services.tool_settings_service import build_global_runtime_context
+        from backend.services.tool_access_service import get_user_agent_access
+        user_id = user.id if user else None
+        agent_access_map = {}
+        if user_id is not None:
+            agent_access_map = await get_user_agent_access(db, user_id)
+        
+        permitted_analysts = [
+            a for a in settings.selected_analysts
+            if agent_access_map.get(a, True)
+        ]
+        
+        runtime_tool_context = await build_global_runtime_context(db, user_id)
+        config["runtime_tool_context"] = runtime_tool_context
+
         ta = TradingAgentsGraph(
-            selected_analysts=settings.selected_analysts,
+            selected_analysts=permitted_analysts,
             debug=False,
             config=config,
         )
@@ -405,8 +421,23 @@ async def run_portfolio_analysis(
     super_report = ""
     if ticker_reports:
         try:
+            from backend.services.tool_settings_service import build_global_runtime_context
+            from backend.services.tool_access_service import get_user_agent_access
+            user_id = user.id if user else None
+            agent_access_map = {}
+            if user_id is not None:
+                agent_access_map = await get_user_agent_access(db, user_id)
+            
+            permitted_analysts = [
+                a for a in settings.selected_analysts
+                if agent_access_map.get(a, True)
+            ]
+            
+            runtime_tool_context = await build_global_runtime_context(db, user_id)
+            config["runtime_tool_context"] = runtime_tool_context
+
             ta = TradingAgentsGraph(
-                selected_analysts=settings.selected_analysts,
+                selected_analysts=permitted_analysts,
                 debug=False,
                 config=config,
             )

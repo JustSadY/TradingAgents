@@ -4,6 +4,7 @@ from .portfolio import Portfolio, Holding
 from .order import Order
 from .analysis import AnalysisResult, AnalysisChat
 from .log import SystemLog
+from .tool_settings import AgentToolSetting, UserAgentAccess, UserToolAccess, UserToolFieldAccess
 
 __all__ = [
     "User",
@@ -14,4 +15,8 @@ __all__ = [
     "AnalysisResult",
     "AnalysisChat",
     "SystemLog",
+    "AgentToolSetting",
+    "UserAgentAccess",
+    "UserToolAccess",
+    "UserToolFieldAccess",
 ]

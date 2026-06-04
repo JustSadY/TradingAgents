@@ -7,8 +7,45 @@ export interface AnalystMeta { key: string; label: string; description: string; 
 export interface Choice { value: string; label: string }
 export interface SignalMeta { value: string; label: string; tone: 'positive' | 'neutral' | 'negative' }
 
+export type ToolSettingType =
+  | 'boolean'
+  | 'number'
+  | 'string'
+  | 'textarea'
+  | 'select'
+  | 'multi_select'
+  | 'string_list'
+  | 'secret'
+
+export interface ToolSettingFieldMeta {
+  key: string
+  type: ToolSettingType
+  scope: 'server' | 'user' | 'both'
+  label_key: string
+  description_key?: string
+  default?: any
+  required?: boolean
+  min?: number
+  max?: number
+  step?: number
+  options?: { value: string; label_key: string }[]
+  secret?: boolean
+  advanced?: boolean
+}
+
+export interface ToolMeta {
+  key: string
+  category: string
+  default_enabled: boolean
+  allowed_analysts: string[]
+  label_key: string
+  description_key: string
+  settings_schema: ToolSettingFieldMeta[]
+}
+
 export interface Meta {
   analysts: AnalystMeta[]
+  tools: ToolMeta[]
   section_labels: Record<string, string>
   signals: SignalMeta[]
   asset_types: Choice[]

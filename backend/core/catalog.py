@@ -160,8 +160,10 @@ CHART_PERIODS: list[dict] = [
 
 
 def build_meta() -> dict:
+    from backend.trading_agents.agents.tools.registry import registry
     return {
         "analysts": available_analysts(),
+        "tools": registry.metadata(),
         "section_labels": SECTION_LABELS,
         "signals": SIGNALS,
         "asset_types": ASSET_TYPES,

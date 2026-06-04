@@ -2,12 +2,13 @@ import { useEffect, useState } from 'react'
 import axios from 'axios'
 import {
   Save, BookmarkPlus, Trash2, Play, Bell,
-  Settings as SettingsIcon, Brain, ShieldAlert, Sliders, Clock
+  Settings as SettingsIcon, Brain, ShieldAlert, Sliders, Clock, Wrench
 } from 'lucide-react'
 import { useMeta } from '../hooks/useMeta'
 import { useAuth } from '../hooks/useAuth'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
 import { useTranslation } from '../contexts/LanguageContext'
+import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
 
 interface Settings {
   trading_mode: string
@@ -175,7 +176,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const [browserNotify, setBrowserNotify] = useState(isBrowserNotifyEnabled())
   const [webhookTesting, setWebhookTesting] = useState(false)
   const [webhookTestResult, setWebhookTestResult] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'risk' | 'webhooks' | 'presets' | 'advanced' | 'cron'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'risk' | 'webhooks' | 'presets' | 'advanced' | 'cron' | 'tools'>('general')
   const [allowedSettings, setAllowedSettings] = useState<string[]>([])
   const meta = useMeta()
 
@@ -287,12 +288,13 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const TABS = [
     { key: 'general',  label: t('settings.general') || 'Preferences',      icon: <SettingsIcon size={14} /> },
     { key: 'llm',      label: t('settings.llm_settings') || 'AI Engine',   icon: <Brain size={14} /> },
+    { key: 'tools',    label: t('settings.section_tools') || 'Agent Tools', icon: <Wrench size={14} /> },
     { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety', icon: <ShieldAlert size={14} /> },
     { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={14} /> },
     { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={14} /> },
     ...(userId ? [] : [{ key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={14} /> }]),
     ...(isAdmin ? [{ key: 'advanced', label: t('settings.section_advanced') || 'Advanced', icon: <Sliders size={14} /> }] : []),
-  ].filter(tab => isAdmin || tab.key === 'advanced' || allowedSettings.includes(tab.key))
+  ].filter(tab => isAdmin || tab.key === 'advanced' || tab.key === 'tools' || allowedSettings.includes(tab.key))
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
@@ -816,6 +818,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 </Row>
               </Section>
             </div>
+          )}
+
+          {activeTab === 'tools' && (
+            <ToolSettingsPanel userId={userId} />
           )}
 
         </div>

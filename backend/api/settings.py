@@ -6,6 +6,7 @@ from sqlalchemy import select
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.schemas.settings import SettingsRead, SettingsUpdate
+from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate
 from backend.api.deps import get_current_user, require_admin
 from backend.services.settings_service import (
     get_or_create_settings,
@@ -127,3 +128,27 @@ async def update_user_settings_by_id(
     settings = await get_or_create_settings(db, target_user)
     settings = await apply_settings_update(db, settings, body)
     return settings_to_read(settings)
+
+
+@router.get("/tools", response_model=ToolSettingsRead)
+async def get_user_tools(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from backend.services.tool_settings_service import get_user_tool_settings
+    from backend.schemas.tool_settings import ToolSettingsRead
+    return await get_user_tool_settings(db, current_user)
+
+
+@router.put("/tools", response_model=ToolSettingsRead)
+async def update_user_tools(
+    body: ToolSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from backend.services.tool_settings_service import apply_tool_settings_update
+    from backend.schemas.tool_settings import ToolSettingsRead
+    try:
+        return await apply_tool_settings_update(db, current_user, body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))

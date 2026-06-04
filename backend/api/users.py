@@ -323,3 +323,81 @@ async def set_user_setting_permissions(
             perm.allowed = allowed
     await db.flush()
     return {"detail": "Setting permissions updated"}
+
+
+@router.get("/{user_id}/agent-access")
+async def get_agent_access(
+    user_id: int,
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.tool_access_service import get_user_agent_access
+    return await get_user_agent_access(db, user_id)
+
+
+class AgentAccessUpdate(BaseModel):
+    agents: dict[str, bool]
+
+
+@router.put("/{user_id}/agent-access")
+async def set_agent_access(
+    user_id: int,
+    body: AgentAccessUpdate,
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.tool_access_service import update_user_agent_access
+    updated = await update_user_agent_access(db, user_id, body.agents)
+    return {"detail": "Agent access updated", "agents": updated}
+
+
+@router.get("/{user_id}/tool-access")
+async def get_tool_access(
+    user_id: int,
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.tool_access_service import get_user_tool_access
+    return await get_user_tool_access(db, user_id)
+
+
+class ToolAccessUpdate(BaseModel):
+    tools: dict[str, dict]
+
+
+@router.put("/{user_id}/tool-access")
+async def set_tool_access(
+    user_id: int,
+    body: ToolAccessUpdate,
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.tool_access_service import update_user_tool_access
+    updated = await update_user_tool_access(db, user_id, body.tools)
+    return {"detail": "Tool access updated", "tools": updated}
+
+
+@router.get("/{user_id}/tool-field-access")
+async def get_tool_field_access(
+    user_id: int,
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.tool_access_service import get_user_tool_field_access
+    return await get_user_tool_field_access(db, user_id)
+
+
+class ToolFieldAccessUpdate(BaseModel):
+    fields: dict[str, dict[str, dict]]
+
+
+@router.put("/{user_id}/tool-field-access")
+async def set_tool_field_access(
+    user_id: int,
+    body: ToolFieldAccessUpdate,
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    from backend.services.tool_access_service import update_user_tool_field_access
+    updated = await update_user_tool_field_access(db, user_id, body.fields)
+    return {"detail": "Tool field access updated", "fields": updated}

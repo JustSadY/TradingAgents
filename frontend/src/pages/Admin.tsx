@@ -4,6 +4,8 @@ import { Save, Trash2, Plus, UserCog, ShieldCheck, Globe, CheckCircle2, Key, Sli
 import { useTranslation } from '../contexts/LanguageContext'
 import { useAuth } from '../hooks/useAuth'
 import Settings from './Settings'
+import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
+import { useMeta } from '../hooks/useMeta'
 
 interface UserRecord {
   id: number
@@ -51,11 +53,14 @@ type Tab = 'users' | 'permissions' | 'system' | 'api-keys' | 'user-settings'
 export default function Admin() {
   const { t } = useTranslation()
   const { isOwner } = useAuth()
+  const meta = useMeta()
   const [tab, setTab] = useState<Tab>('users')
   const [users, setUsers] = useState<UserRecord[]>([])
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
   const [permissions, setPermissions] = useState<Record<string, boolean>>({})
   const [settingPermissions, setSettingPermissions] = useState<Record<string, boolean>>({})
+  const [agentAccess, setAgentAccess] = useState<Record<string, boolean>>({})
+  const [toolAccess, setToolAccess] = useState<Record<string, Record<string, boolean>>>({})
   const [permSaved, setPermSaved] = useState(false)
   const [sysSettings, setSysSettings] = useState<SystemSettings | null>(null)
   const [sysSaved, setSysSaved] = useState(false)
@@ -83,12 +88,16 @@ export default function Admin() {
   }, [loadUsers, loadSystemSettings])
 
   const loadUserPermissions = async (userId: number) => {
-    const [pRes, sRes] = await Promise.all([
+    const [pRes, sRes, agentRes, toolRes] = await Promise.all([
       axios.get(`/api/users/${userId}/permissions`),
       axios.get(`/api/users/${userId}/setting-permissions`),
+      axios.get(`/api/users/${userId}/agent-access`),
+      axios.get(`/api/users/${userId}/tool-access`),
     ])
     setPermissions(pRes.data.permissions)
     setSettingPermissions(sRes.data.permissions)
+    setAgentAccess(agentRes.data)
+    setToolAccess(toolRes.data)
     setSelectedUserId(userId)
   }
 
@@ -125,6 +134,8 @@ export default function Admin() {
     await Promise.all([
       axios.put(`/api/users/${selectedUserId}/permissions`, { permissions }),
       axios.put(`/api/users/${selectedUserId}/setting-permissions`, { permissions: settingPermissions }),
+      axios.put(`/api/users/${selectedUserId}/agent-access`, { agents: agentAccess }),
+      axios.put(`/api/users/${selectedUserId}/tool-access`, { tools: toolAccess }),
     ])
     setPermSaved(true)
     setTimeout(() => setPermSaved(false), 2500)
@@ -360,159 +371,263 @@ export default function Admin() {
               )}
             </Section>
           </>
-        )}
-
-        {tab === 'permissions' && (
-          <Section title={t('admin.section_page_permissions')}>
-            <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
-              <select
-                className={`${Input} sm:max-w-xs`}
-                value={selectedUserId ?? ''}
-                onChange={e => {
-                  const id = parseInt(e.target.value)
-                  if (!isNaN(id)) loadUserPermissions(id)
-                }}
-              >
-                <option value="">{t('admin.select_user')}</option>
-                {users.filter(u => u.role === 'user').map(u => (
-                  <option key={u.id} value={u.id}>{u.username}</option>
-                ))}
-              </select>
-              {selectedUserId && (
-                <button
-                  onClick={savePermissions}
-                  className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition cursor-pointer"
+        )}        {tab === 'permissions' && (
+          <div className="space-y-6">
+            <Section title={t('admin.section_page_permissions')}>
+              <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
+                <select
+                  className={`${Input} sm:max-w-xs`}
+                  value={selectedUserId ?? ''}
+                  onChange={e => {
+                    const id = parseInt(e.target.value)
+                    if (!isNaN(id)) loadUserPermissions(id)
+                  }}
                 >
-                  {permSaved ? <CheckCircle2 size={13} className="text-emerald-300 animate-pulse" /> : <Save size={13} />}
-                  {permSaved ? t('admin.saved') : t('admin.save_permissions')}
-                </button>
-              )}
-            </div>
-
-            {selectedUserId && (
-              <>
-                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
-                  {ALL_PAGE_KEYS.map(key => (
-                    <label key={key} className="flex items-center gap-2.5 text-xs font-semibold text-slate-300 cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 rounded-xl px-3 py-2 border border-white/[0.03] transition-colors select-none">
-                      <input
-                        type="checkbox"
-                        className="accent-violet-600 w-4 h-4 rounded cursor-pointer"
-                        checked={permissions[key] ?? false}
-                        onChange={e => setPermissions(prev => ({ ...prev, [key]: e.target.checked }))}
-                      />
-                      {PAGE_LABELS[key] || key}
-                    </label>
+                  <option value="">{t('admin.select_user')}</option>
+                  {users.filter(u => u.role === 'user').map(u => (
+                    <option key={u.id} value={u.id}>{u.username}</option>
                   ))}
-                </div>
+                </select>
+                {selectedUserId && (
+                  <button
+                    onClick={savePermissions}
+                    className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition cursor-pointer"
+                  >
+                    {permSaved ? <CheckCircle2 size={13} className="text-emerald-300 animate-pulse" /> : <Save size={13} />}
+                    {permSaved ? t('admin.saved') : t('admin.save_permissions')}
+                  </button>
+                )}
+              </div>
 
-                <div className="border-t border-white/[0.04] mt-5 pt-4 space-y-3">
-                  <h4 className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">
-                    {t('admin.section_settings_permissions') || 'Settings Edit Permissions'}
-                  </h4>
-                  <p className="text-[10px] text-slate-500 font-semibold mb-1">Select which settings tabs this user is permitted to edit:</p>
-                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                    {[
-                      { key: 'general',  label: t('settings.general') || 'Preferences' },
-                      { key: 'llm',      label: t('settings.llm_settings') || 'AI Engine' },
-                      { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety' },
-                      { key: 'webhooks', label: t('settings.section_notifications') || 'Personal Webhooks' },
-                      { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler' },
-                      { key: 'presets',  label: t('settings.section_presets') || 'Configuration Templates' },
-                    ].map(s => (
-                      <label key={s.key} className="flex items-center gap-2.5 text-xs font-semibold text-slate-300 cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 rounded-xl px-3 py-2 border border-white/[0.03] transition-colors select-none">
+              {selectedUserId && (
+                <>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 mt-2">
+                    {ALL_PAGE_KEYS.map(key => (
+                      <label key={key} className="flex items-center gap-2.5 text-xs font-semibold text-slate-300 cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 rounded-xl px-3 py-2 border border-white/[0.03] transition-colors select-none">
                         <input
                           type="checkbox"
-                          className="accent-amber-500 w-4 h-4 rounded cursor-pointer"
-                          checked={settingPermissions[s.key] ?? false}
-                          onChange={e => setSettingPermissions(prev => ({ ...prev, [s.key]: e.target.checked }))}
+                          className="accent-violet-600 w-4 h-4 rounded cursor-pointer"
+                          checked={permissions[key] ?? false}
+                          onChange={e => setPermissions(prev => ({ ...prev, [key]: e.target.checked }))}
                         />
-                        {s.label}
+                        {PAGE_LABELS[key] || key}
                       </label>
                     ))}
                   </div>
-                </div>
+
+                  <div className="border-t border-white/[0.04] mt-5 pt-4 space-y-3">
+                    <h4 className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">
+                      {t('admin.section_settings_permissions') || 'Settings Edit Permissions'}
+                    </h4>
+                    <p className="text-[10px] text-slate-500 font-semibold mb-1">Select which settings tabs this user is permitted to edit:</p>
+                    <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                      {[
+                        { key: 'general',  label: t('settings.general') || 'Preferences' },
+                        { key: 'llm',      label: t('settings.llm_settings') || 'AI Engine' },
+                        { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety' },
+                        { key: 'webhooks', label: t('settings.section_notifications') || 'Personal Webhooks' },
+                        { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler' },
+                        { key: 'presets',  label: t('settings.section_presets') || 'Configuration Templates' },
+                      ].map(s => (
+                        <label key={s.key} className="flex items-center gap-2.5 text-xs font-semibold text-slate-300 cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 rounded-xl px-3 py-2 border border-white/[0.03] transition-colors select-none">
+                          <input
+                            type="checkbox"
+                            className="accent-amber-500 w-4 h-4 rounded cursor-pointer"
+                            checked={settingPermissions[s.key] ?? false}
+                            onChange={e => setSettingPermissions(prev => ({ ...prev, [s.key]: e.target.checked }))}
+                          />
+                          {s.label}
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                </>
+              )}
+            </Section>
+
+            {selectedUserId && (
+              <>
+                <Section title={t('admin.section_agent_access') || 'Agent Analyst Permissions'}>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
+                    {meta?.analysts?.map(analyst => (
+                      <label key={analyst.key} className="flex items-center gap-3 text-xs font-semibold text-slate-350 cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 rounded-xl px-3 py-2.5 border border-white/[0.03] transition-colors select-none">
+                        <input
+                          type="checkbox"
+                          className="accent-violet-600 w-4 h-4 rounded cursor-pointer shrink-0"
+                          checked={agentAccess[analyst.key] ?? analyst.default}
+                          onChange={e => setAgentAccess(prev => ({ ...prev, [analyst.key]: e.target.checked }))}
+                        />
+                        <div className="space-y-0.5">
+                          <div className="text-slate-250 font-bold">{analyst.label || analyst.key}</div>
+                          <div className="text-[10px] text-slate-500 font-normal leading-tight">{analyst.description}</div>
+                        </div>
+                      </label>
+                    ))}
+                  </div>
+                </Section>
+
+                <Section title={t('admin.section_tool_access') || 'Tool Access Control Matrix'}>
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-xs text-slate-300 min-w-[500px]">
+                      <thead>
+                        <tr className="text-left text-slate-500 text-[10px] uppercase tracking-wider border-b border-white/[0.04] bg-white/[0.01]">
+                          <th className="px-3 py-2 pr-4 font-bold text-slate-450">Tool</th>
+                          <th className="px-3 py-2 text-center font-bold text-slate-450">View Settings</th>
+                          <th className="px-3 py-2 text-center font-bold text-slate-450">Use in Run</th>
+                          <th className="px-3 py-2 text-center font-bold text-slate-450">Edit Settings</th>
+                          <th className="px-3 py-2 text-center font-bold text-slate-450">Enable/Disable</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.02]">
+                        {meta?.tools?.map(tool => {
+                          const toolState = toolAccess[tool.key] || {
+                            can_view: true,
+                            can_use: true,
+                            can_edit: false,
+                            can_enable: false,
+                          }
+
+                          const handleToggle = (permKey: string, val: boolean) => {
+                            setToolAccess(prev => ({
+                              ...prev,
+                              [tool.key]: {
+                                ...toolState,
+                                [permKey]: val,
+                              }
+                            }))
+                          }
+
+                          return (
+                            <tr key={tool.key} className="hover:bg-white/[0.01]">
+                              <td className="py-2.5 px-3 pr-4">
+                                <div className="font-semibold text-slate-200">{t(tool.label_key)}</div>
+                                <div className="text-[10px] text-slate-500 font-normal leading-relaxed">{t(tool.description_key)}</div>
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  className="accent-violet-600 w-4 h-4 rounded cursor-pointer mx-auto"
+                                  checked={toolState.can_view ?? true}
+                                  onChange={e => handleToggle('can_view', e.target.checked)}
+                                />
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  className="accent-violet-600 w-4 h-4 rounded cursor-pointer mx-auto"
+                                  checked={toolState.can_use ?? true}
+                                  onChange={e => handleToggle('can_use', e.target.checked)}
+                                />
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  className="accent-violet-600 w-4 h-4 rounded cursor-pointer mx-auto"
+                                  checked={toolState.can_edit ?? false}
+                                  onChange={e => handleToggle('can_edit', e.target.checked)}
+                                />
+                              </td>
+                              <td className="py-2.5 px-3 text-center">
+                                <input
+                                  type="checkbox"
+                                  className="accent-violet-600 w-4 h-4 rounded cursor-pointer mx-auto"
+                                  checked={toolState.can_enable ?? false}
+                                  onChange={e => handleToggle('can_enable', e.target.checked)}
+                                />
+                              </td>
+                            </tr>
+                          )
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                </Section>
               </>
             )}
-          </Section>
+          </div>
         )}
 
         {tab === 'system' && sysSettings && (
-          <Section title={t('admin.section_system_settings')}>
-            <div className="space-y-4 pt-1">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
-                <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">SearXNG URL</span>
-                <div className="flex-1 sm:max-w-xs">
-                  <input
-                    className={Input}
-                    value={sysSettings.searxng_url || ''}
-                    onChange={e => setSysSettings(s => s ? { ...s, searxng_url: e.target.value || null } : s)}
-                    placeholder="http://localhost:8080"
-                  />
+          <div className="space-y-6">
+            <Section title={t('admin.section_system_settings')}>
+              <div className="space-y-4 pt-1">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
+                  <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">SearXNG URL</span>
+                  <div className="flex-1 sm:max-w-xs">
+                    <input
+                      className={Input}
+                      value={sysSettings.searxng_url || ''}
+                      onChange={e => setSysSettings(s => s ? { ...s, searxng_url: e.target.value || null } : s)}
+                      placeholder="http://localhost:8080"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
+                  <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Reddit Client ID</span>
+                  <div className="flex-1 sm:max-w-xs">
+                    <input
+                      className={Input}
+                      value={sysSettings.reddit_client_id || ''}
+                      onChange={e => setSysSettings(s => s ? { ...s, reddit_client_id: e.target.value || null } : s)}
+                      placeholder="Reddit Client ID"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
+                  <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Reddit Client Secret</span>
+                  <div className="flex-1 sm:max-w-xs">
+                    <input
+                      className={Input}
+                      type="password"
+                      value={sysSettings.reddit_client_secret || ''}
+                      onChange={e => setSysSettings(s => s ? { ...s, reddit_client_secret: e.target.value || null } : s)}
+                      placeholder="Reddit Client Secret"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
+                  <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Reddit User Agent</span>
+                  <div className="flex-1 sm:max-w-xs">
+                    <input
+                      className={Input}
+                      value={sysSettings.reddit_user_agent || ''}
+                      onChange={e => setSysSettings(s => s ? { ...s, reddit_user_agent: e.target.value || null } : s)}
+                      placeholder="TradingAgents/1.0"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
+                  <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Alpha Vantage API Key</span>
+                  <div className="flex-1 sm:max-w-xs">
+                    <input
+                      className={Input}
+                      type="password"
+                      value={sysSettings.alpha_vantage_api_key || ''}
+                      onChange={e => setSysSettings(s => s ? { ...s, alpha_vantage_api_key: e.target.value || null } : s)}
+                      placeholder="Alpha Vantage API Key"
+                    />
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-3 pt-2">
+                  <button
+                    onClick={saveSystemSettings}
+                    className="flex items-center gap-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl px-5 py-2.5 text-xs font-semibold shadow-md shadow-amber-500/20 transition-all cursor-pointer"
+                  >
+                    {sysSaved ? <CheckCircle2 size={13} className="text-emerald-200" /> : <Save size={13} />}
+                    {sysSaved ? t('admin.saved') : t('admin.save_system')}
+                  </button>
+                  {sysError && <span className="text-rose-400 text-xs font-semibold">{sysError}</span>}
                 </div>
               </div>
+            </Section>
 
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
-                <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Reddit Client ID</span>
-                <div className="flex-1 sm:max-w-xs">
-                  <input
-                    className={Input}
-                    value={sysSettings.reddit_client_id || ''}
-                    onChange={e => setSysSettings(s => s ? { ...s, reddit_client_id: e.target.value || null } : s)}
-                    placeholder="Reddit Client ID"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
-                <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Reddit Client Secret</span>
-                <div className="flex-1 sm:max-w-xs">
-                  <input
-                    className={Input}
-                    type="password"
-                    value={sysSettings.reddit_client_secret || ''}
-                    onChange={e => setSysSettings(s => s ? { ...s, reddit_client_secret: e.target.value || null } : s)}
-                    placeholder="Reddit Client Secret"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
-                <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Reddit User Agent</span>
-                <div className="flex-1 sm:max-w-xs">
-                  <input
-                    className={Input}
-                    value={sysSettings.reddit_user_agent || ''}
-                    onChange={e => setSysSettings(s => s ? { ...s, reddit_user_agent: e.target.value || null } : s)}
-                    placeholder="TradingAgents/1.0"
-                  />
-                </div>
-              </div>
-
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 border-b border-white/[0.01] pb-3.5 last:border-b-0">
-                <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Alpha Vantage API Key</span>
-                <div className="flex-1 sm:max-w-xs">
-                  <input
-                    className={Input}
-                    type="password"
-                    value={sysSettings.alpha_vantage_api_key || ''}
-                    onChange={e => setSysSettings(s => s ? { ...s, alpha_vantage_api_key: e.target.value || null } : s)}
-                    placeholder="Alpha Vantage API Key"
-                  />
-                </div>
-              </div>
-
-              <div className="flex items-center gap-3 pt-2">
-                <button
-                  onClick={saveSystemSettings}
-                  className="flex items-center gap-2 bg-gradient-to-r from-amber-600 to-orange-600 hover:from-amber-500 hover:to-orange-500 text-white rounded-xl px-5 py-2.5 text-xs font-semibold shadow-md shadow-amber-500/20 transition-all cursor-pointer"
-                >
-                  {sysSaved ? <CheckCircle2 size={13} className="text-emerald-200" /> : <Save size={13} />}
-                  {sysSaved ? t('admin.saved') : t('admin.save_system')}
-                </button>
-                {sysError && <span className="text-rose-400 text-xs font-semibold">{sysError}</span>}
-              </div>
-            </div>
-          </Section>
+            <ToolSettingsPanel serverScope={true} />
+          </div>
         )}
 
         {tab === 'api-keys' && (

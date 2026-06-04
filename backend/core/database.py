@@ -36,6 +36,7 @@ async def create_all_tables():
     import backend.models.alert
     import backend.models.preset
     import backend.models.portfolio_analysis
+    import backend.models.tool_settings
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         from backend.core.migrations import apply_column_migrations, apply_type_migrations

@@ -115,6 +115,13 @@ Before publishing the final report, the **Reflection Node** checks the generated
 - It scans for hallucinations (e.g., mismatched prices or tickers).
 - If validation fails, it loops back to the analyst or researcher nodes with a refinement request.
 
+### 5. Modular Agent Tool Registry and Runtime Flow
+To support dynamic tool schema extraction and runtime tool activation, the platform decouples individual tools from the core agent execution:
+*   **BaseAgentTool Class (`agents/tools/base.py`):** Individual tools (e.g., Reddit Sentiment, Macroeconomic Data) inherit from `BaseAgentTool`, defining their execution logic (`_run` / `_arun`), their target analyst nodes, and their configurable settings schema (`ToolSettingField`).
+*   **Tool Registry (`agents/tools/registry.py`):** Acts as the source of truth for all tools. Standard tools are registered at bootstrap (`agents/tools/bootstrap.py`).
+*   **Thread-Safe Context Injection (`graph/trading_graph.py`):** Before running the state machine, user-specific or system-default settings are loaded from the database and merged into a `runtime_tool_context`. This context is stored in the LangGraph thread configuration.
+*   **Runtime Tool Adaptation (`agents/utils/analyst_node_factory.py`):** In the analyst execution lifecycle (`run_tool_analyst`), the runtime filters active tools based on the context and adapts them dynamically into LangChain/LangGraph-compatible bindings.
+
 ---
 
 ## 🔌 LLM Provider Integration

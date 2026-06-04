@@ -84,6 +84,21 @@ Long-running AI debates can take up to 2-3 minutes. Instead of blocking HTTP con
 ### 3. Automatic System Updater
 The server integrates with a systemd-managed update wrapper. [update_service.py](services/update_service.py) regularly polls the GitHub remote repository. If an administrator clicks "Update" in the settings panel, it kicks off a one-shot systemd service to run safe git pulls, dependency updates, front-end compilation, and restarts the parent application daemon.
 
+### 4. Dynamic Modular Tool System & Access Permissions
+To support flexible tool execution inside analyst nodes, the platform implements a dynamically resolved modular tool registry:
+*   **Database Models (`backend/models/tool_settings.py`):**
+    *   `AgentToolSetting`: Stores global defaults and user-specific customizations for tool fields.
+    *   `UserAgentAccess`: Restricts or grants access to run specific analyst nodes (e.g., Market Analyst).
+    *   `UserToolAccess`: Configures granular user actions for individual tools (`can_view`, `can_use`, `can_edit`, `can_enable`).
+    *   `UserToolFieldAccess`: Overrides field-level visibility (`can_view`, `can_edit`) for individual tool configuration settings.
+*   **Access Control Services (`backend/services/tool_access_service.py` & `tool_settings_service.py`):**
+    *   Maintains helper utilities to retrieve, update, and resolve user-specific permission profiles and override configurations.
+*   **API Endpoints:**
+    *   `/api/settings/tools` (`GET/PUT`): Reads/updates active tool settings for the calling user.
+    *   `/api/system-settings/tools` (`GET/PUT`): Admin-only route to manage global fallback tool settings.
+    *   `/api/users/{id}/agent-access` (`GET/PUT`): Admin-only route to manage which analyst nodes a user is permitted to invoke.
+    *   `/api/users/{id}/tool-access` (`GET/PUT`): Admin-only route to configure tool-level user permissions.
+
 ---
 
 ## 🚀 Setup & Developer Onboarding
@@ -145,6 +160,11 @@ Ensure you have a PostgreSQL database server running and a database named `tradi
 | `/api/trading/portfolio` | `GET` | Yes | Paper portfolio with live prices & P&L. |
 | `/api/trading/order` | `POST` | Yes | Submit a paper buy/sell order. |
 | `/api/settings` | `GET/PUT` | Yes | Read / update per-user LLM & engine settings. |
+| `/api/settings/tools` | `GET/PUT` | Yes | Read / update user-specific agent tool settings. |
+| `/api/system-settings/tools` | `GET/PUT` | Admin | Manage system-default fallback tool settings. |
+| `/api/users/{id}/agent-access` | `GET/PUT` | Admin | Read / update user permissions for analyst nodes. |
+| `/api/users/{id}/tool-access` | `GET/PUT` | Admin | Read / update user permissions for agent tools. |
+| `/api/meta` | `GET` | No | Returns system metadata, dynamic tool schemas and lists. |
 | `/ws/analysis/{task_id}` | `WS` | Yes² | Stream live LangGraph progress events. |
 | `/health` | `GET` | No | Health check. Returns `{"status": "ok"}`. |
 

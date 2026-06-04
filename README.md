@@ -22,6 +22,18 @@ The platform supports technical analysis, market sentiment (Reddit/StockTwits), 
 
 ---
 
+## 🛠️ Modular Agent Tool System
+
+The platform features a dynamic, database-driven modular agent tool system that decouples tool registration, settings schema representation, and client UI controls:
+*   **Centralized Tool Registry:** Tools are declared as classes extending `BaseAgentTool` and are dynamically registered with the `ToolRegistry` (containing details like default active state, settings schema definitions, and target analyst associations).
+*   **Dynamic Metadata & UI Generation:** The backend exports all registered tools and their schemas via `/api/meta`. The React frontend reads this metadata to dynamically build user settings panels, range sliders, inputs, and toggles without hardcoded controls.
+*   **Granular Access Controls:** Admins can configure user-specific overrides from the Admin Panel to control:
+    *   **Analyst Node Access:** Define which of the 9 analyst agents a user is permitted to execute.
+    *   **Tool Execution & View Permissions:** Limit user access to specific tools (`can_view`, `can_use`, `can_edit`, `can_enable`).
+*   **Thread-Safe Context Injection:** Active tool configurations are loaded dynamically from the database and injected into the LangGraph thread execution context via `active_run_context` before execution.
+
+---
+
 ## 🛠️ Tech Stack
 
 *   **Backend:** Python 3.10+, FastAPI, SQLAlchemy (Asyncio / asyncpg), PostgreSQL, APScheduler, LangGraph, LangChain Core.
