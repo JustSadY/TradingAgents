@@ -6,13 +6,22 @@ def _node_specs() -> dict:
         return ANALYST_NODE_SPECS
     except Exception:
         return {}
-def available_analysts() -> list[dict]:
+async def available_analysts(db=None, user=None) -> list[dict]:
     # Single source: the engine analyst catalog. When the graph is importable we
     # only surface analysts that actually have a wired node spec.
     specs = _node_specs()
     out: list[dict] = []
+    
+    agent_access_map = {}
+    if db is not None and user is not None and not user.is_admin:
+        from backend.services.tool_access_service import get_user_agent_access
+        agent_access_map = await get_user_agent_access(db, user.id)
+
     for info in _engine_analysts():
         if not specs or info.key in specs:
+            if user is not None and not user.is_admin:
+                if not agent_access_map.get(info.key, True):
+                    continue
             out.append({
                 "key": info.key,
                 "label": info.label,
@@ -159,11 +168,19 @@ CHART_PERIODS: list[dict] = [
 ]
 
 
-def build_meta() -> dict:
+async def build_meta(db=None, user=None) -> dict:
     from backend.trading_agents.agents.tools.registry import registry
+    tools_list = registry.metadata()
+    if db is not None and user is not None and not user.is_admin:
+        from backend.services.tool_access_service import get_user_tool_access
+        tool_access_map = await get_user_tool_access(db, user.id)
+        tools_list = [
+            t for t in tools_list
+            if tool_access_map.get(t["key"], {}).get("can_view", True)
+        ]
     return {
-        "analysts": available_analysts(),
-        "tools": registry.metadata(),
+        "analysts": await available_analysts(db, user),
+        "tools": tools_list,
         "section_labels": SECTION_LABELS,
         "signals": SIGNALS,
         "asset_types": ASSET_TYPES,

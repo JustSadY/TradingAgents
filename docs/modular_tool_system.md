@@ -98,10 +98,22 @@ To wrap existing LangChain `@tool` functions without rewriting them, the system 
 
 ---
 
-## 🔄 Runtime Flow & Context Injection
+## 🔄 Runtime Flow, Metadata Filtering & API Permission Checks
 
-Since LangGraph runs asynchronously on thread pools, configuration values must be injected dynamically into the execution state without database polling.
+Since LangGraph runs asynchronously on thread pools, configuration values and permissions must be verified at API boundaries and injected dynamically into the execution state:
 
+### 1. Dynamic Metadata Filtering (`/api/meta`)
+The general metadata catalog `/api/meta` is user-aware:
+*   **Analysts List Filtering:** Non-admin users only receive analysts in the `analysts` list if they have permission to run them (`can_run` is True or not explicitly False in `user_agent_access`). Unpermitted analysts are excluded, so they are automatically hidden on the frontend settings page.
+*   **Tools List Filtering:** The `tools` list is filtered to only include tools that the user is authorized to see (`can_view` is True in `user_tool_access`).
+
+### 2. API-Level Agent & Tool Permission Verification
+*   **Settings Updates & Presets:** When a user updates their preferences via `PUT /api/settings` or applies a preset config, the backend filters the list of `selected_analysts` against the user's allowed agents, automatically removing any unauthorized entries.
+*   **Tool Settings Access & Edits:**
+    *   `GET /api/settings/tools` filters out tool settings the user does not have permission to view.
+    *   `PUT /api/settings/tools` validates that the user is permitted to toggle the tool's status (`can_enable` must be True) and edit the tool's parameter fields (`can_edit` must be True). Any violations result in validation errors.
+
+### 3. Context Construction & Execution
 1.  **Context Construction:**
     In [analysis_service.py](file:///home/lykia/Desktop/TradingAgents/backend/services/analysis_service.py), when starting a run, the system queries settings and generates the thread context:
     ```python
@@ -113,13 +125,9 @@ Since LangGraph runs asynchronously on thread pools, configuration values must b
     config = {"configurable": {"runtime_tool_context": context}}
     ```
 3.  **Active Tool Filtering:**
-    Inside [trading_graph.py](file:///home/lykia/Desktop/TradingAgents/backend/trading_agents/graph/trading_graph.py), the `_create_tool_nodes` utility queries active tools:
-    ```python
-    active_tools = _filter_tools_for_analyst(analyst_key, registered_tools)
-    ```
-    If a tool is disabled either by general user settings or admin access controls, it is pruned.
+    Inside [trading_graph.py](file:///home/lykia/Desktop/TradingAgents/backend/trading_agents/graph/trading_graph.py), the `_filter_tools_for_analyst` utility checks `can_use` and enablement states, removing disabled tools.
 4.  **Agent Bindings:**
-    Inside [analyst_node_factory.py](file:///home/lykia/Desktop/TradingAgents/backend/trading_agents/agents/utils/analyst_node_factory.py), `run_tool_analyst` retrieves the current thread state via `active_run_context.get("graph").config` and binds parameters dynamically before executing.
+    Inside [analyst_node_factory.py](file:///home/lykia/Desktop/TradingAgents/backend/trading_agents/agents/utils/analyst_node_factory.py), the analyst node retrieves the configuration context and binds parameters before execution.
 
 ---
 

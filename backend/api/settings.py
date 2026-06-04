@@ -74,6 +74,13 @@ async def update_settings(
     settings = await get_or_create_settings(db, current_user)
     if not current_user.is_admin:
         await _check_section_permissions(db, current_user, body)
+        if body.selected_analysts is not None:
+            from backend.services.tool_access_service import get_user_agent_access
+            agent_access_map = await get_user_agent_access(db, current_user.id)
+            body.selected_analysts = [
+                a for a in body.selected_analysts
+                if agent_access_map.get(a, True)
+            ]
     settings = await apply_settings_update(db, settings, body)
     return settings_to_read(settings)
 

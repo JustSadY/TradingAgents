@@ -85,9 +85,17 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
     )
     user_rows = {row.tool_key: row for row in result.scalars().all()}
 
+    # Also load tool access
+    from backend.services.tool_access_service import get_user_tool_access
+    tool_access_map = await get_user_tool_access(db, user.id)
+
     # 2. Build map of all registered tools
     tools_map = {}
     for tool in registry.list():
+        if not user.is_admin:
+            if not tool_access_map.get(tool.key, {}).get("can_view", True):
+                continue
+
         # Get defaults
         default_enabled = tool.default_enabled
         default_settings = tool.default_settings(scope="user")
@@ -136,10 +144,26 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
     )
     user_rows = {row.tool_key: row for row in result.scalars().all()}
 
+    # Also load tool access
+    from backend.services.tool_access_service import get_user_tool_access
+    tool_access_map = await get_user_tool_access(db, user.id)
+
     for tool_key, update in body.tools.items():
         tool = registry.get(tool_key)
         if not tool:
             raise ValueError(f"Unknown tool key '{tool_key}'.")
+
+        # Validate permissions for non-admin users
+        if not user.is_admin:
+            perms = tool_access_map.get(tool_key, {})
+            if not perms.get("can_view", True):
+                raise ValueError(f"You do not have permission to view tool '{tool_key}'.")
+            if update.enabled is not None or update.reset_enabled:
+                if not perms.get("can_enable", False):
+                    raise ValueError(f"You do not have permission to enable/disable tool '{tool_key}'.")
+            if update.settings is not None or update.reset_settings:
+                if not perms.get("can_edit", False):
+                    raise ValueError(f"You do not have permission to modify settings for tool '{tool_key}'.")
 
         row = user_rows.get(tool_key)
         if not row:
