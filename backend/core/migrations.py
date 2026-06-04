@@ -43,7 +43,6 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("app_settings", "output_language",            "VARCHAR(50) DEFAULT 'English'"),
     ("app_settings", "investor_persona",           "VARCHAR(50) DEFAULT 'conservative'"),
     ("app_settings", "analyst_concurrency_limit",  "INTEGER DEFAULT 1"),
-    ("app_settings", "checkpoint_enabled",         "BOOLEAN DEFAULT FALSE"),
     ("app_settings", "max_recur_limit",            "INTEGER DEFAULT 1000"),
     ("app_settings", "benchmark_ticker",           "VARCHAR(20)"),
     ("app_settings", "azure_deployment",           "VARCHAR(100)"),

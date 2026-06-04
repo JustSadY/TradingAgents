@@ -56,13 +56,18 @@ async def place_signal_order(
     if action is None:
         return None
 
-    from backend.services.execution.factory import get_trader
-    from backend.services.mock_trading_service import get_or_create_sim_portfolio
+    from backend.models.system_settings import SystemSettings
+    from sqlalchemy import select
+    sys_settings = (await db.execute(
+        select(SystemSettings).where(SystemSettings.id == 1)
+    )).scalar_one_or_none()
+    sys_mode = sys_settings.trading_mode if sys_settings else "simulation"
+    sys_broker = sys_settings.active_broker if sys_settings else "simulation"
 
     portfolio = await get_or_create_sim_portfolio(db, user=user)
     trader = get_trader(
-        mode=settings.trading_mode,
-        broker=settings.active_broker,
+        mode=sys_mode,
+        broker=sys_broker,
         portfolio_id=portfolio.id,
         initial_capital=portfolio.initial_capital,
         db=None,

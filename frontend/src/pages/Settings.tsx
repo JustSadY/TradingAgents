@@ -11,9 +11,6 @@ import { useTranslation } from '../contexts/LanguageContext'
 import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
 
 interface Settings {
-  trading_mode: string
-  active_broker: string
-  active_data_vendor: string
   cron_enabled: boolean
   cron_schedule: string
   price_tolerance_pct: number
@@ -254,9 +251,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const currentProviderModels = catalog[s.llm_provider]
 
   const providerLabels = meta?.provider_labels ?? PROVIDER_LABELS
-  const tradingModes = meta?.trading_modes ?? [{ value: 'simulation', label: 'Simulation' }, { value: 'live', label: 'Live' }]
-  const brokers = meta?.brokers ?? [{ value: 'simulation', label: 'Simulation' }]
-  const dataVendors = meta?.data_vendors ?? [{ value: 'yfinance', label: 'yFinance' }, { value: 'alpha_vantage', label: 'Alpha Vantage' }]
   const languages = meta?.languages ?? [{ value: 'English', label: 'English' }, { value: 'Turkish', label: 'Türkçe' }]
   const analysts = meta?.analysts ?? []
 
@@ -327,21 +321,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           {/* Preferences */}
           {activeTab === 'general' && (
             <Section title={t('settings.general') || 'Preferences'}>
-              <Row label={t('settings.row_mode')}>
-                <select className={Input} value={s.trading_mode} onChange={e => update('trading_mode', e.target.value)}>
-                  {tradingModes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </Row>
-              <Row label={t('settings.row_active_broker')}>
-                <select className={Input} value={s.active_broker} onChange={e => update('active_broker', e.target.value)}>
-                  {brokers.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </Row>
-              <Row label={t('settings.row_data_source')}>
-                <select className={Input} value={s.active_data_vendor} onChange={e => update('active_data_vendor', e.target.value)}>
-                  {dataVendors.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </Row>
               <Row label={t('settings.row_output_language')}>
                 <select className={Input} value={s.output_language} onChange={e => update('output_language', e.target.value)}>
                   {languages.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}

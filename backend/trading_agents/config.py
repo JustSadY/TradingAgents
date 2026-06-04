@@ -34,7 +34,6 @@ class TradingAgentsConfig(BaseModel):
     google_thinking_level: Optional[str] = None
     openai_reasoning_effort: Optional[str] = None
     anthropic_effort: Optional[str] = None
-    checkpoint_enabled: bool = False
     output_language: str = "English"
     investor_persona: str = "conservative"
     max_debate_rounds: int = Field(default=1, ge=1, le=10)

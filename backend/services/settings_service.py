@@ -41,9 +41,6 @@ async def get_or_create_settings(
 def settings_to_read(settings: AppSettings) -> SettingsRead:
     """Map an ``AppSettings`` row to its read DTO (single source of truth)."""
     return SettingsRead(
-        trading_mode=settings.trading_mode,
-        active_broker=settings.active_broker,
-        active_data_vendor=settings.active_data_vendor,
         cron_enabled=settings.cron_enabled,
         cron_schedule=settings.cron_schedule,
         price_tolerance_pct=settings.price_tolerance_pct,

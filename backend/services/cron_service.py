@@ -80,7 +80,13 @@ class CronService:
             app_settings = app_res.scalar_one_or_none()
             if not app_settings or not app_settings.cron_enabled:
                 return
-            trader = get_trader(app_settings.trading_mode, app_settings.active_broker)
+
+            from backend.models.system_settings import SystemSettings
+            sys_res = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
+            sys_settings = sys_res.scalar_one_or_none()
+            sys_mode = sys_settings.trading_mode if sys_settings else "simulation"
+            sys_broker = sys_settings.active_broker if sys_settings else "simulation"
+            trader = get_trader(sys_mode, sys_broker)
             for ticker in app_settings.watchlist:
                 try:
                     _logger.info("User=%s scanning ticker=%s", user.username, ticker)
@@ -95,7 +101,7 @@ class CronService:
                     )
                     await db.commit()
                     if row.signal in ("Buy", "Overweight", "Sell", "Underweight"):
-                        await _maybe_execute_user(user_id, ticker, row, app_settings, trader, db)
+                        await _maybe_execute_user(user_id, ticker, row, app_settings, trader, db, sys_mode, sys_broker)
                 except Exception as e:
                     _logger.error("User cron scan failed for user=%s, ticker=%s: %s", user.username, ticker, e, exc_info=True)
                     await db.rollback()
@@ -110,7 +116,7 @@ class CronService:
             "job_configured": job is not None,
             "next_run_time": job.next_run_time.isoformat() if job and job.next_run_time else None,
         }
-async def _maybe_execute_user(user_id: int, ticker: str, row, settings, trader, db):
+async def _maybe_execute_user(user_id: int, ticker: str, row, settings, trader, db, sys_mode: str, sys_broker: str):
     from backend.models.order import Order
     from backend.models.user import User
     from backend.services.execution.base import OrderRequest
@@ -139,8 +145,8 @@ async def _maybe_execute_user(user_id: int, ticker: str, row, settings, trader, 
     result = trader.place_order(req)
     order_row = Order(
         portfolio_id=portfolio.id,
-        mode=settings.trading_mode,
-        broker=settings.active_broker,
+        mode=sys_mode,
+        broker=sys_broker,
         ticker=ticker,
         action=action,
         quantity_requested=qty,

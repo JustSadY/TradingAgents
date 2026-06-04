@@ -202,6 +202,9 @@ async def run_analysis(
     user=None,
 ) -> tuple[str, AnalysisResult]:
     from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
+    if user is not None:
+        from backend.services.settings_service import get_or_create_settings
+        settings = await get_or_create_settings(db, user)
     if task_id is None:
         task_id = str(uuid.uuid4())
     current = asyncio.current_task()

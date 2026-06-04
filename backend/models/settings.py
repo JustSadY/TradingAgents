@@ -10,9 +10,6 @@ class AppSettings(Base):
     __tablename__ = "app_settings"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
-    trading_mode: Mapped[str] = mapped_column(String(20), default="simulation")
-    active_broker: Mapped[str] = mapped_column(String(50), default="simulation")
-    active_data_vendor: Mapped[str] = mapped_column(String(50), default="yfinance")
     cron_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     cron_schedule: Mapped[str] = mapped_column(String(100), default="0 9 * * 1-5")
     price_tolerance_pct: Mapped[float] = mapped_column(Float, default=0.5)
@@ -31,7 +28,6 @@ class AppSettings(Base):
     output_language: Mapped[str] = mapped_column(String(50), default="English")
     investor_persona: Mapped[str] = mapped_column(String(50), default="conservative")
     analyst_concurrency_limit: Mapped[int] = mapped_column(Integer, default=1)
-    checkpoint_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     max_recur_limit: Mapped[int] = mapped_column(Integer, default=1000)
     benchmark_ticker: Mapped[str | None] = mapped_column(String(20), nullable=True)
     azure_deployment: Mapped[str | None] = mapped_column(String(100), nullable=True)

@@ -10,9 +10,6 @@ ALWAYS_ALLOWED = {"settings"}
 ALL_SETTING_KEYS = ["general", "llm", "risk", "webhooks", "presets", "cron"]
 SECTION_FIELDS = {
     "general": [
-        "trading_mode",
-        "active_broker",
-        "active_data_vendor",
         "output_language",
         "investor_persona",
         "benchmark_ticker",

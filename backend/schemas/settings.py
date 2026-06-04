@@ -3,9 +3,6 @@ from pydantic import BaseModel, Field
 
 
 class SettingsRead(BaseModel):
-    trading_mode: str
-    active_broker: str
-    active_data_vendor: str
     cron_enabled: bool
     cron_schedule: str
     price_tolerance_pct: float
@@ -42,9 +39,6 @@ class SettingsRead(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
-    trading_mode: str | None = None
-    active_broker: str | None = None
-    active_data_vendor: str | None = None
     cron_enabled: bool | None = None
     cron_schedule: str | None = None
     price_tolerance_pct: float | None = Field(default=None, ge=0, le=50)

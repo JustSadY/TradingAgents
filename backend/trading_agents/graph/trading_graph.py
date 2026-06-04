@@ -290,21 +290,20 @@ class TradingAgentsGraph:
             "visual_annotations": self.visual_annotations
         })
         self._resolve_pending_entries(company_name)
-        if self.config.get("checkpoint_enabled"):
-            self._checkpointer_ctx = get_checkpointer(
-                self.config["data_cache_dir"], company_name
+        self._checkpointer_ctx = get_checkpointer(
+            self.config["data_cache_dir"], company_name
+        )
+        saver = self._checkpointer_ctx.__enter__()
+        self.graph = self.workflow.compile(checkpointer=saver)
+        step = checkpoint_step(
+            self.config["data_cache_dir"], company_name, str(trade_date)
+        )
+        if step is not None:
+            logger.info(
+                "Resuming from step %d for %s on %s", step, company_name, trade_date
             )
-            saver = self._checkpointer_ctx.__enter__()
-            self.graph = self.workflow.compile(checkpointer=saver)
-            step = checkpoint_step(
-                self.config["data_cache_dir"], company_name, str(trade_date)
-            )
-            if step is not None:
-                logger.info(
-                    "Resuming from step %d for %s on %s", step, company_name, trade_date
-                )
-            else:
-                logger.info("Starting fresh for %s on %s", company_name, trade_date)
+        else:
+            logger.info("Starting fresh for %s on %s", company_name, trade_date)
         try:
             return self._run_graph(company_name, trade_date, asset_type=asset_type)
         finally:
@@ -322,9 +321,8 @@ class TradingAgentsGraph:
             company_name, trade_date, asset_type=asset_type, past_context=past_context
         )
         args = self.propagator.get_graph_args()
-        if self.config.get("checkpoint_enabled"):
-            tid = thread_id(company_name, str(trade_date))
-            args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = tid
+        tid = thread_id(company_name, str(trade_date))
+        args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = tid
         if self.debug:
             trace = []
             for chunk in self.graph.stream(init_agent_state, **args):
@@ -345,10 +343,9 @@ class TradingAgentsGraph:
             trade_date=trade_date,
             final_trade_decision=final_state["final_trade_decision"],
         )
-        if self.config.get("checkpoint_enabled"):
-            clear_checkpoint(
-                self.config["data_cache_dir"], company_name, str(trade_date)
-            )
+        clear_checkpoint(
+            self.config["data_cache_dir"], company_name, str(trade_date)
+        )
         return final_state, self.process_signal(final_state["final_trade_decision"])
     def _log_state(self, trade_date, final_state):
         self.log_states_dict[str(trade_date)] = {
@@ -411,12 +408,11 @@ class TradingAgentsGraph:
             "visual_annotations": self.visual_annotations
         })
         await self._async_resolve_pending_entries(company_name)
-        if self.config.get("checkpoint_enabled"):
-            self._checkpointer_ctx = get_checkpointer(
-                self.config["data_cache_dir"], company_name
-            )
-            saver = self._checkpointer_ctx.__enter__()
-            self.graph = self.workflow.compile(checkpointer=saver)
+        self._checkpointer_ctx = get_checkpointer(
+            self.config["data_cache_dir"], company_name
+        )
+        saver = self._checkpointer_ctx.__enter__()
+        self.graph = self.workflow.compile(checkpointer=saver)
         try:
             return await self._async_run_graph(company_name, trade_date, asset_type)
         finally:
@@ -440,9 +436,8 @@ class TradingAgentsGraph:
             company_name, trade_date, asset_type=asset_type, past_context=past_context
         )
         args = self.propagator.get_graph_args()
-        if self.config.get("checkpoint_enabled"):
-            tid = thread_id(company_name, str(trade_date))
-            args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = tid
+        tid = thread_id(company_name, str(trade_date))
+        args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = tid
         final_state = await asyncio.to_thread(self.graph.invoke, init_state, **args)
         self.curr_state = final_state
         await asyncio.to_thread(self._log_state, trade_date, final_state)
@@ -452,10 +447,9 @@ class TradingAgentsGraph:
             trade_date,
             final_state["final_trade_decision"],
         )
-        if self.config.get("checkpoint_enabled"):
-            clear_checkpoint(
-                self.config["data_cache_dir"], company_name, str(trade_date)
-            )
+        clear_checkpoint(
+            self.config["data_cache_dir"], company_name, str(trade_date)
+        )
         return final_state, self.process_signal(final_state["final_trade_decision"])
     async def _async_resolve_pending_entries(self, ticker: str) -> None:
         import asyncio

@@ -17,9 +17,7 @@ class SystemSettings(Base):
     data_vendor_technicals: Mapped[str] = mapped_column(String(50), default="yfinance")
     data_vendor_fundamentals: Mapped[str] = mapped_column(String(50), default="yfinance")
     data_vendor_news: Mapped[str] = mapped_column(String(50), default="yfinance")
-    checkpoint_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    include_historical_analyses: Mapped[bool] = mapped_column(Boolean, default=False)
-    historical_analyses_limit: Mapped[int] = mapped_column(Integer, default=5)
+
 
     
     updated_at: Mapped[datetime] = mapped_column(
