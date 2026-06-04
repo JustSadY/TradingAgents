@@ -36,18 +36,6 @@ async def update_system_settings(
     db: AsyncSession = Depends(get_db),
 ):
     ss = await _get_or_create_system_settings(db)
-    if body.cron_enabled is not None:
-        ss.cron_enabled = body.cron_enabled
-    if body.cron_schedule is not None:
-        ss.cron_schedule = body.cron_schedule
-    if body.watchlist is not None:
-        ss.watchlist = body.watchlist
-    if body.webhook_url is not None:
-        ss.webhook_url = body.webhook_url
-    if body.webhook_enabled is not None:
-        ss.webhook_enabled = body.webhook_enabled
-    if body.webhook_events is not None:
-        ss.webhook_events = body.webhook_events
     if body.searxng_url is not None:
         ss.searxng_url = body.searxng_url
     if body.reddit_client_id is not None:
@@ -58,14 +46,5 @@ async def update_system_settings(
         ss.reddit_user_agent = body.reddit_user_agent
     if body.alpha_vantage_api_key is not None:
         ss.alpha_vantage_api_key = body.alpha_vantage_api_key
-
-    # Re-apply cron job with new schedule
-    try:
-        from backend.services.cron_service import get_cron_service
-        cron = get_cron_service()
-        if cron:
-            await cron.apply_settings(ss)
-    except Exception:
-        pass
 
     return ss

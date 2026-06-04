@@ -159,7 +159,7 @@ async def get_analysis(
 
 _TOKEN_PER_ANALYST = 8_000   # rough average tokens consumed per analyst
 _COST_PER_1K: dict[str, float] = {
-    "gpt-4o": 0.005, "gpt-4o-mini": 0.00015, "gpt-4.1": 0.008,
+    "gpt-4o-mini": 0.00015, "gpt-4o": 0.005, "gpt-4.1": 0.008,
     "claude-opus": 0.015, "claude-sonnet": 0.003, "gemini-1.5-pro": 0.007,
 }
 
@@ -191,9 +191,13 @@ async def get_ab_comparison(
     _: User = Depends(get_current_user),
 ):
     """Return metrics for all completed analyses grouped by preset/LLM model configuration."""
-    q = select(AnalysisResult)
-    res = await db.execute(q)
-    rows = res.scalars().all()
+    try:
+        q = select(AnalysisResult)
+        res = await db.execute(q)
+        rows = res.scalars().all()
+    except Exception as exc:
+        _logger.warning("Failed to query AnalysisResult from database (might be unmigrated DB): %s", exc)
+        rows = []
 
     # Group in python for ultimate flexibility
     groups = {}
@@ -205,7 +209,7 @@ async def get_ab_comparison(
 
     # Cost mapping
     cost_map = {
-        "gpt-4o": 0.005, "gpt-4o-mini": 0.00015, "gpt-4.1": 0.008,
+        "gpt-4o-mini": 0.00015, "gpt-4o": 0.005, "gpt-4.1": 0.008,
         "claude-opus": 0.015, "claude-sonnet": 0.003, "gemini-1.5-pro": 0.007,
         "gemini-2.0": 0.00015, "gemini-2.5": 0.00015, "deepseek": 0.00014,
     }

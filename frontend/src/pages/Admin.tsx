@@ -16,12 +16,6 @@ interface UserRecord {
 }
 
 interface SystemSettings {
-  cron_enabled: boolean
-  cron_schedule: string
-  watchlist: string[]
-  webhook_url: string | null
-  webhook_enabled: boolean
-  webhook_events: string
   searxng_url: string | null
   reddit_client_id: string | null
   reddit_client_secret: string | null
@@ -69,7 +63,6 @@ export default function Admin() {
   const [newUser, setNewUser] = useState({ username: '', password: '', email: '', role: 'user' })
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
-  const [watchlistInput, setWatchlistInput] = useState('')
   const [userKeyProviders, setUserKeyProviders] = useState<string[]>([])
   const [keySaved, setKeySaved] = useState(false)
   const [keyError, setKeyError] = useState<string | null>(null)
@@ -82,7 +75,6 @@ export default function Admin() {
   const loadSystemSettings = useCallback(async () => {
     const r = await axios.get('/api/system-settings')
     setSysSettings(r.data)
-    setWatchlistInput(r.data.watchlist?.join(', ') || '')
   }, [])
 
   useEffect(() => {
@@ -183,9 +175,7 @@ export default function Admin() {
     if (!sysSettings) return
     setSysError(null)
     try {
-      const watchlist = watchlistInput.split(',').map(s => s.trim()).filter(Boolean)
-      const body = { ...sysSettings, watchlist }
-      await axios.put('/api/system-settings', body)
+      await axios.put('/api/system-settings', sysSettings)
       setSysSaved(true)
       setTimeout(() => setSysSaved(false), 2500)
     } catch (err: any) {
@@ -447,28 +437,6 @@ export default function Admin() {
       {tab === 'system' && sysSettings && (
         <Section title={t('admin.section_system_settings')}>
           <div className="space-y-3">
-            {/* Webhook */}
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
-              <span className="text-sm text-gray-400">{t('admin.webhook_url')}</span>
-              <div className="flex-1 sm:max-w-xs">
-                <input
-                  className={Input}
-                  value={sysSettings.webhook_url || ''}
-                  onChange={e => setSysSettings(s => s ? { ...s, webhook_url: e.target.value || null } : s)}
-                  placeholder="https://hooks.slack.com/..."
-                />
-              </div>
-            </div>
-            <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
-              <span className="text-sm text-gray-400">{t('admin.webhook_enabled')}</span>
-              <input
-                type="checkbox"
-                checked={sysSettings.webhook_enabled}
-                onChange={e => setSysSettings(s => s ? { ...s, webhook_enabled: e.target.checked } : s)}
-                className="w-5 h-5 accent-amber-500"
-              />
-            </div>
-
             {/* SearXNG URL */}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
               <span className="text-sm text-gray-400">SearXNG URL</span>

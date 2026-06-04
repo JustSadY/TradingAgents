@@ -48,6 +48,19 @@ class CronService:
         cron_schedule = getattr(settings, "cron_schedule", "0 9 * * 1-5") or "0 9 * * 1-5"
         watchlist = getattr(settings, "watchlist", [])
 
+        username = f"user_id={settings.user_id}"
+        try:
+            from backend.core.database import AsyncSessionLocal
+            from backend.models.user import User
+            from sqlalchemy import select
+            async with AsyncSessionLocal() as db:
+                res = await db.execute(select(User).where(User.id == settings.user_id))
+                user = res.scalar_one_or_none()
+                if user:
+                    username = user.username
+        except Exception as e:
+            _logger.debug("Failed to fetch username for logging user_id=%s: %s", settings.user_id, e)
+
         if cron_enabled and watchlist:
             try:
                 trigger = CronTrigger.from_crontab(cron_schedule, timezone="UTC")
@@ -59,9 +72,10 @@ class CronService:
                     replace_existing=True,
                     misfire_grace_time=300,
                 )
-                _logger.info("User cron job configured for user_id=%s: %s", settings.user_id, cron_schedule)
+                _logger.info("User cron job configured for user=%s: %s", username, cron_schedule)
             except Exception as e:
-                _logger.error("Failed to configure user cron job for user_id=%s: %s", settings.user_id, e)
+                _logger.error("Failed to configure user cron job for user=%s: %s", username, e)
+
 
     async def _run_user_watchlist_scan(self, user_id: int):
         """Triggered by APScheduler — runs analysis for a specific user's watchlist."""
@@ -73,7 +87,6 @@ class CronService:
         from sqlalchemy import select
 
         today = date.today().strftime("%Y-%m-%d")
-        _logger.info("User cron watchlist scan started for user_id=%d, date=%s", user_id, today)
 
         async with AsyncSessionLocal() as db:
             # 1. Load user record
@@ -82,6 +95,8 @@ class CronService:
             if not user or not user.is_active:
                 _logger.warning("User with id=%d not found or inactive, skipping cron scan", user_id)
                 return
+
+            _logger.info("User cron watchlist scan started for user=%s (id=%d), date=%s", user.username, user_id, today)
 
             # 2. Load user's AppSettings
             app_res = await db.execute(select(AppSettings).where(AppSettings.user_id == user_id))
@@ -110,10 +125,11 @@ class CronService:
                         await _maybe_execute_user(user_id, ticker, row, app_settings, trader, db)
 
                 except Exception as e:
-                    _logger.error("User cron scan failed for %s: %s", ticker, e, exc_info=True)
+                    _logger.error("User cron scan failed for user=%s, ticker=%s: %s", user.username, ticker, e, exc_info=True)
                     await db.rollback()
 
-        _logger.info("User cron watchlist scan completed for user_id=%d", user_id)
+            _logger.info("User cron watchlist scan completed for user=%s (id=%d)", user.username, user_id)
+
 
     def get_status(self, user_id: Optional[int] = None) -> dict:
         if not user_id:

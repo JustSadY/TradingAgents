@@ -1,6 +1,6 @@
 import { useEffect, useState, useMemo } from 'react'
 import axios from 'axios'
-import { TrendingUp, TrendingDown, DollarSign, Activity, ArrowRight, Target, ExternalLink } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Activity, ArrowRight, ExternalLink } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useMeta } from '../hooks/useMeta'
 import { useTranslation } from '../contexts/LanguageContext'
@@ -47,7 +47,6 @@ export default function Dashboard() {
   const [portfolios, setPortfolios] = useState<Portfolio[]>([])
   const [recentAnalysis, setRecentAnalysis] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [perf, setPerf] = useState<{ win_rate: number | null; avg_raw_return: number | null; total: number } | null>(null)
   const [news, setNews] = useState<NewsItem[]>([])
   const [orders, setOrders] = useState<any[]>([])
   const navigate = useNavigate()
@@ -59,10 +58,9 @@ export default function Dashboard() {
       axios.get('/api/analysis/history?limit=8').then(r => r.data).catch(() => []),
       axios.get('/api/analysis/performance').then(r => r.data).catch(() => null),
       axios.get('/api/portfolio/orders?limit=100').then(r => Array.isArray(r.data) ? r.data : []).catch(() => []),
-    ]).then(([p, a, pf, ord]) => {
+    ]).then(([p, a, _, ord]) => {
       setPortfolios(Array.isArray(p) ? p : [])
       setRecentAnalysis(Array.isArray(a) ? a : [])
-      if (pf) setPerf(pf)
       setOrders(Array.isArray(ord) ? ord : [])
     })
       .catch(() => {})

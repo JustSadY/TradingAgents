@@ -11,17 +11,6 @@ class SystemSettings(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, default=1)
 
-    # Watchlist cron automation
-    cron_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    cron_schedule: Mapped[str] = mapped_column(String(100), default="0 9 * * 1-5")
-    # Global watchlist for cron (JSON array of tickers)
-    _watchlist: Mapped[str] = mapped_column("sys_watchlist", Text, default="[]")
-
-    # Webhook notifications
-    webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
-    webhook_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    webhook_events: Mapped[str] = mapped_column(Text, default='["analysis_complete"]')
-
     # Global data provider keys configured via Web UI
     searxng_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     reddit_client_id: Mapped[str | None] = mapped_column(String(255), nullable=True)
@@ -35,14 +24,3 @@ class SystemSettings(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    import json as _json
-
-    @property
-    def watchlist(self) -> list[str]:
-        import json
-        return json.loads(self._watchlist or "[]")
-
-    @watchlist.setter
-    def watchlist(self, value: list[str]):
-        import json
-        self._watchlist = json.dumps(value)

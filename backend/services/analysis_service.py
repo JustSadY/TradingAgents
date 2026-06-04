@@ -263,7 +263,9 @@ async def run_analysis(
     if current:
         _RUNNING_TASKS[task_id] = current
 
-    _logger.info("Starting analysis task=%s ticker=%s date=%s", task_id, ticker, trade_date)
+    username = user.username if user else "system"
+    _logger.info("Starting analysis task=%s ticker=%s date=%s user=%s", task_id, ticker, trade_date, username)
+
 
     await ws_manager.send(task_id, {"type": "status", "status": "starting", "agent": "Initializing"})
 
@@ -452,15 +454,17 @@ async def run_analysis(
             "llm_calls": stats.get("llm_calls", 0),
         })
 
+        _logger.info("Analysis complete task=%s ticker=%s signal=%s user=%s duration=%.2fs", task_id, ticker, signal, username, duration)
         return task_id, row
 
     except asyncio.CancelledError:
-        _logger.info("Analysis cancelled task=%s", task_id)
+        _logger.info("Analysis cancelled task=%s user=%s", task_id, username)
         await ws_manager.send(task_id, {"type": "error", "message": "Analiz iptal edildi."})
         raise
     except Exception as exc:
-        _logger.error("Analysis failed task=%s: %s", task_id, exc, exc_info=True)
+        _logger.error("Analysis failed task=%s user=%s: %s", task_id, username, exc, exc_info=True)
         await ws_manager.send(task_id, {"type": "error", "message": str(exc)})
+
         raise
     finally:
         _RUNNING_TASKS.pop(task_id, None)
@@ -486,6 +490,9 @@ async def run_portfolio_analysis(
     from sqlalchemy import select
     from backend.models.system_settings import SystemSettings
 
+    username = user.username if user else "system"
+    _logger.info("Starting portfolio analysis for tickers=%s user=%s triggered_by=%s", tickers, username, triggered_by)
+
     sys_res = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
     sys_settings = sys_res.scalar_one_or_none()
 
@@ -497,7 +504,7 @@ async def run_portfolio_analysis(
 
     async def _run_one(ticker: str):
         async with semaphore:
-            _logger.info("Portfolio analysis: running %s", ticker)
+            _logger.info("Portfolio analysis: running %s for user=%s", ticker, username)
             # Each concurrent ticker gets its OWN session: an AsyncSession is
             # not safe for use by multiple coroutines at once, and the previous
             # shared-session version raced under concurrency_limit > 1.
@@ -519,7 +526,7 @@ async def run_portfolio_analysis(
     analysis_ids: list[int] = []
     for res in results:
         if isinstance(res, Exception):
-            _logger.warning("Portfolio ticker run failed: %s", res)
+            _logger.warning("Portfolio ticker run failed for user=%s: %s", username, res)
             continue
         ticker, data = res
         analysis_ids.append(data["id"])
@@ -543,7 +550,7 @@ async def run_portfolio_analysis(
             state_out = await asyncio.to_thread(spm_node, {"ticker_reports": ticker_reports})
             super_report = state_out.get("super_portfolio_report", "")
         except Exception as e:
-            _logger.error("SuperPortfolioManager failed: %s", e, exc_info=True)
+            _logger.error("SuperPortfolioManager failed for user=%s: %s", username, e, exc_info=True)
             super_report = f"Portfolio synthesis failed: {e}"
 
     multi_row = MultiTickerAnalysis(
@@ -557,4 +564,7 @@ async def run_portfolio_analysis(
     multi_row.analysis_ids = analysis_ids
     db.add(multi_row)
     await db.flush()
+
+    _logger.info("Portfolio analysis complete for user=%s tickers=%s", username, tickers)
     return multi_row
+

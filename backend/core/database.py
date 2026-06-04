@@ -41,6 +41,7 @@ async def create_all_tables():
         await _migrate_add_columns(conn)
 
 
+
 async def _migrate_add_columns(conn):
     """Safely add new columns to existing tables (idempotent)."""
     # NOTE: These migrations are outside Alembic. After adding new entries here,
@@ -130,3 +131,5 @@ async def _migrate_add_columns(conn):
             await conn.execute(text(
                 f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"
             ))
+
+
