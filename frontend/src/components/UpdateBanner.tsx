@@ -16,18 +16,18 @@ interface UpdateStatus {
   last_update?: { state?: string; error?: string }
 }
 
-const POLL_MS = 10_000
+const POLL_MS = 60 * 60 * 1000
 
-// Global, always-visible update bar. Polls /api/update/status; when the upstream
-// repo has new commits every logged-in user sees the bar and can click "Güncelle"
-// to update + restart the app in place.
+
+
+
 export default function UpdateBanner() {
   const { isOwner } = useAuth()
   const [st, setSt] = useState<UpdateStatus | null>(null)
-  const [busy, setBusy] = useState(false)        // this client triggered the update
+  const [busy, setBusy] = useState(false)
   const [dismissed, setDismissed] = useState(false)
-  const seenRef = useRef(false)                   // toast only once per availability
-  const sawDownRef = useRef(false)                // saw the backend go down (= restart)
+  const seenRef = useRef(false)
+  const sawDownRef = useRef(false)
   const busyRef = useRef(false)
 
   useEffect(() => { busyRef.current = busy }, [busy])
@@ -39,23 +39,23 @@ export default function UpdateBanner() {
 
       if (data.update_available && !data.updating && !seenRef.current) {
         seenRef.current = true
-        // Only notify Owner about available updates
+
         notify('info', `Yeni güncelleme mevcut (${data.behind} commit).`, 'Güncelleme', 'owner')
       }
       if (!data.update_available) seenRef.current = false
 
-      // We triggered an update and it is no longer "running".
+
       if (busyRef.current && !data.updating) {
         if (data.last_update?.state === 'failed') {
           setBusy(false); sawDownRef.current = false
           notify('error', data.last_update?.error || 'Güncelleme başarısız oldu.', 'Güncelleme', 'owner')
         } else if (sawDownRef.current && !data.update_available) {
-          // The service went down (restart) and is back on the new commit → reload UI.
+
           window.location.reload()
         }
       }
     } catch {
-      // Backend unreachable — most likely it is restarting mid-update.
+
       if (busyRef.current) sawDownRef.current = true
     }
   }, [])
@@ -82,8 +82,8 @@ export default function UpdateBanner() {
   if (!st || !st.update_supported) return null
   const updating = busy || st.updating
 
-  // "Updating..." is visible to everyone.
-  // "New version available" is only for the Owner.
+
+
   if (!updating) {
     if (!isOwner || !st.update_available || dismissed) return null
   }
@@ -123,3 +123,4 @@ export default function UpdateBanner() {
     </div>
   )
 }
+

@@ -1,47 +1,47 @@
 const analysis = {
   en: {
-    // Page title
+
     'analysis.title': 'Analysis',
 
-    // Tab labels
+
     'analysis.tab.single': 'Single Stock',
     'analysis.tab.multi': 'Multi Stock',
     'analysis.tab.history': 'History',
 
-    // Form labels
+
     'analysis.label.symbol': 'Symbol',
     'analysis.label.date': 'Date',
     'analysis.label.type': 'Type',
 
-    // Buttons
+
     'analysis.btn.start': 'Start Analysis',
     'analysis.btn.stop': 'Stop',
     'analysis.btn.rerun': 'Re-run',
     'analysis.btn.cancel': 'Cancel',
 
-    // Status / hints
+
     'analysis.cost_estimate': 'Estimated cost: ~$',
     'analysis.existing_analysis': '⚠ There is a saved analysis for this date — you will re-run it',
     'analysis.running': 'analyzing',
 
-    // Re-run modal
+
     'analysis.rerun.title': 'Existing Analysis Found',
     'analysis.rerun.body': 'An analysis for {ticker} on {date} already exists. A new analysis will consume more API credits.',
 
-    // Log section
+
     'analysis.log.title': 'Live Log',
     'analysis.log.lines': 'lines',
 
-    // Reports section
+
     'analysis.reports.title': 'Reports',
     'analysis.reports.sections': 'sections',
     'analysis.reports.empty': 'Reports will appear here during analysis.',
 
-    // ReportCard
+
     'analysis.report_card.show': 'Show',
     'analysis.report_card.hide': 'Hide',
 
-    // WS messages (log lines rendered in UI)
+
     'analysis.ws.complete': '— Completed',
     'analysis.ws.llm_calls': 'LLM calls',
     'analysis.ws.error_prefix': '✗ ERROR:',
@@ -56,7 +56,7 @@ const analysis = {
     'analysis.ws.analysis_complete_notif': 'analysis completed',
     'analysis.ws.signal_label': 'Signal:',
 
-    // MultiTab
+
     'analysis.multi.description': 'At least 2, at most 10 stocks. SuperPortfolioManager analyzes all stocks and recommends portfolio allocation.',
     'analysis.multi.label_symbols': 'Symbols',
     'analysis.multi.btn_start': 'Start Portfolio Analysis',
@@ -64,13 +64,13 @@ const analysis = {
     'analysis.multi.started': 'Started in the background — you can track it from the "Portfolio History" tab.',
     'analysis.multi.error_default': 'Portfolio analysis could not be started.',
 
-    // PortfolioHistorySection
+
     'analysis.portfolio_history.title': 'Portfolio Analysis History',
     'analysis.portfolio_history.loading': 'Loading...',
     'analysis.portfolio_history.empty': 'No portfolio analyses yet.',
     'analysis.portfolio_history.report_not_ready': 'Report not ready yet.',
 
-    // HistoryTab
+
     'analysis.history.loading': 'Loading...',
     'analysis.history.empty': 'No analysis history yet.',
     'analysis.history.col_symbol': 'Symbol',
@@ -83,7 +83,7 @@ const analysis = {
     'analysis.history.btn_download_md': 'Download Markdown',
     'analysis.history.btn_download_pdf': 'Download PDF',
 
-    // Section labels (fallback, used when meta is unavailable)
+
     'analysis.section.market_report': 'Market Analysis',
     'analysis.section.sentiment_report': 'Sentiment Analysis',
     'analysis.section.news_report': 'News Analysis',
@@ -113,48 +113,48 @@ const analysis = {
     'analysis.chat.error': 'Failed to get chat response.',
   },
   tr: {
-    // Page title
+
     'analysis.title': 'Analiz',
 
-    // Tab labels
+
     'analysis.tab.single': 'Tek Hisse',
     'analysis.tab.multi': 'Çoklu Hisse',
     'analysis.tab.history': 'Geçmiş',
 
-    // Form labels
+
     'analysis.label.symbol': 'Sembol',
     'analysis.label.date': 'Tarih',
     'analysis.label.type': 'Tür',
 
-    // Buttons
+
     'analysis.btn.start': 'Analiz Başlat',
     'analysis.btn.stop': 'Durdur',
     'analysis.btn.rerun': 'Yeniden Çalıştır',
     'analysis.btn.cancel': 'İptal',
 
-    // Status / hints
+
     'analysis.cost_estimate': 'Tahmini maliyet: ~$',
     'analysis.existing_analysis': '⚠ Bu tarih için kayıtlı analiz var — yeniden çalıştıracaksınız',
     'analysis.running': 'analiz ediliyor',
 
-    // Re-run modal
+
     'analysis.rerun.title': 'Mevcut Analiz Var',
     'analysis.rerun.body': '{ticker} için {date} tarihli bir analiz zaten mevcut. Yeni analiz daha fazla API kredisi harcayacak.',
 
-    // Log section
+
     'analysis.log.title': 'Canlı Log',
     'analysis.log.lines': 'satır',
 
-    // Reports section
+
     'analysis.reports.title': 'Raporlar',
     'analysis.reports.sections': 'bölüm',
     'analysis.reports.empty': 'Raporlar analiz sırasında burada görünecek.',
 
-    // ReportCard
+
     'analysis.report_card.show': 'Göster',
     'analysis.report_card.hide': 'Gizle',
 
-    // WS messages (log lines rendered in UI)
+
     'analysis.ws.complete': '— Tamamlandı',
     'analysis.ws.llm_calls': 'LLM çağrısı',
     'analysis.ws.error_prefix': '✗ HATA:',
@@ -169,7 +169,7 @@ const analysis = {
     'analysis.ws.analysis_complete_notif': 'analizi tamamlandı',
     'analysis.ws.signal_label': 'Sinyal:',
 
-    // MultiTab
+
     'analysis.multi.description': 'En az 2, en fazla 10 hisse. SuperPortfolioManager tüm hisseleri analiz edip portföy dağılımı önerir.',
     'analysis.multi.label_symbols': 'Semboller',
     'analysis.multi.btn_start': 'Portföy Analizi Başlat',
@@ -177,13 +177,13 @@ const analysis = {
     'analysis.multi.started': 'Arka planda başlatıldı — "Portföy Geçmişi" tabından takip edebilirsiniz.',
     'analysis.multi.error_default': 'Portföy analizi başlatılamadı.',
 
-    // PortfolioHistorySection
+
     'analysis.portfolio_history.title': 'Portföy Analizi Geçmişi',
     'analysis.portfolio_history.loading': 'Yükleniyor...',
     'analysis.portfolio_history.empty': 'Henüz portföy analizi yok.',
     'analysis.portfolio_history.report_not_ready': 'Rapor henüz hazır değil.',
 
-    // HistoryTab
+
     'analysis.history.loading': 'Yükleniyor...',
     'analysis.history.empty': 'Henüz analiz geçmişi yok.',
     'analysis.history.col_symbol': 'Sembol',
@@ -196,7 +196,7 @@ const analysis = {
     'analysis.history.btn_download_md': 'Markdown İndir',
     'analysis.history.btn_download_pdf': 'PDF İndir',
 
-    // Section labels (fallback, used when meta is unavailable)
+
     'analysis.section.market_report': 'Piyasa Analizi',
     'analysis.section.sentiment_report': 'Duygu Analizi',
     'analysis.section.news_report': 'Haber Analizi',
@@ -228,3 +228,4 @@ const analysis = {
 }
 
 export default analysis
+

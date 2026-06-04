@@ -17,7 +17,7 @@ import {
   ReferenceLine, Bar, Cell, ComposedChart, CartesianGrid
 } from 'recharts'
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+
 
 interface Candle {
   time: string
@@ -53,7 +53,7 @@ interface AnalysisItem {
   created_at: string
 }
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+
 
 function parseAnnotations(raw: string): ChartAnnotations {
   try { return raw ? JSON.parse(raw) : {} } catch { return {} }
@@ -90,7 +90,7 @@ const PERIODS = [
   { label: '2Y', value: '2y' },
 ]
 
-// ── Component ─────────────────────────────────────────────────────────────────
+
 
 export default function ChartPage() {
   const navigate = useNavigate()
@@ -125,7 +125,7 @@ export default function ChartPage() {
   const tRef = useRef(t)
   useEffect(() => { tRef.current = t })
 
-  // ── Data fetching ────────────────────────────────────────────────────────────
+
 
   const load = useCallback(async (ticker: string, p: string) => {
     if (!ticker) return
@@ -164,9 +164,9 @@ export default function ChartPage() {
 
   useEffect(() => {
     if (activeTicker) load(activeTicker, period)
-  }, []) // initial load from URL params
+  }, [])
 
-  // ── Chart setup ──────────────────────────────────────────────────────────────
+
 
   useEffect(() => {
     if (!chartContainerRef.current) return
@@ -232,9 +232,9 @@ export default function ChartPage() {
     }
     window.addEventListener('resize', applyWidth)
 
-    // The container often has width 0 at mount inside a flex layout — the chart
-    // would then render invisibly until a window resize. A ResizeObserver picks
-    // up the real width as soon as layout settles and on any container change.
+
+
+
     let ro: ResizeObserver | null = null
     if (typeof ResizeObserver !== 'undefined' && chartContainerRef.current) {
       ro = new ResizeObserver(applyWidth)
@@ -255,7 +255,7 @@ export default function ChartPage() {
     }
   }, [])
 
-  // ── Update chart data ─────────────────────────────────────────────────────────
+
 
   useEffect(() => {
     if (!candleSeriesRef.current || !volSeriesRef.current || candles.length === 0) return
@@ -305,7 +305,7 @@ export default function ChartPage() {
     }
 
     priceLineRefs.current.forEach(pl => {
-      try { candleSeriesRef.current?.removePriceLine(pl) } catch { /* ignore */ }
+      try { candleSeriesRef.current?.removePriceLine(pl) } catch {  }
     })
     priceLineRefs.current = []
 
@@ -322,7 +322,7 @@ export default function ChartPage() {
             axisLabelVisible: false, title: '',
           })
           priceLineRefs.current.push(pl)
-        } catch { /* ignore */ }
+        } catch {  }
       })
       ;(ann.resistance_levels ?? []).forEach(price => {
         try {
@@ -331,7 +331,7 @@ export default function ChartPage() {
             axisLabelVisible: false, title: '',
           })
           priceLineRefs.current.push(pl)
-        } catch { /* ignore */ }
+        } catch {  }
       })
       if (ann.target_price) {
         try {
@@ -340,7 +340,7 @@ export default function ChartPage() {
             axisLabelVisible: true, title: tRef.current('chart.price_line_target'),
           })
           priceLineRefs.current.push(pl)
-        } catch { /* ignore */ }
+        } catch {  }
       }
       if (ann.stop_loss) {
         try {
@@ -349,12 +349,12 @@ export default function ChartPage() {
             axisLabelVisible: true, title: tRef.current('chart.price_line_stop'),
           })
           priceLineRefs.current.push(pl)
-        } catch { /* ignore */ }
+        } catch {  }
       }
     })
 
     if (markersRef.current) {
-      try { markersRef.current.setMarkers([]) } catch { /* ignore */ }
+      try { markersRef.current.setMarkers([]) } catch {  }
     }
     const markerData = analyses
       .filter(a => a.signal && tradeDatesInRange.has(a.trade_date))
@@ -374,12 +374,12 @@ export default function ChartPage() {
       } else {
         markersRef.current.setMarkers(markerData)
       }
-    } catch { /* ignore */ }
+    } catch {  }
 
     chartRef.current?.timeScale().fitContent()
   }, [candles, analyses, showSMA, showEMA])
 
-  // ── Render ───────────────────────────────────────────────────────────────────
+
 
   const analysesInRange = activeTicker
     ? analyses.filter(a => candles.some(c => c.time === a.trade_date))
@@ -407,7 +407,7 @@ export default function ChartPage() {
     <div className="p-4 md:p-6 space-y-5 max-w-7xl">
       <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">{t('chart.title')}</h2>
 
-      {/* Search bar */}
+      {}
       <div className="flex items-center gap-3">
         <div className="flex items-center gap-2 bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 flex-1 max-w-xs">
           <Search size={15} className="text-gray-500" />
@@ -447,7 +447,7 @@ export default function ChartPage() {
         {loading && <RefreshCw size={16} className="text-violet-400 animate-spin" />}
       </div>
 
-      {/* Indicators panel */}
+      {}
       {activeTicker && (
         <div className="flex flex-wrap items-center gap-4 bg-gray-900/50 border border-gray-800/80 px-4 py-3 rounded-xl">
           <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-2">{t('chart.indicators')}:</span>
@@ -505,9 +505,9 @@ export default function ChartPage() {
         </div>
       )}
 
-      {/* Main layout: chart + side panel */}
+      {}
       <div className="flex flex-col lg:flex-row gap-5">
-        {/* Chart */}
+        {}
         <div className="flex-1 min-w-0">
           <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
             {activeTicker && (
@@ -530,7 +530,7 @@ export default function ChartPage() {
             )}
           </div>
 
-          {/* Legend */}
+          {}
           {activeTicker && (
             <div className="flex flex-wrap gap-4 mt-3 px-1 text-xs text-gray-500">
               <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5 bg-emerald-500 opacity-60" style={{borderTop: '2px dashed #10b981'}} /> {t('chart.legend_support')}</span>
@@ -542,7 +542,7 @@ export default function ChartPage() {
             </div>
           )}
 
-          {/* RSI subplot */}
+          {}
           {showRSI && candles.length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mt-4">
               <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">
@@ -575,7 +575,7 @@ export default function ChartPage() {
             </div>
           )}
 
-          {/* MACD subplot */}
+          {}
           {showMACD && candles.length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mt-4">
               <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">
@@ -627,7 +627,7 @@ export default function ChartPage() {
             </div>
           )}
 
-          {/* Sentiment Correlation subplot */}
+          {}
           {showSentiment && sentimentChartData.length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mt-4">
               <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">
@@ -671,10 +671,10 @@ export default function ChartPage() {
           )}
         </div>
 
-        {/* Side panel */}
+        {}
         {activeTicker && (
           <div className="w-full lg:w-72 lg:flex-shrink-0 space-y-4">
-            {/* Analysis list */}
+            {}
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
               <div className="px-4 py-3 border-b border-gray-800">
                 <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider">
@@ -704,7 +704,7 @@ export default function ChartPage() {
               </div>
             </div>
 
-            {/* Selected analysis detail */}
+            {}
             {selected && (
               <AnalysisDetail
                 analysis={selected}
@@ -719,7 +719,7 @@ export default function ChartPage() {
   )
 }
 
-// ── Analysis detail panel ─────────────────────────────────────────────────────
+
 
 function AnalysisDetail({
   analysis,
@@ -799,3 +799,4 @@ function AnalysisDetail({
     </div>
   )
 }
+

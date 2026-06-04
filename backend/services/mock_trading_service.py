@@ -1,27 +1,18 @@
-"""Mock trading service — executes paper trades against PostgreSQL portfolio models."""
 import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Optional
-
 from sqlalchemy import select, delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
-
 from backend.models.portfolio import Portfolio, Holding
 from backend.models.order import Order
-
 _logger = logging.getLogger(__name__)
-
-
 async def _get_price(ticker: str) -> Optional[float]:
-    """Fetch latest price from yfinance in a thread pool."""
     import yfinance as yf
-
     def _fetch():
         try:
             info = yf.Ticker(ticker).info
-            # Use explicit None checks to avoid treating 0.0 as missing
             price = info.get("currentPrice")
             if price is None:
                 price = info.get("regularMarketPrice")
@@ -33,19 +24,14 @@ async def _get_price(ticker: str) -> Optional[float]:
         except Exception as e:
             _logger.warning("Price fetch failed for %s: %s", ticker, e)
             return None
-
     return await asyncio.to_thread(_fetch)
-
-
 async def get_or_create_sim_portfolio(db: AsyncSession, initial_capital: float = 100_000.0, user=None) -> Portfolio:
-    """Return the simulation portfolio, creating one if it doesn't exist."""
     user_id = getattr(user, "id", None) if user is not None else None
     q = select(Portfolio).where(Portfolio.mode == "simulation")
     if user_id is not None:
         q = q.where(Portfolio.user_id == user_id)
     else:
         q = q.where(Portfolio.user_id.is_(None))
-
     result = await db.execute(q.options(selectinload(Portfolio.holdings)))
     portfolio = result.scalar_one_or_none()
     if portfolio is None:
@@ -62,23 +48,17 @@ async def get_or_create_sim_portfolio(db: AsyncSession, initial_capital: float =
         await db.flush()
         await db.refresh(portfolio, ["holdings"])
     return portfolio
-
-
 async def get_portfolio_with_live_prices(db: AsyncSession, user=None) -> dict:
-    """Return simulation portfolio enriched with live prices and P&L."""
     user_id = getattr(user, "id", None) if user is not None else None
     q = select(Portfolio).where(Portfolio.mode == "simulation")
     if user_id is not None:
         q = q.where(Portfolio.user_id == user_id)
     else:
         q = q.where(Portfolio.user_id.is_(None))
-
     result = await db.execute(q.options(selectinload(Portfolio.holdings)))
     portfolio = result.scalar_one_or_none()
     if portfolio is None:
         portfolio = await get_or_create_sim_portfolio(db, user=user)
-
-    # Fetch live prices for all holdings concurrently
     tickers = [h.ticker for h in portfolio.holdings]
     prices = {}
     if tickers:
@@ -87,7 +67,6 @@ async def get_portfolio_with_live_prices(db: AsyncSession, user=None) -> dict:
             t: p for t, p in zip(tickers, raw)
             if p is not None and not isinstance(p, BaseException)
         }
-
     holdings_data = []
     positions_value = 0.0
     for h in portfolio.holdings:
@@ -102,12 +81,9 @@ async def get_portfolio_with_live_prices(db: AsyncSession, user=None) -> dict:
         market_value = price * h.quantity
         unrealized_pnl = market_value - cost_basis
         pnl_pct = (unrealized_pnl / cost_basis * 100) if cost_basis else 0.0
-
-        # Persist updated price & pnl
         h.current_price = price
         h.unrealized_pnl = unrealized_pnl
         positions_value += market_value
-
         holdings_data.append({
             "ticker": h.ticker,
             "quantity": h.quantity,
@@ -117,19 +93,14 @@ async def get_portfolio_with_live_prices(db: AsyncSession, user=None) -> dict:
             "unrealized_pnl": round(unrealized_pnl, 2),
             "pnl_pct": round(pnl_pct, 2),
         })
-
     total_value = portfolio.cash_available + positions_value
     total_pnl = total_value - portfolio.initial_capital
     total_pnl_pct = (total_pnl / portfolio.initial_capital * 100) if portfolio.initial_capital else 0.0
-
-    # Persist cached balance and holding prices — wrapped to survive concurrent
-    # request lock contention (statement_timeout) without failing the GET response.
     portfolio.current_balance = total_value
     try:
         await db.flush()
     except Exception:
         await db.rollback()
-
     return {
         "id": portfolio.id,
         "mode": portfolio.mode,
@@ -141,8 +112,6 @@ async def get_portfolio_with_live_prices(db: AsyncSession, user=None) -> dict:
         "total_pnl_pct": round(total_pnl_pct, 2),
         "holdings": holdings_data,
     }
-
-
 async def execute_order(
     db: AsyncSession,
     ticker: str,
@@ -151,34 +120,24 @@ async def execute_order(
     analysis_id: Optional[int] = None,
     user=None,
 ) -> dict:
-    """Execute a paper BUY or SELL order.
-
-    Returns a result dict with order details or raises ValueError on failure.
-    """
     action = action.upper()
     if action not in ("BUY", "SELL"):
         raise ValueError("action must be BUY or SELL")
     if quantity <= 0:
         raise ValueError("quantity must be positive")
-
     price = await _get_price(ticker)
     if price is None:
         raise ValueError(f"Could not fetch price for {ticker}")
-
     portfolio = await get_or_create_sim_portfolio(db, user=user)
     total_cost = price * quantity
-    commission = round(total_cost * 0.001, 4)  # 0.1% commission
-
+    commission = round(total_cost * 0.001, 4)
     if action == "BUY":
         required = total_cost + commission
         if portfolio.cash_available < required:
             raise ValueError(
                 f"Yetersiz bakiye. Gerekli: ${required:.2f}, Mevcut: ${portfolio.cash_available:.2f}"
             )
-
         portfolio.cash_available -= required
-
-        # Update or create holding
         result = await db.execute(
             select(Holding).where(
                 Holding.portfolio_id == portfolio.id,
@@ -201,8 +160,7 @@ async def execute_order(
                 current_price=price,
                 unrealized_pnl=0.0,
             ))
-
-    else:  # SELL
+    else:
         result = await db.execute(
             select(Holding).where(
                 Holding.portfolio_id == portfolio.id,
@@ -213,13 +171,10 @@ async def execute_order(
         if holding is None or holding.quantity < quantity:
             available = holding.quantity if holding else 0
             raise ValueError(f"Yetersiz pozisyon. Mevcut: {available:.4f}, Satılmak istenen: {quantity}")
-
         portfolio.cash_available += total_cost - commission
         holding.quantity -= quantity
         if holding.quantity < 1e-6:
             await db.delete(holding)
-
-    # Record the order
     order = Order(
         portfolio_id=portfolio.id,
         mode="simulation",
@@ -237,7 +192,6 @@ async def execute_order(
     )
     db.add(order)
     await db.flush()
-
     return {
         "order_id": order.id,
         "ticker": ticker,
@@ -248,22 +202,16 @@ async def execute_order(
         "commission": commission,
         "status": "FILLED",
     }
-
-
 async def reset_portfolio(db: AsyncSession, initial_capital: float = 100_000.0, user=None) -> dict:
-    """Reset simulation portfolio to initial state."""
     user_id = getattr(user, "id", None) if user is not None else None
     q = select(Portfolio).where(Portfolio.mode == "simulation")
     if user_id is not None:
         q = q.where(Portfolio.user_id == user_id)
     else:
         q = q.where(Portfolio.user_id.is_(None))
-
     result = await db.execute(q.options(selectinload(Portfolio.holdings)))
     portfolio = result.scalar_one_or_none()
-
     if portfolio:
-        # Bulk delete orders and holdings instead of iterating
         await db.execute(delete(Order).where(Order.portfolio_id == portfolio.id))
         await db.execute(delete(Holding).where(Holding.portfolio_id == portfolio.id))
         portfolio.cash_available = initial_capital
@@ -280,42 +228,31 @@ async def reset_portfolio(db: AsyncSession, initial_capital: float = 100_000.0, 
             user_id=user_id,
         )
         db.add(portfolio)
-
     await db.flush()
     return {"message": "Portföy sıfırlandı", "initial_capital": initial_capital}
-
-
 async def get_performance(db: AsyncSession, user=None) -> dict:
-    """Calculate performance metrics vs SPY benchmark."""
     portfolio_data = await get_portfolio_with_live_prices(db, user=user)
-
-    # Fetch SPY return over same period as portfolio
     user_id = getattr(user, "id", None) if user is not None else None
     q = select(Portfolio).where(Portfolio.mode == "simulation")
     if user_id is not None:
         q = q.where(Portfolio.user_id == user_id)
     else:
         q = q.where(Portfolio.user_id.is_(None))
-
     result = await db.execute(q)
     portfolio = result.scalar_one_or_none()
     if not portfolio:
         return portfolio_data
-
     spy_return_pct = None
     try:
         import yfinance as yf
-
         def _spy():
             spy = yf.Ticker("SPY").history(period="1y")
             if len(spy) >= 2:
                 return float((spy["Close"].iloc[-1] - spy["Close"].iloc[0]) / spy["Close"].iloc[0] * 100)
             return None
-
         spy_return_pct = await asyncio.to_thread(_spy)
     except Exception:
         pass
-
     return {
         **portfolio_data,
         "benchmark_ticker": "SPY",

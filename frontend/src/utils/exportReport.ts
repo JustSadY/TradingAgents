@@ -53,7 +53,7 @@ export function exportMarkdown(analysis: AnalysisForExport): void {
 
 export function exportPDF(analysis: AnalysisForExport): void {
   const content = buildTextContent(analysis)
-  // Build plain-text PDF using browser print dialog (no external dep needed)
+
   const win = window.open('', '_blank')
   if (!win) return
   win.document.write(`
@@ -83,3 +83,4 @@ function buildTextContent(analysis: AnalysisForExport): string {
 function escapeHtml(s: string): string {
   return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, '<br>')
 }
+

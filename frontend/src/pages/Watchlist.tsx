@@ -31,7 +31,7 @@ export default function Watchlist() {
         <button onClick={fetch} className="text-slate-400 hover:text-white"><RefreshCw size={18} /></button>
       </div>
 
-      {/* Add */}
+      {}
       <div className="flex gap-3">
         <input
           className="bg-slate-700 text-white rounded-lg px-3 py-2 uppercase font-mono w-40 focus:ring-2 focus:ring-indigo-500 outline-none"
@@ -45,7 +45,7 @@ export default function Watchlist() {
         </button>
       </div>
 
-      {/* List */}
+      {}
       {loading ? <p className="text-slate-400">{t('watchlist.loading')}</p> : (
         tickers.length === 0
           ? <p className="text-slate-500">{t('watchlist.empty')}</p>
@@ -63,3 +63,4 @@ export default function Watchlist() {
     </div>
   )
 }
+

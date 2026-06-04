@@ -80,7 +80,7 @@ export default function Performance() {
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">{[...Array(4)].map((_, i) => <div key={i} className="h-20 md:h-24 bg-gray-800 rounded-2xl animate-pulse" />)}</div>
       ) : perf && perf.total > 0 ? (
         <>
-          {/* KPI Cards */}
+          {}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 md:gap-4">
             <StatCard icon={<BarChart2 size={16} />} label={t('performance.stat_total')} value={String(perf.total)} />
             <StatCard icon={<Target size={16} />} label={t('performance.stat_win_rate')}
@@ -94,7 +94,7 @@ export default function Performance() {
               color={perf.avg_alpha_return !== null && perf.avg_alpha_return >= 0 ? 'text-emerald-400' : 'text-red-400'} />
           </div>
 
-          {/* Charts */}
+          {}
           {bySignalData.length > 0 && (
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
               <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 h-[280px] md:h-auto">
@@ -130,7 +130,7 @@ export default function Performance() {
             </div>
           )}
 
-          {/* Analyst Performance Attribution */}
+          {}
           {attribution.length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden mt-6">
               <div className="px-4 md:px-5 py-3 md:py-4 border-b border-gray-800">
@@ -173,7 +173,7 @@ export default function Performance() {
             </div>
           )}
 
-          {/* History table with returns */}
+          {}
           {history.length > 0 && (
             <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden mt-6">
               <div className="px-4 md:px-5 py-3 md:py-4 border-b border-gray-800">
@@ -235,3 +235,4 @@ function StatCard({ icon, label, value, color = 'text-white' }: { icon: React.Re
     </div>
   )
 }
+

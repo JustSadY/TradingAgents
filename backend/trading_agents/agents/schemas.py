@@ -1,72 +1,18 @@
-"""Pydantic schemas used by agents that produce structured output.
-
-The framework's primary artifact is still prose: each agent's natural-language
-reasoning is what users read in the saved markdown reports and what the
-downstream agents read as context.  Structured output is layered onto the
-three decision-making agents (Research Manager, Trader, Portfolio Manager)
-so that:
-
-- Their outputs follow consistent section headers across runs and providers
-- Each provider's native structured-output mode is used (json_schema for
-  OpenAI/xAI, response_schema for Gemini, tool-use for Anthropic)
-- Schema field descriptions become the model's output instructions, freeing
-  the prompt body to focus on context and the rating-scale guidance
-- A render helper turns the parsed Pydantic instance back into the same
-  markdown shape the rest of the system already consumes, so display,
-  memory log, and saved reports keep working unchanged
-"""
-
 from __future__ import annotations
-
 from enum import Enum
 from typing import Optional
-
 from pydantic import BaseModel, Field
-
-
-# ---------------------------------------------------------------------------
-# Shared rating types
-# ---------------------------------------------------------------------------
-
-
 class PortfolioRating(str, Enum):
-    """5-tier rating used by the Research Manager and Portfolio Manager."""
-
     BUY = "Buy"
     OVERWEIGHT = "Overweight"
     HOLD = "Hold"
     UNDERWEIGHT = "Underweight"
     SELL = "Sell"
-
-
 class TraderAction(str, Enum):
-    """3-tier transaction direction used by the Trader.
-
-    The Trader's job is to translate the Research Manager's investment plan
-    into a concrete transaction proposal: should the desk execute a Buy, a
-    Sell, or sit on Hold this round.  Position sizing and the nuanced
-    Overweight / Underweight calls happen later at the Portfolio Manager.
-    """
-
     BUY = "Buy"
     HOLD = "Hold"
     SELL = "Sell"
-
-
-# ---------------------------------------------------------------------------
-# Research Manager
-# ---------------------------------------------------------------------------
-
-
 class ResearchPlan(BaseModel):
-    """Structured investment plan produced by the Research Manager.
-
-    Hand-off to the Trader: the recommendation pins the directional view,
-    the rationale captures which side of the bull/bear debate carried the
-    argument, and the strategic actions translate that into concrete
-    instructions the trader can execute against.
-    """
-
     recommendation: PortfolioRating = Field(
         description=(
             "The investment recommendation. Exactly one of Buy / Overweight / "
@@ -88,10 +34,7 @@ class ResearchPlan(BaseModel):
             "including position sizing guidance consistent with the rating."
         ),
     )
-
-
 def render_research_plan(plan: ResearchPlan) -> str:
-    """Render a ResearchPlan to markdown for storage and the trader's prompt context."""
     return "\n".join([
         f"**Recommendation**: {plan.recommendation.value}",
         "",
@@ -99,22 +42,7 @@ def render_research_plan(plan: ResearchPlan) -> str:
         "",
         f"**Strategic Actions**: {plan.strategic_actions}",
     ])
-
-
-# ---------------------------------------------------------------------------
-# Trader
-# ---------------------------------------------------------------------------
-
-
 class TraderProposal(BaseModel):
-    """Structured transaction proposal produced by the Trader.
-
-    The trader reads the Research Manager's investment plan and the analyst
-    reports, then turns them into a concrete transaction: what action to
-    take, the reasoning that justifies it, and the practical levels for
-    entry, stop-loss, and sizing.
-    """
-
     action: TraderAction = Field(
         description="The transaction direction. Exactly one of Buy / Hold / Sell.",
     )
@@ -136,15 +64,7 @@ class TraderProposal(BaseModel):
         default=None,
         description="Optional sizing guidance, e.g. '5% of portfolio'.",
     )
-
-
 def render_trader_proposal(proposal: TraderProposal) -> str:
-    """Render a TraderProposal to markdown.
-
-    The trailing ``FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL**`` line is
-    preserved for backward compatibility with the analyst stop-signal text
-    and any external code that greps for it.
-    """
     parts = [
         f"**Action**: {proposal.action.value}",
         "",
@@ -161,22 +81,7 @@ def render_trader_proposal(proposal: TraderProposal) -> str:
         f"FINAL TRANSACTION PROPOSAL: **{proposal.action.value.upper()}**",
     ])
     return "\n".join(parts)
-
-
-# ---------------------------------------------------------------------------
-# Portfolio Manager
-# ---------------------------------------------------------------------------
-
-
 class PortfolioDecision(BaseModel):
-    """Structured output produced by the Portfolio Manager.
-
-    The model fills every field as part of its primary LLM call; no separate
-    extraction pass is required. Field descriptions double as the model's
-    output instructions, so the prompt body only needs to convey context and
-    the rating-scale guidance.
-    """
-
     rating: PortfolioRating = Field(
         description=(
             "The final position rating. Exactly one of Buy / Overweight / Hold / "
@@ -204,16 +109,7 @@ class PortfolioDecision(BaseModel):
         default=None,
         description="Optional recommended holding period, e.g. '3-6 months'.",
     )
-
-
 def render_pm_decision(decision: PortfolioDecision) -> str:
-    """Render a PortfolioDecision back to the markdown shape the rest of the system expects.
-
-    Memory log, CLI display, and saved report files all read this markdown,
-    so the rendered output preserves the exact section headers (``**Rating**``,
-    ``**Executive Summary**``, ``**Investment Thesis**``) that downstream
-    parsers and the report writers already handle.
-    """
     parts = [
         f"**Rating**: {decision.rating.value}",
         "",
@@ -226,36 +122,11 @@ def render_pm_decision(decision: PortfolioDecision) -> str:
     if decision.time_horizon:
         parts.extend(["", f"**Time Horizon**: {decision.time_horizon}"])
     return "\n".join(parts)
-
-
-# ---------------------------------------------------------------------------
-# PropagateResult
-# ---------------------------------------------------------------------------
-
-
 class PropagateResult(BaseModel):
-    """Type-safe wrapper around the ``(final_state, signal)`` tuple returned
-    by ``TradingAgentsGraph.propagate()`` and ``async_propagate()``.
-
-    Usage::
-
-        state, signal = ta.propagate("AAPL", "2024-05-10")
-        result = PropagateResult.from_state(state, signal)
-
-        # Access reports without magic strings:
-        print(result.market_report)
-        print(result.signal)       # "Buy" | "Overweight" | ...
-
-    The raw ``(state, signal)`` tuple is still returned by ``propagate()``
-    for backward compatibility; this model is opt-in.
-    """
-
     ticker: str
     trade_date: str
     asset_type: str = "stock"
-    signal: str  # Buy | Overweight | Hold | Underweight | Sell
-
-    # Analyst reports
+    signal: str
     market_report: str = ""
     sentiment_report: str = ""
     news_report: str = ""
@@ -265,18 +136,12 @@ class PropagateResult(BaseModel):
     quant_report: str = ""
     earnings_report: str = ""
     review_report: str = ""
-
-    # Decision chain
     investment_plan: str = ""
     trader_plan: str = ""
     final_decision: str = ""
-
     @classmethod
     def from_state(cls, state: dict, signal: str) -> "PropagateResult":
-        """Construct from the raw state dict returned by propagate()."""
-        # Import here to avoid circular imports at module load time
         from tradingagents.agents.utils.agent_states import StateKeys
-
         return cls(
             ticker=state.get(StateKeys.COMPANY, ""),
             trade_date=state.get(StateKeys.TRADE_DATE, ""),

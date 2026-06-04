@@ -12,7 +12,7 @@ import {
   Download, FileDown,
 } from 'lucide-react'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+
 interface WsEvent {
   type: string; section?: string; content?: string; signal?: string
   final_decision?: string; message?: string; duration_seconds?: number
@@ -42,7 +42,7 @@ interface PortfolioDetail {
   super_portfolio_report: string; analysis_ids: number[]; created_at: string
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
+
 const STORAGE_KEY = 'ta_last_run'
 const TASK_KEY = 'ta_task_running'
 
@@ -67,7 +67,7 @@ const FALLBACK_TONE: Record<string, string> = {
   Buy: 'positive', Overweight: 'positive', Hold: 'neutral', Underweight: 'negative', Sell: 'negative',
 }
 
-// ── Shared UI helpers ─────────────────────────────────────────────────────────
+
 function SignalBadge({ signal, large }: { signal: string | null; large?: boolean }) {
   const meta = useMeta()
   if (!signal) return null
@@ -101,7 +101,7 @@ function ReportCard({ label, content, defaultOpen }: { label: string; content: s
   )
 }
 
-// ── Tab: Single-ticker run ────────────────────────────────────────────────────
+
 const EMPTY_RUN = {
   ticker: '', date: new Date().toISOString().slice(0, 10), assetType: 'stock',
   runStatus: 'idle' as 'idle' | 'running' | 'done' | 'error',
@@ -173,8 +173,8 @@ function RunTab() {
     }
   }
 
-  // ── Shared WS attachment ─────────────────────────────────────────────────────
-  // t is captured as stale closure — acceptable since language rarely changes mid-analysis
+
+
   const attachWs = useCallback((taskId: string, isReconnect = false) => {
     taskIdRef.current = taskId
     const token = getAccessToken()
@@ -255,9 +255,9 @@ function RunTab() {
         }
       }
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
-  // ── Auto-reconnect on page refresh ──────────────────────────────────────────
+
   useEffect(() => {
     const raw = localStorage.getItem(TASK_KEY)
     if (!raw) return
@@ -270,9 +270,9 @@ function RunTab() {
       if (runTicker) setTicker(runTicker)
       attachWs(taskId, true)
     } catch { localStorage.removeItem(TASK_KEY) }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [])
 
-  // ── Cost estimate (debounced) ────────────────────────────────────────────────
+
   useEffect(() => {
     if (!ticker.trim() || running) return
     const tid = setTimeout(async () => {
@@ -284,7 +284,7 @@ function RunTab() {
     return () => clearTimeout(tid)
   }, [ticker, date, running])
 
-  // ── Re-analysis check ───────────────────────────────────────────────────────
+
   useEffect(() => {
     if (!ticker.trim()) { setExistingId(null); return }
     const tid = setTimeout(async () => {
@@ -305,7 +305,7 @@ function RunTab() {
     setRunning_(false)
     setLog(l => [...l, t('analysis.ws.stopped')])
     if (tid) {
-      try { await axios.post(`/api/analysis/${tid}/cancel`) } catch { /* ignore */ }
+      try { await axios.post(`/api/analysis/${tid}/cancel`) } catch {  }
     }
   }
 
@@ -352,7 +352,7 @@ function RunTab() {
 
   return (
     <div className="space-y-4">
-      {/* Form card */}
+      {}
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3.5 md:p-5">
         <div className="flex flex-wrap gap-3 items-end">
           <div className="flex-1 min-w-[120px]">
@@ -416,7 +416,7 @@ function RunTab() {
           {runStatus === 'error' && <AlertCircle size={18} className="text-red-400 mb-2.5 hidden sm:block" />}
           {signal && <div className="mb-1.5"><SignalBadge signal={signal} large /></div>}
         </div>
-        {/* Cost estimate + existing analysis hint */}
+        {}
         {!running && (
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5">
             {costEstimate && (
@@ -431,7 +431,7 @@ function RunTab() {
         )}
       </div>
 
-      {/* Re-run warning modal */}
+      {}
       {showRerunModal && (
         <div className="fixed inset-0 bg-black/75 z-[60] flex items-center justify-center p-5 backdrop-blur-md">
           <div className="bg-gray-900 border border-gray-800 rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
@@ -449,7 +449,7 @@ function RunTab() {
         </div>
       )}
 
-      {/* Running status banner */}
+      {}
       {running && (
         <div className="flex items-center gap-3 px-4 py-3 bg-violet-500/10 border border-violet-500/20 rounded-2xl">
           <span className="relative flex h-2 w-2 shrink-0">
@@ -466,10 +466,10 @@ function RunTab() {
         </div>
       )}
 
-      {/* Content: log/debate + reports/chat */}
+      {}
       {(log.length > 0 || reportEntries.length > 0) && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Left Panel: Log & Live Debate */}
+          {}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden flex flex-col h-[60vh] lg:h-[70vh]">
             <div className="flex items-center gap-1 p-1 bg-gray-800/40 border-b border-gray-800">
               <button
@@ -524,10 +524,10 @@ function RunTab() {
             </div>
           </div>
 
-          {/* Right Panel: Reports, Debate, Q&A */}
+          {}
           <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden flex flex-col h-[60vh] lg:h-[70vh]">
             {detail ? (
-              // If analysis completed, show tab navigation for Reports, Debate logs, and Q&A chat
+
               <>
                 <div className="flex items-center gap-1 p-1 bg-gray-800/40 border-b border-gray-800">
                   <button
@@ -572,7 +572,7 @@ function RunTab() {
                 </div>
               </>
             ) : (
-              // Real-time compiling mode
+
               <>
                 <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800 bg-gray-800/40">
                   <FileText size={13} className="text-gray-500" />
@@ -596,7 +596,7 @@ function RunTab() {
   )
 }
 
-// ── Tab: Multi-ticker portfolio run ──────────────────────────────────────────
+
 function MultiTab() {
   const { t } = useTranslation()
   const [tickers, setTickers] = useState<string[]>([])
@@ -730,7 +730,7 @@ function PortfolioHistorySection() {
   )
 }
 
-// ── Tab: History ──────────────────────────────────────────────────────────────
+
 function HistoryTab() {
   const { t } = useTranslation()
   const [items, setItems] = useState<HistoryItem[]>([])
@@ -874,7 +874,7 @@ function HistoryTab() {
   )
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
+
 type Tab = 'run' | 'multi' | 'history'
 
 export default function Analysis() {
@@ -893,7 +893,7 @@ export default function Analysis() {
         <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">{t('analysis.title')}</h2>
       </div>
 
-      {/* Tab bar */}
+      {}
       <div className="flex gap-1 p-1 bg-gray-900 border border-gray-800 rounded-2xl w-fit">
         {tabs.map(tb => (
           <button key={tb.id} onClick={() => setTab(tb.id)}
@@ -913,7 +913,7 @@ export default function Analysis() {
   )
 }
 
-// ── Debate & Q&A Chat Widgets ──────────────────────────────────────────────────
+
 
 interface DebateMessage {
   sender: string
@@ -957,7 +957,7 @@ function DebateHistoryWidget({ investmentHistory, riskHistory }: { investmentHis
       try {
         const parsed = JSON.parse(historyStr)
         if (Array.isArray(parsed)) return parsed.map(msg => parseDebateMessage(msg))
-      } catch { /* fallback */ }
+      } catch {  }
     }
     return historyStr
       .split('\n')
@@ -1097,4 +1097,5 @@ function AnalysisChatWidget({ analysisId }: { analysisId: number }) {
     </div>
   )
 }
+
 

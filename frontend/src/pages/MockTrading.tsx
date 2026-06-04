@@ -73,21 +73,21 @@ export default function MockTrading() {
   const [refreshing, setRefreshing] = useState(false)
   const [fetchError, setFetchError] = useState(false)
 
-  // Order form
+
   const [ticker, setTicker] = useState('')
   const [action, setAction] = useState<'BUY' | 'SELL'>('BUY')
   const [quantity, setQuantity] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [orderResult, setOrderResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
-  // Reset
+
   const [resetting, setResetting] = useState(false)
 
   const fetchPortfolio = useCallback(async (silent = false) => {
     if (!silent) setLoading(true)
     else setRefreshing(true)
     try {
-      // Use /performance to get benchmark data alongside portfolio
+
       const { data } = await axios.get<PortfolioData>('/api/trading/performance')
       setPortfolio(data)
       setFetchError(false)
@@ -136,7 +136,7 @@ export default function MockTrading() {
       await axios.post('/api/trading/reset', { initial_capital: 100000 })
       await fetchPortfolio()
     } catch {
-      // ignore
+
     } finally {
       setResetting(false)
     }
@@ -175,7 +175,7 @@ export default function MockTrading() {
 
   return (
     <div className="p-6 space-y-6">
-      {/* Header */}
+      {}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-bold text-white tracking-tight">{t('mocktrading.title')}</h2>
         <div className="flex gap-2">
@@ -198,7 +198,7 @@ export default function MockTrading() {
         </div>
       </div>
 
-      {/* KPI Cards */}
+      {}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
           icon={<DollarSign size={20} />}
@@ -235,13 +235,13 @@ export default function MockTrading() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* Order Form */}
+        {}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
           <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
             <ShoppingCart size={18} className="text-indigo-400" /> {t('mocktrading.order_title')}
           </h3>
           <form onSubmit={handleOrder} className="space-y-3">
-            {/* Action tabs */}
+            {}
             <div className="flex rounded-xl overflow-hidden border border-gray-700">
               <button
                 type="button"
@@ -317,7 +317,7 @@ export default function MockTrading() {
           </form>
         </div>
 
-        {/* Holdings */}
+        {}
         <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl p-5">
           <h3 className="text-lg font-semibold text-white mb-4">{t('mocktrading.positions_title')}</h3>
           {p.holdings.length === 0 ? (
@@ -361,3 +361,4 @@ export default function MockTrading() {
     </div>
   )
 }
+

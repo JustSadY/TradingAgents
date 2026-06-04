@@ -64,14 +64,14 @@ export function useAuth() {
   }
 }
 
-// Axios interceptor: attach Bearer token automatically
+
 axios.interceptors.request.use(cfg => {
   const token = getAccessToken()
   if (token && cfg.headers) cfg.headers.Authorization = `Bearer ${token}`
   return cfg
 })
 
-// Axios interceptor: auto-refresh on 401
+
 let _refreshing = false
 let _queue: Array<(token: string) => void> = []
 
@@ -81,7 +81,7 @@ axios.interceptors.response.use(
     const original = err.config
     const status: number | undefined = err.response?.status
 
-    // Show toast for 5xx server errors (skip 401 — handled by refresh logic below)
+
     if (status && status >= 500) {
       const detail = err.response?.data?.detail || err.message || 'Sunucu hatası'
       notify('error', detail, `HTTP ${status}`)
@@ -123,3 +123,4 @@ axios.interceptors.response.use(
     }
   }
 )
+

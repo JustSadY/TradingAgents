@@ -1,14 +1,7 @@
-"""Shared model catalog for the settings UI model dropdowns and validation."""
-
 from __future__ import annotations
-
 from typing import Dict, List, Tuple
-
 ModelOption = Tuple[str, str]
 ProviderOptions = Dict[str, List[ModelOption]]
-
-
-# Shared model list for GLM via Z.AI (international) and BigModel (China).
 _GLM_MODELS: List[ModelOption] = [
     ("GLM-5.1 - Latest flagship, 204K ctx", "glm-5.1"),
     ("GLM-5 - Flagship, 204K ctx", "glm-5"),
@@ -16,9 +9,6 @@ _GLM_MODELS: List[ModelOption] = [
     ("GLM-4.7 - Previous-gen flagship", "glm-4.7"),
     ("GLM-4.5-Air - Lightweight, cost-efficient", "glm-4.5-air"),
 ]
-
-
-# Shared model list for Qwen's global (dashscope-intl) and CN (dashscope) endpoints.
 _QWEN_MODELS: List[ModelOption] = [
     ("Qwen 3.6 Plus - Flagship vision-language, agentic coding SOTA", "qwen3.6-plus"),
     ("Qwen 3.6 Flash - Latest fast, agentic coding + vision-language", "qwen3.6-flash"),
@@ -26,9 +16,6 @@ _QWEN_MODELS: List[ModelOption] = [
     ("Qwen 3.5 Flash - Previous-gen fast", "qwen3.5-flash"),
     ("Qwen 3 Max - Specialized for agent programming + tool use", "qwen3-max"),
 ]
-
-
-# Shared model list for MiniMax's global and CN endpoints (same IDs).
 _MINIMAX_MODELS: List[ModelOption] = [
     ("MiniMax-M2.7 - Flagship, SOTA on coding/agent benchmarks, 204K ctx", "MiniMax-M2.7"),
     ("MiniMax-M2.7-highspeed - Same quality as M2.7, ~100 TPS", "MiniMax-M2.7-highspeed"),
@@ -38,8 +25,6 @@ _MINIMAX_MODELS: List[ModelOption] = [
     ("MiniMax-M2.1-highspeed - M2.1 highspeed, 204K ctx", "MiniMax-M2.1-highspeed"),
     ("MiniMax-M2 - Base M2, 204K ctx", "MiniMax-M2"),
 ]
-
-
 MODEL_OPTIONS: ProviderOptions = {
     "openai": [
         ("GPT-5.5 Pro - Most capable, expensive ($30/$180 per 1M tokens)", "gpt-5.5-pro"),
@@ -102,15 +87,9 @@ MODEL_OPTIONS: ProviderOptions = {
         ("Default Quick Model (e.g. gpt-3.5-turbo)", "gpt-3.5-turbo"),
     ],
 }
-
-
 def get_model_options(provider: str, mode: str = "default") -> List[ModelOption]:
-    """Return shared model options for a provider. Mode is kept for backward compatibility."""
     return MODEL_OPTIONS.get(provider.lower(), [])
-
-
 def get_known_models() -> Dict[str, List[str]]:
-    """Build known model names from the shared CLI catalog."""
     return {
         provider: sorted({value for _, value in options})
         for provider, options in MODEL_OPTIONS.items()

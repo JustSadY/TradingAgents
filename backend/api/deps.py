@@ -1,16 +1,11 @@
-"""Shared FastAPI dependencies."""
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
 from backend.core.database import get_db
 from backend.core.security import decode_token
 from backend.models.user import User
-
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
-
-
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
@@ -24,28 +19,18 @@ async def get_current_user(
         username = decode_token(token, expected_type="access")
     except ValueError:
         raise credentials_exc
-
     result = await db.execute(select(User).where(User.username == username))
     user = result.scalar_one_or_none()
     if user is None or not user.is_active:
         raise credentials_exc
     return user
-
-
 async def require_admin(
     current_user: User = Depends(get_current_user),
 ) -> User:
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
-
-
 def require_page(page_key: str):
-    """Dependency factory — checks per-user page permission.
-
-    Admin always passes. 'settings' always passes (needed to set API keys).
-    All others require an explicit allowed=True row in user_page_permissions.
-    """
     async def _check(
         current_user: User = Depends(get_current_user),
         db: AsyncSession = Depends(get_db),

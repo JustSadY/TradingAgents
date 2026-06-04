@@ -1,20 +1,14 @@
 from datetime import datetime
 from pydantic import BaseModel
-
-
 class AnalysisRunRequest(BaseModel):
     ticker: str
-    trade_date: str  # YYYY-MM-DD
+    trade_date: str
     asset_type: str = "stock"
-
-
 class AnalysisRunResponse(BaseModel):
     task_id: str
     ticker: str
     trade_date: str
     message: str = "Analysis started"
-
-
 class AnalysisResultRead(BaseModel):
     id: int
     ticker: str
@@ -52,11 +46,8 @@ class AnalysisResultRead(BaseModel):
     raw_return: float | None = None
     alpha_return: float | None = None
     holding_days: int | None = None
-
     class Config:
         from_attributes = True
-
-
 class AnalysisListItem(BaseModel):
     id: int
     ticker: str
@@ -70,21 +61,14 @@ class AnalysisListItem(BaseModel):
     llm_provider: str | None = None
     llm_model: str | None = None
     preset_name: str | None = None
-
     class Config:
         from_attributes = True
-
-
 class ChatMessageRead(BaseModel):
     id: int
     role: str
     content: str
     created_at: datetime
-
     class Config:
         from_attributes = True
-
-
 class ChatMessageCreate(BaseModel):
     message: str
-

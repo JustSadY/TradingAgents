@@ -1,9 +1,9 @@
 const PREF_KEY = 'ta_browser_notify'
 
-// The Notification API is undefined in insecure contexts (HTTP on a non-localhost
-// host) and some embedded webviews. Accessing `Notification.permission` there
-// throws a ReferenceError — which, if it happens inside the WebSocket onmessage
-// handler, would break analysis completion handling. Always feature-detect first.
+
+
+
+
 function notifySupported(): boolean {
   return typeof window !== 'undefined' && 'Notification' in window
 }
@@ -28,10 +28,11 @@ export function setBrowserNotifyPref(enabled: boolean): void {
 export function sendBrowserNotification(title: string, body: string, icon = '/favicon.ico'): void {
   try {
     if (!isBrowserNotifyEnabled()) return
-    if (document.visibilityState === 'visible') return  // already in focus
+    if (document.visibilityState === 'visible') return
     const notification = new Notification(title, { body, icon })
     notification.onclick = () => {
       window.focus()
     }
-  } catch { /* ignore — never let a notification failure break the caller */ }
+  } catch {  }
 }
+

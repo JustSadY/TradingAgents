@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 
-// Mirrors the payload from GET /api/meta — the backend is the single source of
-// truth for every choice the UI renders (analysts, sections, signals, …).
+
+
 export interface AnalystMeta { key: string; label: string; description: string; default: boolean }
 export interface Choice { value: string; label: string }
 export interface SignalMeta { value: string; label: string; tone: 'positive' | 'neutral' | 'negative' }
@@ -19,7 +19,7 @@ export interface Meta {
   provider_labels: Record<string, string>
 }
 
-// Module-level cache so /api/meta is fetched once and shared by every component.
+
 let _cache: Meta | null = null
 let _inflight: Promise<Meta> | null = null
 
@@ -38,3 +38,4 @@ export function useMeta(): Meta | null {
 
   return meta
 }
+

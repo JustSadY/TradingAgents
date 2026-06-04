@@ -1,19 +1,14 @@
-"""Price alert CRUD — trigger notifications when price thresholds are hit."""
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
-
 from backend.core.database import get_db
 from backend.api.deps import get_current_user
 from backend.models.alert import PriceAlert
 from backend.models.user import User
 from backend.schemas.alert import AlertCreate, AlertUpdate, AlertRead
-
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 _logger = logging.getLogger(__name__)
-
-
 @router.get("", response_model=list[AlertRead])
 async def list_alerts(
     db: AsyncSession = Depends(get_db),
@@ -24,8 +19,6 @@ async def list_alerts(
         q = q.where(PriceAlert.user_id == current_user.id)
     result = await db.execute(q)
     return result.scalars().all()
-
-
 @router.post("", response_model=AlertRead)
 async def create_alert(
     body: AlertCreate,
@@ -42,8 +35,6 @@ async def create_alert(
     db.add(alert)
     await db.flush()
     return alert
-
-
 @router.patch("/{alert_id}", response_model=AlertRead)
 async def update_alert(
     alert_id: int,
@@ -61,8 +52,6 @@ async def update_alert(
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(alert, field, value)
     return alert
-
-
 @router.delete("/{alert_id}")
 async def delete_alert(
     alert_id: int,

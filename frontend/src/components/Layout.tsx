@@ -77,7 +77,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     try { return JSON.parse(localStorage.getItem('ta_task_running') || 'null') } catch { return null }
   })
 
-  // Fetch allowed pages for the current user
+
   useEffect(() => {
     axios.get('/api/users/me/permissions')
       .then(r => setAllowedPages(r.data.allowed_pages ?? []))
@@ -85,7 +85,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [])
 
 
-  // Poll cron status
+
   useEffect(() => {
     const fetch = () => axios.get('/api/cron/status').then(r => setCronStatus(r.data)).catch(() => {})
     fetch()
@@ -93,7 +93,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return () => clearInterval(id)
   }, [])
 
-  // Listen for analysis start/stop events from Analysis.tsx
+
   useEffect(() => {
     const onStorage = (e: StorageEvent) => {
       if (e.key === 'ta_task_running') {
@@ -102,11 +102,11 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       }
     }
     window.addEventListener('storage', onStorage)
-    // Safety valve: a task should never stay "running" for more than this.
-    // If a WebSocket drops or the backend hangs, the completion event may
-    // never clear ta_task_running — this self-heals the sidebar indicator so
-    // it can't get stuck on "analiz ediliyor" forever.
-    const MAX_TASK_AGE_MS = 30 * 60 * 1000  // 30 minutes
+
+
+
+
+    const MAX_TASK_AGE_MS = 30 * 60 * 1000
     const id = setInterval(() => {
       try {
         const raw = localStorage.getItem('ta_task_running')
@@ -123,14 +123,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           const nextJson = JSON.stringify(val)
           return prevJson === nextJson ? prev : val
         })
-      } catch { /* ignore */ }
+      } catch {  }
     }, 1000)
     return () => { window.removeEventListener('storage', onStorage); clearInterval(id) }
   }, [])
 
   const handleLogout = () => { logout(); navigate('/login') }
 
-  // ── Global notification toast stack ────────────────────────────────────────
+
   const [toasts, setToasts] = useState<Notification[]>([])
   const { isOwner, isAdmin: isAtLeastAdmin } = useAuth()
 
@@ -141,8 +141,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     const handler = (e: Event) => {
       const n = (e as CustomEvent<Notification>).detail
-      
-      // Role-based visibility filtering
+
+
       const vis = n.visibility || 'all'
       let visible = false
       if (vis === 'all') visible = true
@@ -158,12 +158,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     window.addEventListener('ta-notify', handler)
     return () => window.removeEventListener('ta-notify', handler)
   }, [dismiss, isAtLeastAdmin, isOwner])
-  // ──────────────────────────────────────────────────────────────────────────
+
 
   return (
     <div className="flex min-h-screen bg-gray-950">
 
-      {/* ── Mobile top header ── */}
+      {}
       <header className="md:hidden fixed top-0 left-0 right-0 z-30 h-14 bg-gray-900 border-b border-gray-800 flex items-center px-4 gap-3 shrink-0">
         <button
           onClick={() => setSidebarOpen(true)}
@@ -188,7 +188,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         )}
       </header>
 
-      {/* ── Mobile sidebar overlay ── */}
+      {}
       {sidebarOpen && (
         <div
           className="md:hidden fixed inset-0 z-40 bg-black/60 backdrop-blur-sm"
@@ -196,7 +196,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         />
       )}
 
-      {/* ── Sidebar ── */}
+      {}
       <aside className={`
         fixed inset-y-0 left-0 z-50 w-64 bg-gray-900 border-r border-gray-800 flex flex-col
         transition-transform duration-200 ease-in-out
@@ -204,7 +204,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         md:relative md:w-60 md:translate-x-0 md:shrink-0
       `}>
 
-        {/* Logo */}
+        {}
         <div className="px-5 py-5 border-b border-gray-800 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div className="w-8 h-8 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/20">
@@ -223,10 +223,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </button>
         </div>
 
-        {/* Nav */}
+        {}
         <nav className="flex-1 px-3 py-3 space-y-4 overflow-y-auto">
           {NAV_SECTIONS.map(section => {
-            // Filter items in the section
+
             const visibleItems = section.items.filter(item => {
               if (item.adminOnly) return isAdmin
               if (item.isProfile) return true
@@ -237,12 +237,12 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
             return (
               <div key={section.sectionKey} className="space-y-1">
-                {/* Section Header */}
+                {}
                 <h3 className="px-3.5 text-[10px] font-bold text-gray-500 uppercase tracking-wider select-none mb-1 opacity-70">
                   {t(section.sectionKey)}
                 </h3>
-                
-                {/* Section Items */}
+
+                {}
                 <div className="space-y-0.5">
                   {visibleItems.map(({ to, key, icon: Icon, adminOnly }) => (
                     <NavLink
@@ -252,7 +252,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                       className={({ isActive }) =>
                         `flex items-center gap-3 px-3.5 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 group ` +
                         (isActive
-                          ? adminOnly 
+                          ? adminOnly
                             ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20 shadow-sm'
                             : 'bg-violet-500/10 text-violet-300 border border-violet-500/20 shadow-sm'
                           : 'text-gray-400 hover:text-white hover:bg-gray-800/40')
@@ -260,19 +260,19 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     >
                       {({ isActive }) => (
                         <>
-                          <Icon 
-                            size={15} 
+                          <Icon
+                            size={15}
                             className={
-                              isActive 
-                                ? adminOnly ? 'text-amber-400' : 'text-violet-400' 
+                              isActive
+                                ? adminOnly ? 'text-amber-400' : 'text-violet-400'
                                 : 'text-gray-500 group-hover:text-gray-300'
-                            } 
+                            }
                           />
                           <span className="flex-1">{t(key)}</span>
                           {isActive && (
-                            <ChevronRight 
-                              size={11} 
-                              className={adminOnly ? 'text-amber-500 opacity-60' : 'text-violet-500 opacity-60'} 
+                            <ChevronRight
+                              size={11}
+                              className={adminOnly ? 'text-amber-500 opacity-60' : 'text-violet-500 opacity-60'}
                             />
                           )}
                         </>
@@ -285,7 +285,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           })}
         </nav>
 
-        {/* Running analysis indicator */}
+        {}
         {runningTask && (
           <div className="mx-3 mb-2 px-3 py-2.5 rounded-xl bg-emerald-500/10 border border-emerald-500/20">
             <div className="flex items-center gap-2">
@@ -302,7 +302,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Cron status */}
+        {}
         {cronStatus.next_run_time && (
           <div className="mx-3 mb-2 px-3 py-2 rounded-xl bg-gray-800/50">
             <div className="flex items-center gap-1.5 text-xs text-gray-500">
@@ -312,9 +312,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         )}
 
-        {/* Language & User */}
+        {}
         <div className="px-3 py-3 border-t border-gray-800 space-y-2">
-          {/* Language Selector */}
+          {}
           <div className="flex items-center justify-between px-3 py-1 text-xs text-gray-500">
             <span>{t('settings.language')}</span>
             <div className="flex gap-1.5">
@@ -337,7 +337,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          {/* User Card */}
+          {}
           <div className="flex items-center gap-3 px-3 py-2.5 rounded-xl hover:bg-gray-800 transition-colors group cursor-default">
             <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-700 flex items-center justify-center text-white text-xs font-bold shrink-0">
               {user?.charAt(0).toUpperCase() || 'U'}
@@ -354,13 +354,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
       </aside>
 
-      {/* ── Main ── */}
+      {}
       <main className="flex-1 overflow-y-auto min-h-screen bg-gray-950 pt-14 md:pt-0">
         <UpdateBanner />
         {children}
       </main>
 
-      {/* ── Toast notifications ── */}
+      {}
       {toasts.length > 0 && (
         <div className="fixed bottom-5 right-3 z-50 flex flex-col gap-2 w-[calc(100vw-1.5rem)] max-w-sm sm:w-96 sm:right-5 sm:max-w-none">
           {toasts.map(t => <Toast key={t.id} n={t} onDismiss={dismiss} />)}
@@ -370,7 +370,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   )
 }
 
-// ── Toast component ───────────────────────────────────────────────────────────
+
 const TOAST_STYLES = {
   error:   { bar: 'bg-red-500',    bg: 'bg-gray-900 border-red-500/30',    icon: AlertCircle,   text: 'text-red-400'    },
   warning: { bar: 'bg-yellow-500', bg: 'bg-gray-900 border-yellow-500/30', icon: AlertTriangle, text: 'text-yellow-400' },
@@ -383,7 +383,7 @@ function Toast({ n, onDismiss }: { n: Notification; onDismiss: (id: string) => v
   const Icon = s.icon
   return (
     <div className={`relative overflow-hidden rounded-2xl border shadow-xl shadow-black/40 ${s.bg} animate-in slide-in-from-right-4 duration-300`}>
-      {/* Coloured left bar */}
+      {}
       <div className={`absolute left-0 top-0 bottom-0 w-1 ${s.bar}`} />
       <div className="flex items-start gap-3 px-4 py-3 pl-5">
         <Icon size={17} className={`${s.text} shrink-0 mt-0.5`} />
@@ -401,3 +401,4 @@ function Toast({ n, onDismiss }: { n: Notification; onDismiss: (id: string) => v
     </div>
   )
 }
+

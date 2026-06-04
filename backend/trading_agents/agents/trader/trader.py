@@ -1,11 +1,6 @@
-"""Trader: turns the Research Manager's investment plan into a concrete transaction proposal."""
-
 from __future__ import annotations
-
 import functools
-
 from langchain_core.messages import AIMessage
-
 from tradingagents.agents.schemas import TraderProposal, render_trader_proposal
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
@@ -15,20 +10,14 @@ from tradingagents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
 )
-
-
 from tradingagents.agents.utils.backtest_tools import run_strategy_backtest
-
 def create_trader(llm):
     structured_llm = bind_structured(llm, TraderProposal, "Trader")
-
     def trader_node(state, name):
         company_name = state["company_of_interest"]
         asset_type = state.get("asset_type", "stock")
         instrument_context = build_instrument_context(company_name, asset_type)
         investment_plan = state["investment_plan"]
-        
-        # Run historical backtests to inform the trader
         macd_args = {
             "ticker": company_name,
             "strategy_type": "macd_crossover"
@@ -40,10 +29,8 @@ def create_trader(llm):
         if state.get("trade_date"):
             macd_args["curr_date"] = state["trade_date"]
             rsi_args["curr_date"] = state["trade_date"]
-            
         macd_results = run_strategy_backtest.invoke(macd_args)
         rsi_results = run_strategy_backtest.invoke(rsi_args)
-
         messages = [
             {
                 "role": "system",
@@ -69,7 +56,6 @@ def create_trader(llm):
                 ),
             },
         ]
-
         trader_plan = invoke_structured_or_freetext(
             structured_llm,
             llm,
@@ -77,11 +63,9 @@ def create_trader(llm):
             render_trader_proposal,
             "Trader",
         )
-
         return {
             "messages": [AIMessage(content=trader_plan)],
             "trader_investment_plan": trader_plan,
             "sender": name,
         }
-
     return functools.partial(trader_node, name="Trader")

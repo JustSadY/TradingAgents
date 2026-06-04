@@ -195,7 +195,7 @@ export default function Admin() {
     <div className="p-4 md:p-6 space-y-4 max-w-4xl">
       <h2 className="text-xl font-bold text-white tracking-tight">{t('admin.title')}</h2>
 
-      {/* Tab bar */}
+      {}
       <div className="flex gap-1 bg-gray-900 border border-gray-800 rounded-2xl p-1 w-fit">
         {TABS.map(tb => (
           <button
@@ -212,7 +212,7 @@ export default function Admin() {
         ))}
       </div>
 
-      {/* ── Users tab ─────────────────────────────────────────────────────────── */}
+      {}
       {tab === 'users' && (
         <>
           <Section title={t('admin.section_create_user')}>
@@ -264,7 +264,7 @@ export default function Admin() {
               {createError && <span className="text-red-400 text-sm">{createError}</span>}
             </div>
           </Section>
- 
+
           <Section title={t('admin.section_user_list')}>
             {users.length === 0 ? (
               <p className="text-gray-600 text-sm">{t('admin.no_users')}</p>
@@ -357,7 +357,7 @@ export default function Admin() {
         </>
       )}
 
-      {/* ── Permissions tab ───────────────────────────────────────────────────── */}
+      {}
       {tab === 'permissions' && (
         <Section title={t('admin.section_page_permissions')}>
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
@@ -401,7 +401,7 @@ export default function Admin() {
                 ))}
               </div>
 
-              {/* Settings Section Permissions */}
+              {}
               <div className="border-t border-gray-800 mt-5 pt-4 space-y-2">
                 <h4 className="text-xs font-semibold text-amber-400 uppercase tracking-wider">
                   {t('admin.section_settings_permissions') || 'Settings Edit Permissions'}
@@ -433,11 +433,11 @@ export default function Admin() {
         </Section>
       )}
 
-      {/* ── System settings tab ───────────────────────────────────────────────── */}
+      {}
       {tab === 'system' && sysSettings && (
         <Section title={t('admin.section_system_settings')}>
           <div className="space-y-3">
-            {/* SearXNG URL */}
+            {}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
               <span className="text-sm text-gray-400">SearXNG URL</span>
               <div className="flex-1 sm:max-w-xs">
@@ -450,7 +450,7 @@ export default function Admin() {
               </div>
             </div>
 
-            {/* Reddit Client ID */}
+            {}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
               <span className="text-sm text-gray-400">Reddit Client ID</span>
               <div className="flex-1 sm:max-w-xs">
@@ -463,7 +463,7 @@ export default function Admin() {
               </div>
             </div>
 
-            {/* Reddit Client Secret */}
+            {}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
               <span className="text-sm text-gray-400">Reddit Client Secret</span>
               <div className="flex-1 sm:max-w-xs">
@@ -477,7 +477,7 @@ export default function Admin() {
               </div>
             </div>
 
-            {/* Reddit User Agent */}
+            {}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
               <span className="text-sm text-gray-400">Reddit User Agent</span>
               <div className="flex-1 sm:max-w-xs">
@@ -490,7 +490,7 @@ export default function Admin() {
               </div>
             </div>
 
-            {/* Alpha Vantage API Key */}
+            {}
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1.5 sm:gap-4">
               <span className="text-sm text-gray-400">Alpha Vantage API Key</span>
               <div className="flex-1 sm:max-w-xs">
@@ -518,7 +518,7 @@ export default function Admin() {
         </Section>
       )}
 
-      {/* ── API Keys tab ────────────────────────────────────────────────────────── */}
+      {}
       {tab === 'api-keys' && (
         <Section title={t('admin.tab_apikeys') || 'User API Keys'}>
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
@@ -578,7 +578,7 @@ export default function Admin() {
         </Section>
       )}
 
-      {/* ── User Settings tab (Admin edit of other users' AppSettings) ────────── */}
+      {}
       {tab === 'user-settings' && (
         <Section title={t('admin.tab_user_settings') || 'User Preferences'}>
           <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center pb-2">
@@ -699,3 +699,4 @@ function AdminApiKeyRow({ providerKey, label, hasKey, onSave, onDelete }: {
     </div>
   )
 }
+

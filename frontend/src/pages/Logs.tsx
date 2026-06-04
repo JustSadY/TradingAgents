@@ -43,7 +43,7 @@ export default function Logs() {
 
   return (
     <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-      {/* Header section */}
+      {}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-gray-800">
         <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">{t('logs.title')}</h2>
         <div className="flex gap-3 items-center w-full sm:w-auto justify-between sm:justify-end">
@@ -86,7 +86,7 @@ export default function Logs() {
                 onClick={() => setExpanded(expanded === l.id ? null : l.id)}
               >
                 <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 text-sm">
-                  {/* Metadata Row for mobile view, aligned elements for desktop view */}
+                  {}
                   <div className="flex items-center justify-between md:justify-start gap-2 shrink-0">
                     <div className="flex items-center gap-2">
                       <span className={`text-[10px] md:text-xs font-bold px-2 py-0.5 rounded tracking-wide uppercase ${LEVEL_COLORS[l.level] || 'text-slate-400'}`}>
@@ -101,12 +101,12 @@ export default function Logs() {
                     </span>
                   </div>
 
-                  {/* Desktop Date */}
+                  {}
                   <span className="text-gray-400 text-xs hidden md:inline shrink-0 font-mono">
                     {new Date(l.created_at).toLocaleString('tr-TR')}
                   </span>
 
-                  {/* Message */}
+                  {}
                   <span className="text-gray-300 flex-1 text-sm leading-relaxed break-words font-sans group-hover:text-white transition-colors">
                     {l.message}
                   </span>
@@ -124,3 +124,4 @@ export default function Logs() {
     </div>
   )
 }
+

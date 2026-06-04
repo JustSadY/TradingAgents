@@ -186,8 +186,8 @@ export default function Settings({ userId }: { userId?: number } = {}) {
       setCatalog(cat)
       setPresets(presetList)
       setAllowedSettings(userId ? ['general', 'llm', 'risk', 'webhooks', 'cron'] : allowedSet)
-      
-      // Auto-select first permitted tab
+
+
       const defaultTabs = ['general', 'llm', 'risk', 'webhooks', 'cron']
       const activeDefault = defaultTabs.find(tab => userId || allowedSet.includes(tab))
       if (activeDefault) {
@@ -291,7 +291,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
   return (
     <div className="p-4 md:p-6 space-y-5 max-w-5xl">
-      {/* Premium Header */}
+      {}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-800 pb-4 gap-3">
         <div>
           <h2 className="text-xl font-bold text-white tracking-tight">{t('settings.title')}</h2>
@@ -306,7 +306,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
       </div>
 
       <div className="flex flex-col md:flex-row gap-6 items-start">
-        {/* Left Side: Navigation Tabs List */}
+        {}
         <div className="w-full md:w-56 flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-x-visible pb-2.5 md:pb-0 shrink-0 border-b md:border-b-0 md:border-r border-gray-800/80 pr-0 md:pr-4">
           {TABS.map(tb => {
             const isActive = activeTab === tb.key
@@ -327,10 +327,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           })}
         </div>
 
-        {/* Right Side: Settings Fields panel */}
+        {}
         <div className="flex-1 space-y-4 min-w-0 w-full">
-          
-          {/* TAB: General / Preferences */}
+
+          {}
           {activeTab === 'general' && (
             <Section title={t('settings.general') || 'Preferences'}>
               <Row label={t('settings.row_mode')}>
@@ -366,7 +366,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
             </Section>
           )}
 
-          {/* TAB: AI Engine / LLM Settings */}
+          {}
           {activeTab === 'llm' && (
             <div className="space-y-4">
               <Section title={t('settings.llm_settings') || 'LLM Settings'}>
@@ -411,7 +411,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   </Row>
                 )}
 
-                {/* API Base URL */}
+                {}
                 {['ollama', 'litellm', 'azure', 'nvidia'].includes(s.llm_provider) && (
                   <Row label="API Base URL">
                     <input
@@ -423,7 +423,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   </Row>
                 )}
 
-                {/* Provider-specific settings */}
+                {}
                 {s.llm_provider === 'openai' && (
                   <Row label="Reasoning Effort">
                     <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>
@@ -500,7 +500,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
                             {isActive && (
                               <div className="flex items-center gap-2 w-full sm:max-w-xs">
-                                {/* Provider Select */}
+                                {}
                                 <select
                                   className={`${Input} text-xs py-1`}
                                   value={currentProvider}
@@ -516,7 +516,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                                   ))}
                                 </select>
 
-                                {/* Model Select */}
+                                {}
                                 <select
                                   className={`${Input} text-xs py-1`}
                                   value={selectModelVal}
@@ -563,7 +563,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
             </div>
           )}
 
-          {/* TAB: Risk & Safety */}
+          {}
           {activeTab === 'risk' && (
             <Section title={t('settings.section_risk') || 'Risk Management'}>
               <Row label={t('settings.row_risk_per_trade')}>
@@ -584,7 +584,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
             </Section>
           )}
 
-          {/* TAB: Webhooks & Alerts */}
+          {}
           {activeTab === 'webhooks' && (
             <Section title={t('settings.section_notifications') || 'Alerts & Webhooks'}>
               <Row label={t('settings.row_webhook_url')}>
@@ -659,7 +659,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
             </Section>
           )}
 
-          {/* TAB: Presets Templates */}
+          {}
           {activeTab === 'presets' && (
             <Section title={t('settings.section_presets') || 'Presets Templates'}>
               <div className="flex gap-2">
@@ -700,7 +700,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
             </Section>
           )}
 
-          {/* TAB: Cron Scheduler */}
+          {}
           {activeTab === 'cron' && (
             <Section title={t('settings.section_cron') || 'Cron / Auto Scan'}>
               <Row label={t('settings.row_active') || 'Active'}>
@@ -723,7 +723,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
             </Section>
           )}
 
-          {/* TAB: Advanced Settings (Admin Only) */}
+          {}
           {activeTab === 'advanced' && isAdmin && (
             <div className="space-y-4">
               <Section title={t('settings.section_data_sources') || 'Data Sources Routing'}>
@@ -799,3 +799,4 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     </div>
   )
 }
+

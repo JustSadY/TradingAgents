@@ -18,7 +18,7 @@ interface Portfolio {
   holdings: { ticker: string; quantity: number; current_price: number; unrealized_pnl: number; avg_buy_price?: number }[]
 }
 
-// tone → presentation (the semantic tone + Turkish label come from /api/meta).
+
 const TONE_META: Record<string, { text: string; dot: string }> = {
   positive: { text: 'text-emerald-400', dot: 'bg-emerald-400' },
   neutral:  { text: 'text-yellow-400',  dot: 'bg-yellow-400' },
@@ -67,7 +67,7 @@ export default function Dashboard() {
       .finally(() => setLoading(false))
   }, [])
 
-  // Load news feed from watchlist tickers
+
   useEffect(() => {
     axios.get('/api/settings').then(r => {
       const tickers = (r.data.watchlist as string[]).slice(0, 5)
@@ -97,7 +97,7 @@ export default function Dashboard() {
     const current = sim.current_balance || 100000
     const dataPoints = []
     const now = new Date()
-    
+
     const pnlByDay: Record<number, number> = {}
     orders.forEach(o => {
       if (!o || !o.executed_at) return
@@ -111,9 +111,9 @@ export default function Dashboard() {
         pnlByDay[diffDays] = (pnlByDay[diffDays] || 0) + (value * 0.05)
       }
     })
-    
+
     const step = (current - initial) / 30
-    
+
     for (let i = 29; i >= 0; i--) {
       const date = new Date()
       date.setDate(now.getDate() - i)
@@ -122,7 +122,7 @@ export default function Dashboard() {
       let dayBalance = initial + step * (30 - i) + noise + orderImpact
       if (i === 29) dayBalance = initial
       if (i === 0) dayBalance = current
-      
+
       dataPoints.push({
         date: date.toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US', { month: 'short', day: 'numeric' }),
         Balance: Math.round(dayBalance * 100) / 100,
@@ -174,7 +174,7 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {/* KPI Cards */}
+      {}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 md:gap-4">
         <KpiCard
           icon={<DollarSign size={16} />}
@@ -205,10 +205,10 @@ export default function Dashboard() {
         />
       </div>
 
-      {/* Visual Analytics */}
+      {}
       {sim && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-          {/* Historical Return / NAV Timeline */}
+          {}
           <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl p-3.5 md:p-5 flex flex-col justify-between min-h-[300px]">
             <div>
               <h3 className="text-sm font-semibold text-gray-300 mb-1">{t('dashboard.pnl_timeline')}</h3>
@@ -237,7 +237,7 @@ export default function Dashboard() {
             </div>
           </div>
 
-          {/* Asset Allocation */}
+          {}
           <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3.5 md:p-5 flex flex-col justify-between min-h-[300px]">
             <div>
               <h3 className="text-sm font-semibold text-gray-300 mb-1">{t('dashboard.asset_allocation')}</h3>
@@ -264,12 +264,12 @@ export default function Dashboard() {
                     itemStyle={{ padding: '2px 0' }}
                     formatter={(value: any) => [`$${(value || 0).toLocaleString()}`, '']}
                   />
-                  <Legend 
-                    verticalAlign="bottom" 
-                    height={40} 
+                  <Legend
+                    verticalAlign="bottom"
+                    height={40}
                     iconType="circle"
                     iconSize={7}
-                    wrapperStyle={{ fontSize: '10px', color: '#9ca3af', paddingTop: '10px' }} 
+                    wrapperStyle={{ fontSize: '10px', color: '#9ca3af', paddingTop: '10px' }}
                   />
                 </PieChart>
               </ResponsiveContainer>
@@ -279,7 +279,7 @@ export default function Dashboard() {
       )}
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        {/* Recent analyses */}
+        {}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-800">
             <h3 className="text-sm font-semibold text-gray-300">{t('dashboard.recent_analyses')}</h3>
@@ -317,7 +317,7 @@ export default function Dashboard() {
           )}
         </div>
 
-        {/* Holdings */}
+        {}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
           <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-800">
             <h3 className="text-sm font-semibold text-gray-300">{t('dashboard.open_positions')}</h3>
@@ -356,7 +356,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Live news feed (MOD6) */}
+      {}
       {news.length > 0 && (
         <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
           <div className="px-4 py-3.5 border-b border-gray-800">
@@ -408,3 +408,4 @@ function KpiCard({ icon, label, value, sub, color = 'text-white', accent = 'from
     </div>
   )
 }
+

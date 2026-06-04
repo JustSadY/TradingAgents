@@ -62,7 +62,7 @@ export default function Portfolio() {
     <div className="p-6 space-y-6">
       <h2 className="text-2xl font-bold text-white">{t('portfolio.title')}</h2>
 
-      {/* Portfolio summary cards */}
+      {}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {portfolios.map(p => {
           const pnl = p.current_balance - p.initial_capital
@@ -97,7 +97,7 @@ export default function Portfolio() {
         })}
       </div>
 
-      {/* Holdings table */}
+      {}
       <div className="bg-slate-800 rounded-xl p-5">
         <h3 className="text-base font-semibold text-white mb-4 flex items-center gap-2">
           <Briefcase size={16} className="text-indigo-400" /> {t('portfolio.all_positions')}
@@ -146,3 +146,4 @@ export default function Portfolio() {
     </div>
   )
 }
+

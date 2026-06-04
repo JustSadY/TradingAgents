@@ -10,7 +10,7 @@ interface LanguageContextType {
 
 const TRANSLATIONS: Record<Language, Record<string, string>> = {
   en: {
-    // Nav
+
     'nav.dashboard': 'Dashboard',
     'nav.analysis': 'Agent Analysis',
     'nav.chart': 'Technical Charts',
@@ -34,7 +34,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'nav.section.market_tools': 'Market Tools',
     'nav.section.system_config': 'Management & Settings',
 
-    // Dashboard
+
     'dashboard.title': 'Dashboard',
     'dashboard.new_analysis': 'New Analysis',
     'dashboard.recent_analyses': 'Recent Analyses',
@@ -57,14 +57,14 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'dashboard.win_rate': 'Signal Win Rate',
     'dashboard.analyses': 'analyses',
 
-    // Watchlist
+
     'watchlist.title': 'Watchlist',
     'watchlist.add': 'Add',
     'watchlist.loading': 'Loading...',
     'watchlist.empty': 'Watchlist is empty.',
     'watchlist.placeholder': 'Enter symbol (e.g. AAPL)',
 
-    // General & Common
+
     'common.loading': 'Loading...',
     'common.save': 'Save',
     'common.cancel': 'Cancel',
@@ -74,7 +74,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'common.add': 'Add',
     'common.no_data': 'No data available',
 
-    // Settings
+
     'settings.title': 'Preferences',
     'settings.general': 'General Preferences',
     'settings.language': 'App Language',
@@ -84,13 +84,13 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'settings.save_success': 'Preferences saved successfully.',
     'settings.save_error': 'Failed to save preferences.',
 
-    // Logs
+
     'logs.title': 'System Logs',
     'logs.all_levels': 'All Levels',
     'logs.no_logs': 'No logs available.',
   },
   tr: {
-    // Nav
+
     'nav.dashboard': 'Pano (Dashboard)',
     'nav.analysis': 'Ajan Analizi',
     'nav.chart': 'Teknik Grafikler',
@@ -114,7 +114,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'nav.section.market_tools': 'Piyasa Takibi',
     'nav.section.system_config': 'Sistem & Ayarlar',
 
-    // Dashboard
+
     'dashboard.title': 'Dashboard',
     'dashboard.new_analysis': 'Yeni Analiz',
     'dashboard.recent_analyses': 'Son Analizler',
@@ -137,14 +137,14 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'dashboard.win_rate': 'Sinyal Kazanma Oranı',
     'dashboard.analyses': 'analiz',
 
-    // Watchlist
+
     'watchlist.title': 'İzleme Listesi',
     'watchlist.add': 'Ekle',
     'watchlist.loading': 'Yükleniyor...',
     'watchlist.empty': 'İzleme listesi boş.',
     'watchlist.placeholder': 'Sembol girin (örn. AAPL)',
 
-    // General & Common
+
     'common.loading': 'Yükleniyor...',
     'common.save': 'Kaydet',
     'common.cancel': 'İptal',
@@ -154,7 +154,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'common.add': 'Ekle',
     'common.no_data': 'Veri bulunamadı',
 
-    // Settings
+
     'settings.title': 'Ayarlar',
     'settings.general': 'Genel Ayarlar',
     'settings.language': 'Uygulama Dili',
@@ -164,7 +164,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'settings.save_success': 'Ayarlar başarıyla kaydedildi.',
     'settings.save_error': 'Ayarlar kaydedilemedi.',
 
-    // Logs
+
     'logs.title': 'Sistem Logları',
     'logs.all_levels': 'Tüm Seviyeler',
     'logs.no_logs': 'Log yok.',
@@ -173,11 +173,11 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
-// ── Auto-merge per-page translation modules ─────────────────────────────────
-// Each file in src/i18n/*.ts default-exports `{ en: {...}, tr: {...} }`. They
-// are merged into the base TRANSLATIONS at module load so every page can own
-// its own translation file without touching this context. Vite resolves the
-// glob at build time; eager import means it's synchronous here.
+
+
+
+
+
 const _modules = import.meta.glob('../i18n/*.ts', { eager: true }) as Record<
   string,
   { default?: { en?: Record<string, string>; tr?: Record<string, string> } }
@@ -217,3 +217,4 @@ export const useTranslation = () => {
   }
   return context
 }
+

@@ -62,13 +62,13 @@ export default function ABTesting() {
         </div>
       </div>
 
-      {/* Preset Cards Grid */}
+      {}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {data.map((m, i) => (
           <div key={i} className="relative overflow-hidden bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 hover:border-gray-700/80 rounded-2xl p-5 shadow-xl transition-all duration-300 group hover:-translate-y-1">
             <div className="absolute top-0 right-0 w-24 h-24 bg-violet-600/5 rounded-full blur-2xl group-hover:bg-violet-600/10 transition-colors" />
             <h3 className="text-sm font-bold text-white tracking-wide truncate mb-4 border-b border-gray-800/80 pb-2">{m.preset_name}</h3>
-            
+
             <div className="grid grid-cols-2 gap-y-4 gap-x-2">
               <div className="flex items-center gap-2">
                 <Zap size={14} className="text-amber-400 shrink-0" />
@@ -103,9 +103,9 @@ export default function ABTesting() {
         ))}
       </div>
 
-      {/* Comparisons Panel */}
+      {}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Cost vs. Duration Comparison */}
+        {}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
           <h4 className="text-xs font-semibold text-violet-400 uppercase tracking-wider">Cost Comparison ($)</h4>
           <div className="h-64">
@@ -122,7 +122,7 @@ export default function ABTesting() {
           </div>
         </div>
 
-        {/* Speed Comparison */}
+        {}
         <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
           <h4 className="text-xs font-semibold text-violet-400 uppercase tracking-wider">Speed Comparison (Seconds)</h4>
           <div className="h-64">
@@ -142,3 +142,4 @@ export default function ABTesting() {
     </div>
   )
 }
+

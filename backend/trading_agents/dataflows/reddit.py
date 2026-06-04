@@ -1,17 +1,4 @@
-"""Reddit search fetcher for ticker-specific discussion posts.
-
-Uses Reddit's public JSON endpoints (``reddit.com/r/{sub}/search.json``)
-which do not require an API key. Public throughput is ~10 requests per
-minute per IP, well within budget for a single agent run that queries
-a handful of finance subreddits per ticker.
-
-Returns formatted plaintext blocks ready for prompt injection. Degrades
-gracefully — returns a placeholder string rather than raising, so callers
-never have to special-case missing data.
-"""
-
 from __future__ import annotations
-
 import json
 import logging
 import time
@@ -19,27 +6,17 @@ from typing import Iterable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
-
 logger = logging.getLogger(__name__)
-
 from tradingagents.dataflows.config import get_config
-
 _API = "https://www.reddit.com/r/{sub}/search.json?{qs}"
 _DEFAULT_UA = "tradingagents/0.2 (+https://github.com/TauricResearch/TradingAgents)"
-
 def _get_user_agent() -> str:
     import os
     cfg_ua = get_config().get("reddit_user_agent")
     if cfg_ua:
         return cfg_ua
     return os.getenv("REDDIT_USER_AGENT", _DEFAULT_UA)
-
-# Default subreddits ordered roughly by signal density for ticker-specific
-# discussion. wallstreetbets has the most volume but most noise; stocks /
-# investing trend more measured. Caller can override.
 DEFAULT_SUBREDDITS = ("wallstreetbets", "stocks", "investing")
-
-
 def _fetch_subreddit(
     ticker: str,
     sub: str,
@@ -50,7 +27,7 @@ def _fetch_subreddit(
         "q": ticker,
         "restrict_sr": "on",
         "sort": "new",
-        "t": "week",  # last 7 days
+        "t": "week",
         "limit": limit,
     })
     url = _API.format(sub=sub, qs=qs)
@@ -63,8 +40,6 @@ def _fetch_subreddit(
         return []
     children = (payload.get("data") or {}).get("children") or []
     return [c.get("data", {}) for c in children if isinstance(c, dict)]
-
-
 def fetch_reddit_posts(
     ticker: str,
     subreddits: Iterable[str] = DEFAULT_SUBREDDITS,
@@ -72,12 +47,6 @@ def fetch_reddit_posts(
     timeout: float = 10.0,
     inter_request_delay: float = 0.4,
 ) -> str:
-    """Fetch recent Reddit posts mentioning ``ticker`` across finance
-    subreddits and return them as a formatted plaintext block.
-
-    ``inter_request_delay`` keeps us under Reddit's public rate limit
-    (~10 req/min per IP) even if the caller queries many subreddits.
-    """
     blocks = []
     total_posts = 0
     for i, sub in enumerate(subreddits):
@@ -88,7 +57,6 @@ def fetch_reddit_posts(
         if not posts:
             blocks.append(f"r/{sub}: <no posts found mentioning {ticker.upper()} in the past 7 days>")
             continue
-
         lines = [f"r/{sub} — {len(posts)} recent posts mentioning {ticker.upper()}:"]
         for p in posts:
             title = (p.get("title") or "").replace("\n", " ").strip()
@@ -106,7 +74,6 @@ def fetch_reddit_posts(
                 + (f"\n    body excerpt: {selftext}" if selftext else "")
             )
         blocks.append("\n".join(lines))
-
     if total_posts == 0:
         return (
             f"<no Reddit posts found mentioning {ticker.upper()} across "

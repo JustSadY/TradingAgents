@@ -59,7 +59,7 @@ export default function Alerts() {
     <div className="p-4 md:p-6 space-y-4 md:space-y-6 max-w-3xl">
       <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">{t('alerts.title')}</h2>
 
-      {/* Create form */}
+      {}
       <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 space-y-4">
         <h3 className="text-sm font-semibold text-violet-400 uppercase tracking-wider">{t('alerts.new_alert')}</h3>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -92,7 +92,7 @@ export default function Alerts() {
         </button>
       </div>
 
-      {/* Alert list */}
+      {}
       <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
         <div className="px-4 md:px-5 py-3 md:py-4 border-b border-gray-800">
           <h3 className="text-sm font-semibold text-gray-300">{t('alerts.active_alerts')} ({alerts.filter(a => a.enabled && !a.triggered_at).length})</h3>
@@ -151,3 +151,4 @@ export default function Alerts() {
     </div>
   )
 }
+

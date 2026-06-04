@@ -1,8 +1,6 @@
 from dataclasses import dataclass
 from time import monotonic
 from typing import Dict, Iterable, List, Optional
-
-
 @dataclass(frozen=True)
 class AnalystNodeSpec:
     key: str
@@ -10,14 +8,10 @@ class AnalystNodeSpec:
     clear_node: str
     tool_node: str
     report_key: str
-
-
 @dataclass(frozen=True)
 class AnalystExecutionPlan:
     specs: List[AnalystNodeSpec]
     concurrency_limit: int
-
-
 ANALYST_NODE_SPECS: Dict[str, AnalystNodeSpec] = {
     "market": AnalystNodeSpec(
         key="market",
@@ -27,10 +21,6 @@ ANALYST_NODE_SPECS: Dict[str, AnalystNodeSpec] = {
         report_key="market_report",
     ),
     "social": AnalystNodeSpec(
-        # Wire key stays "social" for saved-config back-compat; the
-        # user-facing label is "Sentiment Analyst" to match the rename
-        # that landed in v0.2.5 (sentiment_analyst now ingests news +
-        # StockTwits + Reddit, not just social media).
         key="social",
         agent_node="Sentiment Analyst",
         clear_node="Msg Clear Sentiment",
@@ -87,43 +77,32 @@ ANALYST_NODE_SPECS: Dict[str, AnalystNodeSpec] = {
         report_key="review_report",
     ),
 }
-
-
 def build_analyst_execution_plan(
     selected_analysts: Iterable[str],
     concurrency_limit: int = 1,
 ) -> AnalystExecutionPlan:
     if concurrency_limit < 1:
         raise ValueError("analyst concurrency limit must be >= 1")
-
     specs: List[AnalystNodeSpec] = []
     for analyst_key in selected_analysts:
         spec = ANALYST_NODE_SPECS.get(analyst_key)
         if spec is None:
             raise ValueError(f"unknown analyst key: {analyst_key}")
         specs.append(spec)
-
     if not specs:
         raise ValueError("at least one analyst must be selected")
-
     return AnalystExecutionPlan(specs=specs, concurrency_limit=concurrency_limit)
-
-
 def get_initial_analyst_node(plan: AnalystExecutionPlan) -> str:
     return plan.specs[0].agent_node
-
-
 class AnalystWallTimeTracker:
     def __init__(self, plan: AnalystExecutionPlan):
         self.plan = plan
         self._started_at: Dict[str, float] = {}
         self._wall_times: Dict[str, float] = {}
-
     def mark_started(self, analyst_key: str, started_at: Optional[float] = None) -> None:
         if analyst_key not in ANALYST_NODE_SPECS:
             raise ValueError(f"unknown analyst key: {analyst_key}")
         self._started_at.setdefault(analyst_key, monotonic() if started_at is None else started_at)
-
     def mark_completed(
         self,
         analyst_key: str,
@@ -138,10 +117,8 @@ class AnalystWallTimeTracker:
             return
         finished_at = monotonic() if completed_at is None else completed_at
         self._wall_times[analyst_key] = max(0.0, finished_at - started_at)
-
     def get_wall_times(self) -> Dict[str, float]:
         return dict(self._wall_times)
-
     def format_summary(self) -> str:
         parts = []
         for spec in self.plan.specs:
@@ -152,8 +129,6 @@ class AnalystWallTimeTracker:
         if not parts:
             return "Analyst wall time: pending"
         return "Analyst wall time: " + " | ".join(parts)
-
-
 def sync_analyst_tracker_from_chunk(
     tracker: AnalystWallTimeTracker,
     chunk: Dict[str, str],
@@ -161,15 +136,12 @@ def sync_analyst_tracker_from_chunk(
 ) -> None:
     current_time = monotonic() if now is None else now
     active_found = False
-
     for spec in tracker.plan.specs:
         has_report = bool(chunk.get(spec.report_key))
-
         if has_report:
             tracker.mark_started(spec.key, started_at=current_time)
             tracker.mark_completed(spec.key, completed_at=current_time)
             continue
-
         if not active_found:
             tracker.mark_started(spec.key, started_at=current_time)
             active_found = True
