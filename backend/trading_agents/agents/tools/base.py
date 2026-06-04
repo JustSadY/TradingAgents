@@ -25,8 +25,9 @@ class ToolSettingOption:
 class ToolSettingField:
     key: str
     type: ToolSettingType
-    scope: Literal["server", "user", "both"] = "user"
     label_key: str
+    scope: Literal["server", "user", "both"] = "user"
+
     description_key: str | None = None
     default: Any = None
     required: bool = False
