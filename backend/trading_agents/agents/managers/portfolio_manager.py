@@ -1,5 +1,7 @@
 from __future__ import annotations
-from tradingagents.agents.schemas import PortfolioDecision, render_pm_decision
+import json
+from tradingagents.agents.schemas import PortfolioDecision, render_pm_decision, TraderProposal
+from tradingagents.agents.utils.risk_math import calculate_kelly_size, get_risk_reward_from_plan
 from tradingagents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
@@ -16,6 +18,29 @@ def create_portfolio_manager(llm):
         risk_debate_state = state["risk_debate_state"]
         research_plan = state["investment_plan"]
         trader_plan = state["trader_investment_plan"]
+        trader_proposal_json = state.get("trader_proposal_json")
+
+        from tradingagents.dataflows.config import get_config
+        kelly_enabled = get_config().get("kelly_sizing_enabled", True)
+        
+        kelly_recommendation = ""
+        if trader_proposal_json and kelly_enabled:
+            try:
+                tp_dict = json.loads(trader_proposal_json)
+                tp = TraderProposal(**tp_dict)
+                if tp.entry_price and tp.stop_loss and tp.take_profit_price:
+                    rr = get_risk_reward_from_plan(tp.take_profit_price, tp.stop_loss, tp.entry_price)
+                    kelly_pct = calculate_kelly_size(tp.confidence_score, rr)
+                    kelly_recommendation = (
+                        f"\n**Mathematical Risk Recommendation (Kelly Criterion):**\n"
+                        f"- Calculated R/R Ratio: {rr:.2f}\n"
+                        f"- Estimated Win Probability: {tp.confidence_score*100:.1f}%\n"
+                        f"- Suggested Maximum Position Size: {kelly_pct*100:.1f}% of portfolio.\n"
+                        "Note: Use this as a ceiling for your final sizing decision.\n"
+                    )
+            except Exception:
+                pass
+
         past_context = state.get("past_context", "")
         if past_context:
             lessons_line = f"- Lessons from prior decisions and outcomes:\n{past_context}\n"
@@ -64,6 +89,7 @@ def create_portfolio_manager(llm):
 **Context:**
 - Research Manager's investment plan: **{research_plan}**
 - Trader's transaction proposal: **{trader_plan}**
+{kelly_recommendation}
 {lessons_line}
 **Risk Analysts Debate History:**
 {history}

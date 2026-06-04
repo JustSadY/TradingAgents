@@ -127,3 +127,13 @@ The system uses [llm_clients/](file:///c:/Users/JustS/Desktop/TradingAgents/back
 - **xAI Grok:** Grok API endpoint.
 - **Ollama:** Enables running local models (like `llama3`, `mistral`, or `qwen`) for local development without API costs.
 - **Azure OpenAI:** Enterprise private endpoints.
+
+---
+
+## 🚀 Advanced Institutional Features
+
+TradingAgents is designed for high-conviction, professional analysis through three core pillars:
+
+1.  **SEC & Insider Intelligence:** The **Fundamentals Analyst** leverages specialized tools (`get_sec_filings`, `get_insider_transactions_deep`) to monitor regulatory filings (10-K, 10-Q) and Form 4 insider transactions to gauge management sentiment and regulatory risks.
+2.  **Mathematical Risk Sizing:** The **Portfolio Manager** uses a mathematical risk engine based on the **Kelly Criterion** (`K% = W - [(1 - W) / R]`) and **Sharpe Ratio** to calculate mathematically optimal position sizes based on win probability and risk/reward profiles.
+3.  **Continuous Learning Loop:** The **Synthesis Manager** automated historical backtests set performance baselines, and past failures are injected as constraints to prevent the system from repeating historical errors on specific assets.

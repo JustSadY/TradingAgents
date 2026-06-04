@@ -108,3 +108,23 @@ Run Ticker "AAPL" on Day N
 ```
 
 This ensures the Portfolio Manager is aware of past errors (e.g., setting a stop-loss too tight during high volatility, or ignoring macroeconomic indicators) when making new decisions for that asset.
+
+---
+
+## 6. Advanced Institutional Features
+
+To provide professional-grade analysis, the system includes several advanced modules:
+
+### SEC & Insider Intelligence
+The **Fundamentals Analyst** leverages specialized tools (`get_sec_filings`, `get_insider_transactions_deep`) to monitor regulatory filings and management sentiment. High-volume insider buying is treated as a high-conviction bullish signal, while delayed filings or excessive selling trigger caution flags.
+
+### Mathematical Risk Sizing (Kelly Criterion)
+Moving beyond fixed percentages, the **Portfolio Manager** utilizes a mathematical risk engine based on the **Kelly Criterion**.
+*   **Win Probability:** Derived from the Trader's confidence score.
+*   **Risk/Reward:** Calculated from precise entry, stop-loss, and take-profit targets.
+*   **Sizing Formula:** `K% = W - [(1 - W) / R]`, capped by user settings to ensure portfolio safety.
+
+### Continuous Learning & Backtest Loop
+The **Synthesis Manager** automatically runs historical backtests (`macd_crossover`, `rsi_oversold`) on the asset before the debate begins.
+*   **Strict Learning:** If the **Strict Backtest Learning** setting is enabled, the Research Manager MUST justify any recommendation that contradicts poor historical performance (< 50% win rate).
+*   **Hindsight Feedback:** Past failures identified by the Review Analyst are injected as hard constraints into the current analytical cycle.

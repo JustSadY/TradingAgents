@@ -16,6 +16,10 @@ from tradingagents.agents.utils.news_data_tools import (
     get_insider_transactions,
     get_global_news
 )
+from tradingagents.agents.utils.sec_tools import (
+    get_sec_filings,
+    get_insider_transactions_deep
+)
 from tradingagents.agents.utils.macro_tools import (
     get_macro_data
 )

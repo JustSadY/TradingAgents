@@ -42,6 +42,11 @@ interface Settings {
   max_risk_per_trade_pct: number
   include_historical_analyses: boolean
   historical_analyses_limit: number
+  synthesis_enabled: boolean
+  auditor_enabled: boolean
+  kelly_sizing_enabled: boolean
+  sec_insights_enabled: boolean
+  strict_backtest_learning: boolean
   analyst_models: Record<string, string>
   webhook_url: string | null
   webhook_enabled: boolean
@@ -581,6 +586,35 @@ export default function Settings({ userId }: { userId?: number } = {}) {
               <Row label={t('settings.row_parallel_analysts')}>
                 <input type="number" min="1" max="16" className={Input} value={s.analyst_concurrency_limit} onChange={e => update('analyst_concurrency_limit', parseInt(e.target.value))} />
               </Row>
+
+              <div className="border-t border-gray-800/60 pt-4 mt-2 space-y-3">
+                <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest px-1">Institutional Features</h4>
+                
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-800/40 cursor-pointer transition-colors group">
+                  <span className="text-sm text-gray-300 group-hover:text-white transition-colors">Enable Synthesis Layer</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded" checked={s.synthesis_enabled} onChange={e => update('synthesis_enabled', e.target.checked)} />
+                </label>
+
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-800/40 cursor-pointer transition-colors group">
+                  <span className="text-sm text-gray-300 group-hover:text-white transition-colors">Enable Real-time Auditor</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded" checked={s.auditor_enabled} onChange={e => update('auditor_enabled', e.target.checked)} />
+                </label>
+
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-800/40 cursor-pointer transition-colors group">
+                  <span className="text-sm text-gray-300 group-hover:text-white transition-colors">Enable Kelly Sizing Math</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded" checked={s.kelly_sizing_enabled} onChange={e => update('kelly_sizing_enabled', e.target.checked)} />
+                </label>
+
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-800/40 cursor-pointer transition-colors group">
+                  <span className="text-sm text-gray-300 group-hover:text-white transition-colors">SEC & Insider Intelligence</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded" checked={s.sec_insights_enabled} onChange={e => update('sec_insights_enabled', e.target.checked)} />
+                </label>
+
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-800/40 cursor-pointer transition-colors group">
+                  <span className="text-sm text-gray-300 group-hover:text-white transition-colors">Strict Backtest Learning</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded" checked={s.strict_backtest_learning} onChange={e => update('strict_backtest_learning', e.target.checked)} />
+                </label>
+              </div>
             </Section>
           )}
 

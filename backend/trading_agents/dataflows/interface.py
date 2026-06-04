@@ -7,6 +7,7 @@ from .y_finance import (
     get_cashflow as get_yfinance_cashflow,
     get_income_statement as get_yfinance_income_statement,
     get_insider_transactions as get_yfinance_insider_transactions,
+    get_sec_filings as get_yfinance_sec_filings,
 )
 from .yfinance_news import get_news_yfinance, get_global_news_yfinance
 from .alpha_vantage import (
@@ -34,6 +35,7 @@ _TICKER_FIRST_METHODS = frozenset({
     "get_income_statement",
     "get_news",
     "get_insider_transactions",
+    "get_sec_filings",
 })
 TOOLS_CATEGORIES = {
     "core_stock_apis": {
@@ -54,7 +56,8 @@ TOOLS_CATEGORIES = {
             "get_fundamentals",
             "get_balance_sheet",
             "get_cashflow",
-            "get_income_statement"
+            "get_income_statement",
+            "get_sec_filings"
         ]
     },
     "news_data": {
@@ -106,6 +109,9 @@ VENDOR_METHODS = {
     "get_insider_transactions": {
         "alpha_vantage": get_alpha_vantage_insider_transactions,
         "yfinance": get_yfinance_insider_transactions,
+    },
+    "get_sec_filings": {
+        "yfinance": get_yfinance_sec_filings,
     },
 }
 import os

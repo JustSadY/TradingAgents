@@ -35,37 +35,31 @@ def create_trader(llm):
             {
                 "role": "system",
                 "content": (
-                    "You are a trading agent analyzing market data to make investment decisions. "
-                    "Based on your analysis, provide a specific recommendation to buy, sell, or hold. "
-                    "Anchor your reasoning in the analysts' reports, the research plan, and the historical backtest results provided."
+                    "You are a senior execution trader. Your task is to turn an investment plan into a precise trade proposal. "
+                    "You must provide an 'Action' (Buy/Hold/Sell), 'Entry Price', 'Stop Loss', and 'Take Profit'. "
+                    "CRITICAL: You must estimate a 'Confidence Score' (Win Probability) from 0.0 to 1.0 based on the "
+                    "strength of the research plan and technical backtests. This score is used for Kelly Criterion sizing. "
+                    "Anchor your reasoning in the analysts' reports and the quantitative backtest results provided."
                     + get_language_instruction()
                 ),
             },
             {
                 "role": "user",
                 "content": (
-                    f"Based on a comprehensive analysis by a team of analysts, here is an investment "
-                    f"plan tailored for {company_name}. {instrument_context} This plan incorporates "
-                    f"insights from current technical market trends, macroeconomic indicators, and "
-                    f"social media sentiment.\n\n"
-                    f"Additionally, here are the historical backtest results for two common strategies on this asset:\n"
-                    f"{macd_results}\n\n{rsi_results}\n\n"
-                    f"Use this plan and the quantitative backtest performance as a foundation for evaluating your next "
-                    f"trading decision.\n\nProposed Investment Plan: {investment_plan}\n\n"
-                    f"Leverage these insights to make an informed and strategic decision."
+                    f"Research Plan: {investment_plan}\n\n"
+                    f"Historical Strategy Backtests:\n{macd_results}\n\n{rsi_results}\n\n"
+                    f"{instrument_context}\n\n"
+                    "Formulate a precise trade proposal with confidence metrics."
                 ),
             },
         ]
-        trader_plan = invoke_structured_or_freetext(
-            structured_llm,
-            llm,
-            messages,
-            render_trader_proposal,
-            "Trader",
-        )
+        trader_proposal = structured_llm.invoke(messages)
+        trader_plan = render_trader_proposal(trader_proposal)
+        
         return {
             "messages": [AIMessage(content=trader_plan)],
             "trader_investment_plan": trader_plan,
+            "trader_proposal_json": trader_proposal.model_dump_json(),
             "sender": name,
         }
     return functools.partial(trader_node, name="Trader")

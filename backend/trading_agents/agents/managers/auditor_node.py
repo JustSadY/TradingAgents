@@ -5,6 +5,10 @@ from tradingagents.agents.utils.agent_utils import (
 
 def create_auditor_node(llm):
     def auditor_node(state) -> dict:
+        from tradingagents.dataflows.config import get_config
+        if not get_config().get("auditor_enabled", True):
+            return {"audit_report": "Audit disabled by user settings."}
+
         ticker = state["company_of_interest"]
         asset_type = state.get("asset_type", "stock")
         instrument_context = build_instrument_context(ticker, asset_type)

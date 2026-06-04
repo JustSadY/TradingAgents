@@ -270,7 +270,7 @@ async def get_my_setting_permissions(
     db: AsyncSession = Depends(get_db),
 ):
     if current_user.is_admin:
-        return {"allowed_settings": ["general", "llm", "risk", "webhooks", "presets"]}
+        return {"allowed_settings": ["general", "llm", "risk", "webhooks", "cron", "presets"]}
     result = await db.execute(
         select(UserSettingPermission)
         .where(UserSettingPermission.user_id == current_user.id)

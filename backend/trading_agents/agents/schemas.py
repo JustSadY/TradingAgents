@@ -52,6 +52,10 @@ class TraderProposal(BaseModel):
             "the research plan. Two to four sentences."
         ),
     )
+    confidence_score: float = Field(
+        default=0.5,
+        description="Probability of success for this trade, from 0.0 to 1.0. Critical for Kelly sizing.",
+    )
     entry_price: Optional[float] = Field(
         default=None,
         description="Optional entry price target in the instrument's quote currency.",
@@ -59,6 +63,10 @@ class TraderProposal(BaseModel):
     stop_loss: Optional[float] = Field(
         default=None,
         description="Optional stop-loss price in the instrument's quote currency.",
+    )
+    take_profit_price: Optional[float] = Field(
+        default=None,
+        description="Optional target price to take profit.",
     )
     position_sizing: Optional[str] = Field(
         default=None,
@@ -69,11 +77,14 @@ def render_trader_proposal(proposal: TraderProposal) -> str:
         f"**Action**: {proposal.action.value}",
         "",
         f"**Reasoning**: {proposal.reasoning}",
+        f"**Confidence Score**: {proposal.confidence_score:.2f}",
     ]
     if proposal.entry_price is not None:
         parts.extend(["", f"**Entry Price**: {proposal.entry_price}"])
     if proposal.stop_loss is not None:
         parts.extend(["", f"**Stop Loss**: {proposal.stop_loss}"])
+    if proposal.take_profit_price is not None:
+        parts.extend(["", f"**Take Profit**: {proposal.take_profit_price}"])
     if proposal.position_sizing:
         parts.extend(["", f"**Position Sizing**: {proposal.position_sizing}"])
     parts.extend([

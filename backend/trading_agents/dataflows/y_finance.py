@@ -305,3 +305,25 @@ def get_insider_transactions(
         return header + csv_string
     except Exception as e:
         return f"Error retrieving insider transactions for {ticker}: {str(e)}"
+
+def get_sec_filings(
+    ticker: Annotated[str, "ticker symbol of the company"]
+):
+    try:
+        ticker_obj = yf.Ticker(ticker.upper())
+        data = yf_retry(lambda: getattr(ticker_obj, 'sec_filings', None))
+        if data is None or len(data) == 0:
+            return f"No SEC filings data found for symbol '{ticker}'"
+        
+        import pandas as pd
+        df = pd.DataFrame(data)
+        # Drop excessive columns for context efficiency
+        cols_to_keep = ['date', 'type', 'title', 'edgarUrl']
+        df = df[[c for m, c in enumerate(cols_to_keep) if c in df.columns]]
+        
+        csv_string = df.to_csv(index=False)
+        header = f"# SEC Filings for {ticker.upper()}\n"
+        header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        return header + csv_string
+    except Exception as e:
+        return f"Error retrieving SEC filings for {ticker}: {str(e)}"

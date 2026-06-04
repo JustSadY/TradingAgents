@@ -310,6 +310,8 @@ class TradingAgentsGraph:
             "quant_report": final_state.get("quant_report", ""),
             "earnings_report": final_state.get("earnings_report", ""),
             "review_report": final_state.get("review_report", ""),
+            "synthesis_report": final_state.get("synthesis_report", ""),
+            "audit_report": final_state.get("audit_report", ""),
             "investment_debate_state": {
                 "bull_history": final_state["investment_debate_state"]["bull_history"],
                 "bear_history": final_state["investment_debate_state"]["bear_history"],
