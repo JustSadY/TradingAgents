@@ -70,4 +70,4 @@ def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
         return pd.Series(res, index=df.index)
     except Exception as e:
         _logger.error("Error evaluating formula %s: %s", formula, e)
-        raise ValueError(f"Formül hesaplanamadı: {str(e)}")
+        raise ValueError(f"Formula could not be calculated: {str(e)}")

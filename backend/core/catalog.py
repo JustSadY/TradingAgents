@@ -23,25 +23,25 @@ def available_analysts() -> list[dict]:
 def _analyst_label(key: str) -> str:
     return label_for(key)
 SECTION_LABELS: dict[str, str] = {
-    "market_report":             "Piyasa Analizi",
-    "sentiment_report":          "Duygu Analizi",
-    "news_report":               "Haber Analizi",
-    "fundamentals_report":       "Temel Analiz",
-    "macro_report":              "Makro Analiz",
-    "options_report":            "Opsiyon Analizi",
-    "quant_report":              "Kantitatif Analiz",
-    "earnings_report":           "Kazanç Analizi",
-    "review_report":             "Performans İnceleme",
-    "investment_plan":           "Yatırım Planı",
-    "trader_investment_plan":    "Trader Planı",
-    "trader_plan":               "Trader Planı",
-    "final_trade_decision":      "PM Kararı",
-    "final_decision":            "PM Kararı",
-    "bull_history":              "Boğa Argümanları",
-    "bear_history":              "Ayı Argümanları",
-    "investment_debate_history": "Tartışma",
-    "risk_debate_history":       "Risk Tartışması",
-    "judge_decision":            "Hakem Kararı",
+    "market_report":             "Market Analysis",
+    "sentiment_report":          "Sentiment Analysis",
+    "news_report":               "News Analysis",
+    "fundamentals_report":       "Fundamental Analysis",
+    "macro_report":              "Macro Analysis",
+    "options_report":            "Options Analysis",
+    "quant_report":              "Quantitative Analysis",
+    "earnings_report":           "Earnings Analysis",
+    "review_report":             "Performance Review",
+    "investment_plan":           "Investment Plan",
+    "trader_investment_plan":    "Trader Plan",
+    "trader_plan":               "Trader Plan",
+    "final_trade_decision":      "PM Decision",
+    "final_decision":            "PM Decision",
+    "bull_history":              "Bull Arguments",
+    "bear_history":              "Bear Arguments",
+    "investment_debate_history": "Debate",
+    "risk_debate_history":       "Risk Debate",
+    "judge_decision":            "Judge Decision",
 }
 SIGNALS: list[dict] = [
     {"value": "Buy",         "label": "Al",    "tone": "positive"},
@@ -177,14 +177,14 @@ def build_meta() -> dict:
         "chart_periods": CHART_PERIODS,
     }
 _STATIC_NODE_LABELS: dict[str, tuple[str, str]] = {
-    "Bull Researcher":     ("Boğa Araştırmacısı", "research"),
-    "Bear Researcher":     ("Ayı Araştırmacısı", "research"),
-    "Research Manager":    ("Araştırma Müdürü — yatırım planı", "research"),
-    "Trader":              ("Trader — işlem planı", "trade"),
-    "Aggressive Analyst":  ("Agresif Risk Analisti", "risk"),
-    "Conservative Analyst": ("Muhafazakâr Risk Analisti", "risk"),
-    "Neutral Analyst":     ("Nötr Risk Analisti", "risk"),
-    "Portfolio Manager":   ("Portföy Yöneticisi — nihai karar", "decision"),
+    "Bull Researcher":     ("Bull Researcher", "research"),
+    "Bear Researcher":     ("Bear Researcher", "research"),
+    "Research Manager":    ("Research Manager — investment plan", "research"),
+    "Trader":              ("Trader — execution plan", "trade"),
+    "Aggressive Analyst":  ("Aggressive Risk Analyst", "risk"),
+    "Conservative Analyst": ("Conservative Risk Analyst", "risk"),
+    "Neutral Analyst":     ("Neutral Risk Analyst", "risk"),
+    "Portfolio Manager":   ("Portfolio Manager — final decision", "decision"),
 }
 _ANALYST_NODE_LABELS: dict[str, tuple[str, str]] | None = None
 def _analyst_node_labels() -> dict[str, tuple[str, str]]:
@@ -193,8 +193,8 @@ def _analyst_node_labels() -> dict[str, tuple[str, str]]:
         mapping: dict[str, tuple[str, str]] = {}
         for key, spec in _node_specs().items():
             label = _analyst_label(key)
-            mapping[spec.agent_node] = (f"{label} Analisti", "analyst")
-            mapping[spec.tool_node] = (f"{label} — veri çekiliyor", "tool")
+            mapping[spec.agent_node] = (f"{label} Analyst", "analyst")
+            mapping[spec.tool_node] = (f"{label} — fetching data", "tool")
         _ANALYST_NODE_LABELS = mapping
     return _ANALYST_NODE_LABELS
 def node_progress(node_name: str) -> dict | None:

@@ -205,7 +205,7 @@ async def run_analysis(
         from backend.models.system_settings import SystemSettings
         sys_res = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
         sys_settings = sys_res.scalar_one_or_none()
-        await ws_manager.send(task_id, {"type": "status", "status": "starting", "agent": "LLM istemcisi hazırlanıyor..."})
+        await ws_manager.send(task_id, {"type": "status", "status": "starting", "agent": "Preparing LLM client..."})
         config = _build_config(settings, user=user, sys_settings=sys_settings)
         from backend.services.performance_service import get_analyst_attribution_stats
         from sqlalchemy.exc import PendingRollbackError
@@ -347,7 +347,7 @@ async def run_analysis(
         return task_id, row
     except asyncio.CancelledError:
         _logger.info("Analysis cancelled task=%s user=%s", task_id, username)
-        await ws_manager.send(task_id, {"type": "error", "message": "Analiz iptal edildi."})
+        await ws_manager.send(task_id, {"type": "error", "message": "Analysis cancelled."})
         raise
     except Exception as exc:
         _logger.error("Analysis failed task=%s user=%s: %s", task_id, username, exc, exc_info=True)
@@ -466,7 +466,7 @@ async def run_analysis_task(
         except Exception as exc:
             _logger.error("Background analysis failed: %s", exc, exc_info=True)
             try:
-                await ws_manager.send(task_id, {"type": "error", "message": f"Analiz hatası: {exc}"})
+                await ws_manager.send(task_id, {"type": "error", "message": f"Analysis error: {exc}"})
                 await ws_manager.close_task(task_id)
             except Exception:
                 pass

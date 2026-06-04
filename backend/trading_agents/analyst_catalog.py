@@ -25,15 +25,15 @@ class AnalystInfo:
 
 
 ANALYSTS: list[AnalystInfo] = [
-    AnalystInfo("market",       "Piyasa",     "Teknik göstergeler, fiyat trendi ve momentum",     True),
-    AnalystInfo("social",       "Duygu",      "Sosyal medya, StockTwits ve Reddit duygu analizi", True),
-    AnalystInfo("news",         "Haber",      "Şirkete özel ve sektörel haber akışı",             True),
-    AnalystInfo("fundamentals", "Temel",      "Bilanço, gelir tablosu ve değerleme",              True),
-    AnalystInfo("macro",        "Makro",      "Faiz, enflasyon ve genel ekonomik görünüm",        False),
-    AnalystInfo("options",      "Opsiyon",    "Opsiyon zinciri, implied volatility ve akış",      False),
-    AnalystInfo("quant",        "Kantitatif", "İstatistiksel faktör ve nicel sinyaller",          False),
-    AnalystInfo("earnings",     "Kazanç",     "Kazanç çağrıları, tahminler ve sürprizler",        False),
-    AnalystInfo("review",       "İnceleme",   "Geçmiş kararların performans incelemesi",          False),
+    AnalystInfo("market",       "Market",       "Technical indicators, price trends and momentum",  True),
+    AnalystInfo("social",       "Social",       "Social media, StockTwits and Reddit sentiment",    True),
+    AnalystInfo("news",         "News",         "Company-specific and sector news flow",            True),
+    AnalystInfo("fundamentals", "Fundamentals", "Balance sheet, income statement and valuation",    True),
+    AnalystInfo("macro",        "Macro",        "Interest rates, inflation and economic outlook",   False),
+    AnalystInfo("options",      "Options",      "Options chain, implied volatility and flows",      False),
+    AnalystInfo("quant",        "Quant",        "Statistical factors and quantitative signals",     False),
+    AnalystInfo("earnings",     "Earnings",     "Earnings calls, estimates and surprises",          False),
+    AnalystInfo("review",       "Review",       "Performance review of past decisions",             False),
 ]
 
 _BY_KEY = {a.key: a for a in ANALYSTS}

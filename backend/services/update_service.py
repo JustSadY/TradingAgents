@@ -88,12 +88,12 @@ def get_status(do_fetch: bool = True) -> dict:
 def request_update() -> dict:
     if not UPDATE_UNIT:
         raise RuntimeError(
-            "Otomatik güncelleme bu ortamda yapılandırılmamış "
-            "(deploy/install.sh ile kurulan sistemlerde çalışır)."
+            "Automatic updates are not configured in this environment "
+            "(only works on systems installed with deploy/install.sh)."
         )
     status = _read_status()
     if status and status.get("state") == "running":
-        raise RuntimeError("Güncelleme zaten sürüyor.")
+        raise RuntimeError("Update is already in progress.")
     _write_status({"state": "running", "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
     try:
         subprocess.run(
@@ -103,5 +103,5 @@ def request_update() -> dict:
     except Exception as exc:
         detail = getattr(exc, "stderr", "") or str(exc)
         _write_status({"state": "failed", "error": detail})
-        raise RuntimeError(f"Güncelleme başlatılamadı: {detail}")
+        raise RuntimeError(f"Could not start update: {detail}")
     return {"started": True}

@@ -48,7 +48,7 @@ async def update_alert(
     result = await db.execute(q)
     alert = result.scalar_one_or_none()
     if not alert:
-        raise HTTPException(status_code=404, detail="Alarm bulunamadı")
+        raise HTTPException(status_code=404, detail="Alert not found")
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(alert, field, value)
     return alert
@@ -64,6 +64,6 @@ async def delete_alert(
     result = await db.execute(q)
     alert = result.scalar_one_or_none()
     if not alert:
-        raise HTTPException(status_code=404, detail="Alarm bulunamadı")
+        raise HTTPException(status_code=404, detail="Alert not found")
     await db.delete(alert)
     return {"deleted": True}

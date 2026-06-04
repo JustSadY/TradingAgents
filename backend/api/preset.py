@@ -47,7 +47,7 @@ async def create_preset(
         .where(ConfigPreset.user_id == current_user.id)
     )
     if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail=f"'{body.name}' adında şablon zaten var")
+        raise HTTPException(status_code=409, detail=f"A template named '{body.name}' already exists")
     preset = ConfigPreset(
         name=body.name,
         description=body.description,
@@ -70,7 +70,7 @@ async def delete_preset(
     result = await db.execute(q)
     preset = result.scalar_one_or_none()
     if not preset:
-        raise HTTPException(status_code=404, detail="Şablon bulunamadı")
+        raise HTTPException(status_code=404, detail="Template not found")
     await db.delete(preset)
     return {"deleted": True}
 @router.post("/{preset_id}/apply")
@@ -87,12 +87,12 @@ async def apply_preset(
     result = await db.execute(q)
     preset = result.scalar_one_or_none()
     if not preset:
-        raise HTTPException(status_code=404, detail="Şablon bulunamadı")
+        raise HTTPException(status_code=404, detail="Template not found")
     settings = await get_or_create_settings(db, current_user)
     try:
         data = json.loads(preset.settings_json)
     except json.JSONDecodeError:
-        raise HTTPException(status_code=422, detail="Şablon JSON geçersiz")
+        raise HTTPException(status_code=422, detail="Template JSON invalid")
     for key, value in data.items():
         if hasattr(settings, key) and value is not None:
             if key in ("watchlist", "selected_analysts"):

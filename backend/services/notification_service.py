@@ -13,18 +13,18 @@ def _build_payload(url: str, event: str, data: dict) -> dict:
         return {"embeds": [{"title": _event_title(event), "description": text, "color": color}]}
     return {"event": event, "data": data, "text": text}
 def _event_title(event: str) -> str:
-    return {"analysis_complete": "📊 Analiz Tamamlandı", "trade_executed": "💰 İşlem Gerçekleşti",
-            "alert_triggered": "🔔 Fiyat Alarmı"}.get(event, event)
+    return {"analysis_complete": "📊 Analysis Complete", "trade_executed": "💰 Trade Executed",
+            "alert_triggered": "🔔 Price Alert"}.get(event, event)
 def _format_text(event: str, data: dict) -> str:
     if event == "analysis_complete":
-        return (f"**{data.get('ticker', '?')}** — Sinyal: **{data.get('signal', '?')}**\n"
-                f"Tarih: {data.get('trade_date', '')}\n{data.get('summary', '')[:300]}")
+        return (f"**{data.get('ticker', '?')}** — Signal: **{data.get('signal', '?')}**\n"
+                f"Date: {data.get('trade_date', '')}\n{data.get('summary', '')[:300]}")
     if event == "trade_executed":
-        return (f"**{data.get('ticker', '?')}** {data.get('action', '?')} işlemi\n"
-                f"Miktar: {data.get('quantity', 0):.4f} @ ${data.get('price', 0):.2f}")
+        return (f"**{data.get('ticker', '?')}** {data.get('action', '?')} execution\n"
+                f"Quantity: {data.get('quantity', 0):.4f} @ ${data.get('price', 0):.2f}")
     if event == "alert_triggered":
-        return (f"**{data.get('ticker', '?')}** alarm tetiklendi\n"
-                f"Hedef: ${data.get('target_price', 0):.2f} ({data.get('condition', '')})")
+        return (f"**{data.get('ticker', '?')}** alert triggered\n"
+                f"Target: ${data.get('target_price', 0):.2f} ({data.get('condition', '')})")
     return json.dumps(data)[:500]
 async def send_webhook(url: str, event: str, data: dict, retries: int = 2) -> bool:
     if not url:

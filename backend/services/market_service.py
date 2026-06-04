@@ -63,7 +63,7 @@ def _resolve_dates(period: str, start_date: str | None, end_date: str | None) ->
         datetime.strptime(s, "%Y-%m-%d")
         datetime.strptime(e, "%Y-%m-%d")
     except ValueError as exc:
-        raise MarketDataError("Tarih formatı YYYY-MM-DD olmalı") from exc
+        raise MarketDataError("Date format must be YYYY-MM-DD") from exc
     return s, e
 
 
@@ -71,7 +71,7 @@ def _load_history(ticker: str, s: str, e: str):
     import yfinance as yf
     data = yf.Ticker(ticker).history(start=s, end=e)
     if data.empty:
-        raise MarketDataError(f"{ticker} için veri bulunamadı", status_code=404)
+        raise MarketDataError(f"No data found for {ticker}", status_code=404)
     if data.index.tz is not None:
         data.index = data.index.tz_localize(None)
     return data
