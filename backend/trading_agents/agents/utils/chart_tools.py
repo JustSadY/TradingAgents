@@ -162,6 +162,9 @@ def get_mtf_trend(
             return "Error: No daily data found."
             
         df_daily['Date'] = pd.to_datetime(df_daily['Date'])
+        if df_daily['Date'].dt.tz is not None:
+            df_daily['Date'] = df_daily['Date'].dt.tz_localize(None)
+        df_daily['Date'] = df_daily['Date'].astype('datetime64[ns]')
         df_daily.sort_values('Date', inplace=True)
         
         # Download timeframe specific data
@@ -182,6 +185,10 @@ def get_mtf_trend(
         # Map MTF EMA to Daily dates (forward-fill)
         df_mtf_reset = df_mtf.reset_index()
         df_mtf_reset.rename(columns={'Date': 'MTF_Date'}, inplace=True)
+        df_mtf_reset['MTF_Date'] = pd.to_datetime(df_mtf_reset['MTF_Date'])
+        if df_mtf_reset['MTF_Date'].dt.tz is not None:
+            df_mtf_reset['MTF_Date'] = df_mtf_reset['MTF_Date'].dt.tz_localize(None)
+        df_mtf_reset['MTF_Date'] = df_mtf_reset['MTF_Date'].astype('datetime64[ns]')
         
         # Merge on daily index
         merged = pd.merge_asof(
