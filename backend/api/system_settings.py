@@ -28,6 +28,13 @@ async def update_system_settings(
     db: AsyncSession = Depends(get_db),
 ):
     ss = await _get_or_create_system_settings(db)
+    
+    for field, value in body.model_dump(exclude_unset=True).items():
+        setattr(ss, field, value)
+    
+    from datetime import datetime, timezone
+    ss.updated_at = datetime.now(timezone.utc)
+    await db.flush()
     return ss
 
 

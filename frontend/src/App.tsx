@@ -85,6 +85,7 @@ function AppRoutes() {
                 <Route path="/trading" element={<MockTrading />} />
                 <Route path="/portfolio" element={<Portfolio />} />
                 <Route path="/settings" element={<Settings />} />
+                <Route path="/preferences" element={<Settings />} />
                 <Route path="/performance" element={<Performance />} />
                 <Route path="/alerts" element={<Alerts />} />
                 <Route path="/ab-testing" element={<ABTesting />} />

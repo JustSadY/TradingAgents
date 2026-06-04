@@ -60,15 +60,27 @@ export default function Admin() {
   const [userKeyProviders, setUserKeyProviders] = useState<string[]>([])
   const [keySaved, setKeySaved] = useState(false)
   const [keyError, setKeyError] = useState<string | null>(null)
+  const [systemSettings, setSystemSettings] = useState<any>(null)
+  const [sysSaved, setSysSaved] = useState(false)
 
   const loadUsers = useCallback(async () => {
     const r = await axios.get('/api/users')
     setUsers(r.data)
   }, [])
 
+  const loadSystemSettings = useCallback(async () => {
+    try {
+      const r = await axios.get('/api/system-settings')
+      setSystemSettings(r.data)
+    } catch (err) {
+      console.error('Failed to load system settings:', err)
+    }
+  }, [])
+
   useEffect(() => {
     loadUsers()
-  }, [loadUsers])
+    loadSystemSettings()
+  }, [loadUsers, loadSystemSettings])
 
   const loadUserPermissions = async (userId: number) => {
     const [pRes, sRes, agentRes, toolRes] = await Promise.all([
@@ -163,6 +175,17 @@ export default function Admin() {
     await axios.delete(`/api/users/${id}`)
     setUsers(prev => prev.filter(u => u.id !== id))
     if (selectedUserId === id) setSelectedUserId(null)
+  }
+
+  const saveSystemSettings = async () => {
+    if (!systemSettings) return
+    try {
+      await axios.put('/api/system-settings', systemSettings)
+      setSysSaved(true)
+      setTimeout(() => setSysSaved(false), 2000)
+    } catch (err) {
+      console.error('Failed to save system settings:', err)
+    }
   }
 
 
@@ -523,6 +546,102 @@ export default function Admin() {
         {tab === 'system' && (
           <div className="space-y-6">
             <ToolSettingsPanel serverScope={true} />
+            
+            <Section title={t('settings.section_advanced') || 'Engine Core Settings'}>
+              <div className="flex items-center justify-between mb-4">
+                <p className="text-xs text-slate-400">Global server-wide engine configuration affecting all users</p>
+                <button
+                  onClick={saveSystemSettings}
+                  className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition cursor-pointer"
+                >
+                  {sysSaved ? <CheckCircle2 size={13} className="text-emerald-300 animate-pulse" /> : <Save size={13} />}
+                  {sysSaved ? t('admin.saved') : 'Save'}
+                </button>
+              </div>
+
+              {systemSettings && (
+                <div className="space-y-4">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 border-b border-white/[0.01] pb-3">
+                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Trading Mode</span>
+                    <div className="flex-1 sm:max-w-xs w-full">
+                      <select
+                        className={Input}
+                        value={systemSettings.trading_mode || 'simulation'}
+                        onChange={e => setSystemSettings({ ...systemSettings, trading_mode: e.target.value })}
+                      >
+                        {meta?.trading_modes?.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 border-b border-white/[0.01] pb-3">
+                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Active Broker</span>
+                    <div className="flex-1 sm:max-w-xs w-full">
+                      <select
+                        className={Input}
+                        value={systemSettings.active_broker || 'simulation'}
+                        onChange={e => setSystemSettings({ ...systemSettings, active_broker: e.target.value })}
+                      >
+                        {meta?.brokers?.map(b => <option key={b.value} value={b.value}>{b.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 border-b border-white/[0.01] pb-3">
+                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Active Data Vendor</span>
+                    <div className="flex-1 sm:max-w-xs w-full">
+                      <select
+                        className={Input}
+                        value={systemSettings.active_data_vendor || 'yfinance'}
+                        onChange={e => setSystemSettings({ ...systemSettings, active_data_vendor: e.target.value })}
+                      >
+                        {meta?.data_vendors?.map(d => <option key={d.value} value={d.value}>{d.label}</option>)}
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 border-b border-white/[0.01] pb-3">
+                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Checkpoint Enabled</span>
+                    <div className="flex-1 sm:max-w-xs w-full">
+                      <input
+                        type="checkbox"
+                        className="w-5 h-5 accent-violet-600 rounded cursor-pointer"
+                        checked={systemSettings.checkpoint_enabled || false}
+                        onChange={e => setSystemSettings({ ...systemSettings, checkpoint_enabled: e.target.checked })}
+                      />
+                    </div>
+                  </div>
+
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 border-b border-white/[0.01] pb-3">
+                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Include Historical Analyses</span>
+                    <div className="flex-1 sm:max-w-xs w-full">
+                      <input
+                        type="checkbox"
+                        className="w-4 h-4 accent-violet-600 rounded cursor-pointer"
+                        checked={systemSettings.include_historical_analyses || false}
+                        onChange={e => setSystemSettings({ ...systemSettings, include_historical_analyses: e.target.checked })}
+                      />
+                    </div>
+                  </div>
+
+                  {systemSettings.include_historical_analyses && (
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 border-b border-white/[0.01] pb-3 pl-6">
+                      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Historical Analyses Limit</span>
+                      <div className="flex-1 sm:max-w-xs w-full">
+                        <input
+                          type="number"
+                          min="1"
+                          max="50"
+                          className={`${Input} w-32 py-1 font-mono`}
+                          value={systemSettings.historical_analyses_limit || 5}
+                          onChange={e => setSystemSettings({ ...systemSettings, historical_analyses_limit: parseInt(e.target.value) || 5 })}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </Section>
           </div>
         )}
 

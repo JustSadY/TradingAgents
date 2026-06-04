@@ -292,7 +292,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     { key: 'tools',    label: t('settings.section_tools') || 'Agent Tools', icon: <Wrench size={14} /> },
     { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety', icon: <ShieldAlert size={14} /> },
     { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={14} /> },
-    { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={14} /> },
+    { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={18} /> },
     ...(userId ? [] : [{ key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={14} /> }]),
     ...(isAdmin ? [{ key: 'advanced', label: t('settings.section_advanced') || 'Advanced', icon: <Sliders size={14} /> }] : []),
   ].filter(tab => isAdmin || tab.key === 'advanced' || tab.key === 'tools' || allowedSettings.includes(tab.key))
@@ -564,6 +564,23 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   </div>
                 )}
               </Section>
+
+              <Section title={t('settings.section_engine_routing') || 'Engine Routing'}>
+                {(
+                  [
+                    ['data_vendor_core_stock', t('settings.data_core_stock')],
+                    ['data_vendor_technicals', t('settings.data_technicals')],
+                    ['data_vendor_fundamentals', t('settings.data_fundamentals')],
+                    ['data_vendor_news', t('settings.data_news')],
+                  ] as [keyof Settings, string][]
+                ).map(([field, label]) => (
+                  <Row key={field} label={label}>
+                    <select className={Input} value={s[field] as string} onChange={e => update(field, e.target.value)}>
+                      {dataVendors.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </Row>
+                ))}
+              </Section>
             </div>
           )}
 
@@ -759,23 +776,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           {/* Advanced Admin Configuration */}
           {activeTab === 'advanced' && isAdmin && (
             <div className="space-y-4 animate-in fade-in duration-200">
-              <Section title={t('settings.section_data_sources') || 'Data Sources Routing'}>
-                {(
-                  [
-                    ['data_vendor_core_stock', t('settings.data_core_stock')],
-                    ['data_vendor_technicals', t('settings.data_technicals')],
-                    ['data_vendor_fundamentals', t('settings.data_fundamentals')],
-                    ['data_vendor_news', t('settings.data_news')],
-                  ] as [keyof Settings, string][]
-                ).map(([field, label]) => (
-                  <Row key={field} label={label}>
-                    <select className={Input} value={s[field] as string} onChange={e => update(field, e.target.value)}>
-                      {dataVendors.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </Row>
-                ))}
-              </Section>
-
               <Section title={t('settings.section_advanced') || 'Engine Core Settings'}>
                 <Row label={t('settings.row_checkpoint')}>
                   <input type="checkbox" checked={s.checkpoint_enabled} onChange={e => update('checkpoint_enabled', e.target.checked)} className="w-5 h-5 accent-violet-600 rounded cursor-pointer" />
