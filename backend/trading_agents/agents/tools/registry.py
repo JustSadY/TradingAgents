@@ -37,3 +37,6 @@ class ToolRegistry:
 
 # Central registry singleton
 registry = ToolRegistry()
+
+# Auto-load built-in tools
+import backend.trading_agents.agents.tools.bootstrap

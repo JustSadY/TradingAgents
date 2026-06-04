@@ -81,27 +81,19 @@ Some reasoning models accept configuration parameters that are mapped dynamicall
 
 ## 📊 4. Data Vendor Configurations
 
-To query stock/crypto details, sentiment, and news, configure the following in
-the **Web UI** (*Admin Panel → Global Settings*) — like the LLM keys, these are
-stored in the database, not in `.env`:
+To query stock/crypto details, sentiment, and news, configure the following in the **Web UI** as modular tool parameters. They are stored in the database rather than read from `.env` files:
 
-```text
-ALPHA_VANTAGE_API_KEY    — alternative vendor for splits, technicals, fundamentals
-REDDIT_CLIENT_ID         — Reddit sentiment (r/wallstreetbets, etc.)
-REDDIT_CLIENT_SECRET
-REDDIT_USER_AGENT        — e.g. TradingAgents/1.0
-```
+*   **Alpha Vantage API Key (`alpha_vantage_api_key`):** Configured globally by the administrator in **Admin Panel → Global Settings** under the **Core Stock Data** tool settings card (Server Scope).
+*   **Reddit Credentials (`reddit_client_id`, `reddit_client_secret`, `reddit_user_agent`):** Configured individually by users in **Settings → Tools** under the **Reddit Sentiment** tool settings card (User Scope). Reverts to default user agent strings if not set.
 
 ---
 
 ## 🔍 5. Search Engine Configuration (SearXNG)
 
-The News Analyst queries search engines to fetch global current events. To avoid
-rate-limits, TradingAgents connects to a **SearXNG** instance, whose URL is set
-in the **Web UI** (*Admin Panel → Global Settings*, `searxng_url`):
+The News Analyst queries search engines to fetch global current events. To avoid rate-limits, TradingAgents connects to a **SearXNG** instance, whose URL is configured individually by users in **Settings → Tools** under the **SearXNG Web Search** tool settings card (User Scope, defaults to `http://localhost:8080` if empty):
 
 ```text
-SEARXNG_URL   e.g. http://localhost:8080
+searxng_url   e.g. http://localhost:8080
 ```
 
 You can run a local SearXNG instance using Docker:
@@ -111,35 +103,13 @@ docker run -d -p 8080:8080 searxng/searxng
 
 ---
 
-## 🎛️ 6. Platform Runtime Settings (Optional Overrides)
+## 🎛️ 6. Platform Runtime Settings
 
-These environment variables can override the default parameters defined in [config.py](../backend/trading_agents/config.py) (re-exported as `DEFAULT_CONFIG` by [default_config.py](../backend/trading_agents/default_config.py)):
+All of the runtime options below are no longer read from `.env` or system environment variables. They are fully managed through the application's **Web UI** under **Settings** (or **Admin Panel** for defaults) and stored in the database:
 
-```ini
-# Select default LLM Provider (openai, anthropic, google, etc.)
-TRADINGAGENTS_LLM_PROVIDER=openai
-
-# Define default model name
-TRADINGAGENTS_LLM_MODEL=gpt-4o-mini
-
-# Language for generated markdown reports (e.g. English, Turkish)
-TRADINGAGENTS_OUTPUT_LANGUAGE=English
-
-# Max rounds for bull/bear and risk debates
-TRADINGAGENTS_MAX_DEBATE_ROUNDS=2
-TRADINGAGENTS_MAX_RISK_DISCUSS_ROUNDS=2
-
-# Concurrency limits for analyst nodes (concurrency > 1 starts nodes in parallel)
-TRADINGAGENTS_ANALYST_CONCURRENCY_LIMIT=2
-
-# Include previous DB analysis reports in the AI graph context
-TRADINGAGENTS_INCLUDE_HISTORICAL_ANALYSES=false
-
-# Number of historical reports to fetch and include in context (1-50)
-TRADINGAGENTS_HISTORICAL_ANALYSES_LIMIT=5
-
-# JSON dictionary mapping analyst keys to specific provider-model strings.
-# Example: {"market": "google:gemini-3.1-flash-lite", "news": "anthropic:claude-sonnet-4-6"}
-# If a key is empty or missing, the default global provider/model is used.
-TRADINGAGENTS_ANALYST_MODELS={}
-```
+*   **LLM Provider & Model:** E.g., `openai`, `gpt-4o-mini`.
+*   **Output Language:** Output language for markdown reports (English, Turkish, etc.).
+*   **Debate & Risk Rounds:** Number of discussion rounds for Bull/Bear researchers and Risk agents.
+*   **Analyst Concurrency Limit:** Concurrency control for parallel analyst nodes.
+*   **Historical Analysis Scope:** Toggle and limit for loading historical reports into active context.
+*   **Specific Analyst Models Mapping:** Mapping specific analyst plugins to different LLM models.

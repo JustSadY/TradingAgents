@@ -39,7 +39,9 @@ sudo APP_PORT=80 ADMIN_USERNAME=manager bash deploy/install.sh
 | `BUILD_FRONTEND` | `1` | If set to `0`, skips React UI compilation (API-only setup). |
 
 ### Post-Installation Key Configuration:
-To activate agent analysis, you must supply at least one LLM provider key:
+To activate agent analysis, you can configure LLM provider keys (OpenAI, Anthropic, Gemini, etc.) directly in the Web UI under **Settings → API Keys** (or via the **Admin Panel → User API Keys** for specific users). 
+
+Alternatively, you can configure system-wide default keys in the `.env` file:
 1.  Open the environment configuration file:
     ```bash
     sudo nano .env

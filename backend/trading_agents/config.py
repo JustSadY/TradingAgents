@@ -1,42 +1,34 @@
 import os
 from pathlib import Path
 from typing import Optional
-from pydantic import AliasChoices, Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseModel, Field, field_validator
 _HOME = Path.home() / ".tradingagents"
-class TradingAgentsConfig(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_prefix="TRADINGAGENTS_",
-        env_file=str(Path(__file__).parent.parent.parent / ".env"),
-        env_file_encoding="utf-8",
-        extra="ignore",
-        populate_by_name=True,
-        env_ignore_empty=True,
-    )
+class TradingAgentsConfig(BaseModel):
     project_dir: str = Field(
         default_factory=lambda: str(Path(__file__).parent.resolve()),
     )
     results_dir: str = Field(
-        default_factory=lambda: str(_HOME / "logs"),
+        default_factory=lambda: os.environ.get("TRADINGAGENTS_RESULTS_DIR", str(_HOME / "logs")),
     )
     data_cache_dir: str = Field(
-        default_factory=lambda: str(_HOME / "cache"),
-        validation_alias=AliasChoices(
+        default_factory=lambda: os.environ.get(
             "TRADINGAGENTS_CACHE_DIR",
-            "TRADINGAGENTS_DATA_CACHE_DIR",
+            os.environ.get("TRADINGAGENTS_DATA_CACHE_DIR", str(_HOME / "cache"))
         ),
     )
     memory_log_path: str = Field(
-        default_factory=lambda: str(_HOME / "memory" / "trading_memory.md"),
+        default_factory=lambda: os.environ.get(
+            "TRADINGAGENTS_MEMORY_LOG_PATH",
+            str(_HOME / "memory" / "trading_memory.md")
+        ),
     )
     memory_log_max_entries: Optional[int] = Field(default=None, ge=1)
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
     backend_url: Optional[str] = Field(
-        default=None,
-        validation_alias=AliasChoices(
+        default_factory=lambda: os.environ.get(
             "TRADINGAGENTS_LLM_BACKEND_URL",
-            "TRADINGAGENTS_BACKEND_URL",
+            os.environ.get("TRADINGAGENTS_BACKEND_URL", None)
         ),
     )
     google_thinking_level: Optional[str] = None
@@ -46,15 +38,7 @@ class TradingAgentsConfig(BaseSettings):
     output_language: str = "English"
     investor_persona: str = "conservative"
     max_debate_rounds: int = Field(default=1, ge=1, le=10)
-    max_risk_discuss_rounds: int = Field(
-        default=1,
-        ge=1,
-        le=10,
-        validation_alias=AliasChoices(
-            "TRADINGAGENTS_MAX_RISK_ROUNDS",
-            "TRADINGAGENTS_MAX_RISK_DISCUSS_ROUNDS",
-        ),
-    )
+    max_risk_discuss_rounds: int = Field(default=1, ge=1, le=10)
     max_recur_limit: int = Field(default=1000, ge=1)
     analyst_concurrency_limit: int = Field(default=1, ge=1)
     include_historical_analyses: bool = False

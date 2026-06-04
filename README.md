@@ -165,7 +165,7 @@ The following configurations can be loaded into your `.env` file:
 | `OPENAI_API_KEY` | OpenAI API key (optional) | `sk-proj-...` |
 | `ANTHROPIC_API_KEY`| Anthropic Claude API key (optional) | `sk-ant-...` |
 | `GOOGLE_API_KEY` | Google Gemini API key (optional) | `AIzaSy...` |
-| `SEARXNG_URL` | URL of the SearXNG meta-search engine | `http://localhost:8080` |
+| `SEARXNG_URL` | (Deprecated - now set in Web UI under Tools tab) | `http://localhost:8080` |
 | `ADMIN_USERNAME` | First administrator username | `admin` |
 
 ---
