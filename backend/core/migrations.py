@@ -87,6 +87,40 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
 ]
 
 
+# Columns converted from FLOAT/double precision to exact NUMERIC(20, 8).
+# For fresh databases ``create_all`` already creates them as NUMERIC; this step
+# migrates pre-existing PostgreSQL databases in place (idempotent — it inspects
+# the current type and only alters columns still stored as floating point).
+_NUMERIC_COLUMNS: list[tuple[str, tuple[str, ...]]] = [
+    ("orders", ("quantity_requested", "quantity_filled", "price_per_share",
+                "total_value", "commission")),
+    ("portfolios", ("initial_capital", "current_balance", "cash_available")),
+    ("holdings", ("quantity", "avg_buy_price", "current_price", "unrealized_pnl")),
+    ("price_alerts", ("target_price",)),
+]
+_NUMERIC_PRECISION = "NUMERIC(20, 8)"
+
+
+async def apply_type_migrations(conn) -> None:
+    """Convert legacy float money columns to exact NUMERIC on PostgreSQL."""
+    if conn.dialect.name == "sqlite":
+        # SQLite is dynamically typed (dev only); create_all covers fresh DBs.
+        return
+    for table, columns in _NUMERIC_COLUMNS:
+        if table not in _ALLOWED_TABLES:
+            raise ValueError(f"Unknown table in migration: {table!r}")
+        for column in columns:
+            current = (await conn.execute(text(
+                "SELECT data_type FROM information_schema.columns "
+                "WHERE table_name = :t AND column_name = :c"
+            ), {"t": table, "c": column})).scalar_one_or_none()
+            if current is not None and current != "numeric":
+                await conn.execute(text(
+                    f"ALTER TABLE {table} ALTER COLUMN {column} "
+                    f"TYPE {_NUMERIC_PRECISION} USING {column}::numeric(20, 8)"
+                ))
+
+
 async def apply_column_migrations(conn) -> None:
     """Add any missing columns from ``_NEW_COLUMNS`` to the connected database."""
     for table, column, col_type in _NEW_COLUMNS:
