@@ -94,7 +94,7 @@ async def run_analysis(
 @router.get("/history", response_model=list[AnalysisListItem])
 async def list_analysis(
     ticker: str | None = Query(default=None),
-    limit: int = Query(default=20, ge=1, le=100),
+    limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
