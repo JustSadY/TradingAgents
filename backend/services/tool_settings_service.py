@@ -85,9 +85,20 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
     )
     user_rows = {row.tool_key: row for row in result.scalars().all()}
 
-    # Also load tool access
-    from backend.services.tool_access_service import get_user_tool_access
+    # Also load tool access, agent access and settings
+    from backend.services.tool_access_service import get_user_tool_access, get_user_agent_access
+    from backend.services.settings_service import get_or_create_settings
+    
     tool_access_map = await get_user_tool_access(db, user.id)
+    agent_access_map = await get_user_agent_access(db, user.id)
+    
+    settings_obj = await get_or_create_settings(db, user)
+    selected_analysts = settings_obj.selected_analysts
+    
+    active_analysts = {
+        a for a in selected_analysts
+        if agent_access_map.get(a, True)
+    }
 
     # 2. Build map of all registered tools
     tools_map = {}
@@ -95,6 +106,10 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
         if not user.is_admin:
             if not tool_access_map.get(tool.key, {}).get("can_view", True):
                 continue
+
+        # Check if any associated agent is active
+        if tool.allowed_analysts and not any(a in active_analysts for a in tool.allowed_analysts):
+            continue
 
         # Get defaults
         default_enabled = tool.default_enabled
@@ -144,9 +159,20 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
     )
     user_rows = {row.tool_key: row for row in result.scalars().all()}
 
-    # Also load tool access
-    from backend.services.tool_access_service import get_user_tool_access
+    # Also load tool access, agent access and settings
+    from backend.services.tool_access_service import get_user_tool_access, get_user_agent_access
+    from backend.services.settings_service import get_or_create_settings
+    
     tool_access_map = await get_user_tool_access(db, user.id)
+    agent_access_map = await get_user_agent_access(db, user.id)
+    
+    settings_obj = await get_or_create_settings(db, user)
+    selected_analysts = settings_obj.selected_analysts
+    
+    active_analysts = {
+        a for a in selected_analysts
+        if agent_access_map.get(a, True)
+    }
 
     for tool_key, update in body.tools.items():
         tool = registry.get(tool_key)
@@ -164,6 +190,10 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
             if update.settings is not None or update.reset_settings:
                 if not perms.get("can_edit", False):
                     raise ValueError(f"You do not have permission to modify settings for tool '{tool_key}'.")
+
+        # Check if any associated agent is active
+        if tool.allowed_analysts and not any(a in active_analysts for a in tool.allowed_analysts):
+            raise ValueError(f"Tool '{tool_key}' is not available because none of its associated agents are enabled.")
 
         row = user_rows.get(tool_key)
         if not row:

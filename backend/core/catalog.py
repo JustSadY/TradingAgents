@@ -171,13 +171,34 @@ CHART_PERIODS: list[dict] = [
 async def build_meta(db=None, user=None) -> dict:
     from backend.trading_agents.agents.tools.registry import registry
     tools_list = registry.metadata()
-    if db is not None and user is not None and not user.is_admin:
-        from backend.services.tool_access_service import get_user_tool_access
+    if db is not None and user is not None:
+        from backend.services.settings_service import get_or_create_settings
+        from backend.services.tool_access_service import get_user_tool_access, get_user_agent_access
+        
+        settings = await get_or_create_settings(db, user)
+        selected_analysts = settings.selected_analysts
+        agent_access_map = await get_user_agent_access(db, user.id)
+        
+        active_analysts = {
+            a for a in selected_analysts
+            if agent_access_map.get(a, True)
+        }
+        
         tool_access_map = await get_user_tool_access(db, user.id)
-        tools_list = [
-            t for t in tools_list
-            if tool_access_map.get(t["key"], {}).get("can_view", True)
-        ]
+        
+        filtered_tools = []
+        for t in tools_list:
+            # Check permission block for non-admin
+            if not user.is_admin and not tool_access_map.get(t["key"], {}).get("can_view", True):
+                continue
+            
+            # Check if any associated agent is active
+            allowed = t.get("allowed_analysts", [])
+            if allowed and not any(a in active_analysts for a in allowed):
+                continue
+                
+            filtered_tools.append(t)
+        tools_list = filtered_tools
     return {
         "analysts": await available_analysts(db, user),
         "tools": tools_list,
