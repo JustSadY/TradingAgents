@@ -63,7 +63,7 @@ def _inject_tool_credentials(config: dict) -> None:
     config["alpha_vantage_api_key"] = stock_server.get("alpha_vantage_api_key")
 
 
-def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
+def _build_config(settings: AppSettings, user=None) -> dict:
     from backend.trading_agents.graph.trading_graph import DEFAULT_CONFIG
     import tempfile, os as _os
     _tmp = tempfile.gettempdir()
@@ -213,11 +213,8 @@ async def run_analysis(
     start = time.time()
     try:
         from sqlalchemy import select
-        from backend.models.system_settings import SystemSettings
-        sys_res = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
-        sys_settings = sys_res.scalar_one_or_none()
         await ws_manager.send(task_id, {"type": "status", "status": "starting", "agent": "Preparing LLM client..."})
-        config = _build_config(settings, user=user, sys_settings=sys_settings)
+        config = _build_config(settings, user=user)
         from backend.services.performance_service import get_analyst_attribution_stats
         from sqlalchemy.exc import PendingRollbackError
         attribution_md = ""
@@ -397,12 +394,9 @@ async def run_portfolio_analysis(
     from backend.models.portfolio_analysis import MultiTickerAnalysis
     from backend.core.database import AsyncSessionLocal
     from sqlalchemy import select
-    from backend.models.system_settings import SystemSettings
     username = user.username if user else "system"
     _logger.info("Starting portfolio analysis for tickers=%s user=%s triggered_by=%s", tickers, username, triggered_by)
-    sys_res = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
-    sys_settings = sys_res.scalar_one_or_none()
-    config = _build_config(settings, user=user, sys_settings=sys_settings)
+    config = _build_config(settings, user=user)
     concurrency = settings.analyst_concurrency_limit or 1
     semaphore = asyncio.Semaphore(concurrency)
     async def _run_one(ticker: str):

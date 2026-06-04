@@ -171,13 +171,13 @@ To implement and register a new tool in the modular system, follow these steps:
    ```
 
 2. **Add to Bootstrap Loader:**
-   Import your module inside [backend/trading_agents/agents/tools/bootstrap.py](file:///home/lykia/Desktop/TradingAgents/backend/trading_agents/agents/tools/bootstrap.py) so it registers on server startup:
+   Import your module inside [backend/trading_agents/agents/tools/bootstrap.py](agents/tools/bootstrap.py) so it registers on server startup:
    ```python
    from .builtin import my_custom_tool
    ```
 
 3. **Provide Localization Translations:**
-   Add labels and descriptions in [tools.ts](file:///home/lykia/Desktop/TradingAgents/frontend/src/i18n/tools.ts) for:
+   Add labels and descriptions in [tools.ts](../../frontend/src/i18n/tools.ts) for:
    * `tools.my_custom_tool.label`
    * `tools.my_custom_tool.description`
    * `tools.my_custom_tool.max_items`

@@ -200,6 +200,10 @@ them. The backend already exposes everything the UI needs:
 | `order_statuses`, `order_actions` | `{value, label, tone}[]` | catalog |
 | `chart_periods` | `{value, label}[]` (matches `/api/market/ohlcv`) | catalog |
 
+`build_meta(db, user)` is **async and user-aware**: it also returns `tools`
+(from the tool registry, filtered by the user's tool/agent permissions — see §9)
+and filters `analysts` to the ones the user may run.
+
 **`GET /api/settings/llm-catalog`** returns the model dropdown per provider,
 sourced from `trading_agents/llm_clients/model_catalog.py`.
 
@@ -208,3 +212,30 @@ sourced from `trading_agents/llm_clients/model_catalog.py`.
 analysts), surface it in `build_meta()`, and have the frontend read it. The
 `tone` fields (`positive`/`neutral`/`negative`) let the UI map to colors without
 hardcoding hex per signal/status.
+
+---
+
+## 9. Modular tool system (`trading_agents/agents/tools/`)
+
+Agent tools are a **DB-driven plugin system** (see `docs/modular_tool_system.md`).
+Each tool is a `BaseAgentTool` (or a `FunctionToolAdapter` wrapping an existing
+`@tool` function) declaring `key`, `category`, `allowed_analysts`, and a
+`settings_schema` of `ToolSettingField`s. Tools self-register into the singleton
+`registry` (auto-loaded via `agents/tools/bootstrap.py`).
+
+- **Settings & access** live in DB tables (`models/tool_settings.py`):
+  `AgentToolSetting` (server/user scoped field values + enablement),
+  `UserAgentAccess`, `UserToolAccess`, `UserToolFieldAccess`. Services:
+  `tool_settings_service.py` (resolve/update + `build_global_runtime_context`)
+  and `tool_access_service.py` (permission maps).
+- **Runtime:** `analysis_service` calls `build_global_runtime_context(db, user_id)`
+  and puts it on `config["runtime_tool_context"]`; `_inject_tool_credentials`
+  copies the relevant secrets into the engine config, and the graph filters
+  tools per analyst via `_filter_tools_for_analyst` before binding.
+- **Credential convention — important:** data-vendor / external-service config
+  (Reddit `client_id`/`secret`/`user_agent`, SearXNG `searxng_url`, Alpha Vantage
+  `alpha_vantage_api_key`) lives **only** in the tool system (as `ToolSettingField`s
+  on the `reddit_sentiment` / `search_web` / `core_stock_data` tools), is injected
+  at runtime, and is read in the engine via `get_config()`. Do **not** re-add these
+  as `SystemSettings`/`system_settings` columns — the old orphaned columns were
+  removed from `core/migrations.py`.
