@@ -53,6 +53,27 @@ def run_tool_analyst(llm, state, *, tools, system_message, report_key, instrumen
     else:
         bound_llm = llm
 
-    result = (prompt | bound_llm).invoke(state["messages"])
+    from backend.trading_agents.agents.utils.resilience import retry_call, log_event
+    from langchain_core.messages import AIMessage
+    import time as _time
+    analyst = report_key.replace("_report", "")
+    _start = _time.time()
+    log_event("node_start", node=analyst, kind="analyst")
+    try:
+        result = retry_call(
+            lambda: (prompt | bound_llm).invoke(state["messages"]),
+            label=f"analyst:{analyst}",
+        )
+    except Exception as exc:  # noqa: BLE001
+        # Retries exhausted — skip this analyst with a visible note instead of
+        # aborting the whole run. The empty AIMessage carries no tool calls, so
+        # the graph routes straight to the next analyst.
+        log_event("node_error", level=40, node=analyst, kind="analyst", error=str(exc)[:300])
+        log_event("node_skipped", level=30, node=analyst, kind="analyst")
+        return {
+            "messages": [AIMessage(content="")],
+            report_key: f"⚠️ {analyst.title()} analysis unavailable (agent error: {exc}).",
+        }
+    log_event("node_end", node=analyst, kind="analyst", ms=int((_time.time() - _start) * 1000))
     report = result.content if len(result.tool_calls) == 0 else ""
     return {"messages": [result], report_key: report}

@@ -27,8 +27,47 @@ import backend.trading_agents.agents.analysts.quant_analyst
 import backend.trading_agents.agents.analysts.earnings_analyst
 import backend.trading_agents.agents.analysts.review_analyst
 from backend.trading_agents.agents.analyst_registry import get_factory, sync_registry_to_graph
+from backend.trading_agents.agents.utils.resilience import guard_node
 from .analyst_execution import build_analyst_execution_plan
 from .conditional_logic import ConditionalLogic
+
+
+# --- Safe fallbacks: when a downstream agent fails after retries, return a
+# minimal valid state update so the run completes (degraded) instead of aborting.
+
+def _fb_report(key: str):
+    return lambda state, exc: {key: ""}
+
+
+def _fb_text(key: str, msg: str):
+    return lambda state, exc: {key: msg}
+
+
+def _fb_invest_debate(speaker_note: str):
+    def fb(state, exc):
+        ds = dict(state.get("investment_debate_state") or {})
+        ds["count"] = int(ds.get("count", 0)) + 1
+        ds["current_response"] = speaker_note
+        return {"investment_debate_state": ds}
+    return fb
+
+
+def _fb_risk_debate(speaker: str):
+    def fb(state, exc):
+        rs = dict(state.get("risk_debate_state") or {})
+        rs["count"] = int(rs.get("count", 0)) + 1
+        rs["latest_speaker"] = speaker
+        return {"risk_debate_state": rs}
+    return fb
+
+
+def _fb_analyst(report_key: str):
+    def fb(state, exc):
+        from langchain_core.messages import AIMessage
+        analyst = report_key.replace("_report", "").title()
+        return {"messages": [AIMessage(content="")],
+                report_key: f"⚠️ {analyst} analysis unavailable (agent error: {exc})."}
+    return fb
 class GraphSetup:
     def __init__(
         self,
@@ -57,19 +96,48 @@ class GraphSetup:
             )
             for spec in plan.specs
         }
-        bull_researcher_node = create_bull_researcher(self.llm)
-        bear_researcher_node = create_bear_researcher(self.llm)
-        synthesis_manager_node = create_synthesis_manager(self.llm)
-        auditor_node = create_auditor_node(self.llm)
-        research_manager_node = create_research_manager(self.llm)
-        trader_node = create_trader(self.llm)
-        aggressive_analyst = create_aggressive_debator(self.llm)
-        neutral_analyst = create_neutral_debator(self.llm)
-        conservative_analyst = create_conservative_debator(self.llm)
-        portfolio_manager_node = create_portfolio_manager(self.llm)
+        bull_researcher_node = guard_node(
+            create_bull_researcher(self.llm), name="Bull Researcher", kind="research",
+            fallback=_fb_invest_debate("(Bull researcher unavailable.)"))
+        bear_researcher_node = guard_node(
+            create_bear_researcher(self.llm), name="Bear Researcher", kind="research",
+            fallback=_fb_invest_debate("(Bear researcher unavailable.)"))
+        synthesis_manager_node = guard_node(
+            create_synthesis_manager(self.llm), name="Synthesis Manager", kind="manager",
+            fallback=_fb_report("synthesis_report"))
+        auditor_node = guard_node(
+            create_auditor_node(self.llm), name="Auditor", kind="manager",
+            fallback=_fb_report("audit_report"))
+        research_manager_node = guard_node(
+            create_research_manager(self.llm), name="Research Manager", kind="manager",
+            fallback=_fb_text("investment_plan",
+                              "Research manager unavailable; proceeding with available analyst reports."))
+        trader_node = guard_node(
+            create_trader(self.llm), name="Trader", kind="manager",
+            fallback=lambda state, exc: {
+                "trader_investment_plan": "Trader agent unavailable; deferring to risk debate.",
+                "trader_proposal_json": "{}",
+            })
+        aggressive_analyst = guard_node(
+            create_aggressive_debator(self.llm), name="Aggressive Analyst", kind="risk",
+            fallback=_fb_risk_debate("Aggressive"))
+        neutral_analyst = guard_node(
+            create_neutral_debator(self.llm), name="Neutral Analyst", kind="risk",
+            fallback=_fb_risk_debate("Neutral"))
+        conservative_analyst = guard_node(
+            create_conservative_debator(self.llm), name="Conservative Analyst", kind="risk",
+            fallback=_fb_risk_debate("Conservative"))
+        portfolio_manager_node = guard_node(
+            create_portfolio_manager(self.llm), name="Portfolio Manager", kind="decision",
+            fallback=_fb_text("final_trade_decision",
+                              "Hold — automated fallback: Portfolio Manager unavailable."))
         workflow = StateGraph(AgentState)
         for spec in plan.specs:
-            workflow.add_node(spec.agent_node, analyst_factories[spec.key]())
+            workflow.add_node(
+                spec.agent_node,
+                guard_node(analyst_factories[spec.key](), name=spec.agent_node,
+                           kind="analyst", fallback=_fb_analyst(spec.report_key)),
+            )
             workflow.add_node(spec.clear_node, create_msg_delete())
             workflow.add_node(spec.tool_node, self.tool_nodes[spec.key])
         workflow.add_node("Bull Researcher", bull_researcher_node)
