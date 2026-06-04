@@ -173,6 +173,16 @@ function RunTab() {
   }
 
   const attachWs = useCallback((taskId: string, isReconnect = false) => {
+    if (wsRef.current) {
+      try {
+        wsRef.current.onmessage = null
+        wsRef.current.onerror = null
+        wsRef.current.onclose = null
+        wsRef.current.close()
+      } catch (e) {
+        console.error("Error closing existing ws:", e)
+      }
+    }
     taskIdRef.current = taskId
     const token = getAccessToken()
     const ws = new WebSocket(`/ws/analysis/${taskId}?token=${token}`)
@@ -272,6 +282,19 @@ function RunTab() {
       attachWs(taskId, true)
     } catch { localStorage.removeItem(TASK_KEY) }
   }, [attachWs])
+
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        try {
+          wsRef.current.onmessage = null
+          wsRef.current.onerror = null
+          wsRef.current.onclose = null
+          wsRef.current.close()
+        } catch {}
+      }
+    }
+  }, [])
 
   useEffect(() => {
     if (!ticker.trim() || running) return
