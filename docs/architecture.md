@@ -121,10 +121,12 @@ This section outlines how the 16 new AI, visual, and automated execution feature
 *   **LLM A/B Testing Panel (5):** An analytics router compiles execution metrics (duration, token costs, win rates) across different setting templates (presets) for performance comparisons.
 
 ### B. Visualizations & Dashboards Layer
-*   **Interactive Charts (6):** The frontend integrates Recharts components fetching technical indicator details (RSI, MACD), sentiment score lines, and portfolio distribution charts.
+*   **Interactive Charts (6):** The frontend integrates Recharts components and TradingView Lightweight Charts, displaying candle series, volume, and overlaying support/resistance levels, target price lines, and stop losses. Now features a **Dynamic Custom Formula Box** evaluated securely on the backend, **Agent-to-UI Visual Annotations** (Buy/Sell arrows, custom text markers, and trendlines), and dynamically loaded custom indicator subcharts.
 *   **Trading Dashboard (7):** Integrates live data feeds with transaction logs, open orders, and P&L tracking (using real-time price updates).
 
 ### C. Advanced Data Scanning & Signals Layer
+*   **Vision-Based Pattern Recognition:** Serves candlestick chart plots (last 90 days) through `mplfinance`, converts them into base64 images, and prompts the vision LLM to extract visual shapes (Head & Shoulders, Flags, etc.), appending these findings to technical reports.
+*   **Multi-Timeframe Trend Alignment:** Downloads Weekly/Monthly macro data, computes a 20 EMA, and performs a backward merge mapping it onto daily candlesticks as a trend overlay.
 *   **SEC Insider Tracking (8):** A background service queries external SEC Form 4 feeds and appends executive and political trades to the `NewsAnalyst` or `FundamentalsAnalyst` context.
 *   **Patent & R&D Scanning (9):** A dedicated tool queries research and patent databases to score corporate innovation pipelines for the `FundamentalsAnalyst` or a new `R&D Analyst`.
 *   **Whale & Option Sweeps (10):** An options data worker tracks large-block option flows and pushes sweep alerts directly to the `OptionsAnalyst` node.

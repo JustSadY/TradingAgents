@@ -272,3 +272,36 @@ To support small account sizes, upgrade the order managers to support floating-p
             portfolio.holdings[ticker] = portfolio.holdings.get(ticker, 0.0) + quantity
     ```
 
+### F. Safe Dynamic Indicator Engine & Evaluation Blueprint
+Allows both analysts and users to write dynamic mathematical expressions (e.g. `(Close - SMA(20)) / STD(20)`) evaluated safely in the backend.
+
+1. **Backend Evaluation Core:** Located in [indicator_service.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/services/indicator_service.py), it parses formula syntax, replaces calls like `SMA(N)`, `EMA(N)`, `STD(N)`, and `RSI(N)` with computed pandas series, and runs a sandboxed `pandas.eval`:
+   ```python
+   def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
+       # Parsed tokens like SMA(10) get pre-calculated and mapped to SMA_10 in local_dict
+       # Evaluates safely restricting the environment namespace
+       res = pd.eval(processed_formula, local_dict=local_dict, engine='python')
+       return pd.Series(res, index=df.index)
+   ```
+2. **API Router:** Exposes `/api/market/custom-indicator` to resolve queries by fetching the historical ticker data, calculating the formula series, and returning the time-series array.
+3. **Frontend Custom Formula Input:** Integrated in [Chart.tsx](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/pages/Chart.tsx) for dynamic user computations and plots them as line charts at the bottom of the candlestick panel.
+
+### G. Drawing Agent-to-UI Annotations & Trendlines
+Enables trading agents to interactively draw visual markers and trendlines on the user's chart.
+
+1. **State-Safe Tool Execution:** Defined in [chart_tools.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/agents/utils/chart_tools.py) as `add_chart_annotation`. Captures arguments (`type`, `time`, `price`, `text`, `time2`, `price2`) and registers them in the active thread-local context variable (`active_run_context`).
+2. **Database Propagation:** Merged and saved into the `chart_annotations` column of `AnalysisResult` in [analysis_service.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/services/analysis_service.py).
+3. **Frontend Render System:** [Chart.tsx](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/pages/Chart.tsx) parses these annotations and feeds markers to the `CandlestickSeries` or adds separate line segments dynamically to the TradingView chart to represent trendlines.
+
+### H. Vision-Based Pattern Recognition Pipeline
+Numerical series can struggle with visual shapes. This system adds a visual analysis mechanism to identify classic chart patterns.
+
+1. **Visual Plotting and Encoding:** The `get_vision_chart_analysis` tool in [chart_tools.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/agents/utils/chart_tools.py) slices the last 90 trading days, renders a clean PNG chart via `mplfinance` (with candlestick and volume plots), and converts it into a Base64 string.
+2. **Vision Model Call:** It sends the image payload along with a structured prompt to the active session's vision-capable LLM to extract visual pattern insights (e.g., Head and Shoulders, Cup and Handle) and returns the text evaluation back to the caller.
+
+### I. Multi-Timeframe Alignment and Overlay Mapping
+Ensures daily-chart decisions remain aligned with long-term macro trendlines.
+
+1. **High-Timeframe Sampling:** The `get_mtf_trend` tool in [chart_tools.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/agents/utils/chart_tools.py) fetches Weekly or Monthly historical data, computes a 20 EMA, and performs a backward merge/asof join mapping the values onto the daily trading index.
+2. **Chart Overlay:** The resulting series is registered with an `"overlay": true` parameter, signaling [Chart.tsx](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/pages/Chart.tsx) to plot the macro trend directly on top of the main daily price candlesticks as an overlay line.
+
