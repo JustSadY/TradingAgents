@@ -5,6 +5,7 @@ from sqlalchemy import select
 from backend.core.database import get_db
 from backend.core.security import decode_token
 from backend.models.user import User
+from backend.repositories.users import get_user_by_username
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -19,8 +20,7 @@ async def get_current_user(
         username = decode_token(token, expected_type="access")
     except ValueError:
         raise credentials_exc
-    result = await db.execute(select(User).where(User.username == username))
-    user = result.scalar_one_or_none()
+    user = await get_user_by_username(db, username)
     if user is None or not user.is_active:
         raise credentials_exc
     return user

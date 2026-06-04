@@ -18,6 +18,7 @@ from backend.schemas.portfolio_analysis import (
 )
 from backend.models.portfolio_analysis import MultiTickerAnalysis
 from backend.api.deps import get_current_user
+from backend.repositories.common import scope_to_user
 from backend.services.settings_service import get_or_create_settings
 import json as _json
 from backend.core.utils import safe_ticker_component
@@ -53,8 +54,7 @@ async def list_analysis(
     q = select(AnalysisResult).order_by(desc(AnalysisResult.created_at)).limit(limit).offset(offset)
     if ticker:
         q = q.where(AnalysisResult.ticker == ticker.upper())
-    if not current_user.is_admin:
-        q = q.where(AnalysisResult.user_id == current_user.id)
+    q = scope_to_user(q, AnalysisResult, current_user)
     result = await db.execute(q)
     return result.scalars().all()
 @router.post("/{task_id}/cancel")
@@ -125,8 +125,7 @@ async def list_portfolio_analyses(
     current_user: User = Depends(get_current_user),
 ):
     q = select(MultiTickerAnalysis).order_by(desc(MultiTickerAnalysis.created_at)).limit(limit).offset(offset)
-    if not current_user.is_admin:
-        q = q.where(MultiTickerAnalysis.user_id == current_user.id)
+    q = scope_to_user(q, MultiTickerAnalysis, current_user)
     result = await db.execute(q)
     rows = result.scalars().all()
     return [
@@ -146,9 +145,10 @@ async def get_portfolio_analysis(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = select(MultiTickerAnalysis).where(MultiTickerAnalysis.id == portfolio_id)
-    if not current_user.is_admin:
-        q = q.where(MultiTickerAnalysis.user_id == current_user.id)
+    q = scope_to_user(
+        select(MultiTickerAnalysis).where(MultiTickerAnalysis.id == portfolio_id),
+        MultiTickerAnalysis, current_user,
+    )
     result = await db.execute(q)
     row = result.scalar_one_or_none()
     if row is None:
@@ -169,9 +169,10 @@ async def get_analysis(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = select(AnalysisResult).where(AnalysisResult.id == analysis_id)
-    if not current_user.is_admin:
-        q = q.where(AnalysisResult.user_id == current_user.id)
+    q = scope_to_user(
+        select(AnalysisResult).where(AnalysisResult.id == analysis_id),
+        AnalysisResult, current_user,
+    )
     result = await db.execute(q)
     row = result.scalar_one_or_none()
     if row is None:

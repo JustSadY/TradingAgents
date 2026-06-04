@@ -1,14 +1,13 @@
 import logging
-import re
 from typing import Literal, Optional
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.deps import get_current_user, get_db
+from backend.core.utils import safe_ticker_component
 from backend.services import mock_trading_service as svc
 router = APIRouter(prefix="/api/trading", tags=["trading"])
 _logger = logging.getLogger(__name__)
-_TICKER_RE = re.compile(r'^[A-Z0-9.\-]{1,20}$')
 class OrderRequest(BaseModel):
     ticker: str = Field(..., min_length=1, max_length=20)
     action: Literal['BUY', 'SELL']
@@ -18,9 +17,10 @@ class OrderRequest(BaseModel):
     @classmethod
     def validate_ticker(cls, v: str) -> str:
         v = v.upper()
-        if not _TICKER_RE.match(v):
-            raise ValueError('Ticker must be 1–20 alphanumeric characters')
-        return v
+        try:
+            return safe_ticker_component(v, max_len=20)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
 class ResetRequest(BaseModel):
     initial_capital: float = Field(default=100_000.0, gt=0, le=10_000_000)
 @router.get("/portfolio")
