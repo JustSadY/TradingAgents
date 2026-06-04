@@ -58,7 +58,7 @@ export interface Meta {
 
 
 let _cache: Meta | null = null
-let _inflight: Promise<Meta> | null = null
+let _inflight: Promise<any> | null = null
 const _listeners = new Set<(m: Meta | null) => void>()
 
 export function triggerMetaRefetch() {
