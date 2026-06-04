@@ -9,7 +9,7 @@ class BaseSearchEngine(ABC):
     @abstractmethod
     def search(self, query: str, num_results: int = 5) -> List[Dict[str, str]]:
         pass
-from tradingagents.dataflows.config import get_config
+from backend.trading_agents.dataflows.config import get_config
 class SearxNGSearchEngine(BaseSearchEngine):
     def __init__(self, base_url: str = None):
         cfg_url = get_config().get("searxng_url")

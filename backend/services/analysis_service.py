@@ -2,7 +2,7 @@ import asyncio
 import logging
 import time
 import uuid
-import backend.bootstrap  # noqa: F401  (engine env + import-finder setup)
+import backend.bootstrap  # noqa: F401  (sets engine env before importing the engine)
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.websocket import ws_manager
 from backend.models.analysis import AnalysisResult
@@ -42,7 +42,7 @@ async def _get_historical_analyses_context(
         parts.append("")
     return "\n".join(parts)
 def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
-    from tradingagents.graph.trading_graph import DEFAULT_CONFIG
+    from backend.trading_agents.graph.trading_graph import DEFAULT_CONFIG
     import tempfile, os as _os
     _tmp = tempfile.gettempdir()
     cfg: dict = {
@@ -180,7 +180,7 @@ async def run_analysis(
     task_id: str | None = None,
     user=None,
 ) -> tuple[str, AnalysisResult]:
-    from tradingagents.graph.trading_graph import TradingAgentsGraph
+    from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
     if task_id is None:
         task_id = str(uuid.uuid4())
     current = asyncio.current_task()
@@ -278,7 +278,7 @@ async def run_analysis(
         final_state, signal = await ta.async_propagate(ticker, trade_date, asset_type)
         stats = _extract_stats(stats_handler)
         duration = time.time() - start
-        from tradingagents.agents.schemas import PropagateResult
+        from backend.trading_agents.agents.schemas import PropagateResult
         result = PropagateResult.from_state(final_state, signal)
         inv_debate = final_state.get("investment_debate_state", {}) or {}
         risk_debate = final_state.get("risk_debate_state", {}) or {}
@@ -361,7 +361,7 @@ async def run_portfolio_analysis(
     triggered_by: str = "manual",
     user=None,
 ):
-    from tradingagents.graph.trading_graph import TradingAgentsGraph
+    from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
     from backend.models.portfolio_analysis import MultiTickerAnalysis
     from backend.core.database import AsyncSessionLocal
     from sqlalchemy import select
@@ -406,7 +406,7 @@ async def run_portfolio_analysis(
                 debug=False,
                 config=config,
             )
-            from tradingagents.agents.managers.super_portfolio_manager import create_super_portfolio_manager
+            from backend.trading_agents.agents.managers.super_portfolio_manager import create_super_portfolio_manager
             spm_node = create_super_portfolio_manager(ta.thinking_llm)
             state_out = await asyncio.to_thread(spm_node, {"ticker_reports": ticker_reports})
             super_report = state_out.get("super_portfolio_report", "")

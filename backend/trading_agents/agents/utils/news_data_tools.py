@@ -1,6 +1,6 @@
 from langchain_core.tools import tool
 from typing import Annotated, Optional
-from tradingagents.dataflows.interface import route_to_vendor
+from backend.trading_agents.dataflows.interface import route_to_vendor
 @tool
 def get_news(
     ticker: Annotated[str, "Ticker symbol"],

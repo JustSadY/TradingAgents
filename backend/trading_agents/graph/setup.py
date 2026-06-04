@@ -1,7 +1,7 @@
 from typing import Any, Dict
 from langgraph.graph import END, START, StateGraph
 from langgraph.prebuilt import ToolNode
-from tradingagents.agents import (
+from backend.trading_agents.agents import (
     AgentState,
     InvestDebateState,
     RiskDebateState,
@@ -17,16 +17,16 @@ from tradingagents.agents import (
     create_portfolio_manager,
     create_trader,
 )
-import tradingagents.agents.analysts.market_analyst
-import tradingagents.agents.analysts.sentiment_analyst
-import tradingagents.agents.analysts.news_analyst
-import tradingagents.agents.analysts.fundamentals_analyst
-import tradingagents.agents.analysts.macro_analyst
-import tradingagents.agents.analysts.options_analyst
-import tradingagents.agents.analysts.quant_analyst
-import tradingagents.agents.analysts.earnings_analyst
-import tradingagents.agents.analysts.review_analyst
-from tradingagents.agents.analyst_registry import get_factory, sync_registry_to_graph
+import backend.trading_agents.agents.analysts.market_analyst
+import backend.trading_agents.agents.analysts.sentiment_analyst
+import backend.trading_agents.agents.analysts.news_analyst
+import backend.trading_agents.agents.analysts.fundamentals_analyst
+import backend.trading_agents.agents.analysts.macro_analyst
+import backend.trading_agents.agents.analysts.options_analyst
+import backend.trading_agents.agents.analysts.quant_analyst
+import backend.trading_agents.agents.analysts.earnings_analyst
+import backend.trading_agents.agents.analysts.review_analyst
+from backend.trading_agents.agents.analyst_registry import get_factory, sync_registry_to_graph
 from .analyst_execution import build_analyst_execution_plan
 from .conditional_logic import ConditionalLogic
 class GraphSetup:

@@ -1,7 +1,7 @@
 import threading
 from copy import deepcopy
 from typing import Dict, Optional
-import tradingagents.default_config as default_config
+import backend.trading_agents.default_config as default_config
 
 _config: Optional[Dict] = None
 # Guards the module-global ``_config`` so concurrent graph runs / set_config()

@@ -11,7 +11,7 @@ def get_macro_data(curr_date: str | None = None) -> str:
         "CL=F": "Crude Oil",
         "GC=F": "Gold"
     }
-    from tradingagents.dataflows.stockstats_utils import load_ohlcv
+    from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
     import pandas as pd
     if not curr_date:
         curr_date = pd.Timestamp.today().strftime("%Y-%m-%d")

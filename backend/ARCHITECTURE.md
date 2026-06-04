@@ -28,7 +28,7 @@ api (routers)  →  services (business logic)  →  repositories (DB access)  �
 - `services/` hold business logic/orchestration/IO/computation. They may import `repositories`, `models`, `schemas`, `core`, `trading_agents`. **Services must never import from `backend.api`** (that inversion was removed — do not reintroduce it).
 - `repositories/` hold reusable DB queries only.
 - `models/` (SQLAlchemy) and `schemas/` (Pydantic) hold no logic.
-- `trading_agents/` is a self-contained engine imported as the top-level name `tradingagents` (see §6). Treat it as a subsystem with its own conventions.
+- `trading_agents/` is a **normal sub-package of `backend`** — imported as `backend.trading_agents.*` like everything else (see §6). It's still a cohesive subsystem with its own conventions, but it is part of the backend, not an aliased external package.
 
 ---
 
@@ -37,7 +37,7 @@ api (routers)  →  services (business logic)  →  repositories (DB access)  �
 | Path | Responsibility |
 | --- | --- |
 | `main.py` | App factory: lifespan (create tables, seed admin, cron, log handler), CORS, router includes, `/ws/analysis/{task_id}`, `/health`, SPA static mount. |
-| `bootstrap.py` | **Import once, early.** Idempotent runtime setup: `TRADINGAGENTS_*` temp-dir env, the `tradingagents` meta-path import finder, and a no-op `logging_config` stub. Any module that imports `tradingagents.*` should `import backend.bootstrap` first. |
+| `bootstrap.py` | **Import once, early.** Idempotent runtime setup: `TRADINGAGENTS_*` temp-dir env and a no-op `logging_config` stub. Any module that imports `backend.trading_agents.*` should `import backend.bootstrap` first (so the engine's env + logging are set before its modules execute). |
 | `api/*.py` | One thin router per domain. `deps.py` = DI dependencies (`get_current_user`, `require_admin`, `require_page`). |
 | `services/*.py` | Business logic. See §3 for the map. |
 | `repositories/common.py` | `scope_to_user(query, model, user)` — the per-user ownership filter (anti-IDOR). |
@@ -94,8 +94,19 @@ databases get it on startup. For money/price/quantity use the `MONEY` type from
 (pattern: `analysis_service.run_analysis_task`). Background tasks open their own
 `AsyncSessionLocal`.
 
-**Anything touching the `tradingagents` engine:** ensure `import backend.bootstrap`
-has run; import engine modules lazily inside functions (they pull heavy deps).
+**Add an analyst:** declare graph wiring + tools with `@register_analyst` in
+`trading_agents/agents/analysts/<name>.py` (reuse `run_tool_analyst` from
+`agents/utils/analyst_node_factory.py` for the standard tool-using scaffold),
+import the module in `graph/setup.py`, and add the selection metadata
+(label/description/default) to `trading_agents/analyst_catalog.py`. The frontend
+picks it up via `/api/meta` — no frontend edit. (See `docs/developer_guide.md`.)
+
+**Add an investor persona:** add one `InvestorPersona(...)` to
+`trading_agents/personas.py` (key + label + description + PM instruction block).
+The Portfolio Manager and `/api/meta.investor_personas` pick it up automatically.
+
+**Anything touching the engine:** ensure `import backend.bootstrap` has run;
+import engine modules lazily inside functions (they pull heavy deps).
 
 ---
 
@@ -129,13 +140,20 @@ has run; import engine modules lazily inside functions (they pull heavy deps).
 
 ## 6. The `trading_agents` engine (subsystem)
 
-- Imported under the historical top-level name **`tradingagents`** via the
-  meta-path finder installed in `bootstrap.py` (the package lives at
-  `backend/trading_agents/`).
+- Imported as **`backend.trading_agents.*`** — an ordinary backend sub-package
+  (the old top-level `tradingagents` alias and its meta-path finder were
+  removed; `import tradingagents` no longer resolves). Internal modules use
+  absolute `backend.trading_agents...` imports; if you add a module, follow the
+  same prefix.
 - Structure: `graph/` (LangGraph wiring — `trading_graph.py`, `setup.py`,
   `conditional_logic.py`, checkpointer), `agents/` (analysts/managers/researchers/
   risk_mgmt + `analyst_registry.py` + `utils/`), `dataflows/` (vendor-routed data
   via `interface.py`), `llm_clients/` (provider factory), `mock_trading/`.
+- **Engine-root single-source modules** (dependency-free, importable by the
+  backend without the heavy `agents` chain): `personas.py` (investor personas),
+  `analyst_catalog.py` (analyst selection metadata). `agents/utils/` holds shared
+  scaffolds: `analyst_node_factory.run_tool_analyst` (the common tool-using
+  analyst turn) and `report_aggregator.build_resources`.
 - **High-risk zone:** graph compilation depends on the analyst registry's dynamic
   `ConditionalLogic` method injection and on agent state field names. Do **not**
   rewire the graph, rename registry methods, or change state field names without
@@ -160,3 +178,33 @@ uvicorn backend.main:app --reload --port 8000     # /docs for the live contract
 For DB-touching logic without Postgres, point `DATABASE_URL` at
 `sqlite+aiosqlite:///:memory:`, create tables, and exercise the service
 (the money/order flow was validated this way).
+
+---
+
+## 8. Backend is the single source of truth for UI metadata
+
+The frontend should **fetch** option lists / labels / defaults, never hardcode
+them. The backend already exposes everything the UI needs:
+
+**`GET /api/meta`** (`core/catalog.build_meta`) returns:
+
+| Key | Contents | Backed by |
+| --- | --- | --- |
+| `analysts` | `{key, label, description, default}[]` | `trading_agents/analyst_catalog.py` |
+| `investor_personas` | `{value, label, description}[]` | `trading_agents/personas.py` |
+| `signals` | `{value, label, tone}[]` (Buy/Overweight/Hold/Underweight/Sell) | catalog |
+| `section_labels` | report-column → label map | catalog |
+| `asset_types`, `languages`, `data_vendors`, `trading_modes`, `brokers` | `{value, label}[]` | catalog |
+| `provider_labels` | provider id → display name | catalog |
+| `effort_options` | per-provider reasoning/thinking levels (`openai`/`anthropic`/`google`) | catalog |
+| `order_statuses`, `order_actions` | `{value, label, tone}[]` | catalog |
+| `chart_periods` | `{value, label}[]` (matches `/api/market/ohlcv`) | catalog |
+
+**`GET /api/settings/llm-catalog`** returns the model dropdown per provider,
+sourced from `trading_agents/llm_clients/model_catalog.py`.
+
+**Rule:** when the UI needs a new option list, add it to `core/catalog.py`
+(deriving from the engine where the engine owns the concept — e.g. personas,
+analysts), surface it in `build_meta()`, and have the frontend read it. The
+`tone` fields (`positive`/`neutral`/`negative`) let the UI map to colors without
+hardcoding hex per signal/status.

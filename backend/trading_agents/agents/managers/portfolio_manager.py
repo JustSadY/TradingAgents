@@ -1,12 +1,12 @@
 from __future__ import annotations
 import json
-from tradingagents.agents.schemas import PortfolioDecision, render_pm_decision, TraderProposal
-from tradingagents.agents.utils.risk_math import calculate_kelly_size, get_risk_reward_from_plan
-from tradingagents.agents.utils.agent_utils import (
+from backend.trading_agents.agents.schemas import PortfolioDecision, render_pm_decision, TraderProposal
+from backend.trading_agents.agents.utils.risk_math import calculate_kelly_size, get_risk_reward_from_plan
+from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
 )
-from tradingagents.agents.utils.structured import (
+from backend.trading_agents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
 )
@@ -20,7 +20,7 @@ def create_portfolio_manager(llm):
         trader_plan = state["trader_investment_plan"]
         trader_proposal_json = state.get("trader_proposal_json")
 
-        from tradingagents.dataflows.config import get_config
+        from backend.trading_agents.dataflows.config import get_config
         kelly_enabled = get_config().get("kelly_sizing_enabled", True)
         
         kelly_recommendation = ""
@@ -54,28 +54,10 @@ def create_portfolio_manager(llm):
         else:
             lessons_line = ""
             conviction_instructions = ""
-        from tradingagents.dataflows.config import get_config
-        persona = get_config().get("investor_persona", "conservative")
-        persona_instructions = ""
-        if persona == "conservative":
-            persona_instructions = (
-                "**INVESTOR PERSONA: Conservative Dividend Investor (Muhafazakar)**\n"
-                "- Your client is highly risk-averse, focusing on capital preservation, steady income (dividends), and low-volatility blue-chip assets.\n"
-                "- Prefer 'Hold' or 'Sell/Underweight' if uncertainty is high. Do not recommend aggressive positioning, high leverage, or speculative assets unless backed by overwhelming positive fundamental data.\n"
-                "- Keep position sizing conservative, prioritizing cash safety.\n"
-            )
-        elif persona == "risk_loving":
-            persona_instructions = (
-                "**INVESTOR PERSONA: Risk-Loving Crypto & Growth Trader (Risk Sever)**\n"
-                "- Your client seeks high returns and is willing to accept high volatility, leverage, and speculative growth or crypto assets.\n"
-                "- Emphasize growth potential and momentum. Be willing to recommend 'Buy' or 'Overweight' sizing if there is a strong technical breakout or high social sentiment, even if fundamentals are weak or debate is mixed.\n"
-            )
-        elif persona == "esg_focused":
-            persona_instructions = (
-                "**INVESTOR PERSONA: Sustainability / ESG-Focused Investor (ESG Odaklı)**\n"
-                "- Your client prioritizes environmental, social, and corporate governance metrics alongside financial returns.\n"
-                "- Strictly penalize companies with controversial environmental track records, poor corporate governance, or regulatory issues. Heavily favor clean energy, positive social governance, and sustainable business models.\n"
-            )
+        from backend.trading_agents.dataflows.config import get_config
+        from backend.trading_agents.personas import get_persona_instructions, DEFAULT_PERSONA
+        persona = get_config().get("investor_persona", DEFAULT_PERSONA)
+        persona_instructions = get_persona_instructions(persona)
         prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
 {persona_instructions}
 {instrument_context}

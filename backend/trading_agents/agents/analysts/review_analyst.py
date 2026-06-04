@@ -1,13 +1,13 @@
 import json
 from langchain_core.messages import SystemMessage
 from langchain_core.runnables import RunnableConfig
-from tradingagents.agents.utils.agent_states import AgentState
-from tradingagents.agents.utils.agent_utils import (
+from backend.trading_agents.agents.utils.agent_states import AgentState
+from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
 )
-from tradingagents.agents.utils.review_tools import get_past_performance_data
-from tradingagents.agents.analyst_registry import register_analyst
+from backend.trading_agents.agents.utils.review_tools import get_past_performance_data
+from backend.trading_agents.agents.analyst_registry import register_analyst
 @register_analyst(
     key="review",
     agent_node="Performance Review Analyst",

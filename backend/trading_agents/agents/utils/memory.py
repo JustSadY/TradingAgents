@@ -1,7 +1,7 @@
 from typing import List, Optional
 from pathlib import Path
 import re
-from tradingagents.agents.utils.rating import parse_rating
+from backend.trading_agents.agents.utils.rating import parse_rating
 class TradingMemoryLog:
     _SEPARATOR = "\n\n<!-- ENTRY_END -->\n\n"
     _DECISION_RE = re.compile(r"DECISION:\n(.*?)(?=\nREFLECTION:|\Z)", re.DOTALL)

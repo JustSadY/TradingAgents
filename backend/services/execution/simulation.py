@@ -1,13 +1,13 @@
 import logging
 import os
 from typing import Optional
-import backend.bootstrap  # noqa: F401  (makes `tradingagents` importable)
+import backend.bootstrap  # noqa: F401  (sets engine env before importing the engine)
 from .base import BaseTraderInterface, OrderRequest, OrderResult
 _logger = logging.getLogger(__name__)
 class SimulationTrader(BaseTraderInterface):
     def __init__(self, portfolio_id: int = 1, initial_capital: float = 100_000.0, db=None):
-        from tradingagents.mock_trading.engine import MockTradingEngine
-        from tradingagents.mock_trading.database import TradingDatabase
+        from backend.trading_agents.mock_trading.engine import MockTradingEngine
+        from backend.trading_agents.mock_trading.database import TradingDatabase
         if db is None:
             import tempfile
             _cache = os.environ.get(
@@ -39,7 +39,7 @@ class SimulationTrader(BaseTraderInterface):
             return None
     def place_order(self, request: OrderRequest) -> OrderResult:
         try:
-            from tradingagents.mock_trading.order_manager import PriceType
+            from backend.trading_agents.mock_trading.order_manager import PriceType
             if request.action == "BUY":
                 order_id = self._engine.create_buy_order(
                     ticker=request.ticker,
@@ -90,7 +90,7 @@ class SimulationTrader(BaseTraderInterface):
             )
     def cancel_order(self, order_id: str) -> bool:
         try:
-            from tradingagents.mock_trading.order_manager import OrderStatus
+            from backend.trading_agents.mock_trading.order_manager import OrderStatus
             order = self._engine.order_mgr.get_order(order_id)
             if order and order.status.value == "PENDING":
                 order.status = OrderStatus.REJECTED

@@ -18,7 +18,7 @@ The backend uses a clean, service-oriented structure designed to support asynchr
 backend/
 ├── main.py               # FastAPI app factory: wires routers, CORS, WS, SPA static mount
 ├── bootstrap.py          # Idempotent runtime setup: TRADINGAGENTS_* env, the local
-│                         #   `tradingagents` import finder, logging stub (imported once, early)
+│                         #   engine env defaults + logging stub (imported once, early)
 ├── api/                  # 🔵 Presentation layer — thin FastAPI routers (no business logic)
 │   ├── deps.py           # DI dependencies: get_current_user / require_admin / require_page
 │   ├── auth.py           # JWT login & refresh (router prefix: /auth)
@@ -54,7 +54,7 @@ backend/
 │   └── websocket.py      # WS connection manager for real-time progress feeds
 ├── schemas/              # Pydantic request/response DTOs
 ├── models/               # SQLAlchemy async ORM models (User, Portfolio, Order, Analysis, …)
-└── trading_agents/       # Core multi-agent LangGraph engine (imported as `tradingagents`)
+└── trading_agents/       # Core multi-agent LangGraph engine (imported as backend.trading_agents)
 ```
 
 > **Layering rule:** dependencies flow one way — `api → services → repositories → models`.

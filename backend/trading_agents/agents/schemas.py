@@ -152,7 +152,7 @@ class PropagateResult(BaseModel):
     final_decision: str = ""
     @classmethod
     def from_state(cls, state: dict, signal: str) -> "PropagateResult":
-        from tradingagents.agents.utils.agent_states import StateKeys
+        from backend.trading_agents.agents.utils.agent_states import StateKeys
         return cls(
             ticker=state.get(StateKeys.COMPANY, ""),
             trade_date=state.get(StateKeys.TRADE_DATE, ""),

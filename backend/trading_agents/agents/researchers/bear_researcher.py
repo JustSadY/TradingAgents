@@ -1,5 +1,5 @@
-from tradingagents.agents.utils.agent_utils import get_language_instruction
-from tradingagents.agents.utils.report_aggregator import build_resources
+from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
+from backend.trading_agents.agents.utils.report_aggregator import build_resources
 def create_bear_researcher(llm):
     def bear_node(state) -> dict:
         investment_debate_state = state["investment_debate_state"]

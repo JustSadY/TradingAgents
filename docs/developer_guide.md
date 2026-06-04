@@ -8,13 +8,12 @@ This guide describes how to extend the TradingAgents platform, write and registe
 
 TradingAgents uses a dynamic registration system. You can add a new analyst agent without modifying the core LangGraph compilation scripts.
 
-### Step A: Define your Analyst Class and Tools
-Create your new analyst module in `backend/trading_agents/agents/analysts/your_analyst.py`. Use the `@register_analyst` decorator from [analyst_registry.py](../backend/trading_agents/agents/analyst_registry.py):
+### Step A: Define your Analyst Node and Tools
+Create your new analyst module in `backend/trading_agents/agents/analysts/your_analyst.py`. Use the `@register_analyst` decorator from [analyst_registry.py](../backend/trading_agents/agents/analyst_registry.py). The decorator declares the **structural graph wiring** — the node names, the report column the analyst writes, and its tools:
 
 ```python
-from typing import List
 from langchain_core.tools import tool
-from tradingagents.agents.analyst_registry import register_analyst
+from backend.trading_agents.agents.analyst_registry import register_analyst
 
 # 1. Define custom tools for your analyst
 @tool
@@ -23,43 +22,46 @@ def get_custom_sentiment_data(ticker: str) -> str:
     # Your fetching logic (e.g. database queries, custom API calls)
     return "Positive sentiment index: 87"
 
-# 2. Register the analyst with metadata and its declared tools
+# 2. Register the analyst node factory with its graph wiring + tools
 @register_analyst(
     key="custom_sentiment",
-    label="Özel Duygu",
-    description="Özel alternatif veri kaynakları ve duygu endeksleri",
-    default_on=False,
-    tools=[get_custom_sentiment_data]
+    agent_node="Custom Sentiment Analyst",
+    clear_node="Msg Clear Custom Sentiment",
+    tool_node="tools_custom_sentiment",
+    report_key="custom_sentiment_report",
+    tools=[get_custom_sentiment_data],
 )
-class CustomSentimentAnalyst:
-    def __init__(self, llm):
-        self.llm = llm
-
-    def run(self, state):
-        # The agent's decision logic and tool execution
-        # state contains current messages and reports
-        pass
+def create_custom_sentiment_analyst(llm):
+    def node(state):
+        # build the prompt, bind tools, invoke the llm, return the report
+        ...
+    return node
 ```
 
 ### Step B: Import the Module in Setup
 To trigger the decorator on startup, import the module in [backend/trading_agents/graph/setup.py](../backend/trading_agents/graph/setup.py):
 
 ```python
-# Around line 31
-import tradingagents.agents.analysts.custom_sentiment_analyst # noqa: F401
+import backend.trading_agents.agents.analysts.custom_sentiment_analyst  # noqa: F401
 ```
 
-### Step C: Update the Frontend Metadata
-Add your new analyst key to the section dictionary inside [backend/core/catalog.py](../backend/core/catalog.py) to enable display labels and translation support:
+### Step C: Declare the UI/selection metadata (single source)
+Add your analyst's **selection metadata** — label, description and whether it is
+on by default — to the engine analyst catalog
+[backend/trading_agents/analyst_catalog.py](../backend/trading_agents/analyst_catalog.py).
+This is the single source the backend exposes through `/api/meta`, so the
+frontend picks it up automatically (no frontend edit needed):
 
 ```python
-_ANALYST_META: dict[str, tuple[str, str, bool]] = {
+ANALYSTS: list[AnalystInfo] = [
     # ...
-    "custom_sentiment": ("Özel Duygu", "Özel alternatif veri kaynakları ve duygu endeksleri", False),
-}
+    AnalystInfo("custom_sentiment", "Özel Duygu",
+                "Özel alternatif veri kaynakları ve duygu endeksleri", False),
+]
 ```
 
-The system will automatically configure the new LangGraph node, register its tools, and update the UI settings panel.
+The system then configures the LangGraph node, registers its tools, and surfaces
+the analyst in the settings panel via `/api/meta`.
 
 ---
 

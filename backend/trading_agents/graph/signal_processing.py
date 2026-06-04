@@ -1,6 +1,6 @@
 from __future__ import annotations
 from typing import Any
-from tradingagents.agents.utils.rating import parse_rating
+from backend.trading_agents.agents.utils.rating import parse_rating
 class SignalProcessor:
     def __init__(self, llm: Any = None):
         self.llm = llm

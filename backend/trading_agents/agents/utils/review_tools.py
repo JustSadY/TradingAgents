@@ -5,7 +5,7 @@ from datetime import datetime
 import pandas as pd
 import yfinance as yf
 from langchain_core.tools import tool
-from tradingagents.default_config import DEFAULT_CONFIG
+from backend.trading_agents.default_config import DEFAULT_CONFIG
 @tool
 def get_past_performance_data(ticker: str, curr_date: str | None = None) -> str:
     try:
@@ -37,7 +37,7 @@ def get_past_performance_data(ticker: str, curr_date: str | None = None) -> str:
                     past_date = d.name
                     break
         try:
-            from tradingagents.dataflows.stockstats_utils import load_ohlcv
+            from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
             if not curr_date:
                 curr_date = datetime.now().strftime("%Y-%m-%d")
             hist = load_ohlcv(ticker, curr_date)

@@ -7,7 +7,7 @@ from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 logger = logging.getLogger(__name__)
-from tradingagents.dataflows.config import get_config
+from backend.trading_agents.dataflows.config import get_config
 _API = "https://www.reddit.com/r/{sub}/search.json?{qs}"
 _DEFAULT_UA = "tradingagents/0.2 (+https://github.com/TauricResearch/TradingAgents)"
 def _get_user_agent() -> str:
