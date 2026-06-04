@@ -26,6 +26,8 @@ SECTION_FIELDS = {
         "google_thinking_level",
         "selected_analysts",
         "analyst_models",
+        "include_historical_analyses",
+        "historical_analyses_limit",
     ],
     "risk": [
         "max_risk_per_trade_pct",

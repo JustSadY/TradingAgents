@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import axios from 'axios'
 import {
   Save, BookmarkPlus, Trash2, Play, Bell,
-  Settings as SettingsIcon, Brain, ShieldAlert, Sliders, Clock, Wrench
+  Settings as SettingsIcon, Brain, ShieldAlert, Clock, Wrench
 } from 'lucide-react'
 import { useMeta, triggerMetaRefetch } from '../hooks/useMeta'
 import { useAuth } from '../hooks/useAuth'
@@ -26,14 +26,9 @@ interface Settings {
   output_language: string
   investor_persona: string
   analyst_concurrency_limit: number
-  checkpoint_enabled: boolean
   max_recur_limit: number
   benchmark_ticker: string | null
   azure_deployment: string | null
-  data_vendor_core_stock: string
-  data_vendor_technicals: string
-  data_vendor_fundamentals: string
-  data_vendor_news: string
   max_debate_rounds: number
   max_risk_rounds: number
   max_position_size_pct: number
@@ -286,8 +281,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={14} /> },
     { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={18} /> },
     ...(userId ? [] : [{ key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={14} /> }]),
-    ...(isAdmin ? [{ key: 'advanced', label: t('settings.section_advanced') || 'Advanced', icon: <Sliders size={14} /> }] : []),
-  ].filter(tab => isAdmin || tab.key === 'advanced' || tab.key === 'tools' || allowedSettings.includes(tab.key))
+  ].filter(tab => isAdmin || tab.key === 'tools' || allowedSettings.includes(tab.key))
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
@@ -453,6 +447,33 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     </select>
                   </Row>
                 )}
+
+                <Row label={t('settings.row_historical_analyses')}>
+                  <div className="flex flex-col gap-2 pt-1">
+                    <label className="flex items-center gap-2.5 cursor-pointer text-slate-300 hover:text-white select-none">
+                      <input
+                        type="checkbox"
+                        checked={s.include_historical_analyses}
+                        onChange={e => update('include_historical_analyses', e.target.checked)}
+                        className="w-4 h-4 accent-violet-600 rounded"
+                      />
+                      <span className="text-xs font-semibold">{t('settings.historical_analyses_hint')}</span>
+                    </label>
+                    {s.include_historical_analyses && (
+                      <div className="flex items-center gap-2 pt-1 pl-6">
+                        <span className="text-[10px] text-slate-500 font-semibold">{t('settings.historical_limit_label')}:</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="50"
+                          className={`${Input} w-20 py-1 font-mono`}
+                          value={s.historical_analyses_limit}
+                          onChange={e => update('historical_analyses_limit', parseInt(e.target.value) || 5)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </Row>
               </Section>
 
               <Section title={t('settings.section_active_analysts') || 'Active Analysts Mapping'}>
@@ -557,22 +578,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 )}
               </Section>
 
-              <Section title={t('settings.section_engine_routing') || 'Engine Routing'}>
-                {(
-                  [
-                    ['data_vendor_core_stock', t('settings.data_core_stock')],
-                    ['data_vendor_technicals', t('settings.data_technicals')],
-                    ['data_vendor_fundamentals', t('settings.data_fundamentals')],
-                    ['data_vendor_news', t('settings.data_news')],
-                  ] as [keyof Settings, string][]
-                ).map(([field, label]) => (
-                  <Row key={field} label={label}>
-                    <select className={Input} value={s[field] as string} onChange={e => update(field, e.target.value)}>
-                      {dataVendors.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                    </select>
-                  </Row>
-                ))}
-              </Section>
             </div>
           )}
 
@@ -743,43 +748,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 <p className="text-[10px] text-slate-500 mt-1.5 font-medium">Standard 5-field cron schedule format (UTC time)</p>
               </Row>
             </Section>
-          )}
-
-          {/* Advanced Admin Configuration */}
-          {activeTab === 'advanced' && isAdmin && (
-            <div className="space-y-4 animate-in fade-in duration-200">
-              <Section title={t('settings.section_advanced') || 'Engine Core Settings'}>
-                <Row label={t('settings.row_checkpoint')}>
-                  <input type="checkbox" checked={s.checkpoint_enabled} onChange={e => update('checkpoint_enabled', e.target.checked)} className="w-5 h-5 accent-violet-600 rounded cursor-pointer" />
-                </Row>
-                <Row label={t('settings.row_historical_analyses')}>
-                  <div className="flex flex-col gap-2 pt-1">
-                    <label className="flex items-center gap-2.5 cursor-pointer text-slate-300 hover:text-white select-none">
-                      <input
-                        type="checkbox"
-                        checked={s.include_historical_analyses}
-                        onChange={e => update('include_historical_analyses', e.target.checked)}
-                        className="w-4 h-4 accent-violet-600 rounded"
-                      />
-                      <span className="text-xs font-semibold">{t('settings.historical_analyses_hint')}</span>
-                    </label>
-                    {s.include_historical_analyses && (
-                      <div className="flex items-center gap-2 pt-1 pl-6">
-                        <span className="text-[10px] text-slate-500 font-semibold">{t('settings.historical_limit_label')}:</span>
-                        <input
-                          type="number"
-                          min="1"
-                          max="50"
-                          className={`${Input} w-20 py-1 font-mono`}
-                          value={s.historical_analyses_limit}
-                          onChange={e => update('historical_analyses_limit', parseInt(e.target.value) || 5)}
-                        />
-                      </div>
-                    )}
-                  </div>
-                </Row>
-              </Section>
-            </div>
           )}
 
           {activeTab === 'tools' && (

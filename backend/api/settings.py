@@ -53,9 +53,7 @@ async def _check_section_permissions(db: AsyncSession, user: User, body: Setting
                 detail=f"You do not have permission to modify settings in section: {section}",
             )
     advanced_fields = [
-        "checkpoint_enabled", "include_historical_analyses", "historical_analyses_limit",
-        "max_recur_limit", "azure_deployment", "data_vendor_core_stock",
-        "data_vendor_technicals", "data_vendor_fundamentals", "data_vendor_news",
+        "max_recur_limit", "azure_deployment",
     ]
     if any(f in attempted for f in advanced_fields):
         raise HTTPException(

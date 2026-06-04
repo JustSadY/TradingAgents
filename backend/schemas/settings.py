@@ -20,14 +20,9 @@ class SettingsRead(BaseModel):
     output_language: str = "English"
     investor_persona: str = "conservative"
     analyst_concurrency_limit: int = 1
-    checkpoint_enabled: bool = False
     max_recur_limit: int = 1000
     benchmark_ticker: str | None = None
     azure_deployment: str | None = None
-    data_vendor_core_stock: str = "yfinance"
-    data_vendor_technicals: str = "yfinance"
-    data_vendor_fundamentals: str = "yfinance"
-    data_vendor_news: str = "yfinance"
     max_debate_rounds: int
     max_risk_rounds: int
     max_position_size_pct: float
@@ -64,14 +59,9 @@ class SettingsUpdate(BaseModel):
     output_language: str | None = None
     investor_persona: str | None = None
     analyst_concurrency_limit: int | None = Field(default=None, ge=1, le=16)
-    checkpoint_enabled: bool | None = None
     max_recur_limit: int | None = Field(default=None, ge=100, le=5000)
     benchmark_ticker: str | None = None
     azure_deployment: str | None = None
-    data_vendor_core_stock: str | None = None
-    data_vendor_technicals: str | None = None
-    data_vendor_fundamentals: str | None = None
-    data_vendor_news: str | None = None
     max_debate_rounds: int | None = Field(default=None, ge=1, le=10)
     max_risk_rounds: int | None = Field(default=None, ge=1, le=10)
     max_position_size_pct: float | None = Field(default=None, ge=1, le=100)
