@@ -265,13 +265,13 @@ function RunTab() {
     try {
       const { taskId, ticker: runTicker } = JSON.parse(raw)
       if (!taskId) return
-      preRefreshLogRef.current = [...log]
+      preRefreshLogRef.current = [...saved.log]
       setRunning(true)
       setRunStatus('running')
       if (runTicker) setTicker(runTicker)
       attachWs(taskId, true)
     } catch { localStorage.removeItem(TASK_KEY) }
-  }, [attachWs, log])
+  }, [attachWs])
 
   useEffect(() => {
     if (!ticker.trim() || running) return
