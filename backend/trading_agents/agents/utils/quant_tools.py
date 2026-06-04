@@ -7,6 +7,7 @@ def get_quant_data(
     ticker: str,
     curr_date: str | None = None
 ) -> str:
+    """Calculate annualized volatility, beta relative to SPY, Sharpe Ratio, and SPY correlation metrics for a given ticker symbol over the last 1 year."""
     try:
         from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
         import pandas as pd

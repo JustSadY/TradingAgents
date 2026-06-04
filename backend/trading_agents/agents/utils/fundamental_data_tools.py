@@ -6,6 +6,7 @@ def get_fundamentals(
     ticker: Annotated[str, "ticker symbol"],
     curr_date: Annotated[str, "current date you are trading at, yyyy-mm-dd"],
 ) -> str:
+    """Retrieve key fundamental metrics (P/E ratio, market cap, EPS, etc.) for a company."""
     return route_to_vendor("get_fundamentals", ticker, curr_date)
 @tool
 def get_balance_sheet(
@@ -13,6 +14,7 @@ def get_balance_sheet(
     freq: Annotated[str, "reporting frequency: annual/quarterly"] = "quarterly",
     curr_date: Annotated[str, "current date you are trading at, yyyy-mm-dd"] = None,
 ) -> str:
+    """Retrieve the balance sheet statements for a given ticker symbol and frequency."""
     return route_to_vendor("get_balance_sheet", ticker, freq, curr_date)
 @tool
 def get_cashflow(
@@ -20,6 +22,7 @@ def get_cashflow(
     freq: Annotated[str, "reporting frequency: annual/quarterly"] = "quarterly",
     curr_date: Annotated[str, "current date you are trading at, yyyy-mm-dd"] = None,
 ) -> str:
+    """Retrieve the cash flow statements for a given ticker symbol and frequency."""
     return route_to_vendor("get_cashflow", ticker, freq, curr_date)
 @tool
 def get_income_statement(
@@ -27,4 +30,5 @@ def get_income_statement(
     freq: Annotated[str, "reporting frequency: annual/quarterly"] = "quarterly",
     curr_date: Annotated[str, "current date you are trading at, yyyy-mm-dd"] = None,
 ) -> str:
+    """Retrieve the income statement report for a given ticker symbol and frequency."""
     return route_to_vendor("get_income_statement", ticker, freq, curr_date)

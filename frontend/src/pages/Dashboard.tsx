@@ -193,7 +193,7 @@ export default function Dashboard() {
         <KpiCard
           icon={pnl >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
           label={t('dashboard.total_return')}
-          value={`${pnl >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%`}
+          value={`${pnl >= 0 ? '+' : ''}${(pnlPct ?? 0).toFixed(2)}%`}
           sub={`${pnl >= 0 ? '+' : ''}$${pnl.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}`}
           color={pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}
           accent={pnl >= 0 ? 'from-emerald-500/10' : 'from-rose-500/10'}

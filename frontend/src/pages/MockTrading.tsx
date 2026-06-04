@@ -208,7 +208,7 @@ export default function MockTrading() {
           icon={pnlPositive ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
           label={t('mocktrading.stat_total_pnl')}
           value={`${pnlPositive ? '+' : ''}$${p.total_pnl.toLocaleString(locale, { minimumFractionDigits: 2 })}`}
-          sub={`${pnlPositive ? '+' : ''}${p.total_pnl_pct.toFixed(2)}%`}
+          sub={`${pnlPositive ? '+' : ''}${(p.total_pnl_pct ?? 0).toFixed(2)}%`}
           positive={pnlPositive}
         />
         <StatCard
@@ -341,7 +341,7 @@ export default function MockTrading() {
                   {p.holdings.map(h => (
                     <tr key={h.ticker} className="hover:bg-white/[0.01] transition-colors">
                       <td className="px-3 py-3 font-mono font-bold text-white text-sm">{h.ticker}</td>
-                      <td className="px-3 py-3 text-right font-mono text-slate-400">{h.quantity.toFixed(4)}</td>
+                       <td className="px-3 py-3 text-right font-mono text-slate-400">{(h.quantity ?? 0).toFixed(4)}</td>
                       <td className="px-3 py-3 text-right font-mono text-slate-400">${h.avg_buy_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className="px-3 py-3 text-right font-mono text-slate-400">${h.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className="px-3 py-3 text-right font-mono text-slate-400">${h.market_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
@@ -349,7 +349,7 @@ export default function MockTrading() {
                         {h.unrealized_pnl >= 0 ? '+' : ''}${h.unrealized_pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td className={`px-3 py-3 text-right font-mono font-semibold ${h.pnl_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {h.pnl_pct >= 0 ? '+' : ''}{h.pnl_pct.toFixed(2)}%
+                        {h.pnl_pct >= 0 ? '+' : ''}{(h.pnl_pct ?? 0).toFixed(2)}%
                       </td>
                     </tr>
                   ))}

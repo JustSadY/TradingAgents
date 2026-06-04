@@ -119,12 +119,12 @@ export default function Orders() {
                         {o.action}
                       </span>
                     </td>
-                    <td className="px-5 py-3 text-right font-mono font-semibold text-slate-300">{o.quantity_filled.toFixed(4)}</td>
+                    <td className="px-5 py-3 text-right font-mono font-semibold text-slate-300">{(o.quantity_filled ?? 0).toFixed(4)}</td>
                     <td className="px-5 py-3 text-right font-mono text-slate-300">
-                      {o.price_per_share ? `$${o.price_per_share.toFixed(2)}` : '—'}
+                      {o.price_per_share ? `$${(o.price_per_share ?? 0).toFixed(2)}` : '—'}
                     </td>
                     <td className="px-5 py-3 text-right font-mono text-slate-300 font-semibold">
-                      {o.total_value ? `$${o.total_value.toFixed(2)}` : '—'}
+                      {o.total_value ? `$${(o.total_value ?? 0).toFixed(2)}` : '—'}
                     </td>
                     <td className="px-5 py-3 text-center">
                       <span className={`inline-flex items-center text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${STATUS_BADGES[o.status] || 'text-slate-300'}`}>

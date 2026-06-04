@@ -91,7 +91,7 @@ export default function ABTesting() {
                 <div className="p-1 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 shrink-0"><Clock size={12} /></div>
                 <div>
                   <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">Avg Speed</p>
-                  <p className="text-xs font-bold text-white font-mono leading-none">{m.avg_duration.toFixed(1)}s</p>
+                  <p className="text-xs font-bold text-white font-mono leading-none">{(m.avg_duration ?? 0).toFixed(1)}s</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">

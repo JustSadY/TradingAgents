@@ -5,6 +5,7 @@ from langchain_core.tools import tool
 _logger = logging.getLogger(__name__)
 @tool
 def run_strategy_backtest(ticker: str, strategy_type: str, curr_date: str | None = None) -> str:
+    """Run a strategy backtest (e.g. macd_crossover, rsi_oversold) for a stock ticker up to a specific date."""
     try:
         from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
         import pandas as pd

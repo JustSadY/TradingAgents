@@ -2,6 +2,7 @@ import yfinance as yf
 from langchain_core.tools import tool
 @tool
 def get_options_data(ticker: str) -> str:
+    """Retrieve options chain data, including nearest expirations, put/call volume ratio, and implied volatilities for a given stock ticker."""
     try:
         tkr = yf.Ticker(ticker)
         expirations = tkr.options

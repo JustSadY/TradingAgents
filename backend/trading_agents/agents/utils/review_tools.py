@@ -8,6 +8,7 @@ from langchain_core.tools import tool
 from backend.trading_agents.default_config import DEFAULT_CONFIG
 @tool
 def get_past_performance_data(ticker: str, curr_date: str | None = None) -> str:
+    """Retrieve historical performance reports and analyze realized returns relative to previous model suggestions for a given stock ticker."""
     try:
         results_dir = Path(DEFAULT_CONFIG["results_dir"]) / ticker
         if not results_dir.exists():

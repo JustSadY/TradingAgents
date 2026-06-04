@@ -5,6 +5,7 @@ import pandas as pd
 _logger = logging.getLogger(__name__)
 @tool
 def get_macro_data(curr_date: str | None = None) -> str:
+    """Retrieve key macroeconomic indicators including VIX (Volatility Index), 10-Year Treasury Yield, Crude Oil, and Gold prices."""
     tickers = {
         "^VIX": "Volatility Index (VIX)",
         "^TNX": "10-Year Treasury Yield",

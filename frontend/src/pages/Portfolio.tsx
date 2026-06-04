@@ -142,7 +142,7 @@ export default function Portfolio() {
                 }`}>
                   {positive ? <TrendingUp size={12} strokeWidth={2.5} /> : <TrendingDown size={12} strokeWidth={2.5} />}
                   <span>
-                    {positive ? '+' : ''}{pnl.toFixed(2)} ({positive ? '+' : ''}{pnlPct.toFixed(2)}%)
+                    {positive ? '+' : ''}{(pnl ?? 0).toFixed(2)} ({positive ? '+' : ''}{(pnlPct ?? 0).toFixed(2)}%)
                   </span>
                 </div>
               </div>
@@ -203,19 +203,19 @@ export default function Portfolio() {
                   return (
                     <tr key={h.id} className="hover:bg-white/[0.01] transition-colors">
                       <td className="px-5 py-3.5 font-mono font-bold text-white text-sm">{h.ticker}</td>
-                      <td className="px-5 py-3.5 text-right font-mono font-semibold text-slate-300">{h.quantity.toFixed(4)}</td>
-                      <td className="px-5 py-3.5 text-right font-mono text-slate-300">${h.avg_buy_price.toFixed(2)}</td>
+                      <td className="px-5 py-3.5 text-right font-mono font-semibold text-slate-300">{(h.quantity ?? 0).toFixed(4)}</td>
+                      <td className="px-5 py-3.5 text-right font-mono text-slate-300">${(h.avg_buy_price ?? 0).toFixed(2)}</td>
                       <td className="px-5 py-3.5 text-right font-mono text-slate-300">
-                        {h.current_price != null ? `$${h.current_price.toFixed(2)}` : '—'}
+                        {h.current_price != null ? `$${(h.current_price ?? 0).toFixed(2)}` : '—'}
                       </td>
-                      <td className="px-5 py-3.5 text-right font-mono text-white font-bold">${marketValue.toFixed(2)}</td>
+                      <td className="px-5 py-3.5 text-right font-mono text-white font-bold">${(marketValue ?? 0).toFixed(2)}</td>
                       <td className="px-5 py-3.5 text-right">
                         <span className={`inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-0.5 rounded-md ${
                           positive 
                             ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/15' 
                             : 'bg-rose-500/10 text-rose-400 border border-rose-500/15'
                         }`}>
-                          {positive ? '+' : ''}${pnl.toFixed(2)}
+                          {positive ? '+' : ''}${(pnl ?? 0).toFixed(2)}
                         </span>
                       </td>
                     </tr>

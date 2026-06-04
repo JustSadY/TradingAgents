@@ -44,6 +44,7 @@ def get_search_engine() -> BaseSearchEngine:
         return SearxNGSearchEngine()
 @tool
 def search_web(query: str, num_results: int = 5) -> str:
+    """Perform a web search for queries containing company events, news updates, or financial statements."""
     engine = get_search_engine()
     results = engine.search(query, num_results)
     if not results:
@@ -54,6 +55,7 @@ def search_web(query: str, num_results: int = 5) -> str:
     return "\n\n".join(formatted_results)
 @tool
 def get_crypto_fear_and_greed_index() -> str:
+    """Retrieve the current Crypto Fear and Greed Index value and sentiment classification."""
     try:
         response = requests.get("https://api.alternative.me/fng/", timeout=10)
         response.raise_for_status()

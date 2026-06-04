@@ -415,7 +415,7 @@ function RunTab() {
           <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 border-t border-white/[0.03] pt-2.5">
             {costEstimate && (
               <span className="text-[10px] text-slate-500 font-semibold">
-                Cost Estimate: ${costEstimate.min_usd.toFixed(3)} – ${costEstimate.max_usd.toFixed(3)}
+                Cost Estimate: ${(costEstimate.min_usd ?? 0).toFixed(3)} – ${(costEstimate.max_usd ?? 0).toFixed(3)}
               </span>
             )}
             {existingId && (
@@ -774,7 +774,7 @@ function HistoryTab() {
                     <td className="px-5 py-3.5 font-mono font-bold text-white">{item.ticker}</td>
                     <td className="px-5 py-3.5 text-slate-400 font-semibold">{item.trade_date}</td>
                     <td className="px-5 py-3.5"><SignalBadge signal={item.signal} /></td>
-                    <td className="px-5 py-3.5 text-slate-500 font-mono">{item.duration_seconds.toFixed(1)}s</td>
+                    <td className="px-5 py-3.5 text-slate-500 font-mono">{(item.duration_seconds ?? 0).toFixed(1)}s</td>
                     <td className="px-5 py-3.5 text-slate-500 hidden sm:table-cell">{item.triggered_by}</td>
                     <td className="px-5 py-3.5 text-slate-600 hidden md:table-cell font-mono">{new Date(item.created_at).toLocaleString()}</td>
                   </tr>
@@ -798,7 +798,7 @@ function HistoryTab() {
                       <h3 className="text-xl font-display font-bold text-white font-mono">{detail.ticker}</h3>
                       <SignalBadge signal={detail.signal} large />
                     </div>
-                    <p className="text-[10px] text-slate-500 font-semibold">{detail.trade_date} • {detail.duration_seconds.toFixed(1)}s • {detail.llm_calls} LLM • {(detail.tokens_in + detail.tokens_out).toLocaleString()} token</p>
+                    <p className="text-[10px] text-slate-500 font-semibold">{detail.trade_date} • {(detail.duration_seconds ?? 0).toFixed(1)}s • {detail.llm_calls} LLM • {(detail.tokens_in + detail.tokens_out).toLocaleString()} token</p>
                   </div>
                   <div className="flex items-center gap-2 ml-4">
                     <button onClick={() => exportMarkdown(detail)} className="flex items-center gap-1 bg-white/5 hover:bg-white/10 text-[10px] font-bold text-slate-300 px-2.5 py-1.5 rounded-lg transition cursor-pointer" title={t('analysis.history.btn_download_md')}>

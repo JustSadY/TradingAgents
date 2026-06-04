@@ -8,6 +8,7 @@ def get_indicators(
     curr_date: Annotated[str, "The current trading date you are trading on, YYYY-mm-dd"],
     look_back_days: Annotated[int, "how many days to look back"] = 30,
 ) -> str:
+    """Calculate and retrieve technical indicator analyses (e.g. SMA, EMA, RSI, MACD, Bollinger Bands) for a stock."""
     indicators = [i.strip().lower() for i in indicator.split(",") if i.strip()]
     results = []
     for ind in indicators:
