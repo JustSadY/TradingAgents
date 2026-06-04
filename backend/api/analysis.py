@@ -316,112 +316,16 @@ async def get_analysis(
 async def get_analysis_chat(
     analysis_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    result = await db.execute(select(AnalysisResult).where(AnalysisResult.id == analysis_id))
-    analysis = result.scalar_one_or_none()
-    if not analysis:
-        raise HTTPException(status_code=404, detail="Analysis report not found")
-    from backend.models import AnalysisChat
-    chat_result = await db.execute(
-        select(AnalysisChat)
-        .where(AnalysisChat.analysis_id == analysis_id)
-        .order_by(AnalysisChat.created_at.asc())
-    )
-    return chat_result.scalars().all()
+    from backend.services.report_chat_service import get_chat_history
+    return await get_chat_history(db, analysis_id, current_user)
 @router.post("/{analysis_id}/chat", response_model=ChatMessageRead)
 async def ask_analysis_report(
     analysis_id: int,
     body: ChatMessageCreate,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
-    from backend.models import AnalysisChat
-    from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-    from tradingagents.llm_clients.factory import create_llm_client
-    result = await db.execute(select(AnalysisResult).where(AnalysisResult.id == analysis_id))
-    analysis = result.scalar_one_or_none()
-    if not analysis:
-        raise HTTPException(status_code=404, detail="Analysis report not found")
-    settings = await get_or_create_settings(db, _)
-    reports = []
-    if analysis.market_report:
-        reports.append(f"### MARKET REPORT\n{analysis.market_report}")
-    if analysis.sentiment_report:
-        reports.append(f"### SENTIMENT REPORT\n{analysis.sentiment_report}")
-    if analysis.news_report:
-        reports.append(f"### NEWS REPORT\n{analysis.news_report}")
-    if analysis.fundamentals_report:
-        reports.append(f"### FUNDAMENTALS REPORT\n{analysis.fundamentals_report}")
-    if analysis.macro_report:
-        reports.append(f"### MACRO REPORT\n{analysis.macro_report}")
-    if analysis.options_report:
-        reports.append(f"### OPTIONS REPORT\n{analysis.options_report}")
-    if analysis.quant_report:
-        reports.append(f"### QUANT REPORT\n{analysis.quant_report}")
-    if analysis.earnings_report:
-        reports.append(f"### EARNINGS REPORT\n{analysis.earnings_report}")
-    if analysis.final_decision:
-        reports.append(f"### FINAL PORTFOLIO DECISION & SIGNAL ({analysis.signal})\n{analysis.final_decision}")
-    report_content = "\n\n".join(reports)
-    chat_result = await db.execute(
-        select(AnalysisChat)
-        .where(AnalysisChat.analysis_id == analysis_id)
-        .order_by(AnalysisChat.created_at.asc())
-    )
-    past_messages = chat_result.scalars().all()
-    lang = settings.output_language or "English"
-    lang_inst = "" if lang.strip().lower() == "english" else f" Write your entire response in {lang}."
-    system_prompt = (
-        f"You are the Portfolio Manager agent of the TradingAgents platform. The user wants to discuss the "
-        f"following completed analysis report for asset `{analysis.ticker}`.\n\n"
-        f"--- START REPORT CONTENT ---\n"
-        f"{report_content}\n"
-        f"--- END REPORT CONTENT ---\n\n"
-        f"Answer the user's questions about this analysis report accurately, professionally, and concisely. "
-        f"Ground your replies only in the details provided in the report. If they ask about something not covered "
-        f"in the report, say so politely.{lang_inst}"
-    )
-    messages_payload = [SystemMessage(content=system_prompt)]
-    for msg in past_messages:
-        if msg.role == "user":
-            messages_payload.append(HumanMessage(content=msg.content))
-        else:
-            messages_payload.append(AIMessage(content=msg.content))
-    messages_payload.append(HumanMessage(content=body.message))
-    from backend.core.config import get_settings as _cfg
-    from backend.services.user_service import get_user_api_key
-    user_key = None
-    if _ is not None:
-        try:
-            fernet = _cfg().get_fernet()
-            user_key = get_user_api_key(_, settings.llm_provider, fernet)
-        except Exception:
-            user_key = None
-    if not user_key and not getattr(_, "is_admin", False):
-        raise HTTPException(
-            status_code=400,
-            detail=f"No API key set for provider '{settings.llm_provider}'. Please add your API key in Settings."
-        )
-    client = create_llm_client(
-        provider=settings.llm_provider,
-        model=settings.llm_model,
-        base_url=settings.backend_url,
-        api_key=user_key,
-    )
-    llm = client.get_llm()
-    response = await llm.ainvoke(messages_payload)
-    user_chat = AnalysisChat(
-        analysis_id=analysis_id,
-        role="user",
-        content=body.message,
-    )
-    assistant_chat = AnalysisChat(
-        analysis_id=analysis_id,
-        role="assistant",
-        content=response.content,
-    )
-    db.add(user_chat)
-    db.add(assistant_chat)
-    await db.flush()
-    return assistant_chat
+    from backend.services.report_chat_service import answer_report_question
+    return await answer_report_question(db, analysis_id, body.message, current_user)
