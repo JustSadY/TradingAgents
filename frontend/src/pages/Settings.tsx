@@ -28,9 +28,6 @@ interface Settings {
   analyst_concurrency_limit: number
   checkpoint_enabled: boolean
   max_recur_limit: number
-  news_article_limit: number
-  global_news_article_limit: number
-  global_news_lookback_days: number
   benchmark_ticker: string | null
   azure_deployment: string | null
   data_vendor_core_stock: string
@@ -43,10 +40,6 @@ interface Settings {
   max_risk_per_trade_pct: number
   include_historical_analyses: boolean
   historical_analyses_limit: number
-  synthesis_enabled: boolean
-  auditor_enabled: boolean
-  kelly_sizing_enabled: boolean
-  sec_insights_enabled: boolean
   strict_backtest_learning: boolean
   analyst_models: Record<string, string>
   webhook_url: string | null
@@ -54,7 +47,6 @@ interface Settings {
   webhook_events: string
   watchlist: string[]
   selected_analysts: string[]
-  reddit_enabled: boolean
 }
 
 interface Preset { id: number; name: string; description: string | null; created_at: string }
@@ -606,26 +598,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
               <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
                 <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Institutional Features</h4>
                 
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">Enable Synthesis Layer</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.synthesis_enabled} onChange={e => update('synthesis_enabled', e.target.checked)} />
-                </label>
-
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">Enable Real-time Auditor</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.auditor_enabled} onChange={e => update('auditor_enabled', e.target.checked)} />
-                </label>
-
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">Enable Kelly Sizing Math</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.kelly_sizing_enabled} onChange={e => update('kelly_sizing_enabled', e.target.checked)} />
-                </label>
-
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">SEC & Insider Intelligence</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.sec_insights_enabled} onChange={e => update('sec_insights_enabled', e.target.checked)} />
-                </label>
-
                 <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
                   <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">Strict Backtest Learning</span>
                   <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.strict_backtest_learning} onChange={e => update('strict_backtest_learning', e.target.checked)} />

@@ -22,9 +22,6 @@ class SettingsRead(BaseModel):
     analyst_concurrency_limit: int = 1
     checkpoint_enabled: bool = False
     max_recur_limit: int = 1000
-    news_article_limit: int = 20
-    global_news_article_limit: int = 10
-    global_news_lookback_days: int = 7
     benchmark_ticker: str | None = None
     azure_deployment: str | None = None
     data_vendor_core_stock: str = "yfinance"
@@ -37,17 +34,12 @@ class SettingsRead(BaseModel):
     max_risk_per_trade_pct: float
     include_historical_analyses: bool = False
     historical_analyses_limit: int = 5
-    synthesis_enabled: bool = True
-    auditor_enabled: bool = True
-    kelly_sizing_enabled: bool = True
-    sec_insights_enabled: bool = True
     strict_backtest_learning: bool = True
     analyst_models: dict[str, str] = {}
     webhook_url: str | None = None
     webhook_enabled: bool = False
     webhook_events: str = '["analysis_complete"]'
     active_preset_name: str | None = None
-    reddit_enabled: bool = True
     updated_at: datetime | None = None
 
     class Config:
@@ -74,9 +66,6 @@ class SettingsUpdate(BaseModel):
     analyst_concurrency_limit: int | None = Field(default=None, ge=1, le=16)
     checkpoint_enabled: bool | None = None
     max_recur_limit: int | None = Field(default=None, ge=100, le=5000)
-    news_article_limit: int | None = Field(default=None, ge=1, le=100)
-    global_news_article_limit: int | None = Field(default=None, ge=1, le=50)
-    global_news_lookback_days: int | None = Field(default=None, ge=1, le=30)
     benchmark_ticker: str | None = None
     azure_deployment: str | None = None
     data_vendor_core_stock: str | None = None
@@ -89,14 +78,9 @@ class SettingsUpdate(BaseModel):
     max_risk_per_trade_pct: float | None = Field(default=None, ge=0.1, le=50)
     include_historical_analyses: bool | None = None
     historical_analyses_limit: int | None = Field(default=None, ge=1, le=50)
-    synthesis_enabled: bool | None = None
-    auditor_enabled: bool | None = None
-    kelly_sizing_enabled: bool | None = None
-    sec_insights_enabled: bool | None = None
     strict_backtest_learning: bool | None = None
     analyst_models: dict[str, str] | None = None
     webhook_url: str | None = None
     webhook_enabled: bool | None = None
     webhook_events: str | None = None
     active_preset_name: str | None = None
-    reddit_enabled: bool | None = None

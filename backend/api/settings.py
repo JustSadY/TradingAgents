@@ -54,7 +54,6 @@ async def _check_section_permissions(db: AsyncSession, user: User, body: Setting
             )
     advanced_fields = [
         "checkpoint_enabled", "include_historical_analyses", "historical_analyses_limit",
-        "news_article_limit", "global_news_article_limit", "global_news_lookback_days",
         "max_recur_limit", "azure_deployment", "data_vendor_core_stock",
         "data_vendor_technicals", "data_vendor_fundamentals", "data_vendor_news",
     ]

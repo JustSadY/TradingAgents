@@ -46,9 +46,6 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("app_settings", "analyst_concurrency_limit",  "INTEGER DEFAULT 1"),
     ("app_settings", "checkpoint_enabled",         "BOOLEAN DEFAULT FALSE"),
     ("app_settings", "max_recur_limit",            "INTEGER DEFAULT 1000"),
-    ("app_settings", "news_article_limit",         "INTEGER DEFAULT 20"),
-    ("app_settings", "global_news_article_limit",  "INTEGER DEFAULT 10"),
-    ("app_settings", "global_news_lookback_days",  "INTEGER DEFAULT 7"),
     ("app_settings", "benchmark_ticker",           "VARCHAR(20)"),
     ("app_settings", "azure_deployment",           "VARCHAR(100)"),
     ("app_settings", "data_vendor_core_stock",     "VARCHAR(50) DEFAULT 'yfinance'"),
@@ -71,7 +68,6 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("app_settings", "webhook_enabled",                 "BOOLEAN DEFAULT FALSE"),
     ("app_settings", "webhook_events",                  "TEXT DEFAULT '[\"analysis_complete\"]'"),
     ("app_settings", "active_preset_name",              "VARCHAR(100)"),
-    ("app_settings", "reddit_enabled",                  "BOOLEAN DEFAULT TRUE"),
     ("analysis_results", "llm_provider",                "VARCHAR(50)"),
     ("analysis_results", "llm_model",                   "VARCHAR(100)"),
     ("analysis_results", "preset_name",                  "VARCHAR(100)"),
@@ -79,12 +75,7 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("app_settings", "max_risk_rounds",            "INTEGER DEFAULT 1"),
     ("app_settings", "max_position_size_pct",      "FLOAT DEFAULT 10.0"),
     ("app_settings", "max_risk_per_trade_pct",     "FLOAT DEFAULT 2.0"),
-    ("app_settings", "synthesis_enabled",          "BOOLEAN DEFAULT TRUE"),
-    ("app_settings", "auditor_enabled",            "BOOLEAN DEFAULT TRUE"),
-    ("app_settings", "kelly_sizing_enabled",       "BOOLEAN DEFAULT TRUE"),
-    ("app_settings", "sec_insights_enabled",       "BOOLEAN DEFAULT TRUE"),
     ("app_settings", "strict_backtest_learning",   "BOOLEAN DEFAULT TRUE"),
-    ("app_settings", "broker_credentials_enc",     "TEXT"),
 ]
 
 

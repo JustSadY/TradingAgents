@@ -14,6 +14,7 @@ class SystemSettings(Base):
     checkpoint_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     include_historical_analyses: Mapped[bool] = mapped_column(Boolean, default=False)
     historical_analyses_limit: Mapped[int] = mapped_column(Integer, default=5)
+
     
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
