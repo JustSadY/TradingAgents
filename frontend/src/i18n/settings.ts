@@ -10,6 +10,7 @@ const translations = {
     'settings.section_active_analysts': 'Active Analysts & Models',
     'settings.section_data_sources': 'Data Sources Routing',
     'settings.section_advanced': 'Admin Engine Routing',
+    'settings.section_tools': 'Agent Tools',
     'settings.section_presets': 'Configuration Templates',
     'settings.section_notifications': 'Personal Webhooks',
 
@@ -125,6 +126,7 @@ const translations = {
     'settings.section_active_analysts': 'Aktif Analistler & Modeller',
     'settings.section_data_sources': 'Veri Kaynağı Yönlendirmeleri',
     'settings.section_advanced': 'Yönetici Motor Yönlendirmeleri',
+    'settings.section_tools': 'Ajan Araçları (Tools)',
     'settings.section_presets': 'Ayar Şablonları',
     'settings.section_notifications': 'Kişisel Webhooklar',
 
