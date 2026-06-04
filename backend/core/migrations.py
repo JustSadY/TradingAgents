@@ -71,6 +71,7 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("app_settings", "webhook_enabled",                 "BOOLEAN DEFAULT FALSE"),
     ("app_settings", "webhook_events",                  "TEXT DEFAULT '[\"analysis_complete\"]'"),
     ("app_settings", "active_preset_name",              "VARCHAR(100)"),
+    ("app_settings", "reddit_enabled",                  "BOOLEAN DEFAULT TRUE"),
     ("analysis_results", "llm_provider",                "VARCHAR(50)"),
     ("analysis_results", "llm_model",                   "VARCHAR(100)"),
     ("analysis_results", "preset_name",                  "VARCHAR(100)"),

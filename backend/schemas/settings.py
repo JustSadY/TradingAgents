@@ -47,6 +47,7 @@ class SettingsRead(BaseModel):
     webhook_enabled: bool = False
     webhook_events: str = '["analysis_complete"]'
     active_preset_name: str | None = None
+    reddit_enabled: bool = True
     updated_at: datetime | None = None
 
     class Config:
@@ -98,3 +99,4 @@ class SettingsUpdate(BaseModel):
     webhook_enabled: bool | None = None
     webhook_events: str | None = None
     active_preset_name: str | None = None
+    reddit_enabled: bool | None = None

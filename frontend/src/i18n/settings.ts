@@ -83,6 +83,8 @@ const translations = {
     'settings.row_max_recursion': 'Max Recursion Limit',
     'settings.row_benchmark_symbol': 'Benchmark Symbol',
     'settings.benchmark_placeholder': 'Leave empty = auto (SPY)',
+    'settings.row_reddit_enabled': 'Reddit Sentiment Data',
+    'settings.reddit_enabled_hint': 'Use Reddit posts for sentiment analysis',
     'settings.row_azure_deployment': 'Azure Deployment Name',
 
 
@@ -196,6 +198,8 @@ const translations = {
     'settings.row_max_recursion': 'Max Recursion Limiti',
     'settings.row_benchmark_symbol': 'Benchmark Sembolü',
     'settings.benchmark_placeholder': 'Boş bırakın = otomatik (SPY)',
+    'settings.row_reddit_enabled': 'Reddit Duygu Verisi',
+    'settings.reddit_enabled_hint': 'Duygu analizi için Reddit gönderilerini kullan',
     'settings.row_azure_deployment': 'Azure Deployment Adı',
 
 

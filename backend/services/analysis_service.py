@@ -69,6 +69,7 @@ def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
             "news_data": getattr(settings, "data_vendor_news", None) or settings.active_data_vendor,
         },
         "analyst_models": getattr(settings, "analyst_models", {}) or {},
+        "reddit_enabled": getattr(settings, "reddit_enabled", True),
         "is_admin": getattr(user, "is_admin", False) if user is not None else False,
         "has_user": user is not None,
     }

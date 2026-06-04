@@ -53,6 +53,7 @@ interface Settings {
   webhook_events: string
   watchlist: string[]
   selected_analysts: string[]
+  reddit_enabled: boolean
 }
 
 interface Preset { id: number; name: string; description: string | null; created_at: string }
@@ -366,6 +367,17 @@ export default function Settings({ userId }: { userId?: number } = {}) {
               </Row>
               <Row label={t('settings.row_benchmark_symbol')}>
                 <input className={Input} value={s.benchmark_ticker || ''} onChange={e => update('benchmark_ticker', e.target.value || null)} placeholder={t('settings.benchmark_placeholder')} />
+              </Row>
+              <Row label={t('settings.row_reddit_enabled') || 'Reddit Sentiment Data'}>
+                <label className="flex items-center gap-2.5 cursor-pointer text-slate-300 hover:text-white select-none">
+                  <input
+                    type="checkbox"
+                    checked={s.reddit_enabled}
+                    onChange={e => update('reddit_enabled', e.target.checked)}
+                    className="w-5 h-5 accent-violet-600 rounded cursor-pointer"
+                  />
+                  <span className="text-xs font-semibold">{t('settings.reddit_enabled_hint') || 'Use Reddit posts for sentiment analysis'}</span>
+                </label>
               </Row>
             </Section>
           )}

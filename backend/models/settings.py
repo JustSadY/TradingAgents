@@ -53,6 +53,7 @@ class AppSettings(Base):
     kelly_sizing_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     sec_insights_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     strict_backtest_learning: Mapped[bool] = mapped_column(Boolean, default=True)
+    reddit_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     _analyst_models: Mapped[str] = mapped_column("analyst_models", Text, default='{}')
     webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     webhook_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
