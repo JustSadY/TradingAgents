@@ -114,20 +114,6 @@ async def cancel_analysis(
     from backend.services.analysis_service import cancel_analysis as _cancel
     cancelled = await _cancel(task_id)
     return {"cancelled": cancelled, "task_id": task_id}
-@router.get("/{analysis_id}", response_model=AnalysisResultRead)
-async def get_analysis(
-    analysis_id: int,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    q = select(AnalysisResult).where(AnalysisResult.id == analysis_id)
-    if not current_user.is_admin:
-        q = q.where(AnalysisResult.user_id == current_user.id)
-    result = await db.execute(q)
-    row = result.scalar_one_or_none()
-    if row is None:
-        raise HTTPException(status_code=404, detail="Analysis not found")
-    return row
 _TOKEN_PER_ANALYST = 8_000
 _COST_PER_1K: dict[str, float] = {
     "gpt-4o-mini": 0.00015, "gpt-4o": 0.005, "gpt-4.1": 0.008,
@@ -368,6 +354,20 @@ async def get_portfolio_analysis(
         triggered_by=row.triggered_by,
         created_at=row.created_at,
     )
+@router.get("/{analysis_id}", response_model=AnalysisResultRead)
+async def get_analysis(
+    analysis_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    q = select(AnalysisResult).where(AnalysisResult.id == analysis_id)
+    if not current_user.is_admin:
+        q = q.where(AnalysisResult.user_id == current_user.id)
+    result = await db.execute(q)
+    row = result.scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    return row
 @router.get("/{analysis_id}/chat", response_model=list[ChatMessageRead])
 async def get_analysis_chat(
     analysis_id: int,

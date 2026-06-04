@@ -164,7 +164,7 @@ async def _maybe_execute_user(user_id: int, ticker: str, row, settings, trader, 
         _logger.warning("No price available for %s, skipping execution", ticker)
         return
     action = "BUY" if row.signal in ("Buy", "Overweight") else "SELL"
-    balance = portfolio.balance if portfolio.balance > 0 else 100_000.0
+    balance = portfolio.cash_available if portfolio.cash_available > 0 else 100_000.0
     qty = (settings.max_risk_per_trade_pct / 100 * balance) / price
     req = OrderRequest(
         ticker=ticker,
