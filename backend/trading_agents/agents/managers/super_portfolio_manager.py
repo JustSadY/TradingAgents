@@ -1,5 +1,5 @@
 from langchain_core.prompts import ChatPromptTemplate
-from tradingagents.agents.utils.agent_utils import get_language_instruction
+from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
 def create_super_portfolio_manager(llm):
     def super_portfolio_manager_node(state: dict):
         ticker_reports = state.get("ticker_reports", {})
@@ -8,7 +8,7 @@ def create_super_portfolio_manager(llm):
             context_str += f"\n--- Ticker: {ticker} ---\n"
             context_str += f"Trader Plan: {report.get('trader_plan', 'No plan')}\n"
             context_str += f"Portfolio Manager Decision: {report.get('portfolio_decision', 'No decision')}\n"
-        from tradingagents.default_config import DEFAULT_CONFIG
+        from backend.trading_agents.default_config import DEFAULT_CONFIG
         system_message = (
             DEFAULT_CONFIG.get(
                 "super_portfolio_manager_prompt",

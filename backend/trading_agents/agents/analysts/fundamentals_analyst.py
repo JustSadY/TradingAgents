@@ -1,5 +1,5 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from tradingagents.agents.utils.agent_utils import (
+from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_balance_sheet,
     get_cashflow,
@@ -10,8 +10,8 @@ from tradingagents.agents.utils.agent_utils import (
     get_insider_transactions_deep,
     get_language_instruction,
 )
-from tradingagents.agents.analyst_registry import register_analyst
-from tradingagents.dataflows.config import get_config
+from backend.trading_agents.agents.analyst_registry import register_analyst
+from backend.trading_agents.dataflows.config import get_config
 
 
 @register_analyst(

@@ -36,8 +36,8 @@ def register_analyst(
         return factory_fn
     return decorator
 def sync_registry_to_graph() -> None:
-    from tradingagents.graph.analyst_execution import ANALYST_NODE_SPECS, AnalystNodeSpec
-    from tradingagents.graph.conditional_logic import ConditionalLogic
+    from backend.trading_agents.graph.analyst_execution import ANALYST_NODE_SPECS, AnalystNodeSpec
+    from backend.trading_agents.graph.conditional_logic import ConditionalLogic
     for reg in _REGISTRY.values():
         if reg.key not in ANALYST_NODE_SPECS:
             ANALYST_NODE_SPECS[reg.key] = AnalystNodeSpec(

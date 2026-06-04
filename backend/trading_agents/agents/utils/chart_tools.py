@@ -83,7 +83,7 @@ def get_vision_chart_analysis(
         return "Error: Graph client not found in context. Vision analysis unavailable."
     
     try:
-        from tradingagents.dataflows.stockstats_utils import load_ohlcv
+        from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
         df = load_ohlcv(symbol, curr_date)
         if df.empty or len(df) < 10:
             return "Error: Not enough data to plot chart."
@@ -112,7 +112,7 @@ def get_vision_chart_analysis(
         
         # Prepare Vision LLM invocation
         llm = ctx["graph"].thinking_llm
-        from tradingagents.dataflows.config import get_config
+        from backend.trading_agents.dataflows.config import get_config
         lang = get_config().get("output_language", "English")
         
         prompt = (
@@ -155,7 +155,7 @@ def get_mtf_trend(
         return "Error: Active run context not found. Cannot register trend overlay."
         
     try:
-        from tradingagents.dataflows.stockstats_utils import load_ohlcv
+        from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
         # Load daily data to get index mapping
         df_daily = load_ohlcv(symbol, curr_date)
         if df_daily.empty:

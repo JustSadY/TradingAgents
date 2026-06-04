@@ -1,10 +1,10 @@
 from __future__ import annotations
-from tradingagents.agents.schemas import ResearchPlan, render_research_plan
-from tradingagents.agents.utils.agent_utils import (
+from backend.trading_agents.agents.schemas import ResearchPlan, render_research_plan
+from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
 )
-from tradingagents.agents.utils.structured import (
+from backend.trading_agents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
 )
@@ -16,7 +16,7 @@ def create_research_manager(llm):
         investment_debate_state = state["investment_debate_state"]
         audit_report = state.get("audit_report", "No audit report available.")
         
-        from tradingagents.dataflows.config import get_config
+        from backend.trading_agents.dataflows.config import get_config
         strict_learning = get_config().get("strict_backtest_learning", True)
         learning_instruction = ""
         if strict_learning:

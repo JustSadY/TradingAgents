@@ -1,4 +1,4 @@
-from tradingagents.agents.utils.agent_states import AgentState
+from backend.trading_agents.agents.utils.agent_states import AgentState
 class ConditionalLogic:
     def __init__(self, max_debate_rounds=1, max_risk_discuss_rounds=1):
         self.max_debate_rounds = max_debate_rounds

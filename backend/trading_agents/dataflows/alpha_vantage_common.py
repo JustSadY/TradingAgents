@@ -7,7 +7,7 @@ from datetime import datetime
 from io import StringIO
 _logger = logging.getLogger(__name__)
 API_BASE_URL = "https://www.alphavantage.co/query"
-from tradingagents.dataflows.config import get_config
+from backend.trading_agents.dataflows.config import get_config
 def get_api_key() -> str:
     api_key = get_config().get("alpha_vantage_api_key") or os.getenv("ALPHA_VANTAGE_API_KEY")
     if not api_key:

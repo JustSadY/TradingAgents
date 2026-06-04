@@ -1,16 +1,16 @@
 from __future__ import annotations
 import functools
 from langchain_core.messages import AIMessage
-from tradingagents.agents.schemas import TraderProposal, render_trader_proposal
-from tradingagents.agents.utils.agent_utils import (
+from backend.trading_agents.agents.schemas import TraderProposal, render_trader_proposal
+from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
 )
-from tradingagents.agents.utils.structured import (
+from backend.trading_agents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
 )
-from tradingagents.agents.utils.backtest_tools import run_strategy_backtest
+from backend.trading_agents.agents.utils.backtest_tools import run_strategy_backtest
 def create_trader(llm):
     structured_llm = bind_structured(llm, TraderProposal, "Trader")
     def trader_node(state, name):

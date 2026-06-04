@@ -1,13 +1,13 @@
 from datetime import datetime, timedelta
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from tradingagents.agents.utils.agent_utils import (
+from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
     get_news,
 )
-from tradingagents.dataflows.reddit import fetch_reddit_posts
-from tradingagents.dataflows.stocktwits import fetch_stocktwits_messages
-from tradingagents.agents.analyst_registry import register_analyst
+from backend.trading_agents.dataflows.reddit import fetch_reddit_posts
+from backend.trading_agents.dataflows.stocktwits import fetch_stocktwits_messages
+from backend.trading_agents.agents.analyst_registry import register_analyst
 def _seven_days_back(trade_date: str) -> str:
     return (datetime.strptime(trade_date, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
 @register_analyst(

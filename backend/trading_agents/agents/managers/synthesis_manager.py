@@ -1,4 +1,4 @@
-from tradingagents.agents.utils.agent_utils import (
+from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
     run_strategy_backtest,
@@ -6,7 +6,7 @@ from tradingagents.agents.utils.agent_utils import (
 
 def create_synthesis_manager(llm):
     def synthesis_manager_node(state) -> dict:
-        from tradingagents.dataflows.config import get_config
+        from backend.trading_agents.dataflows.config import get_config
         if not get_config().get("synthesis_enabled", True):
             return {"synthesis_report": "Synthesis disabled by user settings."}
 

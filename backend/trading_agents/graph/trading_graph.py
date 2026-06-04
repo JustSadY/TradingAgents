@@ -7,19 +7,19 @@ from typing import Dict, Any, Tuple, List, Optional
 import yfinance as yf
 logger = logging.getLogger(__name__)
 from langgraph.prebuilt import ToolNode
-from tradingagents.llm_clients import create_llm_client
-from tradingagents.agents import *
-from tradingagents.default_config import DEFAULT_CONFIG
-from tradingagents.agents.utils.memory import TradingMemoryLog
-from tradingagents.dataflows.utils import safe_ticker_component
-from tradingagents.agents.utils.agent_states import (
+from backend.trading_agents.llm_clients import create_llm_client
+from backend.trading_agents.agents import *
+from backend.trading_agents.default_config import DEFAULT_CONFIG
+from backend.trading_agents.agents.utils.memory import TradingMemoryLog
+from backend.trading_agents.dataflows.utils import safe_ticker_component
+from backend.trading_agents.agents.utils.agent_states import (
     AgentState,
     InvestDebateState,
     RiskDebateState,
 )
-from tradingagents.agents.utils.chart_tools import active_run_context
-from tradingagents.dataflows.config import set_config
-from tradingagents.agents.utils.agent_utils import (
+from backend.trading_agents.agents.utils.chart_tools import active_run_context
+from backend.trading_agents.dataflows.config import set_config
+from backend.trading_agents.agents.utils.agent_utils import (
     get_stock_data,
     get_indicators,
     get_fundamentals,
@@ -35,7 +35,7 @@ from tradingagents.agents.utils.agent_utils import (
     search_web,
     get_crypto_fear_and_greed_index,
 )
-from tradingagents.agents.utils.review_tools import get_past_performance_data
+from backend.trading_agents.agents.utils.review_tools import get_past_performance_data
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
 from .conditional_logic import ConditionalLogic
 from .setup import GraphSetup
@@ -155,7 +155,7 @@ class TradingAgentsGraph:
         elif self.config.get("api_key") and prov_lower == self.config.get("llm_provider", "").lower():
             kwargs["api_key"] = self.config["api_key"]
         if not kwargs.get("api_key") and self.config.get("has_user", False) and not self.config.get("is_admin", False):
-            from tradingagents.llm_clients.api_key_env import get_api_key_env
+            from backend.trading_agents.llm_clients.api_key_env import get_api_key_env
             api_key_env = get_api_key_env(prov_lower)
             if api_key_env:
                 raise ValueError(
@@ -164,7 +164,7 @@ class TradingAgentsGraph:
                 )
         return kwargs
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
-        from tradingagents.agents.analyst_registry import get_tools, list_analysts
+        from backend.trading_agents.agents.analyst_registry import get_tools, list_analysts
         return {
             key: ToolNode(get_tools(key))
             for key in list_analysts()

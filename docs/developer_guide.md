@@ -14,7 +14,7 @@ Create your new analyst module in `backend/trading_agents/agents/analysts/your_a
 ```python
 from typing import List
 from langchain_core.tools import tool
-from tradingagents.agents.analyst_registry import register_analyst
+from backend.trading_agents.agents.analyst_registry import register_analyst
 
 # 1. Define custom tools for your analyst
 @tool
@@ -46,7 +46,7 @@ To trigger the decorator on startup, import the module in [backend/trading_agent
 
 ```python
 # Around line 31
-import tradingagents.agents.analysts.custom_sentiment_analyst # noqa: F401
+import backend.trading_agents.agents.analysts.custom_sentiment_analyst # noqa: F401
 ```
 
 ### Step C: Update the Frontend Metadata

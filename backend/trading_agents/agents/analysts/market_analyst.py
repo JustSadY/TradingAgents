@@ -1,13 +1,13 @@
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from tradingagents.agents.utils.agent_utils import (
+from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_indicators,
     get_language_instruction,
     get_stock_data,
 )
-from tradingagents.dataflows.config import get_config
-from tradingagents.agents.analyst_registry import register_analyst
-from tradingagents.agents.utils.chart_tools import (
+from backend.trading_agents.dataflows.config import get_config
+from backend.trading_agents.agents.analyst_registry import register_analyst
+from backend.trading_agents.agents.utils.chart_tools import (
     add_chart_annotation,
     add_custom_indicator,
     get_vision_chart_analysis,

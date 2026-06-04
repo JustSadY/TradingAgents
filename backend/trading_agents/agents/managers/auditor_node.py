@@ -1,11 +1,11 @@
-from tradingagents.agents.utils.agent_utils import (
+from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
 )
 
 def create_auditor_node(llm):
     def auditor_node(state) -> dict:
-        from tradingagents.dataflows.config import get_config
+        from backend.trading_agents.dataflows.config import get_config
         if not get_config().get("auditor_enabled", True):
             return {"audit_report": "Audit disabled by user settings."}
 

@@ -1,5 +1,5 @@
 # Bootstrap must run before any import that transitively pulls in the
-# vendored `tradingagents` engine (env defaults + import finder + logging stub).
+# backend.trading_agents engine (sets engine env defaults + logging stub).
 import backend.bootstrap  # noqa: F401  (import side-effect: see backend/bootstrap.py)
 import logging
 from contextlib import asynccontextmanager

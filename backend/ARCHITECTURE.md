@@ -28,7 +28,7 @@ api (routers)  →  services (business logic)  →  repositories (DB access)  �
 - `services/` hold business logic/orchestration/IO/computation. They may import `repositories`, `models`, `schemas`, `core`, `trading_agents`. **Services must never import from `backend.api`** (that inversion was removed — do not reintroduce it).
 - `repositories/` hold reusable DB queries only.
 - `models/` (SQLAlchemy) and `schemas/` (Pydantic) hold no logic.
-- `trading_agents/` is a self-contained engine imported as the top-level name `tradingagents` (see §6). Treat it as a subsystem with its own conventions.
+- `trading_agents/` is a **normal sub-package of `backend`** — imported as `backend.trading_agents.*` like everything else (see §6). It's still a cohesive subsystem with its own conventions, but it is part of the backend, not an aliased external package.
 
 ---
 
@@ -37,7 +37,7 @@ api (routers)  →  services (business logic)  →  repositories (DB access)  �
 | Path | Responsibility |
 | --- | --- |
 | `main.py` | App factory: lifespan (create tables, seed admin, cron, log handler), CORS, router includes, `/ws/analysis/{task_id}`, `/health`, SPA static mount. |
-| `bootstrap.py` | **Import once, early.** Idempotent runtime setup: `TRADINGAGENTS_*` temp-dir env, the `tradingagents` meta-path import finder, and a no-op `logging_config` stub. Any module that imports `tradingagents.*` should `import backend.bootstrap` first. |
+| `bootstrap.py` | **Import once, early.** Idempotent runtime setup: `TRADINGAGENTS_*` temp-dir env and a no-op `logging_config` stub. Any module that imports `backend.trading_agents.*` should `import backend.bootstrap` first (so the engine's env + logging are set before its modules execute). |
 | `api/*.py` | One thin router per domain. `deps.py` = DI dependencies (`get_current_user`, `require_admin`, `require_page`). |
 | `services/*.py` | Business logic. See §3 for the map. |
 | `repositories/common.py` | `scope_to_user(query, model, user)` — the per-user ownership filter (anti-IDOR). |
@@ -129,9 +129,11 @@ has run; import engine modules lazily inside functions (they pull heavy deps).
 
 ## 6. The `trading_agents` engine (subsystem)
 
-- Imported under the historical top-level name **`tradingagents`** via the
-  meta-path finder installed in `bootstrap.py` (the package lives at
-  `backend/trading_agents/`).
+- Imported as **`backend.trading_agents.*`** — an ordinary backend sub-package
+  (the old top-level `tradingagents` alias and its meta-path finder were
+  removed; `import tradingagents` no longer resolves). Internal modules use
+  absolute `backend.trading_agents...` imports; if you add a module, follow the
+  same prefix.
 - Structure: `graph/` (LangGraph wiring — `trading_graph.py`, `setup.py`,
   `conditional_logic.py`, checkpointer), `agents/` (analysts/managers/researchers/
   risk_mgmt + `analyst_registry.py` + `utils/`), `dataflows/` (vendor-routed data

@@ -6,7 +6,7 @@ try:
 except ImportError:
     pass
 try:
-    from tradingagents.agents.utils.logging_config import setup_unified_logging
+    from backend.trading_agents.agents.utils.logging_config import setup_unified_logging
     setup_unified_logging()
 except Exception as exc:
     import sys

@@ -1,12 +1,12 @@
 from __future__ import annotations
 import json
-from tradingagents.agents.schemas import PortfolioDecision, render_pm_decision, TraderProposal
-from tradingagents.agents.utils.risk_math import calculate_kelly_size, get_risk_reward_from_plan
-from tradingagents.agents.utils.agent_utils import (
+from backend.trading_agents.agents.schemas import PortfolioDecision, render_pm_decision, TraderProposal
+from backend.trading_agents.agents.utils.risk_math import calculate_kelly_size, get_risk_reward_from_plan
+from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
 )
-from tradingagents.agents.utils.structured import (
+from backend.trading_agents.agents.utils.structured import (
     bind_structured,
     invoke_structured_or_freetext,
 )
@@ -20,7 +20,7 @@ def create_portfolio_manager(llm):
         trader_plan = state["trader_investment_plan"]
         trader_proposal_json = state.get("trader_proposal_json")
 
-        from tradingagents.dataflows.config import get_config
+        from backend.trading_agents.dataflows.config import get_config
         kelly_enabled = get_config().get("kelly_sizing_enabled", True)
         
         kelly_recommendation = ""
@@ -54,7 +54,7 @@ def create_portfolio_manager(llm):
         else:
             lessons_line = ""
             conviction_instructions = ""
-        from tradingagents.dataflows.config import get_config
+        from backend.trading_agents.dataflows.config import get_config
         persona = get_config().get("investor_persona", "conservative")
         persona_instructions = ""
         if persona == "conservative":

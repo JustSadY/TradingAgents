@@ -1,7 +1,7 @@
 from __future__ import annotations
 def _node_specs() -> dict:
     try:
-        from tradingagents.graph.analyst_execution import ANALYST_NODE_SPECS
+        from backend.trading_agents.graph.analyst_execution import ANALYST_NODE_SPECS
         return ANALYST_NODE_SPECS
     except Exception:
         return {}

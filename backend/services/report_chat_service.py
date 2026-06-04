@@ -95,7 +95,7 @@ async def answer_report_question(
     db: AsyncSession, analysis_id: int, message: str, user,
 ) -> AnalysisChat:
     from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
-    from tradingagents.llm_clients.factory import create_llm_client
+    from backend.trading_agents.llm_clients.factory import create_llm_client
 
     analysis = await _get_owned_analysis(db, analysis_id, user)
     settings = await get_or_create_settings(db, user)

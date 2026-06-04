@@ -6,7 +6,7 @@ from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 from langgraph.checkpoint.sqlite import SqliteSaver
-from tradingagents.dataflows.utils import safe_ticker_component
+from backend.trading_agents.dataflows.utils import safe_ticker_component
 
 _logger = logging.getLogger(__name__)
 def _db_path(data_dir: str | Path, ticker: str) -> Path:
