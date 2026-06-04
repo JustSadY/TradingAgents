@@ -189,7 +189,12 @@ function RunTab() {
           preRefreshLogRef.current = []
         }
       }
-      setLog(l => [...l, line])
+      setLog(l => {
+        if (l.length > 0 && l[l.length - 1] === line) {
+          return l
+        }
+        return [...l, line]
+      })
     }
 
     ws.onmessage = (e) => {

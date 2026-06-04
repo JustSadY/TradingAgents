@@ -246,14 +246,17 @@ async def run_analysis(
             final: dict = {}
             prev_inv_count = 0
             prev_risk_count = 0
+            last_node = None
             for mode, chunk in ta.graph.stream(
                 state, stream_mode=["updates", "values"], config=cfg, **kwargs
             ):
                 if mode == "updates":
                     for node_name in (chunk or {}):
-                        prog = node_progress(node_name)
-                        if prog:
-                            _emit(prog)
+                        if node_name != last_node:
+                            prog = node_progress(node_name)
+                            if prog:
+                                _emit(prog)
+                                last_node = node_name
                 else:
                     inv_state = chunk.get("investment_debate_state") or {}
                     if inv_state and inv_state.get("count", 0) > prev_inv_count:
