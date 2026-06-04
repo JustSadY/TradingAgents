@@ -51,16 +51,16 @@ function StatCard({
   positive?: boolean
 }) {
   const valueColor =
-    positive === undefined ? 'text-white' : positive ? 'text-emerald-400' : 'text-red-400'
+    positive === undefined ? 'text-white' : positive ? 'text-emerald-400' : 'text-rose-400'
   const accent =
-    positive === undefined ? 'from-violet-500/5' : positive ? 'from-emerald-500/10' : 'from-red-500/10'
+    positive === undefined ? 'from-violet-500/10' : positive ? 'from-emerald-500/10' : 'from-rose-500/10'
   return (
-    <div className={`bg-gradient-to-br ${accent} to-gray-900 border border-gray-800 rounded-2xl p-4 flex items-start gap-3`}>
-      <div className="p-2 rounded-xl bg-gray-800 text-violet-400 shrink-0">{icon}</div>
-      <div>
-        <p className="text-gray-500 text-xs font-medium uppercase tracking-wider mb-1">{label}</p>
-        <p className={`text-xl font-bold leading-none ${valueColor}`}>{value}</p>
-        {sub && <p className={`text-xs mt-1 ${valueColor} opacity-70`}>{sub}</p>}
+    <div className={`bg-gradient-to-br ${accent} to-slate-900/40 backdrop-blur-md border border-white/[0.04] rounded-2xl p-4 flex items-start gap-3 shadow`}>
+      <div className="p-2 rounded-xl bg-slate-950/60 text-violet-400 border border-white/[0.04] shrink-0">{icon}</div>
+      <div className="min-w-0">
+        <p className="text-slate-500 text-[10px] md:text-xs font-semibold uppercase tracking-wider mb-1.5 leading-none truncate">{label}</p>
+        <p className={`text-base md:text-lg font-display font-bold leading-none ${valueColor} truncate`}>{value}</p>
+        {sub && <p className={`text-[10px] mt-1.5 font-mono font-medium ${valueColor} opacity-85 truncate`}>{sub}</p>}
       </div>
     </div>
   )
@@ -73,13 +73,11 @@ export default function MockTrading() {
   const [refreshing, setRefreshing] = useState(false)
   const [fetchError, setFetchError] = useState(false)
 
-
   const [ticker, setTicker] = useState('')
   const [action, setAction] = useState<'BUY' | 'SELL'>('BUY')
   const [quantity, setQuantity] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [orderResult, setOrderResult] = useState<{ ok: boolean; msg: string } | null>(null)
-
 
   const [resetting, setResetting] = useState(false)
 
@@ -87,7 +85,6 @@ export default function MockTrading() {
     if (!silent) setLoading(true)
     else setRefreshing(true)
     try {
-
       const { data } = await axios.get<PortfolioData>('/api/trading/performance')
       setPortfolio(data)
       setFetchError(false)
@@ -114,7 +111,7 @@ export default function MockTrading() {
       })
       setOrderResult({
         ok: true,
-        msg: `✓ ${data.action} ${data.quantity} ${data.ticker} @ $${data.price.toFixed(2)} — ${t('mocktrading.order_total_label')}: $${data.total_value.toFixed(2)}`,
+        msg: `✓ ${data.action} ${data.quantity} ${data.ticker} @ $${data.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} — Total: $${data.total_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       })
       setTicker('')
       setQuantity('')
@@ -136,7 +133,6 @@ export default function MockTrading() {
       await axios.post('/api/trading/reset', { initial_capital: 100000 })
       await fetchPortfolio()
     } catch {
-
     } finally {
       setResetting(false)
     }
@@ -144,22 +140,22 @@ export default function MockTrading() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64 text-slate-400">
-        <Loader2 className="animate-spin mr-2" size={20} /> {t('mocktrading.loading')}
+      <div className="flex items-center justify-center h-64 text-slate-500 font-semibold text-xs gap-2">
+        <Loader2 className="animate-spin text-violet-400" size={16} /> {t('mocktrading.loading')}
       </div>
     )
   }
 
   if (fetchError || !portfolio) {
     return (
-      <div className="p-6 space-y-4">
+      <div className="p-4 md:p-6 space-y-4 max-w-7xl mx-auto">
         <h2 className="text-xl font-bold text-white tracking-tight">{t('mocktrading.error_title')}</h2>
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 flex flex-col items-center gap-3 text-center">
-          <AlertCircle size={32} className="text-red-400" />
-          <p className="text-slate-300">{t('mocktrading.error_msg')}</p>
+        <div className="glass-panel rounded-2xl p-8 flex flex-col items-center gap-4 text-center">
+          <AlertCircle size={32} className="text-rose-400" />
+          <p className="text-slate-300 text-sm leading-relaxed">{t('mocktrading.error_msg')}</p>
           <button
             onClick={() => fetchPortfolio()}
-            className="px-4 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-lg text-sm transition"
+            className="px-5 py-2.5 bg-violet-600 hover:bg-violet-500 text-white rounded-xl text-xs font-semibold shadow transition-all cursor-pointer"
           >
             {t('mocktrading.retry')}
           </button>
@@ -174,51 +170,54 @@ export default function MockTrading() {
   const locale = language === 'tr' ? 'tr-TR' : 'en-US'
 
   return (
-    <div className="p-6 space-y-6">
-      {}
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-xl font-bold text-white tracking-tight">{t('mocktrading.title')}</h2>
+        <div>
+          <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('mocktrading.title')}</h2>
+          <p className="text-xs text-slate-500 mt-1">Execute manual sandbox orders and track real-time position ledger stats</p>
+        </div>
         <div className="flex gap-2">
           <button
             onClick={() => fetchPortfolio(true)}
             disabled={refreshing}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-gray-800 border border-gray-700 text-gray-300 hover:bg-gray-700 text-sm transition disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-white/[0.04] text-slate-400 hover:text-white text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
           >
-            <RefreshCw size={14} className={refreshing ? 'animate-spin' : ''} />
+            <RefreshCw size={12} className={refreshing ? 'animate-spin' : ''} />
             {t('mocktrading.refresh')}
           </button>
           <button
             onClick={handleReset}
             disabled={resetting}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-red-900/40 text-red-400 hover:bg-red-900/60 text-sm transition disabled:opacity-50"
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-rose-500/10 border border-rose-500/20 text-rose-400 hover:bg-rose-500 hover:text-white text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
           >
-            <RotateCcw size={14} className={resetting ? 'animate-spin' : ''} />
+            <RotateCcw size={12} className={resetting ? 'animate-spin' : ''} />
             {t('mocktrading.reset')}
           </button>
         </div>
       </div>
 
-      {}
+      {/* KPI Stats */}
       <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <StatCard
-          icon={<DollarSign size={20} />}
+          icon={<DollarSign size={16} />}
           label={t('mocktrading.stat_total_value')}
           value={`$${p.total_value.toLocaleString(locale, { minimumFractionDigits: 2 })}`}
         />
         <StatCard
-          icon={pnlPositive ? <TrendingUp size={20} /> : <TrendingDown size={20} />}
+          icon={pnlPositive ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
           label={t('mocktrading.stat_total_pnl')}
-          value={`${pnlPositive ? '+' : ''}$${p.total_pnl.toFixed(2)}`}
+          value={`${pnlPositive ? '+' : ''}$${p.total_pnl.toLocaleString(locale, { minimumFractionDigits: 2 })}`}
           sub={`${pnlPositive ? '+' : ''}${p.total_pnl_pct.toFixed(2)}%`}
           positive={pnlPositive}
         />
         <StatCard
-          icon={<DollarSign size={20} />}
+          icon={<DollarSign size={16} />}
           label={t('mocktrading.stat_cash')}
           value={`$${p.cash_available.toLocaleString(locale, { minimumFractionDigits: 2 })}`}
         />
         <StatCard
-          icon={<BarChart2 size={20} />}
+          icon={<BarChart2 size={16} />}
           label={`Alpha vs ${p.benchmark_ticker || 'SPY'}`}
           value={
             p.alpha_pct !== null && p.alpha_pct !== undefined
@@ -234,120 +233,122 @@ export default function MockTrading() {
         />
       </div>
 
+      {/* Action Row */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-          <h3 className="text-lg font-semibold text-white mb-4 flex items-center gap-2">
-            <ShoppingCart size={18} className="text-indigo-400" /> {t('mocktrading.order_title')}
-          </h3>
-          <form onSubmit={handleOrder} className="space-y-3">
-            {}
-            <div className="flex rounded-xl overflow-hidden border border-gray-700">
-              <button
-                type="button"
-                onClick={() => setAction('BUY')}
-                className={`flex-1 py-2 text-sm font-medium transition ${
-                  action === 'BUY'
-                    ? 'bg-emerald-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:text-white'
-                }`}
-              >
-                {t('mocktrading.order_buy')}
-              </button>
-              <button
-                type="button"
-                onClick={() => setAction('SELL')}
-                className={`flex-1 py-2 text-sm font-medium transition ${
-                  action === 'SELL'
-                    ? 'bg-red-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:text-white'
-                }`}
-              >
-                {t('mocktrading.order_sell')}
-              </button>
-            </div>
-
-            <input
-              type="text"
-              placeholder={t('mocktrading.order_symbol_placeholder')}
-              value={ticker}
-              onChange={e => setTicker(e.target.value.toUpperCase())}
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition"
-              required
-            />
-            <input
-              type="number"
-              placeholder={t('mocktrading.order_quantity_placeholder')}
-              value={quantity}
-              onChange={e => setQuantity(e.target.value)}
-              min="0.0001"
-              step="any"
-              className="w-full bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 text-white text-sm placeholder-gray-600 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition"
-              required
-            />
-
-            <button
-              type="submit"
-              disabled={submitting}
-              className={`w-full py-2.5 rounded-xl text-white text-sm font-semibold transition disabled:opacity-50 flex items-center justify-center gap-2 shadow-lg ${
-                action === 'BUY' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20' : 'bg-red-600 hover:bg-red-500 shadow-red-500/20'
-              }`}
-            >
-              {submitting ? (
-                <><Loader2 size={14} className="animate-spin" /> {t('mocktrading.order_processing')}</>
-              ) : (
-                action === 'BUY' ? t('mocktrading.order_submit_buy') : t('mocktrading.order_submit_sell')
-              )}
-            </button>
-
-            {orderResult && (
-              <div
-                className={`flex items-start gap-2 rounded-lg px-3 py-2 text-xs ${
-                  orderResult.ok
-                    ? 'bg-emerald-900/40 text-emerald-400'
-                    : 'bg-red-900/40 text-red-400'
-                }`}
-              >
-                {orderResult.ok
-                  ? <CheckCircle size={14} className="mt-0.5 shrink-0" />
-                  : <AlertCircle size={14} className="mt-0.5 shrink-0" />}
-                {orderResult.msg}
+        {/* Placed Order Card */}
+        <div className="glass-panel rounded-2xl p-5 flex flex-col justify-between">
+          <div>
+            <h3 className="text-sm font-display font-semibold text-slate-200 mb-4 flex items-center gap-2">
+              <ShoppingCart size={15} className="text-violet-400" /> {t('mocktrading.order_title')}
+            </h3>
+            <form onSubmit={handleOrder} className="space-y-4">
+              <div className="flex rounded-xl overflow-hidden border border-white/[0.08] p-0.5 bg-slate-950/40">
+                <button
+                  type="button"
+                  onClick={() => setAction('BUY')}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    action === 'BUY'
+                      ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  {t('mocktrading.order_buy')}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAction('SELL')}
+                  className={`flex-1 py-1.5 text-xs font-bold rounded-lg transition-all cursor-pointer ${
+                    action === 'SELL'
+                      ? 'bg-rose-500/10 text-rose-400 border border-rose-500/20'
+                      : 'text-slate-500 hover:text-slate-300'
+                  }`}
+                >
+                  {t('mocktrading.order_sell')}
+                </button>
               </div>
-            )}
-          </form>
+
+              <input
+                type="text"
+                placeholder={t('mocktrading.order_symbol_placeholder')}
+                value={ticker}
+                onChange={e => setTicker(e.target.value.toUpperCase())}
+                className="w-full glass-input rounded-xl px-3 py-2 font-semibold uppercase text-xs outline-none"
+                required
+              />
+              <input
+                type="number"
+                placeholder={t('mocktrading.order_quantity_placeholder')}
+                value={quantity}
+                onChange={e => setQuantity(e.target.value)}
+                min="0.0001"
+                step="any"
+                className="w-full glass-input rounded-xl px-3 py-2 font-mono text-xs outline-none"
+                required
+              />
+
+              <button
+                type="submit"
+                disabled={submitting}
+                className={`w-full py-2 rounded-xl text-white text-xs font-bold transition disabled:opacity-50 flex items-center justify-center gap-2 shadow cursor-pointer ${
+                  action === 'BUY' ? 'bg-emerald-600 hover:bg-emerald-500 shadow-emerald-500/20' : 'bg-rose-600 hover:bg-rose-500 shadow-rose-500/20'
+                }`}
+              >
+                {submitting ? (
+                  <><Loader2 size={13} className="animate-spin" /> {t('mocktrading.order_processing')}</>
+                ) : (
+                  action === 'BUY' ? t('mocktrading.order_submit_buy') : t('mocktrading.order_submit_sell')
+                )}
+              </button>
+            </form>
+          </div>
+
+          {orderResult && (
+            <div
+              className={`flex items-start gap-2 rounded-xl px-3.5 py-3 text-[11px] font-medium mt-4 border ${
+                orderResult.ok
+                  ? 'bg-emerald-950/20 border-emerald-500/20 text-emerald-400'
+                  : 'bg-rose-950/20 border-rose-500/20 text-rose-400'
+              } animate-in fade-in duration-200`}
+            >
+              {orderResult.ok
+                ? <CheckCircle size={14} className="mt-0.5 shrink-0" />
+                : <AlertCircle size={14} className="mt-0.5 shrink-0" />}
+              <span className="leading-relaxed">{orderResult.msg}</span>
+            </div>
+          )}
         </div>
 
-        {}
-        <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl p-5">
-          <h3 className="text-lg font-semibold text-white mb-4">{t('mocktrading.positions_title')}</h3>
+        {/* Holdings List Card */}
+        <div className="lg:col-span-2 glass-panel rounded-2xl p-5">
+          <h3 className="text-sm font-display font-semibold text-slate-200 mb-4">{t('mocktrading.positions_title')}</h3>
           {p.holdings.length === 0 ? (
-            <p className="text-slate-500 text-sm">{t('mocktrading.positions_empty')}</p>
+            <p className="text-slate-500 text-xs py-8 text-center">{t('mocktrading.positions_empty')}</p>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="w-full text-xs text-slate-300 min-w-[500px]">
                 <thead>
-                  <tr className="text-slate-400 text-left text-xs">
-                    <th className="pb-2">{t('mocktrading.col_symbol')}</th>
-                    <th className="pb-2 text-right">{t('mocktrading.col_quantity')}</th>
-                    <th className="pb-2 text-right">{t('mocktrading.col_avg_cost')}</th>
-                    <th className="pb-2 text-right">{t('mocktrading.col_current_price')}</th>
-                    <th className="pb-2 text-right">{t('mocktrading.col_market_value')}</th>
-                    <th className="pb-2 text-right">{t('mocktrading.col_pnl')}</th>
-                    <th className="pb-2 text-right">{t('mocktrading.col_pnl_pct')}</th>
+                  <tr className="text-slate-500 text-[10px] uppercase tracking-wider border-b border-white/[0.04] bg-white/[0.01]">
+                    <th className="px-3 py-2 text-left font-bold">{t('mocktrading.col_symbol')}</th>
+                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_quantity')}</th>
+                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_avg_cost')}</th>
+                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_current_price')}</th>
+                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_market_value')}</th>
+                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_pnl')}</th>
+                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_pnl_pct')}</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-white/[0.02]">
                   {p.holdings.map(h => (
-                    <tr key={h.ticker} className="border-t border-gray-800">
-                      <td className="py-2 font-mono font-bold text-white">{h.ticker}</td>
-                      <td className="py-2 text-right text-slate-300">{h.quantity.toFixed(4)}</td>
-                      <td className="py-2 text-right text-slate-300">${h.avg_buy_price.toFixed(2)}</td>
-                      <td className="py-2 text-right text-slate-300">${h.current_price.toFixed(2)}</td>
-                      <td className="py-2 text-right text-slate-300">${h.market_value.toFixed(2)}</td>
-                      <td className={`py-2 text-right font-semibold ${h.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {h.unrealized_pnl >= 0 ? '+' : ''}${h.unrealized_pnl.toFixed(2)}
+                    <tr key={h.ticker} className="hover:bg-white/[0.01] transition-colors">
+                      <td className="px-3 py-3 font-mono font-bold text-white text-sm">{h.ticker}</td>
+                      <td className="px-3 py-3 text-right font-mono text-slate-400">{h.quantity.toFixed(4)}</td>
+                      <td className="px-3 py-3 text-right font-mono text-slate-400">${h.avg_buy_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-3 text-right font-mono text-slate-400">${h.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-3 text-right font-mono text-slate-400">${h.market_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className={`px-3 py-3 text-right font-mono font-semibold ${h.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {h.unrealized_pnl >= 0 ? '+' : ''}${h.unrealized_pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                      <td className={`py-2 text-right font-semibold ${h.pnl_pct >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
+                      <td className={`px-3 py-3 text-right font-mono font-semibold ${h.pnl_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {h.pnl_pct >= 0 ? '+' : ''}{h.pnl_pct.toFixed(2)}%
                       </td>
                     </tr>
@@ -361,4 +362,3 @@ export default function MockTrading() {
     </div>
   )
 }
-

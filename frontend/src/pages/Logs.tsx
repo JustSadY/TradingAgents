@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
-import { RefreshCw } from 'lucide-react'
+import { RefreshCw, Terminal, Clock, ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 
 interface Log {
@@ -12,11 +12,11 @@ interface Log {
   created_at: string
 }
 
-const LEVEL_COLORS: Record<string, string> = {
-  INFO: 'text-sky-400 bg-sky-950/40 border border-sky-900/30',
-  WARNING: 'text-yellow-400 bg-yellow-950/40 border border-yellow-900/30',
-  ERROR: 'text-red-400 bg-red-950/40 border border-red-900/30',
-  CRITICAL: 'text-red-300 bg-red-950/50 border border-red-800/40',
+const LEVEL_BADGES: Record<string, string> = {
+  INFO: 'text-sky-400 bg-sky-500/10 border border-sky-500/20',
+  WARNING: 'text-amber-400 bg-amber-500/10 border border-amber-500/20',
+  ERROR: 'text-rose-400 bg-rose-500/10 border border-rose-500/20',
+  CRITICAL: 'text-red-300 bg-red-500/15 border border-red-500/30 animate-pulse',
 }
 
 export default function Logs() {
@@ -42,13 +42,20 @@ export default function Logs() {
   useEffect(() => { fetch() }, [level])
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-6">
-      {}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 pb-2 border-b border-gray-800">
-        <h2 className="text-xl md:text-2xl font-bold text-white tracking-tight">{t('logs.title')}</h2>
-        <div className="flex gap-3 items-center w-full sm:w-auto justify-between sm:justify-end">
+    <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
+      {/* Header Panel */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight flex items-center gap-2">
+            <Terminal className="text-violet-400" size={20} />
+            {t('logs.title')}
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">Audit active process outputs, exception callstacks, and database migrations events</p>
+        </div>
+        
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
           <select
-            className="bg-gray-900 text-gray-200 border border-gray-800 rounded-xl px-3 py-2 text-sm outline-none focus:border-violet-500 focus:ring-1 focus:ring-violet-500 transition-all cursor-pointer w-full sm:w-40"
+            className="glass-input rounded-xl px-3 py-2 text-xs outline-none cursor-pointer w-full sm:w-40"
             value={level}
             onChange={e => setLevel(e.target.value)}
           >
@@ -60,8 +67,9 @@ export default function Logs() {
           </select>
           <button
             onClick={fetch}
-            className="flex items-center justify-center p-2 rounded-xl bg-gray-900 hover:bg-gray-800 border border-gray-800 text-gray-400 hover:text-white transition-colors cursor-pointer shrink-0"
-            title="Yenile"
+            disabled={loading}
+            className="flex items-center justify-center p-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white transition-all cursor-pointer shrink-0"
+            title="Refresh"
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -70,58 +78,78 @@ export default function Logs() {
 
       {loading && logs.length === 0 ? (
         <div className="flex items-center justify-center py-12">
-          <p className="text-gray-500 text-sm">{t('common.loading')}</p>
+          <p className="text-slate-400 text-sm">{t('common.loading') || 'Loading Logs...'}</p>
+        </div>
+      ) : logs.length === 0 ? (
+        <div className="glass-panel rounded-2xl p-12 text-center">
+          <Terminal size={32} className="mx-auto text-slate-600 mb-3 opacity-30" />
+          <p className="text-slate-400 text-xs font-semibold">{t('logs.no_logs')}</p>
+          <p className="text-[10px] text-slate-500 mt-1">No system logs recorded for the selected severity level</p>
         </div>
       ) : (
-        logs.length === 0 ? (
-          <div className="flex items-center justify-center py-12">
-            <p className="text-gray-500 text-sm">{t('logs.no_logs')}</p>
-          </div>
-        ) : (
-          <div className="space-y-2">
-            {logs.map(l => (
+        <div className="space-y-3">
+          {logs.map(l => {
+            const isExpanded = expanded === l.id
+            return (
               <div
                 key={l.id}
-                className="bg-gray-900/40 hover:bg-gray-900/80 border border-gray-800/80 hover:border-gray-700/80 rounded-xl p-3 md:px-4 md:py-3 transition-all cursor-pointer group"
-                onClick={() => setExpanded(expanded === l.id ? null : l.id)}
+                className={`glass-panel rounded-2xl border transition-all duration-200 cursor-pointer overflow-hidden ${
+                  isExpanded ? 'border-violet-500/20 bg-gray-950/60' : 'border-white/[0.04] hover:border-white/[0.08] hover:bg-white/[0.01]'
+                }`}
+                onClick={() => setExpanded(isExpanded ? null : l.id)}
               >
-                <div className="flex flex-col gap-2 md:flex-row md:items-center md:gap-3 text-sm">
-                  {}
-                  <div className="flex items-center justify-between md:justify-start gap-2 shrink-0">
+                <div className="flex flex-col gap-3 md:flex-row md:items-center p-4">
+                  {/* Status Badges & Time */}
+                  <div className="flex items-center justify-between md:justify-start gap-3 shrink-0">
                     <div className="flex items-center gap-2">
-                      <span className={`text-[10px] md:text-xs font-bold px-2 py-0.5 rounded tracking-wide uppercase ${LEVEL_COLORS[l.level] || 'text-slate-400'}`}>
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${LEVEL_BADGES[l.level] || 'text-slate-400'}`}>
                         {l.level}
                       </span>
-                      <span className="text-indigo-400 text-xs font-mono font-semibold bg-indigo-950/40 px-1.5 py-0.5 rounded border border-indigo-900/30">
+                      <span className="text-violet-400 text-[10px] font-mono font-semibold bg-violet-500/10 px-2 py-0.5 rounded border border-violet-500/15">
                         {l.source}
                       </span>
                     </div>
-                    <span className="text-gray-500 text-[11px] md:hidden font-mono">
-                      {new Date(l.created_at).toLocaleString('tr-TR')}
+                    
+                    <span className="text-slate-500 text-[10px] font-mono md:hidden flex items-center gap-1">
+                      <Clock size={10} />
+                      {new Date(l.created_at).toLocaleTimeString()}
                     </span>
                   </div>
 
-                  {}
-                  <span className="text-gray-400 text-xs hidden md:inline shrink-0 font-mono">
-                    {new Date(l.created_at).toLocaleString('tr-TR')}
+                  {/* Desktop Time */}
+                  <span className="text-slate-500 text-[10px] font-mono hidden md:flex items-center gap-1 shrink-0">
+                    <Clock size={10} className="text-slate-600" />
+                    {new Date(l.created_at).toLocaleString()}
                   </span>
 
-                  {}
-                  <span className="text-gray-300 flex-1 text-sm leading-relaxed break-words font-sans group-hover:text-white transition-colors">
+                  {/* Message */}
+                  <span className="text-slate-300 flex-1 text-xs md:text-sm font-sans leading-relaxed break-words font-medium pr-4">
                     {l.message}
                   </span>
+
+                  {/* Expand Indicator */}
+                  {l.details && (
+                    <div className="text-slate-500 group-hover:text-white shrink-0 self-end md:self-auto transition-colors ml-auto md:ml-0">
+                      {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                    </div>
+                  )}
                 </div>
-                {expanded === l.id && l.details && (
-                  <pre className="mt-3 text-xs text-gray-300 bg-gray-950/80 border border-gray-800 rounded-lg p-3 whitespace-pre-wrap overflow-x-auto font-mono leading-relaxed shadow-inner">
-                    {l.details}
-                  </pre>
+
+                {/* Details Callstack */}
+                {isExpanded && l.details && (
+                  <div className="border-t border-white/[0.04] bg-black/60 px-5 py-4">
+                    <pre className="text-xs text-slate-300 font-mono leading-relaxed whitespace-pre-wrap overflow-x-auto max-h-96 select-text">
+                      {l.details}
+                    </pre>
+                  </div>
                 )}
               </div>
-            ))}
-          </div>
-        )
+            )
+          })}
+        </div>
       )}
     </div>
   )
 }
+
 

@@ -28,16 +28,24 @@ export default function Login() {
   }
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-slate-900">
-      <div className="w-full max-w-sm bg-slate-800 rounded-2xl shadow-2xl p-8">
-        <div className="flex flex-col items-center mb-6">
-          <TrendingUp className="text-indigo-400 mb-2" size={40} />
-          <h1 className="text-2xl font-bold text-white">TradingAgents</h1>
-          <p className="text-slate-400 text-sm mt-1">{t('login.subtitle')}</p>
+    <div className="min-h-screen flex items-center justify-center bg-[#020617] relative overflow-hidden p-4">
+      {/* Background glowing decorations */}
+      <div className="absolute top-1/4 left-1/4 w-80 h-80 bg-violet-600/10 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-indigo-600/10 rounded-full blur-[100px] pointer-events-none" />
+
+      {/* Login Card */}
+      <div className="w-full max-w-sm glass-panel rounded-3xl p-8 relative z-10">
+        <div className="flex flex-col items-center mb-7">
+          <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-lg shadow-violet-500/25 mb-3.5">
+            <TrendingUp className="text-white" size={20} strokeWidth={2.5} />
+          </div>
+          <h1 className="text-xl font-display font-bold text-white tracking-tight">TradingAgents</h1>
+          <p className="text-slate-400 text-xs mt-1.5 font-medium">{t('login.subtitle')}</p>
         </div>
+
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
           <input
-            className="bg-slate-700 text-white rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full glass-input rounded-xl px-4 py-2.5 text-xs outline-none"
             placeholder={t('login.username_placeholder')}
             value={username}
             onChange={e => setUsername(e.target.value)}
@@ -46,18 +54,20 @@ export default function Login() {
           />
           <input
             type="password"
-            className="bg-slate-700 text-white rounded-lg px-4 py-2 outline-none focus:ring-2 focus:ring-indigo-500"
+            className="w-full glass-input rounded-xl px-4 py-2.5 text-xs outline-none"
             placeholder={t('login.password_placeholder')}
             value={password}
             onChange={e => setPassword(e.target.value)}
             autoComplete="current-password"
             required
           />
-          {error && <p className="text-red-400 text-sm">{error}</p>}
+
+          {error && <p className="text-rose-400 text-xs font-semibold">{error}</p>}
+
           <button
             type="submit"
             disabled={loading}
-            className="bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white font-semibold rounded-lg py-2 transition"
+            className="w-full bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-50 text-white font-semibold text-xs py-2.5 rounded-xl transition shadow-md shadow-violet-600/10 mt-2 cursor-pointer"
           >
             {loading ? t('login.submitting') : t('login.submit')}
           </button>
@@ -66,4 +76,3 @@ export default function Login() {
     </div>
   )
 }
-

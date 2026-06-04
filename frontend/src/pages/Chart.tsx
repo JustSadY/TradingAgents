@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import {
   createChart,
@@ -10,14 +10,12 @@ import {
   createSeriesMarkers,
 } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi } from 'lightweight-charts'
-import { Search, TrendingUp, TrendingDown, Minus, RefreshCw, ExternalLink } from 'lucide-react'
+import { Search, RefreshCw, BarChart2 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import {
   ResponsiveContainer, LineChart, Line, XAxis, YAxis, Tooltip,
   ReferenceLine, Bar, Cell, ComposedChart, CartesianGrid
 } from 'recharts'
-
-
 
 interface Candle {
   time: string
@@ -55,8 +53,6 @@ interface AnalysisItem {
   created_at: string
 }
 
-
-
 function parseAnnotations(raw: string): ChartAnnotations {
   try { return raw ? JSON.parse(raw) : {} } catch { return {} }
 }
@@ -70,32 +66,15 @@ const SIGNAL_COLOR: Record<string, string> = {
   Underweight: '#ef4444',
 }
 
-function SignalBadge({ signal }: { signal: string | null }) {
-  if (!signal) return <span className="text-gray-500 text-xs">—</span>
-  const color = SIGNAL_COLOR[signal] ?? '#6b7280'
-  const Icon = ['Buy', 'Overweight'].includes(signal) ? TrendingUp
-    : ['Sell', 'Underweight'].includes(signal) ? TrendingDown : Minus
-  return (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full"
-      style={{ backgroundColor: color + '22', color }}>
-      <Icon size={11} />
-      {signal}
-    </span>
-  )
-}
-
 const PERIODS = [
-  { label: '1A', value: '1m' },
-  { label: '3A', value: '3m' },
-  { label: '6A', value: '6m' },
+  { label: '1M', value: '1m' },
+  { label: '3M', value: '3m' },
+  { label: '6M', value: '6m' },
   { label: '1Y', value: '1y' },
   { label: '2Y', value: '2y' },
 ]
 
-
-
 export default function ChartPage() {
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
   const { t } = useTranslation()
 
@@ -104,6 +83,7 @@ export default function ChartPage() {
   const [period, setPeriod] = useState(searchParams.get('period') ?? '1y')
   const [candles, setCandles] = useState<Candle[]>([])
   const [analyses, setAnalyses] = useState<AnalysisItem[]>([])
+  const analysesInRange = useMemo(() => analyses, [analyses])
   const [selected, setSelected] = useState<AnalysisItem | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -115,10 +95,8 @@ export default function ChartPage() {
   const [showSentiment, setShowSentiment] = useState(false)
   const [sentimentHistory, setSentimentHistory] = useState<{ time: string; value: number }[]>([])
 
-  // Custom indicators from analysis annotations
   const [customIndicators, setCustomIndicators] = useState<any[]>([])
   
-  // Dynamic User custom formula indicator
   const [userFormula, setUserFormula] = useState('')
   const [userIndicatorData, setUserIndicatorData] = useState<{ time: string; value: number | null }[]>([])
   const [userIndicatorLabel, setUserIndicatorLabel] = useState('')
@@ -137,7 +115,6 @@ export default function ChartPage() {
   const tRef = useRef(t)
   useEffect(() => { tRef.current = t })
 
-  // Effect to load custom indicators when selected analysis changes
   useEffect(() => {
     if (!activeTicker) return
     const ann = selected ? parseAnnotations(selected.chart_annotations) : {}
@@ -168,8 +145,6 @@ export default function ChartPage() {
     }
     fetchCustom()
   }, [selected, activeTicker, period])
-
-
 
   const load = useCallback(async (ticker: string, p: string) => {
     if (!ticker) return
@@ -220,7 +195,7 @@ export default function ChartPage() {
       setUserIndicatorData(res.data.series)
       setUserIndicatorLabel(userFormula.trim())
     } catch (err: any) {
-      setError(err.response?.data?.detail ?? "Formül hesaplanırken hata oluştu.")
+      setError(err.response?.data?.detail ?? "Failed to calculate dynamic custom formula.")
       setUserIndicatorData([])
       setUserIndicatorLabel('')
     } finally {
@@ -232,23 +207,21 @@ export default function ChartPage() {
     if (activeTicker) load(activeTicker, period)
   }, [])
 
-
-
   useEffect(() => {
     if (!chartContainerRef.current) return
 
     const chart = createChart(chartContainerRef.current, {
       layout: {
-        background: { type: ColorType.Solid, color: '#111827' },
+        background: { type: ColorType.Solid, color: '#090d16' },
         textColor: '#9ca3af',
       },
       grid: {
-        vertLines: { color: '#1f2937' },
-        horzLines: { color: '#1f2937' },
+        vertLines: { color: 'rgba(255,255,255,0.02)' },
+        horzLines: { color: 'rgba(255,255,255,0.02)' },
       },
       crosshair: { mode: 1 },
-      rightPriceScale: { borderColor: '#374151' },
-      timeScale: { borderColor: '#374151', timeVisible: true },
+      rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)' },
+      timeScale: { borderColor: 'rgba(255,255,255,0.06)', timeVisible: true },
       width: chartContainerRef.current.clientWidth,
       height: 420,
     })
@@ -264,7 +237,7 @@ export default function ChartPage() {
     })
 
     const volSeries = chart.addSeries(HistogramSeries, {
-      color: '#374151',
+      color: '#1f2937',
       priceFormat: { type: 'volume' },
       priceScaleId: 'volume',
     })
@@ -272,7 +245,7 @@ export default function ChartPage() {
       scaleMargins: { top: 0.8, bottom: 0 },
     })
     chart.priceScale('right').applyOptions({
-      scaleMargins: { top: 0, bottom: 0.25 },
+      scaleMargins: { top: 0.05, bottom: 0.2 },
     })
 
     const smaSeries = chart.addSeries(LineSeries, {
@@ -298,9 +271,6 @@ export default function ChartPage() {
     }
     window.addEventListener('resize', applyWidth)
 
-
-
-
     let ro: ResizeObserver | null = null
     if (typeof ResizeObserver !== 'undefined' && chartContainerRef.current) {
       ro = new ResizeObserver(applyWidth)
@@ -321,8 +291,6 @@ export default function ChartPage() {
     }
   }, [])
 
-
-
   useEffect(() => {
     if (!candleSeriesRef.current || !volSeriesRef.current || candles.length === 0) return
 
@@ -337,7 +305,7 @@ export default function ChartPage() {
     volSeriesRef.current.setData(candles.map(c => ({
       time: c.time as any,
       value: c.volume,
-      color: c.close >= c.open ? '#10b98133' : '#ef444433',
+      color: c.close >= c.open ? '#10b98125' : '#ef444425',
     })))
 
     if (smaSeriesRef.current) {
@@ -394,7 +362,7 @@ export default function ChartPage() {
       ;(ann.support_levels ?? []).forEach(price => {
         try {
           const pl = candleSeriesRef.current!.createPriceLine({
-            price, color: '#ef444466', lineWidth: 1, lineStyle: 2,
+            price, color: 'rgba(239, 68, 68, 0.4)', lineWidth: 1, lineStyle: 2,
             axisLabelVisible: false, title: '',
           })
           priceLineRefs.current.push(pl)
@@ -403,7 +371,7 @@ export default function ChartPage() {
       ;(ann.resistance_levels ?? []).forEach(price => {
         try {
           const pl = candleSeriesRef.current!.createPriceLine({
-            price, color: '#3b82f666', lineWidth: 1, lineStyle: 2,
+            price, color: 'rgba(59, 130, 246, 0.4)', lineWidth: 1, lineStyle: 2,
             axisLabelVisible: false, title: '',
           })
           priceLineRefs.current.push(pl)
@@ -412,8 +380,8 @@ export default function ChartPage() {
       if (ann.target_price) {
         try {
           const pl = candleSeriesRef.current!.createPriceLine({
-            price: ann.target_price, color: '#10b98199', lineWidth: 1, lineStyle: 3,
-            axisLabelVisible: true, title: tRef.current('chart.price_line_target'),
+            price: ann.target_price, color: 'rgba(16, 185, 129, 0.7)', lineWidth: 2, lineStyle: 3,
+            axisLabelVisible: true, title: 'Target',
           })
           priceLineRefs.current.push(pl)
         } catch {  }
@@ -421,14 +389,13 @@ export default function ChartPage() {
       if (ann.stop_loss) {
         try {
           const pl = candleSeriesRef.current!.createPriceLine({
-            price: ann.stop_loss, color: '#ef444499', lineWidth: 1, lineStyle: 3,
-            axisLabelVisible: true, title: tRef.current('chart.price_line_stop'),
+            price: ann.stop_loss, color: 'rgba(239, 68, 68, 0.7)', lineWidth: 2, lineStyle: 3,
+            axisLabelVisible: true, title: 'Stop Loss',
           })
           priceLineRefs.current.push(pl)
         } catch {  }
       }
 
-      // Draw custom trendlines registered by tools
       if (ann.annotations && Array.isArray(ann.annotations)) {
         ann.annotations.forEach((va: any) => {
           if (va.type === 'trendline' && va.time && va.price && va.time2 && va.price2) {
@@ -436,7 +403,7 @@ export default function ChartPage() {
               const tl = chartRef.current!.addSeries(LineSeries, {
                 color: '#f59e0b',
                 lineWidth: 2,
-                lineStyle: 2, // dashed
+                lineStyle: 2,
                 title: va.text || 'Trendline',
               })
               tl.setData([
@@ -451,13 +418,12 @@ export default function ChartPage() {
         })
       }
 
-      // Draw custom overlays registered by tools (e.g. MTF EMA)
       if (ann.custom_indicators && Array.isArray(ann.custom_indicators)) {
         ann.custom_indicators.forEach((ci: any) => {
           if (ci.overlay && ci.values) {
             try {
               const ol = chartRef.current!.addSeries(LineSeries, {
-                color: '#38bdf8', // light blue
+                color: '#06b6d4',
                 lineWidth: 2,
                 title: ci.label || ci.name,
               })
@@ -478,7 +444,6 @@ export default function ChartPage() {
       try { markersRef.current.setMarkers([]) } catch {  }
     }
     
-    // Core signal markers
     const markerData = analyses
       .filter(a => a.signal && tradeDatesInRange.has(a.trade_date))
       .map(a => ({
@@ -487,10 +452,9 @@ export default function ChartPage() {
         color: SIGNAL_COLOR[a.signal!] ?? '#6b7280',
         shape: (['Buy', 'Overweight'].includes(a.signal!) ? 'arrowUp' : ['Sell', 'Underweight'].includes(a.signal!) ? 'arrowDown' : 'circle') as any,
         text: a.signal!,
-        size: 1,
+        size: 1.2,
       }))
 
-    // Additional visual annotations (arrows, markers) registered by tools
     const visualMarkers: any[] = []
     analyses.forEach(a => {
       if (!tradeDatesInRange.has(a.trade_date)) return
@@ -504,7 +468,7 @@ export default function ChartPage() {
               color: va.type === 'arrowUp' ? '#10b981' : va.type === 'arrowDown' ? '#ef4444' : '#f59e0b',
               shape: va.type,
               text: va.text || '',
-              size: 2,
+              size: 1.5,
             })
           }
         })
@@ -526,12 +490,6 @@ export default function ChartPage() {
     chartRef.current?.timeScale().fitContent()
   }, [candles, analyses, showSMA, showEMA])
 
-
-
-  const analysesInRange = activeTicker
-    ? analyses.filter(a => candles.some(c => c.time === a.trade_date))
-    : []
-
   const sentimentChartData = useMemo(() => {
     if (!candles.length) return []
     const sentMap = new Map(sentimentHistory.map(item => [item.time, item.value]))
@@ -551,16 +509,21 @@ export default function ChartPage() {
   }, [candles, sentimentHistory])
 
   return (
-    <div className="p-4 md:p-6 space-y-5 max-w-7xl">
-      <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">{t('chart.title')}</h2>
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+      <div className="flex items-center justify-between">
+        <div>
+          <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('chart.title')}</h2>
+          <p className="text-xs text-slate-500 mt-1">Visualize historical candles overlaid with AI target levels, trendlines, and breakout models</p>
+        </div>
+      </div>
 
-      {}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 flex-1 max-w-xs">
-          <Search size={15} className="text-gray-500" />
+      {/* Control Block */}
+      <div className="flex flex-wrap items-center gap-4">
+        <div className="flex items-center gap-2 bg-slate-900 border border-white/[0.08] rounded-xl px-3 py-2 flex-1 max-w-xs focus-within:border-violet-500/50 transition-colors">
+          <Search size={15} className="text-slate-500" />
           <input
-            className="bg-transparent text-white text-sm outline-none flex-1 uppercase"
-            placeholder="AAPL, TSLA, NVDA..."
+            className="bg-transparent text-white text-xs outline-none flex-1 uppercase font-semibold"
+            placeholder="AAPL, TSLA, BTC-USD..."
             value={tickerInput}
             onChange={e => setTickerInput(e.target.value.toUpperCase())}
             onKeyDown={e => e.key === 'Enter' && handleSearch()}
@@ -568,21 +531,21 @@ export default function ChartPage() {
         </div>
         <button
           onClick={handleSearch}
-          className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition"
+          className="bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer"
         >
           {t('chart.show_button')}
         </button>
 
         {activeTicker && (
-          <div className="flex gap-1 ml-2">
+          <div className="flex gap-1 bg-slate-900 border border-white/[0.04] p-0.5 rounded-xl">
             {PERIODS.map(p => (
               <button
                 key={p.value}
                 onClick={() => handlePeriod(p.value)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
+                className={`px-3 py-1.5 text-[10px] font-bold rounded-lg transition-all cursor-pointer ${
                   period === p.value
                     ? 'bg-violet-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:text-white'
+                    : 'text-slate-500 hover:text-slate-300 hover:bg-white/5'
                 }`}
               >
                 {p.label}
@@ -591,14 +554,14 @@ export default function ChartPage() {
           </div>
         )}
 
-        {loading && <RefreshCw size={16} className="text-violet-400 animate-spin" />}
+        {loading && <RefreshCw size={14} className="text-violet-400 animate-spin" />}
       </div>
 
-      {}
+      {/* Indicator Selection Grid */}
       {activeTicker && (
-        <div className="flex flex-wrap items-center gap-4 bg-gray-900/50 border border-gray-800/80 px-4 py-3 rounded-xl">
-          <span className="text-xs font-semibold text-gray-400 uppercase tracking-wider mr-2">{t('chart.indicators')}:</span>
-          <label className="flex items-center gap-2 text-xs text-gray-300 hover:text-white cursor-pointer select-none">
+        <div className="flex flex-wrap items-center gap-4 bg-slate-900/40 border border-white/[0.04] px-4 py-3 rounded-2xl">
+          <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mr-2">{t('chart.indicators')}:</span>
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-300 hover:text-white cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showSMA}
@@ -607,7 +570,7 @@ export default function ChartPage() {
             />
             SMA (20)
           </label>
-          <label className="flex items-center gap-2 text-xs text-gray-300 hover:text-white cursor-pointer select-none">
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-300 hover:text-white cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showEMA}
@@ -616,7 +579,7 @@ export default function ChartPage() {
             />
             EMA (20)
           </label>
-          <label className="flex items-center gap-2 text-xs text-gray-300 hover:text-white cursor-pointer select-none">
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-300 hover:text-white cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showRSI}
@@ -625,7 +588,7 @@ export default function ChartPage() {
             />
             RSI (14)
           </label>
-          <label className="flex items-center gap-2 text-xs text-gray-300 hover:text-white cursor-pointer select-none">
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-300 hover:text-white cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showMACD}
@@ -634,7 +597,7 @@ export default function ChartPage() {
             />
             MACD
           </label>
-          <label className="flex items-center gap-2 text-xs text-gray-300 hover:text-white cursor-pointer select-none">
+          <label className="flex items-center gap-2 text-xs font-medium text-slate-300 hover:text-white cursor-pointer select-none">
             <input
               type="checkbox"
               checked={showSentiment}
@@ -644,18 +607,18 @@ export default function ChartPage() {
             {t('chart.social_sentiment')}
           </label>
           
-          <div className="flex items-center gap-2 bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 ml-auto w-full sm:w-auto max-w-sm">
-            <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">{t('chart.custom_formula')}:</span>
+          <div className="flex items-center gap-2 bg-slate-950/80 border border-white/[0.04] rounded-xl px-2.5 py-1.5 ml-auto w-full sm:w-auto max-w-sm">
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('chart.custom_formula')}:</span>
             <input
-              className="bg-transparent text-white text-xs outline-none flex-1 font-mono placeholder-gray-600 min-w-[180px]"
-              placeholder="Örn: (Close - SMA(20)) / STD(20)"
+              className="bg-transparent text-white text-xs outline-none flex-1 font-mono placeholder-slate-700 min-w-[150px]"
+              placeholder="e.g., (Close - SMA(20)) / STD(20)"
               value={userFormula}
               onChange={e => setUserFormula(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleCalculateUserIndicator()}
             />
             <button
               onClick={handleCalculateUserIndicator}
-              className="bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold px-3 py-1 rounded-lg transition"
+              className="bg-violet-600 hover:bg-violet-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-lg transition cursor-pointer"
             >
               {t('chart.calculate')}
             </button>
@@ -664,67 +627,63 @@ export default function ChartPage() {
       )}
 
       {error && (
-        <div className="bg-red-900/30 border border-red-700 text-red-300 text-sm rounded-xl px-4 py-3">
+        <div className="bg-rose-950/20 border border-rose-500/20 text-rose-300 text-xs rounded-xl px-4 py-3">
           {error}
         </div>
       )}
 
-      {}
-      <div className="flex flex-col lg:flex-row gap-5">
-        {}
-        <div className="flex-1 min-w-0">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+      {/* Main Charts & History list */}
+      <div className="flex flex-col lg:flex-row gap-6">
+        <div className="flex-1 min-w-0 space-y-4">
+          <div className="glass-panel rounded-2xl overflow-hidden bg-[#090d16]">
             {activeTicker && (
-              <div className="px-5 py-3 border-b border-gray-800 flex items-center gap-3">
-                <span className="text-white font-bold">{activeTicker}</span>
+              <div className="px-5 py-3 border-b border-white/[0.04] flex items-center gap-3 bg-slate-950/20">
+                <span className="text-white font-mono font-bold text-sm uppercase">{activeTicker}</span>
                 {candles.length > 0 && (
-                  <span className="text-gray-400 text-sm">
-                    {candles[candles.length - 1].close.toFixed(2)} USD
+                  <span className="text-slate-400 font-mono text-xs">
+                    ${candles[candles.length - 1].close.toLocaleString(undefined, { minimumFractionDigits: 2 })} USD
                   </span>
                 )}
               </div>
             )}
             <div ref={chartContainerRef} className="w-full" />
             {!activeTicker && (
-              <div className="flex flex-col items-center justify-center h-[420px] text-gray-600">
-                <TrendingUp size={40} className="mb-3 opacity-30" />
-                <p className="text-sm">{t('chart.empty_hint')}</p>
-                <p className="text-xs mt-1 opacity-60">{t('chart.empty_hint_sub')}</p>
+              <div className="flex flex-col items-center justify-center h-[420px] text-slate-600 bg-[#090d16]">
+                <BarChart2 size={36} className="mb-2 opacity-20" />
+                <p className="text-xs font-semibold">{t('chart.empty_hint')}</p>
+                <p className="text-[10px] mt-1 opacity-50">{t('chart.empty_hint_sub')}</p>
               </div>
             )}
           </div>
 
-          {}
           {activeTicker && (
-            <div className="flex flex-wrap gap-4 mt-3 px-1 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5 bg-emerald-500 opacity-60" style={{borderTop: '2px dashed #10b981'}} /> {t('chart.legend_support')}</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5" style={{borderTop: '2px dashed #3b82f6'}} /> {t('chart.legend_resistance')}</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5" style={{borderTop: '1px solid #10b981'}} /> {t('chart.legend_target')}</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5" style={{borderTop: '1px solid #ef4444'}} /> {t('chart.legend_stop_loss')}</span>
-              <span className="flex items-center gap-1 text-emerald-400">{t('chart.legend_buy')}</span>
-              <span className="flex items-center gap-1 text-red-400">{t('chart.legend_sell')}</span>
+            <div className="flex flex-wrap gap-x-4 gap-y-1.5 px-1 text-[10px] text-slate-500 font-semibold bg-white/[0.01] border border-white/[0.03] p-2 rounded-xl">
+              <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-0 border-t border-rose-500 border-dashed" /> {t('chart.legend_support')}</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-0 border-t border-blue-500 border-dashed" /> {t('chart.legend_resistance')}</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-0 border-t border-emerald-500" /> {t('chart.legend_target')}</span>
+              <span className="flex items-center gap-1.5"><span className="inline-block w-4 h-0 border-t border-rose-500" /> {t('chart.legend_stop_loss')}</span>
+              <span className="flex items-center gap-1.5 text-emerald-400">▲ {t('chart.legend_buy')} Signal</span>
+              <span className="flex items-center gap-1.5 text-rose-400">▼ {t('chart.legend_sell')} Signal</span>
             </div>
           )}
 
-          {}
+          {/* RSI subplot */}
           {showRSI && candles.length > 0 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mt-4">
-              <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">
-                RSI (14)
-              </h3>
-              <div className="h-36 w-full">
+            <div className="glass-panel rounded-2xl p-5">
+              <h3 className="text-[10px] font-bold text-violet-400 uppercase tracking-widest mb-3">RSI (14)</h3>
+              <div className="h-32 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={candles} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 10 }} />
-                    <YAxis domain={[0, 100]} stroke="#4b5563" tick={{ fontSize: 10 }} ticks={[30, 50, 70]} />
+                  <LineChart data={candles} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" />
+                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 9 }} tickLine={false} />
+                    <YAxis domain={[0, 100]} stroke="#4b5563" tick={{ fontSize: 9 }} tickLine={false} ticks={[30, 50, 70]} />
                     <Tooltip
-                      contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px' }}
-                      labelStyle={{ color: '#9ca3af', fontSize: '11px' }}
-                      itemStyle={{ color: '#a855f7', fontSize: '11px' }}
+                      contentStyle={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)', borderRadius: '12px', fontSize: '10px' }}
+                      labelStyle={{ color: '#9ca3af', fontWeight: 'bold' }}
+                      itemStyle={{ color: '#a855f7' }}
                     />
-                    <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="3 3" label={{ value: 'Overbought (70)', fill: '#ef4444', fontSize: 9, position: 'insideTopLeft' }} />
-                    <ReferenceLine y={30} stroke="#10b981" strokeDasharray="3 3" label={{ value: 'Oversold (30)', fill: '#10b981', fontSize: 9, position: 'insideBottomLeft' }} />
+                    <ReferenceLine y={70} stroke="#ef4444" strokeDasharray="3 3" label={{ value: 'OB (70)', fill: '#ef4444', fontSize: 8, position: 'insideTopLeft' }} />
+                    <ReferenceLine y={30} stroke="#10b981" strokeDasharray="3 3" label={{ value: 'OS (30)', fill: '#10b981', fontSize: 8, position: 'insideBottomLeft' }} />
                     <Line
                       type="monotone"
                       dataKey="rsi"
@@ -739,22 +698,19 @@ export default function ChartPage() {
             </div>
           )}
 
-          {}
+          {/* MACD subplot */}
           {showMACD && candles.length > 0 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mt-4">
-              <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">
-                MACD (12, 26, 9)
-              </h3>
-              <div className="h-44 w-full">
+            <div className="glass-panel rounded-2xl p-5">
+              <h3 className="text-[10px] font-bold text-violet-400 uppercase tracking-widest mb-3">MACD (12, 26, 9)</h3>
+              <div className="h-40 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <ComposedChart data={candles} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 10 }} />
-                    <YAxis stroke="#4b5563" tick={{ fontSize: 10 }} />
+                  <ComposedChart data={candles} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" />
+                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 9 }} tickLine={false} />
+                    <YAxis stroke="#4b5563" tick={{ fontSize: 9 }} tickLine={false} />
                     <Tooltip
-                      contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px' }}
-                      labelStyle={{ color: '#9ca3af', fontSize: '11px' }}
-                      itemStyle={{ fontSize: '11px' }}
+                      contentStyle={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)', borderRadius: '12px', fontSize: '10px' }}
+                      labelStyle={{ color: '#9ca3af', fontWeight: 'bold' }}
                     />
                     <Bar dataKey="macd_hist" name="Histogram">
                       {candles.map((entry, index) => {
@@ -762,7 +718,7 @@ export default function ChartPage() {
                         return (
                           <Cell
                             key={`cell-${index}`}
-                            fill={val >= 0 ? 'rgba(16, 185, 129, 0.4)' : 'rgba(239, 68, 68, 0.4)'}
+                            fill={val >= 0 ? 'rgba(16, 185, 129, 0.35)' : 'rgba(239, 68, 68, 0.35)'}
                           />
                         )
                       })}
@@ -791,66 +747,56 @@ export default function ChartPage() {
             </div>
           )}
 
-          {}
+          {/* Social Sentiment Subplot */}
           {showSentiment && sentimentChartData.length > 0 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mt-4">
-              <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-3">
-                {t('chart.sentiment_correlation')}
-              </h3>
-              <div className="h-48 w-full">
+            <div className="glass-panel rounded-2xl p-5">
+              <h3 className="text-[10px] font-bold text-violet-400 uppercase tracking-widest mb-3">{t('chart.sentiment_correlation')}</h3>
+              <div className="h-44 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={sentimentChartData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 10 }} />
-                    <YAxis yAxisId="left" stroke="#4b5563" tick={{ fontSize: 10 }} domain={['auto', 'auto']} label={{ value: 'Price (USD)', angle: -90, position: 'insideLeft', fill: '#9ca3af', fontSize: 10, offset: 10 }} />
-                    <YAxis yAxisId="right" orientation="right" stroke="#4b5563" tick={{ fontSize: 10 }} domain={[-1, 1]} ticks={[-1, -0.5, 0, 0.5, 1]} label={{ value: 'Sentiment', angle: 90, position: 'insideRight', fill: '#9ca3af', fontSize: 10, offset: 10 }} />
+                  <ComposedChart data={sentimentChartData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" />
+                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 9 }} tickLine={false} />
+                    <YAxis yAxisId="left" stroke="#4b5563" tick={{ fontSize: 9 }} tickLine={false} />
+                    <YAxis yAxisId="right" orientation="right" stroke="#4b5563" tick={{ fontSize: 9 }} tickLine={false} domain={[-1, 1]} />
                     <Tooltip
-                      contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px' }}
-                      labelStyle={{ color: '#9ca3af', fontSize: '11px' }}
-                      itemStyle={{ fontSize: '11px' }}
+                      contentStyle={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)', borderRadius: '12px', fontSize: '10px' }}
+                      labelStyle={{ color: '#9ca3af', fontWeight: 'bold' }}
                     />
-                    <Line
-                      yAxisId="left"
-                      type="monotone"
-                      dataKey="price"
-                      stroke="#10b981"
-                      dot={false}
-                      strokeWidth={1.5}
-                      name="Stock Price"
-                    />
-                    <Line
-                      yAxisId="right"
-                      type="monotone"
-                      dataKey="sentiment"
-                      stroke="#a855f7"
-                      dot={false}
-                      strokeWidth={2}
-                      name="Sentiment Score"
-                    />
-                    <ReferenceLine yAxisId="right" y={0} stroke="#4b5563" strokeDasharray="3 3" />
-                  </LineChart>
+                    <Bar yAxisId="right" dataKey="sentiment" name="Sentiment">
+                      {sentimentChartData.map((entry, index) => {
+                        const val = entry.sentiment ?? 0
+                        return (
+                          <Cell
+                            key={`cell-${index}`}
+                            fill={val >= 0 ? 'rgba(16, 185, 129, 0.25)' : 'rgba(244, 63, 94, 0.25)'}
+                          />
+                        )
+                      })}
+                    </Bar>
+                    <Line yAxisId="left" type="monotone" dataKey="price" stroke="#a855f7" dot={false} strokeWidth={1.5} name="Price" />
+                  </ComposedChart>
                 </ResponsiveContainer>
               </div>
             </div>
           )}
 
-          {/* Custom Indicators from Agent Annotations */}
-          {customIndicators.map((ci, index) => (
-            <div key={index} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mt-4">
-              <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-1">
-                {ci.label || ci.name}
-              </h3>
-              <p className="text-[10px] text-gray-500 font-mono mb-3">{ci.formula}</p>
-              <div className="h-36 w-full">
+          {/* Dynamic Custom User indicator subplot */}
+          {userIndicatorData.length > 0 && (
+            <div className="glass-panel rounded-2xl p-5">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-[10px] font-bold text-cyan-400 uppercase tracking-widest">Custom Formula Engine</h3>
+                <span className="text-[9px] font-mono bg-cyan-500/10 text-cyan-400 px-2 py-0.5 rounded border border-cyan-500/20">{userIndicatorLabel}</span>
+              </div>
+              <div className="h-32 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={ci.data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 10 }} />
-                    <YAxis stroke="#4b5563" tick={{ fontSize: 10 }} domain={['auto', 'auto']} />
+                  <LineChart data={userIndicatorData} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" />
+                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 9 }} tickLine={false} />
+                    <YAxis stroke="#4b5563" tick={{ fontSize: 9 }} tickLine={false} />
                     <Tooltip
-                      contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px' }}
-                      labelStyle={{ color: '#9ca3af', fontSize: '11px' }}
-                      itemStyle={{ color: '#06b6d4', fontSize: '11px' }}
+                      contentStyle={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)', borderRadius: '12px', fontSize: '10px' }}
+                      labelStyle={{ color: '#9ca3af', fontWeight: 'bold' }}
+                      itemStyle={{ color: '#06b6d4' }}
                     />
                     <Line
                       type="monotone"
@@ -864,38 +810,30 @@ export default function ChartPage() {
                 </ResponsiveContainer>
               </div>
             </div>
-          ))}
+          )}
 
-          {/* User Dynamic Custom Formula Indicator */}
-          {userIndicatorData.length > 0 && (
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mt-4">
-              <div className="flex justify-between items-center mb-1">
-                <h3 className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">
-                  {t('chart.user_custom_indicator')}
-                </h3>
-                <button 
-                  onClick={() => { setUserIndicatorData([]); setUserIndicatorLabel('') }}
-                  className="text-[10px] text-red-400 hover:text-red-300 font-bold px-1.5 py-0.5 rounded border border-red-950 transition"
-                >
-                  Kapat
-                </button>
+          {/* Custom overlays / indicators parsed from Analysis annotations */}
+          {customIndicators.map((ci, idx) => (
+            <div key={idx} className="glass-panel rounded-2xl p-5">
+              <div className="flex justify-between items-center mb-3">
+                <h3 className="text-[10px] font-bold text-violet-400 uppercase tracking-widest">{ci.label}</h3>
+                <span className="text-[9px] font-mono bg-violet-500/10 text-violet-400 px-2 py-0.5 rounded border border-violet-500/20">{ci.formula}</span>
               </div>
-              <p className="text-[10px] text-gray-500 font-mono mb-3">{userIndicatorLabel}</p>
-              <div className="h-36 w-full">
+              <div className="h-32 w-full">
                 <ResponsiveContainer width="100%" height="100%">
-                  <LineChart data={userIndicatorData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 10 }} />
-                    <YAxis stroke="#4b5563" tick={{ fontSize: 10 }} domain={['auto', 'auto']} />
+                  <LineChart data={ci.data} margin={{ top: 5, right: 5, left: -25, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" />
+                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 9 }} tickLine={false} />
+                    <YAxis stroke="#4b5563" tick={{ fontSize: 9 }} tickLine={false} />
                     <Tooltip
-                      contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px' }}
-                      labelStyle={{ color: '#9ca3af', fontSize: '11px' }}
-                      itemStyle={{ color: '#22c55e', fontSize: '11px' }}
+                      contentStyle={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)', borderRadius: '12px', fontSize: '10px' }}
+                      labelStyle={{ color: '#9ca3af', fontWeight: 'bold' }}
+                      itemStyle={{ color: '#8b5cf6' }}
                     />
                     <Line
                       type="monotone"
                       dataKey="value"
-                      stroke="#22c55e"
+                      stroke="#8b5cf6"
                       dot={false}
                       strokeWidth={1.5}
                       connectNulls
@@ -904,135 +842,50 @@ export default function ChartPage() {
                 </ResponsiveContainer>
               </div>
             </div>
-          )}
+          ))}
         </div>
 
-        {}
+        {/* Right sidebar: List of analyses matching timeframe */}
         {activeTicker && (
-          <div className="w-full lg:w-72 lg:flex-shrink-0 space-y-4">
-            {}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-800">
-                <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider">
-                  {t('chart.ai_analyses')} ({analysesInRange.length})
-                </h3>
-              </div>
-              <div className="max-h-80 overflow-y-auto">
-                {analysesInRange.length === 0 && !loading && (
-                  <p className="text-gray-600 text-xs p-4">{t('chart.no_analyses_range')}</p>
-                )}
-                {analysesInRange
-                  .sort((a, b) => b.trade_date.localeCompare(a.trade_date))
-                  .map(a => (
-                    <button
-                      key={a.id}
-                      onClick={() => setSelected(selected?.id === a.id ? null : a)}
-                      className={`w-full text-left px-4 py-2.5 border-b border-gray-800 last:border-0 hover:bg-gray-800 transition ${
-                        selected?.id === a.id ? 'bg-gray-800' : ''
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-white font-mono">{a.trade_date}</span>
-                        <SignalBadge signal={a.signal} />
+          <div className="w-full lg:w-72 shrink-0 space-y-4">
+            <div className="glass-panel rounded-2xl p-4 space-y-3">
+              <h3 className="text-xs font-bold text-slate-400 uppercase tracking-wider">{t('chart.recent_analyses')}</h3>
+              
+              {analysesInRange.length === 0 ? (
+                <p className="text-[11px] text-slate-600">{t('chart.no_analyses_in_range')}</p>
+              ) : (
+                <div className="space-y-1.5 max-h-[480px] overflow-y-auto pr-1">
+                  {analysesInRange.map(a => {
+                    const isSelected = selected?.id === a.id
+                    return (
+                      <div
+                        key={a.id}
+                        onClick={() => setSelected(isSelected ? null : a)}
+                        className={`p-3 rounded-xl cursor-pointer transition-all border ${
+                          isSelected
+                            ? 'bg-violet-500/10 border-violet-500/30 text-white'
+                            : 'bg-slate-900/20 border-white/[0.03] text-slate-400 hover:text-white hover:border-white/[0.08]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-2 mb-1.5">
+                          <span className="text-xs font-mono font-bold">{a.ticker}</span>
+                          <span className="text-[9px] text-slate-500 font-semibold">{a.trade_date}</span>
+                        </div>
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-[10px] font-semibold text-slate-500">Signal:</span>
+                          <span className={`text-[10px] font-bold ${a.signal && ['Buy', 'Overweight'].includes(a.signal) ? 'text-emerald-400' : a.signal && ['Sell', 'Underweight'].includes(a.signal) ? 'text-rose-400' : 'text-amber-400'}`}>
+                            {a.signal || 'N/A'}
+                          </span>
+                        </div>
                       </div>
-                    </button>
-                  ))}
-              </div>
+                    )
+                  })}
+                </div>
+              )}
             </div>
-
-            {}
-            {selected && (
-              <AnalysisDetail
-                analysis={selected}
-                onReanalyze={() => navigate(`/analysis?ticker=${activeTicker}&date=${selected.trade_date}`)}
-                onViewFull={() => navigate(`/analysis?id=${selected.id}`)}
-              />
-            )}
           </div>
         )}
       </div>
     </div>
   )
 }
-
-
-
-function AnalysisDetail({
-  analysis,
-  onReanalyze,
-  onViewFull,
-}: {
-  analysis: AnalysisItem
-  onReanalyze: () => void
-  onViewFull: () => void
-}) {
-  const { t } = useTranslation()
-  const ann = parseAnnotations(analysis.chart_annotations)
-  const hasAnnotations = (
-    (ann.support_levels?.length ?? 0) > 0 ||
-    (ann.resistance_levels?.length ?? 0) > 0 ||
-    ann.target_price ||
-    ann.stop_loss
-  )
-
-  return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-400">{analysis.trade_date}</span>
-        <SignalBadge signal={analysis.signal} />
-      </div>
-
-      {hasAnnotations && (
-        <div className="space-y-1.5">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">{t('chart.ai_price_levels')}</p>
-          {(ann.support_levels ?? []).map((p, i) => (
-            <div key={i} className="flex justify-between text-xs">
-              <span className="text-red-400">{t('chart.support_label')} {i + 1}</span>
-              <span className="text-white font-mono">${p.toFixed(2)}</span>
-            </div>
-          ))}
-          {(ann.resistance_levels ?? []).map((p, i) => (
-            <div key={i} className="flex justify-between text-xs">
-              <span className="text-blue-400">{t('chart.resistance_label')} {i + 1}</span>
-              <span className="text-white font-mono">${p.toFixed(2)}</span>
-            </div>
-          ))}
-          {ann.target_price && (
-            <div className="flex justify-between text-xs">
-              <span className="text-emerald-400">{t('chart.target_label')}</span>
-              <span className="text-white font-mono">${ann.target_price.toFixed(2)}</span>
-            </div>
-          )}
-          {ann.stop_loss && (
-            <div className="flex justify-between text-xs">
-              <span className="text-red-400">{t('chart.stop_loss_label')}</span>
-              <span className="text-white font-mono">${ann.stop_loss.toFixed(2)}</span>
-            </div>
-          )}
-          {(ann.key_levels ?? []).map((kl, i) => (
-            <div key={i} className="flex justify-between text-xs">
-              <span className="text-gray-400 truncate pr-2">{kl.label}</span>
-              <span className="text-white font-mono">${kl.price.toFixed(2)}</span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <div className="flex flex-col gap-2 pt-1">
-        <button
-          onClick={onViewFull}
-          className="flex items-center justify-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 border border-violet-800 hover:border-violet-600 rounded-lg py-1.5 transition"
-        >
-          <ExternalLink size={11} /> {t('chart.view_full_report')}
-        </button>
-        <button
-          onClick={onReanalyze}
-          className="flex items-center justify-center gap-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg py-1.5 transition"
-        >
-          <RefreshCw size={11} /> {t('chart.reanalyze')}
-        </button>
-      </div>
-    </div>
-  )
-}
-

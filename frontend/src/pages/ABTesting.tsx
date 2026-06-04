@@ -32,16 +32,18 @@ export default function ABTesting() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64 text-slate-400">
-        <Loader2 className="animate-spin mr-2" size={20} /> {t('common.loading')}
+      <div className="flex items-center justify-center h-64 text-slate-500 font-semibold text-xs gap-2">
+        <Loader2 className="animate-spin text-violet-400" size={16} /> {t('common.loading')}
       </div>
     )
   }
 
   if (error) {
     return (
-      <div className="p-6 text-red-400 bg-red-950/30 border border-red-900 rounded-2xl">
-        {error}
+      <div className="p-4 md:p-6 space-y-4 max-w-7xl mx-auto">
+        <div className="bg-rose-950/20 border border-rose-500/20 text-rose-300 text-xs rounded-xl px-4 py-3">
+          {error}
+        </div>
       </div>
     )
   }
@@ -50,52 +52,53 @@ export default function ABTesting() {
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <div className="p-2 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-400">
-            <GitCompare size={22} />
+          <div className="p-2 rounded-xl bg-violet-500/10 border border-violet-500/20 text-violet-400 shadow shadow-violet-500/10">
+            <GitCompare size={20} />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white tracking-tight">{t('nav.ab_testing')}</h2>
-            <p className="text-xs text-gray-500 mt-0.5">LLM preset and provider infrastructure comparisons</p>
+            <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('nav.ab_testing')}</h2>
+            <p className="text-xs text-slate-500 mt-1">Audit execution runtime speeds and total tokens costs across models presets</p>
           </div>
         </div>
       </div>
 
-      {}
+      {/* Cards List */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {data.map((m, i) => (
-          <div key={i} className="relative overflow-hidden bg-gradient-to-br from-gray-900 to-gray-950 border border-gray-800 hover:border-gray-700/80 rounded-2xl p-5 shadow-xl transition-all duration-300 group hover:-translate-y-1">
-            <div className="absolute top-0 right-0 w-24 h-24 bg-violet-600/5 rounded-full blur-2xl group-hover:bg-violet-600/10 transition-colors" />
-            <h3 className="text-sm font-bold text-white tracking-wide truncate mb-4 border-b border-gray-800/80 pb-2">{m.preset_name}</h3>
+          <div key={i} className="relative overflow-hidden glass-panel glass-panel-hover rounded-2xl p-5 shadow">
+            <div className="absolute top-0 right-0 w-24 h-24 bg-violet-600/5 rounded-full blur-2xl pointer-events-none" />
+            <h3 className="text-sm font-bold text-white tracking-wide truncate mb-4 border-b border-white/[0.04] pb-2">{m.preset_name}</h3>
 
             <div className="grid grid-cols-2 gap-y-4 gap-x-2">
               <div className="flex items-center gap-2">
-                <Zap size={14} className="text-amber-400 shrink-0" />
+                <div className="p-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/25 shrink-0"><Zap size={12} /></div>
                 <div>
-                  <p className="text-[10px] uppercase text-gray-500 font-medium tracking-wider">Runs</p>
-                  <p className="text-sm font-bold text-white">{m.total_runs}</p>
+                  <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">Runs</p>
+                  <p className="text-xs font-bold text-white font-mono leading-none">{m.total_runs}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <DollarSign size={14} className="text-emerald-400 shrink-0" />
+                <div className="p-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 shrink-0"><DollarSign size={12} /></div>
                 <div>
-                  <p className="text-[10px] uppercase text-gray-500 font-medium tracking-wider">Avg Cost</p>
-                  <p className="text-sm font-bold text-white">${m.avg_cost_usd.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
+                  <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">Avg Cost</p>
+                  <p className="text-xs font-bold text-white font-mono leading-none">${m.avg_cost_usd.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Clock size={14} className="text-indigo-400 shrink-0" />
+                <div className="p-1 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 shrink-0"><Clock size={12} /></div>
                 <div>
-                  <p className="text-[10px] uppercase text-gray-500 font-medium tracking-wider">Avg Speed</p>
-                  <p className="text-sm font-bold text-white">{m.avg_duration.toFixed(1)}s</p>
+                  <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">Avg Speed</p>
+                  <p className="text-xs font-bold text-white font-mono leading-none">{m.avg_duration.toFixed(1)}s</p>
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                <Award size={14} className="text-violet-400 shrink-0" />
+                <div className="p-1 rounded bg-violet-500/10 text-violet-400 border border-violet-500/25 shrink-0"><Award size={12} /></div>
                 <div>
-                  <p className="text-[10px] uppercase text-gray-500 font-medium tracking-wider">Win Rate</p>
-                  <p className="text-sm font-bold text-white">{m.win_rate !== null ? `${m.win_rate}%` : '—'}</p>
+                  <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">Win Rate</p>
+                  <p className="text-xs font-bold text-white font-mono leading-none">{m.win_rate !== null ? `${m.win_rate}%` : '—'}</p>
                 </div>
               </div>
             </div>
@@ -103,18 +106,18 @@ export default function ABTesting() {
         ))}
       </div>
 
-      {}
+      {/* Comparisons Charts */}
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
-          <h4 className="text-xs font-semibold text-violet-400 uppercase tracking-wider">Cost Comparison ($)</h4>
+        {/* Cost Comparison */}
+        <div className="glass-panel rounded-2xl p-5 space-y-4">
+          <h4 className="text-xs font-bold text-violet-400 uppercase tracking-widest">Cost Comparison ($)</h4>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis dataKey="preset_name" stroke="#9ca3af" tick={{ fontSize: 10 }} />
-                <YAxis stroke="#9ca3af" tick={{ fontSize: 10 }} />
-                <Tooltip contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', color: '#fff', fontSize: 11 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" />
+                <XAxis dataKey="preset_name" stroke="#9ca3af" tick={{ fontSize: 9 }} tickLine={false} />
+                <YAxis stroke="#9ca3af" tick={{ fontSize: 9 }} tickLine={false} />
+                <Tooltip contentStyle={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)', borderRadius: 12, color: '#fff', fontSize: 10 }} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
                 <Bar name="Avg Cost (USD)" dataKey="avg_cost_usd" fill="#10b981" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -122,16 +125,16 @@ export default function ABTesting() {
           </div>
         </div>
 
-        {}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
-          <h4 className="text-xs font-semibold text-violet-400 uppercase tracking-wider">Speed Comparison (Seconds)</h4>
+        {/* Speed Comparison */}
+        <div className="glass-panel rounded-2xl p-5 space-y-4">
+          <h4 className="text-xs font-bold text-violet-400 uppercase tracking-widest">Speed Comparison (Seconds)</h4>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
-                <XAxis dataKey="preset_name" stroke="#9ca3af" tick={{ fontSize: 10 }} />
-                <YAxis stroke="#9ca3af" tick={{ fontSize: 10 }} />
-                <Tooltip contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', color: '#fff', fontSize: 11 }} />
+                <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.02)" />
+                <XAxis dataKey="preset_name" stroke="#9ca3af" tick={{ fontSize: 9 }} tickLine={false} />
+                <YAxis stroke="#9ca3af" tick={{ fontSize: 9 }} tickLine={false} />
+                <Tooltip contentStyle={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)', borderRadius: 12, color: '#fff', fontSize: 10 }} />
                 <Legend wrapperStyle={{ fontSize: 10 }} />
                 <Bar name="Avg Duration (seconds)" dataKey="avg_duration" fill="#6366f1" radius={[4, 4, 0, 0]} />
               </BarChart>
@@ -142,4 +145,3 @@ export default function ABTesting() {
     </div>
   )
 }
-

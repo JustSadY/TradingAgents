@@ -18,26 +18,26 @@ interface Portfolio {
   holdings: { ticker: string; quantity: number; current_price: number; unrealized_pnl: number; avg_buy_price?: number }[]
 }
 
-
-const TONE_META: Record<string, { text: string; dot: string }> = {
-  positive: { text: 'text-emerald-400', dot: 'bg-emerald-400' },
-  neutral:  { text: 'text-yellow-400',  dot: 'bg-yellow-400' },
-  negative: { text: 'text-red-400',     dot: 'bg-red-400' },
+const TONE_META: Record<string, { text: string; dot: string; bg: string }> = {
+  positive: { text: 'text-emerald-400', dot: 'bg-emerald-400', bg: 'bg-emerald-500/10' },
+  neutral:  { text: 'text-amber-400',  dot: 'bg-amber-400',  bg: 'bg-amber-500/10' },
+  negative: { text: 'text-rose-400',     dot: 'bg-rose-400',     bg: 'bg-rose-500/10' },
 }
+
 const FALLBACK_TONE: Record<string, string> = {
   Buy: 'positive', Overweight: 'positive', Hold: 'neutral', Underweight: 'negative', Sell: 'negative',
 }
 
 function SignalBadge({ signal }: { signal: string | null }) {
   const meta = useMeta()
-  if (!signal) return <span className="text-gray-600 text-xs">—</span>
+  if (!signal) return <span className="text-slate-600 text-xs font-semibold">—</span>
   const sig = meta?.signals.find(s => s.value === signal)
   const tone = sig?.tone ?? FALLBACK_TONE[signal]
   const m = tone ? TONE_META[tone] : undefined
   const label = sig?.label ?? signal
   return (
-    <span className={`flex items-center gap-1.5 text-xs font-semibold ${m?.text || 'text-gray-400'}`}>
-      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${m?.dot || 'bg-gray-400'}`} />
+    <span className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-lg text-[10px] font-bold border border-white/[0.04] ${m?.text || 'text-slate-400'} ${m?.bg || 'bg-slate-800/40'}`}>
+      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${m?.dot || 'bg-slate-500'}`} />
       {label}
     </span>
   )
@@ -67,7 +67,6 @@ export default function Dashboard() {
       .finally(() => setLoading(false))
   }, [])
 
-
   useEffect(() => {
     axios.get('/api/settings').then(r => {
       const tickers = (r.data.watchlist as string[]).slice(0, 5)
@@ -89,7 +88,7 @@ export default function Dashboard() {
   const pnlPct = sim?.initial_capital ? (pnl / sim.initial_capital * 100) : 0
   const totalUnrealized = (sim?.holdings || []).reduce((s, h) => s + (h.unrealized_pnl || 0), 0)
 
-  const ALLOCATION_COLORS = ['#6366f1', '#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#8b5cf6', '#14b8a6']
+  const ALLOCATION_COLORS = ['#8b5cf6', '#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#14b8a6', '#6366f1']
 
   const navTimelineData = useMemo(() => {
     if (!sim) return []
@@ -151,22 +150,30 @@ export default function Dashboard() {
 
   if (loading) {
     return (
-      <div className="p-4 md:p-6 space-y-4">
-        <div className="h-8 w-32 bg-gray-800 rounded-lg animate-pulse" />
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-          {[...Array(4)].map((_, i) => <div key={i} className="h-20 md:h-24 bg-gray-800 rounded-2xl animate-pulse" />)}
+      <div className="p-4 md:p-6 space-y-6">
+        <div className="h-8 w-40 bg-white/5 border border-white/[0.04] rounded-xl animate-pulse" />
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+          {[...Array(4)].map((_, i) => <div key={i} className="h-24 bg-white/5 border border-white/[0.04] rounded-2xl animate-pulse" />)}
+        </div>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <div className="lg:col-span-2 h-[320px] bg-white/5 border border-white/[0.04] rounded-2xl animate-pulse" />
+          <div className="h-[320px] bg-white/5 border border-white/[0.04] rounded-2xl animate-pulse" />
         </div>
       </div>
     )
   }
 
   return (
-    <div className="p-3 md:p-6 space-y-4 md:space-y-6">
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+      {/* Header */}
       <div className="flex items-center justify-between">
-        <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">{t('dashboard.title')}</h2>
+        <div>
+          <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('dashboard.title')}</h2>
+          <p className="text-xs text-slate-500 mt-1">Real-time overview of your simulated portfolio and latest AI signals</p>
+        </div>
         <button
           onClick={() => navigate('/analysis')}
-          className="flex items-center gap-1.5 text-xs md:text-sm text-violet-400 hover:text-violet-300 transition-colors"
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-600/10 border border-violet-500/20 text-xs md:text-sm font-semibold text-violet-400 hover:bg-violet-600 hover:text-white transition-all shadow-sm"
         >
           <span className="hidden xs:inline">{t('dashboard.new_analysis')}</span>
           <span className="xs:hidden">Yeni</span>
@@ -174,74 +181,76 @@ export default function Dashboard() {
         </button>
       </div>
 
-      {}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-2.5 md:gap-4">
+      {/* KPI Cards Grid */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <KpiCard
           icon={<DollarSign size={16} />}
           label={t('dashboard.portfolio_value')}
           value={sim ? `$${(sim.current_balance || 0).toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}` : '—'}
           color="text-white"
+          accent="from-violet-500/10"
         />
         <KpiCard
           icon={pnl >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
           label={t('dashboard.total_return')}
           value={`${pnl >= 0 ? '+' : ''}${pnlPct.toFixed(2)}%`}
-          sub={`${pnl >= 0 ? '+' : ''}$${pnl.toFixed(2)}`}
-          color={pnl >= 0 ? 'text-emerald-400' : 'text-red-400'}
-          accent={pnl >= 0 ? 'from-emerald-500/10' : 'from-red-500/10'}
+          sub={`${pnl >= 0 ? '+' : ''}$${pnl.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}`}
+          color={pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}
+          accent={pnl >= 0 ? 'from-emerald-500/10' : 'from-rose-500/10'}
         />
         <KpiCard
           icon={<DollarSign size={16} />}
           label={t('dashboard.cash')}
           value={sim ? `$${(sim.cash_available || 0).toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}` : '—'}
           color="text-white"
+          accent="from-blue-500/10"
         />
         <KpiCard
           icon={<Activity size={16} />}
           label={t('dashboard.unrealized_pnl')}
-          value={`${totalUnrealized >= 0 ? '+' : ''}$${totalUnrealized.toFixed(2)}`}
-          color={totalUnrealized >= 0 ? 'text-emerald-400' : 'text-red-400'}
-          accent={totalUnrealized >= 0 ? 'from-emerald-500/10' : 'from-red-500/10'}
+          value={`${totalUnrealized >= 0 ? '+' : ''}$${totalUnrealized.toLocaleString(language === 'tr' ? 'tr-TR' : 'en-US', { minimumFractionDigits: 2 })}`}
+          color={totalUnrealized >= 0 ? 'text-emerald-400' : 'text-rose-400'}
+          accent={totalUnrealized >= 0 ? 'from-emerald-500/10' : 'from-rose-500/10'}
         />
       </div>
 
-      {}
+      {/* Charts Grid */}
       {sim && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 md:gap-6">
-          {}
-          <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl p-3.5 md:p-5 flex flex-col justify-between min-h-[300px]">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Timeline Chart */}
+          <div className="lg:col-span-2 glass-panel rounded-2xl p-5 flex flex-col justify-between min-h-[340px]">
             <div>
-              <h3 className="text-sm font-semibold text-gray-300 mb-1">{t('dashboard.pnl_timeline')}</h3>
-              <p className="text-xs text-gray-500 mb-4">{t('dashboard.pnl_timeline_sub')}</p>
+              <h3 className="text-sm font-display font-semibold text-slate-200 mb-0.5">{t('dashboard.pnl_timeline')}</h3>
+              <p className="text-xs text-slate-500 mb-4">{t('dashboard.pnl_timeline_sub')}</p>
             </div>
             <div className="h-56 md:h-64 w-full">
               <ResponsiveContainer width="100%" height="100%">
-                <AreaChart data={navTimelineData} margin={{ top: 10, right: 5, left: -15, bottom: 0 }}>
+                <AreaChart data={navTimelineData} margin={{ top: 10, right: 5, left: -20, bottom: 0 }}>
                   <defs>
                     <linearGradient id="colorBalance" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.2}/>
+                      <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.25}/>
                       <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0}/>
                     </linearGradient>
                   </defs>
-                  <XAxis dataKey="date" stroke="#4b5563" tick={{ fontSize: 9 }} />
-                  <YAxis stroke="#4b5563" tick={{ fontSize: 9 }} domain={['auto', 'auto']} tickFormatter={val => `$${(val || 0).toLocaleString()}`} />
+                  <XAxis dataKey="date" stroke="#4b5563" tick={{ fontSize: 9 }} tickLine={false} />
+                  <YAxis stroke="#4b5563" tick={{ fontSize: 9 }} domain={['auto', 'auto']} tickFormatter={val => `$${(val || 0).toLocaleString()}`} tickLine={false} />
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px', fontSize: '10px' }}
-                    labelStyle={{ color: '#9ca3af' }}
+                    contentStyle={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)', borderRadius: '12px', fontSize: '10px' }}
+                    labelStyle={{ color: '#9ca3af', fontWeight: 'bold' }}
                     itemStyle={{ color: '#8b5cf6', padding: '2px 0' }}
-                    formatter={(value: any) => [`$${(value || 0).toLocaleString()}`, 'NAV']}
+                    formatter={(value: any) => [`$${(value || 0).toLocaleString()}`, 'Balance']}
                   />
-                  <Area type="monotone" dataKey="Balance" stroke="#8b5cf6" strokeWidth={2} fillOpacity={1} fill="url(#colorBalance)" />
+                  <Area type="monotone" dataKey="Balance" stroke="#8b5cf6" strokeWidth={2.5} fillOpacity={1} fill="url(#colorBalance)" />
                 </AreaChart>
               </ResponsiveContainer>
             </div>
           </div>
 
-          {}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3.5 md:p-5 flex flex-col justify-between min-h-[300px]">
+          {/* Allocation Chart */}
+          <div className="glass-panel rounded-2xl p-5 flex flex-col justify-between min-h-[340px]">
             <div>
-              <h3 className="text-sm font-semibold text-gray-300 mb-1">{t('dashboard.asset_allocation')}</h3>
-              <p className="text-xs text-gray-500 mb-4">{t('dashboard.asset_allocation_sub')}</p>
+              <h3 className="text-sm font-display font-semibold text-slate-200 mb-0.5">{t('dashboard.asset_allocation')}</h3>
+              <p className="text-xs text-slate-500 mb-4">{t('dashboard.asset_allocation_sub')}</p>
             </div>
             <div className="h-56 md:h-64 w-full flex items-center justify-center relative">
               <ResponsiveContainer width="100%" height="100%">
@@ -250,17 +259,17 @@ export default function Dashboard() {
                     data={allocationData}
                     cx="50%"
                     cy="42%"
-                    innerRadius={window.innerWidth < 640 ? 50 : 60}
-                    outerRadius={window.innerWidth < 640 ? 70 : 80}
-                    paddingAngle={3}
+                    innerRadius={window.innerWidth < 640 ? 55 : 65}
+                    outerRadius={window.innerWidth < 640 ? 75 : 85}
+                    paddingAngle={4}
                     dataKey="value"
                   >
                     {allocationData.map((_, index) => (
-                      <Cell key={`cell-${index}`} fill={ALLOCATION_COLORS[index % ALLOCATION_COLORS.length]} />
+                      <Cell key={`cell-${index}`} fill={ALLOCATION_COLORS[index % ALLOCATION_COLORS.length]} stroke="rgba(3,7,18,0.8)" strokeWidth={2} />
                     ))}
                   </Pie>
                   <Tooltip
-                    contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px', fontSize: '10px' }}
+                    contentStyle={{ backgroundColor: '#111827', borderColor: 'rgba(255,255,255,0.06)', borderRadius: '12px', fontSize: '10px' }}
                     itemStyle={{ padding: '2px 0' }}
                     formatter={(value: any) => [`$${(value || 0).toLocaleString()}`, '']}
                   />
@@ -268,7 +277,7 @@ export default function Dashboard() {
                     verticalAlign="bottom"
                     height={40}
                     iconType="circle"
-                    iconSize={7}
+                    iconSize={6}
                     wrapperStyle={{ fontSize: '10px', color: '#9ca3af', paddingTop: '10px' }}
                   />
                 </PieChart>
@@ -278,37 +287,38 @@ export default function Dashboard() {
         </div>
       )}
 
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 md:gap-6">
-        {}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-800">
-            <h3 className="text-sm font-semibold text-gray-300">{t('dashboard.recent_analyses')}</h3>
-            <button onClick={() => navigate('/analysis')} className="text-xs text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1">
-              {t('dashboard.all')} <ArrowRight size={11} />
+      {/* Lists Tables Grid */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Recent Analyses */}
+        <div className="glass-panel rounded-2xl overflow-hidden flex flex-col justify-between">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.04]">
+            <h3 className="text-sm font-display font-semibold text-slate-200">{t('dashboard.recent_analyses')}</h3>
+            <button onClick={() => navigate('/analysis')} className="text-[11px] font-semibold text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1">
+              {t('dashboard.all')} <ArrowRight size={12} />
             </button>
           </div>
           {recentAnalysis.length === 0 ? (
-            <p className="px-5 py-8 text-gray-600 text-sm text-center">{t('dashboard.no_analyses')}</p>
+            <p className="px-5 py-12 text-slate-500 text-xs text-center">{t('dashboard.no_analyses')}</p>
           ) : (
-            <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-800">
-              <table className="w-full text-sm min-w-[340px]">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-slate-300 min-w-[340px]">
                 <thead>
-                  <tr className="text-gray-600 text-[10px] uppercase tracking-wider bg-gray-800/30">
-                    <th className="px-4 py-2 text-left">{t('dashboard.ticker')}</th>
-                    <th className="px-4 py-2 text-left">{t('dashboard.date')}</th>
-                    <th className="px-4 py-2 text-left">{t('dashboard.signal')}</th>
-                    <th className="px-4 py-2 text-right">{t('dashboard.duration')}</th>
+                  <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
+                    <th className="px-5 py-3 text-left font-bold">{t('dashboard.ticker')}</th>
+                    <th className="px-5 py-3 text-left font-bold">{t('dashboard.date')}</th>
+                    <th className="px-5 py-3 text-left font-bold">{t('dashboard.signal')}</th>
+                    <th className="px-5 py-3 text-right font-bold">{t('dashboard.duration')}</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-white/[0.02]">
                   {recentAnalysis.map(a => (
                     <tr key={a.id}
                       onClick={() => navigate('/analysis')}
-                      className="border-t border-gray-800/60 hover:bg-gray-800/40 cursor-pointer transition-colors">
-                      <td className="px-4 py-2.5 font-mono font-bold text-white text-xs md:text-sm">{a.ticker}</td>
-                      <td className="px-4 py-2.5 text-gray-500 text-[11px]">{a.trade_date}</td>
-                      <td className="px-4 py-2.5"><SignalBadge signal={a.signal} /></td>
-                      <td className="px-4 py-2.5 text-gray-600 text-[11px] text-right">{a.duration_seconds?.toFixed(0)}s</td>
+                      className="hover:bg-white/[0.02] cursor-pointer transition-colors">
+                      <td className="px-5 py-3.5 font-mono font-bold text-white text-sm">{a.ticker}</td>
+                      <td className="px-5 py-3.5 text-slate-400 font-medium">{a.trade_date}</td>
+                      <td className="px-5 py-3.5"><SignalBadge signal={a.signal} /></td>
+                      <td className="px-5 py-3.5 text-slate-500 font-mono text-right">{a.duration_seconds?.toFixed(1)}s</td>
                     </tr>
                   ))}
                 </tbody>
@@ -317,35 +327,35 @@ export default function Dashboard() {
           )}
         </div>
 
-        {}
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-          <div className="flex items-center justify-between px-4 py-3.5 border-b border-gray-800">
-            <h3 className="text-sm font-semibold text-gray-300">{t('dashboard.open_positions')}</h3>
-            <button onClick={() => navigate('/portfolio')} className="text-xs text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1">
-              {t('nav.portfolio')} <ArrowRight size={11} />
+        {/* Open Positions */}
+        <div className="glass-panel rounded-2xl overflow-hidden flex flex-col justify-between">
+          <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.04]">
+            <h3 className="text-sm font-display font-semibold text-slate-200">{t('dashboard.open_positions')}</h3>
+            <button onClick={() => navigate('/portfolio')} className="text-[11px] font-semibold text-violet-400 hover:text-violet-300 transition-colors flex items-center gap-1">
+              {t('nav.portfolio')} <ArrowRight size={12} />
             </button>
           </div>
           {!sim?.holdings?.length ? (
-            <p className="px-5 py-8 text-gray-600 text-sm text-center">{t('dashboard.no_open_positions')}</p>
+            <p className="px-5 py-12 text-slate-500 text-xs text-center">{t('dashboard.no_open_positions')}</p>
           ) : (
-            <div className="overflow-x-auto scrollbar-thin scrollbar-thumb-gray-800">
-              <table className="w-full text-sm min-w-[320px]">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-slate-300 min-w-[320px]">
                 <thead>
-                  <tr className="text-gray-600 text-[10px] uppercase tracking-wider bg-gray-800/30">
-                    <th className="px-4 py-2 text-left">{t('dashboard.ticker')}</th>
-                    <th className="px-4 py-2 text-right">{t('dashboard.quantity')}</th>
-                    <th className="px-4 py-2 text-right">{t('dashboard.price')}</th>
-                    <th className="px-4 py-2 text-right">{t('dashboard.pnl')}</th>
+                  <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
+                    <th className="px-5 py-3 text-left font-bold">{t('dashboard.ticker')}</th>
+                    <th className="px-5 py-3 text-right font-bold">{t('dashboard.quantity')}</th>
+                    <th className="px-5 py-3 text-right font-bold">{t('dashboard.price')}</th>
+                    <th className="px-5 py-3 text-right font-bold">{t('dashboard.pnl')}</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-white/[0.02]">
                   {(sim.holdings || []).map(h => (
-                    <tr key={h.ticker} className="border-t border-gray-800/60 hover:bg-gray-800/40 transition-colors">
-                      <td className="px-4 py-2.5 font-mono font-bold text-white text-xs md:text-sm">{h.ticker}</td>
-                      <td className="px-4 py-2.5 text-gray-400 text-right text-[11px]">{(h.quantity ?? 0).toFixed(4)}</td>
-                      <td className="px-4 py-2.5 text-gray-400 text-right text-[11px]">${h.current_price?.toFixed(2) ?? '—'}</td>
-                      <td className={`px-4 py-2.5 text-right text-[11px] font-semibold ${(h.unrealized_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-red-400'}`}>
-                        {(h.unrealized_pnl ?? 0) >= 0 ? '+' : ''}${(h.unrealized_pnl ?? 0).toFixed(2)}
+                    <tr key={h.ticker} className="hover:bg-white/[0.02] transition-colors">
+                      <td className="px-5 py-3.5 font-mono font-bold text-white text-sm">{h.ticker}</td>
+                      <td className="px-5 py-3.5 text-slate-400 text-right font-mono">{(h.quantity ?? 0).toFixed(4)}</td>
+                      <td className="px-5 py-3.5 text-slate-400 text-right font-mono">${h.current_price?.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 }) ?? '—'}</td>
+                      <td className={`px-5 py-3.5 text-right font-mono font-semibold ${(h.unrealized_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {(h.unrealized_pnl ?? 0) >= 0 ? '+' : ''}${(h.unrealized_pnl ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                     </tr>
                   ))}
@@ -356,30 +366,30 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {}
+      {/* Watchlist News Feed */}
       {news.length > 0 && (
-        <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-          <div className="px-4 py-3.5 border-b border-gray-800">
-            <h3 className="text-sm font-semibold text-gray-300">{t('dashboard.watchlist_news')}</h3>
+        <div className="glass-panel rounded-2xl overflow-hidden">
+          <div className="px-5 py-4 border-b border-white/[0.04]">
+            <h3 className="text-sm font-display font-semibold text-slate-200">{t('dashboard.watchlist_news')}</h3>
           </div>
-          <div className="divide-y divide-gray-800">
+          <div className="divide-y divide-white/[0.03]">
             {news.map((item, i) => (
-              <div key={i} className="px-4 py-3.5 hover:bg-gray-800/40 transition-colors">
-                <div className="flex items-start justify-between gap-3">
+              <div key={i} className="px-5 py-4 hover:bg-white/[0.01] transition-colors">
+                <div className="flex items-start justify-between gap-4">
                   <div className="flex-1 min-w-0">
-                    <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 mb-1.5">
-                      <span className="text-[10px] font-mono font-bold text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded-md border border-violet-500/20">{item.ticker}</span>
-                      <span className="text-[10px] text-gray-500 font-medium">{item.source}</span>
-                      <span className="text-[10px] text-gray-600">
+                    <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mb-2">
+                      <span className="text-[9px] font-mono font-bold text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded border border-violet-500/20">{item.ticker}</span>
+                      <span className="text-[10px] text-slate-400 font-semibold">{item.source}</span>
+                      <span className="text-[10px] text-slate-500 font-medium">
                         {(() => {
                           const d = new Date(item.published_at)
                           return Number.isNaN(d.getTime()) ? '' : d.toLocaleDateString(language === 'tr' ? 'tr-TR' : 'en-US')
                         })()}
                       </span>
                     </div>
-                    <p className="text-sm text-gray-300 line-clamp-2 leading-relaxed">{item.title}</p>
+                    <p className="text-xs md:text-sm text-slate-300 font-medium leading-relaxed">{item.title}</p>
                   </div>
-                  <a href={item.url} target="_blank" rel="noreferrer" className="text-gray-600 hover:text-violet-400 transition-colors shrink-0 mt-1">
+                  <a href={item.url} target="_blank" rel="noreferrer" className="text-slate-500 hover:text-violet-400 transition-colors shrink-0 p-1 hover:bg-white/5 rounded-lg mt-0.5">
                     <ExternalLink size={13} />
                   </a>
                 </div>
@@ -396,16 +406,15 @@ function KpiCard({ icon, label, value, sub, color = 'text-white', accent = 'from
   icon: React.ReactNode; label: string; value: string; sub?: string; color?: string; accent?: string
 }) {
   return (
-    <div className={`bg-gradient-to-br ${accent} to-gray-900 border border-gray-800 rounded-2xl p-3.5 md:p-5`}>
-      <div className="flex items-start gap-2.5 md:gap-3">
-        <div className="p-1.5 md:p-2 rounded-xl bg-gray-800 text-violet-400 shrink-0">{icon}</div>
+    <div className={`bg-gradient-to-br ${accent} to-slate-900/40 backdrop-blur-md border border-white/[0.04] rounded-2xl p-4 md:p-5 shadow`}>
+      <div className="flex items-start gap-3">
+        <div className="p-2 rounded-xl bg-slate-950/60 text-violet-400 border border-white/[0.04] shrink-0">{icon}</div>
         <div className="min-w-0">
-          <p className="text-gray-500 text-[10px] md:text-xs font-medium uppercase tracking-wider mb-1 leading-tight truncate">{label}</p>
-          <p className={`text-base md:text-xl font-bold ${color} leading-none truncate`}>{value}</p>
-          {sub && <p className={`text-[10px] mt-1.5 ${color} opacity-70 truncate`}>{sub}</p>}
+          <p className="text-slate-500 text-[10px] md:text-xs font-semibold uppercase tracking-wider mb-1.5 leading-none truncate">{label}</p>
+          <p className={`text-base md:text-xl font-display font-bold ${color} leading-none truncate`}>{value}</p>
+          {sub && <p className="text-[10px] mt-1.5 text-slate-400 font-mono font-medium truncate">{sub}</p>}
         </div>
       </div>
     </div>
   )
 }
-

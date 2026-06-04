@@ -9,9 +9,9 @@ import { useTranslation } from '../contexts/LanguageContext'
 import {
   Loader2, CheckCircle, AlertCircle, History,
   X, BarChart2, FileText, Zap, Square,
-  Download, FileDown,
+  Download, FileDown, Shield, TrendingUp, TrendingDown,
+  MessageSquare, User, Scale, AlertTriangle
 } from 'lucide-react'
-
 
 interface WsEvent {
   type: string; section?: string; content?: string; signal?: string
@@ -42,7 +42,6 @@ interface PortfolioDetail {
   super_portfolio_report: string; analysis_ids: number[]; created_at: string
 }
 
-
 const STORAGE_KEY = 'ta_last_run'
 const TASK_KEY = 'ta_task_running'
 
@@ -59,14 +58,13 @@ const SECTION_LABELS: Record<string, string> = {
 }
 
 const TONE_CLASSES: Record<string, { bg: string; text: string; border: string }> = {
-  positive: { bg: 'bg-emerald-500/15', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  neutral:  { bg: 'bg-yellow-500/15',  text: 'text-yellow-300',  border: 'border-yellow-500/30' },
-  negative: { bg: 'bg-red-500/15',     text: 'text-red-300',     border: 'border-red-500/30' },
+  positive: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
+  neutral:  { bg: 'bg-amber-500/10',  text: 'text-amber-400',  border: 'border-amber-500/20' },
+  negative: { bg: 'bg-rose-500/10',     text: 'text-rose-400',     border: 'border-rose-500/20' },
 }
 const FALLBACK_TONE: Record<string, string> = {
   Buy: 'positive', Overweight: 'positive', Hold: 'neutral', Underweight: 'negative', Sell: 'negative',
 }
-
 
 function SignalBadge({ signal, large }: { signal: string | null; large?: boolean }) {
   const meta = useMeta()
@@ -75,9 +73,9 @@ function SignalBadge({ signal, large }: { signal: string | null; large?: boolean
   const tone = sig?.tone ?? FALLBACK_TONE[signal]
   const m = tone ? TONE_CLASSES[tone] : undefined
   const label = sig?.label ?? signal
-  if (!m) return <span className="text-gray-400">{label}</span>
+  if (!m) return <span className="text-slate-400 font-semibold">{label}</span>
   return (
-    <span className={`inline-flex items-center font-bold border rounded-xl ${m.bg} ${m.text} ${m.border} ${large ? 'px-4 py-1.5 text-base' : 'px-2.5 py-0.5 text-xs'}`}>
+    <span className={`inline-flex items-center font-bold border rounded-xl ${m.bg} ${m.text} ${m.border} ${large ? 'px-4 py-1.5 text-sm' : 'px-2.5 py-0.5 text-[10px]'}`}>
       {label}
     </span>
   )
@@ -87,20 +85,21 @@ function ReportCard({ label, content, defaultOpen }: { label: string; content: s
   const { t } = useTranslation()
   if (!content) return null
   return (
-    <details open={defaultOpen} className="group">
-      <summary className="flex items-center gap-2 cursor-pointer select-none px-4 py-3 rounded-xl bg-gray-800/60 hover:bg-gray-800 transition-colors border border-gray-700/50 list-none">
-        <FileText size={13} className="text-violet-400 shrink-0" />
-        <span className="text-sm font-medium text-gray-200 flex-1">{label}</span>
-        <span className="text-xs text-gray-500 group-open:hidden">{t('analysis.report_card.show')}</span>
-        <span className="text-xs text-gray-500 hidden group-open:inline">{t('analysis.report_card.hide')}</span>
+    <details open={defaultOpen} className="group border border-white/[0.04] rounded-xl overflow-hidden bg-slate-900/20">
+      <summary className="flex items-center gap-2.5 cursor-pointer select-none px-4 py-3 bg-slate-900/40 hover:bg-slate-900/80 transition-colors list-none">
+        <FileText size={14} className="text-violet-400 shrink-0" />
+        <span className="text-xs font-semibold text-slate-200 flex-1">{label}</span>
+        <span className="text-[10px] text-slate-500 group-open:hidden">{t('analysis.report_card.show')}</span>
+        <span className="text-[10px] text-slate-500 hidden group-open:inline">{t('analysis.report_card.hide')}</span>
       </summary>
-      <pre className="text-xs text-gray-300 whitespace-pre-wrap bg-gray-900/80 rounded-xl p-4 mt-1.5 max-h-72 overflow-y-auto border border-gray-700/30 font-mono leading-relaxed">
-        {content}
-      </pre>
+      <div className="p-4 border-t border-white/[0.04] bg-slate-950/80">
+        <pre className="text-xs text-slate-300 whitespace-pre-wrap max-h-80 overflow-y-auto font-mono leading-relaxed select-text">
+          {content}
+        </pre>
+      </div>
     </details>
   )
 }
-
 
 const EMPTY_RUN = {
   ticker: '', date: new Date().toISOString().slice(0, 10), assetType: 'stock',
@@ -173,8 +172,6 @@ function RunTab() {
     }
   }
 
-
-
   const attachWs = useCallback((taskId: string, isReconnect = false) => {
     taskIdRef.current = taskId
     const token = getAccessToken()
@@ -216,10 +213,10 @@ function RunTab() {
         setRunStatus('done')
         setRunning_(false)
         setCurrentStep(null)
-        appendLog(`${t('analysis.ws.complete')} ${ev.duration_seconds}s / ${ev.llm_calls} ${t('analysis.ws.llm_calls')}`)
+        appendLog(`✓ Completed in ${ev.duration_seconds}s / ${ev.llm_calls} LLM calls`)
         sendBrowserNotification(
-          `${ticker.toUpperCase()} ${t('analysis.ws.analysis_complete_notif')}`,
-          `${t('analysis.ws.signal_label')} ${ev.signal ?? 'N/A'} • ${ev.duration_seconds?.toFixed(0)}s`
+          `${ticker.toUpperCase()} Analysis Completed`,
+          `Signal: ${ev.signal ?? 'N/A'} • Duration: ${ev.duration_seconds?.toFixed(0)}s`
         )
         if (ev.analysis_id) {
           setAnalysisId(ev.analysis_id)
@@ -230,7 +227,7 @@ function RunTab() {
         setRunStatus('error')
         setRunning_(false)
         setCurrentStep(null)
-        appendLog(`${t('analysis.ws.error_prefix')} ${ev.message}`)
+        appendLog(`✗ Error: ${ev.message}`)
         notify('error', ev.message ?? t('analysis.ws.analysis_failed'), t('analysis.ws.analysis_error_title'))
       }
     }
@@ -255,8 +252,7 @@ function RunTab() {
         }
       }
     }
-  }, [])
-
+  }, [ticker, t])
 
   useEffect(() => {
     const raw = localStorage.getItem(TASK_KEY)
@@ -270,8 +266,7 @@ function RunTab() {
       if (runTicker) setTicker(runTicker)
       attachWs(taskId, true)
     } catch { localStorage.removeItem(TASK_KEY) }
-  }, [])
-
+  }, [attachWs, log])
 
   useEffect(() => {
     if (!ticker.trim() || running) return
@@ -283,7 +278,6 @@ function RunTab() {
     }, 600)
     return () => clearTimeout(tid)
   }, [ticker, date, running])
-
 
   useEffect(() => {
     if (!ticker.trim()) { setExistingId(null); return }
@@ -351,14 +345,14 @@ function RunTab() {
   const reportEntries = Object.entries(reports)
 
   return (
-    <div className="space-y-4">
-      {}
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-3.5 md:p-5">
-        <div className="flex flex-wrap gap-3 items-end">
+    <div className="space-y-6">
+      {/* Control Block */}
+      <div className="glass-panel rounded-2xl p-4 md:p-5">
+        <div className="flex flex-wrap gap-4 items-end">
           <div className="flex-1 min-w-[120px]">
-            <label className="text-[10px] md:text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.symbol')}</label>
+            <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.symbol')}</label>
             <input
-              className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 w-full uppercase font-mono text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
+              className="glass-input rounded-xl px-3 py-2 w-full uppercase font-mono text-sm outline-none"
               value={ticker}
               onChange={e => setTicker(e.target.value.toUpperCase())}
               placeholder="AAPL"
@@ -366,19 +360,19 @@ function RunTab() {
             />
           </div>
           <div className="flex-1 min-w-[140px]">
-            <label className="text-[10px] md:text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.date')}</label>
+            <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.date')}</label>
             <input
               type="date"
-              className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm w-full focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
+              className="glass-input rounded-xl px-3 py-2 text-sm w-full outline-none"
               value={date}
               onChange={e => setDate(e.target.value)}
               disabled={running}
             />
           </div>
-          <div className="flex-1 min-w-[100px]">
-            <label className="text-[10px] md:text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.type')}</label>
+          <div className="flex-1 min-w-[110px]">
+            <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.type')}</label>
             <select
-              className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm w-full focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
+              className="glass-input rounded-xl px-3 py-2 text-sm w-full outline-none"
               value={assetType}
               onChange={e => setAssetType(e.target.value)}
               disabled={running}
@@ -387,103 +381,103 @@ function RunTab() {
             </select>
           </div>
 
-          <div className="w-full sm:w-auto flex items-center gap-2 mt-1 sm:mt-0">
+          <div className="w-full sm:w-auto flex items-center gap-2 mt-2 sm:mt-0">
             {!running ? (
               <button
                 onClick={handleRun}
                 disabled={!ticker.trim()}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-violet-500/20 transition-all"
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-xs md:text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-violet-500/20 transition-all cursor-pointer"
               >
-                <Zap size={15} /> {t('analysis.btn.start')}
+                <Zap size={14} /> {t('analysis.btn.start')}
               </button>
             ) : (
               <button
                 onClick={handleStop}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white bg-red-600/80 hover:bg-red-600 border border-red-500/40 shadow-lg shadow-red-500/20 transition-all"
+                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-xs md:text-sm font-semibold text-white bg-rose-600/90 hover:bg-rose-600 shadow-md shadow-rose-500/20 transition-all cursor-pointer"
               >
-                <Square size={13} fill="currentColor" /> {t('analysis.btn.stop')}
+                <Square size={12} fill="currentColor" /> {t('analysis.btn.stop')}
               </button>
             )}
 
             {runStatus !== 'idle' && !running && (
-              <button onClick={handleClear} className="text-gray-600 hover:text-gray-400 transition-colors p-2 rounded-lg hover:bg-gray-800 shrink-0">
-                <X size={14} />
+              <button onClick={handleClear} className="text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors p-2 rounded-lg shrink-0 cursor-pointer">
+                <X size={15} />
               </button>
             )}
           </div>
 
-          {runStatus === 'done' && <CheckCircle size={18} className="text-emerald-400 mb-2.5 hidden sm:block" />}
-          {runStatus === 'error' && <AlertCircle size={18} className="text-red-400 mb-2.5 hidden sm:block" />}
-          {signal && <div className="mb-1.5"><SignalBadge signal={signal} large /></div>}
+          {runStatus === 'done' && <CheckCircle size={20} className="text-emerald-400 mb-2 hidden sm:block animate-bounce" />}
+          {runStatus === 'error' && <AlertCircle size={20} className="text-rose-400 mb-2 hidden sm:block" />}
+          {signal && <div className="mb-1"><SignalBadge signal={signal} large /></div>}
         </div>
-        {}
+
         {!running && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-2.5">
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 border-t border-white/[0.03] pt-2.5">
             {costEstimate && (
-              <span className="text-[10px] md:text-xs text-gray-500 font-medium">
-                {t('analysis.cost_estimate')}${costEstimate.min_usd.toFixed(3)}–${costEstimate.max_usd.toFixed(3)}
+              <span className="text-[10px] text-slate-500 font-semibold">
+                Cost Estimate: ${costEstimate.min_usd.toFixed(3)} – ${costEstimate.max_usd.toFixed(3)}
               </span>
             )}
             {existingId && (
-              <span className="text-[10px] md:text-xs text-amber-500 font-medium">{t('analysis.existing_analysis')}</span>
+              <span className="text-[10px] text-amber-500 font-semibold bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg">{t('analysis.existing_analysis')}</span>
             )}
           </div>
         )}
       </div>
 
-      {}
+      {/* Rerun Warning Modal */}
       {showRerunModal && (
         <div className="fixed inset-0 bg-black/75 z-[60] flex items-center justify-center p-5 backdrop-blur-md">
-          <div className="bg-gray-900 border border-gray-800 rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
+          <div className="bg-slate-900 border border-white/[0.06] rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
             <div className="space-y-2">
-              <h3 className="text-white text-lg font-bold">{t('analysis.rerun.title')}</h3>
-              <p className="text-gray-400 text-sm leading-relaxed">
+              <h3 className="text-white text-lg font-display font-bold flex items-center gap-2"><AlertTriangle className="text-amber-500" size={18} /> {t('analysis.rerun.title')}</h3>
+              <p className="text-slate-400 text-xs leading-relaxed">
                 {t('analysis.rerun.body').replace('{ticker}', ticker.toUpperCase()).replace('{date}', date)}
               </p>
             </div>
             <div className="flex gap-3">
-              <button onClick={doRun} className="flex-1 bg-violet-600 hover:bg-violet-500 text-white text-sm font-bold py-2.5 rounded-xl transition shadow-lg shadow-violet-600/20">{t('analysis.btn.rerun')}</button>
-              <button onClick={() => setShowRerunModal(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm font-bold py-2.5 rounded-xl transition">{t('analysis.btn.cancel')}</button>
+              <button onClick={doRun} className="flex-1 bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold py-2.5 rounded-xl transition shadow shadow-violet-600/20 cursor-pointer">{t('analysis.btn.rerun')}</button>
+              <button onClick={() => setShowRerunModal(false)} className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold py-2.5 rounded-xl transition cursor-pointer">{t('analysis.btn.cancel')}</button>
             </div>
           </div>
         </div>
       )}
 
-      {}
+      {/* Live running step notification bar */}
       {running && (
-        <div className="flex items-center gap-3 px-4 py-3 bg-violet-500/10 border border-violet-500/20 rounded-2xl">
+        <div className="flex items-center gap-3 px-4 py-3 bg-violet-500/5 border border-violet-500/15 rounded-2xl">
           <span className="relative flex h-2 w-2 shrink-0">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
             <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
           </span>
-          <Loader2 size={13} className="text-violet-400 animate-spin" />
-          <p className="text-violet-300 text-xs md:text-sm font-medium truncate">
+          <Loader2 size={13} className="text-violet-400 animate-spin shrink-0" />
+          <p className="text-violet-300 text-xs font-medium truncate flex-1">
             <span className="font-bold">{ticker}</span> {t('analysis.running')}
             {currentStep
               ? <span className="text-white ml-2 font-semibold">→ {currentStep.label}</span>
-              : <span className="text-violet-500 ml-2 font-normal">{log.at(-1)}</span>}
+              : <span className="text-slate-400 ml-2 font-normal">{log.at(-1)}</span>}
           </p>
         </div>
       )}
 
-      {}
+      {/* Workspace columns */}
       {(log.length > 0 || reportEntries.length > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden flex flex-col h-[60vh] lg:h-[70vh]">
-            <div className="flex items-center gap-1 p-1 bg-gray-800/40 border-b border-gray-800">
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Left Column: Live Progress Log & Live adversarial debate bubbles */}
+          <div className="glass-panel rounded-2xl overflow-hidden flex flex-col h-[55vh] lg:h-[65vh]">
+            <div className="flex items-center gap-1 p-1 bg-slate-900/40 border-b border-white/[0.04]">
               <button
                 onClick={() => setLeftTab('log')}
-                className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
-                  leftTab === 'log' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
+                  leftTab === 'log' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
                 }`}
               >
                 {t('analysis.log.title')}
               </button>
               <button
                 onClick={() => setLeftTab('debate')}
-                className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
-                  leftTab === 'debate' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
+                  leftTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
                 }`}
               >
                 {t('analysis.tab.live_debate')}
@@ -491,30 +485,32 @@ function RunTab() {
             </div>
             <div className="flex-1 p-4 overflow-y-auto min-h-0">
               {leftTab === 'log' ? (
-                <div className="space-y-1 font-mono text-xs">
+                <div className="space-y-1 font-mono text-[10px]">
                   {log.map((line, i) => (
                     <p key={i} className={`leading-relaxed ${
-                      line.startsWith('✗') ? 'text-red-400' :
-                      line.startsWith('✓') ? 'text-emerald-400' :
-                      line.startsWith('—') ? 'text-violet-400 font-semibold' : 'text-gray-500'
+                      line.startsWith('✗') ? 'text-rose-400' :
+                      line.startsWith('✓') ? 'text-emerald-400 font-semibold' :
+                      line.startsWith('—') ? 'text-violet-400 font-semibold' : 'text-slate-500'
                     }`}>
                       {line}
                     </p>
                   ))}
-                  {running && <p className="text-gray-600 animate-pulse">▋</p>}
+                  {running && <p className="text-slate-600 animate-pulse">▋</p>}
                 </div>
               ) : (
                 <div className="space-y-3">
                   {liveDebate.length === 0 && (
-                    <p className="text-gray-600 text-xs text-center py-12">Tartışma henüz başlamadı veya bekleniyor...</p>
+                    <p className="text-slate-600 text-xs text-center py-12">Debate is waiting to start...</p>
                   )}
                   {liveDebate.map((m, idx) => {
                     const styles = getSenderStyles(m.sender)
                     return (
-                      <div key={idx} className={`flex ${styles.side}`}>
-                        <div className={`border rounded-2xl px-3 py-2 text-[11px] flex flex-col gap-0.5 ${styles.bg}`}>
-                          <span className="font-bold uppercase tracking-wider text-[9px] opacity-75">{m.sender}</span>
-                          <span className="leading-normal whitespace-pre-wrap">{m.content}</span>
+                      <div key={idx} className={`flex ${styles.side} animate-in fade-in duration-200`}>
+                        <div className={`border rounded-2xl px-3.5 py-2.5 text-xs flex flex-col gap-1 max-w-[85%] ${styles.bg}`}>
+                          <span className="font-bold uppercase tracking-wider text-[9px] opacity-80 flex items-center gap-1">
+                            {styles.icon} {m.sender}
+                          </span>
+                          <span className="leading-relaxed whitespace-pre-wrap">{m.content}</span>
                         </div>
                       </div>
                     )
@@ -524,32 +520,31 @@ function RunTab() {
             </div>
           </div>
 
-          {}
-          <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden flex flex-col h-[60vh] lg:h-[70vh]">
+          {/* Right Column: Dynamic Reports, Debate History, QnA chat */}
+          <div className="lg:col-span-2 glass-panel rounded-2xl overflow-hidden flex flex-col h-[55vh] lg:h-[65vh]">
             {detail ? (
-
               <>
-                <div className="flex items-center gap-1 p-1 bg-gray-800/40 border-b border-gray-800">
+                <div className="flex items-center gap-1 p-1 bg-slate-900/40 border-b border-white/[0.04]">
                   <button
                     onClick={() => setActiveDetailTab('reports')}
-                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
-                      activeDetailTab === 'reports' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                    className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
+                      activeDetailTab === 'reports' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
                     }`}
                   >
                     {t('analysis.tab.reports')}
                   </button>
                   <button
                     onClick={() => setActiveDetailTab('debate')}
-                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
-                      activeDetailTab === 'debate' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                    className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
+                      activeDetailTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
                     }`}
                   >
                     {t('analysis.tab.debate')}
                   </button>
                   <button
                     onClick={() => setActiveDetailTab('chat')}
-                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
-                      activeDetailTab === 'chat' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                    className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
+                      activeDetailTab === 'chat' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
                     }`}
                   >
                     {t('analysis.tab.qa')}
@@ -557,7 +552,7 @@ function RunTab() {
                 </div>
                 <div className="flex-1 p-4 overflow-y-auto min-h-0">
                   {activeDetailTab === 'reports' && (
-                    <div className="space-y-1.5">
+                    <div className="space-y-2">
                       {reportEntries.map(([section, content]) => (
                         <ReportCard key={section} label={sectionLabels[section] || section} content={content} defaultOpen={section === activeSection} />
                       ))}
@@ -572,16 +567,18 @@ function RunTab() {
                 </div>
               </>
             ) : (
-
               <>
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800 bg-gray-800/40">
-                  <FileText size={13} className="text-gray-500" />
-                  <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">{t('analysis.reports.title')}</span>
-                  <span className="ml-auto text-xs text-gray-600">{reportEntries.length} {t('analysis.reports.sections')}</span>
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.04] bg-slate-900/20">
+                  <FileText size={14} className="text-slate-400" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('analysis.reports.title')}</span>
+                  <span className="ml-auto text-[10px] text-slate-600 font-semibold">{reportEntries.length} {t('analysis.reports.sections')}</span>
                 </div>
-                <div className="flex-1 p-4 overflow-y-auto min-h-0 space-y-1.5">
+                <div className="flex-1 p-4 overflow-y-auto min-h-0 space-y-2">
                   {reportEntries.length === 0 && (
-                    <p className="text-gray-600 text-sm text-center py-8">{t('analysis.reports.empty')}</p>
+                    <div className="flex flex-col items-center justify-center py-16 text-slate-600">
+                      <FileText size={28} className="opacity-25 mb-2" />
+                      <p className="text-xs">{t('analysis.reports.empty')}</p>
+                    </div>
                   )}
                   {reportEntries.map(([section, content]) => (
                     <ReportCard key={section} label={sectionLabels[section] || section} content={content} defaultOpen={section === activeSection} />
@@ -595,7 +592,6 @@ function RunTab() {
     </div>
   )
 }
-
 
 function MultiTab() {
   const { t } = useTranslation()
@@ -628,22 +624,22 @@ function MultiTab() {
   }
 
   return (
-    <div className="space-y-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
-        <p className="text-gray-500 text-sm">{t('analysis.multi.description')}</p>
+    <div className="space-y-6">
+      <div className="glass-panel rounded-2xl p-5 space-y-5">
+        <p className="text-slate-400 text-xs leading-relaxed">{t('analysis.multi.description')}</p>
 
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.multi.label_symbols')}</label>
-          <div className="flex flex-wrap gap-2 min-h-11 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 focus-within:border-violet-500 transition-colors">
+          <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('analysis.multi.label_symbols')}</label>
+          <div className="flex flex-wrap gap-2 min-h-12 bg-slate-900/60 border border-white/[0.08] rounded-xl px-3 py-2 focus-within:border-violet-500/50 transition-colors">
             {tickers.map(tk => (
-              <span key={tk} className="flex items-center gap-1 bg-violet-500/20 border border-violet-500/30 text-violet-300 text-xs font-mono px-2 py-0.5 rounded-lg">
+              <span key={tk} className="flex items-center gap-1.5 bg-violet-500/10 border border-violet-500/20 text-violet-300 text-xs font-mono font-bold px-2 py-0.5 rounded-lg">
                 {tk}
-                <button onClick={() => setTickers(p => p.filter(x => x !== tk))} className="hover:text-red-400 transition-colors"><X size={10} /></button>
+                <button onClick={() => setTickers(p => p.filter(x => x !== tk))} className="text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"><X size={10} /></button>
               </span>
             ))}
             {tickers.length < 10 && (
               <input
-                className="bg-transparent text-white text-sm outline-none flex-1 min-w-16 uppercase font-mono placeholder-gray-600"
+                className="bg-transparent text-white text-xs outline-none flex-1 min-w-[100px] uppercase font-mono placeholder-slate-600"
                 placeholder="AAPL, Enter"
                 value={input}
                 onChange={e => setInput(e.target.value.toUpperCase())}
@@ -654,29 +650,29 @@ function MultiTab() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3 items-end">
+        <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.date')}</label>
-            <input type="date" className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition" value={date} onChange={e => setDate(e.target.value)} disabled={running} />
+            <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.date')}</label>
+            <input type="date" className="glass-input rounded-xl px-3 py-2 text-xs outline-none" value={date} onChange={e => setDate(e.target.value)} disabled={running} />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.type')}</label>
-            <select className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-500 transition" value={assetType} onChange={e => setAssetType(e.target.value)} disabled={running}>
+            <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.type')}</label>
+            <select className="glass-input rounded-xl px-3 py-2 text-xs outline-none" value={assetType} onChange={e => setAssetType(e.target.value)} disabled={running}>
               {assetTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
           <button
             onClick={handleRun}
             disabled={running || tickers.length < 2}
-            className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 shadow-lg shadow-violet-500/20 transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 shadow-md shadow-violet-500/20 transition-all cursor-pointer"
           >
-            {running ? <Loader2 size={15} className="animate-spin" /> : <BarChart2 size={15} />}
+            {running ? <Loader2 size={13} className="animate-spin" /> : <BarChart2 size={13} />}
             {running ? t('analysis.multi.running') : t('analysis.multi.btn_start')}
           </button>
         </div>
 
-        {done && <div className="flex items-center gap-2 text-emerald-400 text-sm"><CheckCircle size={15} /> {t('analysis.multi.started')}</div>}
-        {error && <div className="flex items-center gap-2 text-red-400 text-sm"><AlertCircle size={15} /> {error}</div>}
+        {done && <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold"><CheckCircle size={14} /> {t('analysis.multi.started')}</div>}
+        {error && <div className="flex items-center gap-2 text-rose-400 text-xs font-semibold"><AlertCircle size={14} /> {error}</div>}
       </div>
       <PortfolioHistorySection />
     </div>
@@ -693,34 +689,34 @@ function PortfolioHistorySection() {
     axios.get('/api/analysis/portfolio-history').then(r => setItems(r.data)).finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="text-gray-500 text-sm px-1">{t('analysis.portfolio_history.loading')}</div>
+  if (loading) return <div className="text-slate-500 text-xs px-2">{t('analysis.portfolio_history.loading')}</div>
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-      <h3 className="text-sm font-semibold text-gray-300 mb-3">{t('analysis.portfolio_history.title')}</h3>
-      {items.length === 0 ? <p className="text-gray-600 text-sm">{t('analysis.portfolio_history.empty')}</p> : (
-        <div className="space-y-1.5">
+    <div className="glass-panel rounded-2xl p-5">
+      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3.5">{t('analysis.portfolio_history.title')}</h3>
+      {items.length === 0 ? <p className="text-slate-600 text-xs">{t('analysis.portfolio_history.empty')}</p> : (
+        <div className="space-y-2">
           {items.map(item => (
             <div key={item.id} onClick={() => axios.get(`/api/analysis/portfolio/${item.id}`).then(r => setDetail(r.data))}
-              className="flex items-center justify-between p-3 rounded-xl bg-gray-800/60 hover:bg-gray-800 cursor-pointer transition-colors border border-gray-700/40 hover:border-gray-700">
+              className="flex items-center justify-between p-3 rounded-xl bg-slate-900/20 hover:bg-slate-900/60 cursor-pointer transition-colors border border-white/[0.03] hover:border-white/[0.08]">
               <div className="flex items-center gap-2">
-                <span className="text-white font-mono text-sm font-semibold">{item.tickers.join(', ')}</span>
-                <span className="text-gray-600 text-xs">{item.trade_date}</span>
+                <span className="text-white font-mono text-xs font-bold">{item.tickers.join(', ')}</span>
+                <span className="text-slate-500 text-[10px]">{item.trade_date}</span>
               </div>
-              <span className="text-gray-600 text-xs">{new Date(item.created_at).toLocaleDateString()}</span>
+              <span className="text-slate-500 text-[10px] font-mono">{new Date(item.created_at).toLocaleDateString()}</span>
             </div>
           ))}
         </div>
       )}
       {detail && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-start justify-center p-4 overflow-y-auto backdrop-blur-sm">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-3xl my-8 space-y-4">
+          <div className="bg-slate-900 border border-white/[0.06] rounded-2xl p-6 w-full max-w-3xl my-8 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">{detail.tickers.join(', ')}</h3>
-              <button onClick={() => setDetail(null)} className="text-gray-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-gray-800"><X size={18} /></button>
+              <h3 className="text-base font-display font-bold text-white">{detail.tickers.join(', ')}</h3>
+              <button onClick={() => setDetail(null)} className="text-slate-500 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5 cursor-pointer"><X size={16} /></button>
             </div>
-            <p className="text-gray-600 text-xs">{detail.trade_date} • {new Date(detail.created_at).toLocaleString()}</p>
-            <pre className="text-sm text-gray-200 whitespace-pre-wrap bg-gray-950 rounded-xl p-5 max-h-96 overflow-y-auto border border-gray-800 font-mono leading-relaxed">
+            <p className="text-slate-500 text-[10px] font-mono">{detail.trade_date} • {new Date(detail.created_at).toLocaleString()}</p>
+            <pre className="text-xs text-slate-300 whitespace-pre-wrap bg-slate-950 rounded-xl p-4 max-h-[50vh] overflow-y-auto border border-white/[0.04] font-mono leading-relaxed select-text">
               {detail.super_portfolio_report || t('analysis.portfolio_history.report_not_ready')}
             </pre>
           </div>
@@ -729,7 +725,6 @@ function PortfolioHistorySection() {
     </div>
   )
 }
-
 
 function HistoryTab() {
   const { t } = useTranslation()
@@ -752,36 +747,36 @@ function HistoryTab() {
     finally { setDetailLoading(false) }
   }, [])
 
-  if (loading) return <div className="p-8 text-gray-500 text-sm">{t('analysis.history.loading')}</div>
+  if (loading) return <div className="p-8 text-slate-500 text-xs">{t('analysis.history.loading')}</div>
 
   return (
     <div className="space-y-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+      <div className="glass-panel rounded-2xl overflow-hidden">
         {items.length === 0 ? (
-          <p className="p-6 text-gray-600 text-sm">{t('analysis.history.empty')}</p>
+          <p className="p-6 text-slate-600 text-xs text-center">{t('analysis.history.empty')}</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[480px]">
+            <table className="w-full text-xs min-w-[500px]">
               <thead>
-                <tr className="text-gray-600 text-xs uppercase tracking-wider border-b border-gray-800 bg-gray-800/30">
-                  <th className="px-4 py-3 text-left">{t('analysis.history.col_symbol')}</th>
-                  <th className="px-4 py-3 text-left">{t('analysis.history.col_date')}</th>
-                  <th className="px-4 py-3 text-left">{t('analysis.history.col_signal')}</th>
-                  <th className="px-4 py-3 text-left">{t('analysis.history.col_duration')}</th>
-                  <th className="px-4 py-3 text-left hidden sm:table-cell">{t('analysis.history.col_source')}</th>
-                  <th className="px-4 py-3 text-left hidden md:table-cell">{t('analysis.history.col_time')}</th>
+                <tr className="text-slate-500 text-[10px] uppercase tracking-wider border-b border-white/[0.04] bg-slate-900/10">
+                  <th className="px-5 py-3 text-left font-bold">{t('analysis.history.col_symbol')}</th>
+                  <th className="px-5 py-3 text-left font-bold">{t('analysis.history.col_date')}</th>
+                  <th className="px-5 py-3 text-left font-bold">{t('analysis.history.col_signal')}</th>
+                  <th className="px-5 py-3 text-left font-bold">{t('analysis.history.col_duration')}</th>
+                  <th className="px-5 py-3 text-left hidden sm:table-cell font-bold">{t('analysis.history.col_source')}</th>
+                  <th className="px-5 py-3 text-left hidden md:table-cell font-bold">{t('analysis.history.col_time')}</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-white/[0.02] text-slate-300">
                 {items.map(item => (
                   <tr key={item.id} onClick={() => openDetail(item.id)}
-                    className="border-t border-gray-800 hover:bg-gray-800/50 cursor-pointer transition-colors">
-                    <td className="px-4 py-3 font-mono font-bold text-white">{item.ticker}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{item.trade_date}</td>
-                    <td className="px-4 py-3"><SignalBadge signal={item.signal} /></td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{item.duration_seconds.toFixed(1)}s</td>
-                    <td className="px-4 py-3 text-gray-600 text-xs hidden sm:table-cell">{item.triggered_by}</td>
-                    <td className="px-4 py-3 text-gray-600 text-xs hidden md:table-cell">{new Date(item.created_at).toLocaleString()}</td>
+                    className="hover:bg-white/[0.02] cursor-pointer transition-colors">
+                    <td className="px-5 py-3.5 font-mono font-bold text-white">{item.ticker}</td>
+                    <td className="px-5 py-3.5 text-slate-400 font-semibold">{item.trade_date}</td>
+                    <td className="px-5 py-3.5"><SignalBadge signal={item.signal} /></td>
+                    <td className="px-5 py-3.5 text-slate-500 font-mono">{item.duration_seconds.toFixed(1)}s</td>
+                    <td className="px-5 py-3.5 text-slate-500 hidden sm:table-cell">{item.triggered_by}</td>
+                    <td className="px-5 py-3.5 text-slate-600 hidden md:table-cell font-mono">{new Date(item.created_at).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -792,60 +787,60 @@ function HistoryTab() {
 
       {(detail || detailLoading) && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-start justify-center p-3 md:p-4 overflow-y-auto backdrop-blur-sm">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-6 w-full max-w-4xl my-4 md:my-8 space-y-4">
+          <div className="bg-slate-900 border border-white/[0.06] rounded-2xl p-4 md:p-6 w-full max-w-4xl my-4 md:my-8 space-y-4 shadow-2xl flex flex-col max-h-[90vh]">
             {detailLoading ? (
-              <div className="flex items-center gap-2 text-gray-400"><Loader2 className="animate-spin" size={16} /> {t('analysis.history.detail_loading')}</div>
+              <div className="flex items-center gap-2 text-slate-400 py-12 justify-center"><Loader2 className="animate-spin" size={16} /> {t('analysis.history.detail_loading')}</div>
             ) : detail ? (
               <>
-                <div className="flex items-start justify-between">
-                  <div className="space-y-2">
+                <div className="flex items-start justify-between border-b border-white/[0.04] pb-3 shrink-0">
+                  <div className="space-y-1">
                     <div className="flex items-center gap-3">
-                      <h3 className="text-2xl font-bold text-white font-mono">{detail.ticker}</h3>
+                      <h3 className="text-xl font-display font-bold text-white font-mono">{detail.ticker}</h3>
                       <SignalBadge signal={detail.signal} large />
                     </div>
-                    <p className="text-gray-500 text-xs">{detail.trade_date} • {detail.duration_seconds.toFixed(1)}s • {detail.llm_calls} LLM • {(detail.tokens_in + detail.tokens_out).toLocaleString()} token</p>
+                    <p className="text-[10px] text-slate-500 font-semibold">{detail.trade_date} • {detail.duration_seconds.toFixed(1)}s • {detail.llm_calls} LLM • {(detail.tokens_in + detail.tokens_out).toLocaleString()} token</p>
                   </div>
                   <div className="flex items-center gap-2 ml-4">
-                    <button onClick={() => exportMarkdown(detail)} className="flex items-center gap-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg transition" title={t('analysis.history.btn_download_md')}>
+                    <button onClick={() => exportMarkdown(detail)} className="flex items-center gap-1 bg-white/5 hover:bg-white/10 text-[10px] font-bold text-slate-300 px-2.5 py-1.5 rounded-lg transition cursor-pointer" title={t('analysis.history.btn_download_md')}>
                       <Download size={12} /> MD
                     </button>
-                    <button onClick={() => exportPDF(detail)} className="flex items-center gap-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg transition" title={t('analysis.history.btn_download_pdf')}>
+                    <button onClick={() => exportPDF(detail)} className="flex items-center gap-1 bg-white/5 hover:bg-white/10 text-[10px] font-bold text-slate-300 px-2.5 py-1.5 rounded-lg transition cursor-pointer" title={t('analysis.history.btn_download_pdf')}>
                       <FileDown size={12} /> PDF
                     </button>
-                    <button onClick={() => setDetail(null)} className="text-gray-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-gray-800"><X size={18} /></button>
+                    <button onClick={() => setDetail(null)} className="text-slate-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/5 cursor-pointer"><X size={16} /></button>
                   </div>
                 </div>
 
-                <div className="flex items-center gap-1 p-1 bg-gray-800/40 border border-gray-800/80 rounded-xl">
+                <div className="flex items-center gap-1 p-1 bg-slate-950/60 border border-white/[0.04] rounded-xl shrink-0">
                   <button
                     onClick={() => setActiveDetailTab('reports')}
-                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
-                      activeDetailTab === 'reports' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                    className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
+                      activeDetailTab === 'reports' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
                     }`}
                   >
                     {t('analysis.tab.reports')}
                   </button>
                   <button
                     onClick={() => setActiveDetailTab('debate')}
-                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
-                      activeDetailTab === 'debate' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                    className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
+                      activeDetailTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
                     }`}
                   >
                     {t('analysis.tab.debate')}
                   </button>
                   <button
                     onClick={() => setActiveDetailTab('chat')}
-                    className={`flex-1 text-center py-2 text-xs font-semibold rounded-xl transition ${
-                      activeDetailTab === 'chat' ? 'bg-gray-800 text-white' : 'text-gray-500 hover:text-white'
+                    className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
+                      activeDetailTab === 'chat' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
                     }`}
                   >
                     {t('analysis.tab.qa')}
                   </button>
                 </div>
 
-                <div className="flex-1 min-h-0">
+                <div className="flex-1 min-h-0 overflow-y-auto">
                   {activeDetailTab === 'reports' && (
-                    <div className="space-y-1.5 max-h-[50vh] md:max-h-[55vh] overflow-y-auto pr-1">
+                    <div className="space-y-2 pr-1">
                       {([
                         ['market_report', detail.market_report], ['sentiment_report', detail.sentiment_report],
                         ['news_report', detail.news_report], ['fundamentals_report', detail.fundamentals_report],
@@ -874,7 +869,6 @@ function HistoryTab() {
   )
 }
 
-
 type Tab = 'run' | 'multi' | 'history'
 
 export default function Analysis() {
@@ -888,17 +882,20 @@ export default function Analysis() {
   ]
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-5">
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">{t('analysis.title')}</h2>
+        <div>
+          <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('analysis.title')}</h2>
+          <p className="text-xs text-slate-500 mt-1">Deploy multi-agent consensus networks for specialized asset research</p>
+        </div>
       </div>
 
-      {}
-      <div className="flex gap-1 p-1 bg-gray-900 border border-gray-800 rounded-2xl w-fit">
+      {/* Tabs */}
+      <div className="flex gap-1 p-1 bg-slate-900/50 border border-white/[0.04] rounded-2xl w-fit">
         {tabs.map(tb => (
           <button key={tb.id} onClick={() => setTab(tb.id)}
-            className={`flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-              tab === tb.id ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20' : 'text-gray-500 hover:text-white'
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              tab === tb.id ? 'bg-violet-600 text-white shadow shadow-violet-500/20' : 'text-slate-500 hover:text-white'
             }`}
           >
             {tb.icon} <span className="hidden sm:inline">{tb.label}</span>
@@ -913,12 +910,7 @@ export default function Analysis() {
   )
 }
 
-
-
-interface DebateMessage {
-  sender: string
-  content: string
-}
+interface DebateMessage { sender: string; content: string }
 
 function parseDebateMessage(msg: string): DebateMessage {
   const parts = msg.split(': ')
@@ -933,17 +925,46 @@ function parseDebateMessage(msg: string): DebateMessage {
 function getSenderStyles(sender: string) {
   switch (sender) {
     case 'Bull Analyst':
-      return { bg: 'bg-emerald-500/10 border-emerald-500/20 text-emerald-300', side: 'justify-start' }
+    case 'BullResearcher':
+      return {
+        bg: 'bg-emerald-500/5 border-emerald-500/15 text-emerald-300 rounded-tl-none',
+        side: 'justify-start',
+        icon: <TrendingUp size={11} className="text-emerald-400 shrink-0" />
+      }
     case 'Bear Analyst':
-      return { bg: 'bg-rose-500/10 border-rose-500/20 text-rose-300', side: 'justify-end' }
+    case 'BearResearcher':
+      return {
+        bg: 'bg-rose-500/5 border-rose-500/15 text-rose-300 rounded-tr-none',
+        side: 'justify-end',
+        icon: <TrendingDown size={11} className="text-rose-400 shrink-0" />
+      }
     case 'Aggressive Analyst':
-      return { bg: 'bg-amber-500/10 border-amber-500/20 text-amber-300', side: 'justify-start' }
+    case 'AggressiveDebator':
+      return {
+        bg: 'bg-amber-500/5 border-amber-500/15 text-amber-300 rounded-tl-none',
+        side: 'justify-start',
+        icon: <Zap size={11} className="text-amber-400 shrink-0" />
+      }
     case 'Conservative Analyst':
-      return { bg: 'bg-indigo-500/10 border-indigo-500/20 text-indigo-300', side: 'justify-end' }
+    case 'ConservativeDebator':
+      return {
+        bg: 'bg-indigo-500/5 border-indigo-500/15 text-indigo-300 rounded-tr-none',
+        side: 'justify-end',
+        icon: <Shield size={11} className="text-indigo-400 shrink-0" />
+      }
     case 'Neutral Analyst':
-      return { bg: 'bg-slate-500/10 border-slate-500/20 text-slate-300', side: 'justify-center mx-auto max-w-[90%]' }
+    case 'NeutralDebator':
+      return {
+        bg: 'bg-slate-800/40 border-slate-700/30 text-slate-300',
+        side: 'justify-center mx-auto max-w-[90%]',
+        icon: <Scale size={11} className="text-slate-400 shrink-0" />
+      }
     default:
-      return { bg: 'bg-gray-800/40 border-gray-700/30 text-gray-400', side: 'justify-center mx-auto' }
+      return {
+        bg: 'bg-slate-900/60 border-white/[0.03] text-slate-400',
+        side: 'justify-center mx-auto',
+        icon: <User size={11} className="text-slate-500 shrink-0" />
+      }
   }
 }
 
@@ -969,36 +990,38 @@ function DebateHistoryWidget({ investmentHistory, riskHistory }: { investmentHis
   const activeHistory = activeTab === 'inv' ? parseLines(investmentHistory) : parseLines(riskHistory)
 
   return (
-    <div className="flex flex-col bg-gray-950 border border-gray-800/80 rounded-2xl overflow-hidden p-4 space-y-4">
-      <div className="flex gap-2 p-1 bg-gray-900 border border-gray-800/80 rounded-xl w-fit self-center">
+    <div className="flex flex-col bg-slate-950/80 border border-white/[0.04] rounded-2xl overflow-hidden p-4 space-y-4">
+      <div className="flex gap-2 p-1 bg-slate-900/50 border border-white/[0.04] rounded-xl w-fit self-center">
         <button
           onClick={() => setActiveTab('inv')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-            activeTab === 'inv' ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/10' : 'text-gray-500 hover:text-white'
+          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer ${
+            activeTab === 'inv' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
           }`}
         >
-          {t('analysis.tab.live_debate')} (Bull & Bear)
+          Consensus Debate
         </button>
         <button
           onClick={() => setActiveTab('risk')}
-          className={`px-3 py-1.5 rounded-lg text-xs font-semibold transition ${
-            activeTab === 'risk' ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/10' : 'text-gray-500 hover:text-white'
+          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer ${
+            activeTab === 'risk' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
           }`}
         >
           {t('analysis.section.risk_debate_history')}
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto space-y-3 max-h-[50vh] pr-1">
+      <div className="flex-1 overflow-y-auto space-y-3 max-h-[45vh] pr-1">
         {activeHistory.length === 0 && (
-          <p className="text-gray-600 text-xs text-center py-12">{t('analysis.reports.empty')}</p>
+          <p className="text-slate-600 text-xs text-center py-12">{t('analysis.reports.empty')}</p>
         )}
         {activeHistory.map((m, idx) => {
           const styles = getSenderStyles(m.sender)
           return (
             <div key={idx} className={`flex ${styles.side}`}>
-              <div className={`border rounded-2xl px-4 py-2.5 text-xs flex flex-col gap-1 ${styles.bg}`}>
-                <span className="font-bold uppercase tracking-wider text-[10px] opacity-75">{m.sender}</span>
+              <div className={`border rounded-2xl px-4 py-2.5 text-xs flex flex-col gap-1 max-w-[85%] ${styles.bg}`}>
+                <span className="font-bold uppercase tracking-wider text-[9px] opacity-80 flex items-center gap-1">
+                  {styles.icon} {m.sender}
+                </span>
                 <span className="leading-relaxed whitespace-pre-wrap">{m.content}</span>
               </div>
             </div>
@@ -1047,21 +1070,21 @@ function AnalysisChatWidget({ analysisId }: { analysisId: number }) {
   }
 
   return (
-    <div className="flex flex-col h-[50vh] md:h-[60vh] bg-gray-950 border border-gray-800/80 rounded-2xl overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-4 space-y-3.5">
+    <div className="flex flex-col h-[48vh] bg-slate-950/80 border border-white/[0.04] rounded-2xl overflow-hidden">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
         {messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-gray-500">
-            <Zap size={24} className="text-violet-500/40 mb-2 animate-pulse" />
-            <p className="text-sm font-medium text-gray-400">{t('analysis.chat.welcome_title')}</p>
-            <p className="text-xs text-gray-600 max-w-xs mt-1">{t('analysis.chat.welcome_desc')}</p>
+          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-600">
+            <MessageSquare size={26} className="text-violet-500/30 mb-2 animate-pulse" />
+            <p className="text-xs font-semibold text-slate-400">{t('analysis.chat.welcome_title')}</p>
+            <p className="text-[10px] text-slate-600 max-w-xs mt-1 leading-relaxed">{t('analysis.chat.welcome_desc')}</p>
           </div>
         )}
         {messages.map(m => (
           <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs line-clamp-none break-words ${
+            <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed select-text ${
               m.role === 'user'
                 ? 'bg-violet-600 text-white rounded-tr-none'
-                : 'bg-gray-850 text-gray-200 border border-gray-700/50 rounded-tl-none'
+                : 'bg-white/5 text-slate-200 border border-white/[0.04] rounded-tl-none'
             }`}>
               {m.content}
             </div>
@@ -1069,7 +1092,7 @@ function AnalysisChatWidget({ analysisId }: { analysisId: number }) {
         ))}
         {loading && (
           <div className="flex justify-start">
-            <div className="bg-gray-850 text-gray-400 border border-gray-700/50 rounded-2xl rounded-tl-none px-4 py-2.5 text-xs flex items-center gap-2">
+            <div className="bg-white/5 text-slate-400 border border-white/[0.04] rounded-2xl rounded-tl-none px-4 py-2.5 text-xs flex items-center gap-2">
               <Loader2 className="animate-spin" size={12} />
               {t('analysis.chat.thinking')}
             </div>
@@ -1078,9 +1101,9 @@ function AnalysisChatWidget({ analysisId }: { analysisId: number }) {
         <div ref={messagesEndRef} />
       </div>
 
-      <form onSubmit={handleSend} className="p-3 border-t border-gray-800 bg-gray-900/40 flex gap-2">
+      <form onSubmit={handleSend} className="p-3 border-t border-white/[0.04] bg-slate-900/40 flex gap-2 shrink-0">
         <input
-          className="flex-1 bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
+          className="flex-1 glass-input rounded-xl px-3 py-2 text-xs outline-none"
           placeholder={t('analysis.chat.placeholder')}
           value={input}
           onChange={e => setInput(e.target.value)}
@@ -1089,7 +1112,7 @@ function AnalysisChatWidget({ analysisId }: { analysisId: number }) {
         <button
           type="submit"
           disabled={loading || !input.trim()}
-          className="bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-semibold px-4 py-2 rounded-xl transition"
+          className="bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer"
         >
           {t('analysis.chat.send')}
         </button>
@@ -1097,5 +1120,3 @@ function AnalysisChatWidget({ analysisId }: { analysisId: number }) {
     </div>
   )
 }
-
-

@@ -78,21 +78,21 @@ const PROVIDER_LABELS: Record<string, string> = {
   azure: 'Azure OpenAI',
 }
 
-const Input = "bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-1.5 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-sm w-full transition"
+const Input = "w-full glass-input rounded-xl px-3 py-2 text-xs outline-none"
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 space-y-4 shadow-sm">
-      <h3 className="text-xs font-bold text-violet-400 uppercase tracking-wider border-b border-gray-800/60 pb-2">{title}</h3>
-      <div className="space-y-3.5 pt-1">{children}</div>
+    <div className="glass-panel rounded-2xl p-4 md:p-5 space-y-4">
+      <h3 className="text-xs font-bold text-violet-400 uppercase tracking-wider border-b border-white/[0.04] pb-2.5">{title}</h3>
+      <div className="space-y-4 pt-1">{children}</div>
     </div>
   )
 }
 
 function Row({ label, children }: { label: string; children: React.ReactNode }) {
   return (
-    <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-1.5 sm:gap-4">
-      <span className="text-sm text-gray-400 whitespace-nowrap sm:pt-2 min-w-0 shrink-0 font-medium">{label}</span>
+    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 border-b border-white/[0.01] pb-3 last:border-b-0 last:pb-0">
+      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">{label}</span>
       <div className="flex-1 sm:max-w-xs w-full">{children}</div>
     </div>
   )
@@ -132,7 +132,7 @@ function ModelSelect({
 
   return (
     <Row label={label}>
-      <div className="space-y-1.5 w-full">
+      <div className="space-y-2 w-full">
         <select
           className={Input}
           value={showCustom ? 'custom' : value}
@@ -191,7 +191,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
       setCatalog(cat)
       setPresets(presetList)
       setAllowedSettings(userId ? ['general', 'llm', 'risk', 'webhooks', 'cron'] : allowedSet)
-
 
       const defaultTabs = ['general', 'llm', 'risk', 'webhooks', 'cron']
       const activeDefault = defaultTabs.find(tab => userId || allowedSet.includes(tab))
@@ -257,7 +256,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     }
   }
 
-  if (!s) return <div className="p-8 text-slate-400">{t('settings.loading')}</div>
+  if (!s) return <div className="p-8 text-slate-500 text-xs font-semibold">{t('settings.loading')}</div>
 
   const update = (k: keyof Settings, v: any) => setS(prev => prev ? { ...prev, [k]: v } : prev)
 
@@ -285,44 +284,44 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   }
 
   const TABS = [
-    { key: 'general',  label: t('settings.general') || 'Preferences',      icon: <SettingsIcon size={16} /> },
-    { key: 'llm',      label: t('settings.llm_settings') || 'AI Engine',   icon: <Brain size={16} /> },
-    { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety', icon: <ShieldAlert size={16} /> },
-    { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={16} /> },
-    { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={16} /> },
-    ...(userId ? [] : [{ key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={16} /> }]),
-    ...(isAdmin ? [{ key: 'advanced', label: t('settings.section_advanced') || 'Advanced', icon: <Sliders size={16} /> }] : []),
+    { key: 'general',  label: t('settings.general') || 'Preferences',      icon: <SettingsIcon size={14} /> },
+    { key: 'llm',      label: t('settings.llm_settings') || 'AI Engine',   icon: <Brain size={14} /> },
+    { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety', icon: <ShieldAlert size={14} /> },
+    { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={14} /> },
+    { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={14} /> },
+    ...(userId ? [] : [{ key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={14} /> }]),
+    ...(isAdmin ? [{ key: 'advanced', label: t('settings.section_advanced') || 'Advanced', icon: <Sliders size={14} /> }] : []),
   ].filter(tab => isAdmin || tab.key === 'advanced' || allowedSettings.includes(tab.key))
 
   return (
-    <div className="p-4 md:p-6 space-y-5 max-w-5xl">
-      {}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-gray-800 pb-4 gap-3">
+    <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.04] pb-4 gap-3">
         <div>
-          <h2 className="text-xl font-bold text-white tracking-tight">{t('settings.title')}</h2>
-          <p className="text-xs text-gray-500 mt-1">Configure your personal trading agent preferences and models</p>
+          <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('settings.title')}</h2>
+          <p className="text-xs text-slate-500 mt-1">Configure your personal trading agent preferences and models</p>
         </div>
         <div className="flex items-center gap-3">
-          {saveError && <span className="text-red-400 text-xs font-medium">{saveError}</span>}
-          <button onClick={save} className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl px-5 py-2.5 text-sm font-semibold shadow-lg shadow-violet-500/20 transition-all shrink-0">
-            <Save size={15} /> {saved ? t('settings.save_button_saved') : t('settings.save_button')}
+          {saveError && <span className="text-rose-400 text-xs font-semibold">{saveError}</span>}
+          <button onClick={save} className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl px-5 py-2.5 text-xs font-semibold shadow-md shadow-violet-500/20 transition-all shrink-0 cursor-pointer">
+            <Save size={14} /> {saved ? t('settings.save_button_saved') : t('settings.save_button')}
           </button>
         </div>
       </div>
 
       <div className="flex flex-col md:flex-row gap-6 items-start">
-        {}
-        <div className="w-full md:w-56 flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-x-visible pb-2.5 md:pb-0 shrink-0 border-b md:border-b-0 md:border-r border-gray-800/80 pr-0 md:pr-4">
+        {/* Settings Navigation Menu */}
+        <div className="w-full md:w-52 flex flex-row md:flex-col gap-1 overflow-x-auto md:overflow-x-visible pb-2 md:pb-0 shrink-0 border-b md:border-b-0 md:border-r border-white/[0.04] pr-0 md:pr-4">
           {TABS.map(tb => {
             const isActive = activeTab === tb.key
             return (
               <button
                 key={tb.key}
                 onClick={() => setActiveTab(tb.key as any)}
-                className={`flex items-center gap-2.5 px-3.5 py-2.5 rounded-xl text-sm font-medium transition-all whitespace-nowrap text-left w-full ${
+                className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap text-left w-full border border-transparent cursor-pointer ${
                   isActive
-                    ? 'bg-violet-500/10 text-violet-300 border border-violet-500/20 shadow-sm'
-                    : 'text-gray-400 hover:text-white hover:bg-gray-800/60'
+                    ? 'bg-violet-500/10 text-violet-300 border-violet-500/20 active-nav-glow'
+                    : 'text-slate-400 hover:text-white hover:bg-white/[0.02]'
                 }`}
               >
                 {tb.icon}
@@ -332,10 +331,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           })}
         </div>
 
-        {}
-        <div className="flex-1 space-y-4 min-w-0 w-full">
+        {/* Setting details panel */}
+        <div className="flex-1 space-y-4 min-w-0 w-full animate-in fade-in duration-150">
 
-          {}
+          {/* Preferences */}
           {activeTab === 'general' && (
             <Section title={t('settings.general') || 'Preferences'}>
               <Row label={t('settings.row_mode')}>
@@ -371,7 +370,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
             </Section>
           )}
 
-          {}
+          {/* AI Engines */}
           {activeTab === 'llm' && (
             <div className="space-y-4">
               <Section title={t('settings.llm_settings') || 'LLM Settings'}>
@@ -416,7 +415,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   </Row>
                 )}
 
-                {}
                 {['ollama', 'litellm', 'azure', 'nvidia'].includes(s.llm_provider) && (
                   <Row label="API Base URL">
                     <input
@@ -428,7 +426,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   </Row>
                 )}
 
-                {}
                 {s.llm_provider === 'openai' && (
                   <Row label="Reasoning Effort">
                     <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>
@@ -462,11 +459,11 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 )}
               </Section>
 
-              <Section title={t('settings.section_active_analysts') || 'Active Analysts'}>
+              <Section title={t('settings.section_active_analysts') || 'Active Analysts Mapping'}>
                 {analysts.length === 0 ? (
-                  <p className="text-gray-600 text-sm">{t('settings.analysts_loading')}</p>
+                  <p className="text-slate-500 text-xs">{t('settings.analysts_loading')}</p>
                 ) : (
-                  <div className="flex flex-col gap-3.5 pt-1">
+                  <div className="flex flex-col gap-3 pt-1">
                     {analysts.map(a => {
                       const isActive = s.selected_analysts.includes(a.key)
                       const modelVal = s.analyst_models?.[a.key] || ''
@@ -486,12 +483,12 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       const selectModelVal = isCustomMode ? 'custom' : currentModel
 
                       return (
-                        <div key={a.key} title={a.description} className="flex flex-col border-b border-gray-800/40 pb-2.5 last:border-b-0 last:pb-0">
+                        <div key={a.key} title={a.description} className="flex flex-col border-b border-white/[0.02] pb-3 last:border-b-0 last:pb-0">
                           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <label className="flex items-center gap-2 text-sm cursor-pointer shrink-0 py-1 font-medium">
+                            <label className="flex items-center gap-2.5 text-xs font-semibold text-slate-300 cursor-pointer py-1">
                               <input
                                 type="checkbox"
-                                className="w-4.5 h-4.5 accent-indigo-600 rounded"
+                                className="w-4 h-4 accent-violet-600 rounded"
                                 checked={isActive}
                                 onChange={e => {
                                   const next = e.target.checked
@@ -505,9 +502,8 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
                             {isActive && (
                               <div className="flex items-center gap-2 w-full sm:max-w-xs">
-                                {}
                                 <select
-                                  className={`${Input} text-xs py-1`}
+                                  className={`${Input} py-1 text-[11px]`}
                                   value={currentProvider}
                                   onChange={e => {
                                     const nextProv = e.target.value
@@ -521,9 +517,8 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                                   ))}
                                 </select>
 
-                                {}
                                 <select
-                                  className={`${Input} text-xs py-1`}
+                                  className={`${Input} py-1 text-[11px]`}
                                   value={selectModelVal}
                                   onChange={e => {
                                     const val = e.target.value
@@ -545,9 +540,9 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                           </div>
 
                           {isActive && selectModelVal === 'custom' && (
-                            <div className="flex justify-end pt-1.5">
+                            <div className="flex justify-end pt-2">
                               <input
-                                className={`${Input} text-xs py-1 placeholder:text-gray-600 w-full sm:max-w-xs`}
+                                className={`${Input} py-1 w-full sm:max-w-xs font-mono`}
                                 placeholder={t('settings.custom_model_placeholder')}
                                 value={currentModel === 'custom' ? '' : currentModel}
                                 onChange={e => {
@@ -568,7 +563,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
             </div>
           )}
 
-          {}
+          {/* Risk Management */}
           {activeTab === 'risk' && (
             <Section title={t('settings.section_risk') || 'Risk Management'}>
               <Row label={t('settings.row_risk_per_trade')}>
@@ -587,38 +582,38 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 <input type="number" min="1" max="16" className={Input} value={s.analyst_concurrency_limit} onChange={e => update('analyst_concurrency_limit', parseInt(e.target.value))} />
               </Row>
 
-              <div className="border-t border-gray-800/60 pt-4 mt-2 space-y-3">
-                <h4 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest px-1">Institutional Features</h4>
+              <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
+                <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Institutional Features</h4>
                 
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-800/40 cursor-pointer transition-colors group">
-                  <span className="text-sm text-gray-300 group-hover:text-white transition-colors">Enable Synthesis Layer</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded" checked={s.synthesis_enabled} onChange={e => update('synthesis_enabled', e.target.checked)} />
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">Enable Synthesis Layer</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.synthesis_enabled} onChange={e => update('synthesis_enabled', e.target.checked)} />
                 </label>
 
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-800/40 cursor-pointer transition-colors group">
-                  <span className="text-sm text-gray-300 group-hover:text-white transition-colors">Enable Real-time Auditor</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded" checked={s.auditor_enabled} onChange={e => update('auditor_enabled', e.target.checked)} />
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">Enable Real-time Auditor</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.auditor_enabled} onChange={e => update('auditor_enabled', e.target.checked)} />
                 </label>
 
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-800/40 cursor-pointer transition-colors group">
-                  <span className="text-sm text-gray-300 group-hover:text-white transition-colors">Enable Kelly Sizing Math</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded" checked={s.kelly_sizing_enabled} onChange={e => update('kelly_sizing_enabled', e.target.checked)} />
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">Enable Kelly Sizing Math</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.kelly_sizing_enabled} onChange={e => update('kelly_sizing_enabled', e.target.checked)} />
                 </label>
 
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-800/40 cursor-pointer transition-colors group">
-                  <span className="text-sm text-gray-300 group-hover:text-white transition-colors">SEC & Insider Intelligence</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded" checked={s.sec_insights_enabled} onChange={e => update('sec_insights_enabled', e.target.checked)} />
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">SEC & Insider Intelligence</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.sec_insights_enabled} onChange={e => update('sec_insights_enabled', e.target.checked)} />
                 </label>
 
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-gray-800/40 cursor-pointer transition-colors group">
-                  <span className="text-sm text-gray-300 group-hover:text-white transition-colors">Strict Backtest Learning</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded" checked={s.strict_backtest_learning} onChange={e => update('strict_backtest_learning', e.target.checked)} />
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">Strict Backtest Learning</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.strict_backtest_learning} onChange={e => update('strict_backtest_learning', e.target.checked)} />
                 </label>
               </div>
             </Section>
           )}
 
-          {}
+          {/* Webhooks & Alerts */}
           {activeTab === 'webhooks' && (
             <Section title={t('settings.section_notifications') || 'Alerts & Webhooks'}>
               <Row label={t('settings.row_webhook_url')}>
@@ -635,35 +630,35 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     type="checkbox"
                     checked={s.webhook_enabled}
                     onChange={e => update('webhook_enabled', e.target.checked)}
-                    className="w-5 h-5 accent-indigo-600 cursor-pointer"
+                    className="w-5 h-5 accent-violet-600 cursor-pointer"
                   />
                   {s.webhook_url && (
                     <button
                       onClick={testWebhook}
                       disabled={webhookTesting}
-                      className="text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg transition"
+                      className="text-[10px] bg-white/5 hover:bg-white/10 text-slate-300 px-2.5 py-1.5 rounded-lg transition cursor-pointer font-bold"
                     >
                       {webhookTesting ? '...' : t('settings.webhook_test_button')}
                     </button>
                   )}
                   {webhookTestResult && (
-                    <span className={`text-xs ${webhookTestResult.startsWith('✓') ? 'text-emerald-400' : 'text-red-400'}`}>
+                    <span className={`text-[10px] font-bold ${webhookTestResult.startsWith('✓') ? 'text-emerald-400' : 'text-rose-400'}`}>
                       {webhookTestResult}
                     </span>
                   )}
                 </div>
               </Row>
               <Row label={t('settings.row_notification_events')}>
-                <div className="flex flex-col gap-1.5 pt-1">
+                <div className="flex flex-col gap-2.5 pt-1">
                   {([
                     ['analysis_complete', t('settings.event_analysis_complete')],
                     ['trade_executed', t('settings.event_trade_executed')],
                     ['alert_triggered', t('settings.event_alert_triggered')],
                   ] as [string, string][]).map(([key, label]) => (
-                    <label key={key} className="flex items-center gap-2 text-sm text-gray-400 cursor-pointer hover:text-gray-300">
+                    <label key={key} className="flex items-center gap-2 text-xs font-medium text-slate-400 cursor-pointer hover:text-slate-300 select-none">
                       <input
                         type="checkbox"
-                        className="accent-indigo-600 rounded w-4.5 h-4.5"
+                        className="accent-violet-600 rounded w-4 h-4 cursor-pointer"
                         checked={s.webhook_events.includes(key)}
                         onChange={e => {
                           const events = s.webhook_events ? s.webhook_events.split(',').filter(Boolean) : []
@@ -681,19 +676,19 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   <div className="flex items-center gap-3">
                     <button
                       onClick={toggleBrowserNotify}
-                      className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${browserNotify ? 'bg-violet-600' : 'bg-gray-700'}`}
+                      className={`relative inline-flex h-5 w-9 items-center rounded-full transition-colors cursor-pointer ${browserNotify ? 'bg-violet-600' : 'bg-slate-700'}`}
                     >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${browserNotify ? 'translate-x-6' : 'translate-x-1'}`} />
+                      <span className={`inline-block h-3.5 w-3.5 transform rounded-full bg-white transition-transform ${browserNotify ? 'translate-x-4.5' : 'translate-x-0.5'}`} />
                     </button>
-                    <Bell size={14} className={browserNotify ? 'text-violet-400' : 'text-gray-600'} />
-                    <span className="text-xs text-gray-500">{browserNotify ? t('settings.browser_notify_on') : t('settings.browser_notify_off')}</span>
+                    <Bell size={14} className={browserNotify ? 'text-violet-400' : 'text-slate-600'} />
+                    <span className="text-[10px] text-slate-500 font-semibold">{browserNotify ? t('settings.browser_notify_on') : t('settings.browser_notify_off')}</span>
                   </div>
                 </Row>
               )}
             </Section>
           )}
 
-          {}
+          {/* Presets / Templates */}
           {activeTab === 'presets' && (
             <Section title={t('settings.section_presets') || 'Presets Templates'}>
               <div className="flex gap-2">
@@ -707,23 +702,23 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 <button
                   onClick={savePreset}
                   disabled={presetSaving || !presetName.trim()}
-                  className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-sm px-4 py-2 rounded-xl transition whitespace-nowrap font-medium"
+                  className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-semibold px-4 py-2 rounded-xl transition whitespace-nowrap cursor-pointer shadow shadow-violet-500/10"
                 >
                   <BookmarkPlus size={14} /> {t('settings.preset_save_button')}
                 </button>
               </div>
               {presets.length === 0 ? (
-                <p className="text-gray-600 text-xs text-center py-4">{t('settings.preset_no_presets')}</p>
+                <p className="text-slate-600 text-xs text-center py-4">{t('settings.preset_no_presets')}</p>
               ) : (
-                <div className="space-y-1.5 pt-1">
+                <div className="space-y-2 pt-1">
                   {presets.map(p => (
-                    <div key={p.id} className="flex items-center justify-between bg-gray-800 border border-gray-700/40 rounded-xl px-3.5 py-2.5">
-                      <span className="text-sm text-gray-300 font-medium">{p.name}</span>
-                      <div className="flex items-center gap-2">
-                        <button onClick={() => applyPreset(p.id)} className="text-violet-400 hover:text-violet-300 p-1 transition-colors" title={t('settings.preset_apply_title')}>
+                    <div key={p.id} className="flex items-center justify-between bg-slate-900/40 border border-white/[0.04] rounded-xl px-4 py-2.5">
+                      <span className="text-xs text-slate-300 font-semibold">{p.name}</span>
+                      <div className="flex items-center gap-3">
+                        <button onClick={() => applyPreset(p.id)} className="text-violet-400 hover:text-violet-300 p-1 transition-colors cursor-pointer" title={t('settings.preset_apply_title')}>
                           <Play size={14} fill="currentColor" />
                         </button>
-                        <button onClick={() => deletePreset(p.id)} className="text-gray-500 hover:text-red-400 p-1 transition-colors">
+                        <button onClick={() => deletePreset(p.id)} className="text-slate-500 hover:text-rose-400 p-1 transition-colors cursor-pointer">
                           <Trash2 size={14} />
                         </button>
                       </div>
@@ -734,10 +729,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
             </Section>
           )}
 
-          {}
+          {/* Cron Scheduler */}
           {activeTab === 'cron' && (
-            <Section title={t('settings.section_cron') || 'Cron / Auto Scan'}>
-              <Row label={t('settings.row_active') || 'Active'}>
+            <Section title={t('settings.section_cron') || 'Cron Scheduler'}>
+              <Row label="Active">
                 <input
                   type="checkbox"
                   className="accent-violet-600 w-4 h-4 rounded cursor-pointer"
@@ -745,21 +740,21 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   onChange={e => update('cron_enabled', e.target.checked)}
                 />
               </Row>
-              <Row label={t('settings.row_schedule') || 'Schedule (Cron)'}>
+              <Row label="Schedule (Cron)">
                 <input
                   className={Input}
                   value={s.cron_schedule}
                   onChange={e => update('cron_schedule', e.target.value)}
                   placeholder="e.g. 0 9 * * 1-5"
                 />
-                <p className="text-xs text-gray-500 mt-1">Standard 5-field cron schedule format (UTC time)</p>
+                <p className="text-[10px] text-slate-500 mt-1.5 font-medium">Standard 5-field cron schedule format (UTC time)</p>
               </Row>
             </Section>
           )}
 
-          {}
+          {/* Advanced Admin Configuration */}
           {activeTab === 'advanced' && isAdmin && (
-            <div className="space-y-4">
+            <div className="space-y-4 animate-in fade-in duration-200">
               <Section title={t('settings.section_data_sources') || 'Data Sources Routing'}>
                 {(
                   [
@@ -779,51 +774,34 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
               <Section title={t('settings.section_advanced') || 'Engine Core Settings'}>
                 <Row label={t('settings.row_checkpoint')}>
-                  <input type="checkbox" checked={s.checkpoint_enabled} onChange={e => update('checkpoint_enabled', e.target.checked)} className="w-5 h-5 accent-indigo-600 cursor-pointer" />
+                  <input type="checkbox" checked={s.checkpoint_enabled} onChange={e => update('checkpoint_enabled', e.target.checked)} className="w-5 h-5 accent-violet-600 rounded cursor-pointer" />
                 </Row>
                 <Row label={t('settings.row_historical_analyses')}>
                   <div className="flex flex-col gap-2 pt-1">
-                    <label className="flex items-center gap-2.5 cursor-pointer text-gray-300 hover:text-white">
+                    <label className="flex items-center gap-2.5 cursor-pointer text-slate-300 hover:text-white select-none">
                       <input
                         type="checkbox"
                         checked={s.include_historical_analyses}
                         onChange={e => update('include_historical_analyses', e.target.checked)}
-                        className="w-4.5 h-4.5 accent-indigo-600 rounded"
+                        className="w-4 h-4 accent-violet-600 rounded"
                       />
-                      <span className="text-sm font-medium">{t('settings.historical_analyses_hint')}</span>
+                      <span className="text-xs font-semibold">{t('settings.historical_analyses_hint')}</span>
                     </label>
                     {s.include_historical_analyses && (
-                      <div className="flex items-center gap-2 pt-1 pl-7">
-                        <span className="text-xs text-gray-500">{t('settings.historical_limit_label')}</span>
+                      <div className="flex items-center gap-2 pt-1 pl-6">
+                        <span className="text-[10px] text-slate-500 font-semibold">{t('settings.historical_limit_label')}:</span>
                         <input
                           type="number"
                           min="1"
                           max="50"
-                          className="bg-gray-800 border border-gray-700 text-white rounded-xl px-2 py-0.5 focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none text-xs w-16 text-center transition"
-                          value={s.historical_analyses_limit ?? 5}
-                          onChange={e => update('historical_analyses_limit', parseInt(e.target.value) || 1)}
+                          className={`${Input} w-20 py-1 font-mono`}
+                          value={s.historical_analyses_limit}
+                          onChange={e => update('historical_analyses_limit', parseInt(e.target.value) || 5)}
                         />
                       </div>
                     )}
                   </div>
                 </Row>
-                <Row label={t('settings.row_news_limit_ticker')}>
-                  <input type="number" min="1" max="100" className={Input} value={s.news_article_limit} onChange={e => update('news_article_limit', parseInt(e.target.value))} />
-                </Row>
-                <Row label={t('settings.row_global_news_limit')}>
-                  <input type="number" min="1" max="50" className={Input} value={s.global_news_article_limit} onChange={e => update('global_news_article_limit', parseInt(e.target.value))} />
-                </Row>
-                <Row label={t('settings.row_global_news_lookback')}>
-                  <input type="number" min="1" max="30" className={Input} value={s.global_news_lookback_days} onChange={e => update('global_news_lookback_days', parseInt(e.target.value))} />
-                </Row>
-                <Row label={t('settings.row_max_recursion')}>
-                  <input type="number" min="100" max="5000" className={Input} value={s.max_recur_limit} onChange={e => update('max_recur_limit', parseInt(e.target.value))} />
-                </Row>
-                {s.llm_provider === 'azure' && (
-                  <Row label={t('settings.row_azure_deployment')}>
-                    <input className={Input} value={s.azure_deployment || ''} onChange={e => update('azure_deployment', e.target.value || null)} placeholder="gpt-4o" />
-                  </Row>
-                )}
               </Section>
             </div>
           )}
@@ -833,4 +811,3 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     </div>
   )
 }
-
