@@ -79,14 +79,34 @@ async def place_signal_order(
 
     capital = portfolio.cash_available if portfolio.cash_available > 0 else portfolio.initial_capital
     quantity = _position_quantity(settings.max_risk_per_trade_pct, capital, price)
-    request = OrderRequest(
-        ticker=ticker,
-        action=action,
-        quantity=quantity,
-        reference_price=price,
-        ai_signal=row.signal or "",
-        ai_reasoning=(row.final_decision or "")[:500],
-    )
-    result = trader.place_order(request)
-    _logger.info("Order placed: %s %s %s -> %s", action, quantity, ticker, result.status)
-    return result
+    if sys_mode == "simulation":
+        from backend.services import mock_trading_service
+        res_dict = await mock_trading_service.execute_order(
+            db=db,
+            ticker=ticker,
+            action=action,
+            quantity=quantity,
+            analysis_id=row.id,
+            user=user,
+        )
+        return OrderResult(
+            order_id=str(res_dict["order_id"]),
+            status=res_dict["status"],
+            filled_price=res_dict["price"],
+            filled_quantity=res_dict["quantity"],
+            commission=res_dict["commission"],
+            message="Simulation order filled",
+        )
+    else:
+        request = OrderRequest(
+            ticker=ticker,
+            action=action,
+            quantity=quantity,
+            reference_price=price,
+            ai_signal=row.signal or "",
+            ai_reasoning=(row.final_decision or "")[:500],
+        )
+        result = trader.place_order(request)
+        _logger.info("Order placed: %s %s %s -> %s", action, quantity, ticker, result.status)
+        return result
+

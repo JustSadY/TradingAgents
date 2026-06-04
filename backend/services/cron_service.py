@@ -117,16 +117,14 @@ class CronService:
             "next_run_time": job.next_run_time.isoformat() if job and job.next_run_time else None,
         }
 async def _maybe_execute_user(user_id: int, ticker: str, row, settings, trader, db, sys_mode: str, sys_broker: str):
-    from backend.models.order import Order
     from backend.models.user import User
-    from backend.services.execution.base import OrderRequest
-    from backend.services.mock_trading_service import get_or_create_sim_portfolio
+    from backend.services import mock_trading_service
     from sqlalchemy import select
     u_res = await db.execute(select(User).where(User.id == user_id))
     user = u_res.scalar_one_or_none()
     if not user:
         return
-    portfolio = await get_or_create_sim_portfolio(db, user=user)
+    portfolio = await mock_trading_service.get_or_create_sim_portfolio(db, user=user)
     price = trader.get_current_price(ticker)
     if not price or price <= 0:
         _logger.warning("No price available for %s, skipping execution", ticker)
@@ -134,35 +132,20 @@ async def _maybe_execute_user(user_id: int, ticker: str, row, settings, trader, 
     action = "BUY" if row.signal in ("Buy", "Overweight") else "SELL"
     balance = portfolio.cash_available if portfolio.cash_available > 0 else 100_000.0
     qty = (settings.max_risk_per_trade_pct / 100 * balance) / price
-    req = OrderRequest(
-        ticker=ticker,
-        action=action,
-        quantity=qty,
-        reference_price=price,
-        ai_signal=row.signal or "",
-        ai_reasoning=row.final_decision[:500],
-    )
-    result = trader.place_order(req)
-    order_row = Order(
-        portfolio_id=portfolio.id,
-        mode=sys_mode,
-        broker=sys_broker,
-        ticker=ticker,
-        action=action,
-        quantity_requested=qty,
-        quantity_filled=result.filled_quantity or 0,
-        status=result.status,
-        price_per_share=result.filled_price,
-        total_value=(result.filled_price or 0) * (result.filled_quantity or 0),
-        commission=result.commission,
-        analysis_id=row.id,
-        ai_signal=row.signal or "",
-        ai_reasoning=row.final_decision[:500],
-        executed_at=result.executed_at,
-    )
-    db.add(order_row)
-    await db.flush()
-    _logger.info("User=%s Order placed: %s %s %s → %s", user.username, action, qty, ticker, result.status)
+    try:
+        await mock_trading_service.execute_order(
+            db=db,
+            ticker=ticker,
+            action=action,
+            quantity=qty,
+            analysis_id=row.id,
+            user=user,
+        )
+        await db.commit()
+        _logger.info("User=%s Order placed: %s %s %s → FILLED", user.username, action, qty, ticker)
+    except Exception as e:
+        _logger.error("Failed to execute mock order for user %s: %s", user.username, e)
+        await db.rollback()
 async def _run_alert_checker():
     from backend.services.alert_service import check_price_alerts
     try:
