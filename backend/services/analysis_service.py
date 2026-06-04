@@ -27,7 +27,7 @@ _REPORT_FIELDS = (
 async def _get_historical_analyses_context(
     ticker: str, trade_date: str, db: AsyncSession, limit: int = 5
 ) -> str:
-        from sqlalchemy import select, desc as _desc
+    from sqlalchemy import select, desc as _desc
     result = await db.execute(
         select(AnalysisResult)
         .where(AnalysisResult.ticker == ticker)
@@ -52,7 +52,7 @@ async def _get_historical_analyses_context(
         parts.append("")
     return "\n".join(parts)
 def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
-        from tradingagents.graph.trading_graph import DEFAULT_CONFIG
+    from tradingagents.graph.trading_graph import DEFAULT_CONFIG
     import tempfile, os as _os
     _tmp = tempfile.gettempdir()
     cfg: dict = {

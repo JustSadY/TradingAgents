@@ -52,16 +52,18 @@ async def _call_llm_async(llm, text: str) -> str:
         return result.content if hasattr(result, "content") else str(result)
     return await asyncio.to_thread(_sync_call)
 def _validate_annotations(data: dict) -> dict:
-        def _floats(lst) -> list[float]:
+    def _floats(lst) -> list[float]:
         if not isinstance(lst, list):
             return []
         return [round(float(x), 2) for x in lst if isinstance(x, (int, float)) and x > 0]
+
     def _float_or_none(val):
         try:
             v = float(val)
             return round(v, 2) if v > 0 else None
         except (TypeError, ValueError):
             return None
+
     key_levels = []
     for kl in data.get("key_levels") or []:
         if isinstance(kl, dict) and isinstance(kl.get("price"), (int, float)):

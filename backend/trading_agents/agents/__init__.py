@@ -33,8 +33,6 @@ __all__ = [
     "create_synthesis_manager",
     "create_auditor_node",
     "create_fundamentals_analyst",
-...
-
     "create_neutral_debator",
     "create_news_analyst",
     "create_aggressive_debator",

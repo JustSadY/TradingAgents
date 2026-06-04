@@ -38,7 +38,7 @@ class DatabaseLogHandler(logging.Handler):
             except asyncio.QueueFull:
                 pass
     def emit(self, record: logging.LogRecord):
-                if not self._started or self._queue is None:
+        if not self._started or self._queue is None:
             return
         try:
             self._queue.put_nowait({

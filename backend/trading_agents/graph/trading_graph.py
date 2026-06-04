@@ -298,7 +298,7 @@ class TradingAgentsGraph:
             )
         return final_state, self.process_signal(final_state["final_trade_decision"])
     def _log_state(self, trade_date, final_state):
-                self.log_states_dict[str(trade_date)] = {
+        self.log_states_dict[str(trade_date)] = {
             "company_of_interest": final_state["company_of_interest"],
             "trade_date": final_state["trade_date"],
             "market_report": final_state["market_report"],
