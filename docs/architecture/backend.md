@@ -217,7 +217,7 @@ hardcoding hex per signal/status.
 
 ## 9. Modular tool system (`trading_agents/agents/tools/`)
 
-Agent tools are a **DB-driven plugin system** (see `docs/modular_tool_system.md`).
+Agent tools are a **DB-driven plugin system** (see modular_tool_system.md).
 Each tool is a `BaseAgentTool` (or a `FunctionToolAdapter` wrapping an existing
 `@tool` function) declaring `key`, `category`, `allowed_analysts`, and a
 `settings_schema` of `ToolSettingField`s. Tools self-register into the singleton
@@ -239,3 +239,4 @@ Each tool is a `BaseAgentTool` (or a `FunctionToolAdapter` wrapping an existing
   at runtime, and is read in the engine via `get_config()`. Do **not** re-add these
   as `SystemSettings`/`system_settings` columns — the old orphaned columns were
   removed from `core/migrations.py`.
+.

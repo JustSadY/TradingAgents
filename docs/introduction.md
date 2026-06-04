@@ -5,11 +5,13 @@ Welcome to the detailed technical documentation for the **TradingAgents** platfo
 Here is the index of available documentation files:
 
 1.  **[Introduction & System Overview](introduction.md):** High-level feature list, technology stack, and directory layout.
-2.  **[System Architecture](architecture.md):** In-depth structural diagrams (using Mermaid), data flow boundaries, and backend-frontend interaction.
+2.  **[System Architecture](architecture/overview.md):** In-depth structural diagrams (using Mermaid), data flow boundaries, and backend-frontend interaction.
 3.  **[Installation & Setup Guide](installation.md):** Step-by-step guides for single-command Linux deployments, Docker Compose containers, and local manual developer setups.
 4.  **[Configuration & API Setup](configuration.md):** Complete guide to configuration files, environment variables (`.env`), LLM providers, and third-party data vendor setups.
-5.  **[Multi-Agent Decision Core](multi_agent_system.md):** Detailed analysis of the LangGraph state machine, the Bull/Bear debate loop, risk analysts, the Portfolio Manager finalizer, and the self-correcting reflection loop.
+5.  **[Multi-Agent Decision Core](architecture/multi_agent_system.md):** Detailed analysis of the LangGraph state machine, the Bull/Bear debate loop, risk analysts, the Portfolio Manager finalizer, and the self-correcting reflection loop.
 6.  **[Developer Guide](developer_guide.md):** Guide on extending the system, registering custom analyst plugins, interacting with the real-time WebSocket progress stream, and configuring background cron schedulers.
+7.  **[Modular Tool System](architecture/modular_tool_system.md):** Detailed guide on the dynamic tool plugin architecture.
+8.  **[Backend Layering & Conventions](architecture/backend.md):** Deep dive into the backend service architecture and layering rules.
 
 ---
 

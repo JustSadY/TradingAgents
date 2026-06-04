@@ -3,7 +3,7 @@
 The backend layer of TradingAgents is a high-performance, asynchronous web server built with **FastAPI**, **SQLAlchemy** (using the `asyncpg` driver), and **APScheduler**. It handles API routing, real-time WebSocket communication, authentication, background portfolio/alert cron scheduling, paper trading simulation, and interacts directly with the **LangGraph** multi-agent AI system.
 
 > 🧭 **Working on the backend (humans & AI agents)?** Read
-> **[ARCHITECTURE.md](ARCHITECTURE.md)** first — it is the single, dense
+> **[docs/architecture/backend.md](../docs/architecture/backend.md)** first — it is the single, dense
 > reference for the layering, where each kind of code belongs, the conventions
 > to follow, and the gotchas to avoid. It exists so you can understand the
 > design without re-scanning the whole tree.

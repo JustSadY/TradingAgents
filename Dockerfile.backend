@@ -7,8 +7,8 @@ COPY pyproject.toml requirements.txt* ./
 RUN pip install --no-cache-dir -e . || pip install --no-cache-dir -r requirements.txt || true
 
 # Install web dependencies
-COPY tradingagents_web/requirements-web.txt ./requirements-web.txt
-RUN pip install --no-cache-dir -r requirements-web.txt
+COPY backend/requirements.txt ./backend/requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
 
 # Copy full source
 COPY . .
@@ -28,4 +28,4 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-CMD ["uvicorn", "tradingagents_web.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

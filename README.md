@@ -53,26 +53,26 @@ For in-depth developer information, check out the documentation files inside eac
 ```text
 TradingAgents/
 ├── backend/                  # FastAPI web server and database logic
-│   ├── api/                  # API endpoints (Auth, Portfolio, Watchlist, Paper Trading, Preferences, etc.)
-│   ├── core/                 # Database initialization, security, web catalog, WS manager
-│   ├── models/               # SQLAlchemy async database models
-│   ├── services/             # Core business services (Analysis, Cron, Alerts, Paper trading, etc.)
-│   └── trading_agents/       # Central AI agent package
-│       ├── agents/           # Multi-agent prompt engineering, schemas, and debator logic
-│       ├── graph/            # LangGraph setup, checkpointer, and transition rules
-│       └── llm_clients/      # Unified LLM provider clients
+│   ├── main.py               # Application entrypoint
+│   ├── bootstrap.py          # Early runtime setup (env, logging)
+│   ├── api/                  # API endpoints (Auth, Portfolio, Watchlist, etc.)
+│   ├── core/                 # Database, security, WS manager, catalog
+│   ├── models/               # SQLAlchemy async ORM models
+│   ├── services/             # Business logic & orchestration
+│   └── trading_agents/       # Central AI agent package (LangGraph)
 ├── frontend/                 # React SPA user interface
-│   ├── src/
-│   │   ├── components/       # Reusable UI widgets (Charts, Analysis panels, Log streams)
-│   │   ├── pages/            # Core views (Dashboard, Watchlist, Performance, Preferences, Account & API Keys)
-│   │   └── hooks/            # Custom React hooks (WS handlers and API queries)
-│   └── Dockerfile.frontend
-├── deploy/                   # Automated deployment scripts for Linux environments
-│   ├── install.sh            # Main deployment shell script
-│   ├── update.sh             # Application updater script
-│   └── uninstall.sh          # Uninstall utility
-├── docker-compose.yml        # Docker composition blueprint
-└── Dockerfile.backend        # Backend service container builder
+├── docs/                     # Comprehensive documentation
+│   ├── introduction.md       # Docs index and overview
+│   ├── architecture/         # Deep dives into system design
+│   │   ├── overview.md       # High-level architecture & data flow
+│   │   ├── backend.md        # Backend layering & conventions
+│   │   ├── multi_agent_system.md
+│   │   └── modular_tool_system.md
+│   ├── installation.md
+│   └── configuration.md
+├── deploy/                   # Linux deployment scripts
+├── docker-compose.yml
+└── Dockerfile.backend
 ```
 
 ---
