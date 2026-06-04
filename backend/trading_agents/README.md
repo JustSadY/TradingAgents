@@ -122,6 +122,66 @@ To support dynamic tool schema extraction and runtime tool activation, the platf
 *   **Thread-Safe Context Injection (`graph/trading_graph.py`):** Before running the state machine, user-specific or system-default settings are loaded from the database and merged into a `runtime_tool_context`. This context is stored in the LangGraph thread configuration.
 *   **Runtime Tool Adaptation (`agents/utils/analyst_node_factory.py`):** In the analyst execution lifecycle (`run_tool_analyst`), the runtime filters active tools based on the context and adapts them dynamically into LangChain/LangGraph-compatible bindings.
 
+### How to Register a New Agent Tool
+
+To implement and register a new tool in the modular system, follow these steps:
+
+1. **Implement the Tool Class:**
+   Create a new file under `backend/trading_agents/agents/tools/builtin/` (e.g., `my_custom_tool.py`) extending `BaseAgentTool` or using `FunctionToolAdapter`:
+   ```python
+   from backend.trading_agents.agents.tools.base import BaseAgentTool, ToolSettingField, ToolContext
+   from backend.trading_agents.agents.tools.registry import registry
+   
+   class MyCustomTool(BaseAgentTool):
+       key = "my_custom_tool"
+       category = "market"
+       default_enabled = True
+       allowed_analysts = ["market"]
+       label_key = "tools.my_custom_tool.label"
+       description_key = "tools.my_custom_tool.description"
+       
+       # Define the schema representing parameters the user/admin can configure:
+       settings_schema = [
+           ToolSettingField(
+               key="max_items",
+               type="number",
+               scope="both",
+               label_key="tools.my_custom_tool.max_items",
+               default=10.0,
+               min=1.0,
+               max=100.0,
+           )
+       ]
+       
+       def get_langchain_tools(self, settings: dict, context: ToolContext) -> list:
+           # Define or return standard LangChain @tool functions:
+           from langchain_core.tools import tool
+           
+           limit = int(settings.get("max_items", 10))
+           
+           @tool
+           def run_custom_query(query: str) -> str:
+               """Run a custom analytical query."""
+               return f"Results for '{query}' (limit: {limit})"
+               
+           return [run_custom_query]
+           
+   # Register it:
+   registry.register(MyCustomTool())
+   ```
+
+2. **Add to Bootstrap Loader:**
+   Import your module inside [backend/trading_agents/agents/tools/bootstrap.py](file:///home/lykia/Desktop/TradingAgents/backend/trading_agents/agents/tools/bootstrap.py) so it registers on server startup:
+   ```python
+   from .builtin import my_custom_tool
+   ```
+
+3. **Provide Localization Translations:**
+   Add labels and descriptions in [tools.ts](file:///home/lykia/Desktop/TradingAgents/frontend/src/i18n/tools.ts) for:
+   * `tools.my_custom_tool.label`
+   * `tools.my_custom_tool.description`
+   * `tools.my_custom_tool.max_items`
+
 ---
 
 ## 🔌 LLM Provider Integration
