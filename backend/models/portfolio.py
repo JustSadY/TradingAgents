@@ -9,6 +9,7 @@ class Portfolio(Base):
     __tablename__ = "portfolios"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     mode: Mapped[str] = mapped_column(String(20), nullable=False)      # simulation | live
     broker: Mapped[str] = mapped_column(String(50), nullable=False)
     initial_capital: Mapped[float] = mapped_column(Float, nullable=False)
@@ -24,7 +25,6 @@ class Portfolio(Base):
         onupdate=lambda: datetime.now(timezone.utc),
     )
 
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     holdings: Mapped[list["Holding"]] = relationship("Holding", back_populates="portfolio")
     orders: Mapped[list["Order"]] = relationship("Order", back_populates="portfolio")

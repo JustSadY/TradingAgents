@@ -8,12 +8,13 @@ class PriceAlert(Base):
     __tablename__ = "price_alerts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     condition: Mapped[str] = mapped_column(String(10), nullable=False)  # "above" | "below"
     target_price: Mapped[float] = mapped_column(Float, nullable=False)
     auto_analyze: Mapped[bool] = mapped_column(Boolean, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
     triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)

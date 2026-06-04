@@ -11,6 +11,7 @@ class MultiTickerAnalysis(Base):
     __tablename__ = "multi_ticker_analyses"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     trade_date: Mapped[str] = mapped_column(String(20), nullable=False)
     asset_type: Mapped[str] = mapped_column(String(20), default="stock")
 
@@ -24,7 +25,7 @@ class MultiTickerAnalysis(Base):
     super_portfolio_report: Mapped[str] = mapped_column(Text, default="")
 
     triggered_by: Mapped[str] = mapped_column(String(20), default="manual")
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

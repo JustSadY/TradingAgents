@@ -13,6 +13,7 @@ from __future__ import annotations
 import json
 import os
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -26,16 +27,34 @@ SYSTEMCTL = os.environ.get("TRADINGAGENTS_SYSTEMCTL", "systemctl")
 
 _FETCH_TTL = 60.0          # don't hit the network more than once per minute
 _last_fetch = 0.0
+_fetch_lock = threading.Lock()
+_fetching = False
 
 
 def _git(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
+    env = os.environ.copy()
+    env["GIT_TERMINAL_PROMPT"] = "0"
     return subprocess.run(
         ["git", "-C", str(PROJECT_ROOT), *args],
         capture_output=True, text=True, timeout=timeout,
+        env=env,
     )
 
 
+def _bg_fetch():
+    global _last_fetch, _fetching
+    try:
+        _git("fetch", "--quiet", timeout=15)
+    except Exception:
+        pass
+    finally:
+        _last_fetch = time.time()
+        with _fetch_lock:
+            _fetching = False
+
+
 def _read_status() -> dict | None:
+
     try:
         return json.loads(STATUS_FILE.read_text(encoding="utf-8"))
     except Exception:
@@ -51,7 +70,7 @@ def _write_status(data: dict) -> None:
 
 def get_status(do_fetch: bool = True) -> dict:
     """Current vs. upstream commit, how many commits behind, and update state."""
-    global _last_fetch
+    global _last_fetch, _fetching
 
     head = _git("rev-parse", "HEAD")
     if head.returncode != 0:
@@ -66,8 +85,14 @@ def get_status(do_fetch: bool = True) -> dict:
     upstream = up.stdout.strip() if up.returncode == 0 else ""
 
     if do_fetch and upstream and (time.time() - _last_fetch) > _FETCH_TTL:
-        _git("fetch", "--quiet", timeout=60)   # ignore failures (offline etc.)
-        _last_fetch = time.time()
+        should_start = False
+        with _fetch_lock:
+            if not _fetching:
+                _fetching = True
+                should_start = True
+        if should_start:
+            threading.Thread(target=_bg_fetch, daemon=True).start()
+
 
     latest, behind, commits = current, 0, []
     if upstream:

@@ -9,7 +9,9 @@ class AnalysisResult(Base):
     __tablename__ = "analysis_results"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+
     trade_date: Mapped[str] = mapped_column(String(20), nullable=False)
     asset_type: Mapped[str] = mapped_column(String(20), default="stock")
     signal: Mapped[str | None] = mapped_column(String(50), nullable=True)  # Buy/Overweight/Hold/Underweight/Sell
@@ -48,9 +50,9 @@ class AnalysisResult(Base):
     llm_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
     llm_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     preset_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
 
     triggered_by: Mapped[str] = mapped_column(String(20), default="manual")  # manual | cron
+
 
     # Post-analysis return tracking (filled async after holding_days have passed)
     raw_return: Mapped[float | None] = mapped_column(Float, nullable=True)
