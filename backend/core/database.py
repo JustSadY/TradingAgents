@@ -89,6 +89,16 @@ async def _migrate_add_columns(conn):
         ("analysis_results", "llm_provider",                "VARCHAR(50)"),
         ("analysis_results", "llm_model",                   "VARCHAR(100)"),
         ("analysis_results", "preset_name",                  "VARCHAR(100)"),
+        ("app_settings", "max_debate_rounds",          "INTEGER DEFAULT 1"),
+        ("app_settings", "max_risk_rounds",            "INTEGER DEFAULT 1"),
+        ("app_settings", "max_position_size_pct",      "FLOAT DEFAULT 10.0"),
+        ("app_settings", "max_risk_per_trade_pct",     "FLOAT DEFAULT 2.0"),
+        ("app_settings", "synthesis_enabled",          "BOOLEAN DEFAULT TRUE"),
+        ("app_settings", "auditor_enabled",            "BOOLEAN DEFAULT TRUE"),
+        ("app_settings", "kelly_sizing_enabled",       "BOOLEAN DEFAULT TRUE"),
+        ("app_settings", "sec_insights_enabled",       "BOOLEAN DEFAULT TRUE"),
+        ("app_settings", "strict_backtest_learning",   "BOOLEAN DEFAULT TRUE"),
+        ("app_settings", "broker_credentials_enc",     "TEXT"),
     ]
     from sqlalchemy import text, inspect
     for table, column, col_type in new_columns:

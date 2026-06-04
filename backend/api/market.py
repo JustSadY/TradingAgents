@@ -86,6 +86,51 @@ async def get_ohlcv(
     except Exception as exc:
         _logger.error("OHLCV fetch failed %s: %s", ticker, exc)
         raise HTTPException(status_code=500, detail=str(exc))
+
+@router.get("/custom-indicator")
+async def get_custom_indicator(
+    ticker: str = Query(..., description="Ticker symbol, e.g. AAPL"),
+    formula: str = Query(..., description="Mathematical formula, e.g. (Close - SMA(20)) / STD(20)"),
+    period: str = Query("1y", description="1m|3m|6m|1y|2y|5y"),
+    start_date: str = Query(None, description="YYYY-MM-DD"),
+    end_date: str = Query(None, description="YYYY-MM-DD"),
+    _: dict = Depends(get_current_user),
+):
+    ticker = ticker.upper().strip()
+    if start_date and end_date:
+        s, e = start_date, end_date
+    else:
+        s, e = _date_range(period)
+    try:
+        datetime.strptime(s, "%Y-%m-%d")
+        datetime.strptime(e, "%Y-%m-%d")
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Tarih formatı YYYY-MM-DD olmalı")
+    try:
+        import yfinance as yf
+        data = yf.Ticker(ticker).history(start=s, end=e)
+        if data.empty:
+            raise HTTPException(status_code=404, detail=f"{ticker} için veri bulunamadı")
+        if data.index.tz is not None:
+            data.index = data.index.tz_localize(None)
+        
+        from backend.services.indicator_service import evaluate_formula_safely
+        series = evaluate_formula_safely(data, formula)
+        
+        import numpy as np
+        series = series.replace({np.nan: None})
+        
+        result = []
+        for ts, val in series.items():
+            result.append({
+                "time": ts.strftime("%Y-%m-%d"),
+                "value": round(float(val), 4) if val is not None else None
+            })
+        return {"ticker": ticker, "formula": formula, "series": result}
+    except Exception as exc:
+        _logger.error("Custom indicator evaluation failed for %s with formula %s: %s", ticker, formula, exc)
+        raise HTTPException(status_code=400, detail=str(exc))
+
 @router.get("/sentiment-history")
 async def get_sentiment_history(
     ticker: str = Query(..., description="Ticker symbol, e.g. AAPL"),

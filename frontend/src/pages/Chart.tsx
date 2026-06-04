@@ -42,6 +42,8 @@ interface ChartAnnotations {
   target_price?: number | null
   stop_loss?: number | null
   key_levels?: KeyLevel[]
+  custom_indicators?: any[]
+  annotations?: any[]
 }
 
 interface AnalysisItem {
@@ -113,8 +115,18 @@ export default function ChartPage() {
   const [showSentiment, setShowSentiment] = useState(false)
   const [sentimentHistory, setSentimentHistory] = useState<{ time: string; value: number }[]>([])
 
+  // Custom indicators from analysis annotations
+  const [customIndicators, setCustomIndicators] = useState<any[]>([])
+  
+  // Dynamic User custom formula indicator
+  const [userFormula, setUserFormula] = useState('')
+  const [userIndicatorData, setUserIndicatorData] = useState<{ time: string; value: number | null }[]>([])
+  const [userIndicatorLabel, setUserIndicatorLabel] = useState('')
+
   const smaSeriesRef = useRef<ISeriesApi<'Line', any> | null>(null)
   const emaSeriesRef = useRef<ISeriesApi<'Line', any> | null>(null)
+  const trendlineSeriesRefs = useRef<any[]>([])
+  const overlaySeriesRefs = useRef<any[]>([])
 
   const chartContainerRef = useRef<HTMLDivElement>(null)
   const chartRef = useRef<IChartApi | null>(null)
@@ -125,6 +137,38 @@ export default function ChartPage() {
   const tRef = useRef(t)
   useEffect(() => { tRef.current = t })
 
+  // Effect to load custom indicators when selected analysis changes
+  useEffect(() => {
+    if (!activeTicker) return
+    const ann = selected ? parseAnnotations(selected.chart_annotations) : {}
+    
+    const fetchCustom = async () => {
+      if (ann.custom_indicators && Array.isArray(ann.custom_indicators)) {
+        const list: any[] = []
+        for (const ci of ann.custom_indicators) {
+          if (ci.overlay) continue
+          try {
+            const res = await axios.get('/api/market/custom-indicator', {
+              params: { ticker: activeTicker, period, formula: ci.formula }
+            })
+            list.push({
+              name: ci.name,
+              label: ci.label || ci.name,
+              formula: ci.formula,
+              data: res.data.series,
+            })
+          } catch (err) {
+            console.error("Custom indicator fetch failed", err)
+          }
+        }
+        setCustomIndicators(list)
+      } else {
+        setCustomIndicators([])
+      }
+    }
+    fetchCustom()
+  }, [selected, activeTicker, period])
+
 
 
   const load = useCallback(async (ticker: string, p: string) => {
@@ -132,6 +176,9 @@ export default function ChartPage() {
     setLoading(true)
     setError(null)
     setSelected(null)
+    setCustomIndicators([])
+    setUserIndicatorData([])
+    setUserIndicatorLabel('')
     try {
       const [ohlcvRes, histRes, sentRes] = await Promise.all([
         axios.get('/api/market/ohlcv', { params: { ticker, period: p } }),
@@ -160,6 +207,25 @@ export default function ChartPage() {
     setPeriod(p)
     setSearchParams({ ticker: activeTicker, period: p })
     if (activeTicker) load(activeTicker, p)
+  }
+
+  const handleCalculateUserIndicator = async () => {
+    if (!userFormula.trim() || !activeTicker) return
+    setLoading(true)
+    setError(null)
+    try {
+      const res = await axios.get('/api/market/custom-indicator', {
+        params: { ticker: activeTicker, period, formula: userFormula.trim() }
+      })
+      setUserIndicatorData(res.data.series)
+      setUserIndicatorLabel(userFormula.trim())
+    } catch (err: any) {
+      setError(err.response?.data?.detail ?? "Formül hesaplanırken hata oluştu.")
+      setUserIndicatorData([])
+      setUserIndicatorLabel('')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => {
@@ -309,6 +375,16 @@ export default function ChartPage() {
     })
     priceLineRefs.current = []
 
+    trendlineSeriesRefs.current.forEach(ts => {
+      try { chartRef.current?.removeSeries(ts) } catch { }
+    })
+    trendlineSeriesRefs.current = []
+
+    overlaySeriesRefs.current.forEach(os => {
+      try { chartRef.current?.removeSeries(os) } catch { }
+    })
+    overlaySeriesRefs.current = []
+
     const tradeDatesInRange = new Set(candles.map(c => c.time))
 
     analyses.forEach(a => {
@@ -351,11 +427,58 @@ export default function ChartPage() {
           priceLineRefs.current.push(pl)
         } catch {  }
       }
+
+      // Draw custom trendlines registered by tools
+      if (ann.annotations && Array.isArray(ann.annotations)) {
+        ann.annotations.forEach((va: any) => {
+          if (va.type === 'trendline' && va.time && va.price && va.time2 && va.price2) {
+            try {
+              const tl = chartRef.current!.addSeries(LineSeries, {
+                color: '#f59e0b',
+                lineWidth: 2,
+                lineStyle: 2, // dashed
+                title: va.text || 'Trendline',
+              })
+              tl.setData([
+                { time: va.time, value: va.price },
+                { time: va.time2, value: va.price2 }
+              ])
+              trendlineSeriesRefs.current.push(tl)
+            } catch (e) {
+              console.error("Trendline draw failed", e)
+            }
+          }
+        })
+      }
+
+      // Draw custom overlays registered by tools (e.g. MTF EMA)
+      if (ann.custom_indicators && Array.isArray(ann.custom_indicators)) {
+        ann.custom_indicators.forEach((ci: any) => {
+          if (ci.overlay && ci.values) {
+            try {
+              const ol = chartRef.current!.addSeries(LineSeries, {
+                color: '#38bdf8', // light blue
+                lineWidth: 2,
+                title: ci.label || ci.name,
+              })
+              const dataPoints = Object.entries(ci.values)
+                .map(([time, value]) => ({ time: time as any, value: value as number }))
+                .sort((a, b) => a.time.localeCompare(b.time))
+              ol.setData(dataPoints)
+              overlaySeriesRefs.current.push(ol)
+            } catch (e) {
+              console.error("Overlay draw failed", e)
+            }
+          }
+        })
+      }
     })
 
     if (markersRef.current) {
       try { markersRef.current.setMarkers([]) } catch {  }
     }
+    
+    // Core signal markers
     const markerData = analyses
       .filter(a => a.signal && tradeDatesInRange.has(a.trade_date))
       .map(a => ({
@@ -366,13 +489,37 @@ export default function ChartPage() {
         text: a.signal!,
         size: 1,
       }))
-      .sort((a, b) => (a.time as string).localeCompare(b.time as string))
+
+    // Additional visual annotations (arrows, markers) registered by tools
+    const visualMarkers: any[] = []
+    analyses.forEach(a => {
+      if (!tradeDatesInRange.has(a.trade_date)) return
+      const ann = parseAnnotations(a.chart_annotations)
+      if (ann.annotations && Array.isArray(ann.annotations)) {
+        ann.annotations.forEach((va: any) => {
+          if (va.type === 'arrowUp' || va.type === 'arrowDown' || va.type === 'circle') {
+            visualMarkers.push({
+              time: va.time,
+              position: va.type === 'arrowUp' ? 'belowBar' : 'aboveBar',
+              color: va.type === 'arrowUp' ? '#10b981' : va.type === 'arrowDown' ? '#ef4444' : '#f59e0b',
+              shape: va.type,
+              text: va.text || '',
+              size: 2,
+            })
+          }
+        })
+      }
+    })
+
+    const combinedMarkers = [...markerData, ...visualMarkers].sort((a, b) => 
+      (a.time as string).localeCompare(b.time as string)
+    )
 
     try {
       if (!markersRef.current) {
-        markersRef.current = createSeriesMarkers(candleSeriesRef.current as any, markerData)
+        markersRef.current = createSeriesMarkers(candleSeriesRef.current as any, combinedMarkers)
       } else {
-        markersRef.current.setMarkers(markerData)
+        markersRef.current.setMarkers(combinedMarkers)
       }
     } catch {  }
 
@@ -496,6 +643,23 @@ export default function ChartPage() {
             />
             {t('chart.social_sentiment')}
           </label>
+          
+          <div className="flex items-center gap-2 bg-gray-950 border border-gray-800 rounded-xl px-3 py-1.5 ml-auto w-full sm:w-auto max-w-sm">
+            <span className="text-xs text-gray-400 font-semibold uppercase tracking-wider">{t('chart.custom_formula')}:</span>
+            <input
+              className="bg-transparent text-white text-xs outline-none flex-1 font-mono placeholder-gray-600 min-w-[180px]"
+              placeholder="Örn: (Close - SMA(20)) / STD(20)"
+              value={userFormula}
+              onChange={e => setUserFormula(e.target.value)}
+              onKeyDown={e => e.key === 'Enter' && handleCalculateUserIndicator()}
+            />
+            <button
+              onClick={handleCalculateUserIndicator}
+              className="bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold px-3 py-1 rounded-lg transition"
+            >
+              {t('chart.calculate')}
+            </button>
+          </div>
         </div>
       )}
 
@@ -664,6 +828,78 @@ export default function ChartPage() {
                       name="Sentiment Score"
                     />
                     <ReferenceLine yAxisId="right" y={0} stroke="#4b5563" strokeDasharray="3 3" />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          )}
+
+          {/* Custom Indicators from Agent Annotations */}
+          {customIndicators.map((ci, index) => (
+            <div key={index} className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mt-4">
+              <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider mb-1">
+                {ci.label || ci.name}
+              </h3>
+              <p className="text-[10px] text-gray-500 font-mono mb-3">{ci.formula}</p>
+              <div className="h-36 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={ci.data} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 10 }} />
+                    <YAxis stroke="#4b5563" tick={{ fontSize: 10 }} domain={['auto', 'auto']} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px' }}
+                      labelStyle={{ color: '#9ca3af', fontSize: '11px' }}
+                      itemStyle={{ color: '#06b6d4', fontSize: '11px' }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="value"
+                      stroke="#06b6d4"
+                      dot={false}
+                      strokeWidth={1.5}
+                      connectNulls
+                    />
+                  </LineChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          ))}
+
+          {/* User Dynamic Custom Formula Indicator */}
+          {userIndicatorData.length > 0 && (
+            <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5 mt-4">
+              <div className="flex justify-between items-center mb-1">
+                <h3 className="text-xs font-semibold text-cyan-400 uppercase tracking-wider">
+                  {t('chart.user_custom_indicator')}
+                </h3>
+                <button 
+                  onClick={() => { setUserIndicatorData([]); setUserIndicatorLabel('') }}
+                  className="text-[10px] text-red-400 hover:text-red-300 font-bold px-1.5 py-0.5 rounded border border-red-950 transition"
+                >
+                  Kapat
+                </button>
+              </div>
+              <p className="text-[10px] text-gray-500 font-mono mb-3">{userIndicatorLabel}</p>
+              <div className="h-36 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <LineChart data={userIndicatorData} margin={{ top: 5, right: 5, left: -20, bottom: 5 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#1f2937" />
+                    <XAxis dataKey="time" stroke="#4b5563" tick={{ fontSize: 10 }} />
+                    <YAxis stroke="#4b5563" tick={{ fontSize: 10 }} domain={['auto', 'auto']} />
+                    <Tooltip
+                      contentStyle={{ backgroundColor: '#111827', borderColor: '#374151', borderRadius: '8px' }}
+                      labelStyle={{ color: '#9ca3af', fontSize: '11px' }}
+                      itemStyle={{ color: '#22c55e', fontSize: '11px' }}
+                    />
+                    <Line
+                      type="monotone"
+                      dataKey="value"
+                      stroke="#22c55e"
+                      dot={false}
+                      strokeWidth={1.5}
+                      connectNulls
+                    />
                   </LineChart>
                 </ResponsiveContainer>
               </div>

@@ -17,6 +17,7 @@ from tradingagents.agents.utils.agent_states import (
     InvestDebateState,
     RiskDebateState,
 )
+from tradingagents.agents.utils.chart_tools import active_run_context
 from tradingagents.dataflows.config import set_config
 from tradingagents.agents.utils.agent_utils import (
     get_stock_data,
@@ -237,6 +238,13 @@ class TradingAgentsGraph:
             self.memory_log.batch_update_with_outcomes(updates)
     def propagate(self, company_name, trade_date, asset_type: str = "stock"):
         self.ticker = company_name
+        self.custom_indicators = []
+        self.visual_annotations = []
+        token = active_run_context.set({
+            "graph": self,
+            "custom_indicators": self.custom_indicators,
+            "visual_annotations": self.visual_annotations
+        })
         self._resolve_pending_entries(company_name)
         if self.config.get("checkpoint_enabled"):
             self._checkpointer_ctx = get_checkpointer(
@@ -256,6 +264,7 @@ class TradingAgentsGraph:
         try:
             return self._run_graph(company_name, trade_date, asset_type=asset_type)
         finally:
+            active_run_context.reset(token)
             if self._checkpointer_ctx is not None:
                 self._checkpointer_ctx.__exit__(None, None, None)
                 self._checkpointer_ctx = None
@@ -350,6 +359,13 @@ class TradingAgentsGraph:
     ):
         import asyncio
         self.ticker = company_name
+        self.custom_indicators = []
+        self.visual_annotations = []
+        token = active_run_context.set({
+            "graph": self,
+            "custom_indicators": self.custom_indicators,
+            "visual_annotations": self.visual_annotations
+        })
         await self._async_resolve_pending_entries(company_name)
         if self.config.get("checkpoint_enabled"):
             self._checkpointer_ctx = get_checkpointer(
@@ -360,6 +376,7 @@ class TradingAgentsGraph:
         try:
             return await self._async_run_graph(company_name, trade_date, asset_type)
         finally:
+            active_run_context.reset(token)
             if self._checkpointer_ctx is not None:
                 self._checkpointer_ctx.__exit__(None, None, None)
                 self._checkpointer_ctx = None

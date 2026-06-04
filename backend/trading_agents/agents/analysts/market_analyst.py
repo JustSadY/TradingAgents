@@ -7,6 +7,12 @@ from tradingagents.agents.utils.agent_utils import (
 )
 from tradingagents.dataflows.config import get_config
 from tradingagents.agents.analyst_registry import register_analyst
+from tradingagents.agents.utils.chart_tools import (
+    add_chart_annotation,
+    add_custom_indicator,
+    get_vision_chart_analysis,
+    get_mtf_trend,
+)
 
 
 @register_analyst(
@@ -15,7 +21,14 @@ from tradingagents.agents.analyst_registry import register_analyst
     clear_node="Msg Clear Market",
     tool_node="tools_market",
     report_key="market_report",
-    tools=[get_stock_data, get_indicators],
+    tools=[
+        get_stock_data,
+        get_indicators,
+        add_chart_annotation,
+        add_custom_indicator,
+        get_vision_chart_analysis,
+        get_mtf_trend,
+    ],
 )
 def create_market_analyst(llm):
 
@@ -29,6 +42,10 @@ def create_market_analyst(llm):
         tools = [
             get_stock_data,
             get_indicators,
+            add_chart_annotation,
+            add_custom_indicator,
+            get_vision_chart_analysis,
+            get_mtf_trend,
         ]
 
         system_message = (
@@ -36,9 +53,10 @@ def create_market_analyst(llm):
 
 ### Analytical Process (Chain-of-Thought):
 1. **Data Extraction:** Retrieve raw price and volume data using `get_stock_data`.
-2. **Indicator Selection:** Select up to 8 complementary indicators (Moving Averages, MACD, RSI, Bollinger, VWMA, ATR).
-3. **Metric Evaluation:** Calculate indicators and interpret their signals (Overbought/Oversold, Trend Strength, Volatility).
-4. **Contextual Synthesis:** Combine all signals into a cohesive market narrative.
+2. **Indicator Selection & Visual Recognition:** Select indicators. Call `get_vision_chart_analysis` to let the vision system review visual patterns (like head and shoulders or triangles) on the chart.
+3. **Multi-Timeframe Trend:** Call `get_mtf_trend` for timeframe (e.g. '1wk' or '1mo') to align with higher-timeframe trend lines.
+4. **Custom Indicators & Annotations:** If you notice special price levels or want to specify custom indicators (like (Close - SMA(20)) / STD(20)), use `add_custom_indicator` and `add_chart_annotation` to draw them on the interactive chart.
+5. **Contextual Synthesis:** Combine all signals into a cohesive market narrative.
 
 ### Indicator Reference:
 Moving Averages:

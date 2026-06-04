@@ -25,6 +25,9 @@ const chart = {
     'chart.indicators': 'Indicators',
     'chart.social_sentiment': 'Social Sentiment',
     'chart.sentiment_correlation': 'Price & Social Sentiment Correlation',
+    'chart.custom_formula': 'Custom Formula',
+    'chart.calculate': 'Calculate',
+    'chart.user_custom_indicator': 'User Custom Indicator',
   },
   tr: {
     'chart.title': 'Trading Grafik',
@@ -52,6 +55,9 @@ const chart = {
     'chart.indicators': 'İndikatörler',
     'chart.social_sentiment': 'Sosyal Medya Duyarlılık',
     'chart.sentiment_correlation': 'Fiyat & Sosyal Medya Duyarlılık İlişkisi',
+    'chart.custom_formula': 'Özel Formül',
+    'chart.calculate': 'Hesapla',
+    'chart.user_custom_indicator': 'Kullanıcı Özel İndikatörü',
   },
 }
 

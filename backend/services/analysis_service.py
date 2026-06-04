@@ -155,6 +155,8 @@ async def _extract_and_save_annotations(
     market_report: str,
     final_decision: str,
     quick_llm,
+    custom_indicators: list = None,
+    visual_annotations: list = None,
 ) -> None:
     import json as _json
     from backend.core.database import AsyncSessionLocal
@@ -162,6 +164,12 @@ async def _extract_and_save_annotations(
     from sqlalchemy import select
     try:
         annotations = await extract_chart_annotations(market_report, final_decision, quick_llm)
+        if not annotations:
+            annotations = {}
+        if custom_indicators:
+            annotations["custom_indicators"] = custom_indicators
+        if visual_annotations:
+            annotations["annotations"] = visual_annotations
         if not annotations:
             return
         async with AsyncSessionLocal() as s:
@@ -319,7 +327,12 @@ async def run_analysis(
         db.add(row)
         await db.flush()
         asyncio.create_task(_extract_and_save_annotations(
-            row.id, result.market_report, result.final_decision, ta.thinking_llm
+            row.id, 
+            result.market_report, 
+            result.final_decision, 
+            ta.thinking_llm,
+            getattr(ta, "custom_indicators", []),
+            getattr(ta, "visual_annotations", [])
         ))
         asyncio.create_task(_send_analysis_webhook(
             ticker, trade_date, signal, result.final_decision, settings

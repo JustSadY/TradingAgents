@@ -5,6 +5,12 @@ from tradingagents.agents.utils.agent_utils import (
     get_language_instruction,
 )
 from tradingagents.agents.analyst_registry import register_analyst
+from tradingagents.agents.utils.chart_tools import (
+    add_chart_annotation,
+    add_custom_indicator,
+    get_vision_chart_analysis,
+    get_mtf_trend,
+)
 
 
 @register_analyst(
@@ -13,7 +19,13 @@ from tradingagents.agents.analyst_registry import register_analyst
     clear_node="Msg Clear Quant",
     tool_node="tools_quant",
     report_key="quant_report",
-    tools=[get_quant_data],
+    tools=[
+        get_quant_data,
+        add_chart_annotation,
+        add_custom_indicator,
+        get_vision_chart_analysis,
+        get_mtf_trend,
+    ],
 )
 def create_quant_analyst(llm):
 
@@ -23,6 +35,10 @@ def create_quant_analyst(llm):
 
         tools = [
             get_quant_data,
+            add_chart_annotation,
+            add_custom_indicator,
+            get_vision_chart_analysis,
+            get_mtf_trend,
         ]
 
         system_message = (
@@ -30,9 +46,11 @@ def create_quant_analyst(llm):
 
 ### Analytical Process (Chain-of-Thought):
 1. **Data Acquisition:** Use `get_quant_data` to retrieve statistical metrics (Beta, Sharpe Ratio, Volatility, Max Drawdown).
-2. **Risk-Adjusted Evaluation:** Analyze the Sharpe Ratio to determine if returns justify the volatility risk.
-3. **Market Correlation Study:** Use Beta to assess how the asset moves relative to the benchmark (SPY).
-4. **Statistical Synthesis:** Formulate a quantitative conclusion on the asset's risk profile and efficiency.
+2. **Visual Analysis & Higher Timeframe Trend:** Call `get_vision_chart_analysis` to evaluate the chart visually, and `get_mtf_trend` to align with macro trend lines.
+3. **Custom Indicator Design:** If standard indicators are insufficient, create custom quantitative signals using the `add_custom_indicator` tool (e.g., `(Close - SMA(20)) / STD(20)`) and mark key quantitative levels using `add_chart_annotation`.
+4. **Risk-Adjusted Evaluation:** Analyze the Sharpe Ratio to determine if returns justify the volatility risk.
+5. **Market Correlation Study:** Use Beta to assess how the asset moves relative to the benchmark (SPY).
+6. **Statistical Synthesis:** Formulate a quantitative conclusion on the asset's risk profile and efficiency.
 
 ### Guidelines:
 - Beta > 1 indicates higher sensitivity to market moves; Beta < 1 indicates lower sensitivity.
