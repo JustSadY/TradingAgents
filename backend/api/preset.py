@@ -9,7 +9,7 @@ from backend.models.preset import ConfigPreset
 from backend.models.settings import AppSettings
 from backend.models.user import User
 from backend.schemas.preset import PresetCreate, PresetRead
-from backend.api.settings import _get_or_create_settings
+from backend.services.settings_service import get_or_create_settings
 router = APIRouter(prefix="/api/presets", tags=["presets"])
 _logger = logging.getLogger(__name__)
 @router.get("", response_model=list[PresetRead])
@@ -88,7 +88,7 @@ async def apply_preset(
     preset = result.scalar_one_or_none()
     if not preset:
         raise HTTPException(status_code=404, detail="Şablon bulunamadı")
-    settings = await _get_or_create_settings(db, current_user)
+    settings = await get_or_create_settings(db, current_user)
     try:
         data = json.loads(preset.settings_json)
     except json.JSONDecodeError:

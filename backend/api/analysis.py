@@ -18,7 +18,7 @@ from backend.schemas.portfolio_analysis import (
 )
 from backend.models.portfolio_analysis import MultiTickerAnalysis
 from backend.api.deps import get_current_user
-from backend.api.settings import _get_or_create_settings
+from backend.services.settings_service import get_or_create_settings
 import json as _json
 from backend.core.utils import safe_ticker_component
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
@@ -34,7 +34,7 @@ async def run_analysis(
         safe_ticker_component(body.ticker)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
-    settings = await _get_or_create_settings(db, _)
+    settings = await get_or_create_settings(db, _)
     current_user = _
     import uuid
     task_id = str(uuid.uuid4())
@@ -293,7 +293,7 @@ async def run_portfolio(
             safe_ticker_component(ticker)
         except ValueError as e:
             raise HTTPException(status_code=422, detail=f"Invalid ticker {ticker}: {e}")
-    settings = await _get_or_create_settings(db, _)
+    settings = await get_or_create_settings(db, _)
     current_user = _
     import uuid
     task_id = str(uuid.uuid4())
@@ -399,7 +399,7 @@ async def ask_analysis_report(
     analysis = result.scalar_one_or_none()
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis report not found")
-    settings = await _get_or_create_settings(db, _)
+    settings = await get_or_create_settings(db, _)
     reports = []
     if analysis.market_report:
         reports.append(f"### MARKET REPORT\n{analysis.market_report}")
