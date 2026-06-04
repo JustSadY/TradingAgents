@@ -75,13 +75,13 @@ class GraphSetup:
         tool_nodes: Dict[str, ToolNode],
         conditional_logic: ConditionalLogic,
         analyst_concurrency_limit: int = 1,
-        analyst_llms: Dict[str, Any] = None,
+        agent_llms: Dict[str, Any] = None,
     ):
         self.llm = llm
         self.tool_nodes = tool_nodes
         self.conditional_logic = conditional_logic
         self.analyst_concurrency_limit = analyst_concurrency_limit
-        self.analyst_llms = analyst_llms or {}
+        self.agent_llms = agent_llms or {}
     def setup_graph(
         self, selected_analysts=["market", "social", "news", "fundamentals"]
     ):
@@ -92,43 +92,43 @@ class GraphSetup:
         )
         analyst_factories = {
             spec.key: (
-                lambda k=spec.key: get_factory(k)(self.analyst_llms.get(k, self.llm))
+                lambda k=spec.key: get_factory(k)(self.agent_llms.get(k, self.llm))
             )
             for spec in plan.specs
         }
         bull_researcher_node = guard_node(
-            create_bull_researcher(self.llm), name="Bull Researcher", kind="research",
+            create_bull_researcher(self.agent_llms.get("bull_researcher", self.llm)), name="Bull Researcher", kind="research",
             fallback=_fb_invest_debate("(Bull researcher unavailable.)"))
         bear_researcher_node = guard_node(
-            create_bear_researcher(self.llm), name="Bear Researcher", kind="research",
+            create_bear_researcher(self.agent_llms.get("bear_researcher", self.llm)), name="Bear Researcher", kind="research",
             fallback=_fb_invest_debate("(Bear researcher unavailable.)"))
         synthesis_manager_node = guard_node(
-            create_synthesis_manager(self.llm), name="Synthesis Manager", kind="manager",
+            create_synthesis_manager(self.agent_llms.get("synthesis_manager", self.llm)), name="Synthesis Manager", kind="manager",
             fallback=_fb_report("synthesis_report"))
         auditor_node = guard_node(
-            create_auditor_node(self.llm), name="Auditor", kind="manager",
+            create_auditor_node(self.agent_llms.get("auditor", self.llm)), name="Auditor", kind="manager",
             fallback=_fb_report("audit_report"))
         research_manager_node = guard_node(
-            create_research_manager(self.llm), name="Research Manager", kind="manager",
+            create_research_manager(self.agent_llms.get("research_manager", self.llm)), name="Research Manager", kind="manager",
             fallback=_fb_text("investment_plan",
                               "Research manager unavailable; proceeding with available analyst reports."))
         trader_node = guard_node(
-            create_trader(self.llm), name="Trader", kind="manager",
+            create_trader(self.agent_llms.get("trader", self.llm)), name="Trader", kind="manager",
             fallback=lambda state, exc: {
                 "trader_investment_plan": "Trader agent unavailable; deferring to risk debate.",
                 "trader_proposal_json": "{}",
             })
         aggressive_analyst = guard_node(
-            create_aggressive_debator(self.llm), name="Aggressive Analyst", kind="risk",
+            create_aggressive_debator(self.agent_llms.get("risk_debate", self.llm)), name="Aggressive Analyst", kind="risk",
             fallback=_fb_risk_debate("Aggressive"))
         neutral_analyst = guard_node(
-            create_neutral_debator(self.llm), name="Neutral Analyst", kind="risk",
+            create_neutral_debator(self.agent_llms.get("risk_debate", self.llm)), name="Neutral Analyst", kind="risk",
             fallback=_fb_risk_debate("Neutral"))
         conservative_analyst = guard_node(
-            create_conservative_debator(self.llm), name="Conservative Analyst", kind="risk",
+            create_conservative_debator(self.agent_llms.get("risk_debate", self.llm)), name="Conservative Analyst", kind="risk",
             fallback=_fb_risk_debate("Conservative"))
         portfolio_manager_node = guard_node(
-            create_portfolio_manager(self.llm), name="Portfolio Manager", kind="decision",
+            create_portfolio_manager(self.agent_llms.get("portfolio_manager", self.llm)), name="Portfolio Manager", kind="decision",
             fallback=_fb_text("final_trade_decision",
                               "Hold — automated fallback: Portfolio Manager unavailable."))
         workflow = StateGraph(AgentState)

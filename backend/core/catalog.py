@@ -170,7 +170,9 @@ CHART_PERIODS: list[dict] = [
 
 async def build_meta(db=None, user=None) -> dict:
     from backend.trading_agents.agents.tools.registry import registry
+    from backend.trading_agents.agent_catalog import list_agents
     tools_list = registry.metadata()
+    agents_list = [a.metadata() for a in list_agents()]
     if db is not None and user is not None:
         from backend.services.settings_service import get_or_create_settings
         from backend.services.tool_access_service import get_user_tool_access, get_user_agent_access
@@ -202,6 +204,7 @@ async def build_meta(db=None, user=None) -> dict:
     return {
         "analysts": await available_analysts(db, user),
         "tools": tools_list,
+        "agents": agents_list,
         "section_labels": SECTION_LABELS,
         "signals": SIGNALS,
         "asset_types": ASSET_TYPES,

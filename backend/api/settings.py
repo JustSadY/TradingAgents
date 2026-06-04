@@ -7,6 +7,7 @@ from backend.core.database import get_db
 from backend.models.user import User
 from backend.schemas.settings import SettingsRead, SettingsUpdate
 from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate
+from backend.schemas.agent_settings import AgentSettingsRead, AgentSettingsUpdate
 from backend.api.deps import get_current_user, require_admin
 from backend.services.settings_service import (
     get_or_create_settings,
@@ -180,5 +181,75 @@ async def update_user_tools(
     from backend.schemas.tool_settings import ToolSettingsRead
     try:
         return await apply_tool_settings_update(db, current_user, body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/agents", response_model=AgentSettingsRead)
+async def get_user_agents(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from backend.services.agent_settings_service import get_user_agent_settings
+    return await get_user_agent_settings(db, current_user)
+
+
+@router.put("/agents", response_model=AgentSettingsRead)
+async def update_user_agents(
+    body: AgentSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from backend.services.agent_settings_service import apply_agent_settings_update
+    try:
+        return await apply_agent_settings_update(db, current_user, body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/users/{user_id}/agents", response_model=AgentSettingsRead)
+async def get_other_user_agents(
+    user_id: int,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    target_user = await _require_target_user(db, user_id)
+    from backend.services.agent_settings_service import get_user_agent_settings
+    return await get_user_agent_settings(db, target_user)
+
+
+@router.put("/users/{user_id}/agents", response_model=AgentSettingsRead)
+async def update_other_user_agents(
+    user_id: int,
+    body: AgentSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    target_user = await _require_target_user(db, user_id)
+    from backend.services.agent_settings_service import apply_agent_settings_update
+    try:
+        return await apply_agent_settings_update(db, target_user, body)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@router.get("/agents/server", response_model=AgentSettingsRead)
+async def get_server_agents(
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    from backend.services.agent_settings_service import get_server_agent_settings
+    return await get_server_agent_settings(db)
+
+
+@router.put("/agents/server", response_model=AgentSettingsRead)
+async def update_server_agents(
+    body: AgentSettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    admin: User = Depends(require_admin),
+):
+    from backend.services.agent_settings_service import apply_server_agent_settings_update
+    try:
+        return await apply_server_agent_settings_update(db, body)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e))

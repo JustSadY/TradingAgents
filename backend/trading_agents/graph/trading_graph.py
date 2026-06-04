@@ -76,39 +76,39 @@ class TradingAgentsGraph:
             **main_kwargs,
         )
         self.thinking_llm = client.get_llm()
-        analyst_llms = {}
-        analyst_models = self.config.get("analyst_models") or {}
-        if isinstance(analyst_models, str):
-            try:
-                analyst_models = json.loads(analyst_models)
-            except Exception:
-                analyst_models = {}
-        for analyst_key, model_str in analyst_models.items():
-            if not model_str or not model_str.strip():
-                continue
-            model_str_clean = model_str.strip()
-            if model_str_clean == "custom":
-                continue
-            if model_str_clean in ("deep", "deep_think_llm", "quick", "quick_think_llm"):
-                analyst_llms[analyst_key] = self.thinking_llm
-            else:
-                prov, model_name = _resolve_provider_and_model(model_str_clean, self.config["llm_provider"])
+        self.agent_llms = {}
+        runtime_agent_ctx = self.config.get("runtime_agent_context") or {}
+        from backend.trading_agents.agent_catalog import list_agents
+        for agent_info in list_agents():
+            agent_key = agent_info.key
+            agent_state = runtime_agent_ctx.get(agent_key)
+            if agent_state and agent_state.get("settings"):
+                settings_val = agent_state["settings"]
+                prov = settings_val.get("llm_provider") or main_prov
+                model_name = settings_val.get("llm_model") or self.config["llm_model"]
+                temperature = settings_val.get("temperature")
                 try:
-                    analyst_kwargs = self._get_provider_kwargs(prov)
+                    agent_kwargs = self._get_provider_kwargs(prov)
+                    if temperature is not None:
+                        agent_kwargs["temperature"] = float(temperature)
                     if self.callbacks:
-                        analyst_kwargs["callbacks"] = self.callbacks
+                        agent_kwargs["callbacks"] = self.callbacks
                     client = create_llm_client(
                         provider=prov,
                         model=model_name,
                         base_url=self.config.get("backend_url"),
-                        **analyst_kwargs,
+                        **agent_kwargs,
                     )
-                    analyst_llms[analyst_key] = client.get_llm()
+                    self.agent_llms[agent_key] = client.get_llm()
                 except Exception as e:
                     logger.warning(
-                        "Could not create custom LLM client for analyst %s using %s: %s",
-                        analyst_key, model_str, e,
+                        "Could not create custom LLM client for agent %s: %s",
+                        agent_key, e,
                     )
+                    self.agent_llms[agent_key] = self.thinking_llm
+            else:
+                self.agent_llms[agent_key] = self.thinking_llm
+
         self.memory_log = TradingMemoryLog(self.config)
         self.tool_nodes = self._create_tool_nodes()
         self.conditional_logic = ConditionalLogic(
@@ -120,7 +120,7 @@ class TradingAgentsGraph:
             self.tool_nodes,
             self.conditional_logic,
             analyst_concurrency_limit=self.config.get("analyst_concurrency_limit", 1),
-            analyst_llms=analyst_llms,
+            agent_llms=self.agent_llms,
         )
         self.propagator = Propagator(
             max_recur_limit=self.config.get("max_recur_limit", 100)

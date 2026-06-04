@@ -43,9 +43,32 @@ export interface ToolMeta {
   settings_schema: ToolSettingFieldMeta[]
 }
 
+export interface AgentSettingFieldMeta {
+  key: string
+  type: string
+  label_key: string
+  description_key?: string
+  default?: any
+  required?: boolean
+  min?: number
+  max?: number
+  step?: number
+  options?: { value: string; label_key: string }[]
+}
+
+export interface AgentMeta {
+  key: string
+  label: string
+  description: string
+  category: string
+  default_enabled: boolean
+  settings_schema: AgentSettingFieldMeta[]
+}
+
 export interface Meta {
   analysts: AnalystMeta[]
   tools: ToolMeta[]
+  agents?: AgentMeta[]
   section_labels: Record<string, string>
   signals: SignalMeta[]
   asset_types: Choice[]

@@ -279,6 +279,9 @@ async def run_analysis(
         config["runtime_tool_context"] = runtime_tool_context
         _inject_tool_credentials(config)
 
+        from backend.services.agent_settings_service import build_agent_runtime_context
+        config["runtime_agent_context"] = await build_agent_runtime_context(db, user_id)
+
         ta = TradingAgentsGraph(
             selected_analysts=permitted_analysts,
             debug=False,
