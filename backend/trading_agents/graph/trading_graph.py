@@ -209,10 +209,18 @@ class TradingAgentsGraph:
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
         from backend.trading_agents.agents.analyst_registry import get_tools, list_analysts
-        return {
-            key: ToolNode(self._filter_tools_for_analyst(key, get_tools(key)))
-            for key in list_analysts()
-        }
+        from backend.trading_agents.agents.utils.resilience import tool_error_handler
+        nodes: Dict[str, ToolNode] = {}
+        for key in list_analysts():
+            tools = self._filter_tools_for_analyst(key, get_tools(key))
+            try:
+                # Log tool failures and feed the error back to the LLM (so it
+                # moves on to the next tool) rather than aborting the run.
+                nodes[key] = ToolNode(tools, handle_tool_errors=tool_error_handler)
+            except TypeError:
+                # Older/newer langgraph without the kwarg — fall back to default.
+                nodes[key] = ToolNode(tools)
+        return nodes
     def _resolve_benchmark(self, ticker: str) -> str:
         explicit = self.config.get("benchmark_ticker")
         if explicit:
