@@ -66,7 +66,7 @@ async def _auto_analyze(ticker: str, trade_date: str, user_id: int) -> None:
     try:
         from backend.core.database import AsyncSessionLocal
         from backend.services.analysis_service import run_analysis
-        from backend.api.settings import _get_or_create_settings
+        from backend.services.settings_service import get_or_create_settings
         from backend.models.user import User
         import uuid
         async with AsyncSessionLocal() as new_db:
@@ -74,7 +74,7 @@ async def _auto_analyze(ticker: str, trade_date: str, user_id: int) -> None:
             user = result.scalar_one_or_none()
             if not user:
                 return
-            settings = await _get_or_create_settings(new_db, user)
+            settings = await get_or_create_settings(new_db, user)
             task_id = str(uuid.uuid4())
             await run_analysis(ticker, trade_date, "stock", settings, new_db,
                                triggered_by="alert", task_id=task_id, user=user)

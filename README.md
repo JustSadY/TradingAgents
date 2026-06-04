@@ -5,7 +5,7 @@ TradingAgents is a state-of-the-art investment decision-making dashboard powered
 The platform supports technical analysis, market sentiment (Reddit/StockTwits), global news, fundamental balance sheets, macroeconomic reports, options chains, and quantitative factors. It features a modern, glassmorphic dark-themed UI with real-time analysis streaming over WebSockets, paper trading simulation, and automated cron-based runs.
 
 > [!NOTE]
-> For a deep dive into the system mechanics, directories, settings, and agent details, please refer to the documentation starting with [docs/introduction.md](file:///c:/Users/JustS/Desktop/TradingAgents/docs/introduction.md).
+> For a deep dive into the system mechanics, directories, settings, and agent details, please refer to the documentation starting with [docs/introduction.md](docs/introduction.md).
 
 ---
 
@@ -24,7 +24,7 @@ The platform supports technical analysis, market sentiment (Reddit/StockTwits), 
 
 ## 🛠️ Tech Stack
 
-*   **Backend:** Python 3.10+, FastAPI, SQLAlchemy (Asyncio / asyncpg), PostgreSQL, Alembic, APScheduler, LangGraph, LangChain Core.
+*   **Backend:** Python 3.10+, FastAPI, SQLAlchemy (Asyncio / asyncpg), PostgreSQL, APScheduler, LangGraph, LangChain Core.
 *   **Frontend:** React (TypeScript), Vite, TailwindCSS (custom dark glassmorphism theme), Recharts (interactive charts).
 *   **Data Providers:** yFinance, Alpha Vantage, Reddit API, SearXNG search engine.
 
@@ -33,10 +33,10 @@ The platform supports technical analysis, market sentiment (Reddit/StockTwits), 
 ## 📁 Directory Layout
 
 For in-depth developer information, check out the documentation files inside each sub-module:
-*   🖥️ **[backend/README.md](file:///c:/Users/JustS/Desktop/TradingAgents/backend/README.md):** FastAPI web server architecture, API routing, asynchronous database logging, and service layout.
-*   🤖 **[backend/trading_agents/README.md](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/README.md):** LangGraph multi-agent orchestration, dynamic analyst plugins registry, and unified LLM clients.
-*   🎨 **[frontend/README.md](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/README.md):** React + TS SPA layout, Tailwind styling, localized translation dictionaries (i18n), and Vite proxy setup.
-*   📦 **[deploy/README.md](file:///c:/Users/JustS/Desktop/TradingAgents/deploy/README.md):** Single-command Linux deployment script, self-updater structure, and systemd management.
+*   🖥️ **[backend/README.md](backend/README.md):** FastAPI web server architecture, API routing, asynchronous database logging, and service layout.
+*   🤖 **[backend/trading_agents/README.md](backend/trading_agents/README.md):** LangGraph multi-agent orchestration, dynamic analyst plugins registry, and unified LLM clients.
+*   🎨 **[frontend/README.md](frontend/README.md):** React + TS SPA layout, Tailwind styling, localized translation dictionaries (i18n), and Vite proxy setup.
+*   📦 **[deploy/README.md](deploy/README.md):** Single-command Linux deployment script, self-updater structure, and systemd management.
 
 ```text
 TradingAgents/
@@ -161,7 +161,7 @@ The following configurations can be loaded into your `.env` file:
 ## 🔄 Automated Self-Updates
 
 The platform features a secure, decoupled mechanism to automatically update itself from the web dashboard:
-*   [update_service.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/services/update_service.py) periodically fetches the remote repo commits (`origin/main`).
+*   [update_service.py](backend/services/update_service.py) periodically fetches the remote repo commits (`origin/main`).
 *   If an update is available, a notification banner is displayed on the UI.
 *   Upon clicking "Update", FastAPI triggers a separate, non-blocking one-shot systemd service `tradingagents-update.service`. This service executes `git pull`, `pip install`, and `npm run build` as an unprivileged user, and performs a safe root restart of the main service.
 

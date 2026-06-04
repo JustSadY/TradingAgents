@@ -1,16 +1,16 @@
 from datetime import datetime, timezone
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, UniqueConstraint
+from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from backend.core.database import Base
+from backend.core.database import Base, MONEY
 class Portfolio(Base):
     __tablename__ = "portfolios"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     mode: Mapped[str] = mapped_column(String(20), nullable=False)
     broker: Mapped[str] = mapped_column(String(50), nullable=False)
-    initial_capital: Mapped[float] = mapped_column(Float, nullable=False)
-    current_balance: Mapped[float] = mapped_column(Float, nullable=False)
-    cash_available: Mapped[float] = mapped_column(Float, nullable=False)
+    initial_capital: Mapped[float] = mapped_column(MONEY, nullable=False)
+    current_balance: Mapped[float] = mapped_column(MONEY, nullable=False)
+    cash_available: Mapped[float] = mapped_column(MONEY, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="active")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -28,10 +28,10 @@ class Holding(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     portfolio_id: Mapped[int] = mapped_column(Integer, ForeignKey("portfolios.id"), nullable=False)
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    quantity: Mapped[float] = mapped_column(Float, nullable=False)
-    avg_buy_price: Mapped[float] = mapped_column(Float, nullable=False)
-    current_price: Mapped[float] = mapped_column(Float, default=0.0)
-    unrealized_pnl: Mapped[float] = mapped_column(Float, default=0.0)
+    quantity: Mapped[float] = mapped_column(MONEY, nullable=False)
+    avg_buy_price: Mapped[float] = mapped_column(MONEY, nullable=False)
+    current_price: Mapped[float] = mapped_column(MONEY, default=0.0)
+    unrealized_pnl: Mapped[float] = mapped_column(MONEY, default=0.0)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

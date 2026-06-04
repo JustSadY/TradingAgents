@@ -1,4 +1,5 @@
 from tradingagents.agents.utils.agent_utils import get_language_instruction
+from tradingagents.agents.utils.report_aggregator import build_resources
 def create_conservative_debator(llm):
     def conservative_node(state) -> dict:
         risk_debate_state = state["risk_debate_state"]
@@ -18,12 +19,7 @@ def create_conservative_debator(llm):
             "earnings_report": "Corporate Guidance & Earnings Report",
             "review_report": "Hindsight Performance Review Report",
         }
-        resources = []
-        for field, label in report_fields.items():
-            content = state.get(field, "")
-            if content and content.strip():
-                resources.append(f"{label}:\n{content.strip()}")
-        resources_text = "\n\n".join(resources)
+        resources_text = build_resources(state, report_fields)
         prompt = f"""As the Conservative Risk Analyst, your primary objective is to protect assets, minimize volatility, and ensure steady, reliable growth. You prioritize stability, security, and risk mitigation, carefully assessing potential losses, economic downturns, and market volatility. When evaluating the trader's decision or plan, critically examine high-risk elements, pointing out where the decision may expose the firm to undue risk and where more cautious alternatives could secure long-term gains. Here is the trader's decision:
 {trader_decision}
 Your task is to actively counter the arguments of the Aggressive and Neutral Analysts, highlighting where their views may overlook potential threats or fail to prioritize sustainability. Respond directly to their points, drawing from the following data sources to build a convincing case for a low-risk approach adjustment to the trader's decision:

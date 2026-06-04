@@ -1,18 +1,11 @@
 import logging
-import sys
 import os
 from typing import Optional
+import backend.bootstrap  # noqa: F401  (makes `tradingagents` importable)
 from .base import BaseTraderInterface, OrderRequest, OrderResult
 _logger = logging.getLogger(__name__)
-def _ensure_project_in_path():
-    project_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-    )
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
 class SimulationTrader(BaseTraderInterface):
     def __init__(self, portfolio_id: int = 1, initial_capital: float = 100_000.0, db=None):
-        _ensure_project_in_path()
         from tradingagents.mock_trading.engine import MockTradingEngine
         from tradingagents.mock_trading.database import TradingDatabase
         if db is None:
@@ -97,11 +90,10 @@ class SimulationTrader(BaseTraderInterface):
             )
     def cancel_order(self, order_id: str) -> bool:
         try:
+            from tradingagents.mock_trading.order_manager import OrderStatus
             order = self._engine.order_mgr.get_order(order_id)
             if order and order.status.value == "PENDING":
-                order.status = __import__(
-                    "tradingagents.mock_trading.order_manager", fromlist=["OrderStatus"]
-                ).OrderStatus.REJECTED
+                order.status = OrderStatus.REJECTED
                 return True
             return False
         except Exception:

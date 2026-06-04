@@ -1,6 +1,14 @@
 # Configuration & API Setup
 
-TradingAgents is customized through environment variables stored in a `.env` file at the project root. These settings configure LLM endpoints, third-party data providers, database connections, and security parameters.
+TradingAgents configuration is split in two:
+
+* **Infrastructure secrets** live in a `.env` file at the project root — the
+  auth secret, admin bootstrap, database URL, Fernet encryption key and CORS
+  origins (sections 1–2 below). These are the only values `core/config.py` reads
+  from the environment.
+* **Provider keys & operational settings** (LLM provider keys, data vendors,
+  SearXNG, per-user engine options) are configured at runtime in the **Web UI**
+  and stored — encrypted where sensitive — in the database.
 
 ---
 
@@ -43,18 +51,24 @@ DATABASE_URL=postgresql+asyncpg://tradingagents:tradingagents@localhost:5432/tra
 
 ## 🤖 3. LLM Provider Configurations
 
-TradingAgents maps LLM requests to multiple model endpoints. Fill in the keys for the providers you plan to use:
+> ⚠️ **These are no longer `.env` variables.** LLM provider keys are configured
+> at runtime through the **Web UI** and stored encrypted (Fernet) in the
+> database — per-user under *Preferences → Account & API Keys*, and globally
+> under *Admin Panel → Global Settings*. The `.env` only holds the
+> infrastructure secrets in sections 1–2 above. The variable names below are
+> kept for reference of which providers are supported.
 
-```ini
-# Core API Keys
-OPENAI_API_KEY=               # GPT models (gpt-4o, o1, o3-mini)
-ANTHROPIC_API_KEY=            # Claude models (claude-3-5-sonnet)
-GOOGLE_API_KEY=               # Gemini models (gemini-2.0-flash/pro, gemini-2.5-flash)
-XAI_API_KEY=                  # Grok models
-DEEPSEEK_API_KEY=             # DeepSeek V3 / R1 models
-OPENROUTER_API_KEY=           # Alternative multi-provider routing gateway
-LITELLM_API_KEY=              # LiteLLM Proxy endpoint
-AZURE_OPENAI_API_KEY=         # Enterprise Azure endpoints
+Supported providers (set their keys in the Web UI):
+
+```text
+OPENAI      — GPT models (gpt-4o, o1, o3-mini)
+ANTHROPIC   — Claude models (claude-sonnet / opus)
+GOOGLE      — Gemini models (gemini-2.0/2.5-flash, pro)
+XAI         — Grok models
+DEEPSEEK    — DeepSeek V3 / R1 models
+OPENROUTER  — Alternative multi-provider routing gateway
+LITELLM     — LiteLLM Proxy endpoint
+AZURE       — Enterprise Azure OpenAI endpoints
 ```
 
 ### Provider-Specific Reasoning Configurations
@@ -67,30 +81,27 @@ Some reasoning models accept configuration parameters that are mapped dynamicall
 
 ## 📊 4. Data Vendor Configurations
 
-To query stock/crypto details, sentiment, and news, configure the following APIs:
+To query stock/crypto details, sentiment, and news, configure the following in
+the **Web UI** (*Admin Panel → Global Settings*) — like the LLM keys, these are
+stored in the database, not in `.env`:
 
-```ini
-# Alpha Vantage (Optional)
-# Used as an alternative data vendor for stock splits, technicals, or fundamentals.
-# Get a key from: https://www.alphavantage.co/
-ALPHA_VANTAGE_API_KEY=
-
-# Reddit Sentiment API (Optional)
-# Allows the Sentiment Analyst to fetch real-time discussions from subreddits like r/wallstreetbets.
-REDDIT_CLIENT_ID=
-REDDIT_CLIENT_SECRET=
-REDDIT_USER_AGENT=TradingAgents/1.0
+```text
+ALPHA_VANTAGE_API_KEY    — alternative vendor for splits, technicals, fundamentals
+REDDIT_CLIENT_ID         — Reddit sentiment (r/wallstreetbets, etc.)
+REDDIT_CLIENT_SECRET
+REDDIT_USER_AGENT        — e.g. TradingAgents/1.0
 ```
 
 ---
 
 ## 🔍 5. Search Engine Configuration (SearXNG)
 
-The News Analyst queries search engines to fetch global current events. To avoid rate-limits, TradingAgents connects to a **SearXNG** instance:
+The News Analyst queries search engines to fetch global current events. To avoid
+rate-limits, TradingAgents connects to a **SearXNG** instance, whose URL is set
+in the **Web UI** (*Admin Panel → Global Settings*, `searxng_url`):
 
-```ini
-# Local or public SearXNG URL (Required for News Analyst web searches)
-SEARXNG_URL=http://localhost:8080
+```text
+SEARXNG_URL   e.g. http://localhost:8080
 ```
 
 You can run a local SearXNG instance using Docker:
@@ -102,7 +113,7 @@ docker run -d -p 8080:8080 searxng/searxng
 
 ## 🎛️ 6. Platform Runtime Settings (Optional Overrides)
 
-These environment variables can override the default parameters defined in [default_config.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/default_config.py):
+These environment variables can override the default parameters defined in [config.py](../backend/trading_agents/config.py) (re-exported as `DEFAULT_CONFIG` by [default_config.py](../backend/trading_agents/default_config.py)):
 
 ```ini
 # Select default LLM Provider (openai, anthropic, google, etc.)

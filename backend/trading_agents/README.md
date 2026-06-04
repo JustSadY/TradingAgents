@@ -81,7 +81,7 @@ trading_agents/
 ## 🔬 Core Components
 
 ### 1. Dynamic Analyst Registry
-All analyst plugins inherit from a base analyst class and register dynamically via [analyst_registry.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/agents/analyst_registry.py). Each analyst is given access to tools (e.g. `yfinance`, web search via SearXNG, social media APIs) to compile an isolated PDF/text report and extract key quantitative signal metrics.
+All analyst plugins inherit from a base analyst class and register dynamically via [analyst_registry.py](agents/analyst_registry.py). Each analyst is given access to tools (e.g. `yfinance`, web search via SearXNG, social media APIs) to compile an isolated PDF/text report and extract key quantitative signal metrics.
 
 The 9 analysts are:
 1.  **Market Analyst:** Pulls historical stock prices, calculates MACD, RSI, Moving Averages, and visualizes trends.
@@ -119,7 +119,7 @@ Before publishing the final report, the **Reflection Node** checks the generated
 
 ## 🔌 LLM Provider Integration
 
-The system uses [llm_clients/](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/llm_clients/) to abstract away API differences. It supports:
+The system uses [llm_clients/](llm_clients) to abstract away API differences. It supports:
 - **OpenAI:** `gpt-4o`, `o1`, `o3-mini`, etc. (Supports structured Pydantic output parsing).
 - **Anthropic Claude:** `claude-3-5-sonnet-latest`.
 - **Google Gemini:** `gemini-2.0-flash`, `gemini-2.5-pro` via native google SDK.

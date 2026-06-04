@@ -1,4 +1,5 @@
 from tradingagents.agents.utils.agent_utils import get_language_instruction
+from tradingagents.agents.utils.report_aggregator import build_resources
 def create_bear_researcher(llm):
     def bear_node(state) -> dict:
         investment_debate_state = state["investment_debate_state"]
@@ -23,14 +24,8 @@ def create_bear_researcher(llm):
             "earnings_report": "Corporate Guidance & Earnings Report",
             "review_report": "Hindsight Performance Review Report",
         }
-        resources = []
-        for field, label in report_fields.items():
-            content = state.get(field, "")
-            if content and content.strip():
-                resources.append(f"{label}:\n{content.strip()}")
-        
         synthesis_report = state.get("synthesis_report", "No synthesis report available.")
-        resources_text = "\n\n".join(resources)
+        resources_text = build_resources(state, report_fields)
         
         prompt = f"""You are a High-Conviction Bear Analyst making the case against investing in the {target_label}. Your goal is to present a rigorous, evidence-based argument emphasizing risks, structural challenges, and negative catalysts.
 

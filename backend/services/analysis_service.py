@@ -1,23 +1,13 @@
 import asyncio
 import logging
-import sys
-import os
 import time
 import uuid
+import backend.bootstrap  # noqa: F401  (engine env + import-finder setup)
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.websocket import ws_manager
 from backend.models.analysis import AnalysisResult
 from backend.models.settings import AppSettings
 _logger = logging.getLogger(__name__)
-_PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-if _PROJECT_ROOT not in sys.path:
-    sys.path.insert(0, _PROJECT_ROOT)
-import tempfile as _tf
-_TMP = _tf.gettempdir()
-os.environ.setdefault("TRADINGAGENTS_RESULTS_DIR",      os.path.join(_TMP, "ta_results"))
-os.environ.setdefault("TRADINGAGENTS_DATA_CACHE_DIR",   os.path.join(_TMP, "ta_cache"))
-os.environ.setdefault("TRADINGAGENTS_MEMORY_LOG_PATH",  os.path.join(_TMP, "ta_memory.md"))
-os.environ.setdefault("TRADINGAGENTS_LOG_DIR",          _TMP)
 _RUNNING_TASKS: dict[str, asyncio.Task] = {}
 _REPORT_FIELDS = (
     "market_report", "sentiment_report", "news_report", "fundamentals_report",
@@ -436,3 +426,64 @@ async def run_portfolio_analysis(
     await db.flush()
     _logger.info("Portfolio analysis complete for user=%s tickers=%s", username, tickers)
     return multi_row
+
+
+async def run_analysis_task(
+    ticker: str,
+    trade_date: str,
+    asset_type: str,
+    settings: AppSettings,
+    task_id: str,
+    user=None,
+) -> None:
+    """Background entrypoint for a single manual analysis run.
+
+    Owns its own DB session, persists the result, places a paper order when the
+    signal is actionable, and reports failures over the WebSocket. This is the
+    orchestration that previously lived inline in the ``/analysis/run`` route.
+    """
+    from backend.core.database import AsyncSessionLocal
+    from backend.services.trading_orchestrator import place_signal_order
+    async with AsyncSessionLocal() as db:
+        try:
+            _, row = await run_analysis(
+                ticker, trade_date, asset_type, settings, db, "manual",
+                task_id=task_id, user=user,
+            )
+            if row.user_id is None and user is not None:
+                row.user_id = user.id
+            await db.commit()
+            try:
+                await place_signal_order(db, ticker=ticker, row=row, settings=settings, user=user)
+                await db.commit()
+            except Exception as exc:
+                _logger.warning("Order execution skipped for %s: %s", ticker, exc)
+                await db.rollback()
+        except Exception as exc:
+            _logger.error("Background analysis failed: %s", exc, exc_info=True)
+            try:
+                await ws_manager.send(task_id, {"type": "error", "message": f"Analiz hatası: {exc}"})
+                await ws_manager.close_task(task_id)
+            except Exception:
+                pass
+            await db.rollback()
+
+
+async def run_portfolio_task(
+    tickers: list[str],
+    trade_date: str,
+    asset_type: str,
+    settings: AppSettings,
+    user=None,
+) -> None:
+    """Background entrypoint for a multi-ticker portfolio analysis run."""
+    from backend.core.database import AsyncSessionLocal
+    async with AsyncSessionLocal() as db:
+        try:
+            await run_portfolio_analysis(
+                tickers, trade_date, asset_type, settings, db, "manual", user=user,
+            )
+            await db.commit()
+        except Exception as exc:
+            _logger.error("Portfolio analysis failed: %s", exc, exc_info=True)
+            await db.rollback()

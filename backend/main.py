@@ -1,35 +1,6 @@
-import os as _os, sys as _sys, tempfile as _tf, types as _types
-_TMP = _tf.gettempdir()
-_os.environ.setdefault("TRADINGAGENTS_LOG_DIR",         _TMP)
-_os.environ.setdefault("TRADINGAGENTS_DATA_CACHE_DIR",  _os.path.join(_TMP, "ta_cache"))
-_os.environ.setdefault("TRADINGAGENTS_RESULTS_DIR",     _os.path.join(_TMP, "ta_results"))
-_os.environ.setdefault("TRADINGAGENTS_MEMORY_LOG_PATH", _os.path.join(_TMP, "ta_memory.md"))
-_lc_stub = _types.ModuleType("tradingagents.agents.utils.logging_config")
-_lc_stub.setup_unified_logging = lambda: None
-_sys.modules.setdefault("tradingagents.agents.utils.logging_config", _lc_stub)
-import importlib.abc as _ilab, importlib.util as _ilu
-class _LocalTradingAgentsFinder(_ilab.MetaPathFinder):
-    _root = _os.path.join(_os.path.dirname(_os.path.abspath(__file__)), "trading_agents")
-    def find_spec(self, fullname, path=None, target=None):
-        if fullname != "tradingagents" and not fullname.startswith("tradingagents."):
-            return None
-        base = _os.path.join(self._root, *fullname.split(".")[1:])
-        if _os.path.isdir(base):
-            init = _os.path.join(base, "__init__.py")
-            if _os.path.isfile(init):
-                return _ilu.spec_from_file_location(
-                    fullname, init, submodule_search_locations=[base],
-                )
-            import importlib.machinery as _ilm
-            spec = _ilm.ModuleSpec(fullname, loader=None, is_package=True)
-            spec.submodule_search_locations = [base]
-            return spec
-        pyfile = base + ".py"
-        if _os.path.isfile(pyfile):
-            return _ilu.spec_from_file_location(fullname, pyfile)
-        return None
-if not any(isinstance(_f, _LocalTradingAgentsFinder) for _f in _sys.meta_path):
-    _sys.meta_path.insert(0, _LocalTradingAgentsFinder())
+# Bootstrap must run before any import that transitively pulls in the
+# vendored `tradingagents` engine (env defaults + import finder + logging stub).
+import backend.bootstrap  # noqa: F401  (import side-effect: see backend/bootstrap.py)
 import logging
 from contextlib import asynccontextmanager
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect, Query, HTTPException, status

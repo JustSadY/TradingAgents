@@ -1,4 +1,5 @@
 from tradingagents.agents.utils.agent_utils import get_language_instruction
+from tradingagents.agents.utils.report_aggregator import build_resources
 def create_neutral_debator(llm):
     def neutral_node(state) -> dict:
         risk_debate_state = state["risk_debate_state"]
@@ -18,12 +19,7 @@ def create_neutral_debator(llm):
             "earnings_report": "Corporate Guidance & Earnings Report",
             "review_report": "Hindsight Performance Review Report",
         }
-        resources = []
-        for field, label in report_fields.items():
-            content = state.get(field, "")
-            if content and content.strip():
-                resources.append(f"{label}:\n{content.strip()}")
-        resources_text = "\n\n".join(resources)
+        resources_text = build_resources(state, report_fields)
         prompt = f"""As the Neutral Risk Analyst, your role is to provide a balanced perspective, weighing both the potential benefits and risks of the trader's decision or plan. You prioritize a well-rounded approach, evaluating the upsides and downsides while factoring in broader market trends, potential economic shifts, and diversification strategies.Here is the trader's decision:
 {trader_decision}
 Your task is to challenge both the Aggressive and Conservative Analysts, pointing out where each perspective may be overly optimistic or overly cautious. Use insights from the following data sources to support a moderate, sustainable strategy to adjust the trader's decision:

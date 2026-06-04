@@ -1,10 +1,9 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
 from backend.core.database import get_db
 from backend.core.security import verify_password, create_access_token, create_refresh_token, decode_token
-from backend.models.user import User
+from backend.repositories.users import get_user_by_username
 from backend.schemas.auth import LoginRequest, TokenResponse, RefreshRequest
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -12,8 +11,7 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 @router.post("/login", response_model=TokenResponse)
 async def login(body: LoginRequest, db: AsyncSession = Depends(get_db)):
-    result = await db.execute(select(User).where(User.username == body.username))
-    user = result.scalar_one_or_none()
+    user = await get_user_by_username(db, body.username)
     if not user or not verify_password(body.password, user.hashed_password) or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
     return TokenResponse(
@@ -29,8 +27,7 @@ async def refresh(body: RefreshRequest, db: AsyncSession = Depends(get_db)):
     except ValueError:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
 
-    result = await db.execute(select(User).where(User.username == username))
-    user = result.scalar_one_or_none()
+    user = await get_user_by_username(db, username)
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 

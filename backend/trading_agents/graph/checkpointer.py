@@ -1,11 +1,14 @@
 from __future__ import annotations
 import hashlib
+import logging
 import sqlite3
 from contextlib import contextmanager
 from pathlib import Path
 from typing import Generator
 from langgraph.checkpoint.sqlite import SqliteSaver
 from tradingagents.dataflows.utils import safe_ticker_component
+
+_logger = logging.getLogger(__name__)
 def _db_path(data_dir: str | Path, ticker: str) -> Path:
     safe = safe_ticker_component(ticker).upper()
     p = Path(data_dir) / "checkpoints"
@@ -54,7 +57,8 @@ def clear_checkpoint(data_dir: str | Path, ticker: str, date: str) -> None:
         for table in ("writes", "checkpoints"):
             conn.execute(f"DELETE FROM {table} WHERE thread_id = ?", (tid,))
         conn.commit()
-    except sqlite3.OperationalError:
-        pass
+    except sqlite3.OperationalError as exc:
+        # Table may not exist yet (no checkpoint ever written) — non-fatal.
+        _logger.debug("clear_checkpoint skipped for %s/%s: %s", ticker, date, exc)
     finally:
         conn.close()
