@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react'
 import axios from 'axios'
-import { notify } from '../utils/notify'
+import { notify, formatErrorDetail } from '../utils/notify'
 
 const TOKEN_KEY = 'ta_access'
 const REFRESH_KEY = 'ta_refresh'
+
 
 export function getAccessToken() {
   return localStorage.getItem(TOKEN_KEY)
@@ -81,6 +82,9 @@ axios.interceptors.response.use(
     const original = err.config
     const status: number | undefined = err.response?.status
 
+    if (err.response?.data && typeof err.response.data === 'object' && 'detail' in err.response.data) {
+      err.response.data.detail = formatErrorDetail(err.response.data.detail)
+    }
 
     if (status && status >= 500) {
       const detail = err.response?.data?.detail || err.message || 'Sunucu hatası'

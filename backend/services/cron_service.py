@@ -62,7 +62,7 @@ class CronService:
             except Exception as e:
                 _logger.error("Failed to configure user cron job for user=%s: %s", username, e)
     async def _run_user_watchlist_scan(self, user_id: int):
-                from backend.core.database import AsyncSessionLocal
+        from backend.core.database import AsyncSessionLocal
         from backend.models.settings import AppSettings
         from backend.models.user import User
         from backend.services.analysis_service import run_analysis
