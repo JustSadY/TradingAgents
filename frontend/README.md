@@ -8,7 +8,7 @@ A modern, high-fidelity investment decision-making dashboard built with **React*
 
 *   **Responsive Glassmorphic UI:** Styled with a premium, sleek dark mode theme using custom Tailwind utility classes, backdrop filters, and subtle hover animations.
 *   **Real-Time WebSocket Streams:** Subscribes to backend multi-agent progress event channels to stream live node executions (e.g. tracking when the Bull/Bear Researchers start debating) and chunk-by-chunk markdown report generation.
-*   **Dual-Language Localization (i18n):** Supports fully integrated translation toggling between **English** and **Turkish**, persisted locally via `localStorage` (located in [src/i18n/](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/i18n)).
+*   **Dual-Language Localization (i18n):** Supports fully integrated translation toggling between **English** and **Turkish**, persisted locally via `localStorage` (located in [src/i18n/](src/i18n)).
 *   **Interactive Financial Charts:** Renders candlestick price charts, technical analysis overlays (MACD, RSI, Moving Averages), and mock trading portfolio returns using **Recharts**.
 *   **Developer Proxy Configuration:** Vite dev-server configures transparent reverse proxy routes (`/api`, `/auth`, `/ws`) to map API calls directly to the local FastAPI port (`8000`) without CORS headaches.
 
@@ -16,7 +16,7 @@ A modern, high-fidelity investment decision-making dashboard built with **React*
 
 ## 📁 Project Structure
 
-The React source files live inside [src/](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src):
+The React source files live inside [src/](src):
 
 ```text
 frontend/
@@ -71,7 +71,7 @@ Make sure you have Node.js 20+ installed.
 
 ## 🌐 Localization (i18n)
 
-Translations are split into separate feature files under `src/i18n/` to ensure code maintainability (e.g. [analysis.ts](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/i18n/analysis.ts), [settings.ts](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/i18n/settings.ts)). 
+Translations are split into separate feature files under `src/i18n/` to ensure code maintainability (e.g. [analysis.ts](src/i18n/analysis.ts), [settings.ts](src/i18n/settings.ts)). 
 
 A toggle component inside the main sidebar layout dynamically sets the active locale (`en` / `tr`), which updates the React context and forces a DOM-wide re-render of local dictionary terms.
 

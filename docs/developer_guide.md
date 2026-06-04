@@ -9,7 +9,7 @@ This guide describes how to extend the TradingAgents platform, write and registe
 TradingAgents uses a dynamic registration system. You can add a new analyst agent without modifying the core LangGraph compilation scripts.
 
 ### Step A: Define your Analyst Class and Tools
-Create your new analyst module in `backend/trading_agents/agents/analysts/your_analyst.py`. Use the `@register_analyst` decorator from [analyst_registry.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/agents/analyst_registry.py):
+Create your new analyst module in `backend/trading_agents/agents/analysts/your_analyst.py`. Use the `@register_analyst` decorator from [analyst_registry.py](../backend/trading_agents/agents/analyst_registry.py):
 
 ```python
 from typing import List
@@ -42,7 +42,7 @@ class CustomSentimentAnalyst:
 ```
 
 ### Step B: Import the Module in Setup
-To trigger the decorator on startup, import the module in [backend/trading_agents/graph/setup.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/graph/setup.py):
+To trigger the decorator on startup, import the module in [backend/trading_agents/graph/setup.py](../backend/trading_agents/graph/setup.py):
 
 ```python
 # Around line 31
@@ -50,7 +50,7 @@ import tradingagents.agents.analysts.custom_sentiment_analyst # noqa: F401
 ```
 
 ### Step C: Update the Frontend Metadata
-Add your new analyst key to the section dictionary inside [backend/core/catalog.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/core/catalog.py) to enable display labels and translation support:
+Add your new analyst key to the section dictionary inside [backend/core/catalog.py](../backend/core/catalog.py) to enable display labels and translation support:
 
 ```python
 _ANALYST_META: dict[str, tuple[str, str, bool]] = {
@@ -99,7 +99,7 @@ The frontend tracks the graph's execution using a persistent WebSocket connectio
 ## ⏰ 3. Managing Background Cron Services
 
 The platform uses `APScheduler` to run periodic background analyses for assets on a per-user basis:
-*   **Initialization:** The global cron scheduler initializes in [backend/main.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/main.py) during startup.
+*   **Initialization:** The global cron scheduler initializes in [backend/main.py](../backend/main.py) during startup.
 *   **User Configuration:** Each user can configure their own schedule and toggle status in the **Settings > Cron / Auto Scan** tab.
 *   **Database Synchronization:** The `CronService` reads active schedules from `AppSettings` and assigns unique job IDs (`watchlist_scan_user_{id}`) for each user.
 *   **Execution Flow:** When a user's cron triggers, it iterates through that specific user's **Watchlist**, starts background tasks using `run_analysis` with the user's active AI settings, and evaluates results.
@@ -112,7 +112,7 @@ The platform uses `APScheduler` to run periodic background analyses for assets o
 The React client supports runtime multi-language localization (defaulting to English, with Turkish support). It operates through a custom, lightweight React Context instead of bulky third-party libraries.
 
 ### A. The Translation Hook and Context
-Common navigation and general strings are managed directly in [LanguageContext.tsx](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/contexts/LanguageContext.tsx). Page/module-specific translations are modularized under the [i18n/](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/i18n/) directory. At runtime, the context uses Vite's `import.meta.glob` to automatically discover and merge all translation files into a single active dictionary.
+Common navigation and general strings are managed directly in [LanguageContext.tsx](../frontend/src/contexts/LanguageContext.tsx). Page/module-specific translations are modularized under the [i18n/](../frontend/src/i18n) directory. At runtime, the context uses Vite's `import.meta.glob` to automatically discover and merge all translation files into a single active dictionary.
 
 To use translations in any React component:
 
@@ -136,9 +136,9 @@ To use translations in any React component:
 
 ### B. Registering New Localization Strings
 To register new translation properties:
-1.  **For Common/Shared Labels:** Open [LanguageContext.tsx](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/contexts/LanguageContext.tsx), locate the `TRANSLATIONS` map, and add your key to both the `en` and `tr` blocks.
-2.  **For Page/Feature-Specific Labels:** Open the relevant translation file in [frontend/src/i18n/](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/i18n/) (e.g., [settings.ts](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/i18n/settings.ts)) and append your keys.
-3.  **For a New Page/Feature:** Create a new `.ts` file in [frontend/src/i18n/](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/i18n/) that default-exports a translations object structure:
+1.  **For Common/Shared Labels:** Open [LanguageContext.tsx](../frontend/src/contexts/LanguageContext.tsx), locate the `TRANSLATIONS` map, and add your key to both the `en` and `tr` blocks.
+2.  **For Page/Feature-Specific Labels:** Open the relevant translation file in [frontend/src/i18n/](../frontend/src/i18n) (e.g., [settings.ts](../frontend/src/i18n/settings.ts)) and append your keys.
+3.  **For a New Page/Feature:** Create a new `.ts` file in [frontend/src/i18n/](../frontend/src/i18n) that default-exports a translations object structure:
     ```typescript
     const translations = {
       en: {
@@ -160,7 +160,7 @@ To register new translation properties:
 This section provides technical guidance and code blueprints for developers implementing or extending the 16 advanced AI, visualization, and automated trading features.
 
 ### A. Setting Up Interactive Q&A Handler (Feature 1)
-To handle interactive questions on completed reports, create a new router under [backend/api/analysis.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/api/analysis.py):
+To handle interactive questions on completed reports, create a new router under [backend/api/analysis.py](../backend/api/analysis.py):
 
 ```python
 from fastapi import APIRouter, Depends
@@ -192,7 +192,7 @@ async def chat_with_report(analysis_id: int, user_message: str, db=Depends(get_d
 ```
 
 ### B. Streaming Live Bull & Bear Debate Exchanges (Feature 2)
-To push live debate bubble flows over WebSockets, hook into the node loop in [backend/trading_agents/graph/trading_graph.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/graph/trading_graph.py):
+To push live debate bubble flows over WebSockets, hook into the node loop in [backend/trading_agents/graph/trading_graph.py](../backend/trading_agents/graph/trading_graph.py):
 
 ```python
 # During the debate node processing, send intermediate outputs to the WebSocket manager
@@ -210,7 +210,7 @@ async def debate_step_callback(agent_name: str, message: str, task_id: str):
 ```
 
 ### C. Registering a New Investor Persona (Feature 4)
-Personas govern LLM advisory behaviors. Add options to [backend/trading_agents/config.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/config.py) and map them inside [backend/trading_agents/agents/managers/portfolio_manager.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/agents/managers/portfolio_manager.py):
+Personas govern LLM advisory behaviors. Add options to [backend/trading_agents/config.py](../backend/trading_agents/config.py) and map them inside [backend/trading_agents/agents/managers/portfolio_manager.py](../backend/trading_agents/agents/managers/portfolio_manager.py):
 
 ```python
 # 1. In backend/trading_agents/config.py
@@ -229,7 +229,7 @@ def get_portfolio_manager_prompt(persona: str) -> str:
 ```
 
 ### D. Implementing the Analyst Success Scorecard (Feature 3)
-Track the performance of individual analysts by comparing their signals against actual prices. Define the SQL model in [backend/models/portfolio_analysis.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/models/portfolio_analysis.py):
+Track the performance of individual analysts by comparing their signals against actual prices. Define the SQL model in [backend/models/portfolio_analysis.py](../backend/models/portfolio_analysis.py):
 
 ```python
 from sqlalchemy import Column, String, Float, Integer
@@ -275,7 +275,7 @@ To support small account sizes, upgrade the order managers to support floating-p
 ### F. Safe Dynamic Indicator Engine & Evaluation Blueprint
 Allows both analysts and users to write dynamic mathematical expressions (e.g. `(Close - SMA(20)) / STD(20)`) evaluated safely in the backend.
 
-1. **Backend Evaluation Core:** Located in [indicator_service.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/services/indicator_service.py), it parses formula syntax, replaces calls like `SMA(N)`, `EMA(N)`, `STD(N)`, and `RSI(N)` with computed pandas series, and runs a sandboxed `pandas.eval`:
+1. **Backend Evaluation Core:** Located in [indicator_service.py](../backend/services/indicator_service.py), it parses formula syntax, replaces calls like `SMA(N)`, `EMA(N)`, `STD(N)`, and `RSI(N)` with computed pandas series, and runs a sandboxed `pandas.eval`:
    ```python
    def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
        # Parsed tokens like SMA(10) get pre-calculated and mapped to SMA_10 in local_dict
@@ -284,24 +284,24 @@ Allows both analysts and users to write dynamic mathematical expressions (e.g. `
        return pd.Series(res, index=df.index)
    ```
 2. **API Router:** Exposes `/api/market/custom-indicator` to resolve queries by fetching the historical ticker data, calculating the formula series, and returning the time-series array.
-3. **Frontend Custom Formula Input:** Integrated in [Chart.tsx](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/pages/Chart.tsx) for dynamic user computations and plots them as line charts at the bottom of the candlestick panel.
+3. **Frontend Custom Formula Input:** Integrated in [Chart.tsx](../frontend/src/pages/Chart.tsx) for dynamic user computations and plots them as line charts at the bottom of the candlestick panel.
 
 ### G. Drawing Agent-to-UI Annotations & Trendlines
 Enables trading agents to interactively draw visual markers and trendlines on the user's chart.
 
-1. **State-Safe Tool Execution:** Defined in [chart_tools.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/agents/utils/chart_tools.py) as `add_chart_annotation`. Captures arguments (`type`, `time`, `price`, `text`, `time2`, `price2`) and registers them in the active thread-local context variable (`active_run_context`).
-2. **Database Propagation:** Merged and saved into the `chart_annotations` column of `AnalysisResult` in [analysis_service.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/services/analysis_service.py).
-3. **Frontend Render System:** [Chart.tsx](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/pages/Chart.tsx) parses these annotations and feeds markers to the `CandlestickSeries` or adds separate line segments dynamically to the TradingView chart to represent trendlines.
+1. **State-Safe Tool Execution:** Defined in [chart_tools.py](../backend/trading_agents/agents/utils/chart_tools.py) as `add_chart_annotation`. Captures arguments (`type`, `time`, `price`, `text`, `time2`, `price2`) and registers them in the active thread-local context variable (`active_run_context`).
+2. **Database Propagation:** Merged and saved into the `chart_annotations` column of `AnalysisResult` in [analysis_service.py](../backend/services/analysis_service.py).
+3. **Frontend Render System:** [Chart.tsx](../frontend/src/pages/Chart.tsx) parses these annotations and feeds markers to the `CandlestickSeries` or adds separate line segments dynamically to the TradingView chart to represent trendlines.
 
 ### H. Vision-Based Pattern Recognition Pipeline
 Numerical series can struggle with visual shapes. This system adds a visual analysis mechanism to identify classic chart patterns.
 
-1. **Visual Plotting and Encoding:** The `get_vision_chart_analysis` tool in [chart_tools.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/agents/utils/chart_tools.py) slices the last 90 trading days, renders a clean PNG chart via `mplfinance` (with candlestick and volume plots), and converts it into a Base64 string.
+1. **Visual Plotting and Encoding:** The `get_vision_chart_analysis` tool in [chart_tools.py](../backend/trading_agents/agents/utils/chart_tools.py) slices the last 90 trading days, renders a clean PNG chart via `mplfinance` (with candlestick and volume plots), and converts it into a Base64 string.
 2. **Vision Model Call:** It sends the image payload along with a structured prompt to the active session's vision-capable LLM to extract visual pattern insights (e.g., Head and Shoulders, Cup and Handle) and returns the text evaluation back to the caller.
 
 ### I. Multi-Timeframe Alignment and Overlay Mapping
 Ensures daily-chart decisions remain aligned with long-term macro trendlines.
 
-1. **High-Timeframe Sampling:** The `get_mtf_trend` tool in [chart_tools.py](file:///c:/Users/JustS/Desktop/TradingAgents/backend/trading_agents/agents/utils/chart_tools.py) fetches Weekly or Monthly historical data, computes a 20 EMA, and performs a backward merge/asof join mapping the values onto the daily trading index.
-2. **Chart Overlay:** The resulting series is registered with an `"overlay": true` parameter, signaling [Chart.tsx](file:///c:/Users/JustS/Desktop/TradingAgents/frontend/src/pages/Chart.tsx) to plot the macro trend directly on top of the main daily price candlesticks as an overlay line.
+1. **High-Timeframe Sampling:** The `get_mtf_trend` tool in [chart_tools.py](../backend/trading_agents/agents/utils/chart_tools.py) fetches Weekly or Monthly historical data, computes a 20 EMA, and performs a backward merge/asof join mapping the values onto the daily trading index.
+2. **Chart Overlay:** The resulting series is registered with an `"overlay": true` parameter, signaling [Chart.tsx](../frontend/src/pages/Chart.tsx) to plot the macro trend directly on top of the main daily price candlesticks as an overlay line.
 
