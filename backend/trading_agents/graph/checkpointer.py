@@ -2,20 +2,24 @@ from __future__ import annotations
 import hashlib
 import logging
 import sqlite3
-from contextlib import contextmanager
+from contextlib import contextmanager, asynccontextmanager
 from pathlib import Path
-from typing import Generator
+from typing import Generator, AsyncGenerator
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from backend.trading_agents.dataflows.utils import safe_ticker_component
 
 _logger = logging.getLogger(__name__)
+
 def _db_path(data_dir: str | Path, ticker: str) -> Path:
     safe = safe_ticker_component(ticker).upper()
     p = Path(data_dir) / "checkpoints"
     p.mkdir(parents=True, exist_ok=True)
     return p / f"{safe}.db"
+
 def thread_id(ticker: str, date: str) -> str:
     return hashlib.sha256(f"{ticker.upper()}:{date}".encode()).hexdigest()[:16]
+
 @contextmanager
 def get_checkpointer(data_dir: str | Path, ticker: str) -> Generator[SqliteSaver, None, None]:
     db = _db_path(data_dir, ticker)
@@ -26,8 +30,17 @@ def get_checkpointer(data_dir: str | Path, ticker: str) -> Generator[SqliteSaver
         yield saver
     finally:
         conn.close()
+
+@asynccontextmanager
+async def get_async_checkpointer(data_dir: str | Path, ticker: str) -> AsyncGenerator[AsyncSqliteSaver, None]:
+    db = _db_path(data_dir, ticker)
+    async with AsyncSqliteSaver.from_conn_string(str(db)) as saver:
+        await saver.setup()
+        yield saver
+
 def has_checkpoint(data_dir: str | Path, ticker: str, date: str) -> bool:
     return checkpoint_step(data_dir, ticker, date) is not None
+
 def checkpoint_step(data_dir: str | Path, ticker: str, date: str) -> int | None:
     db = _db_path(data_dir, ticker)
     if not db.exists():
@@ -36,6 +49,18 @@ def checkpoint_step(data_dir: str | Path, ticker: str, date: str) -> int | None:
     with get_checkpointer(data_dir, ticker) as saver:
         config = {"configurable": {"thread_id": tid}}
         cp = saver.get_tuple(config)
+        if cp is None:
+            return None
+        return cp.metadata.get("step")
+
+async def async_checkpoint_step(data_dir: str | Path, ticker: str, date: str) -> int | None:
+    db = _db_path(data_dir, ticker)
+    if not db.exists():
+        return None
+    tid = thread_id(ticker, date)
+    async with get_async_checkpointer(data_dir, ticker) as saver:
+        config = {"configurable": {"thread_id": tid}}
+        cp = await saver.aget_tuple(config)
         if cp is None:
             return None
         return cp.metadata.get("step")

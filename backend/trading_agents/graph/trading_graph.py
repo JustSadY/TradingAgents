@@ -36,7 +36,14 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 from backend.trading_agents.agents.data.review_tools import get_past_performance_data
 from backend.trading_agents.agents.hierarchy import AgentHierarchy
-from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
+from .checkpointer import (
+    checkpoint_step,
+    async_checkpoint_step,
+    clear_checkpoint,
+    get_checkpointer,
+    get_async_checkpointer,
+    thread_id,
+)
 from .conditional_logic import ConditionalLogic
 from .setup import GraphSetup
 from .propagation import Propagator
@@ -395,19 +402,24 @@ class TradingAgentsGraph:
             "custom_indicators": self.custom_indicators,
             "visual_annotations": self.visual_annotations
         })
-        self._checkpointer_ctx = get_checkpointer(
-            self.config["data_cache_dir"], company_name
-        )
-        saver = self._checkpointer_ctx.__enter__()
-        self.graph = self.workflow.compile(checkpointer=saver)
+
         try:
-            return await self._async_run_graph(company_name, trade_date, asset_type, stream_observer=stream_observer)
+            async with get_async_checkpointer(self.config["data_cache_dir"], company_name) as saver:
+                self.graph = self.workflow.compile(checkpointer=saver)
+                step = await async_checkpoint_step(
+                    self.config["data_cache_dir"], company_name, str(trade_date)
+                )
+                if step is not None:
+                    logger.info(
+                        "Resuming from step %d for %s on %s", step, company_name, trade_date
+                    )
+                else:
+                    logger.info("Starting fresh for %s on %s", company_name, trade_date)
+
+                return await self._async_run_graph(company_name, trade_date, asset_type, stream_observer=stream_observer)
         finally:
             active_run_context.reset(token)
-            if self._checkpointer_ctx is not None:
-                self._checkpointer_ctx.__exit__(None, None, None)
-                self._checkpointer_ctx = None
-                self.graph = self.workflow.compile()
+            self.graph = self.workflow.compile()
     async def _async_run_graph(
         self,
         company_name: str,
