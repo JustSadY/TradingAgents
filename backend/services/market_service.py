@@ -17,7 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.utils import safe_ticker_component
 from backend.models.analysis import AnalysisResult
-from backend.services.indicator_service import evaluate_formula_safely
+from backend.services.indicator_service import calculate_ema, calculate_macd, calculate_rsi, evaluate_formula_safely
 
 _logger = logging.getLogger(__name__)
 
@@ -81,16 +81,11 @@ def _load_history(ticker: str, s: str, e: str):
 def _compute_candles(data) -> list[dict]:
     import numpy as np
     data["sma"] = data["Close"].rolling(window=20).mean()
-    data["ema"] = data["Close"].ewm(span=20, adjust=False).mean()
-    delta = data["Close"].diff()
-    avg_gain = delta.clip(lower=0).ewm(com=13, adjust=False).mean()
-    avg_loss = (-delta.clip(upper=0)).ewm(com=13, adjust=False).mean()
-    rs = avg_gain / (avg_loss + 1e-9)
-    data["rsi"] = 100 - (100 / (1 + rs))
-    ema_12 = data["Close"].ewm(span=12, adjust=False).mean()
-    ema_26 = data["Close"].ewm(span=26, adjust=False).mean()
-    data["macd_line"] = ema_12 - ema_26
-    data["macd_signal"] = data["macd_line"].ewm(span=9, adjust=False).mean()
+    data["ema"] = calculate_ema(data["Close"], span=20)
+    data["rsi"] = calculate_rsi(data["Close"], period=14)
+    macd_line, macd_signal = calculate_macd(data["Close"], fast=12, slow=26, signal=9)
+    data["macd_line"] = macd_line
+    data["macd_signal"] = macd_signal
     data["macd_hist"] = data["macd_line"] - data["macd_signal"]
     data = data.replace({np.nan: None})
 

@@ -134,35 +134,40 @@ VENDOR_METHODS = {
 import os
 import json
 import time
+import sqlite3
 import threading
 from pathlib import Path
 class APICache:
-    _lock = threading.Lock()
+    _init_lock = threading.Lock()
+    _initialized = False
     @classmethod
     def get_cache_path(cls) -> Path:
         config = get_config()
         cache_dir = Path(config.get("data_cache_dir", os.path.join(os.path.expanduser("~"), ".tradingagents", "cache")))
         cache_dir.mkdir(parents=True, exist_ok=True)
-        return cache_dir / "api_cache.json"
+        return cache_dir / "api_cache.sqlite3"
     @classmethod
-    def load_cache(cls) -> dict:
-        path = cls.get_cache_path()
-        if not path.exists():
-            return {}
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        except (json.JSONDecodeError, IOError) as e:
-            _logger.warning("API cache file corrupted or unreadable (%s), starting fresh: %s", path, e)
-            return {}
+    def _ensure_schema(cls, conn) -> None:
+        with cls._init_lock:
+            if cls._initialized:
+                return
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS api_cache (
+                    cache_key TEXT PRIMARY KEY,
+                    method TEXT NOT NULL,
+                    ts REAL NOT NULL,
+                    data_json TEXT NOT NULL
+                )
+            """)
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_api_cache_method ON api_cache(method)")
+            cls._initialized = True
     @classmethod
-    def save_cache(cls, cache_data: dict) -> None:
-        path = cls.get_cache_path()
-        try:
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump(cache_data, f, indent=4)
-        except Exception as e:
-            _logger.warning("Failed to save API cache to %s: %s", path, e)
+    def _connect(cls):
+        conn = sqlite3.connect(str(cls.get_cache_path()), timeout=5.0, check_same_thread=False)
+        conn.execute("PRAGMA journal_mode=WAL")
+        conn.execute("PRAGMA synchronous=NORMAL")
+        cls._ensure_schema(conn)
+        return conn
     @classmethod
     def get_ttl(cls, method: str) -> float:
         try:
@@ -179,30 +184,45 @@ class APICache:
     @classmethod
     def get(cls, method: str, *args, **kwargs):
         key = f"{method}:{json.dumps(args, sort_keys=True)}:{json.dumps(kwargs, sort_keys=True)}"
-        with cls._lock:
-            cache = cls.load_cache()
-            entry = cache.get(key)
-            if entry:
-                timestamp = entry.get("timestamp", 0)
-                ttl = cls.get_ttl(method)
-                if time.time() - timestamp < ttl:
-                    return entry.get("data")
-        return None
+        ttl = cls.get_ttl(method)
+        now = time.time()
+        conn = cls._connect()
+        try:
+            with conn:
+                row = conn.execute(
+                    "SELECT ts, data_json FROM api_cache WHERE cache_key = ?",
+                    (key,),
+                ).fetchone()
+                if not row:
+                    return None
+                ts, data_json = row
+                if now - float(ts) >= ttl:
+                    conn.execute("DELETE FROM api_cache WHERE cache_key = ?", (key,))
+                    return None
+                return json.loads(data_json)
+        finally:
+            conn.close()
     @classmethod
     def set(cls, method: str, data, *args, **kwargs) -> None:
         key = f"{method}:{json.dumps(args, sort_keys=True)}:{json.dumps(kwargs, sort_keys=True)}"
-        with cls._lock:
-            cache = cls.load_cache()
-            cache[key] = {
-                "timestamp": time.time(),
-                "data": data
-            }
-            now = time.time()
-            pruned_cache = {
-                k: v for k, v in cache.items()
-                if now - v.get("timestamp", 0) < 86400.0
-            }
-            cls.save_cache(pruned_cache)
+        now = time.time()
+        conn = cls._connect()
+        try:
+            with conn:
+                conn.execute(
+                    """
+                    INSERT INTO api_cache(cache_key, method, ts, data_json)
+                    VALUES (?, ?, ?, ?)
+                    ON CONFLICT(cache_key) DO UPDATE SET
+                        ts=excluded.ts,
+                        data_json=excluded.data_json,
+                        method=excluded.method
+                    """,
+                    (key, method, now, json.dumps(data)),
+                )
+                conn.execute("DELETE FROM api_cache WHERE ? - ts > 86400.0", (now,))
+        finally:
+            conn.close()
 def get_category_for_method(method: str) -> str:
     for category, info in TOOLS_CATEGORIES.items():
         if method in info["tools"]:

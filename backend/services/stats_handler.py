@@ -1,50 +1,104 @@
 from __future__ import annotations
 import logging
 from typing import Any
+
 from langchain_core.callbacks import BaseCallbackHandler
+
 _logger = logging.getLogger(__name__)
+
+
 class StatsCallbackHandler(BaseCallbackHandler):
     def __init__(self) -> None:
         self.llm_calls = 0
         self.tool_calls = 0
         self.tokens_in = 0
         self.tokens_out = 0
+
     def on_chat_model_start(self, *args: Any, **kwargs: Any) -> None:
         self.llm_calls += 1
+
     def on_llm_start(self, *args: Any, **kwargs: Any) -> None:
         self.llm_calls += 1
+
     def on_llm_end(self, response: Any, **kwargs: Any) -> None:
-        try:
-            usage = self._extract_usage(response)
-            self.tokens_in += int(usage.get("input", 0) or 0)
-            self.tokens_out += int(usage.get("output", 0) or 0)
-        except Exception:
-            pass
+        usage = self._extract_usage(response)
+        if usage is None:
+            _logger.warning("LLM token usage metadata not found; skipping token counters")
+            return
+        self.tokens_in += usage["input"]
+        self.tokens_out += usage["output"]
+
     def on_tool_start(self, *args: Any, **kwargs: Any) -> None:
         self.tool_calls += 1
+
     @staticmethod
-    def _extract_usage(response: Any) -> dict:
-        llm_output = getattr(response, "llm_output", None) or {}
-        if isinstance(llm_output, dict):
-            tu = llm_output.get("token_usage") or llm_output.get("usage") or {}
-            if tu:
-                return {
-                    "input": tu.get("prompt_tokens") or tu.get("input_tokens") or 0,
-                    "output": tu.get("completion_tokens") or tu.get("output_tokens") or 0,
-                }
-        try:
-            for gen_list in getattr(response, "generations", []) or []:
-                for gen in gen_list:
-                    message = getattr(gen, "message", None)
-                    um = getattr(message, "usage_metadata", None)
-                    if um:
-                        return {
-                            "input": um.get("input_tokens", 0),
-                            "output": um.get("output_tokens", 0),
-                        }
-        except Exception:
-            pass
-        return {"input": 0, "output": 0}
+    def _to_int(value: Any) -> int:
+        if value is None:
+            return 0
+        if isinstance(value, bool):
+            return int(value)
+        if isinstance(value, (int, float)):
+            return int(value)
+        if isinstance(value, str):
+            value = value.strip()
+            if not value:
+                return 0
+            try:
+                return int(float(value))
+            except ValueError:
+                return 0
+        return 0
+
+    @classmethod
+    def _parse_usage_dict(cls, usage: Any) -> dict[str, int] | None:
+        if not isinstance(usage, dict):
+            return None
+        input_tokens = cls._to_int(
+            usage.get("prompt_tokens")
+            or usage.get("input_tokens")
+            or usage.get("prompt_token_count")
+            or usage.get("input_token_count")
+        )
+        output_tokens = cls._to_int(
+            usage.get("completion_tokens")
+            or usage.get("output_tokens")
+            or usage.get("candidates_token_count")
+            or usage.get("output_token_count")
+        )
+        if input_tokens == 0 and output_tokens == 0:
+            return None
+        return {"input": input_tokens, "output": output_tokens}
+
+    @classmethod
+    def _extract_usage(cls, response: Any) -> dict[str, int] | None:
+        llm_output = getattr(response, "llm_output", None)
+        usage = cls._parse_usage_dict((llm_output or {}).get("token_usage") if isinstance(llm_output, dict) else None)
+        if usage is not None:
+            return usage
+        usage = cls._parse_usage_dict((llm_output or {}).get("usage") if isinstance(llm_output, dict) else None)
+        if usage is not None:
+            return usage
+
+        direct_usage = cls._parse_usage_dict(getattr(response, "usage_metadata", None))
+        if direct_usage is not None:
+            return direct_usage
+
+        for gen_list in getattr(response, "generations", []) or []:
+            for gen in gen_list:
+                message = getattr(gen, "message", None)
+                usage = cls._parse_usage_dict(getattr(message, "usage_metadata", None))
+                if usage is not None:
+                    return usage
+                response_metadata = getattr(message, "response_metadata", None)
+                usage = cls._parse_usage_dict((response_metadata or {}).get("token_usage") if isinstance(response_metadata, dict) else None)
+                if usage is not None:
+                    return usage
+                usage = cls._parse_usage_dict((response_metadata or {}).get("usage") if isinstance(response_metadata, dict) else None)
+                if usage is not None:
+                    return usage
+
+        return None
+
     def get_stats(self) -> dict:
         return {
             "llm_calls": self.llm_calls,

@@ -2,8 +2,10 @@ from functools import lru_cache
 from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from cryptography.fernet import Fernet
+import threading
 _ROOT_ENV = Path(__file__).parent.parent.parent / ".env"
 _TEMP_KEY = None
+_TEMP_KEY_LOCK = threading.Lock()
 
 
 class Settings(BaseSettings):
@@ -22,9 +24,11 @@ class Settings(BaseSettings):
         key = self.ENCRYPTION_KEY
         if not key:
             if _TEMP_KEY is None:
-                _TEMP_KEY = Fernet.generate_key().decode()
-                import logging
-                logging.warning("ENCRYPTION_KEY is not set in .env. Generating a temporary process-lifetime encryption key. Encrypted data will not persist across restarts!")
+                with _TEMP_KEY_LOCK:
+                    if _TEMP_KEY is None:
+                        _TEMP_KEY = Fernet.generate_key().decode()
+                        import logging
+                        logging.warning("ENCRYPTION_KEY is not set in .env. Generating a temporary process-lifetime encryption key. Encrypted data will not persist across restarts!")
             key = _TEMP_KEY
         return Fernet(key.encode() if isinstance(key, str) else key)
 @lru_cache

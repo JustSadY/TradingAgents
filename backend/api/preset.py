@@ -2,15 +2,15 @@ import json
 import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
+from sqlalchemy import select
 from backend.core.database import get_db
 from backend.api.deps import get_current_user
 from backend.models.preset import ConfigPreset
-from backend.models.settings import AppSettings
 from backend.models.user import User
 from backend.schemas.preset import PresetCreate, PresetRead
 from backend.services.settings_service import get_or_create_settings
 from backend.repositories.common import scope_to_user
+from backend.repositories.permissions import get_user_setting_permission
 router = APIRouter(prefix="/api/presets", tags=["presets"])
 _logger = logging.getLogger(__name__)
 @router.get("", response_model=list[PresetRead])
@@ -25,14 +25,8 @@ async def list_presets(
 async def _check_presets_permission(user: User, db: AsyncSession):
     if user.is_admin:
         return
-    from backend.models.page_permission import UserSettingPermission
-    result = await db.execute(
-        select(UserSettingPermission)
-        .where(UserSettingPermission.user_id == user.id)
-        .where(UserSettingPermission.setting_key == "presets")
-        .where(UserSettingPermission.allowed == True)
-    )
-    if not result.scalar_one_or_none():
+    perm = await get_user_setting_permission(db, user.id, "presets")
+    if not perm or not perm.allowed:
         raise HTTPException(status_code=403, detail="You do not have permission to manage preset templates.")
 @router.post("", response_model=PresetRead)
 async def create_preset(

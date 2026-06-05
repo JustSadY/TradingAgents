@@ -24,6 +24,7 @@ class SettingsRead(BaseModel):
     max_risk_rounds: int
     max_position_size_pct: float
     max_risk_per_trade_pct: float
+    strict_stop_loss_mode: bool = False
     include_historical_analyses: bool = False
     historical_analyses_limit: int = 5
     strict_backtest_learning: bool = True
@@ -61,6 +62,7 @@ class SettingsUpdate(BaseModel):
     max_risk_rounds: int | None = Field(default=None, ge=1, le=10)
     max_position_size_pct: float | None = Field(default=None, ge=1, le=100)
     max_risk_per_trade_pct: float | None = Field(default=None, ge=0.1, le=50)
+    strict_stop_loss_mode: bool | None = None
     include_historical_analyses: bool | None = None
     historical_analyses_limit: int | None = Field(default=None, ge=1, le=50)
     strict_backtest_learning: bool | None = None

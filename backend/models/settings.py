@@ -36,6 +36,7 @@ class AppSettings(Base):
     max_risk_rounds: Mapped[int] = mapped_column(Integer, default=1)
     max_position_size_pct: Mapped[float] = mapped_column(Float, default=10.0)
     max_risk_per_trade_pct: Mapped[float] = mapped_column(Float, default=2.0)
+    strict_stop_loss_mode: Mapped[bool] = mapped_column(Boolean, default=False)
     include_historical_analyses: Mapped[bool] = mapped_column(Boolean, default=False)
     historical_analyses_limit: Mapped[int] = mapped_column(Integer, default=5)
     strict_backtest_learning: Mapped[bool] = mapped_column(Boolean, default=True)

@@ -64,6 +64,7 @@ const translations = {
 
     'settings.row_max_position_size': 'Max Position Size (%)',
     'settings.row_risk_per_trade': 'Risk Per Trade (%)',
+    'settings.row_strict_stop_loss': 'Strict Stop Loss Mode',
     'settings.row_node_retry_attempts': 'Node Retry Attempts',
     'settings.row_node_retry_base_delay': 'Retry Base Delay (s)',
 
@@ -183,6 +184,7 @@ const translations = {
 
     'settings.row_max_position_size': 'Maks. Pozisyon Büyüklüğü (%)',
     'settings.row_risk_per_trade': 'Trade Başına Risk (%)',
+    'settings.row_strict_stop_loss': 'Sıkı Stop-Loss Modu',
     'settings.row_node_retry_attempts': 'Ajan Düğüm Deneme Sayısı',
     'settings.row_node_retry_base_delay': 'Deneme Gecikme Süresi (sn)',
 

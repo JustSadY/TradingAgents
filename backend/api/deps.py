@@ -1,12 +1,18 @@
 from typing import Any
+
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+
 from backend.core.database import get_db
 from backend.core.security import decode_token
 from backend.models.user import User
+from backend.repositories.permissions import get_user_page_permission
 from backend.repositories.users import get_user_by_username
+from backend.schemas.tool_settings import ToolSettingsUpdate
+from backend.services.tool_access_service import get_user_tool_access
+from backend.trading_agents.agents.tools.registry import registry
+
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -40,13 +46,7 @@ def require_page(page_key: str):
             return current_user
         if page_key == "settings":
             return current_user
-        from backend.models.page_permission import UserPagePermission
-        result = await db.execute(
-            select(UserPagePermission)
-            .where(UserPagePermission.user_id == current_user.id)
-            .where(UserPagePermission.page_key == page_key)
-        )
-        perm = result.scalar_one_or_none()
+        perm = await get_user_page_permission(db, current_user.id, page_key)
         if not perm or not perm.allowed:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
@@ -61,17 +61,11 @@ async def check_tool_settings_permission(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ) -> User:
-    """FastAPI dependency to authorize tool settings updates."""
-    # We declare body as Any to avoid static imports, but let's check its type
-    from backend.schemas.tool_settings import ToolSettingsUpdate
     if not isinstance(body, ToolSettingsUpdate):
         return user
 
     if user.is_admin:
         return user
-
-    from backend.services.tool_access_service import get_user_tool_access
-    from backend.trading_agents.agents.tools.registry import registry
 
     tool_access_map = await get_user_tool_access(db, user.id)
 

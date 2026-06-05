@@ -117,6 +117,7 @@ async def check_and_recover_lost_alerts() -> None:
             .where(PriceAlert.auto_analyze == True)
         )
         triggered_alerts = result.scalars().all()
+        missing: list[tuple[str, str, int]] = []
         for alert in triggered_alerts:
             trigger_date = alert.triggered_at.strftime("%Y-%m-%d")
             res_analysis = await db.execute(
@@ -132,8 +133,17 @@ async def check_and_recover_lost_alerts() -> None:
                     "Recovering lost alert analysis task for %s (triggered at %s)",
                     alert.ticker, trigger_date,
                 )
-                task = asyncio.create_task(
-                    _throttled_analyze(alert.ticker, trigger_date, alert.user_id, _RECOVERY_SEMAPHORE)
-                )
-                _BACKGROUND_TASKS.add(task)
-                task.add_done_callback(_BACKGROUND_TASKS.discard)
+                missing.append((alert.ticker, trigger_date, alert.user_id))
+
+        if not missing:
+            return
+
+        batch_size = 3
+        for i in range(0, len(missing), batch_size):
+            batch = missing[i:i + batch_size]
+            await asyncio.gather(*[
+                _throttled_analyze(ticker, trade_date, user_id, _RECOVERY_SEMAPHORE)
+                for ticker, trade_date, user_id in batch
+            ], return_exceptions=True)
+            if i + batch_size < len(missing):
+                await asyncio.sleep(0.5)

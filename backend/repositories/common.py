@@ -1,5 +1,6 @@
 """Shared query helpers used across repositories and routers."""
 from __future__ import annotations
+from sqlalchemy import select
 
 
 def scope_to_user(query, model, user):
@@ -13,3 +14,7 @@ def scope_to_user(query, model, user):
     if user is not None and not getattr(user, "is_admin", False):
         return query.where(model.user_id == user.id)
     return query
+
+
+def by_id(model, row_id: int):
+    return select(model).where(model.id == row_id)

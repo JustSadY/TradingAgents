@@ -1,8 +1,10 @@
 import logging
 import os
+import re
 import requests
 from abc import ABC, abstractmethod
 from typing import List, Dict
+from urllib.parse import quote_plus
 from langchain_core.tools import tool
 _logger = logging.getLogger(__name__)
 class BaseSearchEngine(ABC):
@@ -35,18 +37,44 @@ class SearxNGSearchEngine(BaseSearchEngine):
             return results
         except Exception as e:
             _logger.warning("SearxNG search failed for query %r: %s", query, e, exc_info=True)
-            return [{"title": "Error", "link": "", "snippet": f"SearxNG Search Failed: {str(e)}"}]
+            return []
+
+
+class DuckDuckGoSearchEngine(BaseSearchEngine):
+    def search(self, query: str, num_results: int = 5) -> List[Dict[str, str]]:
+        try:
+            url = f"https://duckduckgo.com/html/?q={quote_plus(query)}"
+            response = requests.get(url, timeout=10, headers={"User-Agent": "Mozilla/5.0"})
+            response.raise_for_status()
+            html = response.text
+            pattern = r'<a[^>]*class="result__a"[^>]*href="([^"]+)"[^>]*>(.*?)</a>'
+            matches = re.findall(pattern, html, flags=re.IGNORECASE | re.DOTALL)
+            results = []
+            for link, title_html in matches[:num_results]:
+                title = re.sub(r"<.*?>", "", title_html).strip()
+                results.append({"title": title, "link": link, "snippet": ""})
+            return results
+        except Exception as e:
+            _logger.warning("DuckDuckGo search failed for query %r: %s", query, e, exc_info=True)
+            return []
 def get_search_engine() -> BaseSearchEngine:
-    engine_type = os.getenv("SEARCH_ENGINE_TYPE", "searxng").lower()
+    cfg = get_config()
+    engine_type = str(
+        cfg.get("search_engine_type")
+        or os.getenv("SEARCH_ENGINE_TYPE", "searxng")
+    ).lower()
+    if engine_type == "duckduckgo":
+        return DuckDuckGoSearchEngine()
     if engine_type == "searxng":
         return SearxNGSearchEngine()
-    else:
-        return SearxNGSearchEngine()
+    return SearxNGSearchEngine()
 @tool
 def search_web(query: str, num_results: int = 5) -> str:
     """Perform a web search for queries containing company events, news updates, or financial statements."""
     engine = get_search_engine()
     results = engine.search(query, num_results)
+    if not results and not isinstance(engine, DuckDuckGoSearchEngine):
+        results = DuckDuckGoSearchEngine().search(query, num_results)
     if not results:
         return f"No results found for query: {query}"
     formatted_results = []

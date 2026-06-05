@@ -1,4 +1,5 @@
 import asyncio
+from typing import Awaitable
 import json as _json
 import logging
 import os as _os
@@ -7,7 +8,6 @@ import time
 import uuid
 
 import backend.bootstrap  # noqa: F401  (sets engine env before importing the engine)
-from sqlalchemy import select, desc as _desc
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import AsyncSessionLocal
@@ -16,8 +16,12 @@ from backend.core.catalog import node_progress
 from backend.core.config import get_settings as _cfg
 from backend.models.analysis import AnalysisResult
 from backend.models.settings import AppSettings
-from backend.models.system_settings import SystemSettings
 from backend.models.portfolio_analysis import MultiTickerAnalysis
+from backend.repositories.analysis import (
+    get_analysis_by_id,
+    get_system_settings,
+    list_historical_analyses,
+)
 from backend.services.settings_service import get_or_create_settings
 from backend.services.stats_handler import StatsCallbackHandler
 from backend.services.performance_service import get_analyst_attribution_stats
@@ -37,6 +41,7 @@ from backend.trading_agents.agents.sub.managers.super_portfolio_manager import c
 
 _logger = logging.getLogger(__name__)
 _RUNNING_TASKS: dict[str, asyncio.Task] = {}
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
 _REPORT_FIELDS = (
     "market_report", "sentiment_report", "news_report", "fundamentals_report",
     "macro_report", "options_report", "quant_report", "earnings_report",
@@ -47,14 +52,12 @@ _REPORT_FIELDS = (
 async def _get_historical_analyses_context(
     ticker: str, trade_date: str, db: AsyncSession, limit: int = 5, output_language: str = "English"
 ) -> str:
-    result = await db.execute(
-        select(AnalysisResult)
-        .where(AnalysisResult.ticker == ticker)
-        .where(AnalysisResult.trade_date < trade_date)
-        .order_by(_desc(AnalysisResult.created_at))
-        .limit(limit)
+    rows = await list_historical_analyses(
+        db,
+        ticker=ticker,
+        before_trade_date=trade_date,
+        limit=limit,
     )
-    rows = result.scalars().all()
     if not rows:
         return ""
     
@@ -226,6 +229,13 @@ async def cancel_analysis(task_id: str) -> bool:
     return False
 
 
+def _track_background_task(coro: Awaitable[None]):
+    task = asyncio.create_task(coro)
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
+    return task
+
+
 async def _send_analysis_webhook(ticker, trade_date, signal, final_decision, settings):
     try:
         await notify_analysis_complete(ticker, signal, trade_date, final_decision, settings)
@@ -253,8 +263,7 @@ async def _extract_and_save_annotations(
         if not annotations:
             return
         async with AsyncSessionLocal() as s:
-            result = await s.execute(select(AnalysisResult).where(AnalysisResult.id == analysis_id))
-            row = result.scalar_one_or_none()
+            row = await get_analysis_by_id(s, analysis_id)
             if row:
                 row.chart_annotations = annotations
                 await s.commit()
@@ -293,9 +302,7 @@ async def run_analysis(
     stats_handler = StatsCallbackHandler()
     start = time.time()
     try:
-        sys_settings = (await db.execute(
-            select(SystemSettings).where(SystemSettings.id == 1)
-        )).scalar_one_or_none()
+        sys_settings = await get_system_settings(db)
         await ws_manager.send(task_id, {"type": "status", "status": "starting", "agent": "Preparing LLM client..."})
         config = _build_config(settings, user=user, sys_settings=sys_settings)
         attribution_md = ""
@@ -425,7 +432,7 @@ async def run_analysis(
         )
         db.add(row)
         await db.flush()
-        asyncio.create_task(_extract_and_save_annotations(
+        _track_background_task(_extract_and_save_annotations(
             row.id, 
             result.market_report, 
             result.final_decision, 
@@ -434,7 +441,7 @@ async def run_analysis(
             getattr(ta, "visual_annotations", []),
             output_language=settings.output_language
         ))
-        asyncio.create_task(_send_analysis_webhook(
+        _track_background_task(_send_analysis_webhook(
             ticker, trade_date, signal, result.final_decision, settings
         ))
         await ws_manager.send(task_id, {
@@ -475,9 +482,7 @@ async def run_portfolio_analysis(
 ):
     username = user.username if user else "system"
     _logger.info("Starting portfolio analysis for tickers=%s user=%s triggered_by=%s", tickers, username, triggered_by)
-    sys_settings = (await db.execute(
-        select(SystemSettings).where(SystemSettings.id == 1)
-    )).scalar_one_or_none()
+    sys_settings = await get_system_settings(db)
     config = _build_config(settings, user=user, sys_settings=sys_settings)
     concurrency = settings.analyst_concurrency_limit or 1
     semaphore = asyncio.Semaphore(concurrency)

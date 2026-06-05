@@ -20,14 +20,22 @@ _COLLAB_SYSTEM = (
     " Use the provided tools to progress towards answering the question."
     " If you are unable to fully answer, that's OK; another assistant with different tools"
     " will help where you left off. Execute what you can to make progress."
-    " If you or any other assistant has the FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** or deliverable,"
-    " prefix your response with FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** so the team knows to stop."
+    " If you have a complete deliverable for your role, clearly mark your final section as FINAL DELIVERABLE."
     " You have access to the following tools: {tool_names}.\n{system_message}"
     "For your reference, the current date is {current_date}. {instrument_context}"
 )
 
 
-async def run_tool_analyst(llm, state, *, tools, system_message, report_key, instrument_context):
+async def run_tool_analyst(
+    llm,
+    state,
+    *,
+    tools,
+    system_message,
+    report_key,
+    instrument_context,
+    collab_system: str | None = None,
+):
     """Run the standard tool-using analyst turn and return its state update."""
     from backend.trading_agents.agents.data.chart_tools import active_run_context
     ctx = active_run_context.get(None)
@@ -36,9 +44,24 @@ async def run_tool_analyst(llm, state, *, tools, system_message, report_key, ins
         analyst_key = report_key.replace("_report", "")
         tools = graph._filter_tools_for_analyst(analyst_key, tools)
 
+    effective_collab_system = collab_system
+    if not effective_collab_system and ctx and "graph" in ctx:
+        graph = ctx["graph"]
+        runtime_agent_ctx = (getattr(graph, "config", {}) or {}).get("runtime_agent_context", {})
+        analyst_key = report_key.replace("_report", "")
+        agent_state = runtime_agent_ctx.get(analyst_key, {}) if isinstance(runtime_agent_ctx, dict) else {}
+        settings = agent_state.get("settings", {}) if isinstance(agent_state, dict) else {}
+        candidate = settings.get("collab_system_prompt") if isinstance(settings, dict) else None
+        if isinstance(candidate, str) and candidate.strip():
+            effective_collab_system = candidate.strip()
+
+    effective_collab_system = effective_collab_system or _COLLAB_SYSTEM
+    runtime_retry_config = None
+    if ctx and "graph" in ctx:
+        runtime_retry_config = getattr(ctx["graph"], "config", {}) or {}
     prompt = ChatPromptTemplate.from_messages(
         [
-            ("system", _COLLAB_SYSTEM),
+            ("system", effective_collab_system),
             MessagesPlaceholder(variable_name="messages"),
         ]
     )
@@ -66,6 +89,7 @@ async def run_tool_analyst(llm, state, *, tools, system_message, report_key, ins
             run_invoke,
             label=f"analyst:{analyst}",
             run_in_thread=True,
+            runtime_config=runtime_retry_config,
         )
     except Exception as exc:  # noqa: BLE001
         # Retries exhausted — skip this analyst with a visible note instead of

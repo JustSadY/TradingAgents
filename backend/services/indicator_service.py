@@ -14,9 +14,11 @@ def calculate_rsi(prices: "pd.Series", period: int = 14) -> "pd.Series":
     both delegate here instead of duplicating the formula.
     """
     delta = prices.diff()
-    gain = (delta.clip(lower=0)).rolling(window=period).mean()
-    loss = (-1 * delta.clip(upper=0)).rolling(window=period).mean()
-    rs = gain / (loss + 1e-9)
+    gain = delta.clip(lower=0)
+    loss = (-1 * delta.clip(upper=0))
+    avg_gain = gain.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+    avg_loss = loss.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+    rs = avg_gain / (avg_loss + 1e-9)
     return 100 - (100 / (1 + rs))
 
 

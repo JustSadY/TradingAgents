@@ -2,11 +2,10 @@ import time
 import logging
 import pandas as pd
 import yfinance as yf
+from .interface import APICache
 from yfinance.exceptions import YFRateLimitError
 from stockstats import wrap
 from typing import Annotated
-import os
-from .config import get_config
 from .utils import safe_ticker_component
 logger = logging.getLogger(__name__)
 def yf_retry(func, max_retries=3, base_delay=2.0):
@@ -29,42 +28,31 @@ def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     data[price_cols] = data[price_cols].ffill().bfill()
     return data
 def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
-    safe_symbol = safe_ticker_component(symbol)
-    config = get_config()
+    safe_ticker_component(symbol)
+    cache_payload = APICache.get("stockstats_load_ohlcv", symbol, curr_date)
+    if isinstance(cache_payload, dict) and cache_payload.get("rows"):
+        cached_df = pd.DataFrame(cache_payload["rows"])
+        if not cached_df.empty:
+            return _clean_dataframe(cached_df)
     curr_date_dt = pd.to_datetime(curr_date)
-    os.makedirs(config["data_cache_dir"], exist_ok=True)
-    data_file = os.path.join(
-        config["data_cache_dir"],
-        f"{safe_symbol}-YFin-data-cache.csv",
-    )
-    import time
-    should_download = True
-    if os.path.exists(data_file):
-        try:
-            file_age = time.time() - os.path.getmtime(data_file)
-            if file_age < 86400:
-                should_download = False
-        except Exception:
-            pass
-    if should_download:
-        today_date = pd.Timestamp.today()
-        start_date = today_date - pd.DateOffset(years=5)
-        start_str = start_date.strftime("%Y-%m-%d")
-        end_str = today_date.strftime("%Y-%m-%d")
-        data = yf_retry(lambda: yf.download(
-            symbol,
-            start=start_str,
-            end=end_str,
-            multi_level_index=False,
-            progress=False,
-            auto_adjust=True,
-        ))
-        data = data.reset_index()
-        data.to_csv(data_file, index=False, encoding="utf-8")
-    else:
-        data = pd.read_csv(data_file, on_bad_lines="skip", encoding="utf-8")
+    today_date = pd.Timestamp.today()
+    start_date = today_date - pd.DateOffset(years=5)
+    start_str = start_date.strftime("%Y-%m-%d")
+    end_str = today_date.strftime("%Y-%m-%d")
+    data = yf_retry(lambda: yf.download(
+        symbol,
+        start=start_str,
+        end=end_str,
+        multi_level_index=False,
+        progress=False,
+        auto_adjust=True,
+    ))
+    data = data.reset_index()
     data = _clean_dataframe(data)
     data = data[data["Date"] <= curr_date_dt]
+    payload = data.copy()
+    payload["Date"] = payload["Date"].dt.strftime("%Y-%m-%d")
+    APICache.set("stockstats_load_ohlcv", {"rows": payload.to_dict(orient="records")}, symbol, curr_date)
     return data
 def filter_financials_by_date(data: pd.DataFrame, curr_date: str) -> pd.DataFrame:
     if not curr_date or data.empty:

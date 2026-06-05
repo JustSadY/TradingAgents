@@ -2,13 +2,14 @@ import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.schemas.settings import SettingsRead, SettingsUpdate
 from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate
 from backend.schemas.agent_settings import AgentSettingsRead, AgentSettingsUpdate
 from backend.api.deps import get_current_user, require_admin, check_tool_settings_permission
+from backend.repositories.permissions import list_allowed_setting_sections
+from backend.repositories.users import get_user_by_id
 from backend.services.settings_service import (
     get_or_create_settings,
     settings_to_read,
@@ -39,13 +40,8 @@ async def get_settings(
 async def _check_section_permissions(db: AsyncSession, user: User, body: SettingsUpdate) -> None:
     """Non-admins may only edit settings sections explicitly granted to them, and
     never advanced engine settings."""
-    from backend.models.page_permission import UserSettingPermission, SECTION_FIELDS
-    result = await db.execute(
-        select(UserSettingPermission)
-        .where(UserSettingPermission.user_id == user.id)
-        .where(UserSettingPermission.allowed == True)  # noqa: E712
-    )
-    allowed_sections = {p.setting_key for p in result.scalars().all()}
+    from backend.models.page_permission import SECTION_FIELDS
+    allowed_sections = await list_allowed_setting_sections(db, user.id)
     attempted = body.model_dump(exclude_unset=True)
     for section, fields in SECTION_FIELDS.items():
         if any(f in attempted for f in fields) and section not in allowed_sections:
@@ -104,8 +100,7 @@ async def test_webhook(body: WebhookTestRequest, _: User = Depends(get_current_u
 
 
 async def _require_target_user(db: AsyncSession, user_id: int) -> User:
-    res = await db.execute(select(User).where(User.id == user_id))
-    target_user = res.scalar_one_or_none()
+    target_user = await get_user_by_id(db, user_id)
     if not target_user:
         raise HTTPException(status_code=404, detail="User not found")
     return target_user

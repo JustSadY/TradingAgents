@@ -33,8 +33,11 @@ _TRANSIENT_HINTS = (
 )
 
 
-def _cfg(key: str, default):
+def _cfg(key: str, default, runtime_config: Optional[dict] = None):
     try:
+        if isinstance(runtime_config, dict):
+            value = runtime_config.get(key, default)
+            return value if value is not None else default
         from backend.trading_agents.dataflows.config import get_config
         value = get_config().get(key, default)
         return value if value is not None else default
@@ -60,6 +63,7 @@ async def retry_call(
     base_delay: Optional[float] = None,
     retry_all: bool = True,
     run_in_thread: bool = False,
+    runtime_config: Optional[dict] = None,
 ) -> Any:
     """Call ``fn`` with retries + exponential backoff.
 
@@ -67,8 +71,8 @@ async def retry_call(
     ``node_retry_attempts`` = 2). By default every exception is retried; set
     ``retry_all=False`` to only retry errors that look transient.
     """
-    attempts = int(attempts if attempts is not None else _cfg("node_retry_attempts", 2))
-    base_delay = float(base_delay if base_delay is not None else _cfg("node_retry_base_delay", 1.0))
+    attempts = int(attempts if attempts is not None else _cfg("node_retry_attempts", 2, runtime_config))
+    base_delay = float(base_delay if base_delay is not None else _cfg("node_retry_base_delay", 1.0, runtime_config))
     attempts = max(1, attempts)
     last: Optional[BaseException] = None
     import inspect

@@ -36,7 +36,7 @@ _ALLOWED_COLUMNS = {
         "include_historical_analyses", "historical_analyses_limit", "webhook_url",
         "webhook_enabled", "webhook_events", "active_preset_name",
         "max_debate_rounds", "max_risk_rounds", "max_position_size_pct",
-        "max_risk_per_trade_pct", "strict_backtest_learning", "node_retry_attempts",
+        "max_risk_per_trade_pct", "strict_stop_loss_mode", "strict_backtest_learning", "node_retry_attempts",
         "node_retry_base_delay"
     },
     "analysis_results": {
@@ -115,6 +115,7 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("app_settings", "max_risk_rounds",            "INTEGER DEFAULT 1"),
     ("app_settings", "max_position_size_pct",      "FLOAT DEFAULT 10.0"),
     ("app_settings", "max_risk_per_trade_pct",     "FLOAT DEFAULT 2.0"),
+    ("app_settings", "strict_stop_loss_mode",      "BOOLEAN DEFAULT FALSE"),
     ("app_settings", "strict_backtest_learning",   "BOOLEAN DEFAULT TRUE"),
     ("app_settings", "node_retry_attempts",         "INTEGER DEFAULT 2"),
     ("app_settings", "node_retry_base_delay",       "FLOAT DEFAULT 1.0"),

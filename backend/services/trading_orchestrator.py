@@ -11,6 +11,7 @@ capital in two of them). It now lives here.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Optional
 
 from sqlalchemy import select
@@ -37,12 +38,48 @@ def is_actionable(signal: Optional[str]) -> bool:
     return signal in _SIGNAL_TO_ACTION
 
 
+def _kelly_fraction_from_confidence(confidence: float | None) -> float:
+    if confidence is None:
+        return 1.0
+    p = max(0.0, min(1.0, confidence))
+    kelly_fraction = max(0.0, min(1.0, (2.0 * p) - 1.0))
+    return max(0.1, kelly_fraction)
+
+
+def _extract_confidence_score(row) -> float | None:
+    chart_annotations = getattr(row, "chart_annotations", None)
+    if isinstance(chart_annotations, dict):
+        raw = chart_annotations.get("confidence_score")
+        try:
+            return float(raw) if raw is not None else None
+        except (TypeError, ValueError):
+            return None
+
+    confidence_text_sources = [
+        getattr(row, "trader_plan", None) or "",
+        getattr(row, "final_decision", None) or "",
+    ]
+    for text in confidence_text_sources:
+        match = re.search(r"confidence\s*score\s*[:=]\s*([0-9]*\.?[0-9]+)", text, flags=re.IGNORECASE)
+        if not match:
+            continue
+        try:
+            parsed = float(match.group(1))
+        except ValueError:
+            continue
+        if parsed > 1.0:
+            parsed = parsed / 100.0
+        return max(0.0, min(1.0, parsed))
+    return None
+
+
 def _position_quantity(
     risk_per_trade_pct: float,
     capital: float,
     price: float,
     stop_loss: float | None = None,
     max_position_size_pct: float = 10.0,
+    confidence_score: float | None = None,
 ) -> float:
     """Risk-budgeted position size using proper financial math.
     
@@ -51,6 +88,7 @@ def _position_quantity(
     allocating the risk percentage directly. Capped by max_position_size_pct.
     """
     risk_usd = (risk_per_trade_pct / 100.0) * capital
+    risk_usd *= _kelly_fraction_from_confidence(confidence_score)
     
     # Check if stop loss is valid
     if stop_loss and stop_loss > 0 and stop_loss != price:
@@ -120,12 +158,21 @@ async def place_signal_order(
             pass
 
     max_position_size_pct = getattr(settings, "max_position_size_pct", 10.0)
+    confidence_score = _extract_confidence_score(row)
+    strict_stop_loss_mode = getattr(settings, "strict_stop_loss_mode", False)
+    if strict_stop_loss_mode and (stop_loss is None or stop_loss <= 0 or stop_loss == price):
+        _logger.warning(
+            "Strict stop-loss mode enabled and no valid stop-loss found for %s; skipping order execution",
+            ticker,
+        )
+        return None
     quantity = _position_quantity(
         settings.max_risk_per_trade_pct,
         capital,
         price,
         stop_loss=stop_loss,
-        max_position_size_pct=max_position_size_pct
+        max_position_size_pct=max_position_size_pct,
+        confidence_score=confidence_score,
     )
     request = OrderRequest(
         ticker=ticker,

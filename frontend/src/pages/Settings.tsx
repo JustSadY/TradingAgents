@@ -31,6 +31,7 @@ interface Settings {
   max_risk_rounds: number
   max_position_size_pct: number
   max_risk_per_trade_pct: number
+  strict_stop_loss_mode: boolean
   include_historical_analyses: boolean
   historical_analyses_limit: number
   strict_backtest_learning: boolean
@@ -432,6 +433,28 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   </Row>
                 )}
 
+                {s.llm_provider === 'azure' && (
+                  <Row label={t('settings.row_azure_deployment')}>
+                    <input
+                      className={Input}
+                      value={s.azure_deployment || ''}
+                      onChange={e => update('azure_deployment', e.target.value || null)}
+                      placeholder="e.g. gpt-4o-deployment"
+                    />
+                  </Row>
+                )}
+
+                <Row label={t('settings.row_max_recursion')}>
+                  <input
+                    type="number"
+                    min="1"
+                    max="5000"
+                    className={Input}
+                    value={s.max_recur_limit}
+                    onChange={e => update('max_recur_limit', parseInt(e.target.value) || 1000)}
+                  />
+                </Row>
+
                 <Row label={t('settings.row_historical_analyses')}>
                   <div className="flex flex-col gap-2 pt-1">
                     <label className="flex items-center gap-2.5 cursor-pointer text-slate-300 hover:text-white select-none">
@@ -513,6 +536,9 @@ export default function Settings({ userId }: { userId?: number } = {}) {
               <Row label={t('settings.row_risk_rounds')}>
                 <input type="number" min="1" max="10" className={Input} value={s.max_risk_rounds} onChange={e => update('max_risk_rounds', parseInt(e.target.value))} />
               </Row>
+              <Row label={t('settings.row_price_tolerance')}>
+                <input type="number" step="0.1" min="0" max="10" className={Input} value={s.price_tolerance_pct} onChange={e => update('price_tolerance_pct', parseFloat(e.target.value))} />
+              </Row>
               <Row label={t('settings.row_parallel_analysts')}>
                 <input type="number" min="1" max="16" className={Input} value={s.analyst_concurrency_limit} onChange={e => update('analyst_concurrency_limit', parseInt(e.target.value))} />
               </Row>
@@ -533,6 +559,11 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
                   <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">Strict Backtest Learning</span>
                   <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.strict_backtest_learning} onChange={e => update('strict_backtest_learning', e.target.checked)} />
+                </label>
+
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_strict_stop_loss')}</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.strict_stop_loss_mode} onChange={e => update('strict_stop_loss_mode', e.target.checked)} />
                 </label>
               </div>
             </Section>

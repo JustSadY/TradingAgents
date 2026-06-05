@@ -62,6 +62,7 @@ def settings_to_read(settings: AppSettings) -> SettingsRead:
         max_risk_rounds=settings.max_risk_rounds,
         max_position_size_pct=settings.max_position_size_pct,
         max_risk_per_trade_pct=settings.max_risk_per_trade_pct,
+        strict_stop_loss_mode=getattr(settings, "strict_stop_loss_mode", False) or False,
         node_retry_attempts=getattr(settings, "node_retry_attempts", 2) or 2,
         node_retry_base_delay=getattr(settings, "node_retry_base_delay", 1.0) or 1.0,
         include_historical_analyses=getattr(settings, "include_historical_analyses", False) or False,

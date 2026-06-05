@@ -1,4 +1,4 @@
-from sqlalchemy import Numeric
+from sqlalchemy import Numeric, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
 from .config import get_settings
@@ -24,10 +24,24 @@ async def get_db() -> AsyncSession:
         except Exception:
             await session.rollback()
             raise
+async def _has_alembic_version(conn) -> bool:
+    if conn.dialect.name == "sqlite":
+        row = (await conn.execute(text(
+            "SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'"
+        ))).fetchone()
+        return row is not None
+    row = (await conn.execute(text(
+        "SELECT to_regclass('public.alembic_version')"
+    ))).scalar_one_or_none()
+    return row is not None
+
+
 async def create_all_tables():
     import backend.models
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        if await _has_alembic_version(conn):
+            return
         from backend.core.migrations import apply_column_migrations, apply_type_migrations
         await apply_column_migrations(conn)
         await apply_type_migrations(conn)

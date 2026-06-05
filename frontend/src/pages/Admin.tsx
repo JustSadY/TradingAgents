@@ -53,8 +53,9 @@ export default function Admin() {
   const [settingPermissions, setSettingPermissions] = useState<Record<string, boolean>>({})
   const [agentAccess, setAgentAccess] = useState<Record<string, boolean>>({})
   const [toolAccess, setToolAccess] = useState<Record<string, Record<string, boolean>>>({})
+  const [toolFieldAccess, setToolFieldAccess] = useState<Record<string, Record<string, { can_view: boolean, can_edit: boolean }>>>({})
   const [permSaved, setPermSaved] = useState(false)
-  const [newUser, setNewUser] = useState({ username: '', password: '', email: '', role: 'user' })
+  const [newUser, setNewUser] = useState({ username: '', password: '', email: '', display_name: '', role: 'user' })
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
   const [userKeyProviders, setUserKeyProviders] = useState<string[]>([])
@@ -83,16 +84,18 @@ export default function Admin() {
   }, [loadUsers, loadSystemSettings])
 
   const loadUserPermissions = async (userId: number) => {
-    const [pRes, sRes, agentRes, toolRes] = await Promise.all([
+    const [pRes, sRes, agentRes, toolRes, toolFieldRes] = await Promise.all([
       axios.get(`/api/users/${userId}/permissions`),
       axios.get(`/api/users/${userId}/setting-permissions`),
       axios.get(`/api/users/${userId}/agent-access`),
       axios.get(`/api/users/${userId}/tool-access`),
+      axios.get(`/api/users/${userId}/tool-field-access`),
     ])
     setPermissions(pRes.data.permissions)
     setSettingPermissions(sRes.data.permissions)
     setAgentAccess(agentRes.data)
     setToolAccess(toolRes.data)
+    setToolFieldAccess(toolFieldRes.data)
     setSelectedUserId(userId)
   }
 
@@ -131,6 +134,7 @@ export default function Admin() {
       axios.put(`/api/users/${selectedUserId}/setting-permissions`, { permissions: settingPermissions }),
       axios.put(`/api/users/${selectedUserId}/agent-access`, { agents: agentAccess }),
       axios.put(`/api/users/${selectedUserId}/tool-access`, { tools: toolAccess }),
+      axios.put(`/api/users/${selectedUserId}/tool-field-access`, { fields: toolFieldAccess }),
     ])
     setPermSaved(true)
     setTimeout(() => setPermSaved(false), 2500)
@@ -148,9 +152,10 @@ export default function Admin() {
         username: newUser.username.trim(),
         password: newUser.password.trim(),
         email: newUser.email.trim() || null,
+        display_name: newUser.display_name.trim() || null,
         role: newUser.role,
       })
-      setNewUser({ username: '', password: '', email: '', role: 'user' })
+      setNewUser({ username: '', password: '', email: '', display_name: '', role: 'user' })
       await loadUsers()
     } catch (err: any) {
       setCreateError(err.response?.data?.detail || t('admin.create_user_error'))
@@ -250,6 +255,12 @@ export default function Admin() {
                   value={newUser.email}
                   onChange={e => setNewUser(f => ({ ...f, email: e.target.value }))}
                 />
+                <input
+                  className={Input}
+                  placeholder={t('admin.display_name_placeholder')}
+                  value={newUser.display_name}
+                  onChange={e => setNewUser(f => ({ ...f, display_name: e.target.value }))}
+                />
                 {isOwner ? (
                   <select
                     className={Input}
@@ -301,7 +312,10 @@ export default function Admin() {
                               <div className="w-7 h-7 rounded-lg bg-gradient-to-br from-violet-600 to-indigo-700 flex items-center justify-center text-white text-[10px] font-bold shrink-0 shadow shadow-violet-500/10">
                                 {u.username.charAt(0).toUpperCase()}
                               </div>
-                              <span className="text-white font-semibold">{u.username}</span>
+                              <div className="flex flex-col">
+                                <span className="text-white font-semibold">{u.username}</span>
+                                {u.display_name && <span className="text-[10px] text-slate-500 font-medium">{u.display_name}</span>}
+                              </div>
                             </div>
                           </td>
                           <td className="py-2.5 px-3 pr-4 text-slate-400 font-semibold">{u.email || '—'}</td>
@@ -462,80 +476,67 @@ export default function Admin() {
                   </div>
                 </Section>
 
-                <Section title={t('admin.section_tool_access') || 'Tool Access Control Matrix'}>
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-xs text-slate-300 min-w-[500px]">
-                      <thead>
-                        <tr className="text-left text-slate-500 text-[10px] uppercase tracking-wider border-b border-white/[0.04] bg-white/[0.01]">
-                          <th className="px-3 py-2 pr-4 font-bold text-slate-450">Tool</th>
-                          <th className="px-3 py-2 text-center font-bold text-slate-450">View Settings</th>
-                          <th className="px-3 py-2 text-center font-bold text-slate-450">Use in Run</th>
-                          <th className="px-3 py-2 text-center font-bold text-slate-450">Edit Settings</th>
-                          <th className="px-3 py-2 text-center font-bold text-slate-450">Enable/Disable</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-white/[0.02]">
-                        {meta?.tools?.map(tool => {
-                          const toolState = toolAccess[tool.key] || {
-                            can_view: true,
-                            can_use: true,
-                            can_edit: false,
-                            can_enable: false,
-                          }
+                <Section title={t('admin.section_tool_field_access') || 'Fine-grained Tool Field Access'}>
+                  <div className="space-y-6">
+                    {meta?.tools?.filter(t => t.settings_schema?.length > 0).map(tool => (
+                      <div key={tool.key} className="bg-slate-900/40 border border-white/[0.04] rounded-2xl p-4 overflow-hidden">
+                        <div className="flex items-center gap-2 mb-3 pb-2 border-b border-white/[0.03]">
+                          <div className="w-1.5 h-1.5 rounded-full bg-violet-500 shadow-[0_0_8px_rgba(139,92,246,0.5)]"></div>
+                          <h4 className="text-xs font-bold text-slate-200 uppercase tracking-wider">{t(tool.label_key)}</h4>
+                        </div>
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-[10px] text-slate-400">
+                            <thead>
+                              <tr className="text-left text-slate-500 uppercase tracking-widest border-b border-white/[0.02]">
+                                <th className="py-2 px-1 font-bold">Field</th>
+                                <th className="py-2 px-1 text-center font-bold">View</th>
+                                <th className="py-2 px-1 text-center font-bold">Edit</th>
+                              </tr>
+                            </thead>
+                            <tbody className="divide-y divide-white/[0.01]">
+                              {tool.settings_schema.map(field => {
+                                const fState = (toolFieldAccess[tool.key] || {})[field.key] || { can_view: true, can_edit: true }
+                                
+                                const updateField = (pk: 'can_view' | 'can_edit', val: boolean) => {
+                                  setToolFieldAccess(prev => ({
+                                    ...prev,
+                                    [tool.key]: {
+                                      ...(prev[tool.key] || {}),
+                                      [field.key]: { ...fState, [pk]: val }
+                                    }
+                                  }))
+                                }
 
-                          const handleToggle = (permKey: string, val: boolean) => {
-                            setToolAccess(prev => ({
-                              ...prev,
-                              [tool.key]: {
-                                ...toolState,
-                                [permKey]: val,
-                              }
-                            }))
-                          }
-
-                          return (
-                            <tr key={tool.key} className="hover:bg-white/[0.01]">
-                              <td className="py-2.5 px-3 pr-4">
-                                <div className="font-semibold text-slate-200">{t(tool.label_key)}</div>
-                                <div className="text-[10px] text-slate-500 font-normal leading-relaxed">{t(tool.description_key)}</div>
-                              </td>
-                              <td className="py-2.5 px-3 text-center">
-                                <input
-                                  type="checkbox"
-                                  className="accent-violet-600 w-4 h-4 rounded cursor-pointer mx-auto"
-                                  checked={toolState.can_view ?? true}
-                                  onChange={e => handleToggle('can_view', e.target.checked)}
-                                />
-                              </td>
-                              <td className="py-2.5 px-3 text-center">
-                                <input
-                                  type="checkbox"
-                                  className="accent-violet-600 w-4 h-4 rounded cursor-pointer mx-auto"
-                                  checked={toolState.can_use ?? true}
-                                  onChange={e => handleToggle('can_use', e.target.checked)}
-                                />
-                              </td>
-                              <td className="py-2.5 px-3 text-center">
-                                <input
-                                  type="checkbox"
-                                  className="accent-violet-600 w-4 h-4 rounded cursor-pointer mx-auto"
-                                  checked={toolState.can_edit ?? false}
-                                  onChange={e => handleToggle('can_edit', e.target.checked)}
-                                />
-                              </td>
-                              <td className="py-2.5 px-3 text-center">
-                                <input
-                                  type="checkbox"
-                                  className="accent-violet-600 w-4 h-4 rounded cursor-pointer mx-auto"
-                                  checked={toolState.can_enable ?? false}
-                                  onChange={e => handleToggle('can_enable', e.target.checked)}
-                                />
-                              </td>
-                            </tr>
-                          )
-                        })}
-                      </tbody>
-                    </table>
+                                return (
+                                  <tr key={field.key} className="hover:bg-white/[0.01]">
+                                    <td className="py-2 px-1">
+                                      <div className="font-semibold text-slate-300">{t(field.label_key)}</div>
+                                      <div className="text-[9px] text-slate-600 italic">ID: {field.key}</div>
+                                    </td>
+                                    <td className="py-2 px-1 text-center">
+                                      <input
+                                        type="checkbox"
+                                        className="accent-amber-500 w-3.5 h-3.5 rounded cursor-pointer mx-auto"
+                                        checked={fState.can_view}
+                                        onChange={e => updateField('can_view', e.target.checked)}
+                                      />
+                                    </td>
+                                    <td className="py-2 px-1 text-center">
+                                      <input
+                                        type="checkbox"
+                                        className="accent-amber-500 w-3.5 h-3.5 rounded cursor-pointer mx-auto"
+                                        checked={fState.can_edit}
+                                        onChange={e => updateField('can_edit', e.target.checked)}
+                                      />
+                                    </td>
+                                  </tr>
+                                )
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </Section>
               </>
