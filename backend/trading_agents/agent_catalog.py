@@ -55,7 +55,13 @@ class AgentInfo:
         }
 
 
+from backend.trading_agents.llm_clients.registry import llm_registry
+
 def get_standard_agent_settings() -> list[AgentSettingField]:
+    provider_options = [{"value": "", "label_key": "settings.analyst_default_provider"}]
+    for p in llm_registry.list_providers():
+        provider_options.append({"value": p.key, "label_key": p.label})
+
     return [
         AgentSettingField(
             key="llm_provider",
@@ -64,20 +70,7 @@ def get_standard_agent_settings() -> list[AgentSettingField]:
             description_key="Select the LLM provider for this agent",
             default="",
             required=False,
-            options=[
-                {"value": "", "label_key": "settings.analyst_default_provider"},
-                {"value": "openai", "label_key": "OpenAI"},
-                {"value": "anthropic", "label_key": "Anthropic (Claude)"},
-                {"value": "google", "label_key": "Google (Gemini)"},
-                {"value": "xai", "label_key": "xAI (Grok)"},
-                {"value": "deepseek", "label_key": "DeepSeek"},
-                {"value": "qwen", "label_key": "Qwen (Global)"},
-                {"value": "glm", "label_key": "GLM / Z.AI (Global)"},
-                {"value": "minimax", "label_key": "MiniMax (Global)"},
-                {"value": "ollama", "label_key": "Ollama (Local)"},
-                {"value": "nvidia", "label_key": "NVIDIA NIM"},
-                {"value": "litellm", "label_key": "LiteLLM Proxy"},
-            ]
+            options=provider_options
         ),
         AgentSettingField(
             key="llm_model",

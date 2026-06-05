@@ -84,49 +84,13 @@ TRADING_MODES: list[dict] = [
 BROKERS: list[dict] = [
     {"value": "simulation", "label": "Simulation"},
 ]
-PROVIDER_LABELS: dict[str, str] = {
-    "openai": "OpenAI",
-    "anthropic": "Anthropic (Claude)",
-    "google": "Google (Gemini)",
-    "xai": "xAI (Grok)",
-    "deepseek": "DeepSeek",
-    "qwen": "Qwen (Global)",
-    "qwen-cn": "Qwen (China)",
-    "glm": "GLM / Z.AI (Global)",
-    "glm-cn": "GLM / BigModel (China)",
-    "minimax": "MiniMax (Global)",
-    "minimax-cn": "MiniMax (China)",
-    "ollama": "Ollama (Local)",
-    "nvidia": "NVIDIA NIM",
-    "litellm": "LiteLLM Proxy",
-}
-def investor_personas() -> list[dict]:
-    from backend.trading_agents.personas import list_personas
-    return [
-        {"value": p.key, "label": p.label, "description": p.description}
-        for p in list_personas()
-    ]
+from backend.trading_agents.llm_clients.registry import llm_registry
 
+PROVIDER_LABELS: dict[str, str] = llm_registry.get_provider_labels()
 
 # Provider-specific reasoning/thinking effort levels (UI option lists).
-EFFORT_OPTIONS: dict[str, list[dict]] = {
-    "openai": [
-        {"value": "low", "label": "Low"},
-        {"value": "medium", "label": "Medium"},
-        {"value": "high", "label": "High"},
-    ],
-    "anthropic": [
-        {"value": "low", "label": "Low"},
-        {"value": "medium", "label": "Medium"},
-        {"value": "high", "label": "High"},
-    ],
-    "google": [
-        {"value": "minimal", "label": "Minimal"},
-        {"value": "low", "label": "Low"},
-        {"value": "medium", "label": "Medium"},
-        {"value": "high", "label": "High"},
-    ],
-}
+EFFORT_OPTIONS: dict[str, list[dict]] = llm_registry.get_effort_options()
+
 ORDER_STATUSES: list[dict] = [
     {"value": "FILLED",           "label": "Filled",      "tone": "positive"},
     {"value": "PARTIALLY_FILLED", "label": "Partial",     "tone": "neutral"},

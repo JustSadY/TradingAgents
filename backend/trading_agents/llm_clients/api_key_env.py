@@ -1,21 +1,7 @@
 from __future__ import annotations
 from typing import Optional
-PROVIDER_API_KEY_ENV: dict[str, Optional[str]] = {
-    "openai":     "OPENAI_API_KEY",
-    "anthropic":  "ANTHROPIC_API_KEY",
-    "google":     "GOOGLE_API_KEY",
-    "xai":        "XAI_API_KEY",
-    "deepseek":   "DEEPSEEK_API_KEY",
-    "qwen":       "DASHSCOPE_API_KEY",
-    "qwen-cn":    "DASHSCOPE_CN_API_KEY",
-    "glm":        "ZHIPU_API_KEY",
-    "glm-cn":     "ZHIPU_CN_API_KEY",
-    "minimax":    "MINIMAX_API_KEY",
-    "minimax-cn": "MINIMAX_CN_API_KEY",
-    "openrouter": "OPENROUTER_API_KEY",
-    "nvidia":     "NVIDIA_API_KEY",
-    "litellm":    "LITELLM_API_KEY",
-    "ollama":     None,
-}
+from .registry import llm_registry
+
 def get_api_key_env(provider: str) -> Optional[str]:
-    return PROVIDER_API_KEY_ENV.get(provider.lower())
+    p = llm_registry.get(provider)
+    return p.api_key_env if p else None

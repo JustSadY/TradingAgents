@@ -31,13 +31,6 @@ MODEL_COST_PER_1K: dict[str, float] = {
     "gemini-1.5-flash": 0.000075,
     "gemini-2.0-flash": 0.000075,
     "gemini-2.0": 0.000075,
-    "grok-2": 0.002,
-    "deepseek-reasoner": 0.00055,
-    "deepseek-chat": 0.00014,
-    "deepseek": 0.00014,
-    "qwen": 0.0002,
-    "glm": 0.0002,
-    "abab": 0.0002,
 }
 _TOKENS_PER_ANALYST = 8_000
 
