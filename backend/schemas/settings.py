@@ -9,6 +9,8 @@ class SettingsRead(BaseModel):
     watchlist: list[str]
     selected_analysts: list[str]
     output_language: str = "English"
+    llm_provider: str = "openai"
+    llm_model: str = "gpt-4o-mini"
     investor_persona: str = "conservative"
     analyst_concurrency_limit: int = 1
     max_recur_limit: int = 1000
@@ -43,6 +45,8 @@ class SettingsUpdate(BaseModel):
     watchlist: list[str] | None = None
     selected_analysts: list[str] | None = None
     output_language: str | None = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
     investor_persona: str | None = None
     analyst_concurrency_limit: int | None = Field(default=None, ge=1, le=16)
     max_recur_limit: int | None = Field(default=None, ge=100, le=5000)

@@ -20,6 +20,8 @@ class AppSettings(Base):
         default='["market", "news", "fundamentals", "social"]',
     )
     output_language: Mapped[str] = mapped_column(String(50), default="English")
+    llm_provider: Mapped[str] = mapped_column(String(50), default="openai")
+    llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini")
     investor_persona: Mapped[str] = mapped_column(String(50), default="conservative")
     analyst_concurrency_limit: Mapped[int] = mapped_column(Integer, default=1)
     max_recur_limit: Mapped[int] = mapped_column(Integer, default=1000)
