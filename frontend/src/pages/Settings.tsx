@@ -80,6 +80,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const [webhookTestResult, setWebhookTestResult] = useState<string | null>(null)
   const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'agents' | 'risk' | 'webhooks' | 'presets' | 'advanced' | 'cron' | 'tools'>('general')
   const [allowedSettings, setAllowedSettings] = useState<string[]>([])
+  const [cronStatus, setCronStatus] = useState<{ running: boolean; job_configured: boolean; next_run_time: string | null } | null>(null)
   const meta = useMeta()
 
   useEffect(() => {
@@ -89,10 +90,12 @@ export default function Settings({ userId }: { userId?: number } = {}) {
       axios.get(settingsUrl).then(r => r.data),
       axios.get('/api/presets').then(r => r.data).catch(() => []),
       axios.get(permUrl).then(r => r.data.allowed_settings || r.data.permissions || []).catch(() => []),
-    ]).then(([settings, presetList, allowedSet]) => {
+      axios.get('/api/cron/status').then(r => r.data).catch(() => null),
+    ]).then(([settings, presetList, allowedSet, cStatus]) => {
       setS(settings)
       setPresets(presetList)
       setAllowedSettings(userId ? ['general', 'llm', 'risk', 'webhooks', 'cron'] : allowedSet)
+      setCronStatus(cStatus)
 
       const defaultTabs = ['general', 'llm', 'risk', 'webhooks', 'cron']
       const activeDefault = defaultTabs.find(tab => userId || allowedSet.includes(tab))
@@ -173,7 +176,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     { key: 'tools',    label: t('settings.section_tools') || 'Agent Tools', icon: <Wrench size={14} /> },
     { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety', icon: <ShieldAlert size={14} /> },
     { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={14} /> },
-    { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={18} /> },
+    { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={14} /> },
     ...(userId ? [] : [{ key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={14} /> }]),
   ].filter(tab => isAdmin || tab.key === 'tools' || tab.key === 'agents' || allowedSettings.includes(tab.key))
 
@@ -497,13 +500,38 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           {/* Cron Scheduler */}
           {activeTab === 'cron' && (
             <Section title={t('settings.section_cron') || 'Cron Scheduler'}>
+              <div className="flex items-center justify-between bg-white/[0.02] border border-white/[0.04] p-3 rounded-xl mb-2">
+                <div className="flex flex-col">
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Engine Status</span>
+                  <div className="flex items-center gap-2 mt-1">
+                    <div className={`w-2 h-2 rounded-full ${cronStatus?.running ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-500'}`} />
+                    <span className="text-xs font-bold text-slate-200">
+                      {cronStatus?.running ? 'Scheduler Core Online' : 'Scheduler Core Offline'}
+                    </span>
+                  </div>
+                </div>
+                {cronStatus?.job_configured && (
+                  <div className="text-right">
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Next Run (UTC)</span>
+                    <div className="text-xs font-mono text-violet-300 mt-1">
+                      {cronStatus.next_run_time ? new Date(cronStatus.next_run_time).toLocaleString() : '—'}
+                    </div>
+                  </div>
+                )}
+              </div>
+
               <Row label="Active">
-                <input
-                  type="checkbox"
-                  className="accent-violet-600 w-4 h-4 rounded cursor-pointer"
-                  checked={s.cron_enabled}
-                  onChange={e => update('cron_enabled', e.target.checked)}
-                />
+                <div className="flex items-center gap-3">
+                  <input
+                    type="checkbox"
+                    className="accent-violet-600 w-5 h-5 rounded cursor-pointer"
+                    checked={s.cron_enabled}
+                    onChange={e => update('cron_enabled', e.target.checked)}
+                  />
+                  <span className={`text-[10px] font-bold uppercase tracking-widest ${s.cron_enabled ? 'text-emerald-400' : 'text-slate-500'}`}>
+                    {s.cron_enabled ? 'Enabled' : 'Disabled'}
+                  </span>
+                </div>
               </Row>
               <Row label="Schedule (Cron)">
                 <input
@@ -512,7 +540,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   onChange={e => update('cron_schedule', e.target.value)}
                   placeholder="e.g. 0 9 * * 1-5"
                 />
-                <p className="text-[10px] text-slate-500 mt-1.5 font-medium">Standard 5-field cron schedule format (UTC time)</p>
+                <p className="text-[10px] text-slate-500 mt-1.5 font-medium leading-relaxed">
+                  Standard 5-field cron schedule format (UTC time). <br/>
+                  Example: <code className="text-violet-400">0 9 * * 1-5</code> runs every weekday at 09:00 UTC.
+                </p>
               </Row>
             </Section>
           )}

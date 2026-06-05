@@ -2,7 +2,7 @@ import { type ReactNode, useEffect, useMemo, useState } from 'react'
 import axios from 'axios'
 import { AlertCircle, ChevronDown, ChevronRight, Save, Settings2 } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
-import { useMeta } from '../../hooks/useMeta'
+import { useMeta, triggerMetaRefetch } from '../../hooks/useMeta'
 
 // ---------------------------------------------------------------------------
 // Types
@@ -538,9 +538,11 @@ export default function AgentSettingsPanel({
     try {
       const res = await axios.put(apiPath, settings)
       setSettings(res.data)
+      triggerMetaRefetch()
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 2000)
-    } catch (err: any) {
+    }
+ catch (err: any) {
       setSaveError(err.response?.data?.detail || 'Failed to save agent settings.')
     } finally {
       setSaving(false)

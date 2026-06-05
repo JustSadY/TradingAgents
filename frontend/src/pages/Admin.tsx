@@ -433,7 +433,8 @@ export default function Admin() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {[
                         { key: 'general',  label: t('settings.general') || 'Preferences' },
-                        { key: 'llm',      label: t('settings.llm_settings') || 'AI Engine' },
+                        { key: 'agents',   label: 'AI Configuration' },
+                        { key: 'tools',    label: t('settings.section_tools') || 'Agent Tools' },
                         { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety' },
                         { key: 'webhooks', label: t('settings.section_notifications') || 'Personal Webhooks' },
                         { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler' },

@@ -152,20 +152,17 @@ CHART_PERIODS: list[dict] = [
 async def build_meta(db=None, user=None) -> dict:
     from backend.trading_agents.agents.tools.registry import registry
     from backend.trading_agents.agent_catalog import list_agents
+    from backend.services.agent_settings_service import build_agent_runtime_context
+    from backend.trading_agents.agents.hierarchy import AgentHierarchy
+
     tools_list = registry.metadata()
     agents_list = [a.metadata() for a in list_agents()]
     if db is not None and user is not None:
-        from backend.services.settings_service import get_or_create_settings
-        from backend.services.tool_access_service import get_user_tool_access, get_user_agent_access
+        from backend.services.tool_access_service import get_user_tool_access
         
-        settings = await get_or_create_settings(db, user)
-        selected_analysts = settings.selected_analysts
-        agent_access_map = await get_user_agent_access(db, user.id)
-        
-        active_analysts = {
-            a for a in selected_analysts
-            if agent_access_map.get(a, True)
-        }
+        # 1. Build hierarchy knowledge
+        agent_ctx = await build_agent_runtime_context(db, user.id)
+        hierarchy = AgentHierarchy(agent_ctx)
         
         tool_access_map = await get_user_tool_access(db, user.id)
         
@@ -175,10 +172,12 @@ async def build_meta(db=None, user=None) -> dict:
             if not user.is_admin and not tool_access_map.get(t["key"], {}).get("can_view", True):
                 continue
             
-            # Check if any associated agent is active
+            # Check if any associated agent is active in the hierarchy
             allowed = t.get("allowed_analysts", [])
-            if allowed and not any(a in active_analysts for a in allowed):
-                continue
+            if allowed:
+                is_any_agent_enabled = any(hierarchy.is_enabled(a) for a in allowed)
+                if not is_any_agent_enabled:
+                    continue
                 
             filtered_tools.append(t)
         tools_list = filtered_tools
