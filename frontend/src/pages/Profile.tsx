@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import axios from 'axios'
 import { Save, Key, Trash2, Eye, EyeOff, CheckCircle2, User2 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
+import { useMeta } from '../hooks/useMeta'
 
 interface UserProfile {
   id: number
@@ -12,21 +13,6 @@ interface UserProfile {
   is_active: boolean
   created_at: string
 }
-
-const PROVIDERS = [
-  { key: 'openai',       label: 'OpenAI' },
-  { key: 'anthropic',    label: 'Anthropic (Claude)' },
-  { key: 'google',       label: 'Google (Gemini)' },
-  { key: 'xai',          label: 'xAI (Grok)' },
-  { key: 'deepseek',     label: 'DeepSeek' },
-  { key: 'qwen',         label: 'Qwen (Global)' },
-  { key: 'glm',          label: 'GLM / Z.AI' },
-  { key: 'minimax',      label: 'MiniMax' },
-  { key: 'ollama',       label: 'Ollama (Local)' },
-  { key: 'nvidia',       label: 'NVIDIA NIM' },
-  { key: 'litellm',      label: 'LiteLLM Proxy' },
-  { key: 'azure',        label: 'Azure OpenAI' },
-]
 
 const Input = "w-full glass-input rounded-xl px-3 py-2 text-xs outline-none"
 
@@ -143,11 +129,20 @@ function ApiKeyRow({ providerKey, label, hasKey, onSave, onDelete }: {
 
 export default function Profile() {
   const { t } = useTranslation()
+  const meta = useMeta()
   const [profile, setProfile] = useState<UserProfile | null>(null)
   const [keyProviders, setKeyProviders] = useState<string[]>([])
   const [profileForm, setProfileForm] = useState({ email: '', display_name: '', password: '', password2: '' })
   const [profileSaved, setProfileSaved] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
+
+  const providers = useMemo(() => {
+    if (!meta?.provider_labels) return []
+    return Object.entries(meta.provider_labels).map(([key, label]) => ({
+      key,
+      label: label as string,
+    }))
+  }, [meta?.provider_labels])
 
   const load = async () => {
     const [p, k] = await Promise.all([
@@ -282,7 +277,7 @@ export default function Profile() {
       <Section title={t('profile.section_api_keys')}>
         <p className="text-[10px] text-slate-500 font-semibold pb-1.5 border-b border-white/[0.04] mb-3">{t('profile.api_keys_hint')}</p>
         <div className="space-y-3 bg-slate-900/40 border border-white/[0.04] p-4 rounded-2xl">
-          {PROVIDERS.map(p => (
+          {providers.map(p => (
             <ApiKeyRow
               key={p.key}
               providerKey={p.key}
@@ -292,6 +287,11 @@ export default function Profile() {
               onDelete={deleteApiKey}
             />
           ))}
+          {providers.length === 0 && (
+            <div className="text-center py-4 text-slate-500 text-xs font-medium italic">
+              {t('common.no_data')}
+            </div>
+          )}
         </div>
       </Section>
     </div>
