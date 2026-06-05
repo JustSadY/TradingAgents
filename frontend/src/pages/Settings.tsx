@@ -244,25 +244,8 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
               <Section title={t('settings.llm_settings') || 'Core Engine Configuration'}>
                 <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed mb-2">
-                  Global LLM settings and connection parameters. Per-agent models are configured in the AI Configuration tab.
+                  Global LLM settings and performance parameters. Per-agent models are configured in the AI Configuration tab.
                 </p>
-                <Row label="API Base URL">
-                  <input
-                    className={Input}
-                    value={s.backend_url || ''}
-                    onChange={e => update('backend_url', e.target.value || null)}
-                    placeholder="http://localhost:11434"
-                  />
-                </Row>
-
-                <Row label="Azure Deployment">
-                  <input
-                    className={Input}
-                    value={s.azure_deployment || ''}
-                    onChange={e => update('azure_deployment', e.target.value || null)}
-                    placeholder="e.g. gpt-4o-deployment"
-                  />
-                </Row>
 
                 <Row label="Reasoning Effort">
                   <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>

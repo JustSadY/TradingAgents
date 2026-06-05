@@ -19,13 +19,11 @@ class AppSettings(Base):
         Text,
         default='["market", "news", "fundamentals", "social"]',
     )
-    backend_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     output_language: Mapped[str] = mapped_column(String(50), default="English")
     investor_persona: Mapped[str] = mapped_column(String(50), default="conservative")
     analyst_concurrency_limit: Mapped[int] = mapped_column(Integer, default=1)
     max_recur_limit: Mapped[int] = mapped_column(Integer, default=1000)
     benchmark_ticker: Mapped[str | None] = mapped_column(String(20), nullable=True)
-    azure_deployment: Mapped[str | None] = mapped_column(String(100), nullable=True)
     openai_reasoning_effort: Mapped[str | None] = mapped_column(String(20), nullable=True)
     anthropic_effort: Mapped[str | None] = mapped_column(String(20), nullable=True)
     google_thinking_level: Mapped[str | None] = mapped_column(String(20), nullable=True)

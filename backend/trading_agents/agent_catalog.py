@@ -77,7 +77,6 @@ def get_standard_agent_settings() -> list[AgentSettingField]:
                 {"value": "ollama", "label_key": "Ollama (Local)"},
                 {"value": "nvidia", "label_key": "NVIDIA NIM"},
                 {"value": "litellm", "label_key": "LiteLLM Proxy"},
-                {"value": "azure", "label_key": "Azure OpenAI"},
             ]
         ),
         AgentSettingField(

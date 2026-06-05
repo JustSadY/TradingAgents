@@ -53,42 +53,58 @@ _REPORT_FIELDS = (
 async def _get_historical_analyses_context(
     ticker: str, trade_date: str, db: AsyncSession, limit: int = 5, output_language: str = "English"
 ) -> str:
-    rows = await list_historical_analyses(
-        db,
-        ticker=ticker,
-        before_trade_date=trade_date,
-        limit=limit,
-    )
-    if not rows:
-        return ""
+    from sqlalchemy import select, desc
+    from backend.models.analysis import AnalysisResult
     
+    # 1. Fetch same-ticker historical analyses
+    q_same = (
+        select(AnalysisResult)
+        .where(AnalysisResult.ticker == ticker)
+        .where(AnalysisResult.trade_date < trade_date)
+        .order_by(desc(AnalysisResult.created_at))
+        .limit(limit)
+    )
+    res_same = await db.execute(q_same)
+    rows_same = res_same.scalars().all()
+    
+    # 2. Fetch cross-ticker lessons (those with populated reflection)
+    q_cross = (
+        select(AnalysisResult)
+        .where(AnalysisResult.ticker != ticker)
+        .where(AnalysisResult.reflection != "")
+        .order_by(desc(AnalysisResult.created_at))
+        .limit(3)
+    )
+    res_cross = await db.execute(q_cross)
+    rows_cross = res_cross.scalars().all()
+
+    if not rows_same and not rows_cross:
+        return ""
+
     lang = (output_language or "English").strip().lower()
     is_tr = lang in ("turkish", "türkçe")
     
-    title = f"=== {ticker} GEÇMİŞ ANALİZ RAPORLARI ===\n" if is_tr else f"=== {ticker} HISTORICAL ANALYSIS REPORTS ===\n"
-    parts = [title]
-    for row in reversed(rows):
-        date_label = f"Tarih: {row.trade_date} | Sinyal" if is_tr else f"Date: {row.trade_date} | Signal"
-        parts.append(f"--- {date_label}: {row.signal or 'N/A'} ---")
-        labels = (
-            [
-                ("Piyasa Raporu", row.market_report),
-                ("Haber Raporu", row.news_report),
-                ("Temel Analiz", row.fundamentals_report),
-                ("Son Karar", row.final_decision),
-            ]
-            if is_tr
-            else [
-                ("Market Report", row.market_report),
-                ("News Report", row.news_report),
-                ("Fundamental Analysis", row.fundamentals_report),
-                ("Final Decision", row.final_decision),
-            ]
-        )
-        for label, field in labels:
-            if field and field.strip():
-                parts.append(f"{label}:\n{field[:400].strip()}...")
-        parts.append("")
+    parts = []
+    
+    if rows_same:
+        title_same = f"=== {ticker} GEÇMİŞ ANALİZ RAPORLARI ===\n" if is_tr else f"=== {ticker} HISTORICAL ANALYSIS REPORTS ===\n"
+        parts.append(title_same)
+        for row in reversed(rows_same):
+            date_label = f"Tarih: {row.trade_date} | Sinyal" if is_tr else f"Date: {row.trade_date} | Signal"
+            parts.append(f"--- {date_label}: {row.signal or 'N/A'} ---")
+            parts.append(f"Final Decision:\n{row.final_decision}")
+            if row.reflection:
+                parts.append(f"Reflection/Outcome:\n{row.reflection}")
+            parts.append("")
+
+    if rows_cross:
+        title_cross = f"=== ÇAPRAZ HİSSE DERSLERİ ===\n" if is_tr else f"=== RECENT CROSS-TICKER LESSONS ===\n"
+        parts.append(title_cross)
+        for row in rows_cross:
+            parts.append(f"--- Ticker: {row.ticker} | Date: {row.trade_date} ---")
+            parts.append(f"Reflection:\n{row.reflection}")
+            parts.append("")
+
     return "\n".join(parts)
 
 
@@ -153,12 +169,8 @@ def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
         "is_admin": getattr(user, "is_admin", False) if user is not None else False,
         "has_user": user is not None,
     }
-    if getattr(settings, "backend_url", None):
-        cfg["backend_url"] = settings.backend_url
     if getattr(settings, "benchmark_ticker", None):
         cfg["benchmark_ticker"] = settings.benchmark_ticker
-    if getattr(settings, "azure_deployment", None):
-        cfg["azure_deployment_name"] = settings.azure_deployment
 
     if user is not None:
         try:

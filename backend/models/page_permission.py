@@ -17,7 +17,6 @@ SECTION_FIELDS = {
     "llm": [
         "llm_provider",
         "llm_model",
-        "backend_url",
         "openai_reasoning_effort",
         "anthropic_effort",
         "google_thinking_level",

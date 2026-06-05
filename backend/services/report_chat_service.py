@@ -117,16 +117,10 @@ async def answer_report_question(
                    "Please add your API key in Settings.",
         )
 
-    kwargs = {}
-    if settings.llm_provider.lower() == "azure" and settings.azure_deployment:
-        kwargs["azure_deployment"] = settings.azure_deployment
-
     client = create_llm_client(
         provider=settings.llm_provider,
         model=settings.llm_model,
-        base_url=settings.backend_url,
         api_key=user_key,
-        **kwargs,
     )
     response = await client.get_llm().ainvoke(payload)
 

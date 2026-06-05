@@ -25,12 +25,6 @@ class TradingAgentsConfig(BaseModel):
     memory_log_max_entries: Optional[int] = Field(default=None, ge=1)
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
-    backend_url: Optional[str] = Field(
-        default_factory=lambda: os.environ.get(
-            "TRADINGAGENTS_LLM_BACKEND_URL",
-            os.environ.get("TRADINGAGENTS_BACKEND_URL", None)
-        ),
-    )
     google_thinking_level: Optional[str] = None
     openai_reasoning_effort: Optional[str] = None
     anthropic_effort: Optional[str] = None

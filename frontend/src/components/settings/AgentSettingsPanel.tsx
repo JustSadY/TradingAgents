@@ -85,11 +85,13 @@ function AgentSettingsFields({
   agentState,
   disabled,
   onFieldChange,
+  t,
 }: {
   agent: AgentMeta
   agentState: AgentSettingState
   disabled: boolean
   onFieldChange: (fieldKey: string, value: any) => void
+  t: (key: string) => string
 }) {
   const fields = agent.settings_schema ?? []
   if (fields.length === 0) return null
@@ -188,6 +190,7 @@ function AgentCard({
   children,
   onToggleEnabled,
   onFieldChange,
+  t,
 }: {
   agent: AgentMeta
   agentState: AgentSettingState
@@ -195,6 +198,7 @@ function AgentCard({
   children?: ReactNode
   onToggleEnabled: (key: string, val: boolean) => void
   onFieldChange: (key: string, fieldKey: string, value: any) => void
+  t: (key: string) => string
 }) {
   const [settingsOpen, setSettingsOpen] = useState(false)
   const [childrenOpen, setChildrenOpen] = useState(false)
@@ -276,6 +280,7 @@ function AgentCard({
               agentState={agentState}
               disabled={inputsDisabled}
               onFieldChange={(fieldKey, value) => onFieldChange(agent.key, fieldKey, value)}
+              t={t}
             />
           )}
         </div>
@@ -302,6 +307,7 @@ function AgentSubTree({
   parentDisabled,
   onToggleEnabled,
   onFieldChange,
+  t,
 }: {
   parentKey: string
   childrenMap: Map<string | null, AgentMeta[]>
@@ -309,6 +315,7 @@ function AgentSubTree({
   parentDisabled: boolean
   onToggleEnabled: (key: string, val: boolean) => void
   onFieldChange: (key: string, fieldKey: string, value: any) => void
+  t: (key: string) => string
 }) {
   // Main agents render as their own top-level accordion sections, so they must
   // not also appear nested under their parent (e.g. under Portfolio Manager).
@@ -335,6 +342,7 @@ function AgentSubTree({
             parentDisabled={parentDisabled}
             onToggleEnabled={onToggleEnabled}
             onFieldChange={onFieldChange}
+            t={t}
           >
             {grandchildren.length > 0 ? (
               <AgentSubTree
@@ -344,6 +352,7 @@ function AgentSubTree({
                 parentDisabled={ownDisabled}
                 onToggleEnabled={onToggleEnabled}
                 onFieldChange={onFieldChange}
+                t={t}
               />
             ) : undefined}
           </AgentCard>
@@ -365,6 +374,7 @@ function MainAgentSection({
   ancestorLabel,
   onToggleEnabled,
   onFieldChange,
+  t,
 }: {
   agent: AgentMeta
   childrenMap: Map<string | null, AgentMeta[]>
@@ -373,6 +383,7 @@ function MainAgentSection({
   ancestorLabel?: string
   onToggleEnabled: (key: string, val: boolean) => void
   onFieldChange: (key: string, fieldKey: string, value: any) => void
+  t: (key: string) => string
 }) {
   const [expanded, setExpanded] = useState(true)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -467,6 +478,7 @@ function MainAgentSection({
                 agentState={agentState}
                 disabled={!ownEnabled}
                 onFieldChange={(fieldKey, value) => onFieldChange(agent.key, fieldKey, value)}
+                t={t}
               />
             </div>
           )}
@@ -488,7 +500,9 @@ function MainAgentSection({
                 parentDisabled={!ownEnabled}
                 onToggleEnabled={onToggleEnabled}
                 onFieldChange={onFieldChange}
+                t={t}
               />
+
             </div>
           )}
         </div>
@@ -680,6 +694,7 @@ export default function AgentSettingsPanel({
               ancestorLabel="Portfolio Manager"
               onToggleEnabled={handleToggleEnabled}
               onFieldChange={handleFieldChange}
+              t={t}
             />
           )
         })}

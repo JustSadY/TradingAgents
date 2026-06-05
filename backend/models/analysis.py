@@ -22,6 +22,7 @@ class AnalysisResult(Base):
     investment_plan: Mapped[str] = mapped_column(Text, default="")
     trader_plan: Mapped[str] = mapped_column(Text, default="")
     final_decision: Mapped[str] = mapped_column(Text, default="")
+    reflection: Mapped[str] = mapped_column(Text, default="")
     bull_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
     bear_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
     investment_debate_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)

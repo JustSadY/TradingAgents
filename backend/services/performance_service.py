@@ -44,6 +44,31 @@ async def backfill_returns(db) -> int:
             row.raw_return = raw
             row.alpha_return = alpha
             row.holding_days = days
+            
+            # Generate reflection using the Reflector
+            try:
+                from backend.trading_agents.graph.reflection import Reflector
+                from backend.trading_agents.llm_clients import create_llm_client
+                from backend.trading_agents.default_config import DEFAULT_CONFIG
+                
+                # Use a lightweight client for reflection
+                client = create_llm_client(
+                    provider=DEFAULT_CONFIG.get("llm_provider", "openai"),
+                    model=DEFAULT_CONFIG.get("llm_model", "gpt-4o-mini"),
+                )
+                reflector = Reflector(client.get_llm())
+                
+                reflection = await asyncio.to_thread(
+                    reflector.reflect_on_final_decision,
+                    final_decision=row.final_decision,
+                    raw_return=raw,
+                    alpha_return=alpha,
+                    benchmark_name=benchmark,
+                )
+                row.reflection = reflection
+            except Exception as ref_exc:
+                _logger.warning("Could not generate reflection for analysis_id=%s: %s", row.id, ref_exc)
+
             updated += 1
     if updated:
         await db.commit()
@@ -73,19 +98,19 @@ def _fetch_returns_sync(ticker: str, trade_date: str, holding_days: int = HOLDIN
 async def get_analyst_attribution_stats(db) -> dict:
     from sqlalchemy import select
     from backend.models.analysis import AnalysisResult
+    from backend.trading_agents.agents.analyst_registry import get_report_fields
+    
     q = select(AnalysisResult).where(AnalysisResult.raw_return.isnot(None))
     result = await db.execute(q)
     rows = result.scalars().all()
+    
+    # Dynamically build analyst map from registry
+    report_fields = get_report_fields()
     analysts = {
-        "market": {"label": "Market Analyst", "report_field": "market_report"},
-        "social": {"label": "Sentiment Analyst", "report_field": "sentiment_report"},
-        "news": {"label": "News Analyst", "report_field": "news_report"},
-        "fundamentals": {"label": "Fundamentals Analyst", "report_field": "fundamentals_report"},
-        "macro": {"label": "Macro Analyst", "report_field": "macro_report"},
-        "options": {"label": "Options Analyst", "report_field": "options_report"},
-        "quant": {"label": "Quant Analyst", "report_field": "quant_report"},
-        "earnings": {"label": "Earnings Analyst", "report_field": "earnings_report"},
+        rf.replace("_report", ""): {"label": label, "report_field": rf}
+        for rf, label in report_fields.items()
     }
+    
     stats = {
         k: {"key": k, "label": val["label"], "total_predictions": 0, "correct_predictions": 0, "win_rate": 50.0}
         for k, val in analysts.items()

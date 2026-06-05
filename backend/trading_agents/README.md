@@ -199,7 +199,6 @@ The system uses [llm_clients/](llm_clients) to abstract away API differences. It
 - **DeepSeek:** Native API support (`deepseek-chat`, `deepseek-reasoner`).
 - **xAI Grok:** Grok API endpoint.
 - **Ollama:** Enables running local models (like `llama3`, `mistral`, or `qwen`) for local development without API costs.
-- **Azure OpenAI:** Enterprise private endpoints.
 
 ---
 

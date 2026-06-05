@@ -10,7 +10,6 @@ from langgraph.prebuilt import ToolNode
 from backend.trading_agents.llm_clients import create_llm_client
 from backend.trading_agents.agents import *
 from backend.trading_agents.default_config import DEFAULT_CONFIG
-from backend.trading_agents.agents.runtime.memory import TradingMemoryLog
 from backend.trading_agents.dataflows.utils import safe_ticker_component
 from backend.trading_agents.agents.runtime.agent_states import (
     AgentState,
@@ -82,7 +81,6 @@ class TradingAgentsGraph:
         client = create_llm_client(
             provider=main_prov,
             model=main_model,
-            base_url=self.config.get("backend_url"),
             **main_kwargs,
         )
         self.thinking_llm = client.get_llm()
@@ -98,7 +96,6 @@ class TradingAgentsGraph:
             c = create_llm_client(
                 provider=prov_lower,
                 model=model,
-                base_url=self.config.get("backend_url"),
                 **kwargs,
             )
             return c.get_llm()
@@ -133,7 +130,6 @@ class TradingAgentsGraph:
                 sorted(skipped),
             )
 
-        self.memory_log = TradingMemoryLog(self.config)
         self.tool_nodes = self._create_tool_nodes()
         self.conditional_logic = ConditionalLogic(
             max_debate_rounds=self.config["max_debate_rounds"],
@@ -174,10 +170,6 @@ class TradingAgentsGraph:
             effort = self.config.get("anthropic_effort")
             if effort:
                 kwargs["effort"] = effort
-        elif prov_lower == "azure":
-            azure_deployment = self.config.get("azure_deployment_name") or self.config.get("azure_deployment")
-            if azure_deployment:
-                kwargs["azure_deployment"] = azure_deployment
         user_keys = self.config.get("user_api_keys") or {}
         user_key = user_keys.get(prov_lower)
         if user_key:
@@ -292,34 +284,6 @@ class TradingAgentsGraph:
                 ticker, trade_date, benchmark, e,
             )
             return None, None, None
-    def _resolve_pending_entries(self, ticker: str) -> None:
-        pending = [e for e in self.memory_log.get_pending_entries() if e["ticker"] == ticker]
-        if not pending:
-            return
-        benchmark = self._resolve_benchmark(ticker)
-        updates = []
-        for entry in pending:
-            raw, alpha, days = self._fetch_returns(
-                ticker, entry["date"], benchmark=benchmark,
-            )
-            if raw is None:
-                continue
-            reflection = self.reflector.reflect_on_final_decision(
-                final_decision=entry.get("decision", ""),
-                raw_return=raw,
-                alpha_return=alpha,
-                benchmark_name=benchmark,
-            )
-            updates.append({
-                "ticker": ticker,
-                "trade_date": entry["date"],
-                "raw_return": raw,
-                "alpha_return": alpha,
-                "holding_days": days,
-                "reflection": reflection,
-            })
-        if updates:
-            self.memory_log.batch_update_with_outcomes(updates)
     def propagate(self, company_name, trade_date, asset_type: str = "stock"):
         self.ticker = company_name
         self.custom_indicators = []
@@ -329,7 +293,6 @@ class TradingAgentsGraph:
             "custom_indicators": self.custom_indicators,
             "visual_annotations": self.visual_annotations
         })
-        self._resolve_pending_entries(company_name)
         self._checkpointer_ctx = get_checkpointer(
             self.config["data_cache_dir"], company_name
         )
@@ -353,10 +316,7 @@ class TradingAgentsGraph:
                 self._checkpointer_ctx = None
                 self.graph = self.workflow.compile()
     def _run_graph(self, company_name, trade_date, asset_type: str = "stock"):
-        past_context = self.memory_log.get_past_context(company_name)
-        historical_context = self.config.get("historical_context", "")
-        if historical_context:
-            past_context = f"{past_context}\n\n{historical_context}" if past_context else historical_context
+        past_context = self.config.get("historical_context", "")
         init_agent_state = self.propagator.create_initial_state(
             company_name, trade_date, asset_type=asset_type, past_context=past_context
         )
@@ -378,11 +338,6 @@ class TradingAgentsGraph:
             final_state = self.graph.invoke(init_agent_state, **args)
         self.curr_state = final_state
         self._log_state(trade_date, final_state)
-        self.memory_log.store_decision(
-            ticker=company_name,
-            trade_date=trade_date,
-            final_trade_decision=final_state["final_trade_decision"],
-        )
         clear_checkpoint(
             self.config["data_cache_dir"], company_name, str(trade_date)
         )
@@ -424,7 +379,7 @@ class TradingAgentsGraph:
             "investment_plan": final_state["investment_plan"],
             "final_trade_decision": final_state["final_trade_decision"],
         }
-        if self.config.get("skip_disk_log"):
+        if self.config.get("skip_disk_log", True):
             return
         safe_ticker = safe_ticker_component(self.ticker)
         directory = Path(self.config["results_dir"]) / safe_ticker / "TradingAgentsStrategy_logs"
@@ -448,7 +403,6 @@ class TradingAgentsGraph:
             "custom_indicators": self.custom_indicators,
             "visual_annotations": self.visual_annotations
         })
-        await self._async_resolve_pending_entries(company_name)
         self._checkpointer_ctx = get_checkpointer(
             self.config["data_cache_dir"], company_name
         )
@@ -470,10 +424,7 @@ class TradingAgentsGraph:
         stream_observer: Optional[Callable[[str, Dict[str, Any]], Awaitable[None]]] = None,
     ):
         import asyncio
-        past_context = self.memory_log.get_past_context(company_name)
-        historical_context = self.config.get("historical_context", "")
-        if historical_context:
-            past_context = f"{past_context}\n\n{historical_context}" if past_context else historical_context
+        past_context = self.config.get("historical_context", "")
         init_state = self.propagator.create_initial_state(
             company_name, trade_date, asset_type=asset_type, past_context=past_context
         )
@@ -503,45 +454,9 @@ class TradingAgentsGraph:
                 final_state = await self.graph.ainvoke(init_state, **args)
         self.curr_state = final_state
         await asyncio.to_thread(self._log_state, trade_date, final_state)
-        await asyncio.to_thread(
-            self.memory_log.store_decision,
-            company_name,
-            trade_date,
-            final_state["final_trade_decision"],
-        )
         clear_checkpoint(
             self.config["data_cache_dir"], company_name, str(trade_date)
         )
         return final_state, self.process_signal(final_state["final_trade_decision"])
-    async def _async_resolve_pending_entries(self, ticker: str) -> None:
-        import asyncio
-        pending = [e for e in self.memory_log.get_pending_entries() if e["ticker"] == ticker]
-        if not pending:
-            return
-        benchmark = self._resolve_benchmark(ticker)
-        updates = []
-        for entry in pending:
-            raw, alpha, days = await asyncio.to_thread(
-                self._fetch_returns, ticker, entry["date"], benchmark=benchmark
-            )
-            if raw is None:
-                continue
-            reflection = await asyncio.to_thread(
-                self.reflector.reflect_on_final_decision,
-                final_decision=entry.get("decision", ""),
-                raw_return=raw,
-                alpha_return=alpha,
-                benchmark_name=benchmark,
-            )
-            updates.append({
-                "ticker": ticker,
-                "trade_date": entry["date"],
-                "raw_return": raw,
-                "alpha_return": alpha,
-                "holding_days": days,
-                "reflection": reflection,
-            })
-        if updates:
-            await asyncio.to_thread(self.memory_log.batch_update_with_outcomes, updates)
     def process_signal(self, full_signal):
         return self.signal_processor.process_signal(full_signal)

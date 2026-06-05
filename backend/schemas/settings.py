@@ -8,13 +8,11 @@ class SettingsRead(BaseModel):
     price_tolerance_pct: float
     watchlist: list[str]
     selected_analysts: list[str]
-    backend_url: str | None = None
     output_language: str = "English"
     investor_persona: str = "conservative"
     analyst_concurrency_limit: int = 1
     max_recur_limit: int = 1000
     benchmark_ticker: str | None = None
-    azure_deployment: str | None = None
     max_debate_rounds: int
     max_risk_rounds: int
     max_position_size_pct: float
@@ -44,13 +42,11 @@ class SettingsUpdate(BaseModel):
     price_tolerance_pct: float | None = Field(default=None, ge=0, le=50)
     watchlist: list[str] | None = None
     selected_analysts: list[str] | None = None
-    backend_url: str | None = None
     output_language: str | None = None
     investor_persona: str | None = None
     analyst_concurrency_limit: int | None = Field(default=None, ge=1, le=16)
     max_recur_limit: int | None = Field(default=None, ge=100, le=5000)
     benchmark_ticker: str | None = None
-    azure_deployment: str | None = None
     max_debate_rounds: int | None = Field(default=None, ge=1, le=10)
     max_risk_rounds: int | None = Field(default=None, ge=1, le=10)
     max_position_size_pct: float | None = Field(default=None, ge=1, le=100)

@@ -99,7 +99,6 @@ PROVIDER_LABELS: dict[str, str] = {
     "ollama": "Ollama (Local)",
     "nvidia": "NVIDIA NIM",
     "litellm": "LiteLLM Proxy",
-    "azure": "Azure OpenAI",
 }
 def investor_personas() -> list[dict]:
     from backend.trading_agents.personas import list_personas

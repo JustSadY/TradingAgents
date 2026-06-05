@@ -16,17 +16,8 @@ def create_auditor_node(llm):
         investment_debate_state = state["investment_debate_state"]
         debate_history = investment_debate_state.get("history", "")
         
-        report_fields = {
-            "market_report": "Market Research Report",
-            "sentiment_report": "Social Media Sentiment Report",
-            "news_report": "Latest World Affairs News",
-            "fundamentals_report": "Fundamentals Report",
-            "macro_report": "Macroeconomic Indicators Report",
-            "options_report": "Options Market Derivatives Report",
-            "quant_report": "Quantitative Metrics Report",
-            "earnings_report": "Corporate Guidance & Earnings Report",
-            "review_report": "Hindsight Performance Review Report",
-        }
+        from backend.trading_agents.agents.analyst_registry import get_report_fields
+        report_fields = get_report_fields()
         
         resources = []
         for field, label in report_fields.items():

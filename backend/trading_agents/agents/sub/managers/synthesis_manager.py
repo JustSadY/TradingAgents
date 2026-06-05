@@ -24,17 +24,8 @@ def create_synthesis_manager(llm):
         macd_results = run_strategy_backtest.invoke(macd_args)
         rsi_results = run_strategy_backtest.invoke(rsi_args)
         
-        report_fields = {
-            "market_report": "Market Research Report",
-            "sentiment_report": "Social Media Sentiment Report",
-            "news_report": "Latest World Affairs News",
-            "fundamentals_report": "Fundamentals Report",
-            "macro_report": "Macroeconomic Indicators Report",
-            "options_report": "Options Market Derivatives Report",
-            "quant_report": "Quantitative Metrics Report",
-            "earnings_report": "Corporate Guidance & Earnings Report",
-            "review_report": "Hindsight Performance Review Report",
-        }
+        from backend.trading_agents.agents.analyst_registry import get_report_fields
+        report_fields = get_report_fields()
         
         resources = []
         for field, label in report_fields.items():
