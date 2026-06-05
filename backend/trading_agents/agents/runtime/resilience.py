@@ -33,32 +33,6 @@ _TRANSIENT_HINTS = (
 )
 
 
-NODE_TO_AGENT_KEY = {
-    # Orchestrator Managers
-    "Bull Researcher": "bull_researcher",
-    "Bear Researcher": "bear_researcher",
-    "Synthesis Manager": "synthesis_manager",
-    "Auditor": "auditor",
-    "Research Manager": "research_manager",
-    "Trader": "trader",
-    "Aggressive Analyst": "risk_debate",
-    "Neutral Analyst": "risk_debate",
-    "Conservative Analyst": "risk_debate",
-    "Portfolio Manager": "portfolio_manager",
-    
-    # Data Analysts
-    "Market Analyst": "market",
-    "Sentiment Analyst": "social",
-    "News Analyst": "news",
-    "Fundamentals Analyst": "fundamentals",
-    "Macro Analyst": "macro",
-    "Options Analyst": "options",
-    "Quant Analyst": "quant",
-    "Earnings Analyst": "earnings",
-    "Performance Review Analyst": "review",
-}
-
-
 def _cfg(key: str, default):
     try:
         from backend.trading_agents.dataflows.config import get_config
@@ -139,14 +113,11 @@ def guard_node(
 
     def wrapped(state, *args, **kwargs):
         start = time.time()
-        agent_key = NODE_TO_AGENT_KEY.get(name)
-        if agent_key:
-            agent_ctx = _cfg("runtime_agent_context", {}).get(agent_key)
-            if agent_ctx and agent_ctx.get("enabled") is False:
-                log_event("node_disabled", node=name, kind=kind)
-                if fallback is not None:
-                    return fallback(state, RuntimeError(f"Agent '{name}' is disabled."))
-                return {}
+        # NOTE: the enable/disable kill-switch is owned by the AgentHierarchy and
+        # enforced inside each Main Agent node (and by Market Intelligence when it
+        # selects analyst sub-agents). guard_node intentionally does NOT re-check
+        # enablement here — that would short-circuit before the cascade-aware
+        # hierarchy logic runs and emit a different, less complete stub.
         log_event("node_start", node=name, kind=kind)
         try:
             result = retry_call(lambda: fn(state, *args, **kwargs), label=f"{kind}:{name}")
