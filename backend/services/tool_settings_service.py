@@ -87,18 +87,11 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
     )
     user_rows = {row.tool_key: row for row in result.scalars().all()}
 
-    # Also load tool access, agent access and settings
-    
+    # Also load tool access and agent settings
     tool_access_map = await get_user_tool_access(db, user.id)
-    agent_access_map = await get_user_agent_access(db, user.id)
     
-    settings_obj = await get_or_create_settings(db, user)
-    selected_analysts = settings_obj.selected_analysts
-    
-    active_analysts = {
-        a for a in selected_analysts
-        if agent_access_map.get(a, True)
-    }
+    from backend.services.agent_settings_service import build_agent_runtime_context
+    agent_ctx = await build_agent_runtime_context(db, user.id)
 
     # 2. Build map of all registered tools
     tools_map = {}
@@ -107,9 +100,14 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
             if not tool_access_map.get(tool.key, {}).get("can_view", True):
                 continue
 
-        # Check if any associated agent is active
-        if tool.allowed_analysts and not any(a in active_analysts for a in tool.allowed_analysts):
-            continue
+        # Check if any associated agent is active in the hierarchy
+        if tool.allowed_analysts:
+            is_any_agent_enabled = any(
+                agent_ctx.get(a, {}).get("enabled", True) 
+                for a in tool.allowed_analysts
+            )
+            if not is_any_agent_enabled:
+                continue
 
         # Get defaults
         default_enabled = tool.default_enabled
@@ -159,26 +157,23 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
     )
     user_rows = {row.tool_key: row for row in result.scalars().all()}
 
-    # Also load agent access and settings
-    
-    agent_access_map = await get_user_agent_access(db, user.id)
-    
-    settings_obj = await get_or_create_settings(db, user)
-    selected_analysts = settings_obj.selected_analysts
-    
-    active_analysts = {
-        a for a in selected_analysts
-        if agent_access_map.get(a, True)
-    }
+    # Also load agent settings
+    from backend.services.agent_settings_service import build_agent_runtime_context
+    agent_ctx = await build_agent_runtime_context(db, user.id)
 
     for tool_key, update in body.tools.items():
         tool = registry.get(tool_key)
         if not tool:
             raise ValueError(f"Unknown tool key '{tool_key}'.")
 
-        # Check if any associated agent is active
-        if tool.allowed_analysts and not any(a in active_analysts for a in tool.allowed_analysts):
-            raise ValueError(f"Tool '{tool_key}' is not available because none of its associated agents are enabled.")
+        # Check if any associated agent is active in the hierarchy
+        if tool.allowed_analysts:
+            is_any_agent_enabled = any(
+                agent_ctx.get(a, {}).get("enabled", True) 
+                for a in tool.allowed_analysts
+            )
+            if not is_any_agent_enabled:
+                raise ValueError(f"Tool '{tool_key}' is not available because none of its associated agents are enabled.")
 
         row = user_rows.get(tool_key)
         if not row:
