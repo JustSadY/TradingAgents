@@ -2,7 +2,7 @@ import time
 import logging
 import pandas as pd
 import yfinance as yf
-from .interface import APICache
+from .cache import APICache
 from yfinance.exceptions import YFRateLimitError
 from stockstats import wrap
 from typing import Annotated
