@@ -9,6 +9,7 @@ class AgentSettingField:
     type: str  # "boolean", "number", "string", "textarea", "select"
     label_key: str
     description_key: str | None = None
+    placeholder_key: str | None = None
     default: Any = None
     required: bool = False
     min: float | None = None
@@ -41,6 +42,7 @@ class AgentInfo:
                     "type": field.type,
                     "label_key": field.label_key,
                     "description_key": field.description_key,
+                    "placeholder_key": field.placeholder_key,
                     "default": field.default,
                     "required": field.required,
                     "min": field.min,
@@ -60,9 +62,10 @@ def get_standard_agent_settings() -> list[AgentSettingField]:
             type="select",
             label_key="LLM Provider",
             description_key="Select the LLM provider for this agent",
-            default="openai",
-            required=True,
+            default="",
+            required=False,
             options=[
+                {"value": "", "label_key": "settings.analyst_default_provider"},
                 {"value": "openai", "label_key": "OpenAI"},
                 {"value": "anthropic", "label_key": "Anthropic (Claude)"},
                 {"value": "google", "label_key": "Google (Gemini)"},
@@ -82,8 +85,9 @@ def get_standard_agent_settings() -> list[AgentSettingField]:
             type="string",
             label_key="Model Name",
             description_key="Specify the model name (e.g. gpt-4o-mini or claude-3-5-sonnet)",
-            default="gpt-4o-mini",
-            required=True,
+            placeholder_key="settings.analyst_default_model",
+            default="",
+            required=False,
         ),
         AgentSettingField(
             key="temperature",

@@ -195,7 +195,7 @@ To implement and register a new tool in the modular system, follow these steps:
 The system uses [llm_clients/](llm_clients) to abstract away API differences. It supports:
 - **OpenAI:** `gpt-4o`, `o1`, `o3-mini`, etc. (Supports structured Pydantic output parsing).
 - **Anthropic Claude:** `claude-3-5-sonnet-latest`.
-- **Google Gemini:** `gemini-2.0-flash`, `gemini-2.5-pro` via native google SDK.
+- **Google Gemini:** `gemini-1.5-pro`, `gemini-2.0-flash` via native google SDK.
 - **DeepSeek:** Native API support (`deepseek-chat`, `deepseek-reasoner`).
 - **xAI Grok:** Grok API endpoint.
 - **Ollama:** Enables running local models (like `llama3`, `mistral`, or `qwen`) for local development without API costs.

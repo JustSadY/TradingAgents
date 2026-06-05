@@ -112,10 +112,7 @@ import engine modules lazily inside functions (they pull heavy deps).
 
 ## 5. Conventions & gotchas (read before changing infra)
 
-- **No Alembic.** Migrations are additive only, applied on startup:
-  `core/migrations.apply_column_migrations` (`ADD COLUMN IF NOT EXISTS`) and
-  `apply_type_migrations` (float→`NUMERIC(20,8)` for money columns on Postgres).
-  Renames / drops / non-additive type changes must be done with manual SQL.
+- **No active Alembic workflow.** Migrations are additive only, applied on startup via `core/migrations.apply_column_migrations` (`ADD COLUMN IF NOT EXISTS`) and `apply_type_migrations` (float→`NUMERIC(20,8)` for money columns on Postgres). While `alembic` is present in the environment for potential future migration paths or baseline checks, it is not used for day-to-day schema changes. Renames / drops / non-additive type changes must be done with manual SQL.
 - **Money columns use `MONEY = Numeric(20, 8, asdecimal=True)`** (from
   `core.database`): exact decimal storage, and Python values are processed as `Decimal`
   to avoid rounding errors. End-to-end calculation and schema conversions are fully

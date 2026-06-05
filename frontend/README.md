@@ -1,6 +1,6 @@
 # 🎨 TradingAgents Frontend
 
-A modern, high-fidelity investment decision-making dashboard built with **React**, **TypeScript**, **Tailwind CSS**, and **Vite**. It features a glassmorphic dark-themed layout, interactive charts, and real-time streaming of multi-agent execution steps and generated reports over WebSockets.
+A modern, high-fidelity investment decision-making dashboard built with **React 19**, **TypeScript**, **Tailwind CSS 4**, and **Vite 6**. It features a glassmorphic dark-themed layout, interactive charts, and real-time streaming of multi-agent execution steps and generated reports over WebSockets.
 
 ---
 

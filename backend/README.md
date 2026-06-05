@@ -66,7 +66,7 @@ backend/
 
 *   **FastAPI:** Modern, asynchronous web framework for Python. Provides interactive API documentation out-of-the-box (Swagger UI at `/docs`).
 *   **SQLAlchemy Async:** Async IO ORM targeting PostgreSQL via `asyncpg`.
-*   **Schema management:** On startup the app calls `Base.metadata.create_all` and then a small **additive, idempotent column migrator** ([core/migrations.py](core/migrations.py)) that issues `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for any newly added model columns. There is **no Alembic** in use — model changes that only *add* columns are picked up automatically; destructive changes (renames/drops/type changes) must be applied manually.
+*   **Schema management:** On startup the app calls `Base.metadata.create_all` and then a small **additive, idempotent column migrator** ([core/migrations.py](core/migrations.py)) that issues `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for any newly added model columns. While `alembic` is included in the dependencies for future-proofing and baseline checks, there is **no active Alembic migration workflow** in use — model changes that only *add* columns are picked up automatically; destructive changes (renames/drops/type changes) must be applied manually.
 *   **APScheduler:** In-process, cron-like job scheduler for background analyses.
 *   **WebSockets:** Dynamic progress updates streaming for long-running agent workflows.
 

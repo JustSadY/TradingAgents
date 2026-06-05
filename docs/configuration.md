@@ -63,7 +63,7 @@ Supported providers (set their keys in the Web UI):
 ```text
 OPENAI      — GPT models (gpt-4o, o1, o3-mini)
 ANTHROPIC   — Claude models (claude-sonnet / opus)
-GOOGLE      — Gemini models (gemini-2.0/2.5-flash, pro)
+GOOGLE      — Gemini models (gemini-1.5/2.0-flash, pro)
 XAI         — Grok models
 DEEPSEEK    — DeepSeek V3 / R1 models
 OPENROUTER  — Alternative multi-provider routing gateway

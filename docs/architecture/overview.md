@@ -89,7 +89,7 @@ The source code is organized into three major system boundaries:
 This is a cohesive AI subsystem that lives inside the backend and is imported as the `backend.trading_agents` sub-package:
 *   `agents/`: Outlines the prompt templates, system instructions, and schema formats for analysts (technical indicators, news, fundamentals, sentiment, options, macro, quantitative, review, earnings) and managers (research manager, portfolio manager, trader, and debate risk managers). Organized into sub-agents under `sub/` (analysts, managers, researchers, risk_mgmt, trader), execution runtime helpers under `runtime/`, tool data handlers under `data/`, and general utilities under `utils/`. *Features specialized modules for Investor Personas, Patent & Research evaluation, Short Squeeze analysis, and Supply Chain risk mappings.*
 *   `graph/`: Houses the state machine architecture (`trading_graph.py`), graph conditional logic (`conditional_logic.py`), propagation configurations, and SQLite checkpoint database connectors. *Streams intermediate debate dialogs directly to the WebSocket and incorporates dynamic performance weightings for each analyst.*
-*   `llm_clients/`: Handles the connections, token usage callback handlers, and specific provider thinking levels (reasoning effort metrics for OpenAI o1/o3, Gemini thinking, and Claude effort configurations).
+*   `llm_clients/`: Handles the connections, token usage callback handlers, and specific provider thinking levels (reasoning effort metrics for OpenAI o1/o3, Gemini thinking, and Claude effort configurations). Supported Gemini models include 1.5 Pro/Flash and 2.0 Flash.
 
 ### C. The Frontend Dashboard UI (`frontend/`)
 *   A responsive dashboard built with React, TypeScript, and Vite.

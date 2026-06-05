@@ -13,6 +13,7 @@ interface FieldSchema {
   type: 'select' | 'string' | 'number' | 'textarea' | 'boolean'
   label_key: string
   description_key?: string
+  placeholder_key?: string
   default: any
   required: boolean
   min?: number
@@ -104,7 +105,7 @@ function AgentSettingsFields({
         return (
           <div key={field.key} className="space-y-1">
             <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block">
-              {field.label_key}
+              {t(field.label_key)}
             </label>
 
             {field.type === 'select' && (
@@ -116,7 +117,7 @@ function AgentSettingsFields({
               >
                 {field.options?.map(opt => (
                   <option key={opt.value} value={opt.value}>
-                    {opt.label_key}
+                    {t(opt.label_key)}
                   </option>
                 ))}
               </select>
@@ -128,6 +129,7 @@ function AgentSettingsFields({
                 className={InputCls}
                 value={val ?? ''}
                 disabled={disabled}
+                placeholder={field.placeholder_key ? t(field.placeholder_key) : ''}
                 onChange={e => onFieldChange(field.key, e.target.value)}
               />
             )}
@@ -164,6 +166,7 @@ function AgentSettingsFields({
                 className={`${InputCls} h-16 resize-none`}
                 value={val ?? ''}
                 disabled={disabled}
+                placeholder={field.placeholder_key ? t(field.placeholder_key) : ''}
                 onChange={e => onFieldChange(field.key, e.target.value)}
               />
             )}
