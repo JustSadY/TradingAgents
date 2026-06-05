@@ -1,6 +1,8 @@
 import json
 import logging
+
 _logger = logging.getLogger(__name__)
+
 _SYSTEM_PROMPT_EN = """You are a financial analyst assistant. Extract numerical price levels from the provided analysis report and respond ONLY in the following JSON format, do not write anything else:
 {
   "support_levels": [number, number],
@@ -18,23 +20,13 @@ Rules:
 - key_levels: list technical levels like moving average, Bollinger bands, etc. (max 4).
 - Use only numerical values explicitly mentioned in the report, do not estimate or extrapolate."""
 
-_SYSTEM_PROMPT_TR = """Sen bir finansal analist asistanısın. Sana verilen analiz raporundan
-sayısal fiyat seviyelerini çıkar ve YALNIZCA aşağıdaki JSON formatında yanıtla, başka hiçbir şey yazma:
-{
-  "support_levels": [sayı, sayı],
-  "resistance_levels": [sayı, sayı],
-  "target_price": sayı_veya_null,
-  "stop_loss": sayı_veya_null,
-  "key_levels": [
-    {"price": sayı, "label": "kısa_açıklama", "type": "ma|indicator|other"}
-  ]
+# Language-specific instruction prefixes injected before _SYSTEM_PROMPT_EN.
+# To add a new language, add a single entry here — no need to duplicate the
+# full prompt. Keys are lower-cased language identifiers.
+_LANG_PREFIXES: dict[str, str] = {
+    "turkish": "Please respond in Turkish.\n\n",
+    "türkçe":  "Lütfen Türkçe yanıtla.\n\n",
 }
-Kurallar:
-- En fazla 2-3 destek ve direnç seviyesi çıkar
-- Fiyatlar yuvarlanmış olabilir — tam sayıya yakın değerleri temiz göster
-- Belirsiz veya olmayan değerler için null kullan
-- key_levels: hareketli ortalama, Bollinger bandı gibi teknik seviyeleri listele (maks 4 adet)
-- Yalnızca raporda açıkça geçen sayısal değerleri kullan, tahmin etme"""
 
 async def extract_chart_annotations(
     market_report: str,
@@ -46,8 +38,8 @@ async def extract_chart_annotations(
         return {}
     
     lang = (output_language or "English").strip().lower()
-    is_tr = lang in ("turkish", "türkçe")
-    system_prompt = _SYSTEM_PROMPT_TR if is_tr else _SYSTEM_PROMPT_EN
+    prefix = _LANG_PREFIXES.get(lang, "")
+    system_prompt = prefix + _SYSTEM_PROMPT_EN
 
     text = f"PIYASA RAPORU:\n{market_report[:2000]}\n\nSON KARAR:\n{final_decision[:1000]}"
     try:

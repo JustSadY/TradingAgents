@@ -1,14 +1,15 @@
 import logging
-import yfinance as yf
 import pandas as pd
 from langchain_core.tools import tool
+from backend.services.indicator_service import calculate_rsi, calculate_macd
+
 _logger = logging.getLogger(__name__)
+
 @tool
 def run_strategy_backtest(ticker: str, strategy_type: str, curr_date: str | None = None) -> str:
     """Run a strategy backtest (e.g. macd_crossover, rsi_oversold) for a stock ticker up to a specific date."""
     try:
         from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
-        import pandas as pd
         if not curr_date:
             curr_date = pd.Timestamp.today().strftime("%Y-%m-%d")
         data = load_ohlcv(ticker, curr_date)
@@ -19,10 +20,7 @@ def run_strategy_backtest(ticker: str, strategy_type: str, curr_date: str | None
         in_position = False
         buy_price = 0
         if strategy_type == 'macd_crossover':
-            exp1 = close.ewm(span=12, adjust=False).mean()
-            exp2 = close.ewm(span=26, adjust=False).mean()
-            macd = exp1 - exp2
-            signal = macd.ewm(span=9, adjust=False).mean()
+            macd, signal = calculate_macd(close)
             for i in range(1, len(close)):
                 if macd.iloc[i] > signal.iloc[i] and macd.iloc[i-1] <= signal.iloc[i-1] and not in_position:
                     buy_price = close.iloc[i]
@@ -32,11 +30,7 @@ def run_strategy_backtest(ticker: str, strategy_type: str, curr_date: str | None
                     trades.append((sell_price - buy_price) / buy_price)
                     in_position = False
         elif strategy_type == 'rsi_oversold':
-            delta = close.diff()
-            gain = (delta.where(delta > 0, 0)).rolling(window=14).mean()
-            loss = (-delta.where(delta < 0, 0)).rolling(window=14).mean()
-            rs = gain / loss
-            rsi = 100 - (100 / (1 + rs))
+            rsi = calculate_rsi(close)
             for i in range(14, len(close)):
                 if rsi.iloc[i] < 30 and not in_position:
                     buy_price = close.iloc[i]

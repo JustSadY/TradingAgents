@@ -1,9 +1,12 @@
 import logging
 from datetime import date, datetime, timedelta, timezone
+from backend.core.utils import resolve_benchmark
+
 _logger = logging.getLogger(__name__)
 _BUY_SIGNALS = {"Buy", "Overweight"}
 _SELL_SIGNALS = {"Sell", "Underweight"}
 HOLDING_DAYS = 5
+
 async def backfill_returns(db) -> int:
     from sqlalchemy import select
     from backend.models.analysis import AnalysisResult
@@ -21,34 +24,20 @@ async def backfill_returns(db) -> int:
     rows = result.scalars().all()
     updated = 0
     config = get_config()
-    benchmark_map = config.get("benchmark_map", {})
 
     for row in rows:
-        benchmark_ticker = None
+        row_config = dict(config)
         if row.user_id:
             res_settings = await db.execute(
                 select(AppSettings).where(AppSettings.user_id == row.user_id)
             )
             settings_obj = res_settings.scalar_one_or_none()
             if settings_obj:
-                benchmark_ticker = getattr(settings_obj, "benchmark_ticker", None)
+                bt = getattr(settings_obj, "benchmark_ticker", None)
+                if bt:
+                    row_config["benchmark_ticker"] = bt
 
-        if not benchmark_ticker:
-            benchmark_ticker = config.get("benchmark_ticker")
-
-        benchmark = "SPY"
-        if benchmark_ticker:
-            benchmark = benchmark_ticker
-        else:
-            ticker_upper = row.ticker.upper()
-            found = False
-            for suffix, b in benchmark_map.items():
-                if suffix and ticker_upper.endswith(suffix.upper()):
-                    benchmark = b
-                    found = True
-                    break
-            if not found:
-                benchmark = benchmark_map.get("", "SPY")
+        benchmark = resolve_benchmark(row.ticker, row_config)
 
         raw, alpha, days = await _fetch_returns_async(row.ticker, row.trade_date, benchmark=benchmark)
         if raw is not None:
@@ -60,6 +49,7 @@ async def backfill_returns(db) -> int:
         await db.commit()
     _logger.info("Performance backfill: updated %d rows with custom benchmarks", updated)
     return updated
+
 async def _fetch_returns_async(ticker: str, trade_date: str, holding_days: int = HOLDING_DAYS, benchmark: str = "SPY"):
     import asyncio
     return await asyncio.to_thread(_fetch_returns_sync, ticker, trade_date, holding_days, benchmark)

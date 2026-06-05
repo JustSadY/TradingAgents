@@ -5,13 +5,46 @@ import numpy as np
 
 _logger = logging.getLogger(__name__)
 
-def calculate_rsi(prices, period=14):
+def calculate_rsi(prices: "pd.Series", period: int = 14) -> "pd.Series":
+    """Compute RSI using Wilder's smoothed-average method.
+
+    Uses ``clip()`` with a small epsilon to avoid division-by-zero on
+    perfectly trending series. This is the canonical RSI implementation
+    for the codebase — ``backtest_tools.py`` and ``indicator_service.py``
+    both delegate here instead of duplicating the formula.
+    """
     delta = prices.diff()
-    # Simple moving average of gains/losses for RSI
     gain = (delta.clip(lower=0)).rolling(window=period).mean()
     loss = (-1 * delta.clip(upper=0)).rolling(window=period).mean()
     rs = gain / (loss + 1e-9)
     return 100 - (100 / (1 + rs))
+
+
+def calculate_ema(prices: "pd.Series", span: int) -> "pd.Series":
+    """Compute exponential moving average with ``adjust=False`` (Wilder/standard style)."""
+    return prices.ewm(span=span, adjust=False).mean()
+
+
+def calculate_macd(
+    prices: "pd.Series",
+    fast: int = 12,
+    slow: int = 26,
+    signal: int = 9,
+) -> "tuple[pd.Series, pd.Series]":
+    """Compute MACD line and signal line.
+
+    Returns:
+        (macd_line, signal_line) — both are ``pd.Series`` aligned to *prices*.
+
+    This is the canonical MACD implementation for the codebase — replaces
+    the inline EWM calculations that were previously duplicated in
+    ``backtest_tools.py``.
+    """
+    ema_fast = calculate_ema(prices, fast)
+    ema_slow = calculate_ema(prices, slow)
+    macd_line = ema_fast - ema_slow
+    signal_line = calculate_ema(macd_line, signal)
+    return macd_line, signal_line
 
 def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
     """

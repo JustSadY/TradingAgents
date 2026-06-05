@@ -11,17 +11,21 @@ from backend.models.order import Order
 
 _logger = logging.getLogger(__name__)
 
+# Default simulation commission rate (0.1%). Named constant for clarity and future
+# configurability (e.g. reading from SystemSettings).
+_DEFAULT_COMMISSION_RATE = Decimal("0.001")
+
 
 async def _get_price(ticker: str) -> Optional[float]:
+    """Fetch live price for a single ticker. Falls back to history if .info is unavailable."""
     import yfinance as yf
     def _fetch():
         try:
-            info = yf.Ticker(ticker).info
-            price = info.get("currentPrice")
+            t = yf.Ticker(ticker)  # single instantiation
+            info = t.info
+            price = info.get("currentPrice") or info.get("regularMarketPrice")
             if price is None:
-                price = info.get("regularMarketPrice")
-            if price is None:
-                hist = yf.Ticker(ticker).history(period="1d")
+                hist = t.history(period="1d")  # reuse same instance
                 if not hist.empty:
                     price = float(hist["Close"].iloc[-1])
             return float(price) if price is not None else None
@@ -31,18 +35,69 @@ async def _get_price(ticker: str) -> Optional[float]:
     return await asyncio.to_thread(_fetch)
 
 
+async def _get_prices_batch(tickers: list[str]) -> dict[str, float]:
+    """Fetch live prices for multiple tickers in a single yfinance batch call.
+
+    Replaces the previous N individual ``_get_price`` calls in
+    ``get_portfolio_with_live_prices``, reducing N HTTP round-trips to 1.
+    Falls back to individual ticker fetch for any that are missing from the
+    batch result.
+    """
+    if not tickers:
+        return {}
+    import yfinance as yf
+
+    def _batch_fetch():
+        prices: dict[str, float] = {}
+        unique = list(dict.fromkeys(tickers))  # preserve order, deduplicate
+        try:
+            data = yf.download(
+                unique if len(unique) > 1 else unique[0],
+                period="2d",
+                progress=False,
+                auto_adjust=True,
+            )
+            close = data["Close"] if "Close" in data.columns else data
+            if hasattr(close, "columns"):  # multi-ticker DataFrame
+                last_row = close.ffill().iloc[-1]
+                for t in unique:
+                    try:
+                        prices[t] = float(last_row[t])
+                    except (KeyError, TypeError, ValueError):
+                        pass
+            else:  # single-ticker Series
+                val = float(close.ffill().iloc[-1])
+                prices[unique[0]] = val
+        except Exception as exc:
+            _logger.debug("Batch price fetch failed (%s), will fall back per-ticker: %s", unique, exc)
+        return prices
+
+    prices = await asyncio.to_thread(_batch_fetch)
+    # Fill any missing tickers with individual fallback
+    missing = [t for t in tickers if t not in prices]
+    if missing:
+        fallbacks = await asyncio.gather(*[_get_price(t) for t in missing], return_exceptions=True)
+        for t, p in zip(missing, fallbacks):
+            if isinstance(p, float):
+                prices[t] = p
+    return prices
+
+
 async def get_or_create_sim_portfolio(
     db: AsyncSession,
     initial_capital: float = 100_000.0,
     user=None,
     portfolio_id: Optional[int] = None,
 ) -> Portfolio:
+    user_id = getattr(user, "id", None) if user is not None else None
+    is_admin = getattr(user, "is_admin", False) if user is not None else False
+
     if portfolio_id is not None:
-        result = await db.execute(
-            select(Portfolio)
-            .where(Portfolio.id == portfolio_id)
-            .options(selectinload(Portfolio.holdings))
-        )
+        q = select(Portfolio).where(Portfolio.id == portfolio_id)
+        # IDOR guard: non-admin users can only access their own portfolio.
+        if not is_admin and user_id is not None:
+            q = q.where(Portfolio.user_id == user_id)
+        result = await db.execute(q.options(selectinload(Portfolio.holdings)))
         portfolio = result.scalar_one_or_none()
         if portfolio is not None:
             return portfolio
@@ -77,12 +132,15 @@ async def get_portfolio_with_live_prices(
     user=None,
     portfolio_id: Optional[int] = None,
 ) -> dict:
+    user_id = getattr(user, "id", None) if user is not None else None
+    is_admin = getattr(user, "is_admin", False) if user is not None else False
+
     if portfolio_id is not None:
-        result = await db.execute(
-            select(Portfolio)
-            .where(Portfolio.id == portfolio_id)
-            .options(selectinload(Portfolio.holdings))
-        )
+        q = select(Portfolio).where(Portfolio.id == portfolio_id)
+        # IDOR guard: non-admin users can only access their own portfolio.
+        if not is_admin and user_id is not None:
+            q = q.where(Portfolio.user_id == user_id)
+        result = await db.execute(q.options(selectinload(Portfolio.holdings)))
         portfolio = result.scalar_one_or_none()
     else:
         user_id = getattr(user, "id", None) if user is not None else None
@@ -96,13 +154,9 @@ async def get_portfolio_with_live_prices(
     if portfolio is None:
         portfolio = await get_or_create_sim_portfolio(db, user=user, portfolio_id=portfolio_id)
     tickers = [h.ticker for h in portfolio.holdings]
-    prices = {}
+    prices: dict[str, float] = {}
     if tickers:
-        raw = await asyncio.gather(*[_get_price(t) for t in tickers], return_exceptions=True)
-        prices = {
-            t: p for t, p in zip(tickers, raw)
-            if p is not None and not isinstance(p, BaseException)
-        }
+        prices = await _get_prices_batch(tickers)
     holdings_data = []
     positions_value = Decimal("0.0")
     for h in portfolio.holdings:
@@ -189,7 +243,7 @@ async def execute_order(
     
     portfolio = await get_or_create_sim_portfolio(db, user=user, portfolio_id=portfolio_id)
     total_cost = price * qty_dec
-    commission = (total_cost * Decimal("0.001")).quantize(Decimal("0.0001"))
+    commission = (total_cost * _DEFAULT_COMMISSION_RATE).quantize(Decimal("0.0001"))
     if action == "BUY":
         required = total_cost + commission
         if portfolio.cash_available < required:

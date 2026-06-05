@@ -17,6 +17,12 @@ from backend.services.settings_service import get_or_create_settings
 _logger = logging.getLogger(__name__)
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
 
+# Concurrency limits for background analysis tasks spawned by alerts.
+# Prevents resource exhaustion when many alerts fire simultaneously or
+# when the server recovers after a long outage.
+_RECOVERY_SEMAPHORE = asyncio.Semaphore(3)  # max 3 concurrent startup-recovery analyses
+_ALERT_SEMAPHORE = asyncio.Semaphore(5)     # max 5 concurrent live-alert analyses
+
 
 async def check_price_alerts() -> None:
     async with AsyncSessionLocal() as db:
@@ -44,7 +50,9 @@ async def check_price_alerts() -> None:
                 await notify_alert_triggered(alert.ticker, alert.condition, alert.target_price, settings)
             if alert.auto_analyze:
                 today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                task = asyncio.create_task(_auto_analyze(alert.ticker, today, alert.user_id))
+                task = asyncio.create_task(
+                    _throttled_analyze(alert.ticker, today, alert.user_id, _ALERT_SEMAPHORE)
+                )
                 _BACKGROUND_TASKS.add(task)
                 task.add_done_callback(_BACKGROUND_TASKS.discard)
         await db.commit()
@@ -76,6 +84,12 @@ def _fetch_prices(tickers: list[str]) -> dict[str, float]:
             except Exception:
                 pass
     return prices
+
+
+async def _throttled_analyze(ticker: str, trade_date: str, user_id: int, semaphore: asyncio.Semaphore) -> None:
+    """Acquire *semaphore* before running ``_auto_analyze`` to cap concurrency."""
+    async with semaphore:
+        await _auto_analyze(ticker, trade_date, user_id)
 
 
 async def _auto_analyze(ticker: str, trade_date: str, user_id: int) -> None:
@@ -114,7 +128,12 @@ async def check_and_recover_lost_alerts() -> None:
             )
             analysis = res_analysis.scalar_one_or_none()
             if not analysis:
-                _logger.warning("Recovering lost alert analysis task for %s (triggered at %s)", alert.ticker, trigger_date)
-                task = asyncio.create_task(_auto_analyze(alert.ticker, trigger_date, alert.user_id))
+                _logger.warning(
+                    "Recovering lost alert analysis task for %s (triggered at %s)",
+                    alert.ticker, trigger_date,
+                )
+                task = asyncio.create_task(
+                    _throttled_analyze(alert.ticker, trigger_date, alert.user_id, _RECOVERY_SEMAPHORE)
+                )
                 _BACKGROUND_TASKS.add(task)
                 task.add_done_callback(_BACKGROUND_TASKS.discard)

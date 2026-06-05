@@ -36,7 +36,7 @@ def decode_token(token: str, expected_type: str = "access") -> Optional[str]:
         return username
     except JWTError as exc:
         raise ValueError(f"Invalid token: {exc}") from exc
-def encrypt_secret(value: str) -> str:
-    return get_settings().get_fernet().encrypt(value.encode()).decode()
-def decrypt_secret(value: str) -> str:
-    return get_settings().get_fernet().decrypt(value.encode()).decode()
+
+# NOTE: API key encryption/decryption is handled via AppSettings.get_fernet()
+# in backend/services/user_service.py — do not add encrypt_secret/decrypt_secret
+# helpers here as they duplicate that responsibility.
