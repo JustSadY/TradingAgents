@@ -1,5 +1,5 @@
 import logging
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
 _logger = logging.getLogger(__name__)
 _BUY_SIGNALS = {"Buy", "Overweight"}
 _SELL_SIGNALS = {"Sell", "Underweight"}
@@ -7,7 +7,7 @@ HOLDING_DAYS = 5
 async def backfill_returns(db) -> int:
     from sqlalchemy import select
     from backend.models.analysis import AnalysisResult
-    cutoff = (datetime.utcnow() - timedelta(days=HOLDING_DAYS + 2)).strftime("%Y-%m-%d")
+    cutoff = (datetime.now(timezone.utc) - timedelta(days=HOLDING_DAYS + 2)).strftime("%Y-%m-%d")
     result = await db.execute(
         select(AnalysisResult)
         .where(AnalysisResult.raw_return.is_(None))
@@ -127,18 +127,6 @@ async def get_analyst_attribution_stats(db) -> dict:
             s["weight"] = round(100.0 / len(stats), 1)
     attribution_list = list(stats.values())
     total_runs_evaluated = sum(s["total_predictions"] for s in attribution_list)
-    if total_runs_evaluated == 0:
-        attribution_list = [
-            {"key": "market", "label": "Market Analyst", "total_predictions": 14, "correct_predictions": 10, "win_rate": 71.4, "weight": 14.8},
-            {"key": "social", "label": "Sentiment Analyst", "total_predictions": 12, "correct_predictions": 9, "win_rate": 75.0, "weight": 15.6},
-            {"key": "news", "label": "News Analyst", "total_predictions": 10, "correct_predictions": 6, "win_rate": 60.0, "weight": 12.5},
-            {"key": "fundamentals", "label": "Fundamentals Analyst", "total_predictions": 15, "correct_predictions": 11, "win_rate": 73.3, "weight": 15.2},
-            {"key": "macro", "label": "Macro Analyst", "total_predictions": 8, "correct_predictions": 5, "win_rate": 62.5, "weight": 13.0},
-            {"key": "options", "label": "Options Analyst", "total_predictions": 6, "correct_predictions": 4, "win_rate": 66.7, "weight": 13.9},
-            {"key": "quant", "label": "Quant Analyst", "total_predictions": 5, "correct_predictions": 3, "win_rate": 60.0, "weight": 12.5},
-            {"key": "earnings", "label": "Earnings Analyst", "total_predictions": 4, "correct_predictions": 1, "win_rate": 25.0, "weight": 5.2},
-        ]
-        total_runs_evaluated = 74
     return {
         "attribution": attribution_list,
         "total_evaluated_runs": total_runs_evaluated

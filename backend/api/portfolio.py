@@ -9,6 +9,7 @@ from backend.models.order import Order
 from backend.models.user import User
 from backend.schemas.portfolio import PortfolioRead, HoldingRead, OrderRead
 from backend.api.deps import get_current_user
+from backend.repositories.common import scope_to_user
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
@@ -19,8 +20,7 @@ async def list_portfolios(
     current_user: User = Depends(get_current_user),
 ):
     q = select(Portfolio).options(selectinload(Portfolio.holdings))
-    if not current_user.is_admin:
-        q = q.where(Portfolio.user_id == current_user.id)
+    q = scope_to_user(q, Portfolio, current_user)
     result = await db.execute(q)
     return result.scalars().all()
 
@@ -32,8 +32,7 @@ async def list_holdings(
     current_user: User = Depends(get_current_user),
 ):
     q = select(Holding).join(Portfolio)
-    if not current_user.is_admin:
-        q = q.where(Portfolio.user_id == current_user.id)
+    q = scope_to_user(q, Portfolio, current_user)
     if mode:
         q = q.where(Portfolio.mode == mode)
     result = await db.execute(q)
@@ -51,7 +50,8 @@ async def list_orders(
 ):
     q = select(Order).order_by(desc(Order.created_at)).limit(limit).offset(offset)
     if not current_user.is_admin:
-        q = q.join(Portfolio).where(Portfolio.user_id == current_user.id)
+        q = q.join(Portfolio)
+    q = scope_to_user(q, Portfolio, current_user)
     if mode:
         q = q.where(Order.mode == mode)
     if ticker:

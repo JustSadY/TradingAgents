@@ -25,7 +25,22 @@ async def _get_price(ticker: str) -> Optional[float]:
             _logger.warning("Price fetch failed for %s: %s", ticker, e)
             return None
     return await asyncio.to_thread(_fetch)
-async def get_or_create_sim_portfolio(db: AsyncSession, initial_capital: float = 100_000.0, user=None) -> Portfolio:
+async def get_or_create_sim_portfolio(
+    db: AsyncSession,
+    initial_capital: float = 100_000.0,
+    user=None,
+    portfolio_id: Optional[int] = None,
+) -> Portfolio:
+    if portfolio_id is not None:
+        result = await db.execute(
+            select(Portfolio)
+            .where(Portfolio.id == portfolio_id)
+            .options(selectinload(Portfolio.holdings))
+        )
+        portfolio = result.scalar_one_or_none()
+        if portfolio is not None:
+            return portfolio
+
     user_id = getattr(user, "id", None) if user is not None else None
     q = select(Portfolio).where(Portfolio.mode == "simulation")
     if user_id is not None:
@@ -48,17 +63,29 @@ async def get_or_create_sim_portfolio(db: AsyncSession, initial_capital: float =
         await db.flush()
         await db.refresh(portfolio, ["holdings"])
     return portfolio
-async def get_portfolio_with_live_prices(db: AsyncSession, user=None) -> dict:
-    user_id = getattr(user, "id", None) if user is not None else None
-    q = select(Portfolio).where(Portfolio.mode == "simulation")
-    if user_id is not None:
-        q = q.where(Portfolio.user_id == user_id)
+async def get_portfolio_with_live_prices(
+    db: AsyncSession,
+    user=None,
+    portfolio_id: Optional[int] = None,
+) -> dict:
+    if portfolio_id is not None:
+        result = await db.execute(
+            select(Portfolio)
+            .where(Portfolio.id == portfolio_id)
+            .options(selectinload(Portfolio.holdings))
+        )
+        portfolio = result.scalar_one_or_none()
     else:
-        q = q.where(Portfolio.user_id.is_(None))
-    result = await db.execute(q.options(selectinload(Portfolio.holdings)))
-    portfolio = result.scalar_one_or_none()
+        user_id = getattr(user, "id", None) if user is not None else None
+        q = select(Portfolio).where(Portfolio.mode == "simulation")
+        if user_id is not None:
+            q = q.where(Portfolio.user_id == user_id)
+        else:
+            q = q.where(Portfolio.user_id.is_(None))
+        result = await db.execute(q.options(selectinload(Portfolio.holdings)))
+        portfolio = result.scalar_one_or_none()
     if portfolio is None:
-        portfolio = await get_or_create_sim_portfolio(db, user=user)
+        portfolio = await get_or_create_sim_portfolio(db, user=user, portfolio_id=portfolio_id)
     tickers = [h.ticker for h in portfolio.holdings]
     prices = {}
     if tickers:
@@ -119,6 +146,7 @@ async def execute_order(
     quantity: float,
     analysis_id: Optional[int] = None,
     user=None,
+    portfolio_id: Optional[int] = None,
 ) -> dict:
     action = action.upper()
     if action not in ("BUY", "SELL"):
@@ -128,7 +156,7 @@ async def execute_order(
     price = await _get_price(ticker)
     if price is None:
         raise ValueError(f"Could not fetch price for {ticker}")
-    portfolio = await get_or_create_sim_portfolio(db, user=user)
+    portfolio = await get_or_create_sim_portfolio(db, user=user, portfolio_id=portfolio_id)
     total_cost = price * quantity
     commission = round(total_cost * 0.001, 4)
     if action == "BUY":

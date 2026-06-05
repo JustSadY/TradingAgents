@@ -1,6 +1,8 @@
+import asyncio
 import logging
 from datetime import datetime, timezone
 _logger = logging.getLogger(__name__)
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
 async def check_price_alerts() -> None:
     from sqlalchemy import select
     from backend.core.database import AsyncSessionLocal
@@ -33,7 +35,9 @@ async def check_price_alerts() -> None:
                 await notify_alert_triggered(alert.ticker, alert.condition, alert.target_price, settings)
             if alert.auto_analyze:
                 today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                asyncio.create_task(_auto_analyze(alert.ticker, today, alert.user_id))
+                task = asyncio.create_task(_auto_analyze(alert.ticker, today, alert.user_id))
+                _BACKGROUND_TASKS.add(task)
+                task.add_done_callback(_BACKGROUND_TASKS.discard)
         await db.commit()
 def _fetch_prices(tickers: list[str]) -> dict[str, float]:
     import yfinance as yf
@@ -81,3 +85,34 @@ async def _auto_analyze(ticker: str, trade_date: str, user_id: int) -> None:
             await new_db.commit()
     except Exception as exc:
         _logger.error("Auto-analyze from alert failed %s: %s", ticker, exc)
+
+
+async def check_and_recover_lost_alerts() -> None:
+    from sqlalchemy import select
+    from backend.core.database import AsyncSessionLocal
+    from backend.models.alert import PriceAlert
+    from backend.models.analysis import AnalysisResult
+    
+    async with AsyncSessionLocal() as db:
+        result = await db.execute(
+            select(PriceAlert)
+            .where(PriceAlert.enabled == True)
+            .where(PriceAlert.triggered_at.isnot(None))
+            .where(PriceAlert.auto_analyze == True)
+        )
+        triggered_alerts = result.scalars().all()
+        for alert in triggered_alerts:
+            trigger_date = alert.triggered_at.strftime("%Y-%m-%d")
+            res_analysis = await db.execute(
+                select(AnalysisResult)
+                .where(AnalysisResult.ticker == alert.ticker)
+                .where(AnalysisResult.trade_date == trigger_date)
+                .where(AnalysisResult.user_id == alert.user_id)
+                .where(AnalysisResult.triggered_by == "alert")
+            )
+            analysis = res_analysis.scalar_one_or_none()
+            if not analysis:
+                _logger.warning("Recovering lost alert analysis task for %s (triggered at %s)", alert.ticker, trigger_date)
+                task = asyncio.create_task(_auto_analyze(alert.ticker, trigger_date, alert.user_id))
+                _BACKGROUND_TASKS.add(task)
+                task.add_done_callback(_BACKGROUND_TASKS.discard)

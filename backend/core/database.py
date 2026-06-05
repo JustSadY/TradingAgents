@@ -25,19 +25,7 @@ async def get_db() -> AsyncSession:
             await session.rollback()
             raise
 async def create_all_tables():
-    import backend.models.user
-    import backend.models.settings
-    import backend.models.system_settings
-    import backend.models.page_permission
-    import backend.models.analysis
-    import backend.models.portfolio
-    import backend.models.order
-    import backend.models.log
-    import backend.models.alert
-    import backend.models.preset
-    import backend.models.portfolio_analysis
-    import backend.models.tool_settings
-    import backend.models.agent_settings
+    import backend.models
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         from backend.core.migrations import apply_column_migrations, apply_type_migrations

@@ -10,6 +10,7 @@ from backend.models.settings import AppSettings
 from backend.models.user import User
 from backend.schemas.preset import PresetCreate, PresetRead
 from backend.services.settings_service import get_or_create_settings
+from backend.repositories.common import scope_to_user
 router = APIRouter(prefix="/api/presets", tags=["presets"])
 _logger = logging.getLogger(__name__)
 @router.get("", response_model=list[PresetRead])
@@ -18,8 +19,7 @@ async def list_presets(
     current_user: User = Depends(get_current_user),
 ):
     q = select(ConfigPreset).order_by(ConfigPreset.created_at.desc())
-    if not current_user.is_admin:
-        q = q.where(ConfigPreset.user_id == current_user.id)
+    q = scope_to_user(q, ConfigPreset, current_user)
     result = await db.execute(q)
     return result.scalars().all()
 async def _check_presets_permission(user: User, db: AsyncSession):
@@ -65,8 +65,7 @@ async def delete_preset(
 ):
     await _check_presets_permission(current_user, db)
     q = select(ConfigPreset).where(ConfigPreset.id == preset_id)
-    if not current_user.is_admin:
-        q = q.where(ConfigPreset.user_id == current_user.id)
+    q = scope_to_user(q, ConfigPreset, current_user)
     result = await db.execute(q)
     preset = result.scalar_one_or_none()
     if not preset:
@@ -82,8 +81,7 @@ async def apply_preset(
     await _check_presets_permission(current_user, db)
     """Apply a preset's settings to the current user's AppSettings row."""
     q = select(ConfigPreset).where(ConfigPreset.id == preset_id)
-    if not current_user.is_admin:
-        q = q.where(ConfigPreset.user_id == current_user.id)
+    q = scope_to_user(q, ConfigPreset, current_user)
     result = await db.execute(q)
     preset = result.scalar_one_or_none()
     if not preset:

@@ -29,11 +29,7 @@ from backend.api.alerts import router as alerts_router
 from backend.api.news import router as news_router
 from backend.api.users import router as users_router
 from backend.api.system_settings import router as system_settings_router
-import backend.models.portfolio_analysis
-import backend.models.preset
-import backend.models.alert
-import backend.models.system_settings
-import backend.models.page_permission
+import backend.models
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 _logger = logging.getLogger(__name__)
 settings = get_settings()
@@ -46,12 +42,33 @@ async def lifespan(app: FastAPI):
     await create_all_tables()
     await _seed_admin_user()
     await db_log_handler.start()
+    
+    # Recover any lost alert analyses from crash/abrupt shutdown
+    from backend.services.alert_service import check_and_recover_lost_alerts
+    try:
+        await check_and_recover_lost_alerts()
+    except Exception as e:
+        _logger.warning("Failed to recover lost alerts: %s", e)
+
     cron = init_cron_service()
     await _load_cron_settings(cron)
     cron.start()
     _logger.info("Application ready.")
     yield
     cron.stop()
+    
+    # Gracefully await any running analyses or alert tasks on shutdown
+    import asyncio
+    from backend.services.analysis_service import _RUNNING_TASKS
+    from backend.services.alert_service import _BACKGROUND_TASKS
+    pending = list(_RUNNING_TASKS.values()) + list(_BACKGROUND_TASKS)
+    if pending:
+        _logger.info("Waiting for %d running background analysis/alert tasks...", len(pending))
+        try:
+            await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=15.0)
+        except asyncio.TimeoutError:
+            _logger.warning("Timeout waiting for background tasks to complete during shutdown.")
+
     _logger.info("Application stopped.")
     db_log_handler.stop()
 async def _seed_admin_user():

@@ -16,6 +16,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+from backend.trading_agents.agent_catalog import AGENTS
+
+
 @dataclass(frozen=True)
 class AnalystInfo:
     key: str
@@ -24,17 +27,22 @@ class AnalystInfo:
     default_on: bool
 
 
-ANALYSTS: list[AnalystInfo] = [
-    AnalystInfo("market",       "Market",       "Technical indicators, price trends and momentum",  True),
-    AnalystInfo("social",       "Social",       "Social media, StockTwits and Reddit sentiment",    True),
-    AnalystInfo("news",         "News",         "Company-specific and sector news flow",            True),
-    AnalystInfo("fundamentals", "Fundamentals", "Balance sheet, income statement and valuation",    True),
-    AnalystInfo("macro",        "Macro",        "Interest rates, inflation and economic outlook",   False),
-    AnalystInfo("options",      "Options",      "Options chain, implied volatility and flows",      False),
-    AnalystInfo("quant",        "Quant",        "Statistical factors and quantitative signals",     False),
-    AnalystInfo("earnings",     "Earnings",     "Earnings calls, estimates and surprises",          False),
-    AnalystInfo("review",       "Review",       "Performance review of past decisions",             False),
-]
+ANALYSTS: list[AnalystInfo] = []
+for _a in AGENTS:
+    if _a.category == "analyst":
+        _lbl = _a.label
+        if _lbl.endswith(" Analyst"):
+            _lbl = _lbl[:-8]
+        if _lbl == "Performance Review":
+            _lbl = "Review"
+        ANALYSTS.append(
+            AnalystInfo(
+                key=_a.key,
+                label=_lbl,
+                description=_a.description,
+                default_on=_a.default_enabled,
+            )
+        )
 
 _BY_KEY = {a.key: a for a in ANALYSTS}
 

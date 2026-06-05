@@ -86,7 +86,7 @@ class CronService:
             sys_settings = sys_res.scalar_one_or_none()
             sys_mode = sys_settings.trading_mode if sys_settings else "simulation"
             sys_broker = sys_settings.active_broker if sys_settings else "simulation"
-            trader = get_trader(sys_mode, sys_broker)
+            trader = get_trader(sys_mode, sys_broker, db=db)
             for ticker in app_settings.watchlist:
                 try:
                     _logger.info("User=%s scanning ticker=%s", user.username, ticker)
@@ -127,7 +127,7 @@ async def _maybe_execute_user(user_id: int, ticker: str, row, settings, trader, 
     if not user:
         return
     portfolio = await get_or_create_sim_portfolio(db, user=user)
-    price = trader.get_current_price(ticker)
+    price = await trader.get_current_price(ticker)
     if not price or price <= 0:
         _logger.warning("No price available for %s, skipping execution", ticker)
         return
@@ -142,7 +142,7 @@ async def _maybe_execute_user(user_id: int, ticker: str, row, settings, trader, 
         ai_signal=row.signal or "",
         ai_reasoning=row.final_decision[:500],
     )
-    result = trader.place_order(req)
+    result = await trader.place_order(req)
     order_row = Order(
         portfolio_id=portfolio.id,
         mode=sys_mode,

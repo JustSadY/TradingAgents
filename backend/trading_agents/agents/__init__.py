@@ -10,7 +10,6 @@ from .sub.analysts.earnings_analyst import create_earnings_analyst
 from .sub.analysts.review_analyst import create_review_analyst
 from .sub.analysts.sentiment_analyst import (
     create_sentiment_analyst,
-    create_social_media_analyst,
 )
 from .sub.researchers.bear_researcher import create_bear_researcher
 from .sub.researchers.bull_researcher import create_bull_researcher
@@ -39,7 +38,6 @@ __all__ = [
     "create_portfolio_manager",
     "create_conservative_debator",
     "create_sentiment_analyst",
-    "create_social_media_analyst",
     "create_trader",
     "create_macro_analyst",
     "create_options_analyst",

@@ -3,6 +3,9 @@ from pathlib import Path
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from cryptography.fernet import Fernet
 _ROOT_ENV = Path(__file__).parent.parent.parent / ".env"
+_TEMP_KEY = None
+
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=str(_ROOT_ENV), env_file_encoding="utf-8", extra="ignore")
     SECRET_KEY: str = "change-me-in-production-use-a-long-random-string"
@@ -15,10 +18,16 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = ""
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
     def get_fernet(self) -> Fernet:
+        global _TEMP_KEY
         key = self.ENCRYPTION_KEY
         if not key:
-            raise RuntimeError("ENCRYPTION_KEY is not set in .env")
+            if _TEMP_KEY is None:
+                _TEMP_KEY = Fernet.generate_key().decode()
+                import logging
+                logging.warning("ENCRYPTION_KEY is not set in .env. Generating a temporary process-lifetime encryption key. Encrypted data will not persist across restarts!")
+            key = _TEMP_KEY
         return Fernet(key.encode() if isinstance(key, str) else key)
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+

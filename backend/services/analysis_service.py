@@ -233,14 +233,9 @@ async def run_analysis(
         await ws_manager.send(task_id, {"type": "status", "status": "starting", "agent": "Preparing LLM client..."})
         config = _build_config(settings, user=user, sys_settings=sys_settings)
         from backend.services.performance_service import get_analyst_attribution_stats
-        from sqlalchemy.exc import PendingRollbackError
         attribution_md = ""
         try:
-            try:
-                attribution_data = await get_analyst_attribution_stats(db)
-            except PendingRollbackError:
-                await db.rollback()
-                attribution_data = await get_analyst_attribution_stats(db)
+            attribution_data = await get_analyst_attribution_stats(db)
             if attribution_data.get("attribution"):
                 attribution_md = "=== ANALYST PERFORMANCE ATTRIBUTION & WEIGHTS ===\n"
                 attribution_md += "Below are the historical win rates and normalized voting weights assigned to each analyst based on empirical accuracy:\n"

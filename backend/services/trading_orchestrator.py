@@ -57,6 +57,8 @@ async def place_signal_order(
         return None
 
     from backend.models.system_settings import SystemSettings
+    from backend.services.mock_trading_service import get_or_create_sim_portfolio
+    from backend.services.execution.factory import get_trader
     from sqlalchemy import select
     sys_settings = (await db.execute(
         select(SystemSettings).where(SystemSettings.id == 1)
@@ -70,9 +72,9 @@ async def place_signal_order(
         broker=sys_broker,
         portfolio_id=portfolio.id,
         initial_capital=portfolio.initial_capital,
-        db=None,
+        db=db,
     )
-    price = trader.get_current_price(ticker) or 0.0
+    price = await trader.get_current_price(ticker) or 0.0
     if price <= 0:
         _logger.warning("No price available for %s; skipping order execution", ticker)
         return None
@@ -87,6 +89,6 @@ async def place_signal_order(
         ai_signal=row.signal or "",
         ai_reasoning=(row.final_decision or "")[:500],
     )
-    result = trader.place_order(request)
+    result = await trader.place_order(request)
     _logger.info("Order placed: %s %s %s -> %s", action, quantity, ticker, result.status)
     return result

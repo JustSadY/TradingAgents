@@ -21,19 +21,19 @@ class OrderResult:
     executed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
 class BaseTraderInterface(ABC):
     @abstractmethod
-    def get_current_price(self, ticker: str) -> Optional[float]:
+    async def get_current_price(self, ticker: str) -> Optional[float]:
         ...
     @abstractmethod
-    def place_order(self, request: OrderRequest) -> OrderResult:
+    async def place_order(self, request: OrderRequest) -> OrderResult:
         ...
     @abstractmethod
-    def cancel_order(self, order_id: str) -> bool:
+    async def cancel_order(self, order_id: str) -> bool:
         ...
     @abstractmethod
-    def get_balance(self) -> float:
+    async def get_balance(self) -> float:
         ...
     @abstractmethod
-    def get_positions(self) -> dict[str, dict]:
+    async def get_positions(self) -> dict[str, dict]:
         ...
     @property
     @abstractmethod

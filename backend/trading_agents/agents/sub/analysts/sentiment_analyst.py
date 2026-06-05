@@ -125,12 +125,3 @@ Your final report MUST follow this structure:
 3. **Catalysts and Risks:** Specific upcoming events or sentiment-driven risks identified.
 4. **Sentiment Data Table:** A Markdown table summarizing key signals, their direction, source, and evidence.
 {get_language_instruction()}"""
-def create_social_media_analyst(llm):
-    import warnings
-    warnings.warn(
-        "create_social_media_analyst is deprecated and will be removed in a "
-        "future version. Use create_sentiment_analyst instead.",
-        DeprecationWarning,
-        stacklevel=2,
-    )
-    return create_sentiment_analyst(llm)

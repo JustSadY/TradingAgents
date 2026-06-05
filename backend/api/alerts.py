@@ -7,6 +7,7 @@ from backend.api.deps import get_current_user
 from backend.models.alert import PriceAlert
 from backend.models.user import User
 from backend.schemas.alert import AlertCreate, AlertUpdate, AlertRead
+from backend.repositories.common import scope_to_user
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 _logger = logging.getLogger(__name__)
 @router.get("", response_model=list[AlertRead])
@@ -15,8 +16,7 @@ async def list_alerts(
     current_user: User = Depends(get_current_user),
 ):
     q = select(PriceAlert).order_by(PriceAlert.created_at.desc())
-    if not current_user.is_admin:
-        q = q.where(PriceAlert.user_id == current_user.id)
+    q = scope_to_user(q, PriceAlert, current_user)
     result = await db.execute(q)
     return result.scalars().all()
 @router.post("", response_model=AlertRead)
@@ -43,8 +43,7 @@ async def update_alert(
     current_user: User = Depends(get_current_user),
 ):
     q = select(PriceAlert).where(PriceAlert.id == alert_id)
-    if not current_user.is_admin:
-        q = q.where(PriceAlert.user_id == current_user.id)
+    q = scope_to_user(q, PriceAlert, current_user)
     result = await db.execute(q)
     alert = result.scalar_one_or_none()
     if not alert:
@@ -59,8 +58,7 @@ async def delete_alert(
     current_user: User = Depends(get_current_user),
 ):
     q = select(PriceAlert).where(PriceAlert.id == alert_id)
-    if not current_user.is_admin:
-        q = q.where(PriceAlert.user_id == current_user.id)
+    q = scope_to_user(q, PriceAlert, current_user)
     result = await db.execute(q)
     alert = result.scalar_one_or_none()
     if not alert:
