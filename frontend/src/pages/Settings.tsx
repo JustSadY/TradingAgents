@@ -252,25 +252,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
   const update = (k: keyof Settings, v: any) => setS(prev => prev ? { ...prev, [k]: v } : prev)
 
-  const providerList = Object.keys(catalog)
-  const currentProviderModels = catalog[s.llm_provider]
-
-  const providerLabels = meta?.provider_labels ?? PROVIDER_LABELS
   const languages = meta?.languages ?? [{ value: 'English', label: 'English' }, { value: 'Turkish', label: 'Türkçe' }]
-  const analysts = meta?.analysts ?? []
-
-  const handleProviderChange = (provider: string) => {
-    const models = catalog[provider]
-    setS(prev => {
-      if (!prev) return prev
-      const defaultModel = models?.[0]?.value || prev.llm_model
-      return {
-        ...prev,
-        llm_provider: provider,
-        llm_model: defaultModel,
-      }
-    })
-  }
 
   const TABS = [
     { key: 'general',  label: t('settings.general') || 'Preferences',      icon: <SettingsIcon size={14} /> },

@@ -61,6 +61,7 @@ export interface AgentMeta {
   label: string
   description: string
   category: string
+  parent_key?: string | null
   default_enabled: boolean
   settings_schema: AgentSettingFieldMeta[]
 }
