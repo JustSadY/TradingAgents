@@ -10,6 +10,15 @@ class NormalizedChatOpenAI(ChatOpenAI):
     def invoke(self, input, config=None, **kwargs):
         return normalize_content(super().invoke(input, config, **kwargs))
 
+    async def ainvoke(self, input, config=None, **kwargs):
+        result = await super().ainvoke(input, config, **kwargs)
+        return normalize_content(result)
+
+    def _use_responses_api(self, payload: dict) -> bool:
+        # Always use Chat Completions API — Responses API is not needed for
+        # tool-calling agents and causes 404 on some account tiers.
+        return False
+
     def with_structured_output(self, schema, *, method=None, **kwargs):
         caps = get_capabilities(self.model_name)
         if caps.preferred_structured_method == "none":
