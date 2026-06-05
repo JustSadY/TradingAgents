@@ -3,6 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, desc
+from sqlalchemy.orm import defer
 from backend.core.database import get_db
 from backend.models.analysis import AnalysisResult
 from backend.models.settings import AppSettings
@@ -51,7 +52,18 @@ async def list_analysis(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = select(AnalysisResult).order_by(desc(AnalysisResult.created_at)).limit(limit).offset(offset)
+    q = (
+        select(AnalysisResult)
+        .options(
+            defer(AnalysisResult.bull_history),
+            defer(AnalysisResult.bear_history),
+            defer(AnalysisResult.investment_debate_history),
+            defer(AnalysisResult.risk_debate_history),
+        )
+        .order_by(desc(AnalysisResult.created_at))
+        .limit(limit)
+        .offset(offset)
+    )
     if ticker:
         q = q.where(AnalysisResult.ticker == ticker.upper())
     q = scope_to_user(q, AnalysisResult, current_user)

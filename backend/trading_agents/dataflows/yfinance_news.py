@@ -1,11 +1,56 @@
+import asyncio
 import logging
+import threading
 from typing import Optional
 import yfinance as yf
-from datetime import datetime
+from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
 from .config import get_config
 from .stockstats_utils import yf_retry
 _logger = logging.getLogger(__name__)
+
+def _run_async_blocking(coro):
+    container = {}
+
+    def _runner():
+        try:
+            container["result"] = asyncio.run(coro)
+        except Exception as exc:
+            container["error"] = exc
+
+    t = threading.Thread(target=_runner, daemon=True)
+    t.start()
+    t.join()
+    if "error" in container:
+        raise container["error"]
+    return container.get("result")
+
+
+def _parse_news_datetime(raw_value):
+    if raw_value is None:
+        return None
+    if isinstance(raw_value, datetime):
+        return raw_value
+    if isinstance(raw_value, (int, float)):
+        try:
+            return datetime.fromtimestamp(float(raw_value), tz=timezone.utc)
+        except Exception:
+            return None
+    if isinstance(raw_value, str):
+        raw = raw_value.strip()
+        if not raw:
+            return None
+        if raw.isdigit():
+            try:
+                return datetime.fromtimestamp(float(raw), tz=timezone.utc)
+            except Exception:
+                return None
+        try:
+            return datetime.fromisoformat(raw.replace("Z", "+00:00"))
+        except Exception:
+            return None
+    return None
+
 def _extract_article_data(article: dict) -> dict:
     if "content" in article:
         content = article["content"]
@@ -15,13 +60,9 @@ def _extract_article_data(article: dict) -> dict:
         publisher = provider.get("displayName", "Unknown")
         url_obj = content.get("canonicalUrl") or content.get("clickThroughUrl") or {}
         link = url_obj.get("url", "")
-        pub_date_str = content.get("pubDate", "")
-        pub_date = None
-        if pub_date_str:
-            try:
-                pub_date = datetime.fromisoformat(pub_date_str.replace("Z", "+00:00"))
-            except (ValueError, AttributeError):
-                pass
+        pub_date = _parse_news_datetime(content.get("pubDate"))
+        if pub_date is None:
+            pub_date = _parse_news_datetime(article.get("providerPublishTime"))
         return {
             "title": title,
             "summary": summary,
@@ -44,27 +85,35 @@ def get_news_yfinance(
 ) -> str:
     article_limit = get_config()["news_article_limit"]
     try:
-        stock = yf.Ticker(ticker)
-        news = yf_retry(lambda: stock.get_news(count=article_limit))
-        if not news:
-            return f"No news found for {ticker}"
+        from backend.services.news_service import get_news_feed
+
+        cached_items = _run_async_blocking(get_news_feed(ticker, article_limit)) or []
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
         end_dt = datetime.strptime(end_date, "%Y-%m-%d")
         news_str = ""
         filtered_count = 0
-        for article in news:
-            data = _extract_article_data(article)
-            if data["pub_date"]:
-                pub_date_naive = data["pub_date"].replace(tzinfo=None)
+
+        for item in cached_items:
+            item_ticker = (item.get("ticker") or "").upper()
+            if item_ticker and item_ticker != ticker.upper():
+                continue
+            pub_date = _parse_news_datetime(item.get("published_at"))
+            if pub_date:
+                pub_date_naive = pub_date.replace(tzinfo=None)
                 if not (start_dt <= pub_date_naive <= end_dt + relativedelta(days=1)):
                     continue
-            news_str += f"### {data['title']} (source: {data['publisher']})\n"
-            if data["summary"]:
-                news_str += f"{data['summary']}\n"
-            if data["link"]:
-                news_str += f"Link: {data['link']}\n"
+            title = item.get("title") or "No title"
+            summary = item.get("summary") or ""
+            publisher = item.get("source") or "Unknown"
+            link = item.get("url") or ""
+            news_str += f"### {title} (source: {publisher})\n"
+            if summary:
+                news_str += f"{summary}\n"
+            if link:
+                news_str += f"Link: {link}\n"
             news_str += "\n"
             filtered_count += 1
+
         if filtered_count == 0:
             return f"No news found for {ticker} between {start_date} and {end_date}"
         return f"## {ticker} News, from {start_date} to {end_date}:\n\n{news_str}"

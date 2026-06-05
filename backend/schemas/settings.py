@@ -8,12 +8,7 @@ class SettingsRead(BaseModel):
     price_tolerance_pct: float
     watchlist: list[str]
     selected_analysts: list[str]
-    llm_provider: str
-    llm_model: str
     backend_url: str | None = None
-    openai_reasoning_effort: str | None = None
-    anthropic_effort: str | None = None
-    google_thinking_level: str | None = None
     output_language: str = "English"
     investor_persona: str = "conservative"
     analyst_concurrency_limit: int = 1
@@ -46,12 +41,7 @@ class SettingsUpdate(BaseModel):
     price_tolerance_pct: float | None = Field(default=None, ge=0, le=50)
     watchlist: list[str] | None = None
     selected_analysts: list[str] | None = None
-    llm_provider: str | None = None
-    llm_model: str | None = None
     backend_url: str | None = None
-    openai_reasoning_effort: str | None = None
-    anthropic_effort: str | None = None
-    google_thinking_level: str | None = None
     output_language: str | None = None
     investor_persona: str | None = None
     analyst_concurrency_limit: int | None = Field(default=None, ge=1, le=16)

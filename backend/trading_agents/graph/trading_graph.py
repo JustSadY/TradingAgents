@@ -57,23 +57,35 @@ class TradingAgentsGraph:
         set_config(self.config)
         os.makedirs(self.config["data_cache_dir"], exist_ok=True)
         os.makedirs(self.config["results_dir"], exist_ok=True)
-        main_prov = self.config["llm_provider"]
-        main_kwargs = self._get_provider_kwargs(main_prov)
-        if self.callbacks:
-            main_kwargs["callbacks"] = self.callbacks
-        client = create_llm_client(
-            provider=main_prov,
-            model=self.config["llm_model"],
-            base_url=self.config.get("backend_url"),
-            **main_kwargs,
-        )
-        self.thinking_llm = client.get_llm()
 
         # ------------------------------------------------------------------
         # Build the agent hierarchy from runtime context
         # ------------------------------------------------------------------
         runtime_agent_ctx = self.config.get("runtime_agent_context") or {}
         self.hierarchy = AgentHierarchy(runtime_agent_ctx)
+
+        # Resolve the Master (Portfolio Manager) LLM to use as thinking_llm
+        pm_state = runtime_agent_ctx.get("portfolio_manager") or {}
+        pm_settings = pm_state.get("settings") or {}
+        
+        main_prov = pm_settings.get("llm_provider") or self.config.get("llm_provider") or "openai"
+        main_model = pm_settings.get("llm_model") or self.config.get("llm_model") or "gpt-4o-mini"
+        
+        main_kwargs = self._get_provider_kwargs(main_prov)
+        if self.callbacks:
+            main_kwargs["callbacks"] = self.callbacks
+        
+        # Merge PM-specific settings into main_kwargs if they exist
+        if pm_settings.get("temperature") is not None:
+            main_kwargs["temperature"] = float(pm_settings["temperature"])
+
+        client = create_llm_client(
+            provider=main_prov,
+            model=main_model,
+            base_url=self.config.get("backend_url"),
+            **main_kwargs,
+        )
+        self.thinking_llm = client.get_llm()
 
         # LLM factory used by the hierarchy for recursive resolution
         def _make_llm(provider: str, model: str, temperature=None) -> Any:

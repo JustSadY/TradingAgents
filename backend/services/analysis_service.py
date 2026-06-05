@@ -126,8 +126,8 @@ def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
         "data_cache_dir": _os.environ.get("TRADINGAGENTS_DATA_CACHE_DIR", DEFAULT_CONFIG["data_cache_dir"]),
         "results_dir":    _os.environ.get("TRADINGAGENTS_RESULTS_DIR", DEFAULT_CONFIG["results_dir"]),
         "memory_log_path": _os.environ.get("TRADINGAGENTS_MEMORY_LOG_PATH", DEFAULT_CONFIG["memory_log_path"]),
-        "llm_provider": settings.llm_provider,
-        "llm_model": settings.llm_model or DEFAULT_CONFIG["llm_model"],
+        "llm_provider": getattr(settings, "llm_provider", DEFAULT_CONFIG["llm_provider"]),
+        "llm_model": getattr(settings, "llm_model", DEFAULT_CONFIG["llm_model"]),
         "max_debate_rounds": settings.max_debate_rounds,
         "max_risk_discuss_rounds": settings.max_risk_rounds,
         "output_language": settings.output_language or DEFAULT_CONFIG["output_language"],
@@ -158,17 +158,12 @@ def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
         cfg["benchmark_ticker"] = settings.benchmark_ticker
     if getattr(settings, "azure_deployment", None):
         cfg["azure_deployment_name"] = settings.azure_deployment
-    if getattr(settings, "openai_reasoning_effort", None):
-        cfg["openai_reasoning_effort"] = settings.openai_reasoning_effort
-    if getattr(settings, "anthropic_effort", None):
-        cfg["anthropic_effort"] = settings.anthropic_effort
-    if getattr(settings, "google_thinking_level", None):
-        cfg["google_thinking_level"] = settings.google_thinking_level
 
     if user is not None:
         try:
             fernet = _cfg().get_fernet()
-            user_key = get_user_api_key(user, settings.llm_provider, fernet)
+            current_provider = cfg.get("llm_provider", "openai")
+            user_key = get_user_api_key(user, current_provider, fernet)
             if user.api_keys_enc:
                 cfg["user_api_keys"] = decrypt_api_keys(user.api_keys_enc, fernet)
             else:
@@ -181,18 +176,18 @@ def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
             cfg["api_key"] = user_key
         else:
             from backend.trading_agents.llm_clients.api_key_env import get_api_key_env
-            env_var = get_api_key_env(settings.llm_provider)
+            env_var = get_api_key_env(current_provider)
             if env_var:
                 env_val = _os.environ.get(env_var)
                 if not env_val:
                     if getattr(user, "is_admin", False):
                         raise ValueError(
-                            f"No API key set for provider '{settings.llm_provider}'. "
+                            f"No API key set for provider '{current_provider}'. "
                             f"Admin check failed: neither user-level key nor server environment variable '{env_var}' is defined."
                         )
                     else:
                         raise ValueError(
-                            f"No API key set for provider '{settings.llm_provider}'. "
+                            f"No API key set for provider '{current_provider}'. "
                             "Go to Settings → API Keys to add your key."
                         )
     return cfg

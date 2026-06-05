@@ -196,6 +196,12 @@ class AgentHierarchy:
         parent = self.parent_of(agent_key)
         if parent:
             return self.resolve_llm(parent, fallback_llm, llm_factory)
+
+        # Ultimate master fallback: If we reached the top and it wasn't the portfolio_manager,
+        # try to get the portfolio_manager settings before giving up to fallback_llm.
+        if agent_key != "portfolio_manager":
+            return self.resolve_llm("portfolio_manager", fallback_llm, llm_factory)
+
         return fallback_llm
 
     def get_effective_settings(self, key: str) -> Dict[str, Any]:
