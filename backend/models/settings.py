@@ -44,7 +44,6 @@ class AppSettings(Base):
     strict_backtest_learning: Mapped[bool] = mapped_column(Boolean, default=True)
     node_retry_attempts: Mapped[int] = mapped_column(Integer, default=2)
     node_retry_base_delay: Mapped[float] = mapped_column(Float, default=1.0)
-    _analyst_models: Mapped[str] = mapped_column("analyst_models", Text, default='{}')
     webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     webhook_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     webhook_events: Mapped[str] = mapped_column(Text, default='["analysis_complete"]')
@@ -65,9 +64,3 @@ class AppSettings(Base):
     @selected_analysts.setter
     def selected_analysts(self, value: list[str]):
         self._selected_analysts = json.dumps(value)
-    @property
-    def analyst_models(self) -> dict[str, str]:
-        return json.loads(self._analyst_models or '{}')
-    @analyst_models.setter
-    def analyst_models(self, value: dict[str, str]):
-        self._analyst_models = json.dumps(value)

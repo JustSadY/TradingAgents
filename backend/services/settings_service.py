@@ -66,7 +66,6 @@ def settings_to_read(settings: AppSettings) -> SettingsRead:
         node_retry_base_delay=getattr(settings, "node_retry_base_delay", 1.0) or 1.0,
         include_historical_analyses=getattr(settings, "include_historical_analyses", False) or False,
         historical_analyses_limit=getattr(settings, "historical_analyses_limit", 5) or 5,
-        analyst_models=getattr(settings, "analyst_models", {}) or {},
         webhook_url=getattr(settings, "webhook_url", None),
         webhook_enabled=getattr(settings, "webhook_enabled", False) or False,
         webhook_events=getattr(settings, "webhook_events", None) or "analysis_complete",

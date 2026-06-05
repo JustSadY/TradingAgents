@@ -22,7 +22,6 @@ SECTION_FIELDS = {
         "anthropic_effort",
         "google_thinking_level",
         "selected_analysts",
-        "analyst_models",
         "include_historical_analyses",
         "historical_analyses_limit",
     ],

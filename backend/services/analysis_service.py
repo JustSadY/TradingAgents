@@ -101,7 +101,6 @@ def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
             "fundamental_data": _vendor("data_vendor_fundamentals"),
             "news_data": _vendor("data_vendor_news"),
         },
-        "analyst_models": getattr(settings, "analyst_models", {}) or {},
         "is_admin": getattr(user, "is_admin", False) if user is not None else False,
         "has_user": user is not None,
     }

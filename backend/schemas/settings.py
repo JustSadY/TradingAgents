@@ -29,7 +29,6 @@ class SettingsRead(BaseModel):
     strict_backtest_learning: bool = True
     node_retry_attempts: int = 2
     node_retry_base_delay: float = 1.0
-    analyst_models: dict[str, str] = {}
     webhook_url: str | None = None
     webhook_enabled: bool = False
     webhook_events: str = '["analysis_complete"]'
@@ -67,7 +66,6 @@ class SettingsUpdate(BaseModel):
     strict_backtest_learning: bool | None = None
     node_retry_attempts: int | None = Field(default=None, ge=1, le=10)
     node_retry_base_delay: float | None = Field(default=None, ge=0.1, le=10.0)
-    analyst_models: dict[str, str] | None = None
     webhook_url: str | None = None
     webhook_enabled: bool | None = None
     webhook_events: str | None = None

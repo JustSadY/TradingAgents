@@ -95,8 +95,8 @@ databases get it on startup. For money/price/quantity use the `MONEY` type from
 `AsyncSessionLocal`.
 
 **Add an analyst:** declare graph wiring + tools with `@register_analyst` in
-`trading_agents/agents/analysts/<name>.py` (reuse `run_tool_analyst` from
-`agents/utils/analyst_node_factory.py` for the standard tool-using scaffold),
+`trading_agents/agents/sub/analysts/<name>.py` (reuse `run_tool_analyst` from
+`agents/runtime/analyst_node_factory.py` for the standard tool-using scaffold),
 import the module in `graph/setup.py`, and add the selection metadata
 (label/description/default) to `trading_agents/analyst_catalog.py`. The frontend
 picks it up via `/api/meta` — no frontend edit. (See `docs/developer_guide.md`.)
@@ -146,19 +146,21 @@ import engine modules lazily inside functions (they pull heavy deps).
   absolute `backend.trading_agents...` imports; if you add a module, follow the
   same prefix.
 - Structure: `graph/` (LangGraph wiring — `trading_graph.py`, `setup.py`,
-  `conditional_logic.py`, checkpointer), `agents/` (analysts/managers/researchers/
-  risk_mgmt + `analyst_registry.py` + `utils/`), `dataflows/` (vendor-routed data
-  via `interface.py`), `llm_clients/` (provider factory), `mock_trading/`.
+  `conditional_logic.py`, checkpointer), `agents/` (the sub-agents under `sub/`
+  [analysts, managers, researchers, risk_mgmt, trader], execution runtime helpers
+  in `runtime/`, tool data helpers in `data/`, shared utilities in `utils/` +
+  `analyst_registry.py` + `schemas.py`), `dataflows/` (vendor-routed data via
+  `interface.py`), `llm_clients/` (provider factory), `mock_trading/`.
 - **Engine-root single-source modules** (dependency-free, importable by the
   backend without the heavy `agents` chain): `personas.py` (investor personas),
-  `analyst_catalog.py` (analyst selection metadata). `agents/utils/` holds shared
+  `analyst_catalog.py` (analyst selection metadata). `agents/runtime/` holds shared
   scaffolds: `analyst_node_factory.run_tool_analyst` (the common tool-using
   analyst turn) and `report_aggregator.build_resources`.
 - **High-risk zone:** graph compilation depends on the analyst registry's dynamic
   `ConditionalLogic` method injection and on agent state field names. Do **not**
   rewire the graph, rename registry methods, or change state field names without
   tests — these break graph compilation silently. Prefer additive, isolated
-  changes (e.g. shared helpers like `agents/utils/report_aggregator.py`).
+  changes (e.g. shared helpers like `agents/runtime/report_aggregator.py`).
 - **Env note:** the engine targets `langchain-core` 0.3.x. On newer 1.x the
   `@tool` decorator rejects functions without docstrings, so the `agents`
   subpackage may fail to import in a mismatched environment — that's a

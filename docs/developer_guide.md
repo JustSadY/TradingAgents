@@ -9,7 +9,7 @@ This guide describes how to extend the TradingAgents platform, write and registe
 TradingAgents uses a dynamic registration system. You can add a new analyst agent without modifying the core LangGraph compilation scripts.
 
 ### Step A: Define your Analyst Node and Tools
-Create your new analyst module in `backend/trading_agents/agents/analysts/your_analyst.py`. Use the `@register_analyst` decorator from [analyst_registry.py](../backend/trading_agents/agents/analyst_registry.py). The decorator declares the **structural graph wiring** — the node names, the report column the analyst writes, and its tools:
+Create your new analyst module in `backend/trading_agents/agents/sub/analysts/your_analyst.py`. Use the `@register_analyst` decorator from [analyst_registry.py](../backend/trading_agents/agents/analyst_registry.py). The decorator declares the **structural graph wiring** — the node names, the report column the analyst writes, and its tools:
 
 ```python
 from langchain_core.tools import tool
@@ -42,7 +42,7 @@ def create_custom_sentiment_analyst(llm):
 To trigger the decorator on startup, import the module in [backend/trading_agents/graph/setup.py](../backend/trading_agents/graph/setup.py):
 
 ```python
-import backend.trading_agents.agents.analysts.custom_sentiment_analyst  # noqa: F401
+import backend.trading_agents.agents.sub.analysts.custom_sentiment_analyst  # noqa: F401
 ```
 
 ### Step C: Declare the UI/selection metadata (single source)
@@ -212,13 +212,13 @@ async def debate_step_callback(agent_name: str, message: str, task_id: str):
 ```
 
 ### C. Registering a New Investor Persona (Feature 4)
-Personas govern LLM advisory behaviors. Add options to [backend/trading_agents/config.py](../backend/trading_agents/config.py) and map them inside [backend/trading_agents/agents/managers/portfolio_manager.py](../backend/trading_agents/agents/managers/portfolio_manager.py):
+Personas govern LLM advisory behaviors. Add options to [backend/trading_agents/config.py](../backend/trading_agents/config.py) and map them inside [backend/trading_agents/agents/sub/managers/portfolio_manager.py](../backend/trading_agents/agents/sub/managers/portfolio_manager.py):
 
 ```python
 # 1. In backend/trading_agents/config.py
 investor_persona: str = "conservative"  # Choices: conservative, risk_loving, esg_focused
 
-# 2. In backend/trading_agents/agents/managers/portfolio_manager.py
+# 2. In backend/trading_agents/agents/sub/managers/portfolio_manager.py
 PERSONA_PROMPTS = {
     "conservative": "Prioritize high-yield dividend stocks, cash conservation, and blue-chips. Avoid leverage.",
     "risk_loving": "Seek high beta, cryptocurrency assets, and swing options setups. Prioritize growth.",
@@ -291,19 +291,19 @@ Allows both analysts and users to write dynamic mathematical expressions (e.g. `
 ### G. Drawing Agent-to-UI Annotations & Trendlines
 Enables trading agents to interactively draw visual markers and trendlines on the user's chart.
 
-1. **State-Safe Tool Execution:** Defined in [chart_tools.py](../backend/trading_agents/agents/utils/chart_tools.py) as `add_chart_annotation`. Captures arguments (`type`, `time`, `price`, `text`, `time2`, `price2`) and registers them in the active thread-local context variable (`active_run_context`).
+1. **State-Safe Tool Execution:** Defined in [chart_tools.py](../backend/trading_agents/agents/data/chart_tools.py) as `add_chart_annotation`. Captures arguments (`type`, `time`, `price`, `text`, `time2`, `price2`) and registers them in the active thread-local context variable (`active_run_context`).
 2. **Database Propagation:** Merged and saved into the `chart_annotations` column of `AnalysisResult` in [analysis_service.py](../backend/services/analysis_service.py).
 3. **Frontend Render System:** [Chart.tsx](../frontend/src/pages/Chart.tsx) parses these annotations and feeds markers to the `CandlestickSeries` or adds separate line segments dynamically to the TradingView chart to represent trendlines.
 
 ### H. Vision-Based Pattern Recognition Pipeline
 Numerical series can struggle with visual shapes. This system adds a visual analysis mechanism to identify classic chart patterns.
 
-1. **Visual Plotting and Encoding:** The `get_vision_chart_analysis` tool in [chart_tools.py](../backend/trading_agents/agents/utils/chart_tools.py) slices the last 90 trading days, renders a clean PNG chart via `mplfinance` (with candlestick and volume plots), and converts it into a Base64 string.
+1. **Visual Plotting and Encoding:** The `get_vision_chart_analysis` tool in [chart_tools.py](../backend/trading_agents/agents/data/chart_tools.py) slices the last 90 trading days, renders a clean PNG chart via `mplfinance` (with candlestick and volume plots), and converts it into a Base64 string.
 2. **Vision Model Call:** It sends the image payload along with a structured prompt to the active session's vision-capable LLM to extract visual pattern insights (e.g., Head and Shoulders, Cup and Handle) and returns the text evaluation back to the caller.
 
 ### I. Multi-Timeframe Alignment and Overlay Mapping
 Ensures daily-chart decisions remain aligned with long-term macro trendlines.
 
-1. **High-Timeframe Sampling:** The `get_mtf_trend` tool in [chart_tools.py](../backend/trading_agents/agents/utils/chart_tools.py) fetches Weekly or Monthly historical data, computes a 20 EMA, and performs a backward merge/asof join mapping the values onto the daily trading index.
+1. **High-Timeframe Sampling:** The `get_mtf_trend` tool in [chart_tools.py](../backend/trading_agents/agents/data/chart_tools.py) fetches Weekly or Monthly historical data, computes a 20 EMA, and performs a backward merge/asof join mapping the values onto the daily trading index.
 2. **Chart Overlay:** The resulting series is registered with an `"overlay": true` parameter, signaling [Chart.tsx](../frontend/src/pages/Chart.tsx) to plot the macro trend directly on top of the main daily price candlesticks as an overlay line.
 

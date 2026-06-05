@@ -34,7 +34,6 @@ interface Settings {
   include_historical_analyses: boolean
   historical_analyses_limit: number
   strict_backtest_learning: boolean
-  analyst_models: Record<string, string>
   webhook_url: string | null
   webhook_enabled: boolean
   webhook_events: string
@@ -461,102 +460,35 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 </Row>
               </Section>
 
-              <Section title={t('settings.section_active_analysts') || 'Active Analysts Mapping'}>
+              <Section title={t('settings.section_active_analysts') || 'Active Analysts'}>
+                <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed">
+                  {t('settings.active_analysts_hint') || 'Choose which analysts run. Per-agent LLM (provider, model, temperature) is now configured in the AI Agents tab.'}
+                </p>
                 {analysts.length === 0 ? (
                   <p className="text-slate-500 text-xs">{t('settings.analysts_loading')}</p>
                 ) : (
-                  <div className="flex flex-col gap-3 pt-1">
+                  <div className="flex flex-col gap-1 pt-1">
                     {analysts.map(a => {
                       const isActive = s.selected_analysts.includes(a.key)
-                      const modelVal = s.analyst_models?.[a.key] || ''
-
-                      let currentProvider = 'default'
-                      let currentModel = modelVal
-                      if (modelVal.includes(':')) {
-                        const parts = modelVal.split(':')
-                        currentProvider = parts[0]
-                        currentModel = parts[1] || ''
-                      }
-
-                      const activeProvider = currentProvider === 'default' ? s.llm_provider : currentProvider
-                      const providerModels = catalog[activeProvider]
-                      const allModelValues = providerModels?.map(o => o.value) || []
-                      const isCustomMode = currentModel === 'custom' || (currentModel !== '' && !allModelValues.includes(currentModel))
-                      const selectModelVal = isCustomMode ? 'custom' : currentModel
-
                       return (
-                        <div key={a.key} title={a.description} className="flex flex-col border-b border-white/[0.02] pb-3 last:border-b-0 last:pb-0">
-                          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-                            <label className="flex items-center gap-2.5 text-xs font-semibold text-slate-300 cursor-pointer py-1">
-                              <input
-                                type="checkbox"
-                                className="w-4 h-4 accent-violet-600 rounded"
-                                checked={isActive}
-                                onChange={e => {
-                                  const next = e.target.checked
-                                    ? [...s.selected_analysts, a.key]
-                                    : s.selected_analysts.filter(x => x !== a.key)
-                                  update('selected_analysts', next)
-                                }}
-                              />
-                              {a.label}
-                            </label>
-
-                            {isActive && (
-                              <div className="flex items-center gap-2 w-full sm:max-w-xs">
-                                <select
-                                  className={`${Input} py-1 text-[11px]`}
-                                  value={currentProvider}
-                                  onChange={e => {
-                                    const nextProv = e.target.value
-                                    const nextVal = nextProv === 'default' ? '' : 'custom'
-                                    update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
-                                  }}
-                                >
-                                  <option value="default">{t('settings.analyst_default_provider')}</option>
-                                  {providerList.map(p => (
-                                    <option key={p} value={p}>{providerLabels[p] || p}</option>
-                                  ))}
-                                </select>
-
-                                <select
-                                  className={`${Input} py-1 text-[11px]`}
-                                  value={selectModelVal}
-                                  onChange={e => {
-                                    const val = e.target.value
-                                    const prefix = currentProvider === 'default' ? '' : `${currentProvider}:`
-                                    const nextVal = val === '' ? '' : prefix + val
-                                    update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
-                                  }}
-                                >
-                                  {currentProvider === 'default' && (
-                                    <option value="">{t('settings.analyst_default_model')}</option>
-                                  )}
-                                  {providerModels?.map(o => (
-                                    <option key={o.value} value={o.value}>{o.label}</option>
-                                  ))}
-                                  <option value="custom">{t('settings.custom_model_option')}</option>
-                                </select>
-                              </div>
-                            )}
-                          </div>
-
-                          {isActive && selectModelVal === 'custom' && (
-                            <div className="flex justify-end pt-2">
-                              <input
-                                className={`${Input} py-1 w-full sm:max-w-xs font-mono`}
-                                placeholder={t('settings.custom_model_placeholder')}
-                                value={currentModel === 'custom' ? '' : currentModel}
-                                onChange={e => {
-                                  const val = e.target.value
-                                  const prefix = currentProvider === 'default' ? '' : `${currentProvider}:`
-                                  const nextVal = prefix + (val.trim() === '' ? 'custom' : val)
-                                  update('analyst_models', { ...(s.analyst_models || {}), [a.key]: nextVal })
-                                }}
-                              />
-                            </div>
-                          )}
-                        </div>
+                        <label
+                          key={a.key}
+                          title={a.description}
+                          className="flex items-center gap-2.5 text-xs font-semibold text-slate-300 cursor-pointer py-2 border-b border-white/[0.02] last:border-b-0 hover:text-white transition-colors"
+                        >
+                          <input
+                            type="checkbox"
+                            className="w-4 h-4 accent-violet-600 rounded"
+                            checked={isActive}
+                            onChange={e => {
+                              const next = e.target.checked
+                                ? [...s.selected_analysts, a.key]
+                                : s.selected_analysts.filter(x => x !== a.key)
+                              update('selected_analysts', next)
+                            }}
+                          />
+                          {a.label}
+                        </label>
                       )
                     })}
                   </div>

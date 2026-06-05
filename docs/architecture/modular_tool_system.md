@@ -127,7 +127,7 @@ The general metadata catalog `/api/meta` is user-aware:
 3.  **Active Tool Filtering:**
     Inside [trading_graph.py](../backend/trading_agents/graph/trading_graph.py), the `_filter_tools_for_analyst` utility checks `can_use` and enablement states, removing disabled tools.
 4.  **Agent Bindings:**
-    Inside [analyst_node_factory.py](../backend/trading_agents/agents/utils/analyst_node_factory.py), the analyst node retrieves the configuration context and binds parameters before execution.
+    Inside [analyst_node_factory.py](../backend/trading_agents/agents/runtime/analyst_node_factory.py), the analyst node retrieves the configuration context and binds parameters before execution.
 
 ---
 

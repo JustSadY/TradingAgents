@@ -43,15 +43,6 @@ from .setup import GraphSetup
 from .propagation import Propagator
 from .reflection import Reflector
 from .signal_processing import SignalProcessor
-def _resolve_provider_and_model(model_str: str, default_provider: str) -> Tuple[str, str]:
-    model_str = model_str.strip()
-    if ":" in model_str:
-        parts = model_str.split(":", 1)
-        return parts[0].strip(), parts[1].strip()
-    if "/" in model_str and not model_str.startswith("http://") and not model_str.startswith("https://"):
-        parts = model_str.split("/", 1)
-        return parts[0].strip(), parts[1].strip()
-    return default_provider, model_str
 class TradingAgentsGraph:
     def __init__(
         self,

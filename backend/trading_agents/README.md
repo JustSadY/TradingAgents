@@ -59,11 +59,17 @@ trading_agents/
 ├── agents/                  # Prompt engineering, agent behaviors, and schemas
 │   ├── analyst_registry.py   # Registry manager to load and execute analyst plugins
 │   ├── schemas.py           # Structured output schemas (Pydantic models)
-│   ├── analysts/            # Implementation of the 9 analyst plugins
-│   ├── researchers/         # Bull & Bear thesis builders
-│   ├── managers/            # Research, Synthesis, and Auditor managers
-│   ├── risk_mgmt/           # Risk analyst personalities (Aggressive, Conservative, Neutral)
-│   └── trader/              # Portfolio Manager (executes final buys/sells and sizes)
+│   ├── base.py              # Base analyst agent class
+│   ├── hierarchy.py         # Multi-agent registry & routing logic
+│   ├── sub/                 # The 9 analyst plugins and debate/manager nodes
+│   │   ├── analysts/        # Implementation of the 9 analyst plugins
+│   │   ├── researchers/     # Bull & Bear thesis builders
+│   │   ├── managers/        # Research, Synthesis, Auditor, and Portfolio managers
+│   │   ├── risk_mgmt/       # Risk analyst personalities (Aggressive, Conservative, Neutral)
+│   │   └── trader/          # Trader node logic
+│   ├── runtime/             # Engine execution runtime helpers (resilience, memory, etc.)
+│   ├── data/                # Data and tool execution helpers
+│   └── utils/               # Shared utilities
 ├── graph/                   # State machine structure (LangGraph engine)
 │   ├── setup.py             # Instantiates, compiles, and chains StateGraph nodes
 │   ├── checkpointer.py      # Persists conversation states and node states
@@ -120,7 +126,7 @@ To support dynamic tool schema extraction and runtime tool activation, the platf
 *   **BaseAgentTool Class (`agents/tools/base.py`):** Individual tools (e.g., Reddit Sentiment, Macroeconomic Data) inherit from `BaseAgentTool`, defining their execution logic (`_run` / `_arun`), their target analyst nodes, and their configurable settings schema (`ToolSettingField`).
 *   **Tool Registry (`agents/tools/registry.py`):** Acts as the source of truth for all tools. Standard tools are registered at bootstrap (`agents/tools/bootstrap.py`).
 *   **Thread-Safe Context Injection (`graph/trading_graph.py`):** Before running the state machine, user-specific or system-default settings are loaded from the database and merged into a `runtime_tool_context`. This context is stored in the LangGraph thread configuration.
-*   **Runtime Tool Adaptation (`agents/utils/analyst_node_factory.py`):** In the analyst execution lifecycle (`run_tool_analyst`), the runtime filters active tools based on the context and adapts them dynamically into LangChain/LangGraph-compatible bindings.
+*   **Runtime Tool Adaptation (`agents/runtime/analyst_node_factory.py`):** In the analyst execution lifecycle (`run_tool_analyst`), the runtime filters active tools based on the context and adapts them dynamically into LangChain/LangGraph-compatible bindings.
 
 ### How to Register a New Agent Tool
 

@@ -6,7 +6,7 @@ Previously a single failing analyst, manager or tool raised through
 `graph.invoke()` and **aborted the entire analysis**. This subsystem makes the
 run resilient and gives it a dedicated, structured log stream.
 
-Implementation: [`backend/trading_agents/agents/utils/resilience.py`](../../backend/trading_agents/agents/utils/resilience.py).
+Implementation: [`backend/trading_agents/agents/runtime/resilience.py`](../../backend/trading_agents/agents/runtime/resilience.py).
 
 ---
 
@@ -36,7 +36,7 @@ with the data it already has, instead of crashing. (Falls back to the default
 - **`retry_call(fn, …)`** retries with exponential backoff (`node_retry_attempts`
   total tries, `node_retry_base_delay` seconds — read from engine config, default
   `2` / `1.0s`). The analyst LLM turn in
-  [`analyst_node_factory.run_tool_analyst`](../../backend/trading_agents/agents/utils/analyst_node_factory.py)
+  [`analyst_node_factory.run_tool_analyst`](../../backend/trading_agents/agents/runtime/analyst_node_factory.py)
   is wrapped in it.
 - **`guard_node(fn, name, kind, fallback)`** wraps every graph node
   ([setup.py](../../backend/trading_agents/graph/setup.py)): it retries, logs, and
