@@ -186,13 +186,8 @@ async def _extract_and_save_annotations(
         if not annotations:
             return
         async with AsyncSessionLocal() as s:
-            row = None
-            for attempt in range(5):
-                result = await s.execute(select(AnalysisResult).where(AnalysisResult.id == analysis_id))
-                row = result.scalar_one_or_none()
-                if row:
-                    break
-                await asyncio.sleep(0.5)
+            result = await s.execute(select(AnalysisResult).where(AnalysisResult.id == analysis_id))
+            row = result.scalar_one_or_none()
             if row:
                 row.chart_annotations = _json.dumps(annotations, ensure_ascii=False)
                 await s.commit()

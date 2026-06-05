@@ -8,7 +8,10 @@ from .analysts.options_analyst import create_options_analyst
 from .analysts.quant_analyst import create_quant_analyst
 from .analysts.earnings_analyst import create_earnings_analyst
 from .analysts.review_analyst import create_review_analyst
-from .analysts.sentiment_analyst import create_sentiment_analyst
+from .analysts.sentiment_analyst import (
+    create_sentiment_analyst,
+    create_social_media_analyst,
+)
 from .researchers.bear_researcher import create_bear_researcher
 from .researchers.bull_researcher import create_bull_researcher
 from .risk_mgmt.aggressive_debator import create_aggressive_debator
@@ -36,6 +39,7 @@ __all__ = [
     "create_portfolio_manager",
     "create_conservative_debator",
     "create_sentiment_analyst",
+    "create_social_media_analyst",
     "create_trader",
     "create_macro_analyst",
     "create_options_analyst",
