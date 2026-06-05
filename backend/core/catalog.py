@@ -91,6 +91,14 @@ PROVIDER_LABELS: dict[str, str] = llm_registry.get_provider_labels()
 # Provider-specific reasoning/thinking effort levels (UI option lists).
 EFFORT_OPTIONS: dict[str, list[dict]] = llm_registry.get_effort_options()
 
+def investor_personas() -> list[dict]:
+    from backend.trading_agents.personas import list_personas
+    return [
+        {"value": p.key, "label": p.label, "description": p.description}
+        for p in list_personas()
+    ]
+
+
 ORDER_STATUSES: list[dict] = [
     {"value": "FILLED",           "label": "Filled",      "tone": "positive"},
     {"value": "PARTIALLY_FILLED", "label": "Partial",     "tone": "neutral"},
