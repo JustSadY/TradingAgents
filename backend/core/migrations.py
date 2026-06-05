@@ -26,7 +26,8 @@ _ALLOWED_COLUMNS = {
     },
     "system_settings": {
         "data_vendor_core_stock", "data_vendor_technicals",
-        "data_vendor_fundamentals", "data_vendor_news"
+        "data_vendor_fundamentals", "data_vendor_news", "trading_mode",
+        "active_broker", "active_data_vendor", "updated_at"
     },
     "app_settings": {
         "user_id", "llm_model", "openai_reasoning_effort",
@@ -37,13 +38,15 @@ _ALLOWED_COLUMNS = {
         "webhook_enabled", "webhook_events", "active_preset_name",
         "max_debate_rounds", "max_risk_rounds", "max_position_size_pct",
         "max_risk_per_trade_pct", "strict_stop_loss_mode", "strict_backtest_learning", "node_retry_attempts",
-        "node_retry_base_delay"
+        "node_retry_base_delay", "llm_provider", "cron_enabled", "cron_schedule",
+        "price_tolerance_pct", "watchlist", "selected_analysts", "updated_at"
     },
     "analysis_results": {
         "user_id", "bull_history", "bear_history", "investment_debate_history",
         "risk_debate_history", "judge_decision", "chart_annotations",
         "raw_return", "alpha_return", "holding_days", "llm_provider",
-        "llm_model", "preset_name", "reflection"
+        "llm_model", "preset_name", "reflection", "llm_calls", "tool_calls",
+        "tokens_in", "tokens_out", "duration_seconds", "triggered_by"
     },
     "portfolios": {
         "user_id", "initial_capital", "current_balance", "cash_available"
@@ -76,6 +79,10 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("system_settings", "data_vendor_technicals",   "VARCHAR(50) DEFAULT 'yfinance'"),
     ("system_settings", "data_vendor_fundamentals", "VARCHAR(50) DEFAULT 'yfinance'"),
     ("system_settings", "data_vendor_news",         "VARCHAR(50) DEFAULT 'yfinance'"),
+    ("system_settings", "trading_mode",             "VARCHAR(20) DEFAULT 'simulation'"),
+    ("system_settings", "active_broker",            "VARCHAR(50) DEFAULT 'simulation'"),
+    ("system_settings", "active_data_vendor",       "VARCHAR(50) DEFAULT 'yfinance'"),
+    ("system_settings", "updated_at",               "TIMESTAMP WITH TIME ZONE"),
     ("app_settings", "user_id", "INTEGER REFERENCES users(id)"),
     ("analysis_results",      "user_id", "INTEGER REFERENCES users(id)"),
     ("portfolios",            "user_id", "INTEGER REFERENCES users(id)"),
@@ -110,6 +117,12 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("analysis_results", "llm_provider",                "VARCHAR(50)"),
     ("analysis_results", "llm_model",                   "VARCHAR(100)"),
     ("analysis_results", "preset_name",                  "VARCHAR(100)"),
+    ("analysis_results", "llm_calls",                   "INTEGER DEFAULT 0"),
+    ("analysis_results", "tool_calls",                  "INTEGER DEFAULT 0"),
+    ("analysis_results", "tokens_in",                   "INTEGER DEFAULT 0"),
+    ("analysis_results", "tokens_out",                  "INTEGER DEFAULT 0"),
+    ("analysis_results", "duration_seconds",            "FLOAT DEFAULT 0.0"),
+    ("analysis_results", "triggered_by",                "VARCHAR(20) DEFAULT 'manual'"),
     ("app_settings", "max_debate_rounds",          "INTEGER DEFAULT 1"),
     ("app_settings", "max_risk_rounds",            "INTEGER DEFAULT 1"),
     ("app_settings", "max_position_size_pct",      "FLOAT DEFAULT 10.0"),
@@ -118,6 +131,13 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("app_settings", "strict_backtest_learning",   "BOOLEAN DEFAULT TRUE"),
     ("app_settings", "node_retry_attempts",         "INTEGER DEFAULT 2"),
     ("app_settings", "node_retry_base_delay",       "FLOAT DEFAULT 1.0"),
+    ("app_settings", "llm_provider",                "VARCHAR(50) DEFAULT 'openai'"),
+    ("app_settings", "cron_enabled",               "BOOLEAN DEFAULT FALSE"),
+    ("app_settings", "cron_schedule",              "VARCHAR(100) DEFAULT '0 9 * * 1-5'"),
+    ("app_settings", "price_tolerance_pct",        "FLOAT DEFAULT 0.5"),
+    ("app_settings", "watchlist",                  "TEXT DEFAULT '[]'"),
+    ("app_settings", "selected_analysts",          "TEXT DEFAULT '[\"market\", \"news\", \"fundamentals\", \"social\"]'"),
+    ("app_settings", "updated_at",                 "TIMESTAMP WITH TIME ZONE"),
 ]
 
 
