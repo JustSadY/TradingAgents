@@ -33,8 +33,8 @@ def create_sentiment_analyst(llm):
             reddit_enabled = fetch_reddit_posts in filtered
             stocktwits_enabled = fetch_stocktwits_messages in filtered
 
-        # get_news.func is the underlying vendor router, now async
-        news_block = await get_news.func(ticker, start_date, end_date)
+        # Use route_to_vendor directly
+        news_block = await route_to_vendor("get_news", ticker, start_date, end_date)
         
         if reddit_enabled:
             reddit_block = await route_to_vendor("fetch_reddit_posts", ticker)
