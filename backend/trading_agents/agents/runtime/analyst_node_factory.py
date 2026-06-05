@@ -94,7 +94,11 @@ async def run_tool_analyst(
         # Retries exhausted — skip this analyst with a visible note instead of
         # aborting the whole run. The empty AIMessage carries no tool calls, so
         # the graph routes straight to the next analyst.
-        log_event("node_error", level=40, node=analyst, kind="analyst", error=str(exc)[:300])
+        import traceback as _tb
+        log_event("node_error", level=40, node=analyst, kind="analyst",
+                  error=str(exc)[:300],
+                  exc_type=type(exc).__name__,
+                  traceback=_tb.format_exc()[-1500:])
         log_event("node_skipped", level=30, node=analyst, kind="analyst")
         return {
             "messages": [AIMessage(content="")],
