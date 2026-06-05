@@ -24,7 +24,7 @@ def create_sentiment_analyst(llm):
         end_date = state["trade_date"]
         start_date = _seven_days_back(end_date)
         instrument_context = build_instrument_context(ticker)
-        from backend.trading_agents.agents.utils.chart_tools import active_run_context
+        from backend.trading_agents.agents.data.chart_tools import active_run_context
         ctx = active_run_context.get(None)
         reddit_enabled = True
         stocktwits_enabled = True

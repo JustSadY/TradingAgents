@@ -1,12 +1,12 @@
 from __future__ import annotations
 import json
 from backend.trading_agents.agents.schemas import PortfolioDecision, render_pm_decision, TraderProposal
-from backend.trading_agents.agents.utils.risk_math import calculate_kelly_size, get_risk_reward_from_plan
+from backend.trading_agents.agents.runtime.risk_math import calculate_kelly_size, get_risk_reward_from_plan
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
 )
-from backend.trading_agents.agents.utils.structured import (
+from backend.trading_agents.agents.runtime.structured import (
     bind_structured,
     invoke_structured_or_freetext,
 )

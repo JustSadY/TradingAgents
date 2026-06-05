@@ -6,8 +6,8 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 from backend.trading_agents.dataflows.config import get_config
 from backend.trading_agents.agents.analyst_registry import register_analyst
-from backend.trading_agents.agents.utils.analyst_node_factory import run_tool_analyst
-from backend.trading_agents.agents.utils.chart_tools import (
+from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
+from backend.trading_agents.agents.data.chart_tools import (
     add_chart_annotation,
     add_custom_indicator,
     get_vision_chart_analysis,

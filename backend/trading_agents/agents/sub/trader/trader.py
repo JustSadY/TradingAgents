@@ -6,11 +6,11 @@ from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
 )
-from backend.trading_agents.agents.utils.structured import (
+from backend.trading_agents.agents.runtime.structured import (
     bind_structured,
     invoke_structured_or_freetext,
 )
-from backend.trading_agents.agents.utils.backtest_tools import run_strategy_backtest
+from backend.trading_agents.agents.data.backtest_tools import run_strategy_backtest
 def create_trader(llm):
     structured_llm = bind_structured(llm, TraderProposal, "Trader")
     def trader_node(state, name):

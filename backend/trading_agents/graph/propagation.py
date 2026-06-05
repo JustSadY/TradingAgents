@@ -1,5 +1,5 @@
 from typing import Dict, Any, List, Optional
-from backend.trading_agents.agents.utils.agent_states import (
+from backend.trading_agents.agents.runtime.agent_states import (
     AgentState,
     InvestDebateState,
     RiskDebateState,

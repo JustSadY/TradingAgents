@@ -1,5 +1,5 @@
 from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
-from backend.trading_agents.agents.utils.report_aggregator import build_resources
+from backend.trading_agents.agents.runtime.report_aggregator import build_resources
 def create_conservative_debator(llm):
     def conservative_node(state) -> dict:
         risk_debate_state = state["risk_debate_state"]

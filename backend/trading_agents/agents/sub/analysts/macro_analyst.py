@@ -5,7 +5,7 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 from backend.trading_agents.dataflows.config import get_config
 from backend.trading_agents.agents.analyst_registry import register_analyst
-from backend.trading_agents.agents.utils.analyst_node_factory import run_tool_analyst
+from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 
 
 @register_analyst(

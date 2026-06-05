@@ -5,10 +5,10 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_language_instruction,
     get_news,
 )
-from backend.trading_agents.agents.utils.search_tools import get_crypto_fear_and_greed_index
+from backend.trading_agents.agents.data.search_tools import get_crypto_fear_and_greed_index
 from backend.trading_agents.dataflows.config import get_config
 from backend.trading_agents.agents.analyst_registry import register_analyst
-from backend.trading_agents.agents.utils.analyst_node_factory import run_tool_analyst
+from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 
 
 @register_analyst(

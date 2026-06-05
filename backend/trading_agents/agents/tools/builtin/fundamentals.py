@@ -1,10 +1,10 @@
-from backend.trading_agents.agents.utils.fundamental_data_tools import (
+from backend.trading_agents.agents.data.fundamental_data_tools import (
     get_fundamentals,
     get_balance_sheet,
     get_cashflow,
     get_income_statement,
 )
-from backend.trading_agents.agents.utils.sec_tools import (
+from backend.trading_agents.agents.data.sec_tools import (
     get_sec_filings,
     get_insider_transactions_deep,
 )

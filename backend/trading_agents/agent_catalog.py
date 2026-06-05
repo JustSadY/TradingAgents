@@ -108,22 +108,27 @@ def get_standard_agent_settings() -> list[AgentSettingField]:
 
 
 AGENTS: list[AgentInfo] = [
-    # Analysts (belonging to Synthesis Manager)
-    AgentInfo("market", "Market Analyst", "Technical indicators, price trends and momentum", "analyst", True, get_standard_agent_settings(), "synthesis_manager"),
-    AgentInfo("social", "Social Analyst", "Social media, StockTwits and Reddit sentiment", "analyst", True, get_standard_agent_settings(), "synthesis_manager"),
-    AgentInfo("news", "News Analyst", "Company-specific and sector news flow", "analyst", True, get_standard_agent_settings(), "synthesis_manager"),
-    AgentInfo("fundamentals", "Fundamentals Analyst", "Balance sheet, income statement and valuation", "analyst", True, get_standard_agent_settings(), "synthesis_manager"),
-    AgentInfo("macro", "Macro Analyst", "Interest rates, inflation and economic outlook", "analyst", False, get_standard_agent_settings(), "synthesis_manager"),
-    AgentInfo("options", "Options Analyst", "Options chain, implied volatility and flows", "analyst", False, get_standard_agent_settings(), "synthesis_manager"),
-    AgentInfo("quant", "Quant Analyst", "Statistical factors and quantitative signals", "analyst", False, get_standard_agent_settings(), "synthesis_manager"),
-    AgentInfo("earnings", "Earnings Analyst", "Earnings calls, estimates and surprises", "analyst", False, get_standard_agent_settings(), "synthesis_manager"),
-    AgentInfo("review", "Performance Review Analyst", "Performance review of past decisions", "analyst", False, get_standard_agent_settings(), "synthesis_manager"),
-    
-    # Managers/Decision Orchestrators
+    # ── Tier-1 Main Agent: Market Intelligence (owns the analyst sub-agents) ──
+    AgentInfo("market_intelligence", "Market Intelligence", "Coordinates the data & indicator analyst sub-agents", "manager", True, get_standard_agent_settings(), "portfolio_manager"),
+
+    # Analysts — Tier-2 sub-agents under Market Intelligence
+    AgentInfo("market", "Market Analyst", "Technical indicators, price trends and momentum", "analyst", True, get_standard_agent_settings(), "market_intelligence"),
+    AgentInfo("social", "Social Analyst", "Social media, StockTwits and Reddit sentiment", "analyst", True, get_standard_agent_settings(), "market_intelligence"),
+    AgentInfo("news", "News Analyst", "Company-specific and sector news flow", "analyst", True, get_standard_agent_settings(), "market_intelligence"),
+    AgentInfo("fundamentals", "Fundamentals Analyst", "Balance sheet, income statement and valuation", "analyst", True, get_standard_agent_settings(), "market_intelligence"),
+    AgentInfo("macro", "Macro Analyst", "Interest rates, inflation and economic outlook", "analyst", False, get_standard_agent_settings(), "market_intelligence"),
+    AgentInfo("options", "Options Analyst", "Options chain, implied volatility and flows", "analyst", False, get_standard_agent_settings(), "market_intelligence"),
+    AgentInfo("quant", "Quant Analyst", "Statistical factors and quantitative signals", "analyst", False, get_standard_agent_settings(), "market_intelligence"),
+    AgentInfo("earnings", "Earnings Analyst", "Earnings calls, estimates and surprises", "analyst", False, get_standard_agent_settings(), "market_intelligence"),
+    AgentInfo("review", "Performance Review Analyst", "Performance review of past decisions", "analyst", False, get_standard_agent_settings(), "market_intelligence"),
+
+    # ── Research branch: sub-agents under Research Manager ──
     AgentInfo("bull_researcher", "Bull Researcher", "Advocates for long positions using positive indicators", "manager", True, get_standard_agent_settings(), "research_manager"),
     AgentInfo("bear_researcher", "Bear Researcher", "Advocates for short/hedged positions using risks", "manager", True, get_standard_agent_settings(), "research_manager"),
     AgentInfo("synthesis_manager", "Synthesis Manager", "Synthesizes analyst reports, alignments and conflicts", "manager", True, get_standard_agent_settings(), "research_manager"),
     AgentInfo("auditor", "Auditor", "Audits research quality, consistency, and completeness", "manager", True, get_standard_agent_settings(), "research_manager"),
+
+    # ── Tier-1 Main Agents under the Portfolio Manager root ──
     AgentInfo("research_manager", "Research Manager", "Formulates overall research summaries and investment plans", "manager", True, get_standard_agent_settings(), "portfolio_manager"),
     AgentInfo("trader", "Trader Agent", "Creates tactical execution strategy and sizing plans", "manager", True, get_standard_agent_settings(), "portfolio_manager"),
     AgentInfo("risk_debate", "Risk Debate Manager", "Orchestrates aggressive, neutral, and conservative risk debate", "manager", True, get_standard_agent_settings(), "portfolio_manager"),

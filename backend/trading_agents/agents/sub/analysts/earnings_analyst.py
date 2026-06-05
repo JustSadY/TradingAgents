@@ -4,7 +4,7 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_language_instruction,
 )
 from backend.trading_agents.agents.analyst_registry import register_analyst
-from backend.trading_agents.agents.utils.analyst_node_factory import run_tool_analyst
+from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 
 
 @register_analyst(

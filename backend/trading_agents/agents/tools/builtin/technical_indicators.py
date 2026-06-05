@@ -1,4 +1,4 @@
-from backend.trading_agents.agents.utils.technical_indicators_tools import get_indicators
+from backend.trading_agents.agents.data.technical_indicators_tools import get_indicators
 from backend.trading_agents.agents.tools.base import ToolSettingField
 from backend.trading_agents.agents.tools.adapters import FunctionToolAdapter
 from backend.trading_agents.agents.tools.registry import registry

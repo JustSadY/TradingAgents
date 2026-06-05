@@ -10,14 +10,14 @@ from langgraph.prebuilt import ToolNode
 from backend.trading_agents.llm_clients import create_llm_client
 from backend.trading_agents.agents import *
 from backend.trading_agents.default_config import DEFAULT_CONFIG
-from backend.trading_agents.agents.utils.memory import TradingMemoryLog
+from backend.trading_agents.agents.runtime.memory import TradingMemoryLog
 from backend.trading_agents.dataflows.utils import safe_ticker_component
-from backend.trading_agents.agents.utils.agent_states import (
+from backend.trading_agents.agents.runtime.agent_states import (
     AgentState,
     InvestDebateState,
     RiskDebateState,
 )
-from backend.trading_agents.agents.utils.chart_tools import active_run_context
+from backend.trading_agents.agents.data.chart_tools import active_run_context
 from backend.trading_agents.dataflows.config import set_config
 from backend.trading_agents.agents.utils.agent_utils import (
     get_stock_data,
@@ -35,7 +35,8 @@ from backend.trading_agents.agents.utils.agent_utils import (
     search_web,
     get_crypto_fear_and_greed_index,
 )
-from backend.trading_agents.agents.utils.review_tools import get_past_performance_data
+from backend.trading_agents.agents.data.review_tools import get_past_performance_data
+from backend.trading_agents.agents.agent_hierarchy import AgentHierarchy
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
 from .conditional_logic import ConditionalLogic
 from .setup import GraphSetup
@@ -76,38 +77,58 @@ class TradingAgentsGraph:
             **main_kwargs,
         )
         self.thinking_llm = client.get_llm()
-        self.agent_llms = {}
+
+        # ------------------------------------------------------------------
+        # Build the agent hierarchy from runtime context
+        # ------------------------------------------------------------------
         runtime_agent_ctx = self.config.get("runtime_agent_context") or {}
+        self.hierarchy = AgentHierarchy(runtime_agent_ctx)
+
+        # LLM factory used by the hierarchy for recursive resolution
+        def _make_llm(provider: str, model: str, temperature=None) -> Any:
+            prov_lower = provider.lower()
+            kwargs = self._get_provider_kwargs(prov_lower)
+            if temperature is not None:
+                kwargs["temperature"] = float(temperature)
+            if self.callbacks:
+                kwargs["callbacks"] = self.callbacks
+            c = create_llm_client(
+                provider=prov_lower,
+                model=model,
+                base_url=self.config.get("backend_url"),
+                **kwargs,
+            )
+            return c.get_llm()
+
+        # Resolve per-agent LLMs via hierarchy (supports parent fallback)
         from backend.trading_agents.agent_catalog import list_agents
+        self.agent_llms: Dict[str, Any] = {}
         for agent_info in list_agents():
-            agent_key = agent_info.key
-            agent_state = runtime_agent_ctx.get(agent_key)
-            if agent_state and agent_state.get("settings"):
-                settings_val = agent_state["settings"]
-                prov = settings_val.get("llm_provider") or main_prov
-                model_name = settings_val.get("llm_model") or self.config["llm_model"]
-                temperature = settings_val.get("temperature")
-                try:
-                    agent_kwargs = self._get_provider_kwargs(prov)
-                    if temperature is not None:
-                        agent_kwargs["temperature"] = float(temperature)
-                    if self.callbacks:
-                        agent_kwargs["callbacks"] = self.callbacks
-                    client = create_llm_client(
-                        provider=prov,
-                        model=model_name,
-                        base_url=self.config.get("backend_url"),
-                        **agent_kwargs,
-                    )
-                    self.agent_llms[agent_key] = client.get_llm()
-                except Exception as e:
-                    logger.warning(
-                        "Could not create custom LLM client for agent %s: %s",
-                        agent_key, e,
-                    )
-                    self.agent_llms[agent_key] = self.thinking_llm
-            else:
-                self.agent_llms[agent_key] = self.thinking_llm
+            key = agent_info.key
+            try:
+                self.agent_llms[key] = self.hierarchy.resolve_llm(
+                    key, self.thinking_llm, _make_llm
+                )
+            except Exception as e:
+                logger.warning(
+                    "LLM resolution failed for agent '%s': %s – using global LLM.", key, e
+                )
+                self.agent_llms[key] = self.thinking_llm
+
+        # ------------------------------------------------------------------
+        # Filter selected analysts using hierarchy enable state.
+        # is_enabled() cascades through market_intelligence → portfolio_manager,
+        # so disabling either branch transparently drops every analyst.
+        # ------------------------------------------------------------------
+        _effective_analysts = [
+            k for k in selected_analysts if self.hierarchy.is_enabled(k)
+        ]
+        skipped = set(selected_analysts) - set(_effective_analysts)
+        if skipped:
+            logger.info(
+                "The following analysts are disabled by hierarchy and will be skipped: %s",
+                sorted(skipped),
+            )
 
         self.memory_log = TradingMemoryLog(self.config)
         self.tool_nodes = self._create_tool_nodes()
@@ -121,6 +142,8 @@ class TradingAgentsGraph:
             self.conditional_logic,
             analyst_concurrency_limit=self.config.get("analyst_concurrency_limit", 1),
             agent_llms=self.agent_llms,
+            agent_hierarchy=self.hierarchy,
+            config=self.config,
         )
         self.propagator = Propagator(
             max_recur_limit=self.config.get("max_recur_limit", 100)
@@ -130,7 +153,7 @@ class TradingAgentsGraph:
         self.curr_state = None
         self.ticker = None
         self.log_states_dict = {}
-        self.workflow = self.graph_setup.setup_graph(selected_analysts)
+        self.workflow = self.graph_setup.setup_graph(_effective_analysts)
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None
     def _get_provider_kwargs(self, provider: str = None) -> Dict[str, Any]:
@@ -169,21 +192,26 @@ class TradingAgentsGraph:
             return raw_tools
 
         from backend.trading_agents.agents.tools.registry import registry
-        
+
         filtered = []
         for tool_func in raw_tools:
             tool_name = tool_func.name if hasattr(tool_func, "name") else tool_func.__name__
             agent_tool_key = registry.get_agent_tool_key_for_langchain_tool(tool_name)
-            
+
             if agent_tool_key is None:
                 filtered.append(tool_func)
                 continue
-                
+
             agent_tool = registry.get(agent_tool_key)
             if not agent_tool:
                 filtered.append(tool_func)
                 continue
-            
+
+            # Hierarchy gate: if every agent permitted to use this tool sits on a
+            # disabled branch, the tool is unreachable and is stripped entirely.
+            if self.hierarchy is not None and not self.hierarchy.tool_is_reachable(agent_tool_key):
+                continue
+
             tool_access = runtime_ctx.get("access", {}).get("tool_access", {}).get(agent_tool_key, {})
             can_use = tool_access.get("can_use", True)
             if not can_use:
@@ -191,7 +219,7 @@ class TradingAgentsGraph:
 
             user_state = runtime_ctx.get("user_settings", {}).get(agent_tool_key, {})
             server_state = runtime_ctx.get("server_settings", {}).get(agent_tool_key, {})
-            
+
             enabled = None
             if user_state and user_state.get("enabled") is not None:
                 enabled = user_state["enabled"]
@@ -199,26 +227,23 @@ class TradingAgentsGraph:
                 enabled = server_state["enabled"]
             else:
                 enabled = agent_tool.default_enabled
-                
+
             if not enabled:
                 continue
-                
+
             filtered.append(tool_func)
-            
+
         return filtered
 
     def _create_tool_nodes(self) -> Dict[str, ToolNode]:
         from backend.trading_agents.agents.analyst_registry import get_tools, list_analysts
-        from backend.trading_agents.agents.utils.resilience import tool_error_handler
+        from backend.trading_agents.agents.runtime.resilience import tool_error_handler
         nodes: Dict[str, ToolNode] = {}
         for key in list_analysts():
             tools = self._filter_tools_for_analyst(key, get_tools(key))
             try:
-                # Log tool failures and feed the error back to the LLM (so it
-                # moves on to the next tool) rather than aborting the run.
                 nodes[key] = ToolNode(tools, handle_tool_errors=tool_error_handler)
             except TypeError:
-                # Older/newer langgraph without the kwarg — fall back to default.
                 nodes[key] = ToolNode(tools)
         return nodes
     def _resolve_benchmark(self, ticker: str) -> str:

@@ -4,7 +4,7 @@ from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
 )
-from backend.trading_agents.agents.utils.structured import (
+from backend.trading_agents.agents.runtime.structured import (
     bind_structured,
     invoke_structured_or_freetext,
 )

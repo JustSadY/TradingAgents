@@ -473,7 +473,7 @@ async def run_portfolio_analysis(
                 debug=False,
                 config=config,
             )
-            from backend.trading_agents.agents.managers.super_portfolio_manager import create_super_portfolio_manager
+            from backend.trading_agents.agents.sub.managers.super_portfolio_manager import create_super_portfolio_manager
             spm_node = create_super_portfolio_manager(ta.thinking_llm)
             state_out = await asyncio.to_thread(spm_node, {"ticker_reports": ticker_reports})
             super_report = state_out.get("super_portfolio_report", "")

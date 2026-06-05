@@ -29,7 +29,7 @@ _COLLAB_SYSTEM = (
 
 def run_tool_analyst(llm, state, *, tools, system_message, report_key, instrument_context):
     """Run the standard tool-using analyst turn and return its state update."""
-    from backend.trading_agents.agents.utils.chart_tools import active_run_context
+    from backend.trading_agents.agents.data.chart_tools import active_run_context
     ctx = active_run_context.get(None)
     if ctx and "graph" in ctx:
         graph = ctx["graph"]
@@ -53,7 +53,7 @@ def run_tool_analyst(llm, state, *, tools, system_message, report_key, instrumen
     else:
         bound_llm = llm
 
-    from backend.trading_agents.agents.utils.resilience import retry_call, log_event
+    from backend.trading_agents.agents.runtime.resilience import retry_call, log_event
     from langchain_core.messages import AIMessage
     import time as _time
     analyst = report_key.replace("_report", "")

@@ -1,4 +1,4 @@
-from backend.trading_agents.agents.utils.chart_tools import (
+from backend.trading_agents.agents.data.chart_tools import (
     add_chart_annotation,
     add_custom_indicator,
     get_vision_chart_analysis,
