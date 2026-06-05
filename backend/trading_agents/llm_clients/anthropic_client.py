@@ -23,9 +23,21 @@ class AnthropicClient(BaseLLMClient):
     def get_llm(self) -> Any:
         self.warn_if_unknown_model()
         llm_kwargs = {"model": self.model}
+        
+        # Determine API Key (NO .env lookup)
+        api_key = self.kwargs.get("api_key")
+        if not api_key:
+            raise ValueError(
+                "API key for Anthropic is not set. "
+                "Please provide it in your Profile or Settings."
+            )
+        llm_kwargs["api_key"] = api_key
+
         if self.base_url:
             llm_kwargs["base_url"] = self.base_url
         for key in _PASSTHROUGH_KWARGS:
+            if key == "api_key":
+                continue
             if key not in self.kwargs:
                 continue
             if key == "effort" and not _supports_effort(self.model):

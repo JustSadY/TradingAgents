@@ -52,18 +52,16 @@ class OpenAIClient(BaseLLMClient):
         if resolved_base_url:
             llm_kwargs["base_url"] = resolved_base_url
 
-        # Determine API Key
-        api_key_env = get_api_key_env(self.provider)
-        if api_key_env:
-            api_key = self.kwargs.get("api_key") or os.environ.get(api_key_env)
-            if api_key:
-                llm_kwargs["api_key"] = api_key
-            elif self.provider != "openai":
-                # For providers other than OpenAI, we strictly require the key
-                raise ValueError(
-                    f"API key for provider '{self.provider}' is not set. "
-                    f"Please set the {api_key_env} environment variable."
-                )
+        # Determine API Key (NO .env lookups)
+        api_key = self.kwargs.get("api_key")
+        if api_key:
+            llm_kwargs["api_key"] = api_key
+        elif self.provider != "openai":
+            # For providers other than OpenAI, we strictly require the key to be passed explicitly
+            raise ValueError(
+                f"API key for provider '{self.provider}' is not set. "
+                "Please provide it in your Profile or Settings."
+            )
 
         for key in _PASSTHROUGH_KWARGS:
             if key in self.kwargs:

@@ -7,15 +7,13 @@ import os
 class LLMProvider:
     key: str
     label: str
-    api_key_env: Optional[str] = None
     models: List[tuple[str, str]] = field(default_factory=list)
     effort_options: List[Dict[str, str]] = field(default_factory=list)
     is_openai_compatible: bool = False
     
     def get_api_key(self) -> Optional[str]:
-        if not self.api_key_env:
-            return None
-        return os.environ.get(self.api_key_env)
+        # Explicitly removed .env lookup
+        return None
 
 class LLMProviderRegistry:
     def __init__(self):
@@ -39,7 +37,8 @@ class LLMProviderRegistry:
         return {p.key: p.effort_options for p in self.list_providers() if p.effort_options}
 
     def get_api_key_envs(self) -> Dict[str, Optional[str]]:
-        return {p.key: p.api_key_env for p in self.list_providers()}
+        # This method is now legacy/empty as we don't use env vars for AI keys
+        return {}
 
     def get_model_options(self, key: str) -> List[tuple[str, str]]:
         p = self.get(key)
@@ -59,11 +58,10 @@ _STANDARD_EFFORT = [
     {"value": "high", "label": "High"},
 ]
 
-# Register core supported providers
+# Register core supported providers (NO api_key_env defined)
 llm_registry.register(LLMProvider(
     key="openai",
     label="OpenAI",
-    api_key_env="OPENAI_API_KEY",
     is_openai_compatible=True,
     effort_options=_STANDARD_EFFORT,
     models=[
@@ -78,7 +76,6 @@ llm_registry.register(LLMProvider(
 llm_registry.register(LLMProvider(
     key="anthropic",
     label="Anthropic (Claude)",
-    api_key_env="ANTHROPIC_API_KEY",
     effort_options=_STANDARD_EFFORT,
     models=[
         ("Claude 3.5 Sonnet - Flagship, SOTA on agentic workflows", "claude-3-5-sonnet-latest"),
@@ -90,7 +87,6 @@ llm_registry.register(LLMProvider(
 llm_registry.register(LLMProvider(
     key="google",
     label="Google (Gemini)",
-    api_key_env="GOOGLE_API_KEY",
     effort_options=[
         {"value": "minimal", "label": "Minimal"},
         {"value": "low", "label": "Low"},
@@ -107,7 +103,6 @@ llm_registry.register(LLMProvider(
 llm_registry.register(LLMProvider(
     key="nvidia",
     label="NVIDIA NIM",
-    api_key_env="NVIDIA_API_KEY",
     is_openai_compatible=True,
     models=[
         ("Llama-3.1 405B Instruct", "meta/llama-3.1-405b-instruct"),

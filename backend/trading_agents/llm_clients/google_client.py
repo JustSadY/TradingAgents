@@ -11,14 +11,22 @@ class GoogleClient(BaseLLMClient):
     def get_llm(self) -> Any:
         self.warn_if_unknown_model()
         llm_kwargs = {"model": self.model}
+
+        # Determine API Key (NO .env lookup)
+        google_api_key = self.kwargs.get("api_key") or self.kwargs.get("google_api_key")
+        if not google_api_key:
+            raise ValueError(
+                "API key for Google Gemini is not set. "
+                "Please provide it in your Profile or Settings."
+            )
+        llm_kwargs["google_api_key"] = google_api_key
+
         if self.base_url:
             llm_kwargs["base_url"] = self.base_url
         for key in ("timeout", "max_retries", "callbacks", "http_client", "http_async_client"):
             if key in self.kwargs:
                 llm_kwargs[key] = self.kwargs[key]
-        google_api_key = self.kwargs.get("api_key") or self.kwargs.get("google_api_key")
-        if google_api_key:
-            llm_kwargs["google_api_key"] = google_api_key
+        
         thinking_level = self.kwargs.get("thinking_level")
         if thinking_level:
             model_lower = self.model.lower()
