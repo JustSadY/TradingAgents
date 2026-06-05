@@ -4,7 +4,7 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 
 def create_auditor_node(llm):
-    def auditor_node(state) -> dict:
+    async def auditor_node(state) -> dict:
         from backend.trading_agents.dataflows.config import get_config
         if not get_config().get("auditor_enabled", True):
             return {"audit_report": "Audit disabled by user settings."}
@@ -51,7 +51,7 @@ Your audit report MUST follow this structure:
 
 {get_language_instruction()}
 """
-        response = llm.invoke(prompt)
+        response = await llm.ainvoke(prompt)
         return {"audit_report": response.content}
     
     return auditor_node

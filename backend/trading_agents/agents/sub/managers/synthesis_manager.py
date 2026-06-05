@@ -5,7 +5,7 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 
 def create_synthesis_manager(llm):
-    def synthesis_manager_node(state) -> dict:
+    async def synthesis_manager_node(state) -> dict:
         from backend.trading_agents.dataflows.config import get_config
         if not get_config().get("synthesis_enabled", True):
             return {"synthesis_report": "Synthesis disabled by user settings."}
@@ -21,6 +21,8 @@ def create_synthesis_manager(llm):
             macd_args["curr_date"] = state["trade_date"]
             rsi_args["curr_date"] = state["trade_date"]
             
+        # run_strategy_backtest is sync, but we call it via invoke (which we'll keep sync for now or use ainvoke if it's async)
+        # Actually, I didn't make run_strategy_backtest async yet.
         macd_results = run_strategy_backtest.invoke(macd_args)
         rsi_results = run_strategy_backtest.invoke(rsi_args)
         
@@ -61,7 +63,7 @@ Your synthesis MUST follow this structure:
 
 {get_language_instruction()}
 """
-        response = llm.invoke(prompt)
+        response = await llm.ainvoke(prompt)
         return {"synthesis_report": response.content}
     
     return synthesis_manager_node

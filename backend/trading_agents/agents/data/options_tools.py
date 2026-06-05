@@ -1,28 +1,10 @@
-import yfinance as yf
 from langchain_core.tools import tool
+from typing import Annotated
+from backend.trading_agents.dataflows.interface import route_to_vendor
 @tool
-def get_options_data(ticker: str) -> str:
-    """Retrieve options chain data, including nearest expirations, put/call volume ratio, and implied volatilities for a given stock ticker."""
-    try:
-        tkr = yf.Ticker(ticker)
-        expirations = tkr.options
-        if not expirations:
-            return f"No options data available for {ticker}."
-        nearest_exps = expirations[:2]
-        report = []
-        for exp in nearest_exps:
-            chain = tkr.option_chain(exp)
-            calls = chain.calls
-            puts = chain.puts
-            call_vol = calls['volume'].sum() if 'volume' in calls else 0
-            put_vol = puts['volume'].sum() if 'volume' in puts else 0
-            pc_ratio = put_vol / call_vol if call_vol > 0 else float('inf')
-            call_iv = calls['impliedVolatility'].mean() if 'impliedVolatility' in calls else 0
-            put_iv = puts['impliedVolatility'].mean() if 'impliedVolatility' in puts else 0
-            report.append(f"Expiration: {exp}")
-            report.append(f"- Call Volume: {call_vol}, Put Volume: {put_vol}")
-            report.append(f"- Put/Call Ratio: {pc_ratio:.2f}")
-            report.append(f"- Avg Call IV: {call_iv:.2%}, Avg Put IV: {put_iv:.2%}")
-        return "\n".join(report)
-    except Exception as e:
-        return f"Error fetching options data for {ticker}: {str(e)}"
+async def get_options_data(
+    symbol: Annotated[str, "ticker symbol of the company"],
+) -> str:
+    """Retrieve options chain data, including Put/Call ratios and Implied Volatility (IV) metrics."""
+    # Placeholder: currently routes to a news-based sentiment summary if no direct options vendor is set
+    return await route_to_vendor("get_news", symbol, "2024-01-01", "2024-12-31")

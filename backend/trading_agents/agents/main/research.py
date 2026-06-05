@@ -20,6 +20,7 @@ Kill-switch behaviour:
 from __future__ import annotations
 
 import logging
+import inspect
 
 from backend.trading_agents.agents.base import (
     AgentRunContext, NodeFn, neutral_invest_debate_state,
@@ -35,8 +36,10 @@ logger = logging.getLogger(__name__)
 MAIN_KEY = "research_manager"
 
 
-def _safe(label: str, fn, state: dict, fallback: dict) -> dict:
+async def _safe(label: str, fn, state: dict, fallback: dict) -> dict:
     try:
+        if inspect.iscoroutinefunction(fn):
+            return await fn(state)
         return fn(state)
     except Exception as exc:  # noqa: BLE001
         logger.warning("[research_manager] sub '%s' failed: %s — using fallback.", label, exc)
@@ -44,7 +47,7 @@ def _safe(label: str, fn, state: dict, fallback: dict) -> dict:
 
 
 def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
-    def research_manager_node(state) -> dict:
+    async def research_manager_node(state) -> dict:
         # Tier-1 kill-switch.
         if not ctx.is_enabled(MAIN_KEY):
             logger.info("[research_manager] branch disabled — skipping research.")
@@ -67,7 +70,7 @@ def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
         # ---- Synthesis Manager (sub) ----
         if ctx.is_enabled("synthesis_manager"):
             node = create_synthesis_manager(ctx.llm_for("synthesis_manager"))
-            apply(_safe("synthesis_manager", node, local, {"synthesis_report": ""}))
+            apply(await _safe("synthesis_manager", node, local, {"synthesis_report": ""}))
         else:
             apply({"synthesis_report": ""})
 
@@ -93,7 +96,7 @@ def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
                     "count": local["investment_debate_state"]["count"] + 1,
                     "current_response": f"({label} unavailable.)",
                 }}
-                apply(_safe(label, speaker, local, fb))
+                apply(await _safe(label, speaker, local, fb))
         else:
             logger.info("[research_manager] debate skipped (bull=%s bear=%s).", bull_on, bear_on)
             if not local.get("investment_debate_state"):
@@ -102,13 +105,13 @@ def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
         # ---- Auditor (sub) ----
         if ctx.is_enabled("auditor"):
             node = create_auditor_node(ctx.llm_for("auditor"))
-            apply(_safe("auditor", node, local, {"audit_report": ""}))
+            apply(await _safe("auditor", node, local, {"audit_report": ""}))
         else:
             apply({"audit_report": ""})
 
         # ---- Research Manager judgement (this main agent's own decision) ----
         judge = create_research_manager(ctx.llm_for("research_manager"))
-        apply(_safe("research_manager", judge, local, {
+        apply(await _safe("research_manager", judge, local, {
             "investment_plan": "Research manager unavailable; proceeding with available reports.",
         }))
 

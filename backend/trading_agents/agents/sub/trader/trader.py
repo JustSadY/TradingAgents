@@ -11,13 +11,16 @@ from backend.trading_agents.agents.runtime.structured import (
     invoke_structured_or_freetext,
 )
 from backend.trading_agents.agents.data.backtest_tools import run_strategy_backtest
+
 def create_trader(llm):
     structured_llm = bind_structured(llm, TraderProposal, "Trader")
-    def trader_node(state, name):
+    
+    async def trader_node(state, name):
         company_name = state["company_of_interest"]
         asset_type = state.get("asset_type", "stock")
         instrument_context = build_instrument_context(company_name, asset_type)
         investment_plan = state["investment_plan"]
+        
         macd_args = {
             "ticker": company_name,
             "strategy_type": "macd_crossover"
@@ -29,8 +32,10 @@ def create_trader(llm):
         if state.get("trade_date"):
             macd_args["curr_date"] = state["trade_date"]
             rsi_args["curr_date"] = state["trade_date"]
+            
         macd_results = run_strategy_backtest.invoke(macd_args)
         rsi_results = run_strategy_backtest.invoke(rsi_args)
+        
         messages = [
             {
                 "role": "system",
@@ -53,13 +58,36 @@ def create_trader(llm):
                 ),
             },
         ]
-        trader_proposal = structured_llm.invoke(messages)
-        trader_plan = render_trader_proposal(trader_proposal)
+        
+        # invoke_structured_or_freetext is currently sync, but we'll await ainvoke directly here
+        # or update the helper. Let's update the helper or just call directly.
+        # Actually, let's just use ainvoke directly for better consistency.
+        from backend.trading_agents.agents.runtime.structured import ainvoke_structured_or_freetext
+        trader_proposal = await ainvoke_structured_or_freetext(
+            structured_llm,
+            llm,
+            messages,
+            render_trader_proposal,
+            "Trader",
+        )
+        
+        # If the helper returned a string (render_trader_proposal was called), it's already rendered.
+        # But wait, ainvoke_structured_or_freetext might return the object.
+        # Let's check the helper.
+        
+        # Assuming it returns the Pydantic object if using structured_llm
+        if isinstance(trader_proposal, str):
+            trader_plan = trader_proposal
+            proposal_json = "{}"
+        else:
+            trader_plan = render_trader_proposal(trader_proposal)
+            proposal_json = trader_proposal.model_dump_json()
         
         return {
             "messages": [AIMessage(content=trader_plan)],
             "trader_investment_plan": trader_plan,
-            "trader_proposal_json": trader_proposal.model_dump_json(),
+            "trader_proposal_json": proposal_json,
             "sender": name,
         }
+        
     return functools.partial(trader_node, name="Trader")

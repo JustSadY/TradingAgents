@@ -83,12 +83,11 @@ async def run_tool_analyst(
     _start = _time.time()
     log_event("node_start", node=analyst, kind="analyst")
     try:
-        def run_invoke():
-            return (prompt | bound_llm).invoke(state["messages"])
+        # Use ainvoke directly for better consistency and to stay on the main loop
         result = await retry_call(
-            run_invoke,
+            lambda: (prompt | bound_llm).ainvoke(state["messages"]),
             label=f"analyst:{analyst}",
-            run_in_thread=True,
+            run_in_thread=False,
             runtime_config=runtime_retry_config,
         )
     except Exception as exc:  # noqa: BLE001

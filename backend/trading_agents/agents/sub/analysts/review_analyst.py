@@ -8,6 +8,7 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 from backend.trading_agents.agents.data.review_tools import get_past_performance_data
 from backend.trading_agents.agents.analyst_registry import register_analyst
+
 @register_analyst(
     key="review",
     agent_node="Performance Review Analyst",
@@ -18,11 +19,13 @@ from backend.trading_agents.agents.analyst_registry import register_analyst
 )
 def create_review_analyst(llm):
     llm_with_tools = llm.bind_tools([get_past_performance_data])
-    def review_analyst(state: AgentState, config: RunnableConfig):
+    
+    async def review_analyst(state: AgentState, config: RunnableConfig):
         ticker = state.get("company_of_interest", "Unknown")
         asset_type = state.get("asset_type", "stock")
         context_str = build_instrument_context(ticker, asset_type)
         curr_date = state.get("trade_date")
+        
         system_message = (
             "You are a senior performance review analyst. Your goal is to conduct a rigorous hindsight audit of past trading decisions to drive system improvement.\n\n"
             "### Analytical Process (Chain-of-Thought):\n"
@@ -43,10 +46,14 @@ def create_review_analyst(llm):
             f"{context_str}\n"
             + get_language_instruction()
         )
+        
         messages = [
             SystemMessage(content=system_message),
             *state["messages"],
         ]
-        response = llm_with_tools.invoke(messages, config)
+        
+        # Use ainvoke for async compatibility
+        response = await llm_with_tools.ainvoke(messages, config)
         return {"messages": [response], "sender": "Review Analyst"}
+        
     return review_analyst

@@ -10,6 +10,7 @@ Kill-switch behaviour:
 from __future__ import annotations
 
 import logging
+import inspect
 
 from backend.trading_agents.agents.base import AgentRunContext, NodeFn
 from backend.trading_agents.agents.sub.trader.trader import create_trader
@@ -20,7 +21,7 @@ MAIN_KEY = "trader"
 
 
 def create_trader_node(ctx: AgentRunContext) -> NodeFn:
-    def trader_node(state) -> dict:
+    async def trader_node(state) -> dict:
         if not ctx.is_enabled(MAIN_KEY):
             logger.info("[trader] branch disabled — skipping trade planning.")
             return {
@@ -30,6 +31,8 @@ def create_trader_node(ctx: AgentRunContext) -> NodeFn:
 
         run = create_trader(ctx.llm_for("trader"))
         try:
+            if inspect.iscoroutinefunction(run):
+                return await run(state)
             return run(state)
         except Exception as exc:  # noqa: BLE001
             logger.warning("[trader] sub-agent failed: %s — using fallback.", exc)

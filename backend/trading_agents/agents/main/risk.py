@@ -15,6 +15,7 @@ Kill-switch behaviour:
 from __future__ import annotations
 
 import logging
+import inspect
 
 from backend.trading_agents.agents.base import (
     AgentRunContext, NodeFn, neutral_risk_debate_state,
@@ -29,7 +30,7 @@ MAIN_KEY = "risk_debate"
 
 
 def create_risk_debate_node(ctx: AgentRunContext) -> NodeFn:
-    def risk_debate_node(state) -> dict:
+    async def risk_debate_node(state) -> dict:
         if not ctx.is_enabled(MAIN_KEY):
             logger.info("[risk_debate] branch disabled — skipping risk debate.")
             return {"risk_debate_state": neutral_risk_debate_state(
@@ -63,7 +64,10 @@ def create_risk_debate_node(ctx: AgentRunContext) -> NodeFn:
             name, fn = rotation[idx % len(rotation)]
             idx += 1
             try:
-                upd = fn(local)
+                if inspect.iscoroutinefunction(fn):
+                    upd = await fn(local)
+                else:
+                    upd = fn(local)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("[risk_debate] '%s' failed: %s — counting a skip.", name, exc)
                 rs = dict(local["risk_debate_state"])

@@ -8,11 +8,13 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 from backend.trading_agents.agents.runtime.structured import (
     bind_structured,
-    invoke_structured_or_freetext,
+    ainvoke_structured_or_freetext,
 )
+
 def create_portfolio_manager(llm):
     structured_llm = bind_structured(llm, PortfolioDecision, "Portfolio Manager")
-    def portfolio_manager_node(state) -> dict:
+    
+    async def portfolio_manager_node(state) -> dict:
         instrument_context = build_instrument_context(state["company_of_interest"])
         history = state["risk_debate_state"]["history"]
         risk_debate_state = state["risk_debate_state"]
@@ -54,10 +56,11 @@ def create_portfolio_manager(llm):
         else:
             lessons_line = ""
             conviction_instructions = ""
-        from backend.trading_agents.dataflows.config import get_config
+            
         from backend.trading_agents.personas import get_persona_instructions, DEFAULT_PERSONA
         persona = get_config().get("investor_persona", DEFAULT_PERSONA)
         persona_instructions = get_persona_instructions(persona)
+        
         prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
 {persona_instructions}
 {instrument_context}
@@ -77,13 +80,20 @@ def create_portfolio_manager(llm):
 {history}
 {conviction_instructions}---
 Be decisive and ground every conclusion in specific evidence from the analysts.{get_language_instruction()}"""
-        final_trade_decision = invoke_structured_or_freetext(
+        
+        result = await ainvoke_structured_or_freetext(
             structured_llm,
             llm,
             prompt,
             render_pm_decision,
             "Portfolio Manager",
         )
+        
+        if isinstance(result, str):
+            final_trade_decision = result
+        else:
+            final_trade_decision = render_pm_decision(result)
+            
         new_risk_debate_state = {
             "judge_decision": final_trade_decision,
             "history": risk_debate_state["history"],
@@ -100,4 +110,5 @@ Be decisive and ground every conclusion in specific evidence from the analysts.{
             "risk_debate_state": new_risk_debate_state,
             "final_trade_decision": final_trade_decision,
         }
+        
     return portfolio_manager_node

@@ -1,30 +1,13 @@
 import asyncio
 import logging
-import threading
 from typing import Optional
 import yfinance as yf
 from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
 from .config import get_config
 from .stockstats_utils import yf_retry
+
 _logger = logging.getLogger(__name__)
-
-def _run_async_blocking(coro):
-    container = {}
-
-    def _runner():
-        try:
-            container["result"] = asyncio.run(coro)
-        except Exception as exc:
-            container["error"] = exc
-
-    t = threading.Thread(target=_runner, daemon=True)
-    t.start()
-    t.join()
-    if "error" in container:
-        raise container["error"]
-    return container.get("result")
-
 
 def _parse_news_datetime(raw_value):
     if raw_value is None:
@@ -78,7 +61,8 @@ def _extract_article_data(article: dict) -> dict:
             "link": article.get("link", ""),
             "pub_date": None,
         }
-def get_news_yfinance(
+
+async def get_news_yfinance(
     ticker: str,
     start_date: str,
     end_date: str,
@@ -87,7 +71,10 @@ def get_news_yfinance(
     try:
         from backend.services.news_service import get_news_feed
 
-        cached_items = _run_async_blocking(get_news_feed(ticker, article_limit)) or []
+        # Correctly await the async news feed service in the main loop
+        cached_items = await get_news_feed(ticker, article_limit)
+        cached_items = cached_items or []
+        
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
         end_dt = datetime.strptime(end_date, "%Y-%m-%d")
         news_str = ""
@@ -120,11 +107,13 @@ def get_news_yfinance(
     except Exception as e:
         _logger.error("Unexpected error fetching news for %s: %s", ticker, e, exc_info=True)
         return f"Error fetching news for {ticker}: {str(e)}"
+
 def get_global_news_yfinance(
     curr_date: str,
     look_back_days: Optional[int] = None,
     limit: Optional[int] = None,
 ) -> str:
+    # yfinance.Search is sync, so it will be wrapped by route_to_vendor's to_thread
     config = get_config()
     if look_back_days is None:
         look_back_days = config["global_news_lookback_days"]

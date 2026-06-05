@@ -18,8 +18,14 @@ _logger = logging.getLogger(__name__)
 active_run_context: contextvars.ContextVar[Dict] = contextvars.ContextVar("active_run_context")
 
 def _load_ohlcv_via_interface(symbol: str, curr_date: str) -> pd.DataFrame:
+    # This remains sync as it's a helper for vision/trend, but we'll use it carefully.
+    # Actually, route_to_vendor is now async. We should probably await it here too.
+    # But this is a helper.
+    pass
+
+async def _load_ohlcv_via_interface_async(symbol: str, curr_date: str) -> pd.DataFrame:
     start_date = (pd.to_datetime(curr_date) - pd.DateOffset(years=5)).strftime("%Y-%m-%d")
-    csv_payload = route_to_vendor("get_stock_data", symbol, start_date, curr_date)
+    csv_payload = await route_to_vendor("get_stock_data", symbol, start_date, curr_date)
     lines = [line for line in (csv_payload or "").splitlines() if line and not line.startswith("#")]
     if not lines:
         return pd.DataFrame(columns=["Date", "Open", "High", "Low", "Close", "Volume"])
@@ -39,7 +45,7 @@ def _load_ohlcv_via_interface(symbol: str, curr_date: str) -> pd.DataFrame:
     return df[df["Date"] <= pd.to_datetime(curr_date)] if "Date" in df.columns else df
 
 @tool
-def add_chart_annotation(
+async def add_chart_annotation(
     type: Annotated[str, "Type of annotation: 'arrowUp', 'arrowDown', or 'trendline'"],
     time: Annotated[str, "Date for the annotation in YYYY-MM-DD format (for trendline, this is start date)"],
     price: Annotated[float, "Price level for the annotation (for trendline, this is start price)"],
@@ -70,7 +76,7 @@ def add_chart_annotation(
     return f"Visual annotation ({type}) successfully registered at {time} / ${price}."
 
 @tool
-def add_custom_indicator(
+async def add_custom_indicator(
     name: Annotated[str, "A short unique name for the custom indicator, e.g., 'NormalizedSpread'"],
     formula: Annotated[str, "Mathematical formula using variables Open, High, Low, Close, Volume and indicators SMA(N), EMA(N), STD(N), RSI(N). Example: (Close - SMA(20)) / STD(20)"],
     label: Annotated[Optional[str], "Optional display label for the indicator chart"] = None,
@@ -92,7 +98,7 @@ def add_custom_indicator(
     return f"Custom indicator '{name}' with formula '{formula}' registered successfully. It will be rendered on the user interface."
 
 @tool
-def get_vision_chart_analysis(
+async def get_vision_chart_analysis(
     symbol: Annotated[str, "ticker symbol of the company"],
     curr_date: Annotated[str, "The current trading date, YYYY-MM-DD"],
 ) -> str:
@@ -105,7 +111,7 @@ def get_vision_chart_analysis(
         return "Error: Graph client not found in context. Vision analysis unavailable."
     
     try:
-        df = _load_ohlcv_via_interface(symbol, curr_date)
+        df = await _load_ohlcv_via_interface_async(symbol, curr_date)
         if df.empty or len(df) < 10:
             return "Error: Not enough data to plot chart."
         
@@ -153,7 +159,7 @@ def get_vision_chart_analysis(
             ]
         )
         
-        res = llm.invoke([message])
+        res = await llm.ainvoke([message])
         content = res.content if hasattr(res, "content") else str(res)
         return f"--- Vision Chart Analysis for {symbol} ---\n{content}"
         
@@ -162,7 +168,7 @@ def get_vision_chart_analysis(
         return f"Error performing vision chart analysis: {str(e)}"
 
 @tool
-def get_mtf_trend(
+async def get_mtf_trend(
     symbol: Annotated[str, "ticker symbol of the company"],
     timeframe: Annotated[str, "Timeframe for trend calculation: '1d', '1wk', '1mo'"],
     curr_date: Annotated[str, "The current trading date you are trading on, YYYY-MM-DD"],
@@ -177,7 +183,7 @@ def get_mtf_trend(
         
     try:
         # Load daily data to get index mapping
-        df_daily = _load_ohlcv_via_interface(symbol, curr_date)
+        df_daily = await _load_ohlcv_via_interface_async(symbol, curr_date)
         if df_daily.empty:
             return "Error: No daily data found."
             
@@ -192,7 +198,8 @@ def get_mtf_trend(
         # We need historical data. Determine start based on lookback
         start_date = (df_daily['Date'].min() - pd.DateOffset(days=90)).strftime('%Y-%m-%d')
         
-        df_mtf = ticker.history(start=start_date, end=curr_date, interval=timeframe)
+        # yfinance download is sync
+        df_mtf = await asyncio.to_thread(ticker.history, start=start_date, end=curr_date, interval=timeframe)
         if df_mtf.empty:
             return f"Error: No data found for timeframe '{timeframe}'."
             

@@ -4,6 +4,7 @@ from typing import Any, Callable, Optional, TypeVar
 from pydantic import BaseModel
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
+
 def bind_structured(llm: Any, schema: type[T], agent_name: str) -> Optional[Any]:
     try:
         return llm.with_structured_output(schema)
@@ -14,6 +15,7 @@ def bind_structured(llm: Any, schema: type[T], agent_name: str) -> Optional[Any]
             agent_name, exc,
         )
         return None
+
 def invoke_structured_or_freetext(
     structured_llm: Optional[Any],
     plain_llm: Any,
@@ -31,4 +33,26 @@ def invoke_structured_or_freetext(
                 agent_name, exc,
             )
     response = plain_llm.invoke(prompt)
+    return response.content
+
+async def ainvoke_structured_or_freetext(
+    structured_llm: Optional[Any],
+    plain_llm: Any,
+    prompt: Any,
+    render: Callable[[T], str],
+    agent_name: str,
+) -> Any:
+    """Async version of invoke_structured_or_freetext.
+    Returns the structured object if successful, otherwise the free-text string content.
+    """
+    if structured_llm is not None:
+        try:
+            result = await structured_llm.ainvoke(prompt)
+            return result
+        except Exception as exc:
+            logger.warning(
+                "%s: structured-output ainvocation failed (%s); retrying once as free text",
+                agent_name, exc,
+            )
+    response = await plain_llm.ainvoke(prompt)
     return response.content

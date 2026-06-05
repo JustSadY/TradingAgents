@@ -35,8 +35,11 @@ langgraph-checkpoint-sqlite>=2.0.0
 # Trading & Data Analysis
 backtrader>=1.9.78.123
 pandas>=2.3.0
+numpy>=2.0.0
 yfinance>=0.2.63
 stockstats>=0.6.5
+mplfinance>=0.12.10b0
+matplotlib>=3.9.0
 
 # Utilities
 requests>=2.32.4

@@ -18,7 +18,7 @@ def _seven_days_back(trade_date: str) -> str:
     tools=[],
 )
 def create_sentiment_analyst(llm):
-    def sentiment_analyst_node(state):
+    async def sentiment_analyst_node(state):
         ticker = state["company_of_interest"]
         end_date = state["trade_date"]
         start_date = _seven_days_back(end_date)
@@ -33,15 +33,16 @@ def create_sentiment_analyst(llm):
             reddit_enabled = fetch_reddit_posts in filtered
             stocktwits_enabled = fetch_stocktwits_messages in filtered
 
-        news_block = get_news.func(ticker, start_date, end_date)
+        # get_news.func is the underlying vendor router, now async
+        news_block = await get_news.func(ticker, start_date, end_date)
         
         if reddit_enabled:
-            reddit_block = route_to_vendor("fetch_reddit_posts", ticker)
+            reddit_block = await route_to_vendor("fetch_reddit_posts", ticker)
         else:
             reddit_block = "Reddit sentiment data source is disabled by user or server settings."
 
         if stocktwits_enabled:
-            stocktwits_block = route_to_vendor("fetch_stocktwits_messages", ticker, limit=30)
+            stocktwits_block = await route_to_vendor("fetch_stocktwits_messages", ticker, limit=30)
         else:
             stocktwits_block = "StockTwits sentiment data source is disabled by user or server settings."
 
@@ -70,7 +71,7 @@ def create_sentiment_analyst(llm):
         prompt = prompt.partial(current_date=end_date)
         prompt = prompt.partial(instrument_context=instrument_context)
         chain = prompt | llm
-        result = chain.invoke(state["messages"])
+        result = await chain.ainvoke(state["messages"])
         return {
             "messages": [result],
             "sentiment_report": result.content,

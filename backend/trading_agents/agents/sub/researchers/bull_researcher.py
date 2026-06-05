@@ -1,7 +1,8 @@
 from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
 from backend.trading_agents.agents.runtime.report_aggregator import build_resources
+
 def create_bull_researcher(llm):
-    def bull_node(state) -> dict:
+    async def bull_node(state) -> dict:
         investment_debate_state = state["investment_debate_state"]
         history = investment_debate_state.get("history", "")
         bull_history = investment_debate_state.get("bull_history", "")
@@ -52,7 +53,7 @@ def create_bull_researcher(llm):
 
 Deliver a compelling bull argument that refutes the bear's concerns using specific citations.
 """ + get_language_instruction()
-        response = llm.invoke(prompt)
+        response = await llm.ainvoke(prompt)
         argument = f"Bull Analyst: {response.content}"
         new_investment_debate_state = {
             "history": history + "\n" + argument,

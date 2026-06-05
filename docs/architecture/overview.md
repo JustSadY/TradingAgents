@@ -100,12 +100,13 @@ This is a cohesive AI subsystem that lives inside the backend and is imported as
 
 ## 3. Asynchronous Task Offloading Strategy
 
-FastAPI's main thread runs on a single event loop. Executing heavy synchronous graph operations directly on this loop would cause API requests to timeout and disconnect active WebSockets.
+FastAPI's main thread runs on a single event loop. Executing heavy graph operations directly on this loop without yielding would block other requests.
 
-To solve this, TradingAgents offloads executions:
-1.  **Graph Invocation Thread Pool:** The function `async_propagate` runs the LangGraph runner `ta.graph.invoke` inside a separate thread pool using `asyncio.to_thread`.
-2.  **Thread-safe WebSocket Signaling:** Within the spawned worker thread, callbacks are registered. These invoke `asyncio.run_coroutine_threadsafe` to push live state updates (like which agent node is executing) and partial reports back to the main event loop, which sends them over WebSockets to the frontend.
-3.  **Background Database Workers:** Long-running database updates, such as parsing chart annotations and sending notifications via webhooks, are offloaded to background asyncio tasks (`asyncio.create_task`) to minimize initial response times.
+To solve this, TradingAgents utilizes a fully asynchronous architecture:
+1.  **Asynchronous Graph Execution:** The function `async_propagate` runs the LangGraph runner using `await ta.graph.ainvoke` or `ta.graph.astream`. This allows the event loop to yield during LLM calls or tool executions, keeping the server responsive.
+2.  **Async/Sync Bridging (where needed):** While most components are now native async, any remaining heavy synchronous calculations (like pandas-based backtests or yfinance fetches) are offloaded to threads using `asyncio.to_thread` from within their respective async tools or nodes.
+3.  **Real-time WebSocket Streaming:** The graph uses `astream` to push live state updates (like which agent node is executing) and partial reports directly to the main event loop, which multicasts them over WebSockets to the frontend.
+4.  **Background Database Workers:** Long-running database updates, such as parsing chart annotations and sending notifications via webhooks, are offloaded to background asyncio tasks (`asyncio.create_task`) to minimize initial response times.
 
 ---
 

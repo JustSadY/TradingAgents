@@ -1,4 +1,8 @@
 from typing import Annotated
+import logging
+import inspect
+import asyncio
+
 from .y_finance import (
     get_YFin_data_online,
     get_stock_stats_indicators_window,
@@ -27,8 +31,9 @@ from .config import get_config
 from .cache import APICache, TOOLS_CATEGORIES, get_category_for_method
 from .reddit import fetch_reddit_posts
 from .stocktwits import fetch_stocktwits_messages
-import logging
+
 _logger = logging.getLogger(__name__)
+
 _TICKER_FIRST_METHODS = frozenset({
     "get_stock_data",
     "get_indicators",
@@ -42,10 +47,12 @@ _TICKER_FIRST_METHODS = frozenset({
     "fetch_reddit_posts",
     "fetch_stocktwits_messages",
 })
+
 VENDOR_LIST = [
     "yfinance",
     "alpha_vantage",
 ]
+
 VENDOR_METHODS = {
     "get_stock_data": {
         "alpha_vantage": get_alpha_vantage_stock,
@@ -93,6 +100,7 @@ VENDOR_METHODS = {
         "stocktwits": fetch_stocktwits_messages,
     },
 }
+
 def get_vendor(category: str, method: str = None) -> str:
     config = get_config()
     if method:
@@ -100,31 +108,45 @@ def get_vendor(category: str, method: str = None) -> str:
         if method in tool_vendors:
             return tool_vendors[method]
     return config.get("data_vendors", {}).get(category, "default")
-def route_to_vendor(method: str, *args, **kwargs):
+
+async def route_to_vendor(method: str, *args, **kwargs):
     if method in _TICKER_FIRST_METHODS and args:
         safe_ticker_component(args[0])
+    
     cached_val = APICache.get(method, *args, **kwargs)
     if cached_val is not None:
         return cached_val
+    
     category = get_category_for_method(method)
     vendor_config = get_vendor(category, method)
     primary_vendors = [v.strip() for v in vendor_config.split(',')]
+    
     if method not in VENDOR_METHODS:
         raise ValueError(f"Method '{method}' not supported")
+    
     all_available_vendors = list(VENDOR_METHODS[method].keys())
     fallback_vendors = primary_vendors.copy()
     for vendor in all_available_vendors:
         if vendor not in fallback_vendors:
             fallback_vendors.append(vendor)
+            
     for vendor in fallback_vendors:
         if vendor not in VENDOR_METHODS[method]:
             continue
+            
         vendor_impl = VENDOR_METHODS[method][vendor]
         impl_func = vendor_impl[0] if isinstance(vendor_impl, list) else vendor_impl
+        
         try:
-            val = impl_func(*args, **kwargs)
+            if inspect.iscoroutinefunction(impl_func):
+                val = await impl_func(*args, **kwargs)
+            else:
+                # Wrap synchronous vendor calls in a thread to keep the event loop responsive
+                val = await asyncio.to_thread(impl_func, *args, **kwargs)
+                
             APICache.set(method, val, *args, **kwargs)
             return val
         except AlphaVantageRateLimitError:
             continue
+            
     raise RuntimeError(f"No available vendor for '{method}'")

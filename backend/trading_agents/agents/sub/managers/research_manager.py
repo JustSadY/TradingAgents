@@ -6,11 +6,13 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 from backend.trading_agents.agents.runtime.structured import (
     bind_structured,
-    invoke_structured_or_freetext,
+    ainvoke_structured_or_freetext,
 )
+
 def create_research_manager(llm):
     structured_llm = bind_structured(llm, ResearchPlan, "Research Manager")
-    def research_manager_node(state) -> dict:
+    
+    async def research_manager_node(state) -> dict:
         instrument_context = build_instrument_context(state["company_of_interest"])
         history = state["investment_debate_state"].get("history", "")
         investment_debate_state = state["investment_debate_state"]
@@ -44,13 +46,20 @@ Commit to a clear stance whenever the debate's strongest arguments warrant one; 
 ---
 **Debate History:**
 {history}""" + get_language_instruction()
-        investment_plan = invoke_structured_or_freetext(
+        
+        result = await ainvoke_structured_or_freetext(
             structured_llm,
             llm,
             prompt,
             render_research_plan,
             "Research Manager",
         )
+        
+        if isinstance(result, str):
+            investment_plan = result
+        else:
+            investment_plan = render_research_plan(result)
+            
         new_investment_debate_state = {
             "judge_decision": investment_plan,
             "history": investment_debate_state.get("history", ""),
@@ -63,4 +72,5 @@ Commit to a clear stance whenever the debate's strongest arguments warrant one; 
             "investment_debate_state": new_investment_debate_state,
             "investment_plan": investment_plan,
         }
+        
     return research_manager_node
