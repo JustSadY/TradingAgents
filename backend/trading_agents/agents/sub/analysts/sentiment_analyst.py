@@ -5,8 +5,7 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_language_instruction,
     get_news,
 )
-from backend.trading_agents.dataflows.reddit import fetch_reddit_posts
-from backend.trading_agents.dataflows.stocktwits import fetch_stocktwits_messages
+from backend.trading_agents.dataflows.interface import route_to_vendor, fetch_reddit_posts, fetch_stocktwits_messages
 from backend.trading_agents.agents.analyst_registry import register_analyst
 def _seven_days_back(trade_date: str) -> str:
     return (datetime.strptime(trade_date, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
@@ -37,12 +36,12 @@ def create_sentiment_analyst(llm):
         news_block = get_news.func(ticker, start_date, end_date)
         
         if reddit_enabled:
-            reddit_block = fetch_reddit_posts(ticker)
+            reddit_block = route_to_vendor("fetch_reddit_posts", ticker)
         else:
             reddit_block = "Reddit sentiment data source is disabled by user or server settings."
 
         if stocktwits_enabled:
-            stocktwits_block = fetch_stocktwits_messages(ticker, limit=30)
+            stocktwits_block = route_to_vendor("fetch_stocktwits_messages", ticker, limit=30)
         else:
             stocktwits_block = "StockTwits sentiment data source is disabled by user or server settings."
 

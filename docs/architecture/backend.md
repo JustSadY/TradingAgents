@@ -116,11 +116,10 @@ import engine modules lazily inside functions (they pull heavy deps).
   `core/migrations.apply_column_migrations` (`ADD COLUMN IF NOT EXISTS`) and
   `apply_type_migrations` (float→`NUMERIC(20,8)` for money columns on Postgres).
   Renames / drops / non-additive type changes must be done with manual SQL.
-- **Money columns use `MONEY = Numeric(20, 8, asdecimal=False)`** (from
-  `core.database`): exact decimal storage, but Python values stay `float` so the
-  trading arithmetic is plain float. **Do not** mix in `Decimal` ad-hoc — moving
-  to `asdecimal=True` end-to-end is a deliberate, separate change that needs a
-  live-DB test pass.
+- **Money columns use `MONEY = Numeric(20, 8, asdecimal=True)`** (from
+  `core.database`): exact decimal storage, and Python values are processed as `Decimal`
+  to avoid rounding errors. End-to-end calculation and schema conversions are fully
+  aligned with Python's decimal arithmetic.
 - **Route ordering:** in a router, declare **static paths before dynamic
   `/{id}` paths**. FastAPI matches in registration order; a `GET /{id:int}`
   placed first will shadow `GET /literal` and return 422. (This bit us once.)

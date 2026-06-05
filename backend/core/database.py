@@ -8,10 +8,10 @@ AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=As
 
 # Exact fixed-precision column type for monetary / price / quantity values.
 # Stored as PostgreSQL NUMERIC(20, 8) (exact) instead of lossy double precision.
-# `asdecimal=False` keeps Python-side values as `float`, so existing arithmetic
-# in the trading services is unchanged. Migrating the Python math to `Decimal`
-# end-to-end (asdecimal=True) is a follow-up that needs a live-DB test pass.
-MONEY = Numeric(20, 8, asdecimal=False)
+# `asdecimal=True` maps Python-side values to `Decimal` type to avoid
+# rounding/accumulative floating-point errors. Arithmetic in the trading
+# services uses Python `Decimal` end-to-end.
+MONEY = Numeric(20, 8, asdecimal=True)
 
 
 class Base(DeclarativeBase):

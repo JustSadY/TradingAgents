@@ -1,14 +1,21 @@
 from datetime import datetime
+from typing import Any
 from pydantic import BaseModel
+
+
 class AnalysisRunRequest(BaseModel):
     ticker: str
     trade_date: str
     asset_type: str = "stock"
+
+
 class AnalysisRunResponse(BaseModel):
     task_id: str
     ticker: str
     trade_date: str
     message: str = "Analysis started"
+
+
 class AnalysisResultRead(BaseModel):
     id: int
     ticker: str
@@ -27,12 +34,12 @@ class AnalysisResultRead(BaseModel):
     investment_plan: str
     trader_plan: str
     final_decision: str
-    bull_history: str = ""
-    bear_history: str = ""
-    investment_debate_history: str = ""
-    risk_debate_history: str = ""
+    bull_history: Any = None
+    bear_history: Any = None
+    investment_debate_history: Any = None
+    risk_debate_history: Any = None
     judge_decision: str = ""
-    chart_annotations: str = ""
+    chart_annotations: Any = None
     llm_calls: int
     tool_calls: int
     tokens_in: int
@@ -46,8 +53,11 @@ class AnalysisResultRead(BaseModel):
     raw_return: float | None = None
     alpha_return: float | None = None
     holding_days: int | None = None
+
     class Config:
         from_attributes = True
+
+
 class AnalysisListItem(BaseModel):
     id: int
     ticker: str
@@ -57,18 +67,24 @@ class AnalysisListItem(BaseModel):
     duration_seconds: float
     triggered_by: str
     created_at: datetime
-    chart_annotations: str = ""
+    chart_annotations: Any = None
     llm_provider: str | None = None
     llm_model: str | None = None
     preset_name: str | None = None
+
     class Config:
         from_attributes = True
+
+
 class ChatMessageRead(BaseModel):
     id: int
     role: str
     content: str
     created_at: datetime
+
     class Config:
         from_attributes = True
+
+
 class ChatMessageCreate(BaseModel):
     message: str

@@ -18,9 +18,26 @@ _logger = logging.getLogger(__name__)
 
 # Indicative blended USD cost per 1K tokens, keyed by substring of the model id.
 MODEL_COST_PER_1K: dict[str, float] = {
-    "gpt-4o-mini": 0.00015, "gpt-4o": 0.005, "gpt-4.1": 0.008,
-    "claude-opus": 0.015, "claude-sonnet": 0.003, "gemini-1.5-pro": 0.007,
-    "gemini-2.0": 0.00015, "gemini-2.5": 0.00015, "deepseek": 0.00014,
+    "gpt-4o-mini": 0.00015,
+    "gpt-4o": 0.005,
+    "o1-mini": 0.003,
+    "o1": 0.015,
+    "o3-mini": 0.0011,
+    "claude-3-5-sonnet": 0.003,
+    "claude-3-5-haiku": 0.001,
+    "claude-opus": 0.015,
+    "claude-sonnet": 0.003,
+    "gemini-1.5-pro": 0.007,
+    "gemini-1.5-flash": 0.000075,
+    "gemini-2.0-flash": 0.000075,
+    "gemini-2.0": 0.000075,
+    "grok-2": 0.002,
+    "deepseek-reasoner": 0.00055,
+    "deepseek-chat": 0.00014,
+    "deepseek": 0.00014,
+    "qwen": 0.0002,
+    "glm": 0.0002,
+    "abab": 0.0002,
 }
 _TOKENS_PER_ANALYST = 8_000
 
@@ -52,15 +69,7 @@ def _is_correct(signal: str | None, raw_return: float) -> bool:
     )
 
 
-# Static sample shown until enough graded runs exist to populate the panel.
-_AB_PLACEHOLDER = [
-    {"preset_name": "OpenAI Presets (GPT-4o)", "total_runs": 12, "avg_duration": 48.2,
-     "avg_tokens": 142000, "avg_cost_usd": 0.71, "win_rate": 66.7, "total_graded": 6},
-    {"preset_name": "Gemini Presets (Flash 2.5)", "total_runs": 8, "avg_duration": 22.4,
-     "avg_tokens": 154000, "avg_cost_usd": 0.023, "win_rate": 60.0, "total_graded": 5},
-    {"preset_name": "Claude Presets (Sonnet 3.5)", "total_runs": 6, "avg_duration": 62.1,
-     "avg_tokens": 139000, "avg_cost_usd": 0.417, "win_rate": 75.0, "total_graded": 4},
-]
+# Static placeholder definition deleted to avoid returning fake/mock data in production.
 
 
 async def get_ab_comparison(db: AsyncSession) -> list[dict]:
@@ -95,7 +104,7 @@ async def get_ab_comparison(db: AsyncSession) -> list[dict]:
             "win_rate": round(wins / len(graded) * 100, 1) if graded else None,
             "total_graded": len(graded),
         })
-    return comparison or _AB_PLACEHOLDER
+    return comparison
 
 
 async def get_signal_performance(db: AsyncSession, ticker: str | None = None) -> dict:

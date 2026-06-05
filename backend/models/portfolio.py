@@ -1,3 +1,4 @@
+from decimal import Decimal
 from datetime import datetime, timezone
 from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -8,9 +9,9 @@ class Portfolio(Base):
     user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     mode: Mapped[str] = mapped_column(String(20), nullable=False)
     broker: Mapped[str] = mapped_column(String(50), nullable=False)
-    initial_capital: Mapped[float] = mapped_column(MONEY, nullable=False)
-    current_balance: Mapped[float] = mapped_column(MONEY, nullable=False)
-    cash_available: Mapped[float] = mapped_column(MONEY, nullable=False)
+    initial_capital: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    current_balance: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    cash_available: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     status: Mapped[str] = mapped_column(String(20), default="active")
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
@@ -28,10 +29,10 @@ class Holding(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     portfolio_id: Mapped[int] = mapped_column(Integer, ForeignKey("portfolios.id"), nullable=False)
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    quantity: Mapped[float] = mapped_column(MONEY, nullable=False)
-    avg_buy_price: Mapped[float] = mapped_column(MONEY, nullable=False)
-    current_price: Mapped[float] = mapped_column(MONEY, default=0.0)
-    unrealized_pnl: Mapped[float] = mapped_column(MONEY, default=0.0)
+    quantity: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    avg_buy_price: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    current_price: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    unrealized_pnl: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

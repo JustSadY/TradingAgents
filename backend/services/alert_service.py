@@ -1,14 +1,24 @@
 import asyncio
 import logging
+import uuid
+import yfinance as yf
 from datetime import datetime, timezone
+from sqlalchemy import select
+
+from backend.core.database import AsyncSessionLocal
+from backend.models.alert import PriceAlert
+from backend.models.settings import AppSettings
+from backend.models.user import User
+from backend.models.analysis import AnalysisResult
+from backend.services.notification_service import notify_alert_triggered
+from backend.services.analysis_service import run_analysis
+from backend.services.settings_service import get_or_create_settings
+
 _logger = logging.getLogger(__name__)
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
 async def check_price_alerts() -> None:
-    from sqlalchemy import select
-    from backend.core.database import AsyncSessionLocal
-    from backend.models.alert import PriceAlert
-    from backend.models.settings import AppSettings
-    from backend.services.notification_service import notify_alert_triggered
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(PriceAlert).where(PriceAlert.enabled == True, PriceAlert.triggered_at.is_(None))
@@ -18,7 +28,6 @@ async def check_price_alerts() -> None:
             return
         settings_res = await db.execute(select(AppSettings).where(AppSettings.id == 1))
         settings = settings_res.scalar_one_or_none()
-        import asyncio
         prices = await asyncio.to_thread(_fetch_prices, [a.ticker for a in alerts])
         for alert in alerts:
             price = prices.get(alert.ticker)
@@ -39,8 +48,9 @@ async def check_price_alerts() -> None:
                 _BACKGROUND_TASKS.add(task)
                 task.add_done_callback(_BACKGROUND_TASKS.discard)
         await db.commit()
+
+
 def _fetch_prices(tickers: list[str]) -> dict[str, float]:
-    import yfinance as yf
     prices = {}
     unique = list(set(tickers))
     try:
@@ -66,13 +76,10 @@ def _fetch_prices(tickers: list[str]) -> dict[str, float]:
             except Exception:
                 pass
     return prices
+
+
 async def _auto_analyze(ticker: str, trade_date: str, user_id: int) -> None:
     try:
-        from backend.core.database import AsyncSessionLocal
-        from backend.services.analysis_service import run_analysis
-        from backend.services.settings_service import get_or_create_settings
-        from backend.models.user import User
-        import uuid
         async with AsyncSessionLocal() as new_db:
             result = await new_db.execute(select(User).where(User.id == user_id))
             user = result.scalar_one_or_none()
@@ -88,11 +95,6 @@ async def _auto_analyze(ticker: str, trade_date: str, user_id: int) -> None:
 
 
 async def check_and_recover_lost_alerts() -> None:
-    from sqlalchemy import select
-    from backend.core.database import AsyncSessionLocal
-    from backend.models.alert import PriceAlert
-    from backend.models.analysis import AnalysisResult
-    
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(PriceAlert)

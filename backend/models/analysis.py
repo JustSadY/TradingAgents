@@ -1,5 +1,5 @@
 from datetime import datetime, timezone
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, JSON
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from backend.core.database import Base
 class AnalysisResult(Base):
@@ -22,12 +22,12 @@ class AnalysisResult(Base):
     investment_plan: Mapped[str] = mapped_column(Text, default="")
     trader_plan: Mapped[str] = mapped_column(Text, default="")
     final_decision: Mapped[str] = mapped_column(Text, default="")
-    bull_history: Mapped[str] = mapped_column(Text, default="")
-    bear_history: Mapped[str] = mapped_column(Text, default="")
-    investment_debate_history: Mapped[str] = mapped_column(Text, default="")
-    risk_debate_history: Mapped[str] = mapped_column(Text, default="")
+    bull_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
+    bear_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
+    investment_debate_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
+    risk_debate_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
     judge_decision: Mapped[str] = mapped_column(Text, default="")
-    chart_annotations: Mapped[str] = mapped_column(Text, default="")
+    chart_annotations: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     llm_calls: Mapped[int] = mapped_column(Integer, default=0)
     tool_calls: Mapped[int] = mapped_column(Integer, default=0)
     tokens_in: Mapped[int] = mapped_column(Integer, default=0)

@@ -1,3 +1,4 @@
+from typing import Any
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -53,3 +54,42 @@ def require_page(page_key: str):
             )
         return current_user
     return _check
+
+
+async def check_tool_settings_permission(
+    body: Any = None,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+) -> User:
+    """FastAPI dependency to authorize tool settings updates."""
+    # We declare body as Any to avoid static imports, but let's check its type
+    from backend.schemas.tool_settings import ToolSettingsUpdate
+    if not isinstance(body, ToolSettingsUpdate):
+        return user
+
+    if user.is_admin:
+        return user
+
+    from backend.services.tool_access_service import get_user_tool_access
+    from backend.trading_agents.agents.tools.registry import registry
+
+    tool_access_map = await get_user_tool_access(db, user.id)
+
+    for tool_key, update in body.tools.items():
+        tool = registry.get(tool_key)
+        if not tool:
+            raise HTTPException(status_code=400, detail=f"Unknown tool key '{tool_key}'.")
+
+        perms = tool_access_map.get(tool_key, {})
+        if not perms.get("can_view", True):
+            raise HTTPException(status_code=403, detail=f"You do not have permission to view tool '{tool_key}'.")
+        
+        if update.enabled is not None or update.reset_enabled:
+            if not perms.get("can_enable", False):
+                raise HTTPException(status_code=403, detail=f"You do not have permission to enable/disable tool '{tool_key}'.")
+        
+        if update.settings is not None or update.reset_settings:
+            if not perms.get("can_edit", False):
+                raise HTTPException(status_code=403, detail=f"You do not have permission to modify settings for tool '{tool_key}'.")
+
+    return user

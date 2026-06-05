@@ -1,3 +1,4 @@
+from decimal import Decimal
 from datetime import datetime, timezone
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
@@ -10,12 +11,12 @@ class Order(Base):
     broker: Mapped[str] = mapped_column(String(50), nullable=False)
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     action: Mapped[str] = mapped_column(String(10), nullable=False)
-    quantity_requested: Mapped[float] = mapped_column(MONEY, nullable=False)
-    quantity_filled: Mapped[float] = mapped_column(MONEY, default=0.0)
+    quantity_requested: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    quantity_filled: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     status: Mapped[str] = mapped_column(String(30), default="PENDING")
-    price_per_share: Mapped[float | None] = mapped_column(MONEY, nullable=True)
-    total_value: Mapped[float | None] = mapped_column(MONEY, nullable=True)
-    commission: Mapped[float] = mapped_column(MONEY, default=0.0)
+    price_per_share: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    total_value: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    commission: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     analysis_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("analysis_results.id"), nullable=True
     )

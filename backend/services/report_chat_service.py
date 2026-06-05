@@ -16,6 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models import AnalysisChat
 from backend.models.analysis import AnalysisResult
 from backend.services.settings_service import get_or_create_settings
+from backend.services.user_service import get_user_api_key
 
 _logger = logging.getLogger(__name__)
 
@@ -85,7 +86,6 @@ def _resolve_user_api_key(user, provider: str) -> Optional[str]:
         return None
     try:
         from backend.core.config import get_settings
-        from backend.services.user_service import get_user_api_key
         return get_user_api_key(user, provider, get_settings().get_fernet())
     except Exception:
         return None
@@ -117,11 +117,16 @@ async def answer_report_question(
                    "Please add your API key in Settings.",
         )
 
+    kwargs = {}
+    if settings.llm_provider.lower() == "azure" and settings.azure_deployment:
+        kwargs["azure_deployment"] = settings.azure_deployment
+
     client = create_llm_client(
         provider=settings.llm_provider,
         model=settings.llm_model,
         base_url=settings.backend_url,
         api_key=user_key,
+        **kwargs,
     )
     response = await client.get_llm().ainvoke(payload)
 

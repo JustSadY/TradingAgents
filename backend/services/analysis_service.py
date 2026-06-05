@@ -1,12 +1,40 @@
 import asyncio
+import json as _json
 import logging
+import os as _os
+import tempfile
 import time
 import uuid
+
 import backend.bootstrap  # noqa: F401  (sets engine env before importing the engine)
+from sqlalchemy import select, desc as _desc
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from backend.core.database import AsyncSessionLocal
 from backend.core.websocket import ws_manager
+from backend.core.catalog import node_progress
+from backend.core.config import get_settings as _cfg
 from backend.models.analysis import AnalysisResult
 from backend.models.settings import AppSettings
+from backend.models.system_settings import SystemSettings
+from backend.models.portfolio_analysis import MultiTickerAnalysis
+from backend.services.settings_service import get_or_create_settings
+from backend.services.stats_handler import StatsCallbackHandler
+from backend.services.performance_service import get_analyst_attribution_stats
+from backend.services.tool_settings_service import build_global_runtime_context
+from backend.services.tool_access_service import get_user_agent_access
+from backend.services.agent_settings_service import build_agent_runtime_context
+from backend.services.user_service import get_user_api_key, decrypt_api_keys
+from backend.services.notification_service import notify_analysis_complete
+from backend.services.annotation_service import extract_chart_annotations
+from backend.services.trading_orchestrator import place_signal_order
+
+# Heavy graph node / schemas imports:
+from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
+from backend.trading_agents.default_config import DEFAULT_CONFIG
+from backend.trading_agents.agents.schemas import PropagateResult
+from backend.trading_agents.agents.sub.managers.super_portfolio_manager import create_super_portfolio_manager
+
 _logger = logging.getLogger(__name__)
 _RUNNING_TASKS: dict[str, asyncio.Task] = {}
 _REPORT_FIELDS = (
@@ -14,10 +42,11 @@ _REPORT_FIELDS = (
     "macro_report", "options_report", "quant_report", "earnings_report",
     "review_report", "investment_plan", "trader_investment_plan", "final_trade_decision",
 )
+
+
 async def _get_historical_analyses_context(
-    ticker: str, trade_date: str, db: AsyncSession, limit: int = 5
+    ticker: str, trade_date: str, db: AsyncSession, limit: int = 5, output_language: str = "English"
 ) -> str:
-    from sqlalchemy import select, desc as _desc
     result = await db.execute(
         select(AnalysisResult)
         .where(AnalysisResult.ticker == ticker)
@@ -28,19 +57,37 @@ async def _get_historical_analyses_context(
     rows = result.scalars().all()
     if not rows:
         return ""
-    parts = [f"=== {ticker} GEÇMİŞ ANALİZ RAPORLARI ===\n"]
+    
+    lang = (output_language or "English").strip().lower()
+    is_tr = lang in ("turkish", "türkçe")
+    
+    title = f"=== {ticker} GEÇMİŞ ANALİZ RAPORLARI ===\n" if is_tr else f"=== {ticker} HISTORICAL ANALYSIS REPORTS ===\n"
+    parts = [title]
     for row in reversed(rows):
-        parts.append(f"--- Tarih: {row.trade_date} | Sinyal: {row.signal or 'N/A'} ---")
-        for label, field in [
-            ("Piyasa Raporu", row.market_report),
-            ("Haber Raporu", row.news_report),
-            ("Temel Analiz", row.fundamentals_report),
-            ("Son Karar", row.final_decision),
-        ]:
+        date_label = f"Tarih: {row.trade_date} | Sinyal" if is_tr else f"Date: {row.trade_date} | Signal"
+        parts.append(f"--- {date_label}: {row.signal or 'N/A'} ---")
+        labels = (
+            [
+                ("Piyasa Raporu", row.market_report),
+                ("Haber Raporu", row.news_report),
+                ("Temel Analiz", row.fundamentals_report),
+                ("Son Karar", row.final_decision),
+            ]
+            if is_tr
+            else [
+                ("Market Report", row.market_report),
+                ("News Report", row.news_report),
+                ("Fundamental Analysis", row.fundamentals_report),
+                ("Final Decision", row.final_decision),
+            ]
+        )
+        for label, field in labels:
             if field and field.strip():
                 parts.append(f"{label}:\n{field[:400].strip()}...")
         parts.append("")
     return "\n".join(parts)
+
+
 def _inject_tool_credentials(config: dict) -> None:
     runtime_tool_context = config.get("runtime_tool_context")
     if not runtime_tool_context:
@@ -64,9 +111,6 @@ def _inject_tool_credentials(config: dict) -> None:
 
 
 def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
-    from backend.trading_agents.graph.trading_graph import DEFAULT_CONFIG
-    import tempfile, os as _os
-    _tmp = tempfile.gettempdir()
     # Data-vendor routing is a server-level concern: read it from the global
     # SystemSettings (falling back to its active_data_vendor / yfinance), not
     # from per-user app settings.
@@ -76,25 +120,26 @@ def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
         return getattr(sys_settings, field, None) or _vendor_default
 
     cfg: dict = {
-        "data_cache_dir": _os.path.join(_tmp, "ta_cache"),
-        "results_dir":    _os.path.join(_tmp, "ta_results"),
-        "memory_log_path": _os.path.join(_tmp, "ta_memory.md"),
+        "data_cache_dir": _os.environ.get("TRADINGAGENTS_DATA_CACHE_DIR", DEFAULT_CONFIG["data_cache_dir"]),
+        "results_dir":    _os.environ.get("TRADINGAGENTS_RESULTS_DIR", DEFAULT_CONFIG["results_dir"]),
+        "memory_log_path": _os.environ.get("TRADINGAGENTS_MEMORY_LOG_PATH", DEFAULT_CONFIG["memory_log_path"]),
         "llm_provider": settings.llm_provider,
-        "llm_model": settings.llm_model or "gpt-4o-mini",
+        "llm_model": settings.llm_model or DEFAULT_CONFIG["llm_model"],
         "max_debate_rounds": settings.max_debate_rounds,
         "max_risk_discuss_rounds": settings.max_risk_rounds,
-        "output_language": settings.output_language or "English",
-        "investor_persona": settings.investor_persona or "conservative",
-        "analyst_concurrency_limit": settings.analyst_concurrency_limit or 1,
+        "output_language": settings.output_language or DEFAULT_CONFIG["output_language"],
+        "investor_persona": settings.investor_persona or DEFAULT_CONFIG["investor_persona"],
+        "analyst_concurrency_limit": settings.analyst_concurrency_limit or DEFAULT_CONFIG["analyst_concurrency_limit"],
         "skip_disk_log": True,
         # Checkpoint (resume) is always enabled — no longer a user/admin setting.
         "checkpoint_enabled": True,
-        "node_retry_attempts": getattr(settings, "node_retry_attempts", 2) or 2,
-        "node_retry_base_delay": getattr(settings, "node_retry_base_delay", 1.0) or 1.0,
-        "max_recur_limit": getattr(settings, "max_recur_limit", 1000) or 1000,
-        "news_article_limit": getattr(settings, "news_article_limit", 20) or 20,
-        "global_news_article_limit": getattr(settings, "global_news_article_limit", 10) or 10,
-        "global_news_lookback_days": getattr(settings, "global_news_lookback_days", 7) or 7,
+        "node_retry_attempts": getattr(settings, "node_retry_attempts", DEFAULT_CONFIG["node_retry_attempts"]) or DEFAULT_CONFIG["node_retry_attempts"],
+        "node_retry_base_delay": getattr(settings, "node_retry_base_delay", DEFAULT_CONFIG["node_retry_base_delay"]) or DEFAULT_CONFIG["node_retry_base_delay"],
+        "strict_backtest_learning": getattr(settings, "strict_backtest_learning", DEFAULT_CONFIG["strict_backtest_learning"]) if getattr(settings, "strict_backtest_learning", None) is not None else DEFAULT_CONFIG["strict_backtest_learning"],
+        "max_recur_limit": getattr(settings, "max_recur_limit", DEFAULT_CONFIG["max_recur_limit"]) or DEFAULT_CONFIG["max_recur_limit"],
+        "news_article_limit": getattr(settings, "news_article_limit", DEFAULT_CONFIG["news_article_limit"]) or DEFAULT_CONFIG["news_article_limit"],
+        "global_news_article_limit": getattr(settings, "global_news_article_limit", DEFAULT_CONFIG["global_news_article_limit"]) or DEFAULT_CONFIG["global_news_article_limit"],
+        "global_news_lookback_days": getattr(settings, "global_news_lookback_days", DEFAULT_CONFIG["global_news_lookback_days"]) or DEFAULT_CONFIG["global_news_lookback_days"],
         "data_vendors": {
             "core_stock_apis": _vendor("data_vendor_core_stock"),
             "technical_indicators": _vendor("data_vendor_technicals"),
@@ -118,8 +163,6 @@ def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
         cfg["google_thinking_level"] = settings.google_thinking_level
 
     if user is not None:
-        from backend.core.config import get_settings as _cfg
-        from backend.services.user_service import get_user_api_key, decrypt_api_keys
         try:
             fernet = _cfg().get_fernet()
             user_key = get_user_api_key(user, settings.llm_provider, fernet)
@@ -127,41 +170,69 @@ def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
                 cfg["user_api_keys"] = decrypt_api_keys(user.api_keys_enc, fernet)
             else:
                 cfg["user_api_keys"] = {}
-        except Exception:
+        except Exception as e:
+            _logger.error("Failed to decrypt user API keys in _build_config: %s", e)
             user_key = None
             cfg["user_api_keys"] = {}
         if user_key:
             cfg["api_key"] = user_key
-        elif not getattr(user, "is_admin", False):
-            raise ValueError(
-                f"No API key set for provider '{settings.llm_provider}'. "
-                "Go to Settings → API Keys to add your key."
-            )
+        else:
+            from backend.trading_agents.llm_clients.api_key_env import get_api_key_env
+            env_var = get_api_key_env(settings.llm_provider)
+            if env_var:
+                env_val = _os.environ.get(env_var)
+                if not env_val:
+                    if getattr(user, "is_admin", False):
+                        raise ValueError(
+                            f"No API key set for provider '{settings.llm_provider}'. "
+                            f"Admin check failed: neither user-level key nor server environment variable '{env_var}' is defined."
+                        )
+                    else:
+                        raise ValueError(
+                            f"No API key set for provider '{settings.llm_provider}'. "
+                            "Go to Settings → API Keys to add your key."
+                        )
     return cfg
-def _history_json_from(value) -> str:
-    import json as _json
-    if value is None:
-        return ""
+
+
+def _history_json_from(value):
+    if not value:
+        return None
     if isinstance(value, (list, dict)):
-        return _json.dumps(value, ensure_ascii=False)
-    return str(value)
+        return value
+    if isinstance(value, str):
+        val_s = value.strip()
+        if (val_s.startswith("[") and val_s.endswith("]")) or (val_s.startswith("{") and val_s.endswith("}")):
+            try:
+                return _json.loads(val_s)
+            except Exception as e:
+                _logger.debug("Failed parsing history JSON string: %s", e)
+    return value
+
+
 def _extract_stats(handler) -> dict:
     try:
         return handler.get_stats()
-    except Exception:
+    except Exception as e:
+        _logger.warning("Failed to extract stats from handler: %s", e)
         return {"llm_calls": 0, "tool_calls": 0, "tokens_in": 0, "tokens_out": 0}
+
+
 async def cancel_analysis(task_id: str) -> bool:
     task = _RUNNING_TASKS.pop(task_id, None)
     if task and not task.done():
         task.cancel()
         return True
     return False
+
+
 async def _send_analysis_webhook(ticker, trade_date, signal, final_decision, settings):
     try:
-        from backend.services.notification_service import notify_analysis_complete
         await notify_analysis_complete(ticker, signal, trade_date, final_decision, settings)
     except Exception as exc:
         _logger.debug("Webhook notify failed (non-fatal): %s", exc)
+
+
 async def _extract_and_save_annotations(
     analysis_id: int,
     market_report: str,
@@ -169,13 +240,10 @@ async def _extract_and_save_annotations(
     quick_llm,
     custom_indicators: list = None,
     visual_annotations: list = None,
+    output_language: str = "English",
 ) -> None:
-    import json as _json
-    from backend.core.database import AsyncSessionLocal
-    from backend.services.annotation_service import extract_chart_annotations
-    from sqlalchemy import select
     try:
-        annotations = await extract_chart_annotations(market_report, final_decision, quick_llm)
+        annotations = await extract_chart_annotations(market_report, final_decision, quick_llm, output_language=output_language)
         if not annotations:
             annotations = {}
         if custom_indicators:
@@ -188,10 +256,12 @@ async def _extract_and_save_annotations(
             result = await s.execute(select(AnalysisResult).where(AnalysisResult.id == analysis_id))
             row = result.scalar_one_or_none()
             if row:
-                row.chart_annotations = _json.dumps(annotations, ensure_ascii=False)
+                row.chart_annotations = annotations
                 await s.commit()
     except Exception as exc:
         _logger.debug("Annotation save failed (non-fatal): %s", exc)
+
+
 async def run_analysis(
     ticker: str,
     trade_date: str,
@@ -202,9 +272,7 @@ async def run_analysis(
     task_id: str | None = None,
     user=None,
 ) -> tuple[str, AnalysisResult]:
-    from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
     if user is not None:
-        from backend.services.settings_service import get_or_create_settings
         settings = await get_or_create_settings(db, user)
     if task_id is None:
         task_id = str(uuid.uuid4())
@@ -214,25 +282,22 @@ async def run_analysis(
     username = user.username if user else "system"
     _logger.info("Starting analysis task=%s ticker=%s date=%s user=%s", task_id, ticker, trade_date, username)
     await ws_manager.send(task_id, {"type": "status", "status": "starting", "agent": "Initializing"})
-    from backend.services.stats_handler import StatsCallbackHandler
-    from backend.core.catalog import node_progress
     loop = asyncio.get_running_loop()
+
     def _emit(event: dict) -> None:
         try:
             asyncio.run_coroutine_threadsafe(ws_manager.send(task_id, event), loop)
         except Exception:
             pass
+
     stats_handler = StatsCallbackHandler()
     start = time.time()
     try:
-        from sqlalchemy import select
-        from backend.models.system_settings import SystemSettings
         sys_settings = (await db.execute(
             select(SystemSettings).where(SystemSettings.id == 1)
         )).scalar_one_or_none()
         await ws_manager.send(task_id, {"type": "status", "status": "starting", "agent": "Preparing LLM client..."})
         config = _build_config(settings, user=user, sys_settings=sys_settings)
-        from backend.services.performance_service import get_analyst_attribution_stats
         attribution_md = ""
         try:
             attribution_data = await get_analyst_attribution_stats(db)
@@ -247,13 +312,13 @@ async def run_analysis(
         hist_ctx = ""
         if getattr(settings, "include_historical_analyses", False):
             limit = getattr(settings, "historical_analyses_limit", 5) or 5
-            db_ctx = await _get_historical_analyses_context(ticker, trade_date, db, limit=limit)
+            db_ctx = await _get_historical_analyses_context(
+                ticker, trade_date, db, limit=limit, output_language=settings.output_language
+            )
             if db_ctx:
                 hist_ctx = db_ctx
         config["historical_context"] = attribution_md + hist_ctx
 
-        from backend.services.tool_settings_service import build_global_runtime_context
-        from backend.services.tool_access_service import get_user_agent_access
         user_id = user.id if user else None
         agent_access_map = {}
         if user_id is not None:
@@ -268,7 +333,6 @@ async def run_analysis(
         config["runtime_tool_context"] = runtime_tool_context
         _inject_tool_credentials(config)
 
-        from backend.services.agent_settings_service import build_agent_runtime_context
         config["runtime_agent_context"] = await build_agent_runtime_context(db, user_id)
 
         ta = TradingAgentsGraph(
@@ -276,7 +340,8 @@ async def run_analysis(
             debug=False,
             config=config,
         )
-        def _patched_invoke(state, config_arg=None, **kwargs):
+
+        async def _patched_ainvoke(state, config_arg=None, **kwargs):
             if config_arg is not None and "config" not in kwargs:
                 kwargs["config"] = config_arg
             kwargs.pop("stream_mode", None)
@@ -287,7 +352,7 @@ async def run_analysis(
             prev_inv_count = 0
             prev_risk_count = 0
             last_node = None
-            for mode, chunk in ta.graph.stream(
+            async for mode, chunk in ta.graph.astream(
                 state, stream_mode=["updates", "values"], config=cfg, **kwargs
             ):
                 if mode == "updates":
@@ -318,11 +383,11 @@ async def run_analysis(
                             prev_state[key] = value
                     final = chunk
             return final
-        ta.graph.invoke = _patched_invoke
+
+        ta.graph.ainvoke = _patched_ainvoke
         final_state, signal = await ta.async_propagate(ticker, trade_date, asset_type)
         stats = _extract_stats(stats_handler)
         duration = time.time() - start
-        from backend.trading_agents.agents.schemas import PropagateResult
         result = PropagateResult.from_state(final_state, signal)
         inv_debate = final_state.get("investment_debate_state", {}) or {}
         risk_debate = final_state.get("risk_debate_state", {}) or {}
@@ -366,7 +431,8 @@ async def run_analysis(
             result.final_decision, 
             ta.thinking_llm,
             getattr(ta, "custom_indicators", []),
-            getattr(ta, "visual_annotations", [])
+            getattr(ta, "visual_annotations", []),
+            output_language=settings.output_language
         ))
         asyncio.create_task(_send_analysis_webhook(
             ticker, trade_date, signal, result.final_decision, settings
@@ -396,6 +462,8 @@ async def run_analysis(
     finally:
         _RUNNING_TASKS.pop(task_id, None)
         await ws_manager.close_task(task_id)
+
+
 async def run_portfolio_analysis(
     tickers: list[str],
     trade_date: str,
@@ -405,11 +473,6 @@ async def run_portfolio_analysis(
     triggered_by: str = "manual",
     user=None,
 ):
-    from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
-    from backend.models.portfolio_analysis import MultiTickerAnalysis
-    from backend.core.database import AsyncSessionLocal
-    from sqlalchemy import select
-    from backend.models.system_settings import SystemSettings
     username = user.username if user else "system"
     _logger.info("Starting portfolio analysis for tickers=%s user=%s triggered_by=%s", tickers, username, triggered_by)
     sys_settings = (await db.execute(
@@ -418,6 +481,7 @@ async def run_portfolio_analysis(
     config = _build_config(settings, user=user, sys_settings=sys_settings)
     concurrency = settings.analyst_concurrency_limit or 1
     semaphore = asyncio.Semaphore(concurrency)
+
     async def _run_one(ticker: str):
         async with semaphore:
             _logger.info("Portfolio analysis: running %s for user=%s", ticker, username)
@@ -430,6 +494,7 @@ async def run_portfolio_analysis(
                 }
                 await t_db.commit()
             return ticker, data
+
     results = await asyncio.gather(*[_run_one(t.upper()) for t in tickers], return_exceptions=True)
     ticker_reports: dict = {}
     analysis_ids: list[int] = []
@@ -446,8 +511,6 @@ async def run_portfolio_analysis(
     super_report = ""
     if ticker_reports:
         try:
-            from backend.services.tool_settings_service import build_global_runtime_context
-            from backend.services.tool_access_service import get_user_agent_access
             user_id = user.id if user else None
             agent_access_map = {}
             if user_id is not None:
@@ -467,7 +530,6 @@ async def run_portfolio_analysis(
                 debug=False,
                 config=config,
             )
-            from backend.trading_agents.agents.sub.managers.super_portfolio_manager import create_super_portfolio_manager
             spm_node = create_super_portfolio_manager(ta.thinking_llm)
             state_out = await asyncio.to_thread(spm_node, {"ticker_reports": ticker_reports})
             super_report = state_out.get("super_portfolio_report", "")
@@ -503,8 +565,6 @@ async def run_analysis_task(
     signal is actionable, and reports failures over the WebSocket. This is the
     orchestration that previously lived inline in the ``/analysis/run`` route.
     """
-    from backend.core.database import AsyncSessionLocal
-    from backend.services.trading_orchestrator import place_signal_order
     async with AsyncSessionLocal() as db:
         try:
             _, row = await run_analysis(
@@ -538,7 +598,6 @@ async def run_portfolio_task(
     user=None,
 ) -> None:
     """Background entrypoint for a multi-ticker portfolio analysis run."""
-    from backend.core.database import AsyncSessionLocal
     async with AsyncSessionLocal() as db:
         try:
             await run_portfolio_analysis(

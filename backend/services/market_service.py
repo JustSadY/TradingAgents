@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.utils import safe_ticker_component
 from backend.models.analysis import AnalysisResult
+from backend.services.indicator_service import evaluate_formula_safely
 
 _logger = logging.getLogger(__name__)
 
@@ -129,7 +130,6 @@ async def get_custom_indicator_series(
 
     def _work():
         import numpy as np
-        from backend.services.indicator_service import evaluate_formula_safely
         data = _load_history(ticker, s, e)
         series = evaluate_formula_safely(data, formula).replace({np.nan: None})
         return [
@@ -154,11 +154,5 @@ async def get_sentiment_history(db: AsyncSession, ticker: str) -> dict:
         for trade_date, signal in rows
     ]
     if not history:
-        import random
-        end = datetime.now()
-        history = [
-            {"time": (end - timedelta(days=i)).strftime("%Y-%m-%d"),
-             "value": round(random.uniform(-0.6, 0.7), 2)}
-            for i in range(30, -1, -1)
-        ]
+        history = []
     return {"ticker": ticker, "history": history}

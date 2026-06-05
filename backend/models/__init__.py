@@ -11,6 +11,7 @@ from .alert import PriceAlert
 from .system_settings import SystemSettings
 from .page_permission import UserSettingPermission
 from .portfolio_analysis import MultiTickerAnalysis
+from .news_cache import NewsCache
 
 __all__ = [
     "User",
@@ -31,5 +32,6 @@ __all__ = [
     "SystemSettings",
     "UserSettingPermission",
     "MultiTickerAnalysis",
+    "NewsCache",
 ]
 

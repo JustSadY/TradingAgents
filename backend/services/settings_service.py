@@ -95,8 +95,15 @@ async def apply_settings_update(
     return settings
 
 
+_settings_change_listener = None
+
+
+def register_settings_change_listener(listener) -> None:
+    """Register a callback to be notified when user settings are updated."""
+    global _settings_change_listener
+    _settings_change_listener = listener
+
+
 async def _resync_cron(settings: AppSettings) -> None:
-    from backend.services.cron_service import get_cron_service
-    cron = get_cron_service()
-    if cron:
-        await cron.apply_user_settings(settings)
+    if _settings_change_listener is not None:
+        await _settings_change_listener(settings)

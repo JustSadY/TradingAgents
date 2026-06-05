@@ -145,3 +145,38 @@ def get_agent(key: str) -> AgentInfo | None:
         if a.key == key:
             return a
     return None
+
+
+@dataclass(frozen=True)
+class AnalystInfo:
+    key: str
+    label: str
+    description: str
+    default_on: bool
+
+
+ANALYSTS: list[AnalystInfo] = [
+    AnalystInfo(
+        key=_a.key,
+        label=_a.label,
+        description=_a.description,
+        default_on=_a.default_enabled,
+    )
+    for _a in AGENTS
+    if _a.category == "analyst"
+]
+
+_ANALYSTS_BY_KEY = {a.key: a for a in ANALYSTS}
+
+
+def list_analysts() -> list[AnalystInfo]:
+    return list(ANALYSTS)
+
+
+def get_analyst(key: str) -> AnalystInfo | None:
+    return _ANALYSTS_BY_KEY.get(key)
+
+
+def label_for(key: str) -> str:
+    info = _ANALYSTS_BY_KEY.get(key)
+    return info.label if info else key.title()

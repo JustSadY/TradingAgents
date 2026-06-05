@@ -33,6 +33,7 @@ class WebSocketManager:
     async def send(self, task_id: str, event: dict[str, Any]):
         buf = self._buffers.setdefault(task_id, deque(maxlen=_BUFFER_SIZE))
         buf.append(event)
+        self._schedule_buffer_cleanup(task_id, ttl=600)  # Refresh with 10-minute sliding TTL
         text = json.dumps(event, ensure_ascii=False)
         dead: list[WebSocket] = []
         for ws in list(self._connections.get(task_id, [])):
@@ -49,10 +50,10 @@ class WebSocketManager:
             except Exception:
                 pass
         self._connections.pop(task_id, None)
-        self._schedule_buffer_cleanup(task_id)
+        self._schedule_buffer_cleanup(task_id, ttl=_BUFFER_TTL)
     def active_tasks(self) -> list[str]:
         return list(self._connections.keys())
-    def _schedule_buffer_cleanup(self, task_id: str):
+    def _schedule_buffer_cleanup(self, task_id: str, ttl: int = _BUFFER_TTL):
         existing = self._cleanup_handles.pop(task_id, None)
         if existing:
             try:
@@ -60,10 +61,18 @@ class WebSocketManager:
             except Exception:
                 pass
         loop = asyncio.get_event_loop()
-        handle = loop.call_later(_BUFFER_TTL, self._cleanup_buffer, task_id)
+        handle = loop.call_later(ttl, self._cleanup_buffer, task_id)
         self._cleanup_handles[task_id] = handle
     def _cleanup_buffer(self, task_id: str):
         self._buffers.pop(task_id, None)
         self._cleanup_handles.pop(task_id, None)
+        conns = self._connections.pop(task_id, None)
+        if conns:
+            _logger.debug("Closing %d lingering WS connections for task=%s during buffer cleanup", len(conns), task_id)
+            for ws in conns:
+                try:
+                    asyncio.create_task(ws.close())
+                except Exception:
+                    pass
         _logger.debug("Buffer cleaned up for task=%s", task_id)
 ws_manager = WebSocketManager()

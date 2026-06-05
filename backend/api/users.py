@@ -180,6 +180,18 @@ async def delete_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The Server Owner account cannot be deleted."
         )
+    # Remove user watchlist cron job if exists
+    try:
+        from backend.services.cron_service import get_cron_service
+        cron = get_cron_service()
+        if cron:
+            job_id = f"watchlist_scan_user_{user_id}"
+            if cron.scheduler.get_job(job_id):
+                cron.scheduler.remove_job(job_id)
+                _logger.info("Successfully removed watchlist scan cron job for deleted user %d", user_id)
+    except Exception as e:
+        _logger.error("Failed to remove cron job for user %d on deletion: %s", user_id, e)
+
     await db.delete(user)
 @router.get("/{user_id}/permissions")
 async def get_user_permissions(
@@ -292,7 +304,7 @@ async def get_user_setting_permissions(
         select(UserSettingPermission).where(UserSettingPermission.user_id == user_id)
     )
     perms = {p.setting_key: p.allowed for p in result.scalars().all()}
-    full = {k: perms.get(k, False) for k in ["general", "llm", "risk", "webhooks", "presets"]}
+    full = {k: perms.get(k, False) for k in ["general", "llm", "risk", "webhooks", "cron", "presets"]}
     return {"user_id": user_id, "permissions": full}
 from pydantic import BaseModel
 class SettingPermissionsUpdate(BaseModel):
@@ -308,7 +320,7 @@ async def set_user_setting_permissions(
     if not result.scalar_one_or_none():
         raise HTTPException(status_code=404, detail="User not found")
     for setting_key, allowed in body.permissions.items():
-        if setting_key not in ["general", "llm", "risk", "webhooks", "presets"]:
+        if setting_key not in ["general", "llm", "risk", "webhooks", "cron", "presets"]:
             continue
         result = await db.execute(
             select(UserSettingPermission)

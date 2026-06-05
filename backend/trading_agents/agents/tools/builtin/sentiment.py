@@ -1,15 +1,20 @@
-from backend.trading_agents.dataflows.reddit import fetch_reddit_posts
-from backend.trading_agents.dataflows.stocktwits import fetch_stocktwits_messages
+from backend.trading_agents.dataflows.interface import route_to_vendor
 from backend.trading_agents.agents.tools.base import ToolSettingField
 from backend.trading_agents.agents.tools.adapters import FunctionToolAdapter
 from backend.trading_agents.agents.tools.registry import registry
+
+def route_reddit_posts(*args, **kwargs):
+    return route_to_vendor("fetch_reddit_posts", *args, **kwargs)
+
+def route_stocktwits_messages(*args, **kwargs):
+    return route_to_vendor("fetch_stocktwits_messages", *args, **kwargs)
 
 reddit_sentiment_tool = FunctionToolAdapter(
     key="reddit_sentiment",
     category="sentiment",
     label_key="tools.reddit_sentiment.label",
     description_key="tools.reddit_sentiment.description",
-    func=fetch_reddit_posts,
+    func=route_reddit_posts,
     allowed_analysts=["social"],
     default_enabled=True,
     settings_schema=[
@@ -44,6 +49,7 @@ reddit_sentiment_tool = FunctionToolAdapter(
             default="TradingAgents/1.0",
         ),
     ],
+    langchain_tool_names=["fetch_reddit_posts"],
 )
 
 stocktwits_sentiment_tool = FunctionToolAdapter(
@@ -51,7 +57,7 @@ stocktwits_sentiment_tool = FunctionToolAdapter(
     category="sentiment",
     label_key="tools.stocktwits_sentiment.label",
     description_key="tools.stocktwits_sentiment.description",
-    func=fetch_stocktwits_messages,
+    func=route_stocktwits_messages,
     allowed_analysts=["social"],
     default_enabled=True,
     settings_schema=[
@@ -65,6 +71,7 @@ stocktwits_sentiment_tool = FunctionToolAdapter(
             max=100.0,
         )
     ],
+    langchain_tool_names=["fetch_stocktwits_messages"],
 )
 
 registry.register(reddit_sentiment_tool)

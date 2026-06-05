@@ -1,6 +1,7 @@
 from __future__ import annotations
 import json
 import os
+import platform
 import subprocess
 import threading
 import time
@@ -9,6 +10,7 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATUS_FILE = PROJECT_ROOT / ".update.json"
 UPDATE_UNIT = os.environ.get("TRADINGAGENTS_UPDATE_UNIT", "")
 SYSTEMCTL = os.environ.get("TRADINGAGENTS_SYSTEMCTL", "systemctl")
+UPDATE_SUPPORTED = platform.system() == "Linux" and bool(UPDATE_UNIT)
 _FETCH_TTL = 60.0
 _last_fetch = 0.0
 _fetch_lock = threading.Lock()
@@ -16,11 +18,18 @@ _fetching = False
 def _git(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"] = "0"
-    return subprocess.run(
-        ["git", "-C", str(PROJECT_ROOT), *args],
-        capture_output=True, text=True, timeout=timeout,
-        env=env,
-    )
+    try:
+        return subprocess.run(
+            ["git", "-C", str(PROJECT_ROOT), *args],
+            capture_output=True, text=True, timeout=timeout,
+            env=env,
+        )
+    except Exception as exc:
+        class MockCompletedProcess:
+            returncode = -1
+            stdout = ""
+            stderr = str(exc)
+        return MockCompletedProcess()
 def _bg_fetch():
     global _last_fetch, _fetching
     try:
@@ -43,11 +52,34 @@ def _write_status(data: dict) -> None:
         pass
 def get_status(do_fetch: bool = True) -> dict:
     global _last_fetch, _fetching
+    if not (PROJECT_ROOT / ".git").is_dir():
+        status = _read_status() or {}
+        return {
+            "git": False,
+            "update_supported": UPDATE_SUPPORTED,
+            "current": None,
+            "current_short": None,
+            "latest_short": None,
+            "behind": 0,
+            "update_available": False,
+            "updating": status.get("state") == "running",
+            "last_update": status,
+            "commits": [],
+        }
     head = _git("rev-parse", "HEAD")
     if head.returncode != 0:
+        status = _read_status() or {}
         return {
-            "git": False, "update_supported": False, "update_available": False,
-            "updating": False, "current_short": None, "behind": 0, "commits": [],
+            "git": False,
+            "update_supported": UPDATE_SUPPORTED,
+            "current": None,
+            "current_short": None,
+            "latest_short": None,
+            "behind": 0,
+            "update_available": False,
+            "updating": status.get("state") == "running",
+            "last_update": status,
+            "commits": [],
         }
     current = head.stdout.strip()
     up = _git("rev-parse", "--abbrev-ref", "--symbolic-full-name", "@{upstream}")
@@ -75,7 +107,7 @@ def get_status(do_fetch: bool = True) -> dict:
     status = _read_status() or {}
     return {
         "git": True,
-        "update_supported": bool(UPDATE_UNIT),
+        "update_supported": UPDATE_SUPPORTED,
         "current": current,
         "current_short": current[:9],
         "latest_short": latest[:9],
@@ -86,10 +118,10 @@ def get_status(do_fetch: bool = True) -> dict:
         "commits": commits,
     }
 def request_update() -> dict:
-    if not UPDATE_UNIT:
+    if not UPDATE_SUPPORTED:
         raise RuntimeError(
-            "Automatic updates are not configured in this environment "
-            "(only works on systems installed with deploy/install.sh)."
+            "Automatic updates are not configured or not supported in this environment "
+            "(only works on Linux systems installed with deploy/install.sh)."
         )
     status = _read_status()
     if status and status.get("state") == "running":

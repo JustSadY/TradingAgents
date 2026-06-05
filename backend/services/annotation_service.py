@@ -1,7 +1,24 @@
 import json
 import logging
 _logger = logging.getLogger(__name__)
-_SYSTEM_PROMPT = """Sen bir finansal analist asistanısın. Sana verilen analiz raporundan
+_SYSTEM_PROMPT_EN = """You are a financial analyst assistant. Extract numerical price levels from the provided analysis report and respond ONLY in the following JSON format, do not write anything else:
+{
+  "support_levels": [number, number],
+  "resistance_levels": [number, number],
+  "target_price": number_or_null,
+  "stop_loss": number_or_null,
+  "key_levels": [
+    {"price": number, "label": "short_description", "type": "ma|indicator|other"}
+  ]
+}
+Rules:
+- Extract at most 2-3 support and resistance levels.
+- Prices might be rounded — show clean values close to integers.
+- Use null for missing or ambiguous values.
+- key_levels: list technical levels like moving average, Bollinger bands, etc. (max 4).
+- Use only numerical values explicitly mentioned in the report, do not estimate or extrapolate."""
+
+_SYSTEM_PROMPT_TR = """Sen bir finansal analist asistanısın. Sana verilen analiz raporundan
 sayısal fiyat seviyelerini çıkar ve YALNIZCA aşağıdaki JSON formatında yanıtla, başka hiçbir şey yazma:
 {
   "support_levels": [sayı, sayı],
@@ -18,17 +35,24 @@ Kurallar:
 - Belirsiz veya olmayan değerler için null kullan
 - key_levels: hareketli ortalama, Bollinger bandı gibi teknik seviyeleri listele (maks 4 adet)
 - Yalnızca raporda açıkça geçen sayısal değerleri kullan, tahmin etme"""
+
 async def extract_chart_annotations(
     market_report: str,
     final_decision: str,
     quick_llm,
+    output_language: str = "English",
 ) -> dict:
     if not market_report and not final_decision:
         return {}
+    
+    lang = (output_language or "English").strip().lower()
+    is_tr = lang in ("turkish", "türkçe")
+    system_prompt = _SYSTEM_PROMPT_TR if is_tr else _SYSTEM_PROMPT_EN
+
     text = f"PIYASA RAPORU:\n{market_report[:2000]}\n\nSON KARAR:\n{final_decision[:1000]}"
     try:
         from langchain_core.messages import HumanMessage, SystemMessage
-        response = await _call_llm_async(quick_llm, text)
+        response = await _call_llm_async(quick_llm, text, system_prompt)
         raw = response.strip()
         if raw.startswith("```"):
             raw = raw.split("```")[1]
@@ -40,12 +64,13 @@ async def extract_chart_annotations(
     except Exception as exc:
         _logger.debug("Annotation extraction failed (non-fatal): %s", exc)
         return {}
-async def _call_llm_async(llm, text: str) -> str:
+
+async def _call_llm_async(llm, text: str, system_prompt: str) -> str:
     import asyncio
     from langchain_core.messages import HumanMessage, SystemMessage
     def _sync_call():
         messages = [
-            SystemMessage(content=_SYSTEM_PROMPT),
+            SystemMessage(content=system_prompt),
             HumanMessage(content=text),
         ]
         result = llm.invoke(messages)

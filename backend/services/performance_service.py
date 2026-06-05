@@ -7,6 +7,9 @@ HOLDING_DAYS = 5
 async def backfill_returns(db) -> int:
     from sqlalchemy import select
     from backend.models.analysis import AnalysisResult
+    from backend.models.settings import AppSettings
+    from backend.trading_agents.dataflows.config import get_config
+
     cutoff = (datetime.now(timezone.utc) - timedelta(days=HOLDING_DAYS + 2)).strftime("%Y-%m-%d")
     result = await db.execute(
         select(AnalysisResult)
@@ -17,8 +20,37 @@ async def backfill_returns(db) -> int:
     )
     rows = result.scalars().all()
     updated = 0
+    config = get_config()
+    benchmark_map = config.get("benchmark_map", {})
+
     for row in rows:
-        raw, alpha, days = await _fetch_returns_async(row.ticker, row.trade_date)
+        benchmark_ticker = None
+        if row.user_id:
+            res_settings = await db.execute(
+                select(AppSettings).where(AppSettings.user_id == row.user_id)
+            )
+            settings_obj = res_settings.scalar_one_or_none()
+            if settings_obj:
+                benchmark_ticker = getattr(settings_obj, "benchmark_ticker", None)
+
+        if not benchmark_ticker:
+            benchmark_ticker = config.get("benchmark_ticker")
+
+        benchmark = "SPY"
+        if benchmark_ticker:
+            benchmark = benchmark_ticker
+        else:
+            ticker_upper = row.ticker.upper()
+            found = False
+            for suffix, b in benchmark_map.items():
+                if suffix and ticker_upper.endswith(suffix.upper()):
+                    benchmark = b
+                    found = True
+                    break
+            if not found:
+                benchmark = benchmark_map.get("", "SPY")
+
+        raw, alpha, days = await _fetch_returns_async(row.ticker, row.trade_date, benchmark=benchmark)
         if raw is not None:
             row.raw_return = raw
             row.alpha_return = alpha
@@ -26,19 +58,19 @@ async def backfill_returns(db) -> int:
             updated += 1
     if updated:
         await db.commit()
-    _logger.info("Performance backfill: updated %d rows", updated)
+    _logger.info("Performance backfill: updated %d rows with custom benchmarks", updated)
     return updated
-async def _fetch_returns_async(ticker: str, trade_date: str, holding_days: int = HOLDING_DAYS):
+async def _fetch_returns_async(ticker: str, trade_date: str, holding_days: int = HOLDING_DAYS, benchmark: str = "SPY"):
     import asyncio
-    return await asyncio.to_thread(_fetch_returns_sync, ticker, trade_date, holding_days)
-def _fetch_returns_sync(ticker: str, trade_date: str, holding_days: int = HOLDING_DAYS):
+    return await asyncio.to_thread(_fetch_returns_sync, ticker, trade_date, holding_days, benchmark)
+def _fetch_returns_sync(ticker: str, trade_date: str, holding_days: int = HOLDING_DAYS, benchmark: str = "SPY"):
     try:
         import yfinance as yf
         start = datetime.strptime(trade_date, "%Y-%m-%d")
         end = start + timedelta(days=holding_days + 7)
         end_str = end.strftime("%Y-%m-%d")
         stock = yf.Ticker(ticker).history(start=trade_date, end=end_str)
-        bench = yf.Ticker("SPY").history(start=trade_date, end=end_str)
+        bench = yf.Ticker(benchmark).history(start=trade_date, end=end_str)
         if len(stock) < 2 or len(bench) < 2:
             return None, None, None
         actual = min(holding_days, len(stock) - 1, len(bench) - 1)
@@ -46,7 +78,7 @@ def _fetch_returns_sync(ticker: str, trade_date: str, holding_days: int = HOLDIN
         bench_r = float((bench["Close"].iloc[actual] - bench["Close"].iloc[0]) / bench["Close"].iloc[0])
         return round(raw, 4), round(raw - bench_r, 4), actual
     except Exception as exc:
-        _logger.debug("Return fetch failed %s %s: %s", ticker, trade_date, exc)
+        _logger.debug("Return fetch failed %s %s with bench %s: %s", ticker, trade_date, benchmark, exc)
         return None, None, None
 async def get_analyst_attribution_stats(db) -> dict:
     from sqlalchemy import select

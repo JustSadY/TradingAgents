@@ -13,9 +13,13 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.services.execution.base import OrderRequest, OrderResult
+from backend.models.system_settings import SystemSettings
+from backend.services.mock_trading_service import get_or_create_sim_portfolio
+from backend.services.execution.factory import get_trader
 
 _logger = logging.getLogger(__name__)
 
@@ -33,9 +37,33 @@ def is_actionable(signal: Optional[str]) -> bool:
     return signal in _SIGNAL_TO_ACTION
 
 
-def _position_quantity(risk_per_trade_pct: float, capital: float, price: float) -> float:
-    """Risk-budgeted position size: a fixed fraction of deployable capital."""
-    return (risk_per_trade_pct / 100.0 * capital) / price
+def _position_quantity(
+    risk_per_trade_pct: float,
+    capital: float,
+    price: float,
+    stop_loss: float | None = None,
+    max_position_size_pct: float = 10.0,
+) -> float:
+    """Risk-budgeted position size using proper financial math.
+    
+    If stop_loss is provided and valid, position size is calculated such that
+    the loss if stopped out equals the risk budget. Otherwise, falls back to
+    allocating the risk percentage directly. Capped by max_position_size_pct.
+    """
+    risk_usd = (risk_per_trade_pct / 100.0) * capital
+    
+    # Check if stop loss is valid
+    if stop_loss and stop_loss > 0 and stop_loss != price:
+        risk_per_share = abs(price - stop_loss)
+        quantity = risk_usd / risk_per_share
+    else:
+        # Fallback to old behavior: allocate risk_per_trade_pct directly
+        quantity = risk_usd / price
+
+    # Cap the allocation based on max_position_size_pct
+    max_alloc_usd = (max_position_size_pct / 100.0) * capital
+    max_qty = max_alloc_usd / price
+    return min(quantity, max_qty)
 
 
 async def place_signal_order(
@@ -56,10 +84,7 @@ async def place_signal_order(
     if action is None:
         return None
 
-    from backend.models.system_settings import SystemSettings
-    from backend.services.mock_trading_service import get_or_create_sim_portfolio
-    from backend.services.execution.factory import get_trader
-    from sqlalchemy import select
+    # Retrieve system settings to verify active broker mode
     sys_settings = (await db.execute(
         select(SystemSettings).where(SystemSettings.id == 1)
     )).scalar_one_or_none()
@@ -71,7 +96,7 @@ async def place_signal_order(
         mode=sys_mode,
         broker=sys_broker,
         portfolio_id=portfolio.id,
-        initial_capital=portfolio.initial_capital,
+        initial_capital=float(portfolio.initial_capital),
         db=db,
     )
     price = await trader.get_current_price(ticker) or 0.0
@@ -79,8 +104,29 @@ async def place_signal_order(
         _logger.warning("No price available for %s; skipping order execution", ticker)
         return None
 
-    capital = portfolio.cash_available if portfolio.cash_available > 0 else portfolio.initial_capital
-    quantity = _position_quantity(settings.max_risk_per_trade_pct, capital, price)
+    capital = float(portfolio.cash_available) if portfolio.cash_available > 0 else float(portfolio.initial_capital)
+    
+    import json
+    stop_loss = None
+    if hasattr(row, "chart_annotations") and row.chart_annotations:
+        try:
+            if isinstance(row.chart_annotations, str):
+                ann = json.loads(row.chart_annotations)
+            else:
+                ann = row.chart_annotations
+            if isinstance(ann, dict):
+                stop_loss = ann.get("stop_loss")
+        except Exception:
+            pass
+
+    max_position_size_pct = getattr(settings, "max_position_size_pct", 10.0)
+    quantity = _position_quantity(
+        settings.max_risk_per_trade_pct,
+        capital,
+        price,
+        stop_loss=stop_loss,
+        max_position_size_pct=max_position_size_pct
+    )
     request = OrderRequest(
         ticker=ticker,
         action=action,

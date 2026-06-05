@@ -1,3 +1,4 @@
+from decimal import Decimal
 from datetime import datetime, timezone
 from sqlalchemy import Boolean, DateTime, Integer, String, ForeignKey
 from sqlalchemy.orm import Mapped, mapped_column
@@ -8,7 +9,7 @@ class PriceAlert(Base):
     user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     condition: Mapped[str] = mapped_column(String(10), nullable=False)
-    target_price: Mapped[float] = mapped_column(MONEY, nullable=False)
+    target_price: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     auto_analyze: Mapped[bool] = mapped_column(Boolean, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

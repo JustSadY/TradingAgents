@@ -36,7 +36,7 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_crypto_fear_and_greed_index,
 )
 from backend.trading_agents.agents.data.review_tools import get_past_performance_data
-from backend.trading_agents.agents.agent_hierarchy import AgentHierarchy
+from backend.trading_agents.agents.hierarchy import AgentHierarchy
 from .checkpointer import checkpoint_step, clear_checkpoint, get_checkpointer, thread_id
 from .conditional_logic import ConditionalLogic
 from .setup import GraphSetup
@@ -162,6 +162,10 @@ class TradingAgentsGraph:
             effort = self.config.get("anthropic_effort")
             if effort:
                 kwargs["effort"] = effort
+        elif prov_lower == "azure":
+            azure_deployment = self.config.get("azure_deployment_name") or self.config.get("azure_deployment")
+            if azure_deployment:
+                kwargs["azure_deployment"] = azure_deployment
         user_keys = self.config.get("user_api_keys") or {}
         user_key = user_keys.get(prov_lower)
         if user_key:
@@ -462,7 +466,7 @@ class TradingAgentsGraph:
         args = self.propagator.get_graph_args()
         tid = thread_id(company_name, str(trade_date))
         args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = tid
-        final_state = await asyncio.to_thread(self.graph.invoke, init_state, **args)
+        final_state = await self.graph.ainvoke(init_state, **args)
         self.curr_state = final_state
         await asyncio.to_thread(self._log_state, trade_date, final_state)
         await asyncio.to_thread(

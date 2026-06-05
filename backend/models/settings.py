@@ -31,10 +31,7 @@ class AppSettings(Base):
     max_recur_limit: Mapped[int] = mapped_column(Integer, default=1000)
     benchmark_ticker: Mapped[str | None] = mapped_column(String(20), nullable=True)
     azure_deployment: Mapped[str | None] = mapped_column(String(100), nullable=True)
-    data_vendor_core_stock: Mapped[str] = mapped_column(String(50), default="yfinance")
-    data_vendor_technicals: Mapped[str] = mapped_column(String(50), default="yfinance")
-    data_vendor_fundamentals: Mapped[str] = mapped_column(String(50), default="yfinance")
-    data_vendor_news: Mapped[str] = mapped_column(String(50), default="yfinance")
+
     max_debate_rounds: Mapped[int] = mapped_column(Integer, default=1)
     max_risk_rounds: Mapped[int] = mapped_column(Integer, default=1)
     max_position_size_pct: Mapped[float] = mapped_column(Float, default=10.0)

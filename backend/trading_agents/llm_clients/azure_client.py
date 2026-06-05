@@ -17,7 +17,7 @@ class AzureOpenAIClient(BaseLLMClient):
         self.warn_if_unknown_model()
         llm_kwargs = {
             "model": self.model,
-            "azure_deployment": os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", self.model),
+            "azure_deployment": self.kwargs.get("azure_deployment") or os.environ.get("AZURE_OPENAI_DEPLOYMENT_NAME", self.model),
         }
         for key in _PASSTHROUGH_KWARGS:
             if key in self.kwargs:

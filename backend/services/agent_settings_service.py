@@ -27,20 +27,22 @@ def validate_agent_settings(agent: AgentInfo, incoming: dict[str, Any]) -> dict[
     return normalized
 
 
-async def get_user_agent_settings(db: AsyncSession, user: User) -> AgentSettingsRead:
-    result = await db.execute(
-        select(AgentSetting)
-        .where(AgentSetting.scope == "user")
-        .where(AgentSetting.user_id == user.id)
-    )
-    user_rows = {row.agent_key: row for row in result.scalars().all()}
+async def get_agent_settings_by_scope(db: AsyncSession, scope: str, user_id: int | None = None) -> AgentSettingsRead:
+    stmt = select(AgentSetting).where(AgentSetting.scope == scope)
+    if scope == "user":
+        stmt = stmt.where(AgentSetting.user_id == user_id)
+    else:
+        stmt = stmt.where(AgentSetting.user_id.is_(None))
+    
+    result = await db.execute(stmt)
+    rows = {row.agent_key: row for row in result.scalars().all()}
 
     agents_map = {}
     for agent in list_agents():
         default_enabled = agent.default_enabled
         default_settings = {field.key: field.default for field in agent.settings_schema}
 
-        row = user_rows.get(agent.key)
+        row = rows.get(agent.key)
         enabled = row.enabled if (row and row.enabled is not None) else default_enabled
         settings = default_settings.copy()
         if row and row.settings:
@@ -49,120 +51,71 @@ async def get_user_agent_settings(db: AsyncSession, user: User) -> AgentSettings
         agents_map[agent.key] = AgentSettingValue(enabled=enabled, settings=settings)
 
     return AgentSettingsRead(agents=agents_map)
+
+
+async def get_user_agent_settings(db: AsyncSession, user: User) -> AgentSettingsRead:
+    return await get_agent_settings_by_scope(db, "user", user.id)
 
 
 async def get_server_agent_settings(db: AsyncSession) -> AgentSettingsRead:
-    result = await db.execute(
-        select(AgentSetting)
-        .where(AgentSetting.scope == "server")
-        .where(AgentSetting.user_id.is_(None))
-    )
-    server_rows = {row.agent_key: row for row in result.scalars().all()}
+    return await get_agent_settings_by_scope(db, "server")
 
-    agents_map = {}
-    for agent in list_agents():
-        default_enabled = agent.default_enabled
-        default_settings = {field.key: field.default for field in agent.settings_schema}
 
-        row = server_rows.get(agent.key)
-        enabled = row.enabled if (row and row.enabled is not None) else default_enabled
-        settings = default_settings.copy()
-        if row and row.settings:
-            settings.update(row.settings)
+async def apply_agent_settings_update_by_scope(
+    db: AsyncSession, scope: str, body: AgentSettingsUpdate, user_id: int | None = None
+) -> AgentSettingsRead:
+    stmt = select(AgentSetting).where(AgentSetting.scope == scope)
+    if scope == "user":
+        stmt = stmt.where(AgentSetting.user_id == user_id)
+    else:
+        stmt = stmt.where(AgentSetting.user_id.is_(None))
 
-        agents_map[agent.key] = AgentSettingValue(enabled=enabled, settings=settings)
+    result = await db.execute(stmt)
+    rows = {row.agent_key: row for row in result.scalars().all()}
 
-    return AgentSettingsRead(agents=agents_map)
+    for agent_key, update in body.agents.items():
+        agent = get_agent(agent_key)
+        if not agent:
+            raise ValueError(f"Unknown agent key '{agent_key}'.")
+
+        row = rows.get(agent_key)
+        if not row:
+            row = AgentSetting(
+                scope=scope,
+                user_id=user_id if scope == "user" else None,
+                agent_key=agent_key,
+                enabled=agent.default_enabled,
+                settings={}
+            )
+            db.add(row)
+
+        if update.reset_enabled:
+            row.enabled = agent.default_enabled
+        elif update.enabled is not None:
+            row.enabled = update.enabled
+
+        current_settings = row.settings.copy()
+        if update.reset_settings:
+            default_settings = {field.key: field.default for field in agent.settings_schema}
+            for k in update.reset_settings:
+                if k in current_settings:
+                    current_settings[k] = default_settings.get(k)
+        elif update.settings is not None:
+            validated = validate_agent_settings(agent, update.settings)
+            current_settings.update(validated)
+
+        row.settings = current_settings
+
+    await db.flush()
+    return await get_agent_settings_by_scope(db, scope, user_id)
 
 
 async def apply_agent_settings_update(db: AsyncSession, user: User, body: AgentSettingsUpdate) -> AgentSettingsRead:
-    result = await db.execute(
-        select(AgentSetting)
-        .where(AgentSetting.scope == "user")
-        .where(AgentSetting.user_id == user.id)
-    )
-    user_rows = {row.agent_key: row for row in result.scalars().all()}
-
-    for agent_key, update in body.agents.items():
-        agent = get_agent(agent_key)
-        if not agent:
-            raise ValueError(f"Unknown agent key '{agent_key}'.")
-
-        row = user_rows.get(agent_key)
-        if not row:
-            row = AgentSetting(
-                scope="user",
-                user_id=user.id,
-                agent_key=agent_key,
-                enabled=agent.default_enabled,
-                settings={}
-            )
-            db.add(row)
-
-        if update.reset_enabled:
-            row.enabled = agent.default_enabled
-        elif update.enabled is not None:
-            row.enabled = update.enabled
-
-        current_settings = row.settings.copy()
-        if update.reset_settings:
-            default_settings = {field.key: field.default for field in agent.settings_schema}
-            for k in update.reset_settings:
-                if k in current_settings:
-                    current_settings[k] = default_settings.get(k)
-        elif update.settings is not None:
-            validated = validate_agent_settings(agent, update.settings)
-            current_settings.update(validated)
-
-        row.settings = current_settings
-
-    await db.flush()
-    return await get_user_agent_settings(db, user)
+    return await apply_agent_settings_update_by_scope(db, "user", body, user.id)
 
 
 async def apply_server_agent_settings_update(db: AsyncSession, body: AgentSettingsUpdate) -> AgentSettingsRead:
-    result = await db.execute(
-        select(AgentSetting)
-        .where(AgentSetting.scope == "server")
-        .where(AgentSetting.user_id.is_(None))
-    )
-    server_rows = {row.agent_key: row for row in result.scalars().all()}
-
-    for agent_key, update in body.agents.items():
-        agent = get_agent(agent_key)
-        if not agent:
-            raise ValueError(f"Unknown agent key '{agent_key}'.")
-
-        row = server_rows.get(agent_key)
-        if not row:
-            row = AgentSetting(
-                scope="server",
-                user_id=None,
-                agent_key=agent_key,
-                enabled=agent.default_enabled,
-                settings={}
-            )
-            db.add(row)
-
-        if update.reset_enabled:
-            row.enabled = agent.default_enabled
-        elif update.enabled is not None:
-            row.enabled = update.enabled
-
-        current_settings = row.settings.copy()
-        if update.reset_settings:
-            default_settings = {field.key: field.default for field in agent.settings_schema}
-            for k in update.reset_settings:
-                if k in current_settings:
-                    current_settings[k] = default_settings.get(k)
-        elif update.settings is not None:
-            validated = validate_agent_settings(agent, update.settings)
-            current_settings.update(validated)
-
-        row.settings = current_settings
-
-    await db.flush()
-    return await get_server_agent_settings(db)
+    return await apply_agent_settings_update_by_scope(db, "server", body)
 
 
 def build_agent_runtime_state(agent: AgentInfo, server_row: AgentSetting | None, user_row: AgentSetting | None) -> dict[str, Any]:

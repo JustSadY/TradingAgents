@@ -24,6 +24,8 @@ from .alpha_vantage import (
 from .alpha_vantage_common import AlphaVantageRateLimitError
 from .utils import safe_ticker_component
 from .config import get_config
+from .reddit import fetch_reddit_posts
+from .stocktwits import fetch_stocktwits_messages
 import logging
 _logger = logging.getLogger(__name__)
 _TICKER_FIRST_METHODS = frozenset({
@@ -36,6 +38,8 @@ _TICKER_FIRST_METHODS = frozenset({
     "get_news",
     "get_insider_transactions",
     "get_sec_filings",
+    "fetch_reddit_posts",
+    "fetch_stocktwits_messages",
 })
 TOOLS_CATEGORIES = {
     "core_stock_apis": {
@@ -66,6 +70,13 @@ TOOLS_CATEGORIES = {
             "get_news",
             "get_global_news",
             "get_insider_transactions",
+        ]
+    },
+    "social_sentiment_data": {
+        "description": "Social media sentiment data",
+        "tools": [
+            "fetch_reddit_posts",
+            "fetch_stocktwits_messages",
         ]
     }
 }
@@ -113,6 +124,12 @@ VENDOR_METHODS = {
     "get_sec_filings": {
         "yfinance": get_yfinance_sec_filings,
     },
+    "fetch_reddit_posts": {
+        "reddit": fetch_reddit_posts,
+    },
+    "fetch_stocktwits_messages": {
+        "stocktwits": fetch_stocktwits_messages,
+    },
 }
 import os
 import json
@@ -156,7 +173,7 @@ class APICache:
             return 600.0
         elif category == "fundamental_data":
             return 43200.0
-        elif category == "news_data":
+        elif category == "news_data" or category == "social_sentiment_data":
             return 1800.0
         return 3600.0
     @classmethod

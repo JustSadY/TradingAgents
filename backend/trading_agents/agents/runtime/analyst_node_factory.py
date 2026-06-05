@@ -27,7 +27,7 @@ _COLLAB_SYSTEM = (
 )
 
 
-def run_tool_analyst(llm, state, *, tools, system_message, report_key, instrument_context):
+async def run_tool_analyst(llm, state, *, tools, system_message, report_key, instrument_context):
     """Run the standard tool-using analyst turn and return its state update."""
     from backend.trading_agents.agents.data.chart_tools import active_run_context
     ctx = active_run_context.get(None)
@@ -60,9 +60,12 @@ def run_tool_analyst(llm, state, *, tools, system_message, report_key, instrumen
     _start = _time.time()
     log_event("node_start", node=analyst, kind="analyst")
     try:
-        result = retry_call(
-            lambda: (prompt | bound_llm).invoke(state["messages"]),
+        def run_invoke():
+            return (prompt | bound_llm).invoke(state["messages"])
+        result = await retry_call(
+            run_invoke,
             label=f"analyst:{analyst}",
+            run_in_thread=True,
         )
     except Exception as exc:  # noqa: BLE001
         # Retries exhausted — skip this analyst with a visible note instead of

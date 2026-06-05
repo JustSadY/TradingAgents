@@ -19,6 +19,53 @@ _ALLOWED_TABLES = {
     "system_settings",
 }
 
+# Strict mapping of table names to their permitted column names.
+_ALLOWED_COLUMNS = {
+    "users": {
+        "email", "role", "display_name", "api_keys_enc"
+    },
+    "system_settings": {
+        "data_vendor_core_stock", "data_vendor_technicals",
+        "data_vendor_fundamentals", "data_vendor_news"
+    },
+    "app_settings": {
+        "user_id", "backend_url", "llm_model", "openai_reasoning_effort",
+        "anthropic_effort", "google_thinking_level", "output_language",
+        "investor_persona", "analyst_concurrency_limit", "max_recur_limit",
+        "benchmark_ticker", "azure_deployment",
+        "include_historical_analyses", "historical_analyses_limit", "webhook_url",
+        "webhook_enabled", "webhook_events", "active_preset_name",
+        "max_debate_rounds", "max_risk_rounds", "max_position_size_pct",
+        "max_risk_per_trade_pct", "strict_backtest_learning", "node_retry_attempts",
+        "node_retry_base_delay"
+    },
+    "analysis_results": {
+        "user_id", "bull_history", "bear_history", "investment_debate_history",
+        "risk_debate_history", "judge_decision", "chart_annotations",
+        "raw_return", "alpha_return", "holding_days", "llm_provider",
+        "llm_model", "preset_name"
+    },
+    "portfolios": {
+        "user_id", "initial_capital", "current_balance", "cash_available"
+    },
+    "config_presets": {
+        "user_id"
+    },
+    "price_alerts": {
+        "user_id", "target_price"
+    },
+    "multi_ticker_analyses": {
+        "user_id"
+    },
+    "orders": {
+        "quantity_requested", "quantity_filled", "price_per_share",
+        "total_value", "commission"
+    },
+    "holdings": {
+        "quantity", "avg_buy_price", "current_price", "unrealized_pnl"
+    },
+}
+
 # (table, column, column_type) tuples applied additively on startup.
 _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("users", "email",         "VARCHAR(255)"),
@@ -46,10 +93,6 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("app_settings", "max_recur_limit",            "INTEGER DEFAULT 1000"),
     ("app_settings", "benchmark_ticker",           "VARCHAR(20)"),
     ("app_settings", "azure_deployment",           "VARCHAR(100)"),
-    ("app_settings", "data_vendor_core_stock",     "VARCHAR(50) DEFAULT 'yfinance'"),
-    ("app_settings", "data_vendor_technicals",     "VARCHAR(50) DEFAULT 'yfinance'"),
-    ("app_settings", "data_vendor_fundamentals",   "VARCHAR(50) DEFAULT 'yfinance'"),
-    ("app_settings", "data_vendor_news",           "VARCHAR(50) DEFAULT 'yfinance'"),
     ("analysis_results", "bull_history",                "TEXT DEFAULT ''"),
     ("analysis_results", "bear_history",                "TEXT DEFAULT ''"),
     ("analysis_results", "investment_debate_history",   "TEXT DEFAULT ''"),
@@ -101,6 +144,8 @@ async def apply_type_migrations(conn) -> None:
         if table not in _ALLOWED_TABLES:
             raise ValueError(f"Unknown table in migration: {table!r}")
         for column in columns:
+            if column not in _ALLOWED_COLUMNS.get(table, set()):
+                raise ValueError(f"Column {column!r} is not allowed for table {table!r} in type migration")
             current = (await conn.execute(text(
                 "SELECT data_type FROM information_schema.columns "
                 "WHERE table_name = :t AND column_name = :c"
@@ -117,6 +162,8 @@ async def apply_column_migrations(conn) -> None:
     for table, column, col_type in _NEW_COLUMNS:
         if table not in _ALLOWED_TABLES:
             raise ValueError(f"Unknown table in migration: {table!r}")
+        if column not in _ALLOWED_COLUMNS.get(table, set()):
+            raise ValueError(f"Column {column!r} is not allowed for table {table!r} in column migration")
         if conn.dialect.name == "sqlite":
             await conn.run_sync(_add_column_sqlite, table, column, col_type)
         else:
@@ -127,6 +174,10 @@ async def apply_column_migrations(conn) -> None:
 
 def _add_column_sqlite(sync_conn, table: str, column: str, col_type: str) -> None:
     """SQLite has no ``ADD COLUMN IF NOT EXISTS``; check the catalog first."""
+    if table not in _ALLOWED_TABLES:
+        raise ValueError(f"Unknown table in migration: {table!r}")
+    if column not in _ALLOWED_COLUMNS.get(table, set()):
+        raise ValueError(f"Column {column!r} is not allowed for table {table!r} in column migration")
     existing = {c["name"] for c in inspect(sync_conn).get_columns(table)}
     if column not in existing:
         sync_conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {column} {col_type}"))

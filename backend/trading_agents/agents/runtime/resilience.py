@@ -52,13 +52,14 @@ def is_transient(exc: BaseException) -> bool:
     return any(hint in str(exc).lower() for hint in _TRANSIENT_HINTS)
 
 
-def retry_call(
+async def retry_call(
     fn: Callable[[], Any],
     *,
     label: str,
     attempts: Optional[int] = None,
     base_delay: Optional[float] = None,
     retry_all: bool = True,
+    run_in_thread: bool = False,
 ) -> Any:
     """Call ``fn`` with retries + exponential backoff.
 
@@ -70,9 +71,17 @@ def retry_call(
     base_delay = float(base_delay if base_delay is not None else _cfg("node_retry_base_delay", 1.0))
     attempts = max(1, attempts)
     last: Optional[BaseException] = None
+    import inspect
+    import asyncio
     for i in range(attempts):
         try:
-            return fn()
+            if run_in_thread:
+                return await asyncio.to_thread(fn)
+            else:
+                res = fn()
+                if inspect.iscoroutine(res):
+                    return await res
+                return res
         except Exception as exc:  # noqa: BLE001 — deliberately broad for resilience
             last = exc
             is_last = i + 1 >= attempts
@@ -84,7 +93,7 @@ def retry_call(
                 attempt=i + 1, attempts=attempts, delay=round(delay, 1),
                 error=str(exc)[:200],
             )
-            time.sleep(delay)
+            await asyncio.sleep(delay)
     assert last is not None
     raise last
 
@@ -110,8 +119,10 @@ def guard_node(
     if it still fails — returns ``fallback(state, exc)`` (a safe partial state
     update) instead of aborting the run. With no ``fallback`` the error is
     logged and re-raised (previous behaviour)."""
+    import inspect
+    import asyncio
 
-    def wrapped(state, *args, **kwargs):
+    async def wrapped(state, *args, **kwargs):
         start = time.time()
         # NOTE: the enable/disable kill-switch is owned by the AgentHierarchy and
         # enforced inside each Main Agent node (and by Market Intelligence when it
@@ -120,7 +131,19 @@ def guard_node(
         # hierarchy logic runs and emit a different, less complete stub.
         log_event("node_start", node=name, kind=kind)
         try:
-            result = retry_call(lambda: fn(state, *args, **kwargs), label=f"{kind}:{name}")
+            is_async = inspect.iscoroutinefunction(fn)
+            if is_async:
+                result = await retry_call(
+                    lambda: fn(state, *args, **kwargs),
+                    label=f"{kind}:{name}",
+                    run_in_thread=False,
+                )
+            else:
+                result = await retry_call(
+                    lambda: fn(state, *args, **kwargs),
+                    label=f"{kind}:{name}",
+                    run_in_thread=True,
+                )
             log_event("node_end", node=name, kind=kind, ms=int((time.time() - start) * 1000))
             return result
         except Exception as exc:  # noqa: BLE001
@@ -131,7 +154,10 @@ def guard_node(
             if fallback is None:
                 raise
             try:
-                update = fallback(state, exc)
+                if inspect.iscoroutinefunction(fallback):
+                    update = await fallback(state, exc)
+                else:
+                    update = fallback(state, exc)
             except Exception as fb_exc:  # noqa: BLE001 — never let the fallback abort
                 log_event("fallback_error", level=logging.ERROR, node=name, error=str(fb_exc)[:200])
                 raise exc from fb_exc

@@ -1,5 +1,5 @@
 from __future__ import annotations
-from backend.trading_agents.analyst_catalog import list_analysts as _engine_analysts, label_for
+from backend.trading_agents.agent_catalog import list_analysts as _engine_analysts, label_for
 def _node_specs() -> dict:
     try:
         from backend.trading_agents.graph.analyst_execution import ANALYST_NODE_SPECS
@@ -53,15 +53,15 @@ SECTION_LABELS: dict[str, str] = {
     "judge_decision":            "Judge Decision",
 }
 SIGNALS: list[dict] = [
-    {"value": "Buy",         "label": "Al",    "tone": "positive"},
-    {"value": "Overweight",  "label": "Artır", "tone": "positive"},
-    {"value": "Hold",        "label": "Tut",   "tone": "neutral"},
-    {"value": "Underweight", "label": "Azalt", "tone": "negative"},
-    {"value": "Sell",        "label": "Sat",   "tone": "negative"},
+    {"value": "Buy",         "label": "Buy",         "tone": "positive"},
+    {"value": "Overweight",  "label": "Overweight",  "tone": "positive"},
+    {"value": "Hold",        "label": "Hold",        "tone": "neutral"},
+    {"value": "Underweight", "label": "Underweight", "tone": "negative"},
+    {"value": "Sell",        "label": "Sell",        "tone": "negative"},
 ]
 ASSET_TYPES: list[dict] = [
-    {"value": "stock",  "label": "Hisse"},
-    {"value": "crypto", "label": "Kripto"},
+    {"value": "stock",  "label": "Stock"},
+    {"value": "crypto", "label": "Crypto"},
 ]
 LANGUAGES: list[dict] = [
     {"value": "English",  "label": "English"},
@@ -78,11 +78,11 @@ DATA_VENDORS: list[dict] = [
     {"value": "alpha_vantage", "label": "Alpha Vantage"},
 ]
 TRADING_MODES: list[dict] = [
-    {"value": "simulation", "label": "Simülasyon (Paper Trading)"},
-    {"value": "live",       "label": "Canlı (Live)"},
+    {"value": "simulation", "label": "Simulation (Paper Trading)"},
+    {"value": "live",       "label": "Live"},
 ]
 BROKERS: list[dict] = [
-    {"value": "simulation", "label": "Simülasyon"},
+    {"value": "simulation", "label": "Simulation"},
 ]
 PROVIDER_LABELS: dict[str, str] = {
     "openai": "OpenAI",
@@ -101,67 +101,48 @@ PROVIDER_LABELS: dict[str, str] = {
     "litellm": "LiteLLM Proxy",
     "azure": "Azure OpenAI",
 }
-# Investor personas are owned by the engine persona registry; derive them so the
-# UI never hardcodes the option list. Falls back to a static copy if the engine
-# package cannot be imported.
-_PERSONAS_FALLBACK: list[dict] = [
-    {"value": "conservative", "label": "Muhafazakâr",
-     "description": "Sermaye koruma, temettü ve düşük volatiliteli blue-chip odaklı"},
-    {"value": "risk_loving", "label": "Risk Sever",
-     "description": "Yüksek getiri, momentum, büyüme ve kripto için yüksek volatilite kabulü"},
-    {"value": "esg_focused", "label": "ESG Odaklı",
-     "description": "Çevre, sosyal ve yönetişim metrikleri finansal getiriyle birlikte önceliklendirilir"},
-]
-
-
 def investor_personas() -> list[dict]:
-    try:
-        from backend.trading_agents.personas import list_personas
-        personas = list_personas()
-        if personas:
-            return [
-                {"value": p.key, "label": p.label, "description": p.description}
-                for p in personas
-            ]
-    except Exception:
-        pass
-    return _PERSONAS_FALLBACK
+    from backend.trading_agents.personas import list_personas
+    return [
+        {"value": p.key, "label": p.label, "description": p.description}
+        for p in list_personas()
+    ]
 
 
 # Provider-specific reasoning/thinking effort levels (UI option lists).
 EFFORT_OPTIONS: dict[str, list[dict]] = {
     "openai": [
-        {"value": "low", "label": "Düşük"},
-        {"value": "medium", "label": "Orta"},
-        {"value": "high", "label": "Yüksek"},
+        {"value": "low", "label": "Low"},
+        {"value": "medium", "label": "Medium"},
+        {"value": "high", "label": "High"},
     ],
     "anthropic": [
-        {"value": "low", "label": "Düşük"},
-        {"value": "medium", "label": "Orta"},
-        {"value": "high", "label": "Yüksek"},
+        {"value": "low", "label": "Low"},
+        {"value": "medium", "label": "Medium"},
+        {"value": "high", "label": "High"},
     ],
     "google": [
         {"value": "minimal", "label": "Minimal"},
-        {"value": "low", "label": "Düşük"},
-        {"value": "medium", "label": "Orta"},
-        {"value": "high", "label": "Yüksek"},
+        {"value": "low", "label": "Low"},
+        {"value": "medium", "label": "Medium"},
+        {"value": "high", "label": "High"},
     ],
 }
 ORDER_STATUSES: list[dict] = [
-    {"value": "FILLED",           "label": "Gerçekleşti", "tone": "positive"},
-    {"value": "PARTIALLY_FILLED", "label": "Kısmi",       "tone": "neutral"},
-    {"value": "PENDING",          "label": "Bekliyor",    "tone": "neutral"},
-    {"value": "REJECTED",         "label": "Reddedildi",  "tone": "negative"},
+    {"value": "FILLED",           "label": "Filled",      "tone": "positive"},
+    {"value": "PARTIALLY_FILLED", "label": "Partial",     "tone": "neutral"},
+    {"value": "PENDING",          "label": "Pending",     "tone": "neutral"},
+    {"value": "REJECTED",         "label": "Rejected",    "tone": "negative"},
 ]
 ORDER_ACTIONS: list[dict] = [
-    {"value": "BUY",  "label": "Al",  "tone": "positive"},
-    {"value": "SELL", "label": "Sat", "tone": "negative"},
+    {"value": "BUY",  "label": "Buy",  "tone": "positive"},
+    {"value": "SELL", "label": "Sell", "tone": "negative"},
 ]
 # Chart time ranges supported by /api/market/ohlcv (single source for the UI).
 CHART_PERIODS: list[dict] = [
-    {"value": "1m", "label": "1A"},
-    {"value": "3m", "label": "3A"},
-    {"value": "6m", "label": "6A"},
+    {"value": "1m", "label": "1M"},
+    {"value": "3m", "label": "3M"},
+    {"value": "6m", "label": "6M"},
     {"value": "1y", "label": "1Y"},
     {"value": "2y", "label": "2Y"},
     {"value": "5y", "label": "5Y"},

@@ -35,10 +35,58 @@ def get_persona(key: str | None) -> InvestorPersona | None:
     return _PERSONAS.get(key or "")
 
 
+_INSTRUCTIONS_EN = {
+    "conservative": (
+        "**INVESTOR PERSONA: Conservative Dividend Investor**\n"
+        "- Your client is highly risk-averse, focusing on capital preservation, steady income (dividends), and low-volatility blue-chip assets.\n"
+        "- Prefer 'Hold' or 'Sell/Underweight' if uncertainty is high. Do not recommend aggressive positioning, high leverage, or speculative assets unless backed by overwhelming positive fundamental data.\n"
+        "- Keep position sizing conservative, prioritizing cash safety.\n"
+    ),
+    "risk_loving": (
+        "**INVESTOR PERSONA: Risk-Loving Crypto & Growth Trader**\n"
+        "- Your client seeks high returns and is willing to accept high volatility, leverage, and speculative growth or crypto assets.\n"
+        "- Emphasize growth potential and momentum. Be willing to recommend 'Buy' or 'Overweight' sizing if there is a strong technical breakout or high social sentiment, even if fundamentals are weak or debate is mixed.\n"
+    ),
+    "esg_focused": (
+        "**INVESTOR PERSONA: Sustainability / ESG-Focused Investor**\n"
+        "- Your client prioritizes environmental, social, and corporate governance metrics alongside financial returns.\n"
+        "- Strictly penalize companies with controversial environmental track records, poor corporate governance, or regulatory issues. Heavily favor clean energy, positive social governance, and sustainable business models.\n"
+    ),
+}
+
+_INSTRUCTIONS_TR = {
+    "conservative": (
+        "**INVESTOR PERSONA: Muhafazakar Temettü Yatırımcısı**\n"
+        "- Müşteriniz riskten son derece kaçınır; anaparanın korunmasına, düzenli gelire (temettü) ve düşük oynaklıklı mavi çipli varlıklara odaklanır.\n"
+        "- Belirsizlik yüksekse 'Tut' veya 'Sat/Ağırlık Azalt' seçeneğini tercih edin. Ezici ölçüde olumlu temel verilerle desteklenmediği sürece agresif pozisyon alma, yüksek kaldıraç veya spekülatif varlıklar önermeyin.\n"
+        "- Nakit güvenliğini ön planda tutarak pozisyon büyüklüğünü muhafazakar tutun.\n"
+    ),
+    "risk_loving": (
+        "**INVESTOR PERSONA: Risk Sever Kripto ve Büyüme Yatırımcısı**\n"
+        "- Müşteriniz yüksek getiri hedefler ve yüksek oynaklığı, kaldıracı, spekülatif büyüme veya kripto varlıkları kabul etmeye isteklidir.\n"
+        "- Büyüme potansiyelini ve ivmeyi vurgulayın. Temeller zayıf veya tartışmalar karışık olsa bile, güçlü bir teknik kırılma veya yüksek sosyal duyarlılık varsa 'Al' veya 'Ağırlık Artır' önerisi yapmaya istekli olun.\n"
+    ),
+    "esg_focused": (
+        "**INVESTOR PERSONA: Sürdürülebilirlik / ESG Odaklı Yatırımcı**\n"
+        "- Müşteriniz finansal getirilerin yanı sıra çevresel, sosyal ve kurumsal yönetim metriklerine öncelik verir.\n"
+        "- Tartışmalı çevre geçmişine, zayıf kurumsal yönetime veya düzenleyici sorunlara sahip şirketleri kesinlikle cezalandırın. Temiz enerjiyi, olumlu sosyal yönetimi ve sürdürülebilir iş modellerini yoğun bir şekilde destekleyin.\n"
+    ),
+}
+
+
 def get_persona_instructions(key: str | None) -> str:
     """Return the PM instruction block for ``key`` (empty string if unknown)."""
-    persona = _PERSONAS.get(key or "")
-    return persona.instructions if persona else ""
+    key = key or ""
+    try:
+        from backend.trading_agents.dataflows.config import get_config
+        lang = get_config().get("output_language", "English").strip().lower()
+    except Exception:
+        lang = "english"
+    
+    is_tr = lang in ("turkish", "türkçe")
+    if is_tr:
+        return _INSTRUCTIONS_TR.get(key, "")
+    return _INSTRUCTIONS_EN.get(key, "")
 
 
 def list_personas() -> list[InvestorPersona]:
@@ -49,34 +97,21 @@ def list_personas() -> list[InvestorPersona]:
 
 register_persona(InvestorPersona(
     key="conservative",
-    label="Muhafazakâr",
-    description="Sermaye koruma, temettü ve düşük volatiliteli blue-chip odaklı",
-    instructions=(
-        "**INVESTOR PERSONA: Conservative Dividend Investor (Muhafazakar)**\n"
-        "- Your client is highly risk-averse, focusing on capital preservation, steady income (dividends), and low-volatility blue-chip assets.\n"
-        "- Prefer 'Hold' or 'Sell/Underweight' if uncertainty is high. Do not recommend aggressive positioning, high leverage, or speculative assets unless backed by overwhelming positive fundamental data.\n"
-        "- Keep position sizing conservative, prioritizing cash safety.\n"
-    ),
+    label="Conservative",
+    description="Capital preservation, dividend income, and focus on low-volatility blue-chip stocks",
+    instructions=_INSTRUCTIONS_EN["conservative"],
 ))
 
 register_persona(InvestorPersona(
     key="risk_loving",
-    label="Risk Sever",
-    description="Yüksek getiri, momentum, büyüme ve kripto için yüksek volatilite kabulü",
-    instructions=(
-        "**INVESTOR PERSONA: Risk-Loving Crypto & Growth Trader (Risk Sever)**\n"
-        "- Your client seeks high returns and is willing to accept high volatility, leverage, and speculative growth or crypto assets.\n"
-        "- Emphasize growth potential and momentum. Be willing to recommend 'Buy' or 'Overweight' sizing if there is a strong technical breakout or high social sentiment, even if fundamentals are weak or debate is mixed.\n"
-    ),
+    label="Risk Loving",
+    description="High returns, momentum, growth, and acceptance of high volatility for crypto",
+    instructions=_INSTRUCTIONS_EN["risk_loving"],
 ))
 
 register_persona(InvestorPersona(
     key="esg_focused",
-    label="ESG Odaklı",
-    description="Çevre, sosyal ve yönetişim metrikleri finansal getiriyle birlikte önceliklendirilir",
-    instructions=(
-        "**INVESTOR PERSONA: Sustainability / ESG-Focused Investor (ESG Odaklı)**\n"
-        "- Your client prioritizes environmental, social, and corporate governance metrics alongside financial returns.\n"
-        "- Strictly penalize companies with controversial environmental track records, poor corporate governance, or regulatory issues. Heavily favor clean energy, positive social governance, and sustainable business models.\n"
-    ),
+    label="ESG Focused",
+    description="Environmental, social, and governance metrics are prioritized alongside financial returns",
+    instructions=_INSTRUCTIONS_EN["esg_focused"],
 ))

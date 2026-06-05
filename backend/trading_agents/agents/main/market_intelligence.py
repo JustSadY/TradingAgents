@@ -111,7 +111,7 @@ def _build_analyst_subgraph(enabled_keys: List[str], ctx: AgentRunContext):
 
 
 def create_market_intelligence_node(ctx: AgentRunContext) -> NodeFn:
-    def market_intelligence_node(state) -> dict:
+    async def market_intelligence_node(state) -> dict:
         # Tier-1 kill-switch — disable the whole analyst branch.
         if not ctx.is_enabled(MAIN_KEY):
             logger.info("[market_intelligence] branch disabled — skipping all analysts.")
@@ -127,7 +127,7 @@ def create_market_intelligence_node(ctx: AgentRunContext) -> NodeFn:
 
         subgraph = _build_analyst_subgraph(enabled, ctx)
         recur = ctx.config.get("max_recur_limit", 100)
-        result = subgraph.invoke(state, config={"recursion_limit": recur})
+        result = await subgraph.ainvoke(state, config={"recursion_limit": recur})
 
         return {rk: result.get(rk, "") for rk in REPORT_KEYS if rk in result}
 

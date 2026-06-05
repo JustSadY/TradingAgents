@@ -8,7 +8,7 @@ from backend.models.user import User
 from backend.schemas.settings import SettingsRead, SettingsUpdate
 from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate
 from backend.schemas.agent_settings import AgentSettingsRead, AgentSettingsUpdate
-from backend.api.deps import get_current_user, require_admin
+from backend.api.deps import get_current_user, require_admin, check_tool_settings_permission
 from backend.services.settings_service import (
     get_or_create_settings,
     settings_to_read,
@@ -175,7 +175,7 @@ async def get_user_tools(
 async def update_user_tools(
     body: ToolSettingsUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(check_tool_settings_permission),
 ):
     from backend.services.tool_settings_service import apply_tool_settings_update
     from backend.schemas.tool_settings import ToolSettingsRead
