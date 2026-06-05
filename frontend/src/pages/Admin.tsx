@@ -457,21 +457,43 @@ export default function Admin() {
 
             {selectedUserId && (
               <>
-                <Section title={t('admin.section_agent_access') || 'Agent Analyst Permissions'}>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-2">
-                    {meta?.analysts?.map(analyst => (
-                      <label key={analyst.key} className="flex items-center gap-3 text-xs font-semibold text-slate-350 cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 rounded-xl px-3 py-2.5 border border-white/[0.03] transition-colors select-none">
-                        <input
-                          type="checkbox"
-                          className="accent-violet-600 w-4 h-4 rounded cursor-pointer shrink-0"
-                          checked={agentAccess[analyst.key] ?? analyst.default}
-                          onChange={e => setAgentAccess(prev => ({ ...prev, [analyst.key]: e.target.checked }))}
-                        />
-                        <div className="space-y-0.5">
-                          <div className="text-slate-250 font-bold">{analyst.label || analyst.key}</div>
-                          <div className="text-[10px] text-slate-500 font-normal leading-tight">{analyst.description}</div>
+                <Section title={t('admin.section_agent_access') || 'Hierarchical Agent Permissions'}>
+                  <p className="text-[10px] text-slate-500 font-semibold mb-3">
+                    Grant or revoke access to specific branches of the AI hierarchy. Disabling a parent agent automatically restricts all its sub-agents.
+                  </p>
+                  <div className="space-y-4">
+                    {meta?.agents?.filter(a => !a.parent_key).map(mainAgent => (
+                      <div key={mainAgent.key} className="space-y-2">
+                        <label className="flex items-center gap-3 text-xs font-bold text-violet-400 cursor-pointer bg-violet-500/5 hover:bg-violet-500/10 rounded-xl px-4 py-3 border border-violet-500/10 transition-colors select-none">
+                          <input
+                            type="checkbox"
+                            className="accent-violet-600 w-4 h-4 rounded cursor-pointer shrink-0"
+                            checked={agentAccess[mainAgent.key] ?? mainAgent.default_enabled}
+                            onChange={e => setAgentAccess(prev => ({ ...prev, [mainAgent.key]: e.target.checked }))}
+                          />
+                          <div className="space-y-0.5">
+                            <div className="uppercase tracking-wider">{mainAgent.label || mainAgent.key}</div>
+                            <div className="text-[10px] text-slate-500 font-normal normal-case leading-tight">{mainAgent.description}</div>
+                          </div>
+                        </label>
+                        
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pl-6">
+                          {meta?.agents?.filter(a => a.parent_key === mainAgent.key).map(subAgent => (
+                            <label key={subAgent.key} className="flex items-center gap-3 text-xs font-semibold text-slate-300 cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 rounded-xl px-3 py-2 border border-white/[0.03] transition-colors select-none">
+                              <input
+                                type="checkbox"
+                                className="accent-violet-600 w-3.5 h-3.5 rounded cursor-pointer shrink-0"
+                                checked={agentAccess[subAgent.key] ?? subAgent.default_enabled}
+                                onChange={e => setAgentAccess(prev => ({ ...prev, [subAgent.key]: e.target.checked }))}
+                              />
+                              <div className="space-y-0.5">
+                                <div className="text-slate-200">{subAgent.label || subAgent.key}</div>
+                                <div className="text-[9px] text-slate-500 font-normal leading-tight line-clamp-1">{subAgent.description}</div>
+                              </div>
+                            </label>
+                          ))}
                         </div>
-                      </label>
+                      </div>
                     ))}
                   </div>
                 </Section>
