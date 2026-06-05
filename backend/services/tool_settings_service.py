@@ -91,7 +91,10 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
     tool_access_map = await get_user_tool_access(db, user.id)
     
     from backend.services.agent_settings_service import build_agent_runtime_context
+    from backend.trading_agents.agents.hierarchy import AgentHierarchy
+    
     agent_ctx = await build_agent_runtime_context(db, user.id)
+    hierarchy = AgentHierarchy(agent_ctx)
 
     # 2. Build map of all registered tools
     tools_map = {}
@@ -100,10 +103,10 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
             if not tool_access_map.get(tool.key, {}).get("can_view", True):
                 continue
 
-        # Check if any associated agent is active in the hierarchy
+        # Check if any associated agent is active in the hierarchy (recursive check)
         if tool.allowed_analysts:
             is_any_agent_enabled = any(
-                agent_ctx.get(a, {}).get("enabled", True) 
+                hierarchy.is_enabled(a)
                 for a in tool.allowed_analysts
             )
             if not is_any_agent_enabled:

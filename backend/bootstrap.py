@@ -4,13 +4,10 @@ The AI engine under ``backend/trading_agents`` is a *normal sub-package of
 ``backend``* — it is imported as ``backend.trading_agents.*`` like any other
 backend module (no import aliasing / meta-path tricks).
 
-Importing this module (idempotently) guarantees two things the engine relies on:
+Importing this module (idempotently) guarantees one thing the engine relies on:
 
 1. ``TRADINGAGENTS_*`` environment variables point at writable temp directories
    so the engine never writes into the (possibly read-only) source tree.
-2. A no-op stub for ``backend.trading_agents.agents.runtime.logging_config`` is
-   installed so the engine skips its file-based "unified logging" setup in the
-   web context.
 
 Import it early (before anything that pulls in ``backend.trading_agents``):
 ``import backend.bootstrap``.
@@ -20,13 +17,9 @@ from __future__ import annotations
 import os
 import sys
 import tempfile
-import types
 
 _BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_BACKEND_DIR)
-
-_LOGGING_CONFIG_MODULE = "backend.trading_agents.agents.runtime.logging_config"
-
 
 def _configure_env() -> None:
     """Point the engine's cache/results/log paths at the system temp dir."""
@@ -42,15 +35,6 @@ def _ensure_project_on_path() -> None:
         sys.path.insert(0, _PROJECT_ROOT)
 
 
-def _install_logging_stub() -> None:
-    """Pre-empt the engine's disk-based logging setup with a no-op stub."""
-    if _LOGGING_CONFIG_MODULE in sys.modules:
-        return
-    stub = types.ModuleType(_LOGGING_CONFIG_MODULE)
-    stub.setup_unified_logging = lambda: None
-    sys.modules[_LOGGING_CONFIG_MODULE] = stub
-
-
 _INITIALISED = False
 
 
@@ -61,7 +45,6 @@ def init() -> None:
         return
     _configure_env()
     _ensure_project_on_path()
-    _install_logging_stub()
     _INITIALISED = True
 
 

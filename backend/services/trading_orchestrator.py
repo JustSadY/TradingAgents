@@ -14,6 +14,8 @@ import logging
 import re
 from typing import Optional
 
+from backend.trading_agents.agents.runtime.risk_math import calculate_kelly_size, get_risk_reward_from_plan
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -36,14 +38,6 @@ _SIGNAL_TO_ACTION = {
 
 def is_actionable(signal: Optional[str]) -> bool:
     return signal in _SIGNAL_TO_ACTION
-
-
-def _kelly_fraction_from_confidence(confidence: float | None) -> float:
-    if confidence is None:
-        return 1.0
-    p = max(0.0, min(1.0, confidence))
-    kelly_fraction = max(0.0, min(1.0, (2.0 * p) - 1.0))
-    return max(0.1, kelly_fraction)
 
 
 def _extract_confidence_score(row) -> float | None:
@@ -73,32 +67,72 @@ def _extract_confidence_score(row) -> float | None:
     return None
 
 
+def _extract_price_level(text: str, label: str) -> float | None:
+    pattern = rf"\*\*{re.escape(label)}\*\*\s*:\s*\$?\s*([0-9]+(?:\.[0-9]+)?)"
+    match = re.search(pattern, text, flags=re.IGNORECASE)
+    if not match:
+        return None
+    try:
+        value = float(match.group(1))
+    except ValueError:
+        return None
+    return value if value > 0 else None
+
+
+def _extract_kelly_ceiling_pct(row, *, confidence_score: float | None, current_price: float) -> float | None:
+    chart_annotations = getattr(row, "chart_annotations", None)
+    if isinstance(chart_annotations, dict):
+        for key in ("kelly_recommendation_pct", "kelly_position_size_pct", "kelly_pct"):
+            raw = chart_annotations.get(key)
+            if raw is None:
+                continue
+            try:
+                parsed = float(raw)
+            except (TypeError, ValueError):
+                continue
+            if parsed > 0:
+                return min(parsed, 100.0)
+
+    final_decision = getattr(row, "final_decision", "") or ""
+    match = re.search(
+        r"Suggested\s+Maximum\s+Position\s+Size\s*:\s*([0-9]+(?:\.[0-9]+)?)%",
+        final_decision,
+        flags=re.IGNORECASE,
+    )
+    if match:
+        try:
+            parsed = float(match.group(1))
+        except ValueError:
+            parsed = None
+        if parsed and parsed > 0:
+            return min(parsed, 100.0)
+
+    trader_plan = getattr(row, "trader_plan", "") or ""
+    entry = _extract_price_level(trader_plan, "Entry Price") or current_price
+    stop = _extract_price_level(trader_plan, "Stop Loss")
+    target = _extract_price_level(trader_plan, "Take Profit")
+    if confidence_score is None or stop is None or target is None:
+        return None
+    rr = get_risk_reward_from_plan(target, stop, entry)
+    kelly_size = calculate_kelly_size(confidence_score, rr)
+    return max(0.0, min(kelly_size * 100.0, 100.0))
+
+
 def _position_quantity(
     risk_per_trade_pct: float,
     capital: float,
     price: float,
     stop_loss: float | None = None,
     max_position_size_pct: float = 10.0,
-    confidence_score: float | None = None,
+    kelly_multiplier: float = 1.0,
 ) -> float:
-    """Risk-budgeted position size using proper financial math.
-    
-    If stop_loss is provided and valid, position size is calculated such that
-    the loss if stopped out equals the risk budget. Otherwise, falls back to
-    allocating the risk percentage directly. Capped by max_position_size_pct.
-    """
     risk_usd = (risk_per_trade_pct / 100.0) * capital
-    risk_usd *= _kelly_fraction_from_confidence(confidence_score)
-    
-    # Check if stop loss is valid
+    risk_usd *= max(0.0, min(1.0, kelly_multiplier))
     if stop_loss and stop_loss > 0 and stop_loss != price:
         risk_per_share = abs(price - stop_loss)
         quantity = risk_usd / risk_per_share
     else:
-        # Fallback to old behavior: allocate risk_per_trade_pct directly
         quantity = risk_usd / price
-
-    # Cap the allocation based on max_position_size_pct
     max_alloc_usd = (max_position_size_pct / 100.0) * capital
     max_qty = max_alloc_usd / price
     return min(quantity, max_qty)
@@ -159,6 +193,16 @@ async def place_signal_order(
 
     max_position_size_pct = getattr(settings, "max_position_size_pct", 10.0)
     confidence_score = _extract_confidence_score(row)
+    kelly_ceiling_pct = _extract_kelly_ceiling_pct(
+        row,
+        confidence_score=confidence_score,
+        current_price=price,
+    )
+    base_risk_pct = float(settings.max_risk_per_trade_pct)
+    effective_risk_pct = base_risk_pct
+    if kelly_ceiling_pct is not None:
+        effective_risk_pct = min(base_risk_pct, kelly_ceiling_pct)
+    kelly_multiplier = (effective_risk_pct / base_risk_pct) if base_risk_pct > 0 else 0.0
     strict_stop_loss_mode = getattr(settings, "strict_stop_loss_mode", False)
     if strict_stop_loss_mode and (stop_loss is None or stop_loss <= 0 or stop_loss == price):
         _logger.warning(
@@ -167,12 +211,12 @@ async def place_signal_order(
         )
         return None
     quantity = _position_quantity(
-        settings.max_risk_per_trade_pct,
+        base_risk_pct,
         capital,
         price,
         stop_loss=stop_loss,
         max_position_size_pct=max_position_size_pct,
-        confidence_score=confidence_score,
+        kelly_multiplier=kelly_multiplier,
     )
     request = OrderRequest(
         ticker=ticker,

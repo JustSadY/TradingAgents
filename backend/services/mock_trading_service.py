@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import math
 from datetime import datetime, timezone
 from typing import Optional
 from decimal import Decimal
@@ -14,6 +15,8 @@ _logger = logging.getLogger(__name__)
 # Default simulation commission rate (0.1%). Named constant for clarity and future
 # configurability (e.g. reading from SystemSettings).
 _DEFAULT_COMMISSION_RATE = Decimal("0.001")
+_BATCH_PRICE_TIMEOUT_SEC = 10.0
+_SINGLE_PRICE_TIMEOUT_SEC = 6.0
 
 
 async def _get_price(ticker: str) -> Optional[float]:
@@ -21,18 +24,27 @@ async def _get_price(ticker: str) -> Optional[float]:
     import yfinance as yf
     def _fetch():
         try:
-            t = yf.Ticker(ticker)  # single instantiation
+            t = yf.Ticker(ticker)
             info = t.info
             price = info.get("currentPrice") or info.get("regularMarketPrice")
             if price is None:
-                hist = t.history(period="1d")  # reuse same instance
+                hist = t.history(period="1d")
                 if not hist.empty:
                     price = float(hist["Close"].iloc[-1])
-            return float(price) if price is not None else None
+            if price is None:
+                return None
+            parsed = float(price)
+            if not math.isfinite(parsed) or parsed <= 0:
+                return None
+            return parsed
         except Exception as e:
             _logger.warning("Price fetch failed for %s: %s", ticker, e)
             return None
-    return await asyncio.to_thread(_fetch)
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_fetch), timeout=_SINGLE_PRICE_TIMEOUT_SEC)
+    except asyncio.TimeoutError:
+        _logger.warning("Price fetch timed out for %s after %.1fs", ticker, _SINGLE_PRICE_TIMEOUT_SEC)
+        return None
 
 
 async def _get_prices_batch(tickers: list[str]) -> dict[str, float]:
@@ -47,39 +59,64 @@ async def _get_prices_batch(tickers: list[str]) -> dict[str, float]:
         return {}
     import yfinance as yf
 
+    unique = list(dict.fromkeys(tickers))
+
     def _batch_fetch():
         prices: dict[str, float] = {}
-        unique = list(dict.fromkeys(tickers))  # preserve order, deduplicate
         try:
             data = yf.download(
                 unique if len(unique) > 1 else unique[0],
                 period="2d",
                 progress=False,
                 auto_adjust=True,
+                threads=False,
             )
+            if data is None or getattr(data, "empty", False):
+                return prices
             close = data["Close"] if "Close" in data.columns else data
-            if hasattr(close, "columns"):  # multi-ticker DataFrame
-                last_row = close.ffill().iloc[-1]
-                for t in unique:
+            if getattr(close, "empty", False):
+                return prices
+            if hasattr(close, "columns"):
+                rows = close.ffill()
+                if rows.empty:
+                    return prices
+                last_row = rows.iloc[-1]
+                for symbol in unique:
                     try:
-                        prices[t] = float(last_row[t])
+                        raw = last_row[symbol]
+                        val = float(raw)
+                        if math.isfinite(val) and val > 0:
+                            prices[symbol] = val
                     except (KeyError, TypeError, ValueError):
-                        pass
-            else:  # single-ticker Series
-                val = float(close.ffill().iloc[-1])
-                prices[unique[0]] = val
+                        continue
+            else:
+                rows = close.ffill()
+                if rows.empty:
+                    return prices
+                val = float(rows.iloc[-1])
+                if math.isfinite(val) and val > 0:
+                    prices[unique[0]] = val
         except Exception as exc:
             _logger.debug("Batch price fetch failed (%s), will fall back per-ticker: %s", unique, exc)
         return prices
 
-    prices = await asyncio.to_thread(_batch_fetch)
-    # Fill any missing tickers with individual fallback
-    missing = [t for t in tickers if t not in prices]
+    try:
+        prices = await asyncio.wait_for(asyncio.to_thread(_batch_fetch), timeout=_BATCH_PRICE_TIMEOUT_SEC)
+    except asyncio.TimeoutError:
+        _logger.warning("Batch price fetch timed out for %s after %.1fs", unique, _BATCH_PRICE_TIMEOUT_SEC)
+        prices = {}
+
+    missing = [symbol for symbol in unique if symbol not in prices]
     if missing:
-        fallbacks = await asyncio.gather(*[_get_price(t) for t in missing], return_exceptions=True)
-        for t, p in zip(missing, fallbacks):
-            if isinstance(p, float):
-                prices[t] = p
+        fallbacks = await asyncio.gather(*[_get_price(symbol) for symbol in missing], return_exceptions=True)
+        for symbol, fetched in zip(missing, fallbacks):
+            if isinstance(fetched, BaseException):
+                continue
+            if fetched is None:
+                continue
+            val = float(fetched)
+            if math.isfinite(val) and val > 0:
+                prices[symbol] = val
     return prices
 
 
@@ -232,8 +269,8 @@ async def execute_order(
     if quantity <= 0:
         raise ValueError("quantity must be positive")
     price_val = await _get_price(ticker)
-    if price_val is None:
-        raise ValueError(f"Could not fetch price for {ticker}")
+    if price_val is None or not math.isfinite(price_val) or price_val <= 0:
+        raise ValueError(f"Could not fetch valid price for {ticker}")
     
     price = Decimal(str(price_val))
     qty_dec = Decimal(str(quantity))
