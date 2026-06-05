@@ -66,9 +66,6 @@ class OpenAIClient(BaseLLMClient):
             if key in self.kwargs:
                 llm_kwargs[key] = self.kwargs[key]
 
-        if self.provider == "openai":
-            llm_kwargs["use_responses_api"] = True
-
         return NormalizedChatOpenAI(**llm_kwargs)
 
     def validate_model(self) -> bool:

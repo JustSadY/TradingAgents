@@ -78,6 +78,11 @@ async def apply_agent_settings_update_by_scope(
         if not agent:
             raise ValueError(f"Unknown agent key '{agent_key}'.")
 
+        # Root agent (no parent) must always stay enabled — it is the global
+        # kill-switch and disabling it collapses every run to an automated Hold.
+        if agent.parent_key is None and update.enabled is False:
+            update = update.model_copy(update={"enabled": None})
+
         row = rows.get(agent_key)
         if not row:
             row = AgentSetting(
@@ -160,6 +165,11 @@ async def build_agent_runtime_context(db: AsyncSession, user_id: int | None) -> 
 
     context = {}
     for agent in list_agents():
-        context[agent.key] = build_agent_runtime_state(agent, server_rows.get(agent.key), user_rows.get(agent.key))
+        state = build_agent_runtime_state(agent, server_rows.get(agent.key), user_rows.get(agent.key))
+        # Root agents (no parent) can never be disabled — force enabled as a
+        # safety net in case the DB row was set incorrectly.
+        if agent.parent_key is None and not state.get("enabled", True):
+            state = {**state, "enabled": True}
+        context[agent.key] = state
 
     return context

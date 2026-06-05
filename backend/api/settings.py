@@ -19,14 +19,6 @@ from backend.services.settings_service import (
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
-@router.get("/llm-catalog")
-async def get_llm_catalog(_: User = Depends(get_current_user)):
-    from backend.trading_agents.llm_clients.model_catalog import MODEL_OPTIONS
-    return {
-        provider: [{"label": label, "value": value} for label, value in opts]
-        for provider, opts in MODEL_OPTIONS.items()
-    }
-
 
 @router.get("", response_model=SettingsRead)
 async def get_settings(
