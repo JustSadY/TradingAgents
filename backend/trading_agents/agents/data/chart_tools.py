@@ -3,6 +3,7 @@ import re
 import io
 import base64
 import logging
+import asyncio
 import contextvars
 from typing import Annotated, Optional, List, Dict
 import pandas as pd
@@ -18,9 +19,7 @@ _logger = logging.getLogger(__name__)
 active_run_context: contextvars.ContextVar[Dict] = contextvars.ContextVar("active_run_context")
 
 def _load_ohlcv_via_interface(symbol: str, curr_date: str) -> pd.DataFrame:
-    # This remains sync as it's a helper for vision/trend, but we'll use it carefully.
-    # Actually, route_to_vendor is now async. We should probably await it here too.
-    # But this is a helper.
+    # Legacy sync helper (unused in new async flow but kept for safety)
     pass
 
 async def _load_ohlcv_via_interface_async(symbol: str, curr_date: str) -> pd.DataFrame:
@@ -137,8 +136,16 @@ async def get_vision_chart_analysis(
         buf.seek(0)
         base64_image = base64.b64encode(buf.read()).decode('utf-8')
         
-        # Prepare Vision LLM invocation
+        # Resolve LLM for vision. 
+        # If the thinking model is not multimodal, try to find a multimodal one or provide a helpful error.
         llm = ctx["graph"].thinking_llm
+        model_name = getattr(llm, "model_name", getattr(llm, "model", "")).lower()
+        
+        # Common non-multimodal model patterns (heuristic)
+        non_multimodal = ["nemotron", "llama-3", "mixtral", "deepseek-v3", "o1-preview", "o1-mini"]
+        if any(nm in model_name for nm in non_multimodal) and "vision" not in model_name:
+             return f"Vision analysis skipped: The current model ({model_name}) is not multimodal. Please switch to a vision-capable model (like GPT-4o, Claude 3.5 Sonnet, or Gemini 1.5 Pro) in settings to enable this feature."
+
         from backend.trading_agents.dataflows.config import get_config
         lang = get_config().get("output_language", "English")
         
@@ -164,8 +171,11 @@ async def get_vision_chart_analysis(
         return f"--- Vision Chart Analysis for {symbol} ---\n{content}"
         
     except Exception as e:
+        err_msg = str(e)
+        if "not a multimodal model" in err_msg or "BadRequestError" in err_msg:
+             return f"Vision analysis failed: The current model does not support image input. Please use a multimodal model (e.g., GPT-4o, Claude 3.5, Gemini 1.5)."
         _logger.exception("Vision chart analysis failed: %s", e)
-        return f"Error performing vision chart analysis: {str(e)}"
+        return f"Error performing vision chart analysis: {err_msg}"
 
 @tool
 async def get_mtf_trend(
