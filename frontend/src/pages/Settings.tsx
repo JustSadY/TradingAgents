@@ -46,27 +46,6 @@ interface Settings {
 
 interface Preset { id: number; name: string; description: string | null; created_at: string }
 
-interface ModelOption { label: string; value: string }
-type Catalog = Record<string, ModelOption[]>
-
-const PROVIDER_LABELS: Record<string, string> = {
-  openai: 'OpenAI',
-  anthropic: 'Anthropic (Claude)',
-  google: 'Google (Gemini)',
-  xai: 'xAI (Grok)',
-  deepseek: 'DeepSeek',
-  qwen: 'Qwen (Global)',
-  'qwen-cn': 'Qwen (China)',
-  glm: 'GLM / Z.AI (Global)',
-  'glm-cn': 'GLM / BigModel (China)',
-  minimax: 'MiniMax (Global)',
-  'minimax-cn': 'MiniMax (China)',
-  ollama: 'Ollama (Local)',
-  nvidia: 'NVIDIA NIM',
-  litellm: 'LiteLLM Proxy',
-  azure: 'Azure OpenAI',
-}
-
 const Input = "w-full glass-input rounded-xl px-3 py-2 text-xs outline-none"
 
 function Section({ title, children }: { title: string; children: React.ReactNode }) {
@@ -87,74 +66,10 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
-function ModelSelect({
-  label,
-  options,
-  value,
-  onChange,
-}: {
-  label: string
-  options: ModelOption[]
-  value: string
-  onChange: (v: string) => void
-}) {
-  const { t } = useTranslation()
-  const isCustom = !options.some(o => o.value === value) || value === 'custom'
-  const [showCustom, setShowCustom] = useState(isCustom)
-  const [customVal, setCustomVal] = useState(isCustom ? value : '')
-
-  useEffect(() => {
-    const custom = !options.some(o => o.value === value) || value === 'custom'
-    setShowCustom(custom)
-    if (custom) setCustomVal(value === 'custom' ? '' : value)
-  }, [value, options])
-
-  const handleSelect = (v: string) => {
-    if (v === 'custom') {
-      setShowCustom(true)
-      setCustomVal('')
-    } else {
-      setShowCustom(false)
-      onChange(v)
-    }
-  }
-
-  return (
-    <Row label={label}>
-      <div className="space-y-2 w-full">
-        <select
-          className={Input}
-          value={showCustom ? 'custom' : value}
-          onChange={e => handleSelect(e.target.value)}
-        >
-          {options.map(o => (
-            <option key={o.value} value={o.value}>{o.label}</option>
-          ))}
-          {!options.some(o => o.value === 'custom') && (
-            <option value="custom">{t('settings.custom_model_id')}</option>
-          )}
-        </select>
-        {showCustom && (
-          <input
-            className={Input}
-            placeholder={t('settings.model_id_placeholder')}
-            value={customVal}
-            onChange={e => {
-              setCustomVal(e.target.value)
-              onChange(e.target.value)
-            }}
-          />
-        )}
-      </div>
-    </Row>
-  )
-}
-
 export default function Settings({ userId }: { userId?: number } = {}) {
   const { t } = useTranslation()
   const { isAdmin } = useAuth()
   const [s, setS] = useState<Settings | null>(null)
-  const [catalog, setCatalog] = useState<Catalog>({})
   const [saved, setSaved] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [presets, setPresets] = useState<Preset[]>([])
@@ -172,12 +87,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     const permUrl = userId ? `/api/users/${userId}/setting-permissions` : '/api/users/me/setting-permissions'
     Promise.all([
       axios.get(settingsUrl).then(r => r.data),
-      axios.get('/api/settings/llm-catalog').then(r => r.data),
       axios.get('/api/presets').then(r => r.data).catch(() => []),
       axios.get(permUrl).then(r => r.data.allowed_settings || r.data.permissions || []).catch(() => []),
-    ]).then(([settings, cat, presetList, allowedSet]) => {
+    ]).then(([settings, presetList, allowedSet]) => {
       setS(settings)
-      setCatalog(cat)
       setPresets(presetList)
       setAllowedSettings(userId ? ['general', 'llm', 'risk', 'webhooks', 'cron'] : allowedSet)
 
