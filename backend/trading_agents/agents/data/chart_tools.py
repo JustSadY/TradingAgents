@@ -10,11 +10,33 @@ import numpy as np
 import yfinance as yf
 from langchain_core.tools import tool
 from langchain_core.messages import HumanMessage
+from backend.trading_agents.dataflows.interface import route_to_vendor
 
 _logger = logging.getLogger(__name__)
 
 # Context for storing runtime registered indicators and annotations thread-safely
 active_run_context: contextvars.ContextVar[Dict] = contextvars.ContextVar("active_run_context")
+
+def _load_ohlcv_via_interface(symbol: str, curr_date: str) -> pd.DataFrame:
+    start_date = (pd.to_datetime(curr_date) - pd.DateOffset(years=5)).strftime("%Y-%m-%d")
+    csv_payload = route_to_vendor("get_stock_data", symbol, start_date, curr_date)
+    lines = [line for line in (csv_payload or "").splitlines() if line and not line.startswith("#")]
+    if not lines:
+        return pd.DataFrame(columns=["Date", "Open", "High", "Low", "Close", "Volume"])
+    df = pd.read_csv(io.StringIO("\n".join(lines)))
+    if "Date" not in df.columns and "Datetime" in df.columns:
+        df.rename(columns={"Datetime": "Date"}, inplace=True)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df.dropna(subset=["Date"])
+    price_cols = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in df.columns]
+    if price_cols:
+        df[price_cols] = df[price_cols].apply(pd.to_numeric, errors="coerce")
+    if "Close" in df.columns:
+        df = df.dropna(subset=["Close"])
+    if price_cols:
+        df[price_cols] = df[price_cols].ffill().bfill()
+    return df[df["Date"] <= pd.to_datetime(curr_date)] if "Date" in df.columns else df
 
 @tool
 def add_chart_annotation(
@@ -83,8 +105,7 @@ def get_vision_chart_analysis(
         return "Error: Graph client not found in context. Vision analysis unavailable."
     
     try:
-        from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
-        df = load_ohlcv(symbol, curr_date)
+        df = _load_ohlcv_via_interface(symbol, curr_date)
         if df.empty or len(df) < 10:
             return "Error: Not enough data to plot chart."
         
@@ -155,9 +176,8 @@ def get_mtf_trend(
         return "Error: Active run context not found. Cannot register trend overlay."
         
     try:
-        from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
         # Load daily data to get index mapping
-        df_daily = load_ohlcv(symbol, curr_date)
+        df_daily = _load_ohlcv_via_interface(symbol, curr_date)
         if df_daily.empty:
             return "Error: No daily data found."
             

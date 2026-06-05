@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import json
 from datetime import datetime, timedelta
-from typing import Dict, Any, Tuple, List, Optional
+from typing import Dict, Any, Tuple, List, Optional, Callable, Awaitable
 import yfinance as yf
 logger = logging.getLogger(__name__)
 from langgraph.prebuilt import ToolNode
@@ -437,6 +437,7 @@ class TradingAgentsGraph:
         company_name: str,
         trade_date: str,
         asset_type: str = "stock",
+        stream_observer: Optional[Callable[[str, Dict[str, Any]], Awaitable[None]]] = None,
     ):
         import asyncio
         self.ticker = company_name
@@ -454,7 +455,7 @@ class TradingAgentsGraph:
         saver = self._checkpointer_ctx.__enter__()
         self.graph = self.workflow.compile(checkpointer=saver)
         try:
-            return await self._async_run_graph(company_name, trade_date, asset_type)
+            return await self._async_run_graph(company_name, trade_date, asset_type, stream_observer=stream_observer)
         finally:
             active_run_context.reset(token)
             if self._checkpointer_ctx is not None:
@@ -466,6 +467,7 @@ class TradingAgentsGraph:
         company_name: str,
         trade_date: str,
         asset_type: str = "stock",
+        stream_observer: Optional[Callable[[str, Dict[str, Any]], Awaitable[None]]] = None,
     ):
         import asyncio
         past_context = self.memory_log.get_past_context(company_name)
@@ -478,7 +480,27 @@ class TradingAgentsGraph:
         args = self.propagator.get_graph_args()
         tid = thread_id(company_name, str(trade_date))
         args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = tid
-        final_state = await self.graph.ainvoke(init_state, **args)
+        if stream_observer is None:
+            final_state = await self.graph.ainvoke(init_state, **args)
+        else:
+            cfg = dict(args.get("config") or {})
+            prev_state: Dict[str, Any] = {}
+            final_state: Dict[str, Any] = {}
+            async for mode, chunk in self.graph.astream(
+                init_state,
+                stream_mode=["updates", "values"],
+                config=cfg,
+            ):
+                await stream_observer(mode, chunk or {})
+                if mode == "values":
+                    curr = chunk or {}
+                    for key, value in curr.items():
+                        if key not in prev_state:
+                            prev_state[key] = value
+                    prev_state.update(curr)
+                    final_state = dict(prev_state)
+            if not final_state:
+                final_state = await self.graph.ainvoke(init_state, **args)
         self.curr_state = final_state
         await asyncio.to_thread(self._log_state, trade_date, final_state)
         await asyncio.to_thread(

@@ -1,7 +1,30 @@
+import io
 import pandas as pd
 import numpy as np
 from langchain_core.tools import tool
 from backend.core.utils import resolve_benchmark
+from backend.trading_agents.dataflows.interface import route_to_vendor
+
+def _load_ohlcv_via_interface(symbol: str, curr_date: str) -> pd.DataFrame:
+    start_date = (pd.to_datetime(curr_date) - pd.DateOffset(years=5)).strftime("%Y-%m-%d")
+    csv_payload = route_to_vendor("get_stock_data", symbol, start_date, curr_date)
+    lines = [line for line in (csv_payload or "").splitlines() if line and not line.startswith("#")]
+    if not lines:
+        return pd.DataFrame(columns=["Date", "Open", "High", "Low", "Close", "Volume"])
+    df = pd.read_csv(io.StringIO("\n".join(lines)))
+    if "Date" not in df.columns and "Datetime" in df.columns:
+        df.rename(columns={"Datetime": "Date"}, inplace=True)
+    if "Date" in df.columns:
+        df["Date"] = pd.to_datetime(df["Date"], errors="coerce")
+        df = df.dropna(subset=["Date"])
+    price_cols = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in df.columns]
+    if price_cols:
+        df[price_cols] = df[price_cols].apply(pd.to_numeric, errors="coerce")
+    if "Close" in df.columns:
+        df = df.dropna(subset=["Close"])
+    if price_cols:
+        df[price_cols] = df[price_cols].ffill().bfill()
+    return df[df["Date"] <= pd.to_datetime(curr_date)] if "Date" in df.columns else df
 
 @tool
 def get_quant_data(
@@ -10,14 +33,13 @@ def get_quant_data(
 ) -> str:
     """Calculate annualized volatility, beta, Sharpe Ratio, and benchmark correlation metrics for a given ticker symbol over the last 1 year."""
     try:
-        from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
         from backend.trading_agents.dataflows.config import get_config
         if not curr_date:
             curr_date = pd.Timestamp.today().strftime("%Y-%m-%d")
         config = get_config()
         benchmark = resolve_benchmark(ticker, config)
-        hist = load_ohlcv(ticker, curr_date)
-        bench_hist = load_ohlcv(benchmark, curr_date)
+        hist = _load_ohlcv_via_interface(ticker, curr_date)
+        bench_hist = _load_ohlcv_via_interface(benchmark, curr_date)
         curr_date_dt = pd.to_datetime(curr_date)
         one_year_ago = curr_date_dt - pd.DateOffset(years=1)
         hist = hist[hist['Date'] >= one_year_ago]

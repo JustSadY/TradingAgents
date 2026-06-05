@@ -42,6 +42,7 @@ from backend.trading_agents.agents.sub.managers.super_portfolio_manager import c
 _logger = logging.getLogger(__name__)
 _RUNNING_TASKS: dict[str, asyncio.Task] = {}
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
+_ANALYSIS_BACKGROUND_TASKS: dict[str, set[asyncio.Task]] = {}
 _REPORT_FIELDS = (
     "market_report", "sentiment_report", "news_report", "fundamentals_report",
     "macro_report", "options_report", "quant_report", "earnings_report",
@@ -224,11 +225,30 @@ async def cancel_analysis(task_id: str) -> bool:
     return False
 
 
-def _track_background_task(coro: Awaitable[None]):
+def _track_background_task(coro: Awaitable[None], task_id: str | None = None):
     task = asyncio.create_task(coro)
     _BACKGROUND_TASKS.add(task)
-    task.add_done_callback(_BACKGROUND_TASKS.discard)
+    if task_id:
+        tasks = _ANALYSIS_BACKGROUND_TASKS.setdefault(task_id, set())
+        tasks.add(task)
+
+    def _cleanup(done_task: asyncio.Task) -> None:
+        _BACKGROUND_TASKS.discard(done_task)
+        if task_id and task_id in _ANALYSIS_BACKGROUND_TASKS:
+            scoped = _ANALYSIS_BACKGROUND_TASKS[task_id]
+            scoped.discard(done_task)
+            if not scoped:
+                _ANALYSIS_BACKGROUND_TASKS.pop(task_id, None)
+
+    task.add_done_callback(_cleanup)
     return task
+
+
+async def _await_analysis_background_tasks(task_id: str) -> None:
+    pending = list(_ANALYSIS_BACKGROUND_TASKS.get(task_id, set()))
+    if not pending:
+        return
+    await asyncio.gather(*pending, return_exceptions=True)
 
 
 async def _send_analysis_webhook(ticker, trade_date, signal, final_decision, settings):
@@ -326,11 +346,12 @@ async def run_analysis(
         if user_id is not None:
             agent_access_map = await get_user_agent_access(db, user_id)
         
+        from backend.trading_agents.agent_catalog import list_analysts
+        all_analyst_keys = [a.key for a in list_analysts()]
         permitted_analysts = [
-            a for a in settings.selected_analysts
+            a for a in all_analyst_keys
             if agent_access_map.get(a, True)
         ]
-        
         runtime_tool_context = await build_global_runtime_context(db, user_id)
         config["runtime_tool_context"] = runtime_tool_context
         _inject_tool_credentials(config)
@@ -341,53 +362,49 @@ async def run_analysis(
             selected_analysts=permitted_analysts,
             debug=False,
             config=config,
+            callbacks=[stats_handler],
         )
 
-        async def _patched_ainvoke(state, config_arg=None, **kwargs):
-            if config_arg is not None and "config" not in kwargs:
-                kwargs["config"] = config_arg
-            kwargs.pop("stream_mode", None)
-            cfg = dict(kwargs.pop("config", None) or {})
-            cfg["callbacks"] = list(cfg.get("callbacks") or []) + [stats_handler]
-            prev_state: dict = {}
-            final: dict = {}
-            prev_inv_count = 0
-            prev_risk_count = 0
-            last_node = None
-            async for mode, chunk in ta.graph.astream(
-                state, stream_mode=["updates", "values"], config=cfg, **kwargs
-            ):
-                if mode == "updates":
-                    for node_name in (chunk or {}):
-                        if node_name != last_node:
-                            prog = node_progress(node_name)
-                            if prog:
-                                _emit(prog)
-                                last_node = node_name
-                else:
-                    inv_state = chunk.get("investment_debate_state") or {}
-                    if inv_state and inv_state.get("count", 0) > prev_inv_count:
-                        prev_inv_count = inv_state.get("count", 0)
-                        history = inv_state.get("history", "")
-                        lines = [line.strip() for line in history.split("\n") if line.strip()]
-                        if lines:
-                            _emit({"type": "debate_bubble", "debate_type": "investment", "message": lines[-1]})
-                    risk_state = chunk.get("risk_debate_state") or {}
-                    if risk_state and risk_state.get("count", 0) > prev_risk_count:
-                        prev_risk_count = risk_state.get("count", 0)
-                        history = risk_state.get("history", "")
-                        lines = [line.strip() for line in history.split("\n") if line.strip()]
-                        if lines:
-                            _emit({"type": "debate_bubble", "debate_type": "risk", "message": lines[-1]})
-                    for key, value in chunk.items():
-                        if key in _REPORT_FIELDS and value and value != prev_state.get(key):
-                            _emit({"type": "report", "section": key, "content": value})
-                            prev_state[key] = value
-                    final = chunk
-            return final
+        prev_state: dict = {}
+        prev_inv_count = 0
+        prev_risk_count = 0
+        last_node = None
 
-        ta.graph.ainvoke = _patched_ainvoke
-        final_state, signal = await ta.async_propagate(ticker, trade_date, asset_type)
+        async def _stream_observer(mode: str, chunk: dict) -> None:
+            nonlocal prev_inv_count, prev_risk_count, last_node
+            if mode == "updates":
+                for node_name in (chunk or {}):
+                    if node_name != last_node:
+                        prog = node_progress(node_name)
+                        if prog:
+                            _emit(prog)
+                            last_node = node_name
+                return
+            inv_state = chunk.get("investment_debate_state") or {}
+            if inv_state and inv_state.get("count", 0) > prev_inv_count:
+                prev_inv_count = inv_state.get("count", 0)
+                history = inv_state.get("history", "")
+                lines = [line.strip() for line in history.split("\n") if line.strip()]
+                if lines:
+                    _emit({"type": "debate_bubble", "debate_type": "investment", "message": lines[-1]})
+            risk_state = chunk.get("risk_debate_state") or {}
+            if risk_state and risk_state.get("count", 0) > prev_risk_count:
+                prev_risk_count = risk_state.get("count", 0)
+                history = risk_state.get("history", "")
+                lines = [line.strip() for line in history.split("\n") if line.strip()]
+                if lines:
+                    _emit({"type": "debate_bubble", "debate_type": "risk", "message": lines[-1]})
+            for key, value in chunk.items():
+                if key in _REPORT_FIELDS and value and value != prev_state.get(key):
+                    _emit({"type": "report", "section": key, "content": value})
+                    prev_state[key] = value
+
+        final_state, signal = await ta.async_propagate(
+            ticker,
+            trade_date,
+            asset_type,
+            stream_observer=_stream_observer,
+        )
         stats = _extract_stats(stats_handler)
         duration = time.time() - start
         result = PropagateResult.from_state(final_state, signal)
@@ -435,10 +452,11 @@ async def run_analysis(
             getattr(ta, "custom_indicators", []),
             getattr(ta, "visual_annotations", []),
             output_language=settings.output_language
-        ))
+        ), task_id=task_id)
         _track_background_task(_send_analysis_webhook(
             ticker, trade_date, signal, result.final_decision, settings
-        ))
+        ), task_id=task_id)
+        await _await_analysis_background_tasks(task_id)
         await ws_manager.send(task_id, {
             "type": "decision",
             "signal": signal,
@@ -516,11 +534,12 @@ async def run_portfolio_analysis(
             if user_id is not None:
                 agent_access_map = await get_user_agent_access(db, user_id)
             
+            from backend.trading_agents.agent_catalog import list_analysts
+            all_analyst_keys = [a.key for a in list_analysts()]
             permitted_analysts = [
-                a for a in settings.selected_analysts
+                a for a in all_analyst_keys
                 if agent_access_map.get(a, True)
             ]
-            
             runtime_tool_context = await build_global_runtime_context(db, user_id)
             config["runtime_tool_context"] = runtime_tool_context
             _inject_tool_credentials(config)

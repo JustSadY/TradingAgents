@@ -5,6 +5,7 @@ from cryptography.fernet import Fernet
 import threading
 _ROOT_ENV = Path(__file__).parent.parent.parent / ".env"
 _TEMP_KEY = None
+_TEMP_FERNET = None
 _TEMP_KEY_LOCK = threading.Lock()
 
 
@@ -20,17 +21,19 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = ""
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
     def get_fernet(self) -> Fernet:
-        global _TEMP_KEY
+        global _TEMP_KEY, _TEMP_FERNET
         key = self.ENCRYPTION_KEY
-        if not key:
+        if key:
+            key_bytes = key.encode() if isinstance(key, str) else key
+            return Fernet(key_bytes)
+        with _TEMP_KEY_LOCK:
             if _TEMP_KEY is None:
-                with _TEMP_KEY_LOCK:
-                    if _TEMP_KEY is None:
-                        _TEMP_KEY = Fernet.generate_key().decode()
-                        import logging
-                        logging.warning("ENCRYPTION_KEY is not set in .env. Generating a temporary process-lifetime encryption key. Encrypted data will not persist across restarts!")
-            key = _TEMP_KEY
-        return Fernet(key.encode() if isinstance(key, str) else key)
+                _TEMP_KEY = Fernet.generate_key().decode()
+                import logging
+                logging.warning("ENCRYPTION_KEY is not set in .env. Generating a temporary process-lifetime encryption key. Encrypted data will not persist across restarts!")
+            if _TEMP_FERNET is None:
+                _TEMP_FERNET = Fernet(_TEMP_KEY.encode() if isinstance(_TEMP_KEY, str) else _TEMP_KEY)
+            return _TEMP_FERNET
 @lru_cache
 def get_settings() -> Settings:
     return Settings()

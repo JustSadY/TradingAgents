@@ -274,8 +274,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
   const TABS = [
     { key: 'general',  label: t('settings.general') || 'Preferences',      icon: <SettingsIcon size={14} /> },
-    { key: 'llm',      label: t('settings.llm_settings') || 'AI Engine',   icon: <Brain size={14} /> },
-    { key: 'agents',   label: 'AI Agents',                                 icon: <Brain size={14} /> },
+    { key: 'agents',   label: 'AI Configuration',                          icon: <Brain size={14} /> },
     { key: 'tools',    label: t('settings.section_tools') || 'Agent Tools', icon: <Wrench size={14} /> },
     { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety', icon: <ShieldAlert size={14} /> },
     { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={14} /> },
@@ -326,23 +325,114 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
           {/* Preferences */}
           {activeTab === 'general' && (
-            <Section title={t('settings.general') || 'Preferences'}>
-              <Row label={t('settings.row_output_language')}>
-                <select className={Input} value={s.output_language} onChange={e => update('output_language', e.target.value)}>
-                  {languages.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                </select>
-              </Row>
-              <Row label={t('settings.row_investor_persona')}>
-                <select className={Input} value={s.investor_persona} onChange={e => update('investor_persona', e.target.value)}>
-                  <option value="conservative">{t('settings.persona_conservative')}</option>
-                  <option value="risk_loving">{t('settings.persona_risk_loving')}</option>
-                  <option value="esg_focused">{t('settings.persona_esg_focused')}</option>
-                </select>
-              </Row>
-              <Row label={t('settings.row_benchmark_symbol')}>
-                <input className={Input} value={s.benchmark_ticker || ''} onChange={e => update('benchmark_ticker', e.target.value || null)} placeholder={t('settings.benchmark_placeholder')} />
-              </Row>
-            </Section>
+            <div className="space-y-4">
+              <Section title={t('settings.general') || 'Preferences'}>
+                <Row label={t('settings.row_output_language')}>
+                  <select className={Input} value={s.output_language} onChange={e => update('output_language', e.target.value)}>
+                    {languages.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                  </select>
+                </Row>
+                <Row label={t('settings.row_investor_persona')}>
+                  <select className={Input} value={s.investor_persona} onChange={e => update('investor_persona', e.target.value)}>
+                    <option value="conservative">{t('settings.persona_conservative')}</option>
+                    <option value="risk_loving">{t('settings.persona_risk_loving')}</option>
+                    <option value="esg_focused">{t('settings.persona_esg_focused')}</option>
+                  </select>
+                </Row>
+                <Row label={t('settings.row_benchmark_symbol')}>
+                  <input className={Input} value={s.benchmark_ticker || ''} onChange={e => update('benchmark_ticker', e.target.value || null)} placeholder={t('settings.benchmark_placeholder')} />
+                </Row>
+              </Section>
+
+              <Section title={t('settings.llm_settings') || 'Core Engine Configuration'}>
+                <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed mb-2">
+                  Global LLM settings and connection parameters. Per-agent models are configured in the AI Configuration tab.
+                </p>
+                <Row label="API Base URL">
+                  <input
+                    className={Input}
+                    value={s.backend_url || ''}
+                    onChange={e => update('backend_url', e.target.value || null)}
+                    placeholder="http://localhost:11434"
+                  />
+                </Row>
+
+                <Row label="Azure Deployment">
+                  <input
+                    className={Input}
+                    value={s.azure_deployment || ''}
+                    onChange={e => update('azure_deployment', e.target.value || null)}
+                    placeholder="e.g. gpt-4o-deployment"
+                  />
+                </Row>
+
+                <Row label="Reasoning Effort">
+                  <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>
+                    <option value="">{t('settings.effort_default')}</option>
+                    <option value="low">{t('settings.effort_low_fast_cheap')}</option>
+                    <option value="medium">{t('settings.effort_medium_balanced')}</option>
+                    <option value="high">{t('settings.effort_high_deep')}</option>
+                  </select>
+                </Row>
+                
+                <Row label="Thinking Effort">
+                  <select className={Input} value={s.anthropic_effort || ''} onChange={e => update('anthropic_effort', e.target.value || null)}>
+                    <option value="">{t('settings.effort_default')}</option>
+                    <option value="low">{t('settings.effort_low_fast')}</option>
+                    <option value="medium">{t('settings.effort_medium_balanced')}</option>
+                    <option value="high">{t('settings.effort_high_extended')}</option>
+                  </select>
+                </Row>
+                
+                <Row label="Thinking Level">
+                  <select className={Input} value={s.google_thinking_level || ''} onChange={e => update('google_thinking_level', e.target.value || null)}>
+                    <option value="">{t('settings.effort_default')}</option>
+                    <option value="minimal">{t('settings.effort_minimal_fastest')}</option>
+                    <option value="low">Low</option>
+                    <option value="medium">Medium</option>
+                    <option value="high">{t('settings.effort_high_deepest')}</option>
+                  </select>
+                </Row>
+
+                <Row label={t('settings.row_max_recursion')}>
+                  <input
+                    type="number"
+                    min="1"
+                    max="5000"
+                    className={Input}
+                    value={s.max_recur_limit}
+                    onChange={e => update('max_recur_limit', parseInt(e.target.value) || 1000)}
+                  />
+                </Row>
+
+                <Row label={t('settings.row_historical_analyses')}>
+                  <div className="flex flex-col gap-2 pt-1">
+                    <label className="flex items-center gap-2.5 cursor-pointer text-slate-300 hover:text-white select-none">
+                      <input
+                        type="checkbox"
+                        checked={s.include_historical_analyses}
+                        onChange={e => update('include_historical_analyses', e.target.checked)}
+                        className="w-4 h-4 accent-violet-600 rounded"
+                      />
+                      <span className="text-xs font-semibold">{t('settings.historical_analyses_hint')}</span>
+                    </label>
+                    {s.include_historical_analyses && (
+                      <div className="flex items-center gap-2 pt-1 pl-6">
+                        <span className="text-[10px] text-slate-500 font-semibold">{t('settings.historical_limit_label')}:</span>
+                        <input
+                          type="number"
+                          min="1"
+                          max="50"
+                          className={`${Input} w-20 py-1 font-mono`}
+                          value={s.historical_analyses_limit}
+                          onChange={e => update('historical_analyses_limit', parseInt(e.target.value) || 5)}
+                        />
+                      </div>
+                    )}
+                  </div>
+                </Row>
+              </Section>
+            </div>
           )}
 
           {/* AI Engines */}

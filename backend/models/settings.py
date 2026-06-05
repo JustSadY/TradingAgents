@@ -26,6 +26,9 @@ class AppSettings(Base):
     max_recur_limit: Mapped[int] = mapped_column(Integer, default=1000)
     benchmark_ticker: Mapped[str | None] = mapped_column(String(20), nullable=True)
     azure_deployment: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    openai_reasoning_effort: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    anthropic_effort: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    google_thinking_level: Mapped[str | None] = mapped_column(String(20), nullable=True)
 
     max_debate_rounds: Mapped[int] = mapped_column(Integer, default=1)
     max_risk_rounds: Mapped[int] = mapped_column(Integer, default=1)

@@ -23,6 +23,9 @@ class SettingsRead(BaseModel):
     include_historical_analyses: bool = False
     historical_analyses_limit: int = 5
     strict_backtest_learning: bool = True
+    openai_reasoning_effort: str | None = None
+    anthropic_effort: str | None = None
+    google_thinking_level: str | None = None
     node_retry_attempts: int = 2
     node_retry_base_delay: float = 1.0
     webhook_url: str | None = None
@@ -56,6 +59,9 @@ class SettingsUpdate(BaseModel):
     include_historical_analyses: bool | None = None
     historical_analyses_limit: int | None = Field(default=None, ge=1, le=50)
     strict_backtest_learning: bool | None = None
+    openai_reasoning_effort: str | None = None
+    anthropic_effort: str | None = None
+    google_thinking_level: str | None = None
     node_retry_attempts: int | None = Field(default=None, ge=1, le=10)
     node_retry_base_delay: float | None = Field(default=None, ge=0.1, le=10.0)
     webhook_url: str | None = None
