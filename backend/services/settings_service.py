@@ -45,7 +45,6 @@ def settings_to_read(settings: AppSettings) -> SettingsRead:
         cron_schedule=settings.cron_schedule,
         price_tolerance_pct=settings.price_tolerance_pct,
         watchlist=settings.watchlist,
-        selected_analysts=settings.selected_analysts,
         output_language=settings.output_language or "English",
         llm_provider=settings.llm_provider or "openai",
         llm_model=settings.llm_model or "gpt-4o-mini",

@@ -7,7 +7,6 @@ class SettingsRead(BaseModel):
     cron_schedule: str
     price_tolerance_pct: float
     watchlist: list[str]
-    selected_analysts: list[str]
     output_language: str = "English"
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
@@ -43,7 +42,6 @@ class SettingsUpdate(BaseModel):
     cron_schedule: str | None = None
     price_tolerance_pct: float | None = Field(default=None, ge=0, le=50)
     watchlist: list[str] | None = None
-    selected_analysts: list[str] | None = None
     output_language: str | None = None
     llm_provider: str | None = None
     llm_model: str | None = None

@@ -39,7 +39,6 @@ interface Settings {
   webhook_enabled: boolean
   webhook_events: string
   watchlist: string[]
-  selected_analysts: string[]
   node_retry_attempts: number
   node_retry_base_delay: number
 }

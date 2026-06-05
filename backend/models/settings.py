@@ -14,11 +14,6 @@ class AppSettings(Base):
     cron_schedule: Mapped[str] = mapped_column(String(100), default="0 9 * * 1-5")
     price_tolerance_pct: Mapped[float] = mapped_column(Float, default=0.5)
     _watchlist: Mapped[str] = mapped_column("watchlist", Text, default='[]')
-    _selected_analysts: Mapped[str] = mapped_column(
-        "selected_analysts",
-        Text,
-        default='["market", "news", "fundamentals", "social"]',
-    )
     output_language: Mapped[str] = mapped_column(String(50), default="English")
     llm_provider: Mapped[str] = mapped_column(String(50), default="openai")
     llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini")
@@ -54,9 +49,4 @@ class AppSettings(Base):
     @watchlist.setter
     def watchlist(self, value: list[str]):
         self._watchlist = json.dumps(value)
-    @property
-    def selected_analysts(self) -> list[str]:
-        return json.loads(self._selected_analysts or '[]')
-    @selected_analysts.setter
-    def selected_analysts(self, value: list[str]):
-        self._selected_analysts = json.dumps(value)
+

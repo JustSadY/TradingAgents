@@ -87,13 +87,6 @@ async def apply_preset(
         raise HTTPException(status_code=422, detail="Template JSON invalid")
     for key, value in data.items():
         if hasattr(settings, key) and value is not None:
-            if key == "selected_analysts" and not current_user.is_admin:
-                from backend.services.tool_access_service import get_user_agent_access
-                agent_access_map = await get_user_agent_access(db, current_user.id)
-                value = [
-                    a for a in value
-                    if agent_access_map.get(a, True)
-                ]
             setattr(settings, key, value)
     settings.active_preset_name = preset.name
     return {"applied": True, "preset_name": preset.name}

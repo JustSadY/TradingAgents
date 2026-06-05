@@ -39,7 +39,7 @@ _ALLOWED_COLUMNS = {
         "max_debate_rounds", "max_risk_rounds", "max_position_size_pct",
         "max_risk_per_trade_pct", "strict_stop_loss_mode", "strict_backtest_learning", "node_retry_attempts",
         "node_retry_base_delay", "llm_provider", "cron_enabled", "cron_schedule",
-        "price_tolerance_pct", "watchlist", "selected_analysts", "updated_at"
+        "price_tolerance_pct", "watchlist", "updated_at"
     },
     "analysis_results": {
         "user_id", "bull_history", "bear_history", "investment_debate_history",
@@ -136,7 +136,6 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("app_settings", "cron_schedule",              "VARCHAR(100) DEFAULT '0 9 * * 1-5'"),
     ("app_settings", "price_tolerance_pct",        "FLOAT DEFAULT 0.5"),
     ("app_settings", "watchlist",                  "TEXT DEFAULT '[]'"),
-    ("app_settings", "selected_analysts",          "TEXT DEFAULT '[\"market\", \"news\", \"fundamentals\", \"social\"]'"),
     ("app_settings", "updated_at",                 "TIMESTAMP WITH TIME ZONE"),
 ]
 

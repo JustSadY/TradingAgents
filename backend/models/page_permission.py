@@ -20,7 +20,6 @@ SECTION_FIELDS = {
         "openai_reasoning_effort",
         "anthropic_effort",
         "google_thinking_level",
-        "selected_analysts",
         "include_historical_analyses",
         "historical_analyses_limit",
     ],
