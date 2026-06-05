@@ -36,9 +36,6 @@ class LLMProviderRegistry:
     def get_effort_options(self) -> Dict[str, List[Dict[str, str]]]:
         return {p.key: p.effort_options for p in self.list_providers() if p.effort_options}
 
-    def get_api_key_envs(self) -> Dict[str, Optional[str]]:
-        # This method is now legacy/empty as we don't use env vars for AI keys
-        return {}
 
     def get_model_options(self, key: str) -> List[tuple[str, str]]:
         p = self.get(key)

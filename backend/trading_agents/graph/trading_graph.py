@@ -176,14 +176,6 @@ class TradingAgentsGraph:
             kwargs["api_key"] = user_key
         elif self.config.get("api_key") and prov_lower == self.config.get("llm_provider", "").lower():
             kwargs["api_key"] = self.config["api_key"]
-        if not kwargs.get("api_key") and self.config.get("has_user", False) and not self.config.get("is_admin", False):
-            from backend.trading_agents.llm_clients.api_key_env import get_api_key_env
-            api_key_env = get_api_key_env(prov_lower)
-            if api_key_env:
-                raise ValueError(
-                    f"No API key set for provider '{prov_lower}'. "
-                    "Go to Profile → API Keys to add your key."
-                )
         return kwargs
     def _filter_tools_for_analyst(self, analyst_key: str, raw_tools: list) -> list:
         runtime_ctx = self.config.get("runtime_tool_context")

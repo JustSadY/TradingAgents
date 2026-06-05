@@ -2,7 +2,6 @@ import os
 from typing import Any, Optional
 from langchain_core.messages import AIMessage
 from langchain_openai import ChatOpenAI
-from .api_key_env import get_api_key_env
 from .base_client import BaseLLMClient, normalize_content
 from .capabilities import get_capabilities
 from .validators import validate_model

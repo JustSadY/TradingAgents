@@ -187,22 +187,6 @@ def _build_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
             cfg["user_api_keys"] = {}
         if user_key:
             cfg["api_key"] = user_key
-        else:
-            from backend.trading_agents.llm_clients.api_key_env import get_api_key_env
-            env_var = get_api_key_env(current_provider)
-            if env_var:
-                env_val = _os.environ.get(env_var)
-                if not env_val:
-                    if getattr(user, "is_admin", False):
-                        raise ValueError(
-                            f"No API key set for provider '{current_provider}'. "
-                            f"Admin check failed: neither user-level key nor server environment variable '{env_var}' is defined."
-                        )
-                    else:
-                        raise ValueError(
-                            f"No API key set for provider '{current_provider}'. "
-                            "Go to Settings → API Keys to add your key."
-                        )
     return cfg
 
 
