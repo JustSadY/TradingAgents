@@ -20,7 +20,7 @@ from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_
     tools=[get_news, get_global_news, get_insider_transactions, get_crypto_fear_and_greed_index],
 )
 def create_news_analyst(llm):
-    def news_analyst_node(state):
+    async def news_analyst_node(state):
         asset_type = state.get("asset_type", "stock")
         asset_label = "company" if asset_type == "stock" else "asset"
         instrument_context = build_instrument_context(
@@ -55,7 +55,7 @@ Your final report MUST follow this structure:
             + get_language_instruction()
         )
 
-        return run_tool_analyst(
+        return await run_tool_analyst(
             llm, state, tools=tools, system_message=system_message,
             report_key="news_report", instrument_context=instrument_context,
         )

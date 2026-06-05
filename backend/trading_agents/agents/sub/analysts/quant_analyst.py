@@ -29,7 +29,7 @@ from backend.trading_agents.agents.data.chart_tools import (
 )
 def create_quant_analyst(llm):
 
-    def quant_analyst_node(state):
+    async def quant_analyst_node(state):
         instrument_context = build_instrument_context(state["company_of_interest"])
 
         tools = [
@@ -65,7 +65,7 @@ Your final report MUST follow this structure:
             + get_language_instruction()
         )
 
-        return run_tool_analyst(
+        return await run_tool_analyst(
             llm, state, tools=tools, system_message=system_message,
             report_key="quant_report", instrument_context=instrument_context,
         )

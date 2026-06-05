@@ -32,7 +32,7 @@ from backend.trading_agents.agents.data.chart_tools import (
 )
 def create_market_analyst(llm):
 
-    def market_analyst_node(state):
+    async def market_analyst_node(state):
         asset_type = state.get("asset_type", "stock")
         instrument_context = build_instrument_context(
             state["company_of_interest"], asset_type
@@ -94,7 +94,7 @@ Your final report MUST follow this structure:
             + get_language_instruction()
         )
 
-        return run_tool_analyst(
+        return await run_tool_analyst(
             llm, state, tools=tools, system_message=system_message,
             report_key="market_report", instrument_context=instrument_context,
         )

@@ -18,7 +18,7 @@ from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_
 )
 def create_options_analyst(llm):
 
-    def options_analyst_node(state):
+    async def options_analyst_node(state):
         instrument_context = build_instrument_context(state["company_of_interest"])
 
         tools = [
@@ -48,7 +48,7 @@ Your final report MUST follow this structure:
             + get_language_instruction()
         )
 
-        return run_tool_analyst(
+        return await run_tool_analyst(
             llm, state, tools=tools, system_message=system_message,
             report_key="options_report", instrument_context=instrument_context,
         )
