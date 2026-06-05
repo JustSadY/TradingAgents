@@ -102,6 +102,8 @@ llm_registry.register(LLMProvider(
     label="NVIDIA NIM",
     is_openai_compatible=True,
     models=[
+        ("Llama-3.1-Nemotron-70B-Instruct", "nvidia/llama-3.1-nemotron-70b-instruct"),
+        ("Nemotron-4 340B Instruct", "nvidia/nemotron-4-340b-instruct"),
         ("Llama-3.1 405B Instruct", "meta/llama-3.1-405b-instruct"),
         ("Llama-3.1 70B Instruct", "meta/llama-3.1-70b-instruct"),
         ("Llama-3.1 8B Instruct", "meta/llama-3.1-8b-instruct"),

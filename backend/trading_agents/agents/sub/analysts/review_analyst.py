@@ -1,6 +1,5 @@
 import json
 from langchain_core.messages import SystemMessage
-from langchain_core.runnables import RunnableConfig
 from backend.trading_agents.agents.runtime.agent_states import AgentState
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
@@ -20,12 +19,12 @@ from backend.trading_agents.agents.analyst_registry import register_analyst
 def create_review_analyst(llm):
     llm_with_tools = llm.bind_tools([get_past_performance_data])
     
-    async def review_analyst(state: AgentState, config: RunnableConfig):
+    async def review_analyst(state: AgentState):
         ticker = state.get("company_of_interest", "Unknown")
         asset_type = state.get("asset_type", "stock")
         context_str = build_instrument_context(ticker, asset_type)
         curr_date = state.get("trade_date")
-        
+
         system_message = (
             "You are a senior performance review analyst. Your goal is to conduct a rigorous hindsight audit of past trading decisions to drive system improvement.\n\n"
             "### Analytical Process (Chain-of-Thought):\n"
@@ -46,14 +45,13 @@ def create_review_analyst(llm):
             f"{context_str}\n"
             + get_language_instruction()
         )
-        
+
         messages = [
             SystemMessage(content=system_message),
             *state["messages"],
         ]
-        
+
         # Use ainvoke for async compatibility
-        response = await llm_with_tools.ainvoke(messages, config)
-        return {"messages": [response], "sender": "Review Analyst"}
-        
+        response = await llm_with_tools.ainvoke(messages)
+        return {"messages": [response], "review_report": response.content}
     return review_analyst
