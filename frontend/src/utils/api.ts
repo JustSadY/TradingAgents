@@ -1,5 +1,5 @@
 import axios from 'axios'
-import { getAccessToken } from '../hooks/useAuth'
+import { getAccessToken } from '../contexts/AuthContext'
 import { notify } from './notify'
 
 const api = axios.create({

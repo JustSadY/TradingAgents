@@ -129,6 +129,21 @@ async def run_individual_analysis(
         inv_debate = final_state.get("investment_debate_state", {}) or {}
         risk_debate = final_state.get("risk_debate_state", {}) or {}
 
+        # Capture structured results for non-regex extraction
+        structured_data = final_state.get("chart_annotations") or {}
+        if not isinstance(structured_data, dict):
+            structured_data = {}
+        
+        # Add LLM generated plan details if available in state. 
+        # Note: The graph currently stores the rendered text in trader_investment_plan.
+        # We check for a raw object if the agent supports structured output.
+        trader_obj = final_state.get("trader_investment_plan_obj")
+        if trader_obj:
+            if hasattr(trader_obj, "dict"):
+                structured_data["trader_proposal"] = trader_obj.dict()
+            elif isinstance(trader_obj, dict):
+                structured_data["trader_proposal"] = trader_obj
+        
         final_payload = {
             "signal": result.signal,
             "market_report": result.market_report,
@@ -148,7 +163,7 @@ async def run_individual_analysis(
             "investment_debate_history": history_json_from(inv_debate.get("history", "")),
             "risk_debate_history": history_json_from(risk_debate.get("history", "")),
             "judge_decision": str(inv_debate.get("judge_decision", "") or ""),
-            "chart_annotations": final_state.get("chart_annotations"),
+            "chart_annotations": structured_data,
             "llm_calls": stats.get("llm_calls", 0),
             "tool_calls": stats.get("tool_calls", 0),
             "tokens_in": stats.get("tokens_in", 0),

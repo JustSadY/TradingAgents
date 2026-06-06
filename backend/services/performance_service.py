@@ -9,6 +9,8 @@ from backend.core.constants import (
 
 _logger = logging.getLogger(__name__)
 
+from backend.services.market_data_service import calculate_returns
+
 async def backfill_returns(db) -> int:
     from sqlalchemy import select
     from backend.models.analysis import AnalysisResult
@@ -41,7 +43,7 @@ async def backfill_returns(db) -> int:
 
         benchmark = resolve_benchmark(row.ticker, row_config)
 
-        raw, alpha, days = await _fetch_returns_async(row.ticker, row.trade_date, benchmark=benchmark)
+        raw, alpha, days = await calculate_returns(row.ticker, row.trade_date, holding_days=HOLDING_DAYS, benchmark=benchmark)
         if raw is not None:
             row.raw_return = raw
             row.alpha_return = alpha
@@ -49,6 +51,7 @@ async def backfill_returns(db) -> int:
             
             # Generate reflection using the Reflector
             try:
+                import asyncio
                 from backend.trading_agents.graph.reflection import Reflector
                 from backend.trading_agents.llm_clients import create_llm_client
                 from backend.trading_agents.default_config import DEFAULT_CONFIG
@@ -76,27 +79,6 @@ async def backfill_returns(db) -> int:
         await db.commit()
     _logger.info("Performance backfill: updated %d rows with custom benchmarks", updated)
     return updated
-
-async def _fetch_returns_async(ticker: str, trade_date: str, holding_days: int = HOLDING_DAYS, benchmark: str = "SPY"):
-    import asyncio
-    return await asyncio.to_thread(_fetch_returns_sync, ticker, trade_date, holding_days, benchmark)
-def _fetch_returns_sync(ticker: str, trade_date: str, holding_days: int = HOLDING_DAYS, benchmark: str = "SPY"):
-    try:
-        import yfinance as yf
-        start = datetime.strptime(trade_date, "%Y-%m-%d")
-        end = start + timedelta(days=holding_days + 7)
-        end_str = end.strftime("%Y-%m-%d")
-        stock = yf.Ticker(ticker).history(start=trade_date, end=end_str)
-        bench = yf.Ticker(benchmark).history(start=trade_date, end=end_str)
-        if len(stock) < 2 or len(bench) < 2:
-            return None, None, None
-        actual = min(holding_days, len(stock) - 1, len(bench) - 1)
-        raw = float((stock["Close"].iloc[actual] - stock["Close"].iloc[0]) / stock["Close"].iloc[0])
-        bench_r = float((bench["Close"].iloc[actual] - bench["Close"].iloc[0]) / bench["Close"].iloc[0])
-        return round(raw, 4), round(raw - bench_r, 4), actual
-    except Exception as exc:
-        _logger.debug("Return fetch failed %s %s with bench %s: %s", ticker, trade_date, benchmark, exc)
-        return None, None, None
 async def get_analyst_attribution_stats(db) -> dict:
     from sqlalchemy import select
     from backend.models.analysis import AnalysisResult
@@ -118,31 +100,19 @@ async def get_analyst_attribution_stats(db) -> dict:
         for k, val in analysts.items()
     }
     import re
-    def _extract(report_text: str) -> str | None:
-        if not report_text:
-            return None
-        ratings_match = re.search(r'\*\*(buy|overweight|hold|underweight|sell)\*\*', report_text, re.IGNORECASE)
-        if ratings_match:
-            val = ratings_match.group(1).lower()
-            if val in ("buy", "overweight"):
-                return "Buy"
-            if val in ("sell", "underweight"):
-                return "Sell"
-            return "Hold"
-        text = report_text.lower()
-        if re.search(r'\b(buy|bullish|overweight)\b', text):
-            return "Buy"
-        if re.search(r'\b(sell|bearish|underweight)\b', text):
-            return "Sell"
-        if re.search(r'\b(hold|neutral)\b', text):
-            return "Hold"
-        return None
+    from backend.trading_agents.agents.runtime.rating import parse_rating
     for row in rows:
         for key, config in analysts.items():
             report_text = getattr(row, config["report_field"], "")
-            pred = _extract(report_text)
+            pred = parse_rating(report_text, default=None)
             if not pred:
                 continue
+            # Normalize to Buy/Sell/Hold for grading
+            if pred in ("Overweight", "Buy"):
+                pred = "Buy"
+            elif pred in ("Underweight", "Sell"):
+                pred = "Sell"
+            
             raw_ret = row.raw_return
             is_correct = False
             has_graded = False

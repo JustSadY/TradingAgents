@@ -40,149 +40,70 @@ def get_stock_stats_indicators_window(
     look_back_days: Annotated[int, "how many days to look back"],
 ) -> str:
     best_ind_params = {
-        "close_50_sma": (
-            "50 SMA: A medium-term trend indicator. "
-            "Usage: Identify trend direction and serve as dynamic support/resistance. "
-            "Tips: It lags price; combine with faster indicators for timely signals."
-        ),
-        "close_200_sma": (
-            "200 SMA: A long-term trend benchmark. "
-            "Usage: Confirm overall market trend and identify golden/death cross setups. "
-            "Tips: It reacts slowly; best for strategic trend confirmation rather than frequent trading entries."
-        ),
-        "close_10_ema": (
-            "10 EMA: A responsive short-term average. "
-            "Usage: Capture quick shifts in momentum and potential entry points. "
-            "Tips: Prone to noise in choppy markets; use alongside longer averages for filtering false signals."
-        ),
-        "macd": (
-            "MACD: Computes momentum via differences of EMAs. "
-            "Usage: Look for crossovers and divergence as signals of trend changes. "
-            "Tips: Confirm with other indicators in low-volatility or sideways markets."
-        ),
-        "macds": (
-            "MACD Signal: An EMA smoothing of the MACD line. "
-            "Usage: Use crossovers with the MACD line to trigger trades. "
-            "Tips: Should be part of a broader strategy to avoid false positives."
-        ),
-        "macdh": (
-            "MACD Histogram: Shows the gap between the MACD line and its signal. "
-            "Usage: Visualize momentum strength and spot divergence early. "
-            "Tips: Can be volatile; complement with additional filters in fast-moving markets."
-        ),
-        "rsi": (
-            "RSI: Measures momentum to flag overbought/oversold conditions. "
-            "Usage: Apply 70/30 thresholds and watch for divergence to signal reversals. "
-            "Tips: In strong trends, RSI may remain extreme; always cross-check with trend analysis."
-        ),
-        "boll": (
-            "Bollinger Middle: A 20 SMA serving as the basis for Bollinger Bands. "
-            "Usage: Acts as a dynamic benchmark for price movement. "
-            "Tips: Combine with the upper and lower bands to effectively spot breakouts or reversals."
-        ),
-        "boll_ub": (
-            "Bollinger Upper Band: Typically 2 standard deviations above the middle line. "
-            "Usage: Signals potential overbought conditions and breakout zones. "
-            "Tips: Confirm signals with other tools; prices may ride the band in strong trends."
-        ),
-        "boll_lb": (
-            "Bollinger Lower Band: Typically 2 standard deviations below the middle line. "
-            "Usage: Indicates potential oversold conditions. "
-            "Tips: Use additional analysis to avoid false reversal signals."
-        ),
-        "atr": (
-            "ATR: Averages true range to measure volatility. "
-            "Usage: Set stop-loss levels and adjust position sizes based on current market volatility. "
-            "Tips: It's a reactive measure, so use it as part of a broader risk management strategy."
-        ),
-        "vwma": (
-            "VWMA: A moving average weighted by volume. "
-            "Usage: Confirm trends by integrating price action with volume data. "
-            "Tips: Watch for skewed results from volume spikes; use in combination with other volume analyses."
-        ),
-        "mfi": (
-            "MFI: The Money Flow Index is a momentum indicator that uses both price and volume to measure buying and selling pressure. "
-            "Usage: Identify overbought (>80) or oversold (<20) conditions and confirm the strength of trends or reversals. "
-            "Tips: Use alongside RSI or MACD to confirm signals; divergence between price and MFI can indicate potential reversals."
-        ),
+        "close_50_sma": ("50 SMA", "rolling(window=50).mean()"),
+        "close_200_sma": ("200 SMA", "rolling(window=200).mean()"),
+        "close_10_ema": ("10 EMA", "ewm(span=10, adjust=False).mean()"),
+        "macd": ("MACD", "MACD_LINE"),
+        "rsi": ("RSI", "RSI_14"),
+        "atr": ("ATR", "ATR_14"),
+        "boll": ("Bollinger Middle", "SMA(20)"),
+        "boll_ub": ("Bollinger Upper", "SMA(20) + 2*STD(20)"),
+        "boll_lb": ("Bollinger Lower", "SMA(20) - 2*STD(20)"),
     }
+    
     if indicator not in best_ind_params:
-        raise ValueError(
-            f"Indicator {indicator} is not supported. Please choose from: {list(best_ind_params.keys())}"
-        )
-    end_date = curr_date
-    curr_date_dt = datetime.strptime(curr_date, "%Y-%m-%d")
-    before = curr_date_dt - relativedelta(days=look_back_days)
-    try:
-        indicator_data = _get_stock_stats_bulk(symbol, indicator, curr_date)
-        current_dt = curr_date_dt
-        date_values = []
-        while current_dt >= before:
-            date_str = current_dt.strftime('%Y-%m-%d')
-            if date_str in indicator_data:
-                indicator_value = indicator_data[date_str]
-            else:
-                indicator_value = "N/A: Not a trading day (weekend or holiday)"
-            date_values.append((date_str, indicator_value))
-            current_dt = current_dt - relativedelta(days=1)
-        ind_string = ""
-        for date_str, value in date_values:
-            ind_string += f"{date_str}: {value}\n"
-    except Exception as e:
-        _logger.warning("Bulk stockstats data error: %s", e)
-        ind_string = ""
-        curr_date_dt = datetime.strptime(curr_date, "%Y-%m-%d")
-        while curr_date_dt >= before:
-            indicator_value = get_stockstats_indicator(
-                symbol, indicator, curr_date_dt.strftime("%Y-%m-%d")
-            )
-            ind_string += f"{curr_date_dt.strftime('%Y-%m-%d')}: {indicator_value}\n"
-            curr_date_dt = curr_date_dt - relativedelta(days=1)
-    result_str = (
-        f"## {indicator} values from {before.strftime('%Y-%m-%d')} to {end_date}:\n\n"
-        + ind_string
-        + "\n\n"
-        + best_ind_params.get(indicator, "No description available.")
-    )
-    return result_str
-def _get_stock_stats_bulk(
-    symbol: Annotated[str, "ticker symbol of the company"],
-    indicator: Annotated[str, "technical indicator to calculate"],
-    curr_date: Annotated[str, "current date for reference"]
-) -> dict:
-    from stockstats import wrap
+        # Fallback to direct indicator service or error
+        pass
+
+    from backend.services.indicator_service import calculate_rsi, calculate_macd, calculate_ema
+    from .stockstats_utils import load_ohlcv
+    
     data = load_ohlcv(symbol, curr_date)
-    df = wrap(data)
-    df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
-    df[indicator]
-    result_dict = {}
-    for _, row in df.iterrows():
-        date_str = row["Date"]
-        indicator_value = row[indicator]
-        if pd.isna(indicator_value):
-            result_dict[date_str] = "N/A"
-        else:
-            result_dict[date_str] = str(indicator_value)
-    return result_dict
-def get_stockstats_indicator(
-    symbol: Annotated[str, "ticker symbol of the company"],
-    indicator: Annotated[str, "technical indicator to get the analysis and report of"],
-    curr_date: Annotated[
-        str, "The current trading date you are trading on, YYYY-mm-dd"
-    ],
-) -> str:
-    curr_date_dt = datetime.strptime(curr_date, "%Y-%m-%d")
-    curr_date = curr_date_dt.strftime("%Y-%m-%d")
-    try:
-        indicator_value = StockstatsUtils.get_stock_stats(
-            symbol,
-            indicator,
-            curr_date,
-        )
-    except Exception as e:
-        _logger.warning("Stockstats indicator error for %s on %s: %s", indicator, curr_date, e)
-        return ""
-    return str(indicator_value)
+    if data.empty:
+        return f"No data found for {symbol}"
+    
+    # Calculate requested indicator using central service
+    series = data["Close"]
+    res_series = None
+    
+    if indicator == "rsi":
+        res_series = calculate_rsi(series)
+    elif indicator == "macd":
+        macd_line, _ = calculate_macd(series)
+        res_series = macd_line
+    elif "sma" in indicator:
+        window = int(re.search(r"\d+", indicator).group())
+        res_series = series.rolling(window=window).mean()
+    elif "ema" in indicator:
+        span = int(re.search(r"\d+", indicator).group())
+        res_series = calculate_ema(series, span)
+    elif indicator.startswith("boll"):
+        sma20 = series.rolling(window=20).mean()
+        std20 = series.rolling(window=20).std()
+        if indicator == "boll": res_series = sma20
+        elif indicator == "boll_ub": res_series = sma20 + (std20 * 2)
+        elif indicator == "boll_lb": res_series = sma20 - (std20 * 2)
+    
+    if res_series is None:
+        return f"Indicator {indicator} not yet supported in centralized service"
+
+    # Filter and format output
+    end_dt = datetime.strptime(curr_date, "%Y-%m-%d")
+    start_dt = end_dt - relativedelta(days=look_back_days)
+    
+    # Align and filter
+    df_res = pd.DataFrame({"value": res_series}, index=data.index)
+    mask = (df_res.index >= start_dt) & (df_res.index <= end_dt)
+    df_filtered = df_res.loc[mask].sort_index(ascending=False)
+    
+    ind_string = ""
+    for dt, row in df_filtered.iterrows():
+        val = row["value"]
+        val_str = f"{val:.2f}" if pd.notna(val) else "N/A"
+        ind_string += f"{dt.strftime('%Y-%m-%d')}: {val_str}\n"
+
+    return f"## {indicator} values for {symbol} (back to {start_dt.strftime('%Y-%m-%d')}):\n\n{ind_string}"
+
 def get_fundamentals(
     ticker: Annotated[str, "ticker symbol of the company"],
     curr_date: Annotated[str, "current date (not used for yfinance)"] = None

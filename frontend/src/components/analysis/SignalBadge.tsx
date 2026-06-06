@@ -1,4 +1,3 @@
-import React from 'react'
 import { useMeta } from '../../hooks/useMeta'
 
 const TONE_CLASSES: Record<string, { bg: string; text: string; border: string }> = {

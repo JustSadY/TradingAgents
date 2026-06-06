@@ -11,7 +11,7 @@ interface TechnicalControlsProps {
 
 export const TechnicalControls: React.FC<TechnicalControlsProps> = ({
   showSMA, setShowSMA, showEMA, setShowEMA, showRSI, setShowRSI,
-  showMACD, setShowMACD, showSentiment, setShowSentiment, t
+  showMACD, setShowMACD, showSentiment, setShowSentiment
 }) => {
   return (
     <div className="flex flex-wrap items-center gap-2 mb-4">

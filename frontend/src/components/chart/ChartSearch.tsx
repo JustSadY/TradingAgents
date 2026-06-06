@@ -11,7 +11,7 @@ interface ChartSearchProps {
 }
 
 export const ChartSearch: React.FC<ChartSearchProps> = ({
-  tickerInput, setTickerInput, period, handlePeriod, periods, loading, handleSearch, t
+  tickerInput, setTickerInput, period, handlePeriod, periods, loading, handleSearch
 }) => {
   return (
     <div className="flex flex-wrap items-center justify-between gap-4 bg-slate-900/40 p-4 border-b border-white/[0.04]">

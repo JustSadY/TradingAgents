@@ -1,4 +1,4 @@
-import React, { useState } from 'react'
+import { useState } from 'react'
 import { TrendingUp, TrendingDown, Zap, Shield, Scale, User } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
 
@@ -60,27 +60,27 @@ export function getSenderStyles(sender: string) {
   }
 }
 
-export function DebateHistoryWidget({ investmentHistory, riskHistory }: { investmentHistory: string; riskHistory: string }) {
+export function DebateHistoryWidget({ investmentHistory, riskHistory }: { investmentHistory: any; riskHistory: any }) {
   const { t } = useTranslation()
   const [activeTab, setActiveTab] = useState<'inv' | 'risk'>('inv')
 
-  const parseLines = (historyStr: string) => {
+  const parseLines = (historyStr: any): DebateMessage[] => {
     if (!historyStr) return []
     if (typeof historyStr === 'string' && historyStr.trim().startsWith('[')) {
       try {
         const parsed = JSON.parse(historyStr)
-        if (Array.isArray(parsed)) return parsed.map(msg => parseDebateMessage(msg))
+        if (Array.isArray(parsed)) return parsed.map((msg: string) => parseDebateMessage(msg))
       } catch {  }
     }
     if (typeof historyStr !== 'string') {
-        if (Array.isArray(historyStr)) return historyStr.map(msg => parseDebateMessage(String(msg)))
+        if (Array.isArray(historyStr)) return historyStr.map((msg: any) => parseDebateMessage(String(msg)))
         return []
     }
     return historyStr
       .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0)
-      .map(line => parseDebateMessage(line))
+      .map((line: string) => line.trim())
+      .filter((line: string) => line.length > 0)
+      .map((line: string) => parseDebateMessage(line))
   }
 
   const activeHistory = activeTab === 'inv' ? parseLines(investmentHistory) : parseLines(riskHistory)
@@ -110,7 +110,7 @@ export function DebateHistoryWidget({ investmentHistory, riskHistory }: { invest
         {activeHistory.length === 0 && (
           <p className="text-slate-600 text-xs text-center py-12">{t('analysis.reports.empty')}</p>
         )}
-        {activeHistory.map((m, idx) => {
+        {activeHistory.map((m: DebateMessage, idx: number) => {
           const styles = getSenderStyles(m.sender)
           return (
             <div key={idx} className={`flex ${styles.side}`}>

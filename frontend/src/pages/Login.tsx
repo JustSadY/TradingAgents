@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth } from '../contexts/AuthContext'
 import { TrendingUp } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 

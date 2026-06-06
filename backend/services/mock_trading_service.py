@@ -147,7 +147,18 @@ async def execute_order(
     from backend.services.settings_service import get_user_language
     lang = await get_user_language(db, user)
     
+    # Use with_for_update to prevent race conditions during the check-and-decrement phase
+    stmt = select(Portfolio).where(Portfolio.id == (portfolio_id or 0 if portfolio_id else -1)).with_for_update()
+    # Actually we need to get the portfolio first to know its ID if not provided, 
+    # but get_or_create_sim_portfolio already does a select. 
+    # Let's refactor to lock it properly.
     portfolio = await get_or_create_sim_portfolio(db, user=user, portfolio_id=portfolio_id)
+    
+    # Re-fetch with lock
+    stmt = select(Portfolio).where(Portfolio.id == portfolio.id).with_for_update()
+    res = await db.execute(stmt)
+    portfolio = res.scalar_one()
+
     total_cost = price * qty_dec
     commission = (total_cost * _DEFAULT_COMMISSION_RATE).quantize(Decimal("0.0001"))
     
@@ -250,25 +261,13 @@ async def reset_portfolio(db: AsyncSession, initial_capital: float = 100_000.0, 
 async def get_performance(db: AsyncSession, user=None) -> dict:
     portfolio_data = await get_portfolio_with_live_prices(db, user=user)
     
-    spy_return_pct = None
-    try:
-        from backend.services.market_data_service import get_live_price
-        # Simple SPY return for alpha calc (this should probably use historical data properly)
-        # but keep original logic of fetching "current" vs some baseline.
-        import yfinance as yf
-        def _spy():
-            spy = yf.Ticker("SPY").history(period="1y")
-            if len(spy) >= 2:
-                return float((spy["Close"].iloc[-1] - spy["Close"].iloc[0]) / spy["Close"].iloc[0] * 100)
-            return None
-        spy_return_pct = await asyncio.to_thread(_spy)
-    except Exception:
-        pass
+    from backend.services.market_data_service import get_benchmark_return
+    spy_return_pct = await get_benchmark_return("SPY", period="1y")
     
     return {
         **portfolio_data,
         "benchmark_ticker": "SPY",
         "benchmark_return_pct": round(spy_return_pct, 2) if spy_return_pct is not None else None,
-        "alpha_pct": round(portfolio_data["total_pnl_pct"] - spy_return_pct, 2)
+        "alpha_pct": round(portfolio_data["total_pnl_pct"] - Decimal(str(spy_return_pct or 0)), 2)
         if spy_return_pct is not None else None,
     }

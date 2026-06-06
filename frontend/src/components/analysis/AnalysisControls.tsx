@@ -1,7 +1,6 @@
 import React from 'react'
-import { Zap, Square, X, CheckCircle, AlertCircle, AlertTriangle, Loader2 } from 'lucide-react'
+import { Zap, Square, X, CheckCircle, AlertCircle } from 'lucide-react'
 import { SignalBadge } from './SignalBadge'
-import { useTranslation } from '../../contexts/LanguageContext'
 
 interface AnalysisControlsProps {
   ticker: string

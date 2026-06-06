@@ -3,7 +3,6 @@ import { useSearchParams } from 'react-router-dom'
 import api from '../utils/api'
 import { RefreshCw, BarChart2, AlertCircle } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
-import { useMeta } from '../hooks/useMeta'
 import { usePriceChart } from '../hooks/usePriceChart'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 
@@ -52,7 +51,7 @@ export default function ChartPage() {
   const [userIndicatorLabel, setUserIndicatorLabel] = useState('')
 
   const chartContainerRef = useRef<HTMLDivElement>(null)
-  usePriceChart(chartContainerRef, candles, analyses, showSMA, showEMA)
+  usePriceChart(chartContainerRef as React.RefObject<HTMLDivElement>, candles, analyses, showSMA, showEMA)
 
   const load = useCallback(async (ticker: string, p: string) => {
     if (!ticker) return
@@ -190,7 +189,6 @@ export default function ChartPage() {
             candles={candles} sentimentChartData={sentimentChartData}
             customIndicators={customIndicators}
             userIndicatorData={userIndicatorData} userIndicatorLabel={userIndicatorLabel}
-            t={t}
         />
       </ErrorBoundary>
       

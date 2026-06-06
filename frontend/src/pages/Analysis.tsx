@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import axios from 'axios'
-import { getAccessToken } from '../hooks/useAuth'
+import { getAccessToken } from '../contexts/AuthContext'
 import { useMeta } from '../hooks/useMeta'
 import { useActiveTasks } from '../hooks/useActiveTasks'
 import { notify } from '../utils/notify'
@@ -9,7 +9,7 @@ import { sendBrowserNotification } from '../utils/browserNotify'
 import { useTranslation } from '../contexts/LanguageContext'
 import {
   Loader2, CheckCircle, AlertCircle, History,
-  X, BarChart2, FileText, Zap, Square,
+  X, BarChart2, FileText, Zap,
   Download, FileDown, AlertTriangle
 } from 'lucide-react'
 
@@ -18,7 +18,7 @@ import { SignalBadge } from '../components/analysis/SignalBadge'
 import { ReportCard } from '../components/analysis/ReportCard'
 import { AnalysisControls } from '../components/analysis/AnalysisControls'
 import { AnalysisLog } from '../components/analysis/AnalysisLog'
-import { DebateHistoryWidget, getSenderStyles, parseDebateMessage } from '../components/analysis/DebateHistoryWidget'
+import { DebateHistoryWidget, parseDebateMessage } from '../components/analysis/DebateHistoryWidget'
 import { AnalysisChatWidget } from '../components/analysis/AnalysisChatWidget'
 
 interface WsEvent {

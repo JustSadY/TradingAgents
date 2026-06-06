@@ -1,5 +1,5 @@
 import React from 'react'
-import { X, Calendar, Target, Shield, AlertTriangle } from 'lucide-react'
+import { X, Calendar, Target, Shield } from 'lucide-react'
 import { SignalBadge } from '../analysis/SignalBadge'
 
 interface AnalysisDetailSidebarProps {

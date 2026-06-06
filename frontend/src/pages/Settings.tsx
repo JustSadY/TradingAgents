@@ -5,7 +5,7 @@ import {
   Settings as SettingsIcon, Brain, ShieldAlert, Clock, Wrench
 } from 'lucide-react'
 import { useMeta, triggerMetaRefetch } from '../hooks/useMeta'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth } from '../contexts/AuthContext'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
 import { useTranslation } from '../contexts/LanguageContext'
 import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'

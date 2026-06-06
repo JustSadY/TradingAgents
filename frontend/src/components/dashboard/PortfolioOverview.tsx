@@ -1,5 +1,5 @@
 import React from 'react'
-import { TrendingUp, TrendingDown, DollarSign, Activity, ArrowRight } from 'lucide-react'
+import { TrendingUp, DollarSign, Activity } from 'lucide-react'
 
 interface Portfolio {
   id: number; mode: string; broker: string

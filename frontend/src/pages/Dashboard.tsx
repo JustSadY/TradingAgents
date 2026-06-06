@@ -4,8 +4,7 @@ import { Activity } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import {
-  ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip,
-  PieChart, Pie, Cell, Legend
+  ResponsiveContainer, PieChart, Pie, Cell, Legend, Tooltip
 } from 'recharts'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useNewsFeed } from '../hooks/useNewsFeed'
@@ -23,7 +22,7 @@ export default function Dashboard() {
   const [watchlist, setWatchlist] = useState<string[]>([])
   
   const watchlistSlice = useMemo(() => watchlist.slice(0, 5), [watchlist])
-  const { news, loading: newsLoading } = useNewsFeed(watchlistSlice)
+  const { news } = useNewsFeed(watchlistSlice)
   
   const [recentAnalysis, setRecentAnalysis] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
@@ -79,9 +78,10 @@ export default function Dashboard() {
                     dataKey="value"
                     stroke="none"
                     >
-                    {allocationData.map((entry, index) => (
-                        <Cell key={`cell-${index}`} fill={ALLOCATION_COLORS[index % ALLOCATION_COLORS.length]} />
+                    {allocationData.map((_, index) => (
+                      <Cell key={`cell-${index}`} fill={ALLOCATION_COLORS[index % ALLOCATION_COLORS.length]} />
                     ))}
+
                     </Pie>
                     <Tooltip 
                     contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '12px', fontSize: '10px' }}

@@ -40,11 +40,18 @@ def is_actionable(signal: Optional[str]) -> bool:
 def _extract_confidence_score(row) -> float | None:
     chart_annotations = getattr(row, "chart_annotations", None)
     if isinstance(chart_annotations, dict):
+        # Prefer structured trader proposal from LLM
+        trader_prop = chart_annotations.get("trader_proposal")
+        if isinstance(trader_prop, dict):
+            raw = trader_prop.get("confidence_score")
+            if raw is not None:
+                return float(raw)
+        
         raw = chart_annotations.get("confidence_score")
         try:
             return float(raw) if raw is not None else None
         except (TypeError, ValueError):
-            return None
+            pass
 
     confidence_text_sources = [
         getattr(row, "trader_plan", None) or "",
@@ -64,7 +71,20 @@ def _extract_confidence_score(row) -> float | None:
     return None
 
 
-def _extract_price_level(text: str, label: str) -> float | None:
+def _extract_price_level(text: str, label: str, row=None) -> float | None:
+    # Try structured extraction first
+    if row and hasattr(row, "chart_annotations") and isinstance(row.chart_annotations, dict):
+        trader_prop = row.chart_annotations.get("trader_proposal")
+        if isinstance(trader_prop, dict):
+            key_map = {
+                "Entry Price": "entry_price",
+                "Stop Loss": "stop_loss",
+                "Take Profit": "take_profit_price"
+            }
+            struct_key = key_map.get(label)
+            if struct_key and trader_prop.get(struct_key):
+                return float(trader_prop[struct_key])
+
     pattern = rf"\*\*{re.escape(label)}\*\*\s*:\s*\$?\s*([0-9]+(?:\.[0-9]+)?)"
     match = re.search(pattern, text, flags=re.IGNORECASE)
     if not match:
@@ -105,9 +125,9 @@ def _extract_kelly_ceiling_pct(row, *, confidence_score: float | None, current_p
             return min(parsed, 100.0)
 
     trader_plan = getattr(row, "trader_plan", "") or ""
-    entry = _extract_price_level(trader_plan, "Entry Price") or current_price
-    stop = _extract_price_level(trader_plan, "Stop Loss")
-    target = _extract_price_level(trader_plan, "Take Profit")
+    entry = _extract_price_level(trader_plan, "Entry Price", row=row) or current_price
+    stop = _extract_price_level(trader_plan, "Stop Loss", row=row)
+    target = _extract_price_level(trader_plan, "Take Profit", row=row)
     if confidence_score is None or stop is None or target is None:
         return None
     rr = get_risk_reward_from_plan(target, stop, entry)

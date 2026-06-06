@@ -1,6 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate, Outlet, useLocation } from 'react-router-dom'
-import React, { useMemo } from 'react'
-import { useAuth } from './hooks/useAuth'
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
+import React from 'react'
+import { AuthProvider, useAuth } from './contexts/AuthContext'
 import Layout from './components/Layout'
 
 import Login from './pages/Login'
@@ -47,7 +47,11 @@ class ErrorBoundary extends React.Component<
 }
 
 function AppRoutes() {
-  const { isAuthenticated, isAdmin } = useAuth()
+  const { isAuthenticated, isAdmin, loading } = useAuth()
+
+  if (loading) {
+    return <div style={{ background: '#0f172a', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1', fontWeight: 600 }}>BAŞLATILIYOR...</div>
+  }
 
   return (
     <Routes>
@@ -100,11 +104,13 @@ function AppRoutes() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <LanguageProvider>
-        <BrowserRouter>
-          <AppRoutes />
-        </BrowserRouter>
-      </LanguageProvider>
+      <AuthProvider>
+        <LanguageProvider>
+          <BrowserRouter>
+            <AppRoutes />
+          </BrowserRouter>
+        </LanguageProvider>
+      </AuthProvider>
     </ErrorBoundary>
   )
 }

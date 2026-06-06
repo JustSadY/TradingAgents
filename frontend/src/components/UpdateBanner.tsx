@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import axios from 'axios'
 import { Download, Loader2, X, RefreshCw } from 'lucide-react'
 import { notify } from '../utils/notify'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth } from '../contexts/AuthContext'
 
 interface UpdateStatus {
   git: boolean

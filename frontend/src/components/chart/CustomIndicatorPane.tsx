@@ -1,4 +1,5 @@
 import React from 'react'
+import { BarChart2 } from 'lucide-react'
 import { 
   ResponsiveContainer, ComposedChart, CartesianGrid, XAxis, YAxis, Tooltip, 
   Bar, Cell, Line, ReferenceLine, AreaChart, Area, LineChart 
@@ -15,12 +16,11 @@ interface CustomIndicatorPaneProps {
   customIndicators: any[]
   userIndicatorData: any[]
   userIndicatorLabel: string
-  t: any
 }
 
 export const CustomIndicatorPane: React.FC<CustomIndicatorPaneProps> = ({
   showRSI, showMACD, showSentiment, candles, sentimentChartData,
-  customIndicators, userIndicatorData, userIndicatorLabel, t
+  customIndicators, userIndicatorData, userIndicatorLabel
 }) => {
   if (!showRSI && !showMACD && !showSentiment && customIndicators.length === 0 && userIndicatorData.length === 0) {
     return null

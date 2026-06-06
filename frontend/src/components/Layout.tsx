@@ -1,5 +1,5 @@
 import { NavLink, useNavigate, Outlet } from 'react-router-dom'
-import { useAuth } from '../hooks/useAuth'
+import { useAuth } from '../contexts/AuthContext'
 import { useTranslation } from '../contexts/LanguageContext'
 import {
   LayoutDashboard, Search, BookMarked, Briefcase,

@@ -1,10 +1,9 @@
-import { useState, useCallback } from 'react'
+import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import axios from 'axios'
-import { notify, formatErrorDetail } from '../utils/notify'
+import { formatErrorDetail, notify } from '../utils/notify'
 
 const TOKEN_KEY = 'ta_access'
 const REFRESH_KEY = 'ta_refresh'
-
 
 export function getAccessToken() {
   return localStorage.getItem(TOKEN_KEY)
@@ -25,24 +24,49 @@ function decodeToken(token: string): JwtPayload | null {
   }
 }
 
-export function useAuth() {
-  const [user, setUser] = useState<string | null>(() => {
-    const t = localStorage.getItem(TOKEN_KEY)
-    if (!t) return null
-    return decodeToken(t)?.sub ?? null
-  })
+interface AuthContextType {
+  user: string | null
+  role: string | null
+  isAdmin: boolean
+  isOwner: boolean
+  isAuthenticated: boolean
+  login: (username: string, password: string) => Promise<void>
+  logout: () => void
+  loading: boolean
+}
 
-  const [role, setRole] = useState<string | null>(() => {
+const AuthContext = createContext<AuthContextType | undefined>(undefined)
+
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const [user, setUser] = useState<string | null>(null)
+  const [role, setRole] = useState<string | null>(null)
+  const [loading, setLoading] = useState(true)
+
+  const initAuth = useCallback(() => {
     const t = localStorage.getItem(TOKEN_KEY)
-    if (!t) return null
-    return decodeToken(t)?.role ?? 'user'
-  })
+    if (t) {
+      const payload = decodeToken(t)
+      if (payload && payload.exp * 1000 > Date.now()) {
+        setUser(payload.sub)
+        setRole(payload.role || 'user')
+      } else {
+        localStorage.removeItem(TOKEN_KEY)
+        localStorage.removeItem(REFRESH_KEY)
+      }
+    }
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    initAuth()
+  }, [initAuth])
 
   const login = useCallback(async (username: string, password: string) => {
     const res = await axios.post('/auth/login', { username, password })
-    localStorage.setItem(TOKEN_KEY, res.data.access_token)
-    localStorage.setItem(REFRESH_KEY, res.data.refresh_token)
-    const payload = decodeToken(res.data.access_token)
+    const { access_token, refresh_token } = res.data
+    localStorage.setItem(TOKEN_KEY, access_token)
+    localStorage.setItem(REFRESH_KEY, refresh_token)
+    const payload = decodeToken(access_token)
     setUser(payload?.sub ?? username)
     setRole(payload?.role ?? 'user')
   }, [])
@@ -54,24 +78,34 @@ export function useAuth() {
     setRole(null)
   }, [])
 
-  return {
+  const value = {
     user,
     role,
     isAdmin: role === 'admin' || role === 'owner',
     isOwner: role === 'owner',
+    isAuthenticated: !!user,
     login,
     logout,
-    isAuthenticated: !!user,
+    loading
   }
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
 }
 
+export function useAuth() {
+  const context = useContext(AuthContext)
+  if (context === undefined) {
+    throw new Error('useAuth must be used within an AuthProvider')
+  }
+  return context
+}
 
+// Global Axios Interceptors
 axios.interceptors.request.use(cfg => {
-  const token = getAccessToken()
+  const token = localStorage.getItem(TOKEN_KEY)
   if (token && cfg.headers) cfg.headers.Authorization = `Bearer ${token}`
   return cfg
 })
-
 
 let _refreshing = false
 let _queue: Array<(token: string) => void> = []
@@ -127,4 +161,3 @@ axios.interceptors.response.use(
     }
   }
 )
-
