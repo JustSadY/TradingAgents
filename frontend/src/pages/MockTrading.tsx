@@ -218,7 +218,7 @@ export default function MockTrading() {
         />
         <StatCard
           icon={<BarChart2 size={16} />}
-          label={`Alpha vs ${p.benchmark_ticker || 'SPY'}`}
+          label={`${t('mocktrading.stat_alpha')} ${p.benchmark_ticker || 'SPY'}`}
           value={
             p.alpha_pct !== null && p.alpha_pct !== undefined
               ? `${alphaPositive ? '+' : ''}${p.alpha_pct.toFixed(2)}%`

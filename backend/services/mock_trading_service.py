@@ -130,31 +130,27 @@ async def execute_order(
     portfolio_id: Optional[int] = None,
 ) -> dict:
     from backend.repositories.portfolio import get_holding
+    from backend.core.l10n import get_message
+    from backend.services.settings_service import get_user_language
+    lang = await get_user_language(db, user)
+
     action = action.upper()
     if action not in ("BUY", "SELL"):
-        raise ValueError("action must be BUY or SELL")
+        raise ValueError(get_message("invalid_action", lang))
     if quantity <= 0:
         raise ValueError("quantity must be positive")
     
     price_val = await get_live_price(ticker)
     if price_val is None or not math.isfinite(price_val) or price_val <= 0:
-        raise ValueError(f"Could not fetch valid price for {ticker}")
+        raise ValueError(get_message("invalid_price", lang, ticker=ticker))
     
     price = Decimal(str(price_val))
     qty_dec = Decimal(str(quantity))
     
-    from backend.core.l10n import get_message
-    from backend.services.settings_service import get_user_language
-    lang = await get_user_language(db, user)
-    
-    # Use with_for_update to prevent race conditions during the check-and-decrement phase
-    stmt = select(Portfolio).where(Portfolio.id == (portfolio_id or 0 if portfolio_id else -1)).with_for_update()
-    # Actually we need to get the portfolio first to know its ID if not provided, 
-    # but get_or_create_sim_portfolio already does a select. 
-    # Let's refactor to lock it properly.
+    # Get or create the portfolio first
     portfolio = await get_or_create_sim_portfolio(db, user=user, portfolio_id=portfolio_id)
     
-    # Re-fetch with lock
+    # Re-fetch with lock to ensure atomic bakiye check and update
     stmt = select(Portfolio).where(Portfolio.id == portfolio.id).with_for_update()
     res = await db.execute(stmt)
     portfolio = res.scalar_one()
@@ -268,6 +264,6 @@ async def get_performance(db: AsyncSession, user=None) -> dict:
         **portfolio_data,
         "benchmark_ticker": "SPY",
         "benchmark_return_pct": round(spy_return_pct, 2) if spy_return_pct is not None else None,
-        "alpha_pct": round(portfolio_data["total_pnl_pct"] - Decimal(str(spy_return_pct or 0)), 2)
+        "alpha_pct": round(portfolio_data["total_pnl_pct"] - (spy_return_pct or 0.0), 2)
         if spy_return_pct is not None else None,
     }

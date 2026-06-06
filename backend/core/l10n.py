@@ -25,6 +25,14 @@ MESSAGES = {
         "en": "Portfolio reset",
         "tr": "Portföy sıfırlandı",
     },
+    "invalid_price": {
+        "en": "Could not fetch valid price for {ticker}",
+        "tr": "{ticker} için geçerli fiyat alınamadı",
+    },
+    "invalid_action": {
+        "en": "Action must be BUY or SELL",
+        "tr": "İşlem AL veya SAT olmalıdır",
+    },
 }
 
 
