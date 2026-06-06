@@ -153,9 +153,21 @@ async def _run_performance_backfill():
 def init_cron_service() -> CronService:
     global _cron_service
     _cron_service = CronService()
-    # Register settings change listener to handle dynamic re-syncs
-    from backend.services.settings_service import register_settings_change_listener
-    register_settings_change_listener(_cron_service.apply_user_settings)
+    
+    from backend.core.events import subscribe
+
+    # Register settings change listener
+    subscribe("settings_updated", _cron_service.apply_user_settings)
+
+    # Register user deletion listener
+    async def _on_user_deleted(user_id: int):
+        job_id = f"watchlist_scan_user_{user_id}"
+        if _cron_service.scheduler.get_job(job_id):
+            _cron_service.scheduler.remove_job(job_id)
+            _logger.info("Successfully removed watchlist scan cron job for deleted user %d", user_id)
+
+    subscribe("user_deleted", _on_user_deleted)
+
     return _cron_service
 
 

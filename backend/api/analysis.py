@@ -44,6 +44,16 @@ async def run_analysis(
         body.ticker, body.trade_date, body.asset_type, settings, task_id, current_user,
     )
     return AnalysisRunResponse(task_id=task_id, ticker=body.ticker, trade_date=body.trade_date)
+
+
+@router.get("/active")
+async def get_active_tasks(
+    current_user: User = Depends(get_current_user),
+):
+    from backend.services.analysis_service import get_active_tasks_for_user
+    return get_active_tasks_for_user(current_user.id)
+
+
 @router.get("/history", response_model=list[AnalysisListItem])
 async def list_analysis(
     ticker: str | None = Query(default=None),

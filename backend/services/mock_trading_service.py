@@ -275,8 +275,8 @@ async def execute_order(
     price = Decimal(str(price_val))
     qty_dec = Decimal(str(quantity))
     
+    from backend.core.l10n import get_message
     lang = await _get_output_lang(db, user)
-    is_tr = lang.strip().lower() in ("turkish", "türkçe")
     
     portfolio = await get_or_create_sim_portfolio(db, user=user, portfolio_id=portfolio_id)
     total_cost = price * qty_dec
@@ -284,14 +284,9 @@ async def execute_order(
     if action == "BUY":
         required = total_cost + commission
         if portfolio.cash_available < required:
-            if is_tr:
-                raise ValueError(
-                    f"Yetersiz bakiye. Gerekli: ${float(required):.2f}, Mevcut: ${float(portfolio.cash_available):.2f}"
-                )
-            else:
-                raise ValueError(
-                    f"Insufficient funds. Required: ${float(required):.2f}, Available: ${float(portfolio.cash_available):.2f}"
-                )
+            raise ValueError(
+                get_message("insufficient_funds", lang, required=float(required), available=float(portfolio.cash_available))
+            )
         portfolio.cash_available -= required
         result = await db.execute(
             select(Holding).where(
@@ -325,10 +320,9 @@ async def execute_order(
         holding = result.scalar_one_or_none()
         if holding is None or holding.quantity < qty_dec:
             available = holding.quantity if holding else Decimal("0.0")
-            if is_tr:
-                raise ValueError(f"Yetersiz pozisyon. Mevcut: {float(available):.4f}, Satılmak istenen: {quantity}")
-            else:
-                raise ValueError(f"Insufficient position. Available: {float(available):.4f}, Requested to sell: {quantity}")
+            raise ValueError(
+                get_message("insufficient_position", lang, available=float(available), requested=quantity)
+            )
         portfolio.cash_available += total_cost - commission
         holding.quantity -= qty_dec
         if holding.quantity < Decimal("1e-6"):
@@ -390,9 +384,9 @@ async def reset_portfolio(db: AsyncSession, initial_capital: float = 100_000.0, 
         )
         db.add(portfolio)
     await db.flush()
+    from backend.core.l10n import get_message
     lang = await _get_output_lang(db, user)
-    is_tr = lang.strip().lower() in ("turkish", "türkçe")
-    msg = "Portföy sıfırlandı" if is_tr else "Portfolio reset"
+    msg = get_message("portfolio_reset", lang)
     return {"message": msg, "initial_capital": initial_capital}
 
 

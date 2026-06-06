@@ -13,29 +13,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.analysis import AnalysisResult
+from backend.core.constants import (
+    BUY_SIGNALS as _BUY_SIGNALS,
+    SELL_SIGNALS as _SELL_SIGNALS,
+    TOKENS_PER_ANALYST as _TOKENS_PER_ANALYST,
+    MODEL_COST_PER_1K,
+)
 
 _logger = logging.getLogger(__name__)
 
 # Indicative blended USD cost per 1K tokens, keyed by substring of the model id.
-MODEL_COST_PER_1K: dict[str, float] = {
-    "gpt-4o-mini": 0.00015,
-    "gpt-4o": 0.005,
-    "o1-mini": 0.003,
-    "o1": 0.015,
-    "o3-mini": 0.0011,
-    "claude-3-5-sonnet": 0.003,
-    "claude-3-5-haiku": 0.001,
-    "claude-opus": 0.015,
-    "claude-sonnet": 0.003,
-    "gemini-1.5-pro": 0.007,
-    "gemini-1.5-flash": 0.000075,
-    "gemini-2.0-flash": 0.000075,
-    "gemini-2.0": 0.000075,
-}
-_TOKENS_PER_ANALYST = 8_000
-
-_BUY_SIGNALS = {"Buy", "Overweight"}
-_SELL_SIGNALS = {"Sell", "Underweight"}
 
 
 def _rate_for_model(model: str, default: float) -> float:

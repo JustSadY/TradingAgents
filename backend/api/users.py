@@ -136,7 +136,8 @@ async def create_user(
     await db.flush()
     db.add(UserPagePermission(user_id=user.id, page_key="dashboard", allowed=True))
     db.add(UserPagePermission(user_id=user.id, page_key="portfolio", allowed=True))
-    for s_key in ["general", "llm", "risk", "webhooks", "cron", "presets"]:
+    from backend.core.constants import SETTING_KEYS
+    for s_key in SETTING_KEYS:
         db.add(UserSettingPermission(user_id=user.id, setting_key=s_key, allowed=True))
     await db.flush()
     return user
@@ -200,17 +201,9 @@ async def delete_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The Server Owner account cannot be deleted.",
         )
-    try:
-        from backend.services.cron_service import get_cron_service
-
-        cron = get_cron_service()
-        if cron:
-            job_id = f"watchlist_scan_user_{user_id}"
-            if cron.scheduler.get_job(job_id):
-                cron.scheduler.remove_job(job_id)
-                _logger.info("Successfully removed watchlist scan cron job for deleted user %d", user_id)
-    except Exception as e:
-        _logger.error("Failed to remove cron job for user %d on deletion: %s", user_id, e)
+    
+    from backend.core.events import emit
+    emit("user_deleted", user_id=user_id)
 
     await db.delete(user)
 
@@ -310,8 +303,9 @@ async def get_my_setting_permissions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from backend.core.constants import SETTING_KEYS
     if current_user.is_admin:
-        return {"allowed_settings": ["general", "llm", "risk", "webhooks", "cron", "presets"]}
+        return {"allowed_settings": SETTING_KEYS}
     allowed = sorted(list(await list_allowed_setting_sections(db, current_user.id)))
     return {"allowed_settings": allowed}
 
@@ -325,11 +319,12 @@ async def get_user_setting_permissions(
     user = await get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    from backend.core.constants import SETTING_KEYS
     result = await db.execute(
         select(UserSettingPermission).where(UserSettingPermission.user_id == user_id)
     )
     perms = {p.setting_key: p.allowed for p in result.scalars().all()}
-    full = {k: perms.get(k, False) for k in ["general", "llm", "risk", "webhooks", "cron", "presets"]}
+    full = {k: perms.get(k, False) for k in SETTING_KEYS}
     return {"user_id": user_id, "permissions": full}
 
 
@@ -347,8 +342,9 @@ async def set_user_setting_permissions(
     user = await get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    from backend.core.constants import SETTING_KEYS
     for setting_key, allowed in body.permissions.items():
-        if setting_key not in ["general", "llm", "risk", "webhooks", "cron", "presets"]:
+        if setting_key not in SETTING_KEYS:
             continue
         result = await db.execute(
             select(UserSettingPermission)

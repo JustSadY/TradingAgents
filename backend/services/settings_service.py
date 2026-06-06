@@ -40,42 +40,16 @@ async def get_or_create_settings(
 
 def settings_to_read(settings: AppSettings) -> SettingsRead:
     """Map an ``AppSettings`` row to its read DTO (single source of truth)."""
-    return SettingsRead(
-        cron_enabled=settings.cron_enabled,
-        cron_schedule=settings.cron_schedule,
-        price_tolerance_pct=settings.price_tolerance_pct,
-        watchlist=settings.watchlist,
-        output_language=settings.output_language or "English",
-        llm_provider=settings.llm_provider or "openai",
-        llm_model=settings.llm_model or "gpt-4o-mini",
-        investor_persona=settings.investor_persona or "conservative",
-        analyst_concurrency_limit=settings.analyst_concurrency_limit or 1,
-        max_recur_limit=settings.max_recur_limit or 1000,
-        benchmark_ticker=settings.benchmark_ticker,
-        max_debate_rounds=settings.max_debate_rounds,
-        max_risk_rounds=settings.max_risk_rounds,
-        max_position_size_pct=settings.max_position_size_pct,
-        max_risk_per_trade_pct=settings.max_risk_per_trade_pct,
-        strict_stop_loss_mode=settings.strict_stop_loss_mode,
-        node_retry_attempts=settings.node_retry_attempts or 2,
-        node_retry_base_delay=settings.node_retry_base_delay or 1.0,
-        include_historical_analyses=settings.include_historical_analyses,
-        historical_analyses_limit=settings.historical_analyses_limit or 5,
-        openai_reasoning_effort=settings.openai_reasoning_effort,
-        anthropic_effort=settings.anthropic_effort,
-        google_thinking_level=settings.google_thinking_level,
-        webhook_url=settings.webhook_url,
-        webhook_enabled=settings.webhook_enabled,
-        webhook_events=settings.webhook_events or "analysis_complete",
-        updated_at=settings.updated_at,
-    )
+    # Using Pydantic's from_attributes=True (configured in SettingsRead)
+    # allows us to directly validate the SQLAlchemy model instance.
+    return SettingsRead.model_validate(settings)
 
 
 async def apply_settings_update(
     db: AsyncSession, settings: AppSettings, body: SettingsUpdate,
 ) -> AppSettings:
     """Apply a partial settings update, reset the active preset on real changes,
-    persist, and re-sync the user's cron job."""
+    persist, and emit a 'settings_updated' event."""
     has_changes = False
     for field, value in body.model_dump(exclude_unset=True).items():
         if field == "active_preset_name":
@@ -89,19 +63,8 @@ async def apply_settings_update(
         settings.active_preset_name = None
     settings.updated_at = datetime.now(timezone.utc)
     await db.flush()
-    await _resync_cron(settings)
+    
+    from backend.core.events import emit
+    emit("settings_updated", settings=settings)
+    
     return settings
-
-
-_settings_change_listener = None
-
-
-def register_settings_change_listener(listener) -> None:
-    """Register a callback to be notified when user settings are updated."""
-    global _settings_change_listener
-    _settings_change_listener = listener
-
-
-async def _resync_cron(settings: AppSettings) -> None:
-    if _settings_change_listener is not None:
-        await _settings_change_listener(settings)

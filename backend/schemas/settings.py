@@ -1,68 +1,73 @@
 from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel, Field
 
 
-class SettingsRead(BaseModel):
-    cron_enabled: bool
-    cron_schedule: str
-    price_tolerance_pct: float
-    watchlist: list[str]
+class SettingsBase(BaseModel):
+    cron_enabled: bool = False
+    cron_schedule: str = "0 9 * * 1-5"
+    price_tolerance_pct: float = 0.5
+    watchlist: list[str] = []
     output_language: str = "English"
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
     investor_persona: str = "conservative"
     analyst_concurrency_limit: int = 1
     max_recur_limit: int = 1000
-    benchmark_ticker: str | None = None
-    max_debate_rounds: int
-    max_risk_rounds: int
-    max_position_size_pct: float
-    max_risk_per_trade_pct: float
+    benchmark_ticker: Optional[str] = None
+    max_debate_rounds: int = 1
+    max_risk_rounds: int = 1
+    max_position_size_pct: float = 10.0
+    max_risk_per_trade_pct: float = 2.0
     strict_stop_loss_mode: bool = False
     include_historical_analyses: bool = False
     historical_analyses_limit: int = 5
     strict_backtest_learning: bool = True
-    openai_reasoning_effort: str | None = None
-    anthropic_effort: str | None = None
-    google_thinking_level: str | None = None
+    openai_reasoning_effort: Optional[str] = None
+    anthropic_effort: Optional[str] = None
+    google_thinking_level: Optional[str] = None
     node_retry_attempts: int = 2
     node_retry_base_delay: float = 1.0
-    webhook_url: str | None = None
+    webhook_url: Optional[str] = None
     webhook_enabled: bool = False
     webhook_events: str = '["analysis_complete"]'
-    active_preset_name: str | None = None
-    updated_at: datetime | None = None
+    active_preset_name: Optional[str] = None
+
+
+class SettingsRead(SettingsBase):
+    updated_at: Optional[datetime] = None
 
     class Config:
         from_attributes = True
 
 
 class SettingsUpdate(BaseModel):
-    cron_enabled: bool | None = None
-    cron_schedule: str | None = None
-    price_tolerance_pct: float | None = Field(default=None, ge=0, le=50)
-    watchlist: list[str] | None = None
-    output_language: str | None = None
-    llm_provider: str | None = None
-    llm_model: str | None = None
-    investor_persona: str | None = None
-    analyst_concurrency_limit: int | None = Field(default=None, ge=1, le=16)
-    max_recur_limit: int | None = Field(default=None, ge=100, le=5000)
-    benchmark_ticker: str | None = None
-    max_debate_rounds: int | None = Field(default=None, ge=1, le=10)
-    max_risk_rounds: int | None = Field(default=None, ge=1, le=10)
-    max_position_size_pct: float | None = Field(default=None, ge=1, le=100)
-    max_risk_per_trade_pct: float | None = Field(default=None, ge=0.1, le=50)
-    strict_stop_loss_mode: bool | None = None
-    include_historical_analyses: bool | None = None
-    historical_analyses_limit: int | None = Field(default=None, ge=1, le=50)
-    strict_backtest_learning: bool | None = None
-    openai_reasoning_effort: str | None = None
-    anthropic_effort: str | None = None
-    google_thinking_level: str | None = None
-    node_retry_attempts: int | None = Field(default=None, ge=1, le=10)
-    node_retry_base_delay: float | None = Field(default=None, ge=0.1, le=10.0)
-    webhook_url: str | None = None
-    webhook_enabled: bool | None = None
-    webhook_events: str | None = None
-    active_preset_name: str | None = None
+    # We explicitly define these to keep the validation logic (ge, le)
+    cron_enabled: Optional[bool] = None
+    cron_schedule: Optional[str] = None
+    price_tolerance_pct: Optional[float] = Field(default=None, ge=0, le=50)
+    watchlist: Optional[list[str]] = None
+    output_language: Optional[str] = None
+    llm_provider: Optional[str] = None
+    llm_model: Optional[str] = None
+    investor_persona: Optional[str] = None
+    analyst_concurrency_limit: Optional[int] = Field(default=None, ge=1, le=16)
+    max_recur_limit: Optional[int] = Field(default=None, ge=100, le=5000)
+    benchmark_ticker: Optional[str] = None
+    max_debate_rounds: Optional[int] = Field(default=None, ge=1, le=10)
+    max_risk_rounds: Optional[int] = Field(default=None, ge=1, le=10)
+    max_position_size_pct: Optional[float] = Field(default=None, ge=1, le=100)
+    max_risk_per_trade_pct: Optional[float] = Field(default=None, ge=0.1, le=50)
+    strict_stop_loss_mode: Optional[bool] = None
+    include_historical_analyses: Optional[bool] = None
+    historical_analyses_limit: Optional[int] = Field(default=None, ge=1, le=50)
+    strict_backtest_learning: Optional[bool] = None
+    openai_reasoning_effort: Optional[str] = None
+    anthropic_effort: Optional[str] = None
+    google_thinking_level: Optional[str] = None
+    node_retry_attempts: Optional[int] = Field(default=None, ge=1, le=10)
+    node_retry_base_delay: Optional[float] = Field(default=None, ge=0.1, le=10.0)
+    webhook_url: Optional[str] = None
+    webhook_enabled: Optional[bool] = None
+    webhook_events: Optional[str] = None
+    active_preset_name: Optional[str] = None

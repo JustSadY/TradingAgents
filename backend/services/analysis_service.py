@@ -41,6 +41,7 @@ from backend.trading_agents.agents.sub.managers.super_portfolio_manager import c
 
 _logger = logging.getLogger(__name__)
 _RUNNING_TASKS: dict[str, asyncio.Task] = {}
+_TASK_REGISTRY: dict[str, dict] = {}  # task_id -> {ticker, date, user_id, started_at, ...}
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
 _ANALYSIS_BACKGROUND_TASKS: dict[str, set[asyncio.Task]] = {}
 _REPORT_FIELDS = (
@@ -81,16 +82,13 @@ async def _get_historical_analyses_context(
     if not rows_same and not rows_cross:
         return ""
 
-    lang = (output_language or "English").strip().lower()
-    is_tr = lang in ("turkish", "türkçe")
-    
+    from backend.core.l10n import get_message
     parts = []
     
     if rows_same:
-        title_same = f"=== {ticker} GEÇMİŞ ANALİZ RAPORLARI ===\n" if is_tr else f"=== {ticker} HISTORICAL ANALYSIS REPORTS ===\n"
-        parts.append(title_same)
+        parts.append(get_message("historical_reports_title", output_language, ticker=ticker))
         for row in reversed(rows_same):
-            date_label = f"Tarih: {row.trade_date} | Sinyal" if is_tr else f"Date: {row.trade_date} | Signal"
+            date_label = get_message("date_signal_label", output_language, date=row.trade_date)
             parts.append(f"--- {date_label}: {row.signal or 'N/A'} ---")
             parts.append(f"Final Decision:\n{row.final_decision}")
             if row.reflection:
@@ -98,8 +96,7 @@ async def _get_historical_analyses_context(
             parts.append("")
 
     if rows_cross:
-        title_cross = f"=== ÇAPRAZ HİSSE DERSLERİ ===\n" if is_tr else f"=== RECENT CROSS-TICKER LESSONS ===\n"
-        parts.append(title_cross)
+        parts.append(get_message("cross_ticker_lessons_title", output_language))
         for row in rows_cross:
             parts.append(f"--- Ticker: {row.ticker} | Date: {row.trade_date} ---")
             parts.append(f"Reflection:\n{row.reflection}")
@@ -215,10 +212,20 @@ def _extract_stats(handler) -> dict:
 
 async def cancel_analysis(task_id: str) -> bool:
     task = _RUNNING_TASKS.pop(task_id, None)
+    _TASK_REGISTRY.pop(task_id, None)
     if task and not task.done():
         task.cancel()
         return True
     return False
+
+
+def get_active_tasks_for_user(user_id: int | None) -> list[dict]:
+    """Returns a list of active tasks for the given user."""
+    return [
+        {"task_id": tid, **meta}
+        for tid, meta in _TASK_REGISTRY.items()
+        if meta.get("user_id") == user_id
+    ]
 
 
 def _track_background_task(coro: Awaitable[None], task_id: str | None = None):
@@ -299,6 +306,14 @@ async def run_analysis(
     current = asyncio.current_task()
     if current:
         _RUNNING_TASKS[task_id] = current
+        _TASK_REGISTRY[task_id] = {
+            "ticker": ticker,
+            "trade_date": trade_date,
+            "asset_type": asset_type,
+            "user_id": user.id if user else None,
+            "started_at": time.time(),
+            "status": "running"
+        }
     username = user.username if user else "system"
     _logger.info("Starting analysis task=%s ticker=%s date=%s user=%s", task_id, ticker, trade_date, username)
     await ws_manager.send(task_id, {"type": "status", "status": "starting", "agent": "Initializing"})
@@ -477,6 +492,7 @@ async def run_analysis(
         raise
     finally:
         _RUNNING_TASKS.pop(task_id, None)
+        _TASK_REGISTRY.pop(task_id, None)
         await ws_manager.close_task(task_id)
 
 

@@ -12,71 +12,74 @@ from backend.services.tool_access_service import get_user_tool_access, get_user_
 from backend.services.settings_service import get_or_create_settings
 
 
-def validate_field(field: Any, value: Any) -> Any:
-    if value is None:
-        return field.default
+from pydantic import create_model, Field as PydanticField
 
-    if field.type == "boolean":
-        if not isinstance(value, bool):
-            raise ValueError(f"Field '{field.key}' must be a boolean.")
-        return value
-
-    if field.type == "number":
-        if not isinstance(value, (int, float)):
-            raise ValueError(f"Field '{field.key}' must be a number.")
-        if field.min is not None and value < field.min:
-            raise ValueError(f"Field '{field.key}' must be >= {field.min}.")
-        if field.max is not None and value > field.max:
-            raise ValueError(f"Field '{field.key}' must be <= {field.max}.")
-        return value
-
-    if field.type == "string" or field.type == "textarea" or field.type == "secret":
-        if not isinstance(value, str):
-            raise ValueError(f"Field '{field.key}' must be a string.")
-        return value
-
-    if field.type == "string_list":
-        if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
-            raise ValueError(f"Field '{field.key}' must be a list of strings.")
-        return value
-
-    if field.type == "select":
-        if not isinstance(value, str):
-            raise ValueError(f"Field '{field.key}' must be a string.")
-        allowed_vals = {opt.value for opt in field.options}
-        if allowed_vals and value not in allowed_vals:
-            raise ValueError(f"Field '{field.key}' value '{value}' must be one of {allowed_vals}.")
-        return value
-
-    if field.type == "multi_select":
-        if not isinstance(value, list) or not all(isinstance(x, str) for x in value):
-            raise ValueError(f"Field '{field.key}' must be a list of strings.")
-        allowed_vals = {opt.value for opt in field.options}
-        if allowed_vals and any(x not in allowed_vals for x in value):
-            raise ValueError(f"Field '{field.key}' values {value} must be sub-elements of {allowed_vals}.")
-        return value
-
-    return value
-
+def _get_pydantic_type(field_type: str) -> Any:
+    mapping = {
+        "boolean": bool,
+        "number": float,
+        "string": str,
+        "textarea": str,
+        "secret": str,
+        "string_list": list[str],
+        "select": str,
+        "multi_select": list[str],
+    }
+    return mapping.get(field_type, Any)
 
 def validate_tool_settings(tool: BaseAgentTool, incoming: dict[str, Any]) -> dict[str, Any]:
-    schema_by_key = {field.key: field for field in tool.settings_schema}
-    normalized = {}
-
-    for key, value in incoming.items():
-        if key not in schema_by_key:
-            raise ValueError(f"Unknown setting '{key}' for tool '{tool.key}'.")
-        field = schema_by_key[key]
-        normalized[key] = validate_field(field, value)
-
+    """Validate incoming settings against the tool's schema using dynamic Pydantic models."""
+    fields = {}
     for field in tool.settings_schema:
-        if field.required and field.key not in normalized and field.default is None:
-            raise ValueError(f"Missing required setting '{field.key}' for tool '{tool.key}'.")
-        if field.key not in normalized:
-            normalized[field.key] = field.default
+        f_type = _get_pydantic_type(field.type)
+        default = field.default
+        
+        # Build field constraints
+        extra_kwargs = {}
+        if field.type == "number":
+            if field.min is not None: extra_kwargs["ge"] = field.min
+            if field.max is not None: extra_kwargs["le"] = field.max
+        
+        # For selects, we could add Literal or Validator, but keeping it simple for now
+        # with basic type check + manual check if needed.
+        
+        fields[field.key] = (f_type, PydanticField(default=default, **extra_kwargs))
 
-    return normalized
+    # Create a dynamic Pydantic model for this tool
+    ToolModel = create_model(f"Dynamic{tool.key}Model", **fields)
+    
+    try:
+        validated_obj = ToolModel(**incoming)
+        normalized = validated_obj.model_dump()
+        
+        # Manual check for selects/options which are harder to do purely with create_model dynamic types
+        for field in tool.settings_schema:
+            if field.type in ("select", "multi_select") and field.options:
+                allowed = {opt.value for opt in field.options}
+                val = normalized.get(field.key)
+                if field.type == "select" and val not in allowed:
+                     raise ValueError(f"Field '{field.key}' value '{val}' must be one of {allowed}.")
+                if field.type == "multi_select" and val:
+                    if not all(v in allowed for v in val):
+                        raise ValueError(f"Field '{field.key}' values {val} must be sub-elements of {allowed}.")
+        
+        return normalized
+    except Exception as e:
+        # Re-wrap Pydantic errors for consistency
+        raise ValueError(str(e))
 
+async def _check_tool_availability(db: AsyncSession, user_id: int, tool: BaseAgentTool) -> bool:
+    """Helper to check if a tool is available based on the agent hierarchy."""
+    if not tool.allowed_analysts:
+        return True
+        
+    from backend.services.agent_settings_service import build_agent_runtime_context
+    from backend.trading_agents.agents.hierarchy import AgentHierarchy
+    
+    agent_ctx = await build_agent_runtime_context(db, user_id)
+    hierarchy = AgentHierarchy(agent_ctx)
+    
+    return any(hierarchy.is_enabled(a) for a in tool.allowed_analysts)
 
 async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRead:
     # 1. Fetch DB overrides for this user
@@ -87,15 +90,9 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
     )
     user_rows = {row.tool_key: row for row in result.scalars().all()}
 
-    # Also load tool access and agent settings
+    # Also load tool access
     tool_access_map = await get_user_tool_access(db, user.id)
     
-    from backend.services.agent_settings_service import build_agent_runtime_context
-    from backend.trading_agents.agents.hierarchy import AgentHierarchy
-    
-    agent_ctx = await build_agent_runtime_context(db, user.id)
-    hierarchy = AgentHierarchy(agent_ctx)
-
     # 2. Build map of all registered tools
     tools_map = {}
     for tool in registry.list():
@@ -103,14 +100,8 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
             if not tool_access_map.get(tool.key, {}).get("can_view", True):
                 continue
 
-        # Check if any associated agent is active in the hierarchy (recursive check)
-        if tool.allowed_analysts:
-            is_any_agent_enabled = any(
-                hierarchy.is_enabled(a)
-                for a in tool.allowed_analysts
-            )
-            if not is_any_agent_enabled:
-                continue
+        if not await _check_tool_availability(db, user.id, tool):
+            continue
 
         # Get defaults
         default_enabled = tool.default_enabled

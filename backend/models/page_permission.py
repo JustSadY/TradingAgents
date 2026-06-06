@@ -1,13 +1,11 @@
 from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.core.database import Base
-ALL_PAGE_KEYS = [
-    "dashboard", "analysis", "chart", "trading", "portfolio",
-    "watchlist", "orders", "performance", "alerts",
-    "ab-testing", "logs",
-]
+from backend.core.constants import PAGE_KEYS, SETTING_KEYS
+
+ALL_PAGE_KEYS = [k for k in PAGE_KEYS if k != "settings"]
 ALWAYS_ALLOWED = {"settings"}
-ALL_SETTING_KEYS = ["general", "llm", "risk", "webhooks", "presets", "cron"]
+ALL_SETTING_KEYS = SETTING_KEYS
 SECTION_FIELDS = {
     "general": [
         "output_language",

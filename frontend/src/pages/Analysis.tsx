@@ -2,6 +2,7 @@ import { useState, useRef, useEffect, useCallback } from 'react'
 import axios from 'axios'
 import { getAccessToken } from '../hooks/useAuth'
 import { useMeta } from '../hooks/useMeta'
+import { useActiveTasks } from '../hooks/useActiveTasks'
 import { notify } from '../utils/notify'
 import { exportMarkdown, exportPDF } from '../utils/exportReport'
 import { sendBrowserNotification } from '../utils/browserNotify'
@@ -9,9 +10,16 @@ import { useTranslation } from '../contexts/LanguageContext'
 import {
   Loader2, CheckCircle, AlertCircle, History,
   X, BarChart2, FileText, Zap, Square,
-  Download, FileDown, Shield, TrendingUp, TrendingDown,
-  MessageSquare, User, Scale, AlertTriangle
+  Download, FileDown, AlertTriangle
 } from 'lucide-react'
+
+// Components
+import { SignalBadge } from '../components/analysis/SignalBadge'
+import { ReportCard } from '../components/analysis/ReportCard'
+import { AnalysisControls } from '../components/analysis/AnalysisControls'
+import { AnalysisLog } from '../components/analysis/AnalysisLog'
+import { DebateHistoryWidget, getSenderStyles, parseDebateMessage } from '../components/analysis/DebateHistoryWidget'
+import { AnalysisChatWidget } from '../components/analysis/AnalysisChatWidget'
 
 interface WsEvent {
   type: string; section?: string; content?: string; signal?: string
@@ -55,50 +63,6 @@ const SECTION_LABELS: Record<string, string> = {
   bull_history: 'Bull', bear_history: 'Bear',
   investment_debate_history: 'Debate', risk_debate_history: 'Risk Debate',
   judge_decision: 'Judge',
-}
-
-const TONE_CLASSES: Record<string, { bg: string; text: string; border: string }> = {
-  positive: { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20' },
-  neutral:  { bg: 'bg-amber-500/10',  text: 'text-amber-400',  border: 'border-amber-500/20' },
-  negative: { bg: 'bg-rose-500/10',     text: 'text-rose-400',     border: 'border-rose-500/20' },
-}
-const FALLBACK_TONE: Record<string, string> = {
-  Buy: 'positive', Overweight: 'positive', Hold: 'neutral', Underweight: 'negative', Sell: 'negative',
-}
-
-function SignalBadge({ signal, large }: { signal: string | null; large?: boolean }) {
-  const meta = useMeta()
-  if (!signal) return null
-  const sig = meta?.signals.find(s => s.value === signal)
-  const tone = sig?.tone ?? FALLBACK_TONE[signal]
-  const m = tone ? TONE_CLASSES[tone] : undefined
-  const label = sig?.label ?? signal
-  if (!m) return <span className="text-slate-400 font-semibold">{label}</span>
-  return (
-    <span className={`inline-flex items-center font-bold border rounded-xl ${m.bg} ${m.text} ${m.border} ${large ? 'px-4 py-1.5 text-sm' : 'px-2.5 py-0.5 text-[10px]'}`}>
-      {label}
-    </span>
-  )
-}
-
-function ReportCard({ label, content, defaultOpen }: { label: string; content: string; defaultOpen?: boolean }) {
-  const { t } = useTranslation()
-  if (!content) return null
-  return (
-    <details open={defaultOpen} className="group border border-white/[0.04] rounded-xl overflow-hidden bg-slate-900/20">
-      <summary className="flex items-center gap-2.5 cursor-pointer select-none px-4 py-3 bg-slate-900/40 hover:bg-slate-900/80 transition-colors list-none">
-        <FileText size={14} className="text-violet-400 shrink-0" />
-        <span className="text-xs font-semibold text-slate-200 flex-1">{label}</span>
-        <span className="text-[10px] text-slate-500 group-open:hidden">{t('analysis.report_card.show')}</span>
-        <span className="text-[10px] text-slate-500 hidden group-open:inline">{t('analysis.report_card.hide')}</span>
-      </summary>
-      <div className="p-4 border-t border-white/[0.04] bg-slate-950/80">
-        <pre className="text-xs text-slate-300 whitespace-pre-wrap max-h-80 overflow-y-auto font-mono leading-relaxed select-text">
-          {content}
-        </pre>
-      </div>
-    </details>
-  )
 }
 
 const EMPTY_RUN = {
@@ -153,6 +117,8 @@ function RunTab() {
   const [costEstimate, setCostEstimate] = useState<{ min_usd: number; max_usd: number } | null>(null)
   const [existingId, setExistingId] = useState<number | null>(null)
   const [showRerunModal, setShowRerunModal] = useState(false)
+
+  const { activeTasks } = useActiveTasks()
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ ticker, date, assetType, runStatus, signal, reports, log, activeSection, analysisId }))
@@ -269,6 +235,26 @@ function RunTab() {
     }
   }, [ticker, t])
 
+  // Effect to sync with active tasks from the server (Cross-device fix)
+  useEffect(() => {
+    if (activeTasks.length > 0 && !running) {
+        // If there's an active task on the server but we are 'idle' here, sync it.
+        const task = activeTasks[0]
+        setTicker(task.ticker)
+        setDate(task.trade_date)
+        setAssetType(task.asset_type)
+        setRunning(true)
+        setRunStatus('running')
+        setLog([])
+        setReports({})
+        setSignal(null)
+        setAnalysisId(null)
+        setDetail(null)
+        localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: task.ticker, taskId: task.task_id, startedAt: new Date(task.started_at * 1000).toISOString() }))
+        attachWs(task.task_id, true)
+    }
+  }, [activeTasks, running, attachWs])
+
   useEffect(() => {
     const raw = localStorage.getItem(TASK_KEY)
     if (!raw) return
@@ -374,86 +360,17 @@ function RunTab() {
 
   return (
     <div className="space-y-6">
-      {/* Control Block */}
-      <div className="glass-panel rounded-2xl p-4 md:p-5">
-        <div className="flex flex-wrap gap-4 items-end">
-          <div className="flex-1 min-w-[120px]">
-            <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.symbol')}</label>
-            <input
-              className="glass-input rounded-xl px-3 py-2 w-full uppercase font-mono text-sm outline-none"
-              value={ticker}
-              onChange={e => setTicker(e.target.value.toUpperCase())}
-              placeholder="AAPL"
-              disabled={running}
-            />
-          </div>
-          <div className="flex-1 min-w-[140px]">
-            <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.date')}</label>
-            <input
-              type="date"
-              className="glass-input rounded-xl px-3 py-2 text-sm w-full outline-none"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              disabled={running}
-            />
-          </div>
-          <div className="flex-1 min-w-[110px]">
-            <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.type')}</label>
-            <select
-              className="glass-input rounded-xl px-3 py-2 text-sm w-full outline-none"
-              value={assetType}
-              onChange={e => setAssetType(e.target.value)}
-              disabled={running}
-            >
-              {assetTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
+      <AnalysisControls
+        ticker={ticker} setTicker={setTicker}
+        date={date} setDate={setDate}
+        assetType={assetType} setAssetType={setAssetType}
+        assetTypes={assetTypes}
+        running={running} runStatus={runStatus}
+        handleRun={handleRun} handleStop={handleStop} handleClear={handleClear}
+        signal={signal} costEstimate={costEstimate} existingId={existingId}
+        t={t}
+      />
 
-          <div className="w-full sm:w-auto flex items-center gap-2 mt-2 sm:mt-0">
-            {!running ? (
-              <button
-                onClick={handleRun}
-                disabled={!ticker.trim()}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-xs md:text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-violet-500/20 transition-all cursor-pointer"
-              >
-                <Zap size={14} /> {t('analysis.btn.start')}
-              </button>
-            ) : (
-              <button
-                onClick={handleStop}
-                className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-xs md:text-sm font-semibold text-white bg-rose-600/90 hover:bg-rose-600 shadow-md shadow-rose-500/20 transition-all cursor-pointer"
-              >
-                <Square size={12} fill="currentColor" /> {t('analysis.btn.stop')}
-              </button>
-            )}
-
-            {runStatus !== 'idle' && !running && (
-              <button onClick={handleClear} className="text-slate-500 hover:text-slate-300 hover:bg-white/5 transition-colors p-2 rounded-lg shrink-0 cursor-pointer">
-                <X size={15} />
-              </button>
-            )}
-          </div>
-
-          {runStatus === 'done' && <CheckCircle size={20} className="text-emerald-400 mb-2 hidden sm:block animate-bounce" />}
-          {runStatus === 'error' && <AlertCircle size={20} className="text-rose-400 mb-2 hidden sm:block" />}
-          {signal && <div className="mb-1"><SignalBadge signal={signal} large /></div>}
-        </div>
-
-        {!running && (
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 border-t border-white/[0.03] pt-2.5">
-            {costEstimate && (
-              <span className="text-[10px] text-slate-500 font-semibold">
-                Cost Estimate: ${(costEstimate.min_usd ?? 0).toFixed(3)} – ${(costEstimate.max_usd ?? 0).toFixed(3)}
-              </span>
-            )}
-            {existingId && (
-              <span className="text-[10px] text-amber-500 font-semibold bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg">{t('analysis.existing_analysis')}</span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Rerun Warning Modal */}
       {showRerunModal && (
         <div className="fixed inset-0 bg-black/75 z-[60] flex items-center justify-center p-5 backdrop-blur-md">
           <div className="bg-slate-900 border border-white/[0.06] rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
@@ -471,7 +388,6 @@ function RunTab() {
         </div>
       )}
 
-      {/* Live running step notification bar */}
       {running && (
         <div className="flex items-center gap-3 px-4 py-3 bg-violet-500/5 border border-violet-500/15 rounded-2xl">
           <span className="relative flex h-2 w-2 shrink-0">
@@ -488,95 +404,17 @@ function RunTab() {
         </div>
       )}
 
-      {/* Workspace columns */}
       {(log.length > 0 || reportEntries.length > 0) && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          {/* Left Column: Live Progress Log & Live adversarial debate bubbles */}
-          <div className="glass-panel rounded-2xl overflow-hidden flex flex-col h-[55vh] lg:h-[65vh]">
-            <div className="flex items-center gap-1 p-1 bg-slate-900/40 border-b border-white/[0.04]">
-              <button
-                onClick={() => setLeftTab('log')}
-                className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
-                  leftTab === 'log' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
-                }`}
-              >
-                {t('analysis.log.title')}
-              </button>
-              <button
-                onClick={() => setLeftTab('debate')}
-                className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
-                  leftTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
-                }`}
-              >
-                {t('analysis.tab.live_debate')}
-              </button>
-            </div>
-            <div className="flex-1 p-4 overflow-y-auto min-h-0">
-              {leftTab === 'log' ? (
-                <div className="space-y-1 font-mono text-[10px]">
-                  {log.map((line, i) => (
-                    <p key={i} className={`leading-relaxed ${
-                      line.startsWith('✗') ? 'text-rose-400' :
-                      line.startsWith('✓') ? 'text-emerald-400 font-semibold' :
-                      line.startsWith('—') ? 'text-violet-400 font-semibold' : 'text-slate-500'
-                    }`}>
-                      {line}
-                    </p>
-                  ))}
-                  {running && <p className="text-slate-600 animate-pulse">▋</p>}
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {liveDebate.length === 0 && (
-                    <p className="text-slate-600 text-xs text-center py-12">Debate is waiting to start...</p>
-                  )}
-                  {liveDebate.map((m, idx) => {
-                    const styles = getSenderStyles(m.sender)
-                    return (
-                      <div key={idx} className={`flex ${styles.side} animate-in fade-in duration-200`}>
-                        <div className={`border rounded-2xl px-3.5 py-2.5 text-xs flex flex-col gap-1 max-w-[85%] ${styles.bg}`}>
-                          <span className="font-bold uppercase tracking-wider text-[9px] opacity-80 flex items-center gap-1">
-                            {styles.icon} {m.sender}
-                          </span>
-                          <span className="leading-relaxed whitespace-pre-wrap">{m.content}</span>
-                        </div>
-                      </div>
-                    )
-                  })}
-                </div>
-              )}
-            </div>
-          </div>
+          <AnalysisLog leftTab={leftTab} setLeftTab={setLeftTab} log={log} liveDebate={liveDebate} t={t} />
 
-          {/* Right Column: Dynamic Reports, Debate History, QnA chat */}
           <div className="lg:col-span-2 glass-panel rounded-2xl overflow-hidden flex flex-col h-[55vh] lg:h-[65vh]">
             {detail ? (
               <>
                 <div className="flex items-center gap-1 p-1 bg-slate-900/40 border-b border-white/[0.04]">
-                  <button
-                    onClick={() => setActiveDetailTab('reports')}
-                    className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
-                      activeDetailTab === 'reports' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
-                    }`}
-                  >
-                    {t('analysis.tab.reports')}
-                  </button>
-                  <button
-                    onClick={() => setActiveDetailTab('debate')}
-                    className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
-                      activeDetailTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
-                    }`}
-                  >
-                    {t('analysis.tab.debate')}
-                  </button>
-                  <button
-                    onClick={() => setActiveDetailTab('chat')}
-                    className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
-                      activeDetailTab === 'chat' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
-                    }`}
-                  >
-                    {t('analysis.tab.qa')}
-                  </button>
+                  <button onClick={() => setActiveDetailTab('reports')} className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'reports' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.reports')}</button>
+                  <button onClick={() => setActiveDetailTab('debate')} className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.debate')}</button>
+                  <button onClick={() => setActiveDetailTab('chat')} className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'chat' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.qa')}</button>
                 </div>
                 <div className="flex-1 p-4 overflow-y-auto min-h-0">
                   {activeDetailTab === 'reports' && (
@@ -586,12 +424,8 @@ function RunTab() {
                       ))}
                     </div>
                   )}
-                  {activeDetailTab === 'debate' && (
-                    <DebateHistoryWidget investmentHistory={detail.investment_debate_history} riskHistory={detail.risk_debate_history} />
-                  )}
-                  {activeDetailTab === 'chat' && (
-                    <AnalysisChatWidget analysisId={detail.id} />
-                  )}
+                  {activeDetailTab === 'debate' && <DebateHistoryWidget investmentHistory={detail.investment_debate_history} riskHistory={detail.risk_debate_history} />}
+                  {activeDetailTab === 'chat' && <AnalysisChatWidget analysisId={detail.id} />}
                 </div>
               </>
             ) : (
@@ -934,217 +768,6 @@ export default function Analysis() {
       {tab === 'run'     && <RunTab />}
       {tab === 'multi'   && <MultiTab />}
       {tab === 'history' && <HistoryTab />}
-    </div>
-  )
-}
-
-interface DebateMessage { sender: string; content: string }
-
-function parseDebateMessage(msg: string): DebateMessage {
-  const parts = msg.split(': ')
-  if (parts.length >= 2) {
-    const sender = parts[0].trim()
-    const content = parts.slice(1).join(': ').trim()
-    return { sender, content }
-  }
-  return { sender: 'System', content: msg }
-}
-
-function getSenderStyles(sender: string) {
-  switch (sender) {
-    case 'Bull Analyst':
-    case 'BullResearcher':
-      return {
-        bg: 'bg-emerald-500/5 border-emerald-500/15 text-emerald-300 rounded-tl-none',
-        side: 'justify-start',
-        icon: <TrendingUp size={11} className="text-emerald-400 shrink-0" />
-      }
-    case 'Bear Analyst':
-    case 'BearResearcher':
-      return {
-        bg: 'bg-rose-500/5 border-rose-500/15 text-rose-300 rounded-tr-none',
-        side: 'justify-end',
-        icon: <TrendingDown size={11} className="text-rose-400 shrink-0" />
-      }
-    case 'Aggressive Analyst':
-    case 'AggressiveDebator':
-      return {
-        bg: 'bg-amber-500/5 border-amber-500/15 text-amber-300 rounded-tl-none',
-        side: 'justify-start',
-        icon: <Zap size={11} className="text-amber-400 shrink-0" />
-      }
-    case 'Conservative Analyst':
-    case 'ConservativeDebator':
-      return {
-        bg: 'bg-indigo-500/5 border-indigo-500/15 text-indigo-300 rounded-tr-none',
-        side: 'justify-end',
-        icon: <Shield size={11} className="text-indigo-400 shrink-0" />
-      }
-    case 'Neutral Analyst':
-    case 'NeutralDebator':
-      return {
-        bg: 'bg-slate-800/40 border-slate-700/30 text-slate-300',
-        side: 'justify-center mx-auto max-w-[90%]',
-        icon: <Scale size={11} className="text-slate-400 shrink-0" />
-      }
-    default:
-      return {
-        bg: 'bg-slate-900/60 border-white/[0.03] text-slate-400',
-        side: 'justify-center mx-auto',
-        icon: <User size={11} className="text-slate-500 shrink-0" />
-      }
-  }
-}
-
-function DebateHistoryWidget({ investmentHistory, riskHistory }: { investmentHistory: string; riskHistory: string }) {
-  const { t } = useTranslation()
-  const [activeTab, setActiveTab] = useState<'inv' | 'risk'>('inv')
-
-  const parseLines = (historyStr: string) => {
-    if (!historyStr) return []
-    if (historyStr.trim().startsWith('[')) {
-      try {
-        const parsed = JSON.parse(historyStr)
-        if (Array.isArray(parsed)) return parsed.map(msg => parseDebateMessage(msg))
-      } catch {  }
-    }
-    return historyStr
-      .split('\n')
-      .map(line => line.trim())
-      .filter(line => line.length > 0)
-      .map(line => parseDebateMessage(line))
-  }
-
-  const activeHistory = activeTab === 'inv' ? parseLines(investmentHistory) : parseLines(riskHistory)
-
-  return (
-    <div className="flex flex-col bg-slate-950/80 border border-white/[0.04] rounded-2xl overflow-hidden p-4 space-y-4">
-      <div className="flex gap-2 p-1 bg-slate-900/50 border border-white/[0.04] rounded-xl w-fit self-center">
-        <button
-          onClick={() => setActiveTab('inv')}
-          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer ${
-            activeTab === 'inv' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
-          }`}
-        >
-          Consensus Debate
-        </button>
-        <button
-          onClick={() => setActiveTab('risk')}
-          className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer ${
-            activeTab === 'risk' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
-          }`}
-        >
-          {t('analysis.section.risk_debate_history')}
-        </button>
-      </div>
-
-      <div className="flex-1 overflow-y-auto space-y-3 max-h-[45vh] pr-1">
-        {activeHistory.length === 0 && (
-          <p className="text-slate-600 text-xs text-center py-12">{t('analysis.reports.empty')}</p>
-        )}
-        {activeHistory.map((m, idx) => {
-          const styles = getSenderStyles(m.sender)
-          return (
-            <div key={idx} className={`flex ${styles.side}`}>
-              <div className={`border rounded-2xl px-4 py-2.5 text-xs flex flex-col gap-1 max-w-[85%] ${styles.bg}`}>
-                <span className="font-bold uppercase tracking-wider text-[9px] opacity-80 flex items-center gap-1">
-                  {styles.icon} {m.sender}
-                </span>
-                <span className="leading-relaxed whitespace-pre-wrap">{m.content}</span>
-              </div>
-            </div>
-          )
-        })}
-      </div>
-    </div>
-  )
-}
-
-function AnalysisChatWidget({ analysisId }: { analysisId: number }) {
-  const { t } = useTranslation()
-  const [messages, setMessages] = useState<{ id: number; role: 'user' | 'assistant'; content: string }[]>([])
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
-  const messagesEndRef = useRef<HTMLDivElement>(null)
-
-  useEffect(() => {
-    axios.get(`/api/analysis/${analysisId}/chat`)
-      .then(r => setMessages(r.data))
-      .catch(() => {})
-  }, [analysisId])
-
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
-
-  const handleSend = async (e?: React.FormEvent) => {
-    e?.preventDefault()
-    const msg = input.trim()
-    if (!msg || loading) return
-    setInput('')
-
-    const tempUserMsg = { id: Date.now(), role: 'user' as const, content: msg }
-    setMessages(prev => [...prev, tempUserMsg])
-    setLoading(true)
-
-    try {
-      const { data } = await axios.post(`/api/analysis/${analysisId}/chat`, { message: msg })
-      setMessages(prev => [...prev, data])
-    } catch {
-      notify('error', t('analysis.chat.error'), 'Hata')
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  return (
-    <div className="flex flex-col h-[48vh] bg-slate-950/80 border border-white/[0.04] rounded-2xl overflow-hidden">
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.length === 0 && (
-          <div className="h-full flex flex-col items-center justify-center text-center p-6 text-slate-600">
-            <MessageSquare size={26} className="text-violet-500/30 mb-2 animate-pulse" />
-            <p className="text-xs font-semibold text-slate-400">{t('analysis.chat.welcome_title')}</p>
-            <p className="text-[10px] text-slate-600 max-w-xs mt-1 leading-relaxed">{t('analysis.chat.welcome_desc')}</p>
-          </div>
-        )}
-        {messages.map(m => (
-          <div key={m.id} className={`flex ${m.role === 'user' ? 'justify-end' : 'justify-start'}`}>
-            <div className={`max-w-[85%] rounded-2xl px-4 py-2.5 text-xs leading-relaxed select-text ${
-              m.role === 'user'
-                ? 'bg-violet-600 text-white rounded-tr-none'
-                : 'bg-white/5 text-slate-200 border border-white/[0.04] rounded-tl-none'
-            }`}>
-              {m.content}
-            </div>
-          </div>
-        ))}
-        {loading && (
-          <div className="flex justify-start">
-            <div className="bg-white/5 text-slate-400 border border-white/[0.04] rounded-2xl rounded-tl-none px-4 py-2.5 text-xs flex items-center gap-2">
-              <Loader2 className="animate-spin" size={12} />
-              {t('analysis.chat.thinking')}
-            </div>
-          </div>
-        )}
-        <div ref={messagesEndRef} />
-      </div>
-
-      <form onSubmit={handleSend} className="p-3 border-t border-white/[0.04] bg-slate-900/40 flex gap-2 shrink-0">
-        <input
-          className="flex-1 glass-input rounded-xl px-3 py-2 text-xs outline-none"
-          placeholder={t('analysis.chat.placeholder')}
-          value={input}
-          onChange={e => setInput(e.target.value)}
-          disabled={loading}
-        />
-        <button
-          type="submit"
-          disabled={loading || !input.trim()}
-          className="bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer"
-        >
-          {t('analysis.chat.send')}
-        </button>
-      </form>
     </div>
   )
 }

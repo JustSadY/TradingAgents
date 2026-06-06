@@ -35,12 +35,23 @@ class WebSocketManager:
         buf.append(event)
         self._schedule_buffer_cleanup(task_id, ttl=600)  # Refresh with 10-minute sliding TTL
         text = json.dumps(event, ensure_ascii=False)
+        
+        active_conns = self._connections.get(task_id, [])
+        if not active_conns:
+            return
+
         dead: list[WebSocket] = []
-        for ws in list(self._connections.get(task_id, [])):
-            try:
-                await ws.send_text(text)
-            except Exception:
-                dead.append(ws)
+        # Send to all active connections for this task
+        results = await asyncio.gather(
+            *[ws.send_text(text) for ws in active_conns],
+            return_exceptions=True
+        )
+        
+        for i, res in enumerate(results):
+            if isinstance(res, Exception):
+                dead.append(active_conns[i])
+                _logger.debug("WS send failed for task=%s, marking as dead: %s", task_id, res)
+
         for ws in dead:
             self.disconnect(task_id, ws)
     async def close_task(self, task_id: str):

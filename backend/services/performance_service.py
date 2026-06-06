@@ -1,11 +1,13 @@
 import logging
 from datetime import date, datetime, timedelta, timezone
 from backend.core.utils import resolve_benchmark
+from backend.core.constants import (
+    BUY_SIGNALS as _BUY_SIGNALS,
+    SELL_SIGNALS as _SELL_SIGNALS,
+    DEFAULT_HOLDING_DAYS as HOLDING_DAYS,
+)
 
 _logger = logging.getLogger(__name__)
-_BUY_SIGNALS = {"Buy", "Overweight"}
-_SELL_SIGNALS = {"Sell", "Underweight"}
-HOLDING_DAYS = 5
 
 async def backfill_returns(db) -> int:
     from sqlalchemy import select
