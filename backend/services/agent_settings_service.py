@@ -28,14 +28,9 @@ def validate_agent_settings(agent: AgentInfo, incoming: dict[str, Any]) -> dict[
 
 
 async def get_agent_settings_by_scope(db: AsyncSession, scope: str, user_id: int | None = None) -> AgentSettingsRead:
-    stmt = select(AgentSetting).where(AgentSetting.scope == scope)
-    if scope == "user":
-        stmt = stmt.where(AgentSetting.user_id == user_id)
-    else:
-        stmt = stmt.where(AgentSetting.user_id.is_(None))
-    
-    result = await db.execute(stmt)
-    rows = {row.agent_key: row for row in result.scalars().all()}
+    from backend.repositories.agent_settings import get_agent_settings_by_scope as _repo_get
+    rows_list = await _repo_get(db, scope, user_id)
+    rows = {row.agent_key: row for row in rows_list}
 
     agents_map = {}
     for agent in list_agents():
@@ -64,14 +59,9 @@ async def get_server_agent_settings(db: AsyncSession) -> AgentSettingsRead:
 async def apply_agent_settings_update_by_scope(
     db: AsyncSession, scope: str, body: AgentSettingsUpdate, user_id: int | None = None
 ) -> AgentSettingsRead:
-    stmt = select(AgentSetting).where(AgentSetting.scope == scope)
-    if scope == "user":
-        stmt = stmt.where(AgentSetting.user_id == user_id)
-    else:
-        stmt = stmt.where(AgentSetting.user_id.is_(None))
-
-    result = await db.execute(stmt)
-    rows = {row.agent_key: row for row in result.scalars().all()}
+    from backend.repositories.agent_settings import get_agent_settings_by_scope as _repo_get
+    rows_list = await _repo_get(db, scope, user_id)
+    rows = {row.agent_key: row for row in rows_list}
 
     for agent_key, update in body.agents.items():
         agent = get_agent(agent_key)
@@ -147,21 +137,14 @@ def build_agent_runtime_state(agent: AgentInfo, server_row: AgentSetting | None,
 
 
 async def build_agent_runtime_context(db: AsyncSession, user_id: int | None) -> dict[str, Any]:
-    result = await db.execute(
-        select(AgentSetting)
-        .where(AgentSetting.scope == "server")
-        .where(AgentSetting.user_id.is_(None))
-    )
-    server_rows = {row.agent_key: row for row in result.scalars().all()}
+    from backend.repositories.agent_settings import get_server_agent_settings as _repo_get_server, get_user_agent_settings as _repo_get_user
+    server_rows_list = await _repo_get_server(db)
+    server_rows = {row.agent_key: row for row in server_rows_list}
 
     user_rows = {}
     if user_id is not None:
-        result = await db.execute(
-            select(AgentSetting)
-            .where(AgentSetting.scope == "user")
-            .where(AgentSetting.user_id == user_id)
-        )
-        user_rows = {row.agent_key: row for row in result.scalars().all()}
+        user_rows_list = await _repo_get_user(db, user_id)
+        user_rows = {row.agent_key: row for row in user_rows_list}
 
     context = {}
     for agent in list_agents():

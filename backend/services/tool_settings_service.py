@@ -83,12 +83,9 @@ async def _check_tool_availability(db: AsyncSession, user_id: int, tool: BaseAge
 
 async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRead:
     # 1. Fetch DB overrides for this user
-    result = await db.execute(
-        select(AgentToolSetting)
-        .where(AgentToolSetting.scope == "user")
-        .where(AgentToolSetting.user_id == user.id)
-    )
-    user_rows = {row.tool_key: row for row in result.scalars().all()}
+    from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
+    user_rows_list = await _repo_get_user(db, user.id)
+    user_rows = {row.tool_key: row for row in user_rows_list}
 
     # Also load tool access
     tool_access_map = await get_user_tool_access(db, user.id)
@@ -119,12 +116,9 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
 
 
 async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
-    result = await db.execute(
-        select(AgentToolSetting)
-        .where(AgentToolSetting.scope == "server")
-        .where(AgentToolSetting.user_id.is_(None))
-    )
-    server_rows = {row.tool_key: row for row in result.scalars().all()}
+    from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
+    server_rows_list = await _repo_get_server(db)
+    server_rows = {row.tool_key: row for row in server_rows_list}
 
     tools_map = {}
     for tool in registry.list():
@@ -144,12 +138,9 @@ async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
 
 async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSettingsUpdate) -> ToolSettingsRead:
     # Get existing user rows
-    result = await db.execute(
-        select(AgentToolSetting)
-        .where(AgentToolSetting.scope == "user")
-        .where(AgentToolSetting.user_id == user.id)
-    )
-    user_rows = {row.tool_key: row for row in result.scalars().all()}
+    from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
+    user_rows_list = await _repo_get_user(db, user.id)
+    user_rows = {row.tool_key: row for row in user_rows_list}
 
     # Also load agent settings
     from backend.services.agent_settings_service import build_agent_runtime_context
@@ -202,12 +193,9 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
 
 
 async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettingsUpdate) -> ToolSettingsRead:
-    result = await db.execute(
-        select(AgentToolSetting)
-        .where(AgentToolSetting.scope == "server")
-        .where(AgentToolSetting.user_id.is_(None))
-    )
-    server_rows = {row.tool_key: row for row in result.scalars().all()}
+    from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
+    server_rows_list = await _repo_get_server(db)
+    server_rows = {row.tool_key: row for row in server_rows_list}
 
     for tool_key, update in body.tools.items():
         tool = registry.get(tool_key)
@@ -277,22 +265,15 @@ def build_tool_runtime_state(tool: BaseAgentTool, server_row: AgentToolSetting |
 
 async def build_global_runtime_context(db: AsyncSession, user_id: int | None) -> dict[str, Any]:
     # 1. Load Server Tool Settings
-    result = await db.execute(
-        select(AgentToolSetting)
-        .where(AgentToolSetting.scope == "server")
-        .where(AgentToolSetting.user_id.is_(None))
-    )
-    server_rows = {row.tool_key: row for row in result.scalars().all()}
+    from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server, get_user_tool_settings as _repo_get_user
+    server_rows_list = await _repo_get_server(db)
+    server_rows = {row.tool_key: row for row in server_rows_list}
 
     # 2. Load User Tool Settings
     user_rows = {}
     if user_id is not None:
-        result = await db.execute(
-            select(AgentToolSetting)
-            .where(AgentToolSetting.scope == "user")
-            .where(AgentToolSetting.user_id == user_id)
-        )
-        user_rows = {row.tool_key: row for row in result.scalars().all()}
+        user_rows_list = await _repo_get_user(db, user_id)
+        user_rows = {row.tool_key: row for row in user_rows_list}
 
     # 3. Build merged active tool settings namespaces
     server_settings_map = {}

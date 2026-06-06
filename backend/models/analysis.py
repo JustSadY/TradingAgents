@@ -38,6 +38,8 @@ class AnalysisResult(Base):
     llm_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     preset_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     triggered_by: Mapped[str] = mapped_column(String(20), default="manual")
+    task_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True, unique=True)
+    status: Mapped[str] = mapped_column(String(20), default="completed", index=True)
     raw_return: Mapped[float | None] = mapped_column(Float, nullable=True)
     alpha_return: Mapped[float | None] = mapped_column(Float, nullable=True)
     holding_days: Mapped[int | None] = mapped_column(Integer, nullable=True)

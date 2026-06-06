@@ -31,5 +31,14 @@ async def list_historical_analyses(
 
 
 async def get_analysis_by_id(db: AsyncSession, analysis_id: int) -> AnalysisResult | None:
-    result = await db.execute(by_id(AnalysisResult, analysis_id))
+    result = await db.execute(select(AnalysisResult).where(AnalysisResult.id == analysis_id))
     return result.scalar_one_or_none()
+
+
+async def get_sentiment_history_by_ticker(db: AsyncSession, ticker: str):
+    result = await db.execute(
+        select(AnalysisResult.trade_date, AnalysisResult.signal)
+        .where(AnalysisResult.ticker == ticker)
+        .order_by(AnalysisResult.trade_date.asc())
+    )
+    return result.all()

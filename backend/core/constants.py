@@ -1,3 +1,4 @@
+from datetime import timedelta
 from typing import Set
 
 # Application Structure
@@ -8,6 +9,15 @@ PAGE_KEYS = [
 ]
 
 SETTING_KEYS = ["general", "llm", "risk", "webhooks", "cron", "presets"]
+
+PERIOD_DELTAS = {
+    "1m": timedelta(days=31),
+    "3m": timedelta(days=92),
+    "6m": timedelta(days=183),
+    "1y": timedelta(days=365),
+    "2y": timedelta(days=730),
+    "5y": timedelta(days=1825),
+}
 
 # Analysis Signals
 BUY_SIGNALS: Set[str] = {"Buy", "Overweight"}
@@ -33,6 +43,16 @@ MODEL_COST_PER_1K: dict[str, float] = {
     "gemini-1.5-flash": 0.000075,
     "gemini-2.0-flash": 0.000075,
     "gemini-2.0": 0.000075,
+}
+
+# Sentiment values for charting and analytics
+SIGNAL_SENTIMENT_VALUES = {
+    "Buy": 0.85,
+    "Overweight": 0.45,
+    "Hold": 0.0,
+    "Neutral": 0.0,
+    "Underweight": -0.45,
+    "Sell": -0.85,
 }
 
 # Tone mappings (could also be here if shared)

@@ -317,6 +317,32 @@ async def run_analysis(
     username = user.username if user else "system"
     _logger.info("Starting analysis task=%s ticker=%s date=%s user=%s", task_id, ticker, trade_date, username)
     await ws_manager.send(task_id, {"type": "status", "status": "starting", "agent": "Initializing"})
+
+    # PERSISTENCE: Create initial skeleton row
+    row = AnalysisResult(
+        task_id=task_id,
+        user_id=user.id if user else None,
+        ticker=ticker,
+        trade_date=trade_date,
+        asset_type=asset_type,
+        status="running",
+        triggered_by=triggered_by,
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+
+    async def _update_row(**fields):
+        # Local helper to incrementally save progress to DB
+        # Re-fetch is safer in long async runs
+        stmt = select(AnalysisResult).where(AnalysisResult.id == row.id)
+        current_res = await db.execute(stmt)
+        curr = current_res.scalar_one_or_none()
+        if curr:
+            for k, v in fields.items():
+                setattr(curr, k, v)
+            await db.commit()
+
     loop = asyncio.get_running_loop()
 
     def _emit(event: dict) -> None:
@@ -407,6 +433,8 @@ async def run_analysis(
                     _emit({"type": "debate_bubble", "debate_type": "risk", "message": lines[-1]})
             for key, value in chunk.items():
                 if key in _REPORT_FIELDS and value and value != prev_state.get(key):
+                    # PERSISTENCE: Save each report part as it arrives
+                    await _update_row(**{key: value})
                     _emit({"type": "report", "section": key, "content": value})
                     prev_state[key] = value
 
@@ -421,10 +449,10 @@ async def run_analysis(
         result = PropagateResult.from_state(final_state, signal)
         inv_debate = final_state.get("investment_debate_state", {}) or {}
         risk_debate = final_state.get("risk_debate_state", {}) or {}
-        row = AnalysisResult(
-            ticker=ticker,
-            trade_date=trade_date,
-            asset_type=asset_type,
+
+        # PERSISTENCE: Update the existing row with final results
+        await _update_row(
+            status="completed",
             signal=result.signal,
             market_report=result.market_report,
             sentiment_report=result.sentiment_report,
@@ -448,13 +476,11 @@ async def run_analysis(
             tokens_in=stats.get("tokens_in", 0),
             tokens_out=stats.get("tokens_out", 0),
             duration_seconds=duration,
-            triggered_by=triggered_by,
             llm_provider=settings.llm_provider,
             llm_model=settings.llm_model,
             preset_name=settings.active_preset_name or f"{settings.llm_provider}:{settings.llm_model}",
         )
-        db.add(row)
-        await db.flush()
+
         _track_background_task(_extract_and_save_annotations(
             row.id, 
             result.market_report, 
@@ -484,10 +510,12 @@ async def run_analysis(
         return task_id, row
     except asyncio.CancelledError:
         _logger.info("Analysis cancelled task=%s user=%s", task_id, username)
+        await _update_row(status="cancelled")
         await ws_manager.send(task_id, {"type": "error", "message": "Analysis cancelled."})
         raise
     except Exception as exc:
         _logger.error("Analysis failed task=%s user=%s: %s", task_id, username, exc, exc_info=True)
+        await _update_row(status="failed")
         await ws_manager.send(task_id, {"type": "error", "message": str(exc)})
         raise
     finally:

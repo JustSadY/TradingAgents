@@ -14,6 +14,13 @@ _SENSITIVE_ENV_VARS = (
     "OPENROUTER_API_KEY", "NVIDIA_API_KEY", "LITELLM_API_KEY",
     "ALPHA_VANTAGE_API_KEY", "REDDIT_CLIENT_ID", "REDDIT_CLIENT_SECRET",
 )
+
+_DYNAMIC_LITERALS: set[str] = set()
+
+def register_sensitive_literal(value: str):
+    """Add a dynamic value to be masked in logs (e.g. user webhook URLs)."""
+    if value and len(value) >= 6:
+        _DYNAMIC_LITERALS.add(value)
 _PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_\-]{12,}"),
     re.compile(r"xai-[A-Za-z0-9_\-]{12,}"),
@@ -35,8 +42,9 @@ def _build_literals() -> list[str]:
 def redact_text(text: str, literals: list[str] | None = None) -> str:
     if not text:
         return text
-    literals = _LITERALS if literals is None else literals
-    for secret in literals:
+    # Combine static environment-based literals with dynamic user-based literals
+    combined_literals = (list(_DYNAMIC_LITERALS) + _LITERALS) if literals is None else literals
+    for secret in combined_literals:
         if secret in text:
             text = text.replace(secret, _MASK)
     for pat in _PATTERNS:

@@ -18,22 +18,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.utils import safe_ticker_component
 from backend.models.analysis import AnalysisResult
 from backend.services.indicator_service import calculate_ema, calculate_macd, calculate_rsi, evaluate_formula_safely
+from backend.core.constants import SIGNAL_SENTIMENT_VALUES, PERIOD_DELTAS
 
 _logger = logging.getLogger(__name__)
-
-_PERIOD_DELTAS = {
-    "1m": timedelta(days=31),
-    "3m": timedelta(days=92),
-    "6m": timedelta(days=183),
-    "1y": timedelta(days=365),
-    "2y": timedelta(days=730),
-    "5y": timedelta(days=1825),
-}
-
-_SIGNAL_SENTIMENT = {
-    "Buy": 0.85, "Overweight": 0.45, "Hold": 0.0, "Neutral": 0.0,
-    "Sell": -0.85, "Underweight": -0.45,
-}
 
 
 class MarketDataError(Exception):
@@ -58,7 +45,7 @@ def _resolve_dates(period: str, start_date: str | None, end_date: str | None) ->
         s, e = start_date, end_date
     else:
         end = datetime.now()
-        start = end - _PERIOD_DELTAS.get(period, _PERIOD_DELTAS["1y"])
+        start = end - PERIOD_DELTAS.get(period, PERIOD_DELTAS["1y"])
         s, e = start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
     try:
         datetime.strptime(s, "%Y-%m-%d")
@@ -139,13 +126,10 @@ async def get_custom_indicator_series(
 
 async def get_sentiment_history(db: AsyncSession, ticker: str) -> dict:
     ticker = _clean_ticker(ticker)
-    rows = (await db.execute(
-        select(AnalysisResult.trade_date, AnalysisResult.signal)
-        .where(AnalysisResult.ticker == ticker)
-        .order_by(AnalysisResult.trade_date.asc())
-    )).all()
+    from backend.repositories.analysis import get_sentiment_history_by_ticker
+    rows = await get_sentiment_history_by_ticker(db, ticker)
     history = [
-        {"time": trade_date, "value": _SIGNAL_SENTIMENT.get(signal, 0.0)}
+        {"time": trade_date, "value": SIGNAL_SENTIMENT_VALUES.get(signal, 0.0)}
         for trade_date, signal in rows
     ]
     if not history:

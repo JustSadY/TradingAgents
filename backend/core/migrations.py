@@ -46,7 +46,8 @@ _ALLOWED_COLUMNS = {
         "risk_debate_history", "judge_decision", "chart_annotations",
         "raw_return", "alpha_return", "holding_days", "llm_provider",
         "llm_model", "preset_name", "reflection", "llm_calls", "tool_calls",
-        "tokens_in", "tokens_out", "duration_seconds", "triggered_by"
+        "tokens_in", "tokens_out", "duration_seconds", "triggered_by",
+        "task_id", "status"
     },
     "portfolios": {
         "user_id", "initial_capital", "current_balance", "cash_available"
@@ -123,6 +124,8 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("analysis_results", "tokens_out",                  "INTEGER DEFAULT 0"),
     ("analysis_results", "duration_seconds",            "FLOAT DEFAULT 0.0"),
     ("analysis_results", "triggered_by",                "VARCHAR(20) DEFAULT 'manual'"),
+    ("analysis_results", "task_id",                     "VARCHAR(100)"),
+    ("analysis_results", "status",                      "VARCHAR(20) DEFAULT 'completed'"),
     ("app_settings", "max_debate_rounds",          "INTEGER DEFAULT 1"),
     ("app_settings", "max_risk_rounds",            "INTEGER DEFAULT 1"),
     ("app_settings", "max_position_size_pct",      "FLOAT DEFAULT 10.0"),

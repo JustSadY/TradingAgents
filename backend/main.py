@@ -41,6 +41,19 @@ async def lifespan(app: FastAPI):
     _logger.info("Starting TradingAgents Web API...")
     await create_all_tables()
     await _seed_admin_user()
+    
+    # PERSISTENCE: Cleanup analyses that were interrupted by a crash/restart
+    try:
+        from sqlalchemy import update
+        from backend.core.database import AsyncSessionLocal
+        from backend.models.analysis import AnalysisResult
+        async with AsyncSessionLocal() as db:
+            stmt = update(AnalysisResult).where(AnalysisResult.status == "running").values(status="failed")
+            await db.execute(stmt)
+            await db.commit()
+    except Exception as e:
+        _logger.warning("Failed to cleanup stale analyses on startup: %s", e)
+
     await db_log_handler.start()
     
     # Recover any lost alert analyses from crash/abrupt shutdown

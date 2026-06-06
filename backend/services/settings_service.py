@@ -21,6 +21,9 @@ async def get_or_create_settings(
 ) -> AppSettings:
     """Return the settings row for ``user`` (or the global row), creating it lazily."""
     user_id = getattr(user, "id", None) if user is not None else None
+    
+    from backend.core.log_redaction import register_sensitive_literal
+
     if user_id is not None:
         result = await db.execute(select(AppSettings).where(AppSettings.user_id == user_id))
         settings = result.scalar_one_or_none()
@@ -28,13 +31,20 @@ async def get_or_create_settings(
             settings = AppSettings(user_id=user_id)
             db.add(settings)
             await db.flush()
+        
+        if settings.webhook_url:
+            register_sensitive_literal(settings.webhook_url)
         return settings
+    
     result = await db.execute(select(AppSettings).where(AppSettings.user_id.is_(None)).limit(1))
     settings = result.scalar_one_or_none()
     if settings is None:
         settings = AppSettings()
         db.add(settings)
         await db.flush()
+    
+    if settings.webhook_url:
+        register_sensitive_literal(settings.webhook_url)
     return settings
 
 
@@ -61,6 +71,11 @@ async def apply_settings_update(
     if has_changes:
         # An explicit edit detaches the row from any named preset.
         settings.active_preset_name = None
+    
+    if settings.webhook_url:
+        from backend.core.log_redaction import register_sensitive_literal
+        register_sensitive_literal(settings.webhook_url)
+
     settings.updated_at = datetime.now(timezone.utc)
     await db.flush()
     
