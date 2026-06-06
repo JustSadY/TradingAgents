@@ -2,7 +2,6 @@ import asyncio
 from typing import Awaitable
 import json as _json
 import logging
-import os as _os
 import tempfile
 import time
 import uuid

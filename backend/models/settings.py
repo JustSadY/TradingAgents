@@ -4,8 +4,8 @@ from typing import Any
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
 from backend.core.database import Base
-def _json_default(value: Any) -> str:
-    return json.dumps(value)
+
+
 class AppSettings(Base):
     __tablename__ = "app_settings"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

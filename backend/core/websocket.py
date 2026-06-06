@@ -62,8 +62,6 @@ class WebSocketManager:
                 pass
         self._connections.pop(task_id, None)
         self._schedule_buffer_cleanup(task_id, ttl=_BUFFER_TTL)
-    def active_tasks(self) -> list[str]:
-        return list(self._connections.keys())
     def _schedule_buffer_cleanup(self, task_id: str, ttl: int = _BUFFER_TTL):
         existing = self._cleanup_handles.pop(task_id, None)
         if existing:

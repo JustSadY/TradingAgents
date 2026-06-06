@@ -18,5 +18,3 @@ def get_trader(
             f"Available: {list(_REGISTRY.keys())}"
         )
     return cls(portfolio_id=portfolio_id, initial_capital=initial_capital, db=db)
-def list_available_brokers() -> list[str]:
-    return list(_REGISTRY.keys())

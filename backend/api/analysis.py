@@ -21,7 +21,6 @@ from backend.models.portfolio_analysis import MultiTickerAnalysis
 from backend.api.deps import get_current_user
 from backend.repositories.common import scope_to_user
 from backend.services.settings_service import get_or_create_settings
-import json as _json
 from backend.core.utils import safe_ticker_component
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 _logger = logging.getLogger(__name__)
