@@ -36,3 +36,77 @@ async def email_exists(db: AsyncSession, email: str, exclude_user_id: int | None
         query = query.where(User.id != exclude_user_id)
     result = await db.execute(query)
     return result.scalar_one_or_none() is not None
+
+
+async def list_users(db: AsyncSession) -> list[User]:
+    """List all users ordered by ID."""
+    result = await db.execute(select(User).order_by(User.id))
+    return list(result.scalars().all())
+
+async def create_user_with_permissions(
+    db: AsyncSession, 
+    username: str, 
+    hashed_password: str, 
+    email: str | None, 
+    display_name: str | None, 
+    role: str
+) -> User:
+    from backend.models.page_permission import UserPagePermission, UserSettingPermission
+    from backend.core.constants import SETTING_KEYS
+
+    user = User(
+        username=username,
+        hashed_password=hashed_password,
+        email=email,
+        display_name=display_name,
+        role=role,
+    )
+    db.add(user)
+    await db.flush()
+    
+    # Default permissions
+    db.add(UserPagePermission(user_id=user.id, page_key="dashboard", allowed=True))
+    db.add(UserPagePermission(user_id=user.id, page_key="portfolio", allowed=True))
+    
+    for s_key in SETTING_KEYS:
+        db.add(UserSettingPermission(user_id=user.id, setting_key=s_key, allowed=True))
+    
+    await db.flush()
+    return user
+
+
+async def update_user_profile(
+    db: AsyncSession, 
+    user: User, 
+    email: str | None = None, 
+    display_name: str | None = None, 
+    hashed_password: str | None = None
+) -> User:
+    """Update a user's basic profile fields."""
+    if email is not None:
+        user.email = email
+    if display_name is not None:
+        user.display_name = display_name
+    if hashed_password is not None:
+        user.hashed_password = hashed_password
+    return user
+
+
+async def update_user_admin(
+    db: AsyncSession, 
+    user: User, 
+    role: str | None = None, 
+    is_active: bool | None = None, 
+    email: str | None = None, 
+    display_name: str | None = None
+) -> User:
+    """Update a user's administrative fields."""
+    if role is not None:
+        user.role = role
+    if is_active is not None:
+        user.is_active = is_active
+    if email is not None:
+        user.email = email
+    if display_name is not None:
+        user.display_name = display_name
+    return user

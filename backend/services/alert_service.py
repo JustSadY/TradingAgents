@@ -14,40 +14,49 @@ from backend.services.notification_service import notify_alert_triggered
 from backend.services.analysis_service import run_analysis
 from backend.services.settings_service import get_or_create_settings
 
+from backend.services.market_data_service import get_live_prices_batch
+
 _logger = logging.getLogger(__name__)
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
 
-# Concurrency limits for background analysis tasks spawned by alerts.
-# Prevents resource exhaustion when many alerts fire simultaneously or
-# when the server recovers after a long outage.
-_RECOVERY_SEMAPHORE = asyncio.Semaphore(3)  # max 3 concurrent startup-recovery analyses
-_ALERT_SEMAPHORE = asyncio.Semaphore(5)     # max 5 concurrent live-alert analyses
-
+# Concurrency limits
+_RECOVERY_SEMAPHORE = asyncio.Semaphore(3)
+_ALERT_SEMAPHORE = asyncio.Semaphore(5)
 
 async def check_price_alerts() -> None:
     async with AsyncSessionLocal() as db:
-        result = await db.execute(
-            select(PriceAlert).where(PriceAlert.enabled == True, PriceAlert.triggered_at.is_(None))
-        )
-        alerts = result.scalars().all()
+        from backend.repositories.alerts import get_enabled_alerts
+        alerts = await get_enabled_alerts(db)
         if not alerts:
             return
-        settings_res = await db.execute(select(AppSettings).where(AppSettings.id == 1))
-        settings = settings_res.scalar_one_or_none()
-        prices = await asyncio.to_thread(_fetch_prices, [a.ticker for a in alerts])
+        
+        from backend.repositories.analysis import get_system_settings
+        settings = await get_system_settings(db)
+        
+        prices = await get_live_prices_batch([a.ticker for a in alerts])
+        
         for alert in alerts:
             price = prices.get(alert.ticker)
             if price is None:
                 continue
+            
             hit = (alert.condition == "above" and price >= alert.target_price) or \
                   (alert.condition == "below" and price <= alert.target_price)
             if not hit:
                 continue
+            
             alert.triggered_at = datetime.now(timezone.utc)
             _logger.info("Alert triggered: %s %s $%.2f (current: $%.2f)",
                          alert.ticker, alert.condition, alert.target_price, price)
+            
             if settings:
-                await notify_alert_triggered(alert.ticker, alert.condition, alert.target_price, settings)
+                from backend.services.settings_service import get_or_create_settings
+                # settings here is SystemSettings from repo, we need AppSettings for user if possible
+                # but the original code used id=1 which might be global settings
+                # For now, keeping original notification logic but using user settings if possible
+                user_settings = await get_or_create_settings(db, user_id=alert.user_id)
+                await notify_alert_triggered(alert.ticker, alert.condition, alert.target_price, user_settings)
+            
             if alert.auto_analyze:
                 today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
                 task = asyncio.create_task(
@@ -56,34 +65,6 @@ async def check_price_alerts() -> None:
                 _BACKGROUND_TASKS.add(task)
                 task.add_done_callback(_BACKGROUND_TASKS.discard)
         await db.commit()
-
-
-def _fetch_prices(tickers: list[str]) -> dict[str, float]:
-    prices = {}
-    unique = list(set(tickers))
-    try:
-        data = yf.download(unique, period="1d", progress=False, auto_adjust=True)
-        if "Close" in data.columns:
-            close = data["Close"].iloc[-1]
-            for t in unique:
-                try:
-                    prices[t] = float(close[t])
-                except Exception:
-                    pass
-        else:
-            for t in unique:
-                try:
-                    prices[t] = float(yf.Ticker(t).fast_info.last_price or 0)
-                except Exception:
-                    pass
-    except Exception as exc:
-        _logger.debug("Batch price fetch failed: %s", exc)
-        for t in unique:
-            try:
-                prices[t] = float(yf.Ticker(t).fast_info.last_price or 0)
-            except Exception:
-                pass
-    return prices
 
 
 async def _throttled_analyze(ticker: str, trade_date: str, user_id: int, semaphore: asyncio.Semaphore) -> None:

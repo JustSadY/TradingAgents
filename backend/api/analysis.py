@@ -61,23 +61,10 @@ async def list_analysis(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = (
-        select(AnalysisResult)
-        .options(
-            defer(AnalysisResult.bull_history),
-            defer(AnalysisResult.bear_history),
-            defer(AnalysisResult.investment_debate_history),
-            defer(AnalysisResult.risk_debate_history),
-        )
-        .order_by(desc(AnalysisResult.created_at))
-        .limit(limit)
-        .offset(offset)
-    )
-    if ticker:
-        q = q.where(AnalysisResult.ticker == ticker.upper())
-    q = scope_to_user(q, AnalysisResult, current_user)
-    result = await db.execute(q)
-    return result.scalars().all()
+    from backend.repositories.analysis import list_analyses as _repo_list
+    return await _repo_list(db, user=current_user, ticker=ticker, limit=limit, offset=offset)
+
+
 @router.post("/{task_id}/cancel")
 async def cancel_analysis(
     task_id: str,
@@ -86,6 +73,8 @@ async def cancel_analysis(
     from backend.services.analysis_service import cancel_analysis as _cancel
     cancelled = await _cancel(task_id)
     return {"cancelled": cancelled, "task_id": task_id}
+
+
 @router.get("/cost-estimate")
 async def cost_estimate(
     analysts: str = Query(default="market,news,fundamentals,social"),
@@ -93,8 +82,10 @@ async def cost_estimate(
     model: str = Query(default="gpt-4o"),
     _: User = Depends(get_current_user),
 ):
-    from backend.services.analysis_stats_service import estimate_cost
-    return estimate_cost(analysts, debate_rounds, model)
+    from backend.services.analysis_stats_service import estimate_cost as _est
+    return _est(analysts, debate_rounds, model)
+
+
 @router.get("/ab-comparison")
 async def get_ab_comparison(
     db: AsyncSession = Depends(get_db),
@@ -102,23 +93,29 @@ async def get_ab_comparison(
 ):
     from backend.services.analysis_stats_service import get_ab_comparison as _ab
     return await _ab(db)
+
+
 @router.get("/performance")
 async def get_performance(
     ticker: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    from backend.services.analysis_stats_service import get_signal_performance
-    return await get_signal_performance(db, ticker)
+    from backend.services.analysis_stats_service import get_signal_performance as _perf
+    return await _perf(db, ticker)
+
+
 @router.get("/performance-attribution")
 async def get_performance_attribution(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    from backend.services.performance_service import get_analyst_attribution_stats
-    return await get_analyst_attribution_stats(db)
+    from backend.services.performance_service import get_analyst_attribution_stats as _attr
+    return await _attr(db)
+
+
 @router.post("/run-portfolio", response_model=MultiTickerRunResponse)
-async def run_portfolio(
+async def run_portfolio_run(
     body: MultiTickerRunRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
@@ -138,6 +135,8 @@ async def run_portfolio(
         tickers, body.trade_date, body.asset_type, settings, current_user,
     )
     return MultiTickerRunResponse(task_id=task_id, tickers=tickers, trade_date=body.trade_date)
+
+
 @router.get("/portfolio-history", response_model=list[MultiTickerListItem])
 async def list_portfolio_analyses(
     limit: int = Query(default=20, ge=1, le=100),
@@ -145,10 +144,8 @@ async def list_portfolio_analyses(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = select(MultiTickerAnalysis).order_by(desc(MultiTickerAnalysis.created_at)).limit(limit).offset(offset)
-    q = scope_to_user(q, MultiTickerAnalysis, current_user)
-    result = await db.execute(q)
-    rows = result.scalars().all()
+    from backend.repositories.analysis import list_multi_ticker_analyses as _repo_list
+    rows = await _repo_list(db, user=current_user, limit=limit, offset=offset)
     return [
         MultiTickerListItem(
             id=r.id,
@@ -160,18 +157,16 @@ async def list_portfolio_analyses(
         )
         for r in rows
     ]
+
+
 @router.get("/portfolio/{portfolio_id}", response_model=MultiTickerResultRead)
 async def get_portfolio_analysis(
     portfolio_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = scope_to_user(
-        select(MultiTickerAnalysis).where(MultiTickerAnalysis.id == portfolio_id),
-        MultiTickerAnalysis, current_user,
-    )
-    result = await db.execute(q)
-    row = result.scalar_one_or_none()
+    from backend.repositories.analysis import get_multi_ticker_analysis_by_id as _repo_get
+    row = await _repo_get(db, portfolio_id, user=current_user)
     if row is None:
         raise HTTPException(status_code=404, detail="Portfolio analysis not found")
     return MultiTickerResultRead(
@@ -184,18 +179,16 @@ async def get_portfolio_analysis(
         triggered_by=row.triggered_by,
         created_at=row.created_at,
     )
+
+
 @router.get("/{analysis_id}", response_model=AnalysisResultRead)
 async def get_analysis(
     analysis_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = scope_to_user(
-        select(AnalysisResult).where(AnalysisResult.id == analysis_id),
-        AnalysisResult, current_user,
-    )
-    result = await db.execute(q)
-    row = result.scalar_one_or_none()
+    from backend.repositories.analysis import get_analysis_by_id as _repo_get
+    row = await _repo_get(db, analysis_id, user=current_user)
     if row is None:
         raise HTTPException(status_code=404, detail="Analysis not found")
     return row

@@ -16,11 +16,8 @@ from typing import Optional
 
 from backend.trading_agents.agents.runtime.risk_math import calculate_kelly_size, get_risk_reward_from_plan
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-
 from backend.services.execution.base import OrderRequest, OrderResult
-from backend.models.system_settings import SystemSettings
 from backend.services.mock_trading_service import get_or_create_sim_portfolio
 from backend.services.execution.factory import get_trader
 
@@ -157,9 +154,8 @@ async def place_signal_order(
         return None
 
     # Retrieve system settings to verify active broker mode
-    sys_settings = (await db.execute(
-        select(SystemSettings).where(SystemSettings.id == 1)
-    )).scalar_one_or_none()
+    from backend.repositories.analysis import get_system_settings
+    sys_settings = await get_system_settings(db)
     sys_mode = sys_settings.trading_mode if sys_settings else "simulation"
     sys_broker = sys_settings.active_broker if sys_settings else "simulation"
 

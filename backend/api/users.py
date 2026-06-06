@@ -8,7 +8,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.deps import get_current_user, get_db, require_admin
 from backend.core.config import get_settings as _get_settings
 from backend.core.security import hash_password
-from backend.models.page_permission import ALL_PAGE_KEYS, UserPagePermission, UserSettingPermission
 from backend.models.user import User
 from backend.repositories.permissions import list_allowed_page_keys, list_allowed_setting_sections
 from backend.repositories.users import email_exists, get_user_by_id, username_exists
@@ -45,12 +44,14 @@ async def update_me(
     if body.email is not None:
         if await email_exists(db, body.email, exclude_user_id=current_user.id):
             raise HTTPException(status_code=400, detail="Email already in use")
-        current_user.email = body.email
-    if body.display_name is not None:
-        current_user.display_name = body.display_name
-    if body.password:
-        current_user.hashed_password = hash_password(body.password)
-    return current_user
+    
+    from backend.repositories.users import update_user_profile
+    return await update_user_profile(
+        db, current_user, 
+        email=body.email, 
+        display_name=body.display_name, 
+        hashed_password=hash_password(body.password) if body.password else None
+    )
 
 
 @router.get("/me/api-keys")
@@ -89,20 +90,22 @@ async def get_my_permissions(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    from backend.core.constants import PAGE_KEYS
     if current_user.is_admin:
-        return PagePermissionsRead(allowed_pages=ALL_PAGE_KEYS + ["admin", "settings"])
+        return PagePermissionsRead(allowed_pages=PAGE_KEYS + ["admin"])
     allowed = sorted(list(await list_allowed_page_keys(db, current_user.id)))
-    allowed.append("settings")
+    if "settings" not in allowed:
+        allowed.append("settings")
     return PagePermissionsRead(allowed_pages=allowed)
 
 
 @router.get("", response_model=list[UserRead])
-async def list_users(
+async def list_users_run(
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(select(User).order_by(User.id))
-    return result.scalars().all()
+    from backend.repositories.users import list_users as _repo_list
+    return await _repo_list(db)
 
 
 @router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
@@ -125,22 +128,16 @@ async def create_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the Server Owner can create administrator accounts.",
         )
-    user = User(
+    
+    from backend.repositories.users import create_user_with_permissions
+    return await create_user_with_permissions(
+        db,
         username=body.username,
         hashed_password=hash_password(body.password),
         email=body.email,
         display_name=body.display_name,
         role=body.role,
     )
-    db.add(user)
-    await db.flush()
-    db.add(UserPagePermission(user_id=user.id, page_key="dashboard", allowed=True))
-    db.add(UserPagePermission(user_id=user.id, page_key="portfolio", allowed=True))
-    from backend.core.constants import SETTING_KEYS
-    for s_key in SETTING_KEYS:
-        db.add(UserSettingPermission(user_id=user.id, setting_key=s_key, allowed=True))
-    await db.flush()
-    return user
 
 
 @router.put("/{user_id}", response_model=UserRead)
@@ -153,36 +150,27 @@ async def update_user(
     user = await get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    
     if user.role == "owner":
         if body.role is not None and body.role != "owner":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="The Server Owner role is immutable and cannot be demoted.",
-            )
+            raise HTTPException(status_code=403, detail="The Server Owner role is immutable.")
         if body.is_active is not None and body.is_active != user.is_active:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="The Server Owner account cannot be deactivated.",
-            )
+            raise HTTPException(status_code=403, detail="The Server Owner account cannot be deactivated.")
+    
     if body.role is not None:
         if body.role == "owner" and user.role != "owner":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Assigning the Server Owner role is prohibited.",
-            )
+            raise HTTPException(status_code=403, detail="Assigning Server Owner is prohibited.")
         if admin.role != "owner":
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail="Only the Server Owner can modify user roles or promote/demote administrators.",
-            )
-        user.role = body.role
-    if body.is_active is not None:
-        user.is_active = body.is_active
-    if body.email is not None:
-        user.email = body.email
-    if body.display_name is not None:
-        user.display_name = body.display_name
-    return user
+            raise HTTPException(status_code=403, detail="Only Server Owner can promote/demote admins.")
+
+    from backend.repositories.users import update_user_admin
+    return await update_user_admin(
+        db, user, 
+        role=body.role, 
+        is_active=body.is_active, 
+        email=body.email, 
+        display_name=body.display_name
+    )
 
 
 @router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -214,10 +202,8 @@ async def get_user_permissions(
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    result = await db.execute(
-        select(UserPagePermission).where(UserPagePermission.user_id == user_id)
-    )
-    perms = {p.page_key: p.allowed for p in result.scalars().all()}
+    from backend.repositories.permissions import get_user_page_permissions_map
+    perms = await get_user_page_permissions_map(db, user_id)
     full = {k: perms.get(k, False) for k in ALL_PAGE_KEYS}
     return {"user_id": user_id, "permissions": full}
 
@@ -232,20 +218,13 @@ async def set_user_permissions(
     user = await get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    
+    from backend.repositories.permissions import set_user_page_permission
     for page_key, allowed in body.permissions.items():
         if page_key not in ALL_PAGE_KEYS:
             continue
-        result = await db.execute(
-            select(UserPagePermission)
-            .where(UserPagePermission.user_id == user_id)
-            .where(UserPagePermission.page_key == page_key)
-        )
-        perm = result.scalar_one_or_none()
-        if perm is None:
-            perm = UserPagePermission(user_id=user_id, page_key=page_key, allowed=allowed)
-            db.add(perm)
-        else:
-            perm.allowed = allowed
+        await set_user_page_permission(db, user_id, page_key, allowed)
+    
     await db.flush()
     return {"detail": "Permissions updated"}
 
@@ -320,10 +299,8 @@ async def get_user_setting_permissions(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
     from backend.core.constants import SETTING_KEYS
-    result = await db.execute(
-        select(UserSettingPermission).where(UserSettingPermission.user_id == user_id)
-    )
-    perms = {p.setting_key: p.allowed for p in result.scalars().all()}
+    from backend.repositories.permissions import get_user_setting_permissions_map
+    perms = await get_user_setting_permissions_map(db, user_id)
     full = {k: perms.get(k, False) for k in SETTING_KEYS}
     return {"user_id": user_id, "permissions": full}
 
@@ -342,21 +319,14 @@ async def set_user_setting_permissions(
     user = await get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
+    
     from backend.core.constants import SETTING_KEYS
+    from backend.repositories.permissions import set_user_setting_permission
     for setting_key, allowed in body.permissions.items():
         if setting_key not in SETTING_KEYS:
             continue
-        result = await db.execute(
-            select(UserSettingPermission)
-            .where(UserSettingPermission.user_id == user_id)
-            .where(UserSettingPermission.setting_key == setting_key)
-        )
-        perm = result.scalar_one_or_none()
-        if perm is None:
-            perm = UserSettingPermission(user_id=user_id, setting_key=setting_key, allowed=allowed)
-            db.add(perm)
-        else:
-            perm.allowed = allowed
+        await set_user_setting_permission(db, user_id, setting_key, allowed)
+    
     await db.flush()
     return {"detail": "Setting permissions updated"}
 

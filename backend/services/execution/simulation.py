@@ -5,11 +5,11 @@ import backend.bootstrap  # noqa: F401  (sets engine env before importing the en
 from .base import BaseTraderInterface, OrderRequest, OrderResult
 from backend.core.database import AsyncSessionLocal
 from backend.services.mock_trading_service import (
-    _get_price,
     execute_order,
     get_or_create_sim_portfolio,
     get_portfolio_with_live_prices,
 )
+from backend.services.market_data_service import get_live_price as _get_price
 
 _logger = logging.getLogger(__name__)
 

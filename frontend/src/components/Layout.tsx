@@ -1,4 +1,4 @@
-import { NavLink, useNavigate } from 'react-router-dom'
+import { NavLink, useNavigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
 import { useTranslation } from '../contexts/LanguageContext'
 import {
@@ -66,7 +66,7 @@ const NAV_SECTIONS: NavSection[] = [
   }
 ]
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+export default function Layout() {
   const { user, isAdmin, logout } = useAuth()
   const [allowedPages, setAllowedPages] = useState<string[]>([])
   const navigate = useNavigate()
@@ -152,7 +152,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex min-h-screen bg-[#030712] text-slate-100 font-sans">
       {/* Mobile Header */}
-      <header className="md:hidden fixed top-0 left-0 right-0 z-30 h-14 bg-gray-950/80 backdrop-blur-md border-b border-gray-800/60 flex items-center px-4 gap-3 shrink-0">
+      <header className="md:hidden fixed top-0 left-0 right-0 z-[90] h-14 bg-gray-950/80 backdrop-blur-md border-b border-gray-800/60 flex items-center px-4 gap-3 shrink-0">
         <button
           onClick={() => setSidebarOpen(true)}
           className="p-2 rounded-xl text-slate-400 hover:text-white hover:bg-white/5 transition-colors"
@@ -179,14 +179,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Backdrop for Mobile Sidebar */}
       {sidebarOpen && (
         <div
-          className="md:hidden fixed inset-0 z-40 bg-black/70 backdrop-blur-sm transition-opacity duration-200"
+          className="md:hidden fixed inset-0 z-[95] bg-black/70 backdrop-blur-sm transition-opacity duration-200"
           onClick={() => setSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar Navigation */}
       <aside className={`
-        fixed inset-y-0 left-0 z-50 w-64 bg-gray-950 border-r border-white/[0.04] flex flex-col
+        fixed inset-y-0 left-0 z-[100] w-64 bg-gray-950 border-r border-white/[0.04] flex flex-col
         transition-transform duration-300 cubic-bezier(0.4, 0, 0.2, 1)
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}
         md:relative md:w-60 md:translate-x-0 md:shrink-0
@@ -340,10 +340,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       </aside>
 
       {/* Main Container */}
-      <main className="flex-1 overflow-y-auto min-h-screen pt-14 md:pt-0 flex flex-col bg-[#030712]">
+      <main className="flex-1 overflow-y-auto min-h-screen pt-14 md:pt-0 flex flex-col bg-[#030712] relative z-0">
         <UpdateBanner />
         <div className="flex-1">
-          {children}
+          <Outlet />
         </div>
       </main>
 

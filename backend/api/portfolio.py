@@ -19,10 +19,8 @@ async def list_portfolios(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = select(Portfolio).options(selectinload(Portfolio.holdings))
-    q = scope_to_user(q, Portfolio, current_user)
-    result = await db.execute(q)
-    return result.scalars().all()
+    from backend.repositories.portfolio import list_portfolios as _repo_list
+    return await _repo_list(db, user=current_user)
 
 
 @router.get("/holdings", response_model=list[HoldingRead])
@@ -31,12 +29,8 @@ async def list_holdings(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = select(Holding).join(Portfolio)
-    q = scope_to_user(q, Portfolio, current_user)
-    if mode:
-        q = q.where(Portfolio.mode == mode)
-    result = await db.execute(q)
-    return result.scalars().all()
+    from backend.repositories.portfolio import list_holdings as _repo_list
+    return await _repo_list(db, user=current_user, mode=mode)
 
 
 @router.get("/orders", response_model=list[OrderRead])
@@ -48,13 +42,5 @@ async def list_orders(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    q = select(Order).order_by(desc(Order.created_at)).limit(limit).offset(offset)
-    if not current_user.is_admin:
-        q = q.join(Portfolio)
-    q = scope_to_user(q, Portfolio, current_user)
-    if mode:
-        q = q.where(Order.mode == mode)
-    if ticker:
-        q = q.where(Order.ticker == ticker.upper())
-    result = await db.execute(q)
-    return result.scalars().all()
+    from backend.repositories.portfolio import list_orders as _repo_list
+    return await _repo_list(db, user=current_user, mode=mode, ticker=ticker, limit=limit, offset=offset)

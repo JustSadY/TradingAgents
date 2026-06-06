@@ -19,6 +19,7 @@ from backend.core.utils import safe_ticker_component
 from backend.models.analysis import AnalysisResult
 from backend.services.indicator_service import calculate_ema, calculate_macd, calculate_rsi, evaluate_formula_safely
 from backend.core.constants import SIGNAL_SENTIMENT_VALUES, PERIOD_DELTAS
+from backend.services.market_data_service import get_historical_data
 
 _logger = logging.getLogger(__name__)
 
@@ -55,16 +56,6 @@ def _resolve_dates(period: str, start_date: str | None, end_date: str | None) ->
     return s, e
 
 
-def _load_history(ticker: str, s: str, e: str):
-    import yfinance as yf
-    data = yf.Ticker(ticker).history(start=s, end=e)
-    if data.empty:
-        raise MarketDataError(f"No data found for {ticker}", status_code=404)
-    if data.index.tz is not None:
-        data.index = data.index.tz_localize(None)
-    return data
-
-
 def _compute_candles(data) -> list[dict]:
     import numpy as np
     data["sma"] = data["Close"].rolling(window=20).mean()
@@ -97,10 +88,11 @@ async def get_ohlcv(ticker: str, period: str, start_date: str | None, end_date: 
     ticker = _clean_ticker(ticker)
     s, e = _resolve_dates(period, start_date, end_date)
 
-    def _work():
-        return _compute_candles(_load_history(ticker, s, e))
-
-    candles = await asyncio.to_thread(_work)
+    data = await get_historical_data(ticker, s, e)
+    if data.empty:
+        raise MarketDataError(f"No data found for {ticker}", status_code=404)
+    
+    candles = _compute_candles(data)
     return {"ticker": ticker, "start_date": s, "end_date": e, "candles": candles}
 
 
@@ -110,18 +102,19 @@ async def get_custom_indicator_series(
     ticker = _clean_ticker(ticker)
     s, e = _resolve_dates(period, start_date, end_date)
 
-    def _work():
-        import numpy as np
-        data = _load_history(ticker, s, e)
-        series = evaluate_formula_safely(data, formula).replace({np.nan: None})
-        return [
-            {"time": ts.strftime("%Y-%m-%d"),
-             "value": round(float(val), 4) if val is not None else None}
-            for ts, val in series.items()
-        ]
+    import numpy as np
+    data = await get_historical_data(ticker, s, e)
+    if data.empty:
+        raise MarketDataError(f"No data found for {ticker}", status_code=404)
 
-    series = await asyncio.to_thread(_work)
-    return {"ticker": ticker, "formula": formula, "series": series}
+    series = evaluate_formula_safely(data, formula).replace({np.nan: None})
+    results = [
+        {"time": ts.strftime("%Y-%m-%d"),
+         "value": round(float(val), 4) if val is not None else None}
+        for ts, val in series.items()
+    ]
+
+    return {"ticker": ticker, "formula": formula, "series": results}
 
 
 async def get_sentiment_history(db: AsyncSession, ticker: str) -> dict:

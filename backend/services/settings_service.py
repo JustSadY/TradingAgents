@@ -83,3 +83,14 @@ async def apply_settings_update(
     emit("settings_updated", settings=settings)
     
     return settings
+
+
+async def get_user_language(db: AsyncSession, user=None) -> str:
+    """Return the preferred output language for a user (fallback to English)."""
+    if user is None:
+        return "English"
+    try:
+        settings = await get_or_create_settings(db, user)
+        return settings.output_language or "English"
+    except Exception:
+        return "English"

@@ -180,3 +180,20 @@ async def get_analyst_attribution_stats(db) -> dict:
         "attribution": attribution_list,
         "total_evaluated_runs": total_runs_evaluated
     }
+
+
+async def get_analyst_performance_context(db) -> str:
+    """Return a Markdown summary of analyst performance weights for AI injection."""
+    try:
+        attribution_data = await get_analyst_attribution_stats(db)
+        if not attribution_data.get("attribution"):
+            return ""
+        md = "=== ANALYST PERFORMANCE ATTRIBUTION & WEIGHTS ===\n"
+        md += "Below are the historical win rates and normalized voting weights assigned to each analyst based on empirical accuracy:\n"
+        for att in attribution_data["attribution"]:
+            md += f"- {att['label']}: Win Rate = {att['win_rate']}%, Assigned Weight = {att['weight']}%\n"
+        md += "\n[IMPORTANT] During decision synthesis, discount opinions of analysts with lower weights and heavily prioritize opinions of analysts with higher weights.\n\n"
+        return md
+    except Exception as e:
+        _logger.warning("Could not load analyst attribution stats (skipping): %s", e)
+        return ""

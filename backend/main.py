@@ -44,13 +44,12 @@ async def lifespan(app: FastAPI):
     
     # PERSISTENCE: Cleanup analyses that were interrupted by a crash/restart
     try:
-        from sqlalchemy import update
         from backend.core.database import AsyncSessionLocal
-        from backend.models.analysis import AnalysisResult
+        from backend.repositories.analysis import cleanup_stale_analyses
         async with AsyncSessionLocal() as db:
-            stmt = update(AnalysisResult).where(AnalysisResult.status == "running").values(status="failed")
-            await db.execute(stmt)
-            await db.commit()
+            count = await cleanup_stale_analyses(db)
+            if count > 0:
+                _logger.info("Marked %d stale analyses as failed.", count)
     except Exception as e:
         _logger.warning("Failed to cleanup stale analyses on startup: %s", e)
 

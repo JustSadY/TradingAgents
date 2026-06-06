@@ -7,71 +7,41 @@ import {
   ResponsiveContainer, AreaChart, Area, XAxis, YAxis, Tooltip,
   PieChart, Pie, Cell, Legend
 } from 'recharts'
+import { usePortfolio } from '../hooks/usePortfolio'
+import { useNewsFeed } from '../hooks/useNewsFeed'
 
 // Components
 import { PortfolioOverview } from '../components/dashboard/PortfolioOverview'
 import { RecentAnalysisTable } from '../components/dashboard/RecentAnalysisTable'
 import { NewsFeed } from '../components/dashboard/NewsFeed'
 
-interface NewsItem { title: string; url: string; source: string; published_at: string; ticker: string }
-interface Portfolio {
-  id: number; mode: string; broker: string
-  initial_capital: number; current_balance: number; cash_available: number
-  status: string
-  holdings: { ticker: string; quantity: number; current_price: number; unrealized_pnl: number; avg_buy_price?: number }[]
-}
-
 const ALLOCATION_COLORS = ['#8b5cf6', '#10b981', '#f59e0b', '#3b82f6', '#ec4899', '#14b8a6', '#6366f1']
 
 export default function Dashboard() {
-  const [portfolios, setPortfolios] = useState<Portfolio[]>([])
+  const { t } = useTranslation()
+  const { sim, stats, allocationData, loading: portfolioLoading } = usePortfolio()
+  const [watchlist, setWatchlist] = useState<string[]>([])
+  
+  const watchlistSlice = useMemo(() => watchlist.slice(0, 5), [watchlist])
+  const { news, loading: newsLoading } = useNewsFeed(watchlistSlice)
+  
   const [recentAnalysis, setRecentAnalysis] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
-  const [news, setNews] = useState<NewsItem[]>([])
-  const [orders, setOrders] = useState<any[]>([])
-  const { t } = useTranslation()
 
   useEffect(() => {
+    // Fetch only what's not covered by hooks
     Promise.all([
-      api.get('/api/portfolio').then(r => r.data).catch(() => []),
       api.get('/api/analysis/history?limit=8').then(r => r.data).catch(() => []),
-      api.get('/api/portfolio/orders?limit=100').then(r => Array.isArray(r.data) ? r.data : []).catch(() => []),
-    ]).then(([p, a, ord]) => {
-      setPortfolios(Array.isArray(p) ? p : [])
+      api.get('/api/settings').then(r => r.data.watchlist || []).catch(() => []),
+    ]).then(([a, w]) => {
       setRecentAnalysis(Array.isArray(a) ? a : [])
-      setOrders(Array.isArray(ord) ? ord : [])
+      setWatchlist(w)
     })
       .catch(() => {})
       .finally(() => setLoading(false))
   }, [])
 
-  useEffect(() => {
-    const fetchNews = () => {
-        api.get('/api/settings').then(r => {
-            const tickers = (r.data.watchlist as string[]).slice(0, 5)
-            if (tickers.length === 0) return
-            return api.get('/api/news/feed', { params: { tickers: tickers.join(','), limit: 4 } }).then(r => setNews(r.data))
-        }).catch(() => {})
-    }
-    fetchNews()
-    const id = setInterval(fetchNews, 5 * 60 * 1000)
-    return () => clearInterval(id)
-  }, [])
-
-  const sim = portfolios.find(p => p.mode === 'simulation') || portfolios[0]
-  const pnl = sim ? sim.current_balance - sim.initial_capital : 0
-  const pnlPct = sim?.initial_capital ? (pnl / sim.initial_capital * 100) : 0
-  const totalUnrealized = (sim?.holdings || []).reduce((s, h) => s + (h.unrealized_pnl || 0), 0)
-
-  const allocationData = useMemo(() => {
-    if (!sim || !sim.holdings) return []
-    const data = sim.holdings.map(h => ({ name: h.ticker, value: h.quantity * h.current_price }))
-    const totalValue = data.reduce((s, d) => s + d.value, 0)
-    if (sim.cash_available > 0) data.push({ name: 'Cash', value: sim.cash_available })
-    return data.sort((a, b) => b.value - a.value)
-  }, [sim])
-
-  if (loading) return (
+  if (loading || portfolioLoading) return (
     <div className="h-[80vh] flex flex-col items-center justify-center space-y-4 opacity-50">
         <Activity className="text-violet-500 animate-pulse" size={32} />
         <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Synchronizing Engine...</p>
@@ -87,7 +57,7 @@ export default function Dashboard() {
         </div>
       </div>
 
-      <PortfolioOverview sim={sim} pnl={pnl} pnlPct={pnlPct} totalUnrealized={totalUnrealized} t={t} />
+      <PortfolioOverview sim={sim} pnl={stats.pnl} pnlPct={stats.pnlPct} totalUnrealized={stats.totalUnrealized} t={t} />
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
         <RecentAnalysisTable recentAnalysis={recentAnalysis} t={t} />
