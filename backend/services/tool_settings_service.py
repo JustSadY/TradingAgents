@@ -1,9 +1,6 @@
 from __future__ import annotations
-import json
 from typing import Any
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.models.tool_settings import AgentToolSetting
 from backend.models.user import User
 from backend.trading_agents.agents.tools.registry import registry
 from backend.trading_agents.agents.tools.base import BaseAgentTool

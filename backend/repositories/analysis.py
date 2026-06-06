@@ -5,7 +5,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.analysis import AnalysisResult
 from backend.models.system_settings import SystemSettings
-from backend.repositories.common import by_id
 
 
 async def get_system_settings(db: AsyncSession) -> SystemSettings | None:
