@@ -42,22 +42,6 @@ def get_stock_stats_indicators_window(
     curr_date: Annotated[str, "The current trading date you are trading on, YYYY-mm-dd"],
     look_back_days: Annotated[int, "how many days to look back"],
 ) -> str:
-    best_ind_params = {
-        "close_50_sma": ("50 SMA", "rolling(window=50).mean()"),
-        "close_200_sma": ("200 SMA", "rolling(window=200).mean()"),
-        "close_10_ema": ("10 EMA", "ewm(span=10, adjust=False).mean()"),
-        "macd": ("MACD", "MACD_LINE"),
-        "rsi": ("RSI", "RSI_14"),
-        "atr": ("ATR", "ATR_14"),
-        "boll": ("Bollinger Middle", "SMA(20)"),
-        "boll_ub": ("Bollinger Upper", "SMA(20) + 2*STD(20)"),
-        "boll_lb": ("Bollinger Lower", "SMA(20) - 2*STD(20)"),
-    }
-
-    if indicator not in best_ind_params:
-        # Fallback to direct indicator service or error
-        pass
-
     from backend.services.indicator_service import calculate_ema, calculate_macd, calculate_rsi
 
     data = load_ohlcv(symbol, curr_date)

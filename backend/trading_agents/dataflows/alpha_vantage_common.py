@@ -51,12 +51,6 @@ def _make_api_request(function_name: str, params: dict) -> dict | str:
             "source": "trading_agents",
         }
     )
-    current_entitlement = globals().get("_current_entitlement")
-    entitlement = api_params.get("entitlement") or current_entitlement
-    if entitlement:
-        api_params["entitlement"] = entitlement
-    elif "entitlement" in api_params:
-        api_params.pop("entitlement", None)
     response = requests.get(API_BASE_URL, params=api_params)
     response.raise_for_status()
     response_text = response.text
