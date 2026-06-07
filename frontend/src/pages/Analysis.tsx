@@ -129,6 +129,11 @@ function RunTab() {
   const wsRef = useRef<WebSocket | null>(null)
   const taskIdRef = useRef<string | null>(null)
   const preRefreshLogRef = useRef<string[] | null>(null)
+  // Always-current ticker for use inside the WS handler, so attachWs doesn't
+  // need `ticker` in its deps (which recreated the socket on every keystroke)
+  // and the completion toast never shows a stale/empty symbol.
+  const tickerRef = useRef(ticker)
+  useEffect(() => { tickerRef.current = ticker }, [ticker])
 
   const meta = useMeta()
   const sectionLabels = meta?.section_labels ?? SECTION_LABELS
@@ -223,7 +228,7 @@ function RunTab() {
         setMentalModel(null)
         appendLog(`✓ Completed in ${ev.duration_seconds}s / ${ev.llm_calls} LLM calls`)
         sendBrowserNotification(
-          `${ticker.toUpperCase()} Analysis Completed`,
+          `${tickerRef.current.toUpperCase()} Analysis Completed`,
           `Signal: ${ev.signal ?? 'N/A'} • Duration: ${ev.duration_seconds?.toFixed(0)}s`
         )
         if (ev.analysis_id) {
@@ -260,7 +265,9 @@ function RunTab() {
         }
       }
     }
-  }, [ticker, t])
+    // ticker is intentionally read via tickerRef (not a dep) so the socket
+    // isn't torn down and recreated on every ticker keystroke.
+  }, [t])
 
   // Effect to sync with active tasks from the server (Cross-device fix)
   useEffect(() => {
