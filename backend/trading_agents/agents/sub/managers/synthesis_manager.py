@@ -1,3 +1,5 @@
+import asyncio
+
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
@@ -23,10 +25,10 @@ def create_synthesis_manager(llm):
             macd_args["curr_date"] = state["trade_date"]
             rsi_args["curr_date"] = state["trade_date"]
 
-        # run_strategy_backtest is sync, but we call it via invoke (which we'll keep sync for now or use ainvoke if it's async)
-        # Actually, I didn't make run_strategy_backtest async yet.
-        macd_results = run_strategy_backtest.invoke(macd_args)
-        rsi_results = run_strategy_backtest.invoke(rsi_args)
+        # run_strategy_backtest is synchronous and heavy; run it off the event
+        # loop so it doesn't stall concurrent analyses.
+        macd_results = await asyncio.to_thread(run_strategy_backtest.invoke, macd_args)
+        rsi_results = await asyncio.to_thread(run_strategy_backtest.invoke, rsi_args)
 
         from backend.trading_agents.agents.analyst_registry import get_report_fields
 
