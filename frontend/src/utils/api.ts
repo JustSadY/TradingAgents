@@ -1,29 +1,11 @@
+// The default axios instance is fully configured in AuthContext (auth header,
+// 401 token refresh + retry/queue, and 5xx error toasts). AuthProvider always
+// loads, so those interceptors are always attached.
+//
+// This module used to export a *separate* axios.create() instance that only had
+// the auth header — it lacked the refresh logic, so requests made through it
+// 401'd silently without refreshing or logging the user out. Re-export the
+// configured default instance so every caller shares one client.
 import axios from 'axios'
-import { getAccessToken } from '../contexts/AuthContext'
-import { notify } from './notify'
 
-const api = axios.create({
-  baseURL: '/',
-})
-
-api.interceptors.request.use((config) => {
-  const token = getAccessToken()
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`
-  }
-  return config
-})
-
-api.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    const message = error.response?.data?.detail || error.message || 'An unexpected error occurred'
-    // Avoid notifying for 401s as they are handled by auth hooks/login page
-    if (error.response?.status !== 401) {
-       notify('error', message, 'API Error')
-    }
-    return Promise.reject(error)
-  }
-)
-
-export default api
+export default axios
