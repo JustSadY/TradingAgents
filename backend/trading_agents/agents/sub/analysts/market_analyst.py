@@ -14,20 +14,26 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 
 
+# Single source of truth: the ToolNode (built from the registration) and the LLM
+# binding in the node must use the same list, or the model is bound to tools the
+# ToolNode can run but can't invoke (or vice versa).
+_MARKET_TOOLS = [
+    get_stock_data,
+    get_indicators,
+    add_chart_annotation,
+    add_custom_indicator,
+    get_vision_chart_analysis,
+    get_mtf_trend,
+]
+
+
 @register_analyst(
     key="market",
     agent_node="Market Analyst",
     clear_node="Msg Clear Market",
     tool_node="tools_market",
     report_key="market_report",
-    tools=[
-        get_stock_data,
-        get_indicators,
-        add_chart_annotation,
-        add_custom_indicator,
-        get_vision_chart_analysis,
-        get_mtf_trend,
-    ],
+    tools=_MARKET_TOOLS,
 )
 def create_market_analyst(llm):
 
@@ -35,14 +41,7 @@ def create_market_analyst(llm):
         asset_type = state.get("asset_type", "stock")
         instrument_context = build_instrument_context(state["company_of_interest"], asset_type)
 
-        tools = [
-            get_stock_data,
-            get_indicators,
-            add_chart_annotation,
-            add_custom_indicator,
-            get_vision_chart_analysis,
-            get_mtf_trend,
-        ]
+        tools = _MARKET_TOOLS
 
         system_message = """You are a senior market analyst. Your goal is to provide a high-conviction, data-driven technical analysis report.
 

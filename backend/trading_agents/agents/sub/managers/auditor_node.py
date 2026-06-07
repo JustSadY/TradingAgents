@@ -19,16 +19,9 @@ def create_auditor_node(llm):
         debate_history = investment_debate_state.get("history", "")
 
         from backend.trading_agents.agents.analyst_registry import get_report_fields
+        from backend.trading_agents.agents.runtime.report_aggregator import build_resources
 
-        report_fields = get_report_fields()
-
-        resources = []
-        for field, label in report_fields.items():
-            content = state.get(field, "")
-            if content and content.strip():
-                resources.append(f"### {label}:\n{content.strip()}")
-
-        resources_text = "\n\n".join(resources)
+        resources_text = build_resources(state, get_report_fields(), prefix="### ")
 
         prompt = f"""You are a Senior Compliance Auditor and Fact-Checker. Your goal is to review the investment debate for {ticker} and ensure all claims are grounded in the provided analyst reports.
 

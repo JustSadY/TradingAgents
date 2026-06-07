@@ -10,7 +10,9 @@ accumulated debate history.
 
 Kill-switch behaviour:
   • risk_debate disabled    → emit a neutral debate state and skip every sub.
-  • a single risk sub off   → that speaker is dropped from the rotation.
+
+The three debators are not individually registered in the catalog; they share
+the single ``risk_debate`` enable, so the whole trio runs (or none of it does).
 """
 
 from __future__ import annotations
@@ -39,17 +41,16 @@ def create_risk_debate_node(ctx: AgentRunContext) -> NodeFn:
             return {"risk_debate_state": neutral_risk_debate_state("Risk debate disabled by configuration.")}
 
         llm = ctx.llm_for("risk_debate")
-        # Speaker rotation in canonical order, filtered by per-sub enable.
-        # All three share the "risk_debate" enable/LLM in the catalog, but we
-        # still honour an explicit per-key override if one exists.
+        # The three debators are not separately registered in the agent catalog
+        # — they share the single "risk_debate" enable/LLM (already checked
+        # above), so the whole trio runs in canonical order whenever risk debate
+        # is enabled. (A previous per-speaker filter here keyed off the constant
+        # "risk_debate" and so was a no-op.)
         rotation = [
             ("aggressive", create_aggressive_debator(llm)),
             ("conservative", create_conservative_debator(llm)),
             ("neutral", create_neutral_debator(llm)),
         ]
-        rotation = [(name, fn) for name, fn in rotation if ctx.is_enabled("risk_debate")]
-        if not rotation:
-            return {"risk_debate_state": neutral_risk_debate_state()}
 
         local = dict(state)
         if not local.get("risk_debate_state"):

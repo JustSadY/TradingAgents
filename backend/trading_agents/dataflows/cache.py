@@ -44,7 +44,10 @@ def get_category_for_method(method: str) -> str:
 
 class APICache:
     _init_lock = threading.Lock()
-    _initialized = False
+    # Track schema init per resolved DB path, not via a single bool, so a change
+    # to data_cache_dir at runtime initializes the new DB file instead of
+    # hitting "no such table" because a one-shot flag was already set.
+    _initialized_paths: set[str] = set()
 
     @classmethod
     def get_cache_path(cls) -> Path:
@@ -54,9 +57,9 @@ class APICache:
         return cache_dir / "api_cache.sqlite3"
 
     @classmethod
-    def _ensure_schema(cls, conn) -> None:
+    def _ensure_schema(cls, conn, path: str) -> None:
         with cls._init_lock:
-            if cls._initialized:
+            if path in cls._initialized_paths:
                 return
             conn.execute("""
                 CREATE TABLE IF NOT EXISTS api_cache (
@@ -67,14 +70,15 @@ class APICache:
                 )
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_api_cache_method ON api_cache(method)")
-            cls._initialized = True
+            cls._initialized_paths.add(path)
 
     @classmethod
     def _connect(cls):
-        conn = sqlite3.connect(str(cls.get_cache_path()), timeout=5.0, check_same_thread=False)
+        path = str(cls.get_cache_path())
+        conn = sqlite3.connect(path, timeout=5.0, check_same_thread=False)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA synchronous=NORMAL")
-        cls._ensure_schema(conn)
+        cls._ensure_schema(conn, path)
         return conn
 
     @classmethod

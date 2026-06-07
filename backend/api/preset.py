@@ -1,4 +1,3 @@
-import json
 import logging
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -9,7 +8,6 @@ from backend.core.database import get_db
 from backend.models.user import User
 from backend.repositories.permissions import get_user_setting_permission
 from backend.schemas.preset import PresetCreate, PresetRead
-from backend.services.settings_service import get_or_create_settings
 
 router = APIRouter(prefix="/api/presets", tags=["presets"])
 _logger = logging.getLogger(__name__)
@@ -74,20 +72,16 @@ async def apply_preset(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    await _check_presets_permission(current_user, db)
     """Apply a preset's settings to the current user's AppSettings row."""
+    await _check_presets_permission(current_user, db)
     from backend.repositories.preset import get_preset_by_id
+    from backend.services.settings_service import apply_preset_to_settings
 
     preset = await get_preset_by_id(db, preset_id, user=current_user)
     if not preset:
         raise HTTPException(status_code=404, detail="Template not found")
-    settings = await get_or_create_settings(db, current_user)
     try:
-        data = json.loads(preset.settings_json)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=422, detail="Template JSON invalid")
-    for key, value in data.items():
-        if hasattr(settings, key) and value is not None:
-            setattr(settings, key, value)
-    settings.active_preset_name = preset.name
-    return {"applied": True, "preset_name": preset.name}
+        preset_name = await apply_preset_to_settings(db, current_user, preset)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    return {"applied": True, "preset_name": preset_name}

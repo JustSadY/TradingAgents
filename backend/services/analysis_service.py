@@ -32,10 +32,38 @@ _logger = logging.getLogger(__name__)
 _RUNNING_TASKS: dict[str, asyncio.Task] = {}
 _TASK_REGISTRY: dict[str, dict] = {}  # Re-used by get_active_tasks_for_user
 
+# Maps an analysis task_id to the id of the user who started it. Populated
+# synchronously by the API handlers before the task_id is returned to the
+# client, so the WebSocket endpoint can verify ownership before streaming a
+# run's reports/decisions to a connecting socket.
+_TASK_OWNERS: dict[str, int | None] = {}
+
+
+def register_task_owner(task_id: str, user_id: int | None) -> None:
+    _TASK_OWNERS[task_id] = user_id
+
+
+def clear_task_owner(task_id: str) -> None:
+    _TASK_OWNERS.pop(task_id, None)
+
+
+def is_task_owner(task_id: str, user_id: int | None, is_admin: bool = False) -> bool:
+    """Return True if *user* may subscribe to *task_id*'s event stream.
+
+    Admins may observe any task. Otherwise the task must have a known owner that
+    matches the user; unknown task ids are rejected so a stream can only be
+    reached via a task id the server actually issued to that user.
+    """
+    if is_admin:
+        return True
+    owner = _TASK_OWNERS.get(task_id)
+    return owner is not None and owner == user_id
+
 
 async def cancel_analysis(task_id: str) -> bool:
     task = _RUNNING_TASKS.pop(task_id, None)
     _TASK_REGISTRY.pop(task_id, None)
+    _TASK_OWNERS.pop(task_id, None)
     if task and not task.done():
         task.cancel()
         return True
@@ -75,6 +103,9 @@ async def run_analysis(
             "started_at": time.time(),
             "status": "running",
         }
+        # Record ownership for runs that don't pass through the API handler
+        # (alert-/cron-triggered), so their owner can still reconnect via WS.
+        register_task_owner(task_id, user.id if user else None)
 
     emitter = AnalysisEmitter(task_id)
     try:
@@ -82,6 +113,7 @@ async def run_analysis(
     finally:
         _RUNNING_TASKS.pop(task_id, None)
         _TASK_REGISTRY.pop(task_id, None)
+        _TASK_OWNERS.pop(task_id, None)
         await emitter.close()
 
 
@@ -124,6 +156,7 @@ async def run_portfolio_task(
     asset_type: str,
     settings: AppSettings,
     user=None,
+    task_id: str | None = None,
 ) -> None:
     """Background entrypoint for a multi-ticker portfolio analysis run."""
     async with AsyncSessionLocal() as db:
@@ -136,8 +169,20 @@ async def run_portfolio_task(
                 db,
                 "manual",
                 user=user,
+                task_id=task_id,
             )
             await db.commit()
         except Exception as exc:
             _logger.error("Portfolio analysis failed: %s", exc, exc_info=True)
             await db.rollback()
+            if task_id:
+                # Surface the failure on the WebSocket channel so a subscribed
+                # client stops waiting instead of hanging on an open socket.
+                from backend.services.analysis.emitter import AnalysisEmitter
+
+                emitter = AnalysisEmitter(task_id)
+                await emitter.emit_error("Portfolio analysis failed")
+                await emitter.close()
+        finally:
+            if task_id:
+                clear_task_owner(task_id)

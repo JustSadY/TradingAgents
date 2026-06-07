@@ -7,22 +7,24 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 
 
+# Single source of truth shared by the ToolNode registration and the LLM binding.
+_EARNINGS_TOOLS = [search_web]
+
+
 @register_analyst(
     key="earnings",
     agent_node="Earnings Analyst",
     clear_node="Msg Clear Earnings",
     tool_node="tools_earnings",
     report_key="earnings_report",
-    tools=[search_web],
+    tools=_EARNINGS_TOOLS,
 )
 def create_earnings_analyst(llm):
 
     async def earnings_analyst_node(state):
         instrument_context = build_instrument_context(state["company_of_interest"])
 
-        tools = [
-            search_web,
-        ]
+        tools = _EARNINGS_TOOLS
 
         system_message = """You are a senior earnings and corporate guidance analyst. Your goal is to extract key insights from management communication and financial filings.
 

@@ -1,4 +1,4 @@
-from backend.trading_agents.agents.runtime.report_aggregator import build_resources
+from backend.trading_agents.agents.runtime.report_aggregator import build_report_fields, build_resources
 from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
 
 
@@ -11,17 +11,7 @@ def create_aggressive_debator(llm):
         current_neutral_response = risk_debate_state.get("current_neutral_response", "")
         trader_decision = state["trader_investment_plan"]
 
-        report_fields = {
-            "market_report": "Market Research Report",
-            "sentiment_report": "Social Media Sentiment Report",
-            "news_report": "Latest World Affairs Report",
-            "fundamentals_report": "Company Fundamentals Report",
-            "macro_report": "Macroeconomic Indicators Report",
-            "options_report": "Options Market Derivatives Report",
-            "quant_report": "Quantitative Metrics Report",
-            "earnings_report": "Corporate Guidance & Earnings Report",
-            "review_report": "Hindsight Performance Review Report",
-        }
+        report_fields = build_report_fields("Latest World Affairs Report", "Company Fundamentals Report")
         resources_text = build_resources(state, report_fields)
 
         prompt = f"""As the Aggressive Risk Analyst, your role is to actively champion high-reward, high-risk opportunities, emphasizing bold strategies and competitive advantages. When evaluating the trader's decision or plan, focus intently on the potential upside, growth potential, and innovative benefits—even when these come with elevated risk. Use the provided market data and sentiment analysis to strengthen your arguments and challenge the opposing views. Specifically, respond directly to each point made by the conservative and neutral analysts, countering with data-driven rebuttals and persuasive reasoning. Highlight where their caution might miss critical opportunities or where their assumptions may be overly conservative. Here is the trader's decision:

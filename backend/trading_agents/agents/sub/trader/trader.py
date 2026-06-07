@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import functools
 
 from langchain_core.messages import AIMessage
@@ -46,13 +47,13 @@ def create_trader(llm):
                             total_value = float(portfolio.current_balance)
                             for h in holdings:
                                 try:
-                                    # This might be slow if done many times, but for a few holdings it's okay.
-                                    # In a real system, we'd cache sector info in the Holding model.
-                                    info = yf.Ticker(h.ticker).info
+                                    # Run the blocking yfinance lookup off the event loop.
+                                    # (In a real system, cache sector info on the Holding model.)
+                                    info = await asyncio.to_thread(lambda t=h.ticker: yf.Ticker(t).info)
                                     sector = info.get("sector", "Unknown")
                                     h_value = float(h.quantity) * float(h.current_price)
                                     sectors[sector] = sectors.get(sector, 0) + h_value
-                                except:
+                                except Exception:
                                     continue
                             
                             if sectors:
@@ -76,8 +77,10 @@ def create_trader(llm):
             macd_args["curr_date"] = state["trade_date"]
             rsi_args["curr_date"] = state["trade_date"]
 
-        macd_results = run_strategy_backtest.invoke(macd_args)
-        rsi_results = run_strategy_backtest.invoke(rsi_args)
+        # run_strategy_backtest is synchronous and CPU/IO-heavy; keep it off the
+        # event loop so it doesn't stall concurrent analyses.
+        macd_results = await asyncio.to_thread(run_strategy_backtest.invoke, macd_args)
+        rsi_results = await asyncio.to_thread(run_strategy_backtest.invoke, rsi_args)
 
         messages = [
             {
@@ -110,24 +113,17 @@ def create_trader(llm):
             },
         ]
 
-        # invoke_structured_or_freetext is currently sync, but we'll await ainvoke directly here
-        # or update the helper. Let's update the helper or just call directly.
-        # Actually, let's just use ainvoke directly for better consistency.
         from backend.trading_agents.agents.runtime.structured import ainvoke_structured_or_freetext
 
         trader_proposal = await ainvoke_structured_or_freetext(
             structured_llm,
             llm,
             messages,
-            render_trader_proposal,
             "Trader",
         )
 
-        # If the helper returned a string (render_trader_proposal was called), it's already rendered.
-        # But wait, ainvoke_structured_or_freetext might return the object.
-        # Let's check the helper.
-
-        # Assuming it returns the Pydantic object if using structured_llm
+        # The helper returns a free-text string on fallback, or the structured
+        # TraderProposal object when structured output succeeds.
         if isinstance(trader_proposal, str):
             trader_plan = trader_proposal
             proposal_json = "{}"

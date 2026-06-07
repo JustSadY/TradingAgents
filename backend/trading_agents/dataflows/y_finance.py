@@ -42,22 +42,6 @@ def get_stock_stats_indicators_window(
     curr_date: Annotated[str, "The current trading date you are trading on, YYYY-mm-dd"],
     look_back_days: Annotated[int, "how many days to look back"],
 ) -> str:
-    best_ind_params = {
-        "close_50_sma": ("50 SMA", "rolling(window=50).mean()"),
-        "close_200_sma": ("200 SMA", "rolling(window=200).mean()"),
-        "close_10_ema": ("10 EMA", "ewm(span=10, adjust=False).mean()"),
-        "macd": ("MACD", "MACD_LINE"),
-        "rsi": ("RSI", "RSI_14"),
-        "atr": ("ATR", "ATR_14"),
-        "boll": ("Bollinger Middle", "SMA(20)"),
-        "boll_ub": ("Bollinger Upper", "SMA(20) + 2*STD(20)"),
-        "boll_lb": ("Bollinger Lower", "SMA(20) - 2*STD(20)"),
-    }
-
-    if indicator not in best_ind_params:
-        # Fallback to direct indicator service or error
-        pass
-
     from backend.services.indicator_service import calculate_ema, calculate_macd, calculate_rsi
 
     data = load_ohlcv(symbol, curr_date)
@@ -156,8 +140,10 @@ def get_fundamentals(
         header = f"# Company Fundamentals for {ticker.upper()}\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + "\n".join(lines)
-    except Exception as e:
-        return f"Error retrieving fundamentals for {ticker}: {str(e)}"
+    except Exception:
+        # Re-raise so route_to_vendor can fall back to another vendor instead of
+        # returning (and caching) an error string the router treats as data.
+        raise
 
 
 def get_balance_sheet(
@@ -178,8 +164,8 @@ def get_balance_sheet(
         header = f"# Balance Sheet data for {ticker.upper()} ({freq})\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
-    except Exception as e:
-        return f"Error retrieving balance sheet for {ticker}: {str(e)}"
+    except Exception:
+        raise
 
 
 def get_cashflow(
@@ -200,8 +186,8 @@ def get_cashflow(
         header = f"# Cash Flow data for {ticker.upper()} ({freq})\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
-    except Exception as e:
-        return f"Error retrieving cash flow for {ticker}: {str(e)}"
+    except Exception:
+        raise
 
 
 def get_income_statement(
@@ -222,8 +208,8 @@ def get_income_statement(
         header = f"# Income Statement data for {ticker.upper()} ({freq})\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
-    except Exception as e:
-        return f"Error retrieving income statement for {ticker}: {str(e)}"
+    except Exception:
+        raise
 
 
 def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the company"]):
@@ -236,8 +222,8 @@ def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the compan
         header = f"# Insider Transactions data for {ticker.upper()}\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
-    except Exception as e:
-        return f"Error retrieving insider transactions for {ticker}: {str(e)}"
+    except Exception:
+        raise
 
 
 def get_sec_filings(ticker: Annotated[str, "ticker symbol of the company"]):
@@ -258,5 +244,5 @@ def get_sec_filings(ticker: Annotated[str, "ticker symbol of the company"]):
         header = f"# SEC Filings for {ticker.upper()}\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
-    except Exception as e:
-        return f"Error retrieving SEC filings for {ticker}: {str(e)}"
+    except Exception:
+        raise

@@ -12,33 +12,30 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 
 
+# Single source of truth shared by the ToolNode registration and the LLM binding.
+_FUNDAMENTALS_TOOLS = [
+    get_fundamentals,
+    get_balance_sheet,
+    get_cashflow,
+    get_income_statement,
+    get_sec_filings,
+    get_insider_transactions_deep,
+]
+
+
 @register_analyst(
     key="fundamentals",
     agent_node="Fundamentals Analyst",
     clear_node="Msg Clear Fundamentals",
     tool_node="tools_fundamentals",
     report_key="fundamentals_report",
-    tools=[
-        get_fundamentals,
-        get_balance_sheet,
-        get_cashflow,
-        get_income_statement,
-        get_sec_filings,
-        get_insider_transactions_deep,
-    ],
+    tools=_FUNDAMENTALS_TOOLS,
 )
 def create_fundamentals_analyst(llm):
     async def fundamentals_analyst_node(state):
         instrument_context = build_instrument_context(state["company_of_interest"])
 
-        tools = [
-            get_fundamentals,
-            get_balance_sheet,
-            get_cashflow,
-            get_income_statement,
-            get_sec_filings,
-            get_insider_transactions_deep,
-        ]
+        tools = _FUNDAMENTALS_TOOLS
 
         system_message = """You are a senior fundamental analyst. Your goal is to assess a company's corporate health and intrinsic value through rigorous financial analysis and regulatory monitoring.
 

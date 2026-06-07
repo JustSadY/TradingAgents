@@ -2,11 +2,9 @@ import json
 import logging
 import os
 from collections.abc import Awaitable, Callable
-from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-import yfinance as yf
 
 logger = logging.getLogger(__name__)
 from langgraph.prebuilt import ToolNode
@@ -29,7 +27,6 @@ from .checkpointer import (
 )
 from .conditional_logic import ConditionalLogic
 from .propagation import Propagator
-from .reflection import Reflector
 from .setup import GraphSetup
 from .signal_processing import SignalProcessor
 
@@ -132,7 +129,6 @@ class TradingAgentsGraph:
             config=self.config,
         )
         self.propagator = Propagator(max_recur_limit=self.config.get("max_recur_limit", 100))
-        self.reflector = Reflector(self.thinking_llm)
         self.signal_processor = SignalProcessor(self.thinking_llm)
         self.curr_state = None
         self.ticker = None
@@ -225,47 +221,6 @@ class TradingAgentsGraph:
             except TypeError:
                 nodes[key] = ToolNode(tools)
         return nodes
-
-    def _resolve_benchmark(self, ticker: str) -> str:
-        explicit = self.config.get("benchmark_ticker")
-        if explicit:
-            return explicit
-        benchmark_map = self.config.get("benchmark_map", {})
-        ticker_upper = ticker.upper()
-        for suffix, benchmark in benchmark_map.items():
-            if suffix and ticker_upper.endswith(suffix.upper()):
-                return benchmark
-        return benchmark_map.get("", "SPY")
-
-    def _fetch_returns(
-        self,
-        ticker: str,
-        trade_date: str,
-        holding_days: int = 5,
-        benchmark: str = "SPY",
-    ) -> tuple[float | None, float | None, int | None]:
-        try:
-            start = datetime.strptime(trade_date, "%Y-%m-%d")
-            end = start + timedelta(days=holding_days + 7)
-            end_str = end.strftime("%Y-%m-%d")
-            stock = yf.Ticker(ticker).history(start=trade_date, end=end_str)
-            bench = yf.Ticker(benchmark).history(start=trade_date, end=end_str)
-            if len(stock) < 2 or len(bench) < 2:
-                return None, None, None
-            actual_days = min(holding_days, len(stock) - 1, len(bench) - 1)
-            raw = float((stock["Close"].iloc[actual_days] - stock["Close"].iloc[0]) / stock["Close"].iloc[0])
-            bench_ret = float((bench["Close"].iloc[actual_days] - bench["Close"].iloc[0]) / bench["Close"].iloc[0])
-            alpha = raw - bench_ret
-            return raw, alpha, actual_days
-        except Exception as e:
-            logger.warning(
-                "Could not resolve outcome for %s on %s vs %s (will retry next run): %s",
-                ticker,
-                trade_date,
-                benchmark,
-                e,
-            )
-            return None, None, None
 
     def propagate(self, company_name, trade_date, asset_type: str = "stock"):
         self.ticker = company_name

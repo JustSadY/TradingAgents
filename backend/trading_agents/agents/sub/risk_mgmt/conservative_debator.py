@@ -1,4 +1,4 @@
-from backend.trading_agents.agents.runtime.report_aggregator import build_resources
+from backend.trading_agents.agents.runtime.report_aggregator import build_report_fields, build_resources
 from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
 
 
@@ -11,17 +11,7 @@ def create_conservative_debator(llm):
         current_neutral_response = risk_debate_state.get("current_neutral_response", "")
         trader_decision = state["trader_investment_plan"]
 
-        report_fields = {
-            "market_report": "Market Research Report",
-            "sentiment_report": "Social Media Sentiment Report",
-            "news_report": "Latest World Affairs Report",
-            "fundamentals_report": "Company Fundamentals Report",
-            "macro_report": "Macroeconomic Indicators Report",
-            "options_report": "Options Market Derivatives Report",
-            "quant_report": "Quantitative Metrics Report",
-            "earnings_report": "Corporate Guidance & Earnings Report",
-            "review_report": "Hindsight Performance Review Report",
-        }
+        report_fields = build_report_fields("Latest World Affairs Report", "Company Fundamentals Report")
         resources_text = build_resources(state, report_fields)
 
         prompt = f"""As the Conservative Risk Analyst, your role is to prioritize capital preservation and emphasize high-probability, low-risk outcomes. When evaluating the trader's decision or plan, look specifically for potential downsides, hidden risks, and worst-case scenarios. Challenge the arguments of the aggressive and neutral analysts by highlighting where their optimism may lead to significant losses. Use the provided market data and sentiment insights to justify a more cautious approach. Respond directly to the points raised by your counterparts, identifying logical flaws and risks they have overlooked. Here is the trader's decision:

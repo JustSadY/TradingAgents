@@ -188,5 +188,7 @@ def get_indicator(
         )
         return result_str
     except Exception as e:
+        # Re-raise (incl. rate-limit errors) so route_to_vendor can fall back to
+        # another indicator vendor instead of caching this error as if it were data.
         _logger.warning("Alpha Vantage indicator error for %s: %s", indicator, e)
-        return f"Error retrieving {indicator} data: {str(e)}"
+        raise

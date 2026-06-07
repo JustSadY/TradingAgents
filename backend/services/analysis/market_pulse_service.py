@@ -1,6 +1,4 @@
 import logging
-import asyncio
-from typing import Dict, Any
 from backend.services.market_data_service import get_live_prices_batch
 
 _logger = logging.getLogger(__name__)

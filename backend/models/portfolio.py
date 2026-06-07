@@ -1,10 +1,14 @@
 from datetime import UTC, datetime
 from decimal import Decimal
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import MONEY, Base
+
+if TYPE_CHECKING:
+    from backend.models.order import Order
 
 
 class Portfolio(Base):

@@ -18,11 +18,6 @@ _logger = logging.getLogger(__name__)
 active_run_context: contextvars.ContextVar[dict] = contextvars.ContextVar("active_run_context")
 
 
-def _load_ohlcv_via_interface(symbol: str, curr_date: str) -> pd.DataFrame:
-    # Legacy sync helper (unused in new async flow but kept for safety)
-    pass
-
-
 async def _load_ohlcv_via_interface_async(symbol: str, curr_date: str) -> pd.DataFrame:
     start_date = (pd.to_datetime(curr_date) - pd.DateOffset(years=5)).strftime("%Y-%m-%d")
     csv_payload = await route_to_vendor("get_stock_data", symbol, start_date, curr_date)

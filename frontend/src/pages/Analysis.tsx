@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import { getAccessToken } from '../contexts/AuthContext'
 import { useMeta } from '../hooks/useMeta'
@@ -94,6 +95,17 @@ function loadRunState() {
   } catch { return EMPTY_RUN }
 }
 
+// Safely render the Kelly card from a (possibly malformed/partial) JSON string.
+// trader_proposal_json is streamed over the WebSocket, so an unguarded JSON.parse
+// in the render path could throw and take down the whole tab.
+function KellyPositioningFromJson({ json }: { json?: string | null }) {
+  if (!json || json === '{}') return null
+  let parsed: any
+  try { parsed = JSON.parse(json) } catch { return null }
+  if (!parsed || typeof parsed !== 'object') return null
+  return <KellyPositioningCard kellySize={parsed.kelly_size} suggestedCapital={parsed.suggested_capital} />
+}
+
 function RunTab() {
   const { t } = useTranslation()
   const saved = loadRunState()
@@ -117,6 +129,11 @@ function RunTab() {
   const wsRef = useRef<WebSocket | null>(null)
   const taskIdRef = useRef<string | null>(null)
   const preRefreshLogRef = useRef<string[] | null>(null)
+  // Always-current ticker for use inside the WS handler, so attachWs doesn't
+  // need `ticker` in its deps (which recreated the socket on every keystroke)
+  // and the completion toast never shows a stale/empty symbol.
+  const tickerRef = useRef(ticker)
+  useEffect(() => { tickerRef.current = ticker }, [ticker])
 
   const meta = useMeta()
   const sectionLabels = meta?.section_labels ?? SECTION_LABELS
@@ -183,7 +200,8 @@ function RunTab() {
     }
 
     ws.onmessage = (e) => {
-      const ev: WsEvent = JSON.parse(e.data)
+      let ev: WsEvent
+      try { ev = JSON.parse(e.data) } catch { return }
       if (ev.type === 'status') {
         appendLog(`${ev.agent}`)
       } else if (ev.type === 'progress') {
@@ -210,7 +228,7 @@ function RunTab() {
         setMentalModel(null)
         appendLog(`✓ Completed in ${ev.duration_seconds}s / ${ev.llm_calls} LLM calls`)
         sendBrowserNotification(
-          `${ticker.toUpperCase()} Analysis Completed`,
+          `${tickerRef.current.toUpperCase()} Analysis Completed`,
           `Signal: ${ev.signal ?? 'N/A'} • Duration: ${ev.duration_seconds?.toFixed(0)}s`
         )
         if (ev.analysis_id) {
@@ -247,7 +265,9 @@ function RunTab() {
         }
       }
     }
-  }, [ticker, t])
+    // ticker is intentionally read via tickerRef (not a dep) so the socket
+    // isn't torn down and recreated on every ticker keystroke.
+  }, [t])
 
   // Effect to sync with active tasks from the server (Cross-device fix)
   useEffect(() => {
@@ -438,12 +458,7 @@ function RunTab() {
                   {activeDetailTab === 'reports' && (
                     <div className="space-y-2">
                       {detail.risk_metrics && <RiskMetricsCard metrics={detail.risk_metrics} />}
-                      {detail.trader_proposal_json && detail.trader_proposal_json !== '{}' && (
-                        <KellyPositioningCard 
-                          kellySize={JSON.parse(detail.trader_proposal_json).kelly_size} 
-                          suggestedCapital={JSON.parse(detail.trader_proposal_json).suggested_capital} 
-                        />
-                      )}
+                      <KellyPositioningFromJson json={detail.trader_proposal_json} />
                       {reportEntries.map(([section, content]) => (
                         <ReportCard key={section} label={sectionLabels[section] || section} content={content} defaultOpen={section === activeSection} />
                       ))}
@@ -462,12 +477,7 @@ function RunTab() {
                 </div>
                 <div className="flex-1 p-4 overflow-y-auto min-h-0 space-y-2">
                   {riskMetrics && <RiskMetricsCard metrics={riskMetrics} />}
-                  {reports.trader_proposal_json && (
-                    <KellyPositioningCard 
-                      kellySize={JSON.parse(reports.trader_proposal_json).kelly_size}
-                      suggestedCapital={JSON.parse(reports.trader_proposal_json).suggested_capital}
-                    />
-                  )}
+                  <KellyPositioningFromJson json={reports.trader_proposal_json} />
                   {reportEntries.length === 0 && !riskMetrics && (
                     <div className="flex flex-col items-center justify-center py-16 text-slate-600">
                       <FileText size={28} className="opacity-25 mb-2" />
@@ -497,8 +507,13 @@ function MultiTab() {
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<string>('')
+  const wsRef = useRef<WebSocket | null>(null)
   const meta = useMeta()
   const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Stock' }, { value: 'crypto', label: 'Crypto' }]
+
+  // Close the live-progress socket if the tab unmounts mid-run.
+  useEffect(() => () => { try { wsRef.current?.close() } catch { /* noop */ } }, [])
 
   const addTicker = () => {
     const tk = input.trim().toUpperCase()
@@ -509,13 +524,34 @@ function MultiTab() {
 
   const handleRun = async () => {
     if (tickers.length < 2) return
-    setRunning(true); setDone(false); setError(null)
+    setRunning(true); setDone(false); setError(null); setProgress('')
     try {
-      await axios.post('/api/analysis/run-portfolio', { tickers, trade_date: date, asset_type: assetType })
-      setDone(true)
+      const { data } = await axios.post('/api/analysis/run-portfolio', { tickers, trade_date: date, asset_type: assetType })
+      const taskId = data.task_id
+      if (!taskId) { setDone(true); setRunning(false); return }
+
+      try { wsRef.current?.close() } catch { /* noop */ }
+      const token = getAccessToken()
+      const ws = new WebSocket(`/ws/analysis/${taskId}?token=${token}`)
+      wsRef.current = ws
+      ws.onmessage = (e) => {
+        let ev: any
+        try { ev = JSON.parse(e.data) } catch { return }
+        if (ev.type === 'progress') {
+          setProgress(ev.label || '')
+        } else if (ev.type === 'complete') {
+          setDone(true); setRunning(false)
+          try { ws.close() } catch { /* noop */ }
+        } else if (ev.type === 'error') {
+          setError(ev.message || t('analysis.multi.error_default')); setRunning(false)
+          try { ws.close() } catch { /* noop */ }
+        }
+      }
+      ws.onerror = () => { setRunning(false) }
     } catch (err: any) {
       setError(err.response?.data?.detail || t('analysis.multi.error_default'))
-    } finally { setRunning(false) }
+      setRunning(false)
+    }
   }
 
   return (
@@ -566,6 +602,7 @@ function MultiTab() {
           </button>
         </div>
 
+        {running && progress && <div className="flex items-center gap-2 text-violet-300 text-xs font-semibold"><Loader2 size={14} className="animate-spin" /> {progress}</div>}
         {done && <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold"><CheckCircle size={14} /> {t('analysis.multi.started')}</div>}
         {error && <div className="flex items-center gap-2 text-rose-400 text-xs font-semibold"><AlertCircle size={14} /> {error}</div>}
       </div>
@@ -621,7 +658,7 @@ function PortfolioHistorySection() {
   )
 }
 
-function HistoryTab() {
+function HistoryTab({ initialDetailId }: { initialDetailId?: number }) {
   const { t } = useTranslation()
   const [items, setItems] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -641,6 +678,11 @@ function HistoryTab() {
     try { const { data } = await axios.get(`/api/analysis/${id}`); setDetail(data) }
     finally { setDetailLoading(false) }
   }, [])
+
+  // Open the detail modal directly when arriving via a /analysis?id=… deep link.
+  useEffect(() => {
+    if (initialDetailId) openDetail(initialDetailId)
+  }, [initialDetailId, openDetail])
 
   if (loading) return <div className="p-8 text-slate-500 text-xs">{t('analysis.history.loading')}</div>
 
@@ -737,12 +779,7 @@ function HistoryTab() {
                   {activeDetailTab === 'reports' && (
                     <div className="space-y-2 pr-1">
                       {detail.risk_metrics && <RiskMetricsCard metrics={detail.risk_metrics} />}
-                      {detail.trader_proposal_json && detail.trader_proposal_json !== '{}' && (
-                        <KellyPositioningCard 
-                          kellySize={JSON.parse(detail.trader_proposal_json).kelly_size} 
-                          suggestedCapital={JSON.parse(detail.trader_proposal_json).suggested_capital} 
-                        />
-                      )}
+                      <KellyPositioningFromJson json={detail.trader_proposal_json} />
                       {([
                         ['market_report', detail.market_report], ['sentiment_report', detail.sentiment_report],
                         ['news_report', detail.news_report], ['fundamentals_report', detail.fundamentals_report],
@@ -775,7 +812,9 @@ type Tab = 'run' | 'multi' | 'history'
 
 export default function Analysis() {
   const { t } = useTranslation()
-  const [tab, setTab] = useState<Tab>('run')
+  const [searchParams] = useSearchParams()
+  const deepLinkId = searchParams.get('id')
+  const [tab, setTab] = useState<Tab>(deepLinkId ? 'history' : 'run')
 
   const tabs = [
     { id: 'run' as Tab,     label: t('analysis.tab.single'), icon: <Zap size={13} /> },
@@ -807,7 +846,7 @@ export default function Analysis() {
 
       {tab === 'run'     && <RunTab />}
       {tab === 'multi'   && <MultiTab />}
-      {tab === 'history' && <HistoryTab />}
+      {tab === 'history' && <HistoryTab initialDetailId={deepLinkId ? Number(deepLinkId) : undefined} />}
     </div>
   )
 }

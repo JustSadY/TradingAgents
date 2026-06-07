@@ -18,7 +18,12 @@ interface JwtPayload {
 
 function decodeToken(token: string): JwtPayload | null {
   try {
-    return JSON.parse(atob(token.split('.')[1])) as JwtPayload
+    // JWT segments are base64url; normalize to base64 (+ padding) before atob,
+    // otherwise tokens whose payload contains '-' or '_' fail to decode and the
+    // user is silently logged out.
+    let b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
+    b64 += '='.repeat((4 - (b64.length % 4)) % 4)
+    return JSON.parse(atob(b64)) as JwtPayload
   } catch {
     return null
   }

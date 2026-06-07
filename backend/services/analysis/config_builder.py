@@ -154,3 +154,24 @@ def history_json_from(value):
             except Exception as e:
                 _logger.debug("Failed parsing history JSON string: %s", e)
     return value
+
+
+async def prepare_graph_config(db: AsyncSession, user_id: int | None, config: dict) -> list[str]:
+    """Resolve the user's permitted analysts and inject runtime tool/agent
+    context + credentials into ``config``; returns the permitted analyst keys.
+
+    Shared by the single- and multi-ticker orchestrators so the
+    security-sensitive agent-access filtering can't diverge between them.
+    """
+    from backend.services.agent_settings_service import build_agent_runtime_context
+    from backend.services.tool_access_service import get_user_agent_access
+    from backend.services.tool_settings_service import build_global_runtime_context
+    from backend.trading_agents.agent_catalog import list_analysts
+
+    agent_access_map = await get_user_agent_access(db, user_id) if user_id else {}
+    permitted_analysts = [a.key for a in list_analysts() if agent_access_map.get(a.key, True)]
+
+    config["runtime_tool_context"] = await build_global_runtime_context(db, user_id)
+    config["runtime_agent_context"] = await build_agent_runtime_context(db, user_id)
+    inject_tool_credentials(config)
+    return permitted_analysts

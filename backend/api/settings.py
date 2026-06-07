@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import check_tool_settings_permission, get_current_user, require_admin
+from backend.api.deps import enforce_tool_settings_permission, get_current_user, require_admin
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.repositories.permissions import list_allowed_setting_sections
@@ -197,8 +197,9 @@ async def get_user_tools(
 async def update_user_tools(
     body: ToolSettingsUpdate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(check_tool_settings_permission),
+    current_user: User = Depends(get_current_user),
 ):
+    await enforce_tool_settings_permission(db, current_user, body)
     from backend.services.tool_settings_service import apply_tool_settings_update
 
     try:

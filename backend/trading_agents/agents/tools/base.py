@@ -101,9 +101,6 @@ class BaseAgentTool(ABC):
             if scope is None or field.scope in (scope, "both")
         }
 
-    async def setup_db(self, engine) -> None:
-        return None
-
     @abstractmethod
     def get_langchain_tools(
         self,

@@ -181,10 +181,26 @@ async def websocket_analysis(
     token: str = Query(..., description="JWT access token"),
 ):
     try:
-        decode_token(token, expected_type="access")
+        username = decode_token(token, expected_type="access")
     except ValueError:
         await websocket.close(code=4001, reason="Unauthorized")
         return
+
+    from backend.core.database import AsyncSessionLocal
+    from backend.repositories.users import get_user_by_username
+    from backend.services.analysis_service import is_task_owner
+
+    async with AsyncSessionLocal() as db:
+        user = await get_user_by_username(db, username)
+    if user is None or not user.is_active:
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+    # Only the user who started the run (or an admin) may stream its events;
+    # otherwise any authenticated user could read another user's analysis.
+    if not is_task_owner(task_id, user.id, user.is_admin):
+        await websocket.close(code=4003, reason="Forbidden")
+        return
+
     await ws_manager.connect(task_id, websocket)
     try:
         while True:

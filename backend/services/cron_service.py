@@ -2,17 +2,16 @@ import logging
 from datetime import date
 from typing import Optional
 
+from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 
 from backend.core.database import AsyncSessionLocal
 from backend.models.settings import AppSettings
-from backend.models.system_settings import SystemSettings
 from backend.models.user import User
 from backend.services.alert_service import check_price_alerts
 from backend.services.analysis_service import run_analysis
-from backend.services.execution.factory import get_trader
 from backend.services.performance_service import backfill_returns
 from backend.services.trading_orchestrator import place_signal_order
 
@@ -56,7 +55,11 @@ class CronService:
         if not settings.user_id:
             return
         job_id = f"watchlist_scan_user_{settings.user_id}"
-        self.scheduler.remove_job(job_id) if self.scheduler.get_job(job_id) else None
+        # Remove without a check-then-remove race against the scheduler thread.
+        try:
+            self.scheduler.remove_job(job_id)
+        except JobLookupError:
+            pass
         cron_enabled = getattr(settings, "cron_enabled", False)
         cron_schedule = getattr(settings, "cron_schedule", "0 9 * * 1-5") or "0 9 * * 1-5"
         watchlist = getattr(settings, "watchlist", [])
@@ -98,11 +101,6 @@ class CronService:
             if not app_settings or not app_settings.cron_enabled:
                 return
 
-            sys_res = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
-            sys_settings = sys_res.scalar_one_or_none()
-            sys_mode = sys_settings.trading_mode if sys_settings else "simulation"
-            sys_broker = sys_settings.active_broker if sys_settings else "simulation"
-            trader = get_trader(sys_mode, sys_broker, db=db)
             for ticker in app_settings.watchlist:
                 try:
                     _logger.info("User=%s scanning ticker=%s", user.username, ticker)
@@ -117,7 +115,8 @@ class CronService:
                     )
                     await db.commit()
                     if row.signal in ("Buy", "Overweight", "Sell", "Underweight"):
-                        await _maybe_execute_user(user_id, ticker, row, app_settings, trader, db, sys_mode, sys_broker)
+                        # place_signal_order resolves the active broker/mode itself.
+                        await place_signal_order(db, ticker=ticker, row=row, settings=app_settings, user=user)
                 except Exception as e:
                     _logger.error(
                         "User cron scan failed for user=%s, ticker=%s: %s", user.username, ticker, e, exc_info=True
@@ -135,14 +134,6 @@ class CronService:
             "job_configured": job is not None,
             "next_run_time": job.next_run_time.isoformat() if job and job.next_run_time else None,
         }
-
-
-async def _maybe_execute_user(user_id: int, ticker: str, row, settings, trader, db, sys_mode: str, sys_broker: str):
-    u_res = await db.execute(select(User).where(User.id == user_id))
-    user = u_res.scalar_one_or_none()
-    if not user:
-        return
-    await place_signal_order(db, ticker=ticker, row=row, settings=settings, user=user)
 
 
 async def _run_alert_checker():
@@ -172,9 +163,11 @@ def init_cron_service() -> CronService:
     # Register user deletion listener
     async def _on_user_deleted(user_id: int):
         job_id = f"watchlist_scan_user_{user_id}"
-        if _cron_service.scheduler.get_job(job_id):
+        try:
             _cron_service.scheduler.remove_job(job_id)
             _logger.info("Successfully removed watchlist scan cron job for deleted user %d", user_id)
+        except JobLookupError:
+            pass
 
     subscribe("user_deleted", _on_user_deleted)
 

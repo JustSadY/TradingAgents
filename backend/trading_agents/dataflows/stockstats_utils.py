@@ -1,10 +1,8 @@
 import logging
 import time
-from typing import Annotated
 
 import pandas as pd
 import yfinance as yf
-from stockstats import wrap
 from yfinance.exceptions import YFRateLimitError
 
 from .cache import APICache
@@ -75,23 +73,3 @@ def filter_financials_by_date(data: pd.DataFrame, curr_date: str) -> pd.DataFram
     cutoff = pd.Timestamp(curr_date)
     mask = pd.to_datetime(data.columns, errors="coerce") <= cutoff
     return data.loc[:, mask]
-
-
-class StockstatsUtils:
-    @staticmethod
-    def get_stock_stats(
-        symbol: Annotated[str, "ticker symbol for the company"],
-        indicator: Annotated[str, "quantitative indicators based off of the stock data for the company"],
-        curr_date: Annotated[str, "curr date for retrieving stock price data, YYYY-mm-dd"],
-    ):
-        data = load_ohlcv(symbol, curr_date)
-        df = wrap(data)
-        df["Date"] = df["Date"].dt.strftime("%Y-%m-%d")
-        curr_date_str = pd.to_datetime(curr_date).strftime("%Y-%m-%d")
-        df[indicator]
-        matching_rows = df[df["Date"].str.startswith(curr_date_str)]
-        if not matching_rows.empty:
-            indicator_value = matching_rows[indicator].values[0]
-            return indicator_value
-        else:
-            return "N/A: Not a trading day (weekend or holiday)"

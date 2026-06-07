@@ -12,7 +12,6 @@ from __future__ import annotations
 import logging
 from datetime import datetime
 
-import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.constants import PERIOD_DELTAS, SIGNAL_SENTIMENT_VALUES
@@ -140,6 +139,4 @@ async def get_sentiment_history(db: AsyncSession, ticker: str) -> dict:
 
     rows = await get_sentiment_history_by_ticker(db, ticker)
     history = [{"time": trade_date, "value": SIGNAL_SENTIMENT_VALUES.get(signal, 0.0)} for trade_date, signal in rows]
-    if not history:
-        history = []
     return {"ticker": ticker, "history": history}

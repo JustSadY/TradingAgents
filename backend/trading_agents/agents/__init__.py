@@ -39,6 +39,7 @@ __all__ = [
     "create_portfolio_manager",
     "create_conservative_debator",
     "create_sentiment_analyst",
+    "create_market_analyst",
     "create_trader",
     "create_macro_analyst",
     "create_options_analyst",

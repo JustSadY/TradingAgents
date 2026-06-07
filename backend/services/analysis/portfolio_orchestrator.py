@@ -9,12 +9,10 @@ from backend.core.database import AsyncSessionLocal
 from backend.models.portfolio_analysis import MultiTickerAnalysis
 from backend.models.settings import AppSettings
 from backend.repositories.analysis import get_system_settings
-from backend.services.tool_access_service import get_user_agent_access
-from backend.services.tool_settings_service import build_global_runtime_context
 from backend.trading_agents.agents.sub.managers.super_portfolio_manager import create_super_portfolio_manager
 from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
 
-from .config_builder import build_analysis_config, inject_tool_credentials
+from .config_builder import build_analysis_config, prepare_graph_config
 from .emitter import AnalysisEmitter
 from .orchestrator import run_individual_analysis
 
@@ -29,9 +27,21 @@ async def run_portfolio_analysis(
     db: AsyncSession,
     triggered_by: str = "manual",
     user=None,
+    task_id: str | None = None,
 ):
     username = user.username if user else "system"
     _logger.info("Starting portfolio analysis for tickers=%s user=%s triggered_by=%s", tickers, username, triggered_by)
+
+    # Portfolio-level emitter: streams aggregate progress to the WebSocket
+    # channel the API handed back to the client (``task_id``). Each ticker still
+    # gets its own emitter for detailed per-run streaming.
+    portfolio_emitter = AnalysisEmitter(task_id) if task_id else None
+    total = len(tickers)
+    completed = 0
+    progress_lock = asyncio.Lock()
+
+    if portfolio_emitter:
+        await portfolio_emitter.emit_progress(f"Starting portfolio analysis ({total} tickers)", "starting", "portfolio")
 
     sys_settings = await get_system_settings(db)
     config = build_analysis_config(settings, user=user, sys_settings=sys_settings)
@@ -39,15 +49,16 @@ async def run_portfolio_analysis(
     semaphore = asyncio.Semaphore(concurrency)
 
     async def _run_one(ticker: str):
+        nonlocal completed
         async with semaphore:
             _logger.info("Portfolio analysis: running %s for user=%s", ticker, username)
             async with AsyncSessionLocal() as t_db:
-                # Portfolio analysis doesn't have a single task_id for the whole thing yet in the UI,
-                # but each individual run gets its own.
+                # Each individual run gets its own task_id/emitter for detailed
+                # streaming; the portfolio_emitter above reports aggregate progress.
                 import uuid
 
-                task_id = str(uuid.uuid4())
-                emitter = AnalysisEmitter(task_id)
+                ticker_task_id = str(uuid.uuid4())
+                emitter = AnalysisEmitter(ticker_task_id)
                 _, row = await run_individual_analysis(
                     ticker, trade_date, asset_type, settings, t_db, emitter, triggered_by, user=user
                 )
@@ -57,6 +68,11 @@ async def run_portfolio_analysis(
                     "portfolio_decision": row.final_decision,
                 }
                 await t_db.commit()
+            if portfolio_emitter:
+                async with progress_lock:
+                    completed += 1
+                    done = completed
+                await portfolio_emitter.emit_progress(f"{ticker} complete ({done}/{total})", "running", "portfolio")
             return ticker, data
 
     results = await asyncio.gather(*[_run_one(t.upper()) for t in tickers], return_exceptions=True)
@@ -89,6 +105,18 @@ async def run_portfolio_analysis(
     db.add(multi_row)
     await db.flush()
     _logger.info("Portfolio analysis complete for user=%s tickers=%s", username, tickers)
+
+    if portfolio_emitter:
+        await portfolio_emitter.emit(
+            {
+                "type": "complete",
+                "multi_id": multi_row.id,
+                "analysis_ids": analysis_ids,
+                "completed": len(analysis_ids),
+                "total": total,
+            }
+        )
+        await portfolio_emitter.close()
     return multi_row
 
 
@@ -96,16 +124,7 @@ async def _generate_super_report(db, user, config, ticker_reports) -> str:
     username = user.username if user else "system"
     try:
         user_id = user.id if user else None
-        agent_access_map = await get_user_agent_access(db, user_id) if user_id else {}
-
-        from backend.services.agent_settings_service import build_agent_runtime_context
-        from backend.trading_agents.agent_catalog import list_analysts
-
-        permitted_analysts = [a.key for a in list_analysts() if agent_access_map.get(a.key, True)]
-
-        config["runtime_tool_context"] = await build_global_runtime_context(db, user_id)
-        config["runtime_agent_context"] = await build_agent_runtime_context(db, user_id)
-        inject_tool_credentials(config)
+        permitted_analysts = await prepare_graph_config(db, user_id, config)
 
         ta = TradingAgentsGraph(selected_analysts=permitted_analysts, config=config)
         spm_node = create_super_portfolio_manager(ta.thinking_llm)

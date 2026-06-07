@@ -8,6 +8,7 @@ depend on this service instead.
 
 from __future__ import annotations
 
+import json
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -100,3 +101,40 @@ async def get_user_language(db: AsyncSession, user=None) -> str:
         return settings.output_language or "English"
     except Exception:
         return "English"
+
+
+async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
+    """Apply a preset's settings JSON onto *user*'s AppSettings row.
+
+    Raises ValueError if the stored preset JSON is invalid. Flushes so any
+    constraint error surfaces here rather than at request-commit time.
+    """
+    try:
+        data = json.loads(preset.settings_json)
+    except json.JSONDecodeError as exc:
+        raise ValueError("Template JSON invalid") from exc
+
+    settings = await get_or_create_settings(db, user)
+    for key, value in data.items():
+        if hasattr(settings, key) and value is not None:
+            setattr(settings, key, value)
+    settings.active_preset_name = preset.name
+    await db.flush()
+    return preset.name
+
+
+async def add_ticker_to_watchlist(db: AsyncSession, user, ticker: str) -> list[str]:
+    """Add ``ticker`` (already validated/normalized) to ``user``'s watchlist."""
+    settings = await get_or_create_settings(db, user)
+    if ticker not in settings.watchlist:
+        settings.watchlist = [*settings.watchlist, ticker]
+    await db.flush()
+    return settings.watchlist
+
+
+async def remove_ticker_from_watchlist(db: AsyncSession, user, ticker: str) -> list[str]:
+    """Remove ``ticker`` from ``user``'s watchlist."""
+    settings = await get_or_create_settings(db, user)
+    settings.watchlist = [t for t in settings.watchlist if t != ticker]
+    await db.flush()
+    return settings.watchlist

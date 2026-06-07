@@ -7,22 +7,24 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 
 
+# Single source of truth shared by the ToolNode registration and the LLM binding.
+_OPTIONS_TOOLS = [get_options_data]
+
+
 @register_analyst(
     key="options",
     agent_node="Options Analyst",
     clear_node="Msg Clear Options",
     tool_node="tools_options",
     report_key="options_report",
-    tools=[get_options_data],
+    tools=_OPTIONS_TOOLS,
 )
 def create_options_analyst(llm):
 
     async def options_analyst_node(state):
         instrument_context = build_instrument_context(state["company_of_interest"])
 
-        tools = [
-            get_options_data,
-        ]
+        tools = _OPTIONS_TOOLS
 
         system_message = """You are a senior options and derivatives analyst. Your goal is to decode market expectations and institutional positioning through options chain analysis.
 

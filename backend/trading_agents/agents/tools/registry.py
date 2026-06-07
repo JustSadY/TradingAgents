@@ -25,9 +25,6 @@ class ToolRegistry:
     def metadata(self) -> list[dict]:
         return [tool.metadata() for tool in self.list()]
 
-    def tools_for_analyst(self, analyst_key: str) -> list[BaseAgentTool]:
-        return [tool for tool in self.list() if analyst_key in tool.allowed_analysts]
-
     def get_agent_tool_key_for_langchain_tool(self, langchain_tool_name: str) -> str | None:
         return self._langchain_tool_to_agent_tool_key.get(langchain_tool_name)
 

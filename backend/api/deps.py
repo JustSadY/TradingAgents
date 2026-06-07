@@ -1,5 +1,3 @@
-from typing import Any
-
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -63,16 +61,20 @@ def require_page(page_key: str):
     return _check
 
 
-async def check_tool_settings_permission(
-    body: Any = None,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_user),
-) -> User:
-    if not isinstance(body, ToolSettingsUpdate):
-        return user
+async def enforce_tool_settings_permission(
+    db: AsyncSession,
+    user: User,
+    body: ToolSettingsUpdate,
+) -> None:
+    """Raise 403/400 if *user* may not apply the tool changes in *body*.
 
+    This must be called from inside the request handler, where the parsed body
+    is available. It cannot be a FastAPI dependency: FastAPI does not inject a
+    route's body model into a dependency parameter, so the previous
+    dependency-based version received ``None`` and silently allowed everything.
+    """
     if user.is_admin:
-        return user
+        return
 
     tool_access_map = await get_user_tool_access(db, user.id)
 
@@ -96,5 +98,3 @@ async def check_tool_settings_permission(
                 raise HTTPException(
                     status_code=403, detail=f"You do not have permission to modify settings for tool '{tool_key}'."
                 )
-
-    return user

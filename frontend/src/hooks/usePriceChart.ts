@@ -39,8 +39,6 @@ export function usePriceChart(
   useEffect(() => {
     if (!containerRef.current || chartRef.current) return
 
-    console.log("Initializing Lightweight Charts v5...")
-
     const chart = createChart(containerRef.current, {
       layout: {
         background: { type: ColorType.Solid, color: '#090d16' },
