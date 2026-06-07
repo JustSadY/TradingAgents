@@ -7,22 +7,24 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 
 
+# Single source of truth shared by the ToolNode registration and the LLM binding.
+_MACRO_TOOLS = [get_macro_data]
+
+
 @register_analyst(
     key="macro",
     agent_node="Macro Analyst",
     clear_node="Msg Clear Macro",
     tool_node="tools_macro",
     report_key="macro_report",
-    tools=[get_macro_data],
+    tools=_MACRO_TOOLS,
 )
 def create_macro_analyst(llm):
 
     async def macro_analyst_node(state):
         instrument_context = build_instrument_context(state["company_of_interest"])
 
-        tools = [
-            get_macro_data,
-        ]
+        tools = _MACRO_TOOLS
 
         system_message = """You are a senior macroeconomic analyst. Your goal is to interpret the broader economic climate and its ripple effects on financial markets.
 

@@ -13,32 +13,30 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 
 
+# Single source of truth shared by the ToolNode registration and the LLM binding.
+_QUANT_TOOLS = [
+    get_quant_data,
+    add_chart_annotation,
+    add_custom_indicator,
+    get_vision_chart_analysis,
+    get_mtf_trend,
+]
+
+
 @register_analyst(
     key="quant",
     agent_node="Quant Analyst",
     clear_node="Msg Clear Quant",
     tool_node="tools_quant",
     report_key="quant_report",
-    tools=[
-        get_quant_data,
-        add_chart_annotation,
-        add_custom_indicator,
-        get_vision_chart_analysis,
-        get_mtf_trend,
-    ],
+    tools=_QUANT_TOOLS,
 )
 def create_quant_analyst(llm):
 
     async def quant_analyst_node(state):
         instrument_context = build_instrument_context(state["company_of_interest"])
 
-        tools = [
-            get_quant_data,
-            add_chart_annotation,
-            add_custom_indicator,
-            get_vision_chart_analysis,
-            get_mtf_trend,
-        ]
+        tools = _QUANT_TOOLS
 
         system_message = """You are a senior quantitative analyst. Your goal is to provide a statistically rigorous assessment of an asset's risk-return profile and market correlation.
 

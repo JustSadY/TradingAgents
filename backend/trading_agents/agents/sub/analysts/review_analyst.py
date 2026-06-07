@@ -9,16 +9,20 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 
 
+# Single source of truth shared by the ToolNode registration and the LLM binding.
+_REVIEW_TOOLS = [get_past_performance_data]
+
+
 @register_analyst(
     key="review",
     agent_node="Performance Review Analyst",
     clear_node="Msg Clear Review",
     tool_node="tools_review",
     report_key="review_report",
-    tools=[get_past_performance_data],
+    tools=_REVIEW_TOOLS,
 )
 def create_review_analyst(llm):
-    llm_with_tools = llm.bind_tools([get_past_performance_data])
+    llm_with_tools = llm.bind_tools(_REVIEW_TOOLS)
 
     async def review_analyst(state: AgentState):
         ticker = state.get("company_of_interest", "Unknown")
