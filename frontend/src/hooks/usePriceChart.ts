@@ -5,6 +5,7 @@ import {
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
+  createSeriesMarkers,
 } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 
@@ -29,6 +30,7 @@ export function usePriceChart(
   const volSeriesRef = useRef<ISeriesApi<'Histogram', any> | null>(null)
   const smaSeriesRef = useRef<ISeriesApi<'Line', any> | null>(null)
   const emaSeriesRef = useRef<ISeriesApi<'Line', any> | null>(null)
+  const markersApiRef = useRef<any>(null)
   const priceLineRefs = useRef<any[]>([])
   const trendlineSeriesRefs = useRef<any[]>([])
   const overlaySeriesRefs = useRef<any[]>([])
@@ -110,6 +112,7 @@ export function usePriceChart(
       volSeriesRef.current = null
       smaSeriesRef.current = null
       emaSeriesRef.current = null
+      markersApiRef.current = null
     }
   }, []) // Initialize only once
 
@@ -251,10 +254,10 @@ export function usePriceChart(
 
     if (candleSeriesRef.current) {
         try {
-            if (typeof candleSeriesRef.current.setMarkers === 'function') {
-                candleSeriesRef.current.setMarkers(combinedMarkers)
+            if (!markersApiRef.current) {
+                markersApiRef.current = createSeriesMarkers(candleSeriesRef.current, combinedMarkers)
             } else {
-                console.warn("setMarkers is not available on candleSeriesRef.current", candleSeriesRef.current)
+                markersApiRef.current.setMarkers(combinedMarkers)
             }
         } catch (err) {
             console.error("Error setting markers:", err)
