@@ -33,6 +33,9 @@ langchain-openai>=0.3.23
 langgraph>=0.4.8
 langgraph-checkpoint-sqlite>=2.0.0
 
+# Vector memory (episodic + inter-agent Q&A)
+pinecone>=5.0.0
+
 # Trading & Data Analysis
 backtrader>=1.9.78.123
 pandas>=2.3.0
