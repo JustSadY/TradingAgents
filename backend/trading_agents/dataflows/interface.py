@@ -161,6 +161,7 @@ async def route_to_vendor(method: str, *args, **kwargs):
         if vendor not in fallback_vendors:
             fallback_vendors.append(vendor)
 
+    last_error: Exception | None = None
     for vendor in fallback_vendors:
         if vendor not in VENDOR_METHODS[method]:
             continue
@@ -177,7 +178,15 @@ async def route_to_vendor(method: str, *args, **kwargs):
 
             APICache.set(method, val, *args, **kwargs)
             return val
-        except AlphaVantageRateLimitError:
+        except Exception as exc:  # noqa: BLE001 — any vendor failure should fall through to the next
+            # Previously only AlphaVantageRateLimitError fell back, so a network
+            # error / missing key / yfinance hiccup on the primary vendor would
+            # abort instead of trying the configured fallback vendor.
+            if not isinstance(exc, AlphaVantageRateLimitError):
+                _logger.warning("Vendor '%s' failed for method '%s': %s", vendor, method, exc)
+            last_error = exc
             continue
 
+    if last_error is not None:
+        raise RuntimeError(f"All vendors failed for '{method}': {last_error}") from last_error
     raise RuntimeError(f"No available vendor for '{method}'")

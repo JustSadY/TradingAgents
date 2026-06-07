@@ -156,8 +156,10 @@ def get_fundamentals(
         header = f"# Company Fundamentals for {ticker.upper()}\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + "\n".join(lines)
-    except Exception as e:
-        return f"Error retrieving fundamentals for {ticker}: {str(e)}"
+    except Exception:
+        # Re-raise so route_to_vendor can fall back to another vendor instead of
+        # returning (and caching) an error string the router treats as data.
+        raise
 
 
 def get_balance_sheet(
@@ -178,8 +180,8 @@ def get_balance_sheet(
         header = f"# Balance Sheet data for {ticker.upper()} ({freq})\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
-    except Exception as e:
-        return f"Error retrieving balance sheet for {ticker}: {str(e)}"
+    except Exception:
+        raise
 
 
 def get_cashflow(
@@ -200,8 +202,8 @@ def get_cashflow(
         header = f"# Cash Flow data for {ticker.upper()} ({freq})\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
-    except Exception as e:
-        return f"Error retrieving cash flow for {ticker}: {str(e)}"
+    except Exception:
+        raise
 
 
 def get_income_statement(
@@ -222,8 +224,8 @@ def get_income_statement(
         header = f"# Income Statement data for {ticker.upper()} ({freq})\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
-    except Exception as e:
-        return f"Error retrieving income statement for {ticker}: {str(e)}"
+    except Exception:
+        raise
 
 
 def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the company"]):
@@ -236,8 +238,8 @@ def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the compan
         header = f"# Insider Transactions data for {ticker.upper()}\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
-    except Exception as e:
-        return f"Error retrieving insider transactions for {ticker}: {str(e)}"
+    except Exception:
+        raise
 
 
 def get_sec_filings(ticker: Annotated[str, "ticker symbol of the company"]):
@@ -258,5 +260,5 @@ def get_sec_filings(ticker: Annotated[str, "ticker symbol of the company"]):
         header = f"# SEC Filings for {ticker.upper()}\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
-    except Exception as e:
-        return f"Error retrieving SEC filings for {ticker}: {str(e)}"
+    except Exception:
+        raise
