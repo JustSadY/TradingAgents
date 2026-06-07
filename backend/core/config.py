@@ -3,9 +3,11 @@ from functools import lru_cache
 from pathlib import Path
 
 from cryptography.fernet import Fernet
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _ROOT_ENV = Path(__file__).parent.parent.parent / ".env"
+_DEFAULT_SECRET_KEY = "change-me-in-production-use-a-long-random-string"
 _TEMP_KEY = None
 _TEMP_FERNET = None
 _TEMP_KEY_LOCK = threading.Lock()
@@ -13,7 +15,8 @@ _TEMP_KEY_LOCK = threading.Lock()
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=str(_ROOT_ENV), env_file_encoding="utf-8", extra="ignore")
-    SECRET_KEY: str = "change-me-in-production-use-a-long-random-string"
+    ENVIRONMENT: str = "development"
+    SECRET_KEY: str = _DEFAULT_SECRET_KEY
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 30
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
@@ -22,6 +25,28 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://tradingagents:tradingagents@localhost:5432/tradingagents"
     ENCRYPTION_KEY: str = ""
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+
+    @model_validator(mode="after")
+    def _reject_insecure_production_defaults(self) -> "Settings":
+        """Refuse to boot in production with shipped-default secrets.
+
+        In development the defaults stay usable out of the box; with
+        ENVIRONMENT=production an operator must provide real secrets, otherwise
+        JWTs are forgeable, the owner account password defaults to 'changeme',
+        and encrypted API keys are silently lost on restart.
+        """
+        if self.ENVIRONMENT.strip().lower() != "production":
+            return self
+        problems = []
+        if not self.SECRET_KEY or self.SECRET_KEY == _DEFAULT_SECRET_KEY:
+            problems.append("SECRET_KEY must be set to a long random value")
+        if not self.ENCRYPTION_KEY:
+            problems.append("ENCRYPTION_KEY must be set (encrypted data is lost on restart otherwise)")
+        if not self.ADMIN_PASSWORD_HASH:
+            problems.append("ADMIN_PASSWORD_HASH must be set (the admin password defaults to 'changeme' otherwise)")
+        if problems:
+            raise ValueError("Insecure configuration for ENVIRONMENT=production: " + "; ".join(problems))
+        return self
 
     def get_fernet(self) -> Fernet:
         global _TEMP_KEY, _TEMP_FERNET
