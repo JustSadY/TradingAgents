@@ -57,12 +57,10 @@ async def check_price_alerts() -> None:
             )
 
             if settings:
-                from backend.services.settings_service import get_or_create_settings
-
-                # settings here is SystemSettings from repo, we need AppSettings for user if possible
-                # but the original code used id=1 which might be global settings
-                # For now, keeping original notification logic but using user settings if possible
-                user_settings = await get_or_create_settings(db, user_id=alert.user_id)
+                # Resolve the alert owner's AppSettings (holds the webhook config) so the
+                # notification respects that user's delivery preferences.
+                user = await db.get(User, alert.user_id)
+                user_settings = await get_or_create_settings(db, user)
                 await notify_alert_triggered(alert.ticker, alert.condition, alert.target_price, user_settings)
 
             if alert.auto_analyze:

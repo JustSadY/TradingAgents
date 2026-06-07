@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query
 from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user
+from backend.api.deps import require_admin
 from backend.core.database import get_db
 from backend.models.log import SystemLog
 from backend.models.user import User
@@ -18,7 +18,7 @@ async def list_logs(
     limit: int = Query(default=50, ge=1, le=500),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ):
     q = select(SystemLog).order_by(desc(SystemLog.created_at)).limit(limit).offset(offset)
     if level:

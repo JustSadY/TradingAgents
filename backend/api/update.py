@@ -2,7 +2,7 @@ import asyncio
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from backend.api.deps import get_current_user
+from backend.api.deps import get_current_user, require_admin
 from backend.models.user import User
 from backend.services import update_service
 
@@ -15,7 +15,7 @@ async def update_status(_: User = Depends(get_current_user)):
 
 
 @router.post("/apply")
-async def update_apply(_: User = Depends(get_current_user)):
+async def update_apply(_: User = Depends(require_admin)):
     try:
         return await asyncio.to_thread(update_service.request_update)
     except RuntimeError as exc:

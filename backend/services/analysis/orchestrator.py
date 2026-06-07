@@ -95,7 +95,7 @@ async def run_individual_analysis(
         agent_access_map = await get_user_agent_access(db, user_id) if user_id else {}
         from backend.trading_agents.agent_catalog import list_analysts
 
-        permitted_analysts = [a.key for a in list_analysts() if agent_access_map.get(a, True)]
+        permitted_analysts = [a.key for a in list_analysts() if agent_access_map.get(a.key, True)]
 
         config["runtime_tool_context"] = await build_global_runtime_context(db, user_id)
         config["runtime_agent_context"] = await build_agent_runtime_context(db, user_id)
