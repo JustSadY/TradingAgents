@@ -53,8 +53,14 @@ export default function ChartPage() {
   const chartContainerRef = useRef<HTMLDivElement>(null)
   usePriceChart(chartContainerRef as React.RefObject<HTMLDivElement>, candles, analyses, showSMA, showEMA)
 
+  // Monotonic request id so that if loads overlap (e.g. rapid period switches),
+  // only the most recent one's result is applied — out-of-order responses for a
+  // stale ticker/period are ignored.
+  const loadReqId = useRef(0)
+
   const load = useCallback(async (ticker: string, p: string) => {
     if (!ticker) return
+    const reqId = ++loadReqId.current
     setLoading(true); setError(null); setSelected(null); setCustomIndicators([]); setUserIndicatorData([]); setUserIndicatorLabel('')
     try {
       const [ohlcvRes, histRes, sentRes] = await Promise.all([
@@ -62,12 +68,16 @@ export default function ChartPage() {
         api.get('/api/analysis/history', { params: { ticker, limit: 200 } }),
         api.get('/api/market/sentiment-history', { params: { ticker } }),
       ])
+      if (reqId !== loadReqId.current) return
       setCandles(ohlcvRes.data.candles)
       setAnalyses(histRes.data)
       setSentimentHistory(sentRes.data.history)
     } catch (e: any) {
+      if (reqId !== loadReqId.current) return
       setError(e.response?.data?.detail ?? t('chart.error_load'))
-    } finally { setLoading(false) }
+    } finally {
+      if (reqId === loadReqId.current) setLoading(false)
+    }
   }, [t])
 
   useEffect(() => { if (activeTicker) load(activeTicker, period) }, [])
