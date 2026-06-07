@@ -1,3 +1,7 @@
+import ipaddress
+import socket
+from urllib.parse import urlparse
+
 import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -69,14 +73,49 @@ class WebhookTestRequest(BaseModel):
     url: str
 
 
+def _validate_webhook_url(url: str) -> None:
+    """Reject non-http(s) schemes and URLs whose host resolves to a private,
+    loopback, link-local, or otherwise non-public address.
+
+    Without this guard the server can be coerced into making requests to
+    internal services or the cloud metadata endpoint (SSRF) on behalf of any
+    user who can reach this endpoint.
+    """
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise HTTPException(status_code=400, detail="Webhook URL must use http or https")
+    host = parsed.hostname
+    if not host:
+        raise HTTPException(status_code=400, detail="Webhook URL is missing a host")
+
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+    except socket.gaierror:
+        raise HTTPException(status_code=400, detail="Webhook host could not be resolved")
+
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            raise HTTPException(status_code=400, detail="Webhook URL resolves to a disallowed internal address")
+
+
 @router.post("/test-webhook")
 async def test_webhook(body: WebhookTestRequest, _: User = Depends(get_current_user)):
+    _validate_webhook_url(body.url)
     payload = {
         "text": "TradingAgents webhook testi başarılı! ✓",
         "content": "TradingAgents webhook testi başarılı! ✓",
     }
     try:
-        async with httpx.AsyncClient(timeout=10) as client:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
             r = await client.post(body.url, json=payload)
             if r.status_code >= 400:
                 raise HTTPException(status_code=400, detail=f"Webhook yanıtı: {r.status_code}")
