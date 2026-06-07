@@ -8,10 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.catalog import node_progress
 from backend.repositories.analysis import get_system_settings
-from backend.services.agent_settings_service import build_agent_runtime_context
 from backend.services.stats_handler import StatsCallbackHandler
-from backend.services.tool_access_service import get_user_agent_access
-from backend.services.tool_settings_service import build_global_runtime_context
 from backend.trading_agents.agents.schemas import PropagateResult
 from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
 
@@ -19,7 +16,7 @@ from .config_builder import (
     build_analysis_config,
     get_historical_analyses_context,
     history_json_from,
-    inject_tool_credentials,
+    prepare_graph_config,
 )
 from .emitter import AnalysisEmitter
 from .persistence import (
@@ -91,15 +88,8 @@ async def run_individual_analysis(
             )
         config["historical_context"] = attribution_md + market_pulse_md + scenarios_md + hist_ctx
 
-        # 4. Agent & Tool Access
-        agent_access_map = await get_user_agent_access(db, user_id) if user_id else {}
-        from backend.trading_agents.agent_catalog import list_analysts
-
-        permitted_analysts = [a.key for a in list_analysts() if agent_access_map.get(a.key, True)]
-
-        config["runtime_tool_context"] = await build_global_runtime_context(db, user_id)
-        config["runtime_agent_context"] = await build_agent_runtime_context(db, user_id)
-        inject_tool_credentials(config)
+        # 4. Agent & Tool Access (+ runtime context / credentials)
+        permitted_analysts = await prepare_graph_config(db, user_id, config)
 
         # 5. Initialize & Run Graph
         stats_handler = StatsCallbackHandler()

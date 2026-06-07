@@ -9,12 +9,10 @@ from backend.core.database import AsyncSessionLocal
 from backend.models.portfolio_analysis import MultiTickerAnalysis
 from backend.models.settings import AppSettings
 from backend.repositories.analysis import get_system_settings
-from backend.services.tool_access_service import get_user_agent_access
-from backend.services.tool_settings_service import build_global_runtime_context
 from backend.trading_agents.agents.sub.managers.super_portfolio_manager import create_super_portfolio_manager
 from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
 
-from .config_builder import build_analysis_config, inject_tool_credentials
+from .config_builder import build_analysis_config, prepare_graph_config
 from .emitter import AnalysisEmitter
 from .orchestrator import run_individual_analysis
 
@@ -126,16 +124,7 @@ async def _generate_super_report(db, user, config, ticker_reports) -> str:
     username = user.username if user else "system"
     try:
         user_id = user.id if user else None
-        agent_access_map = await get_user_agent_access(db, user_id) if user_id else {}
-
-        from backend.services.agent_settings_service import build_agent_runtime_context
-        from backend.trading_agents.agent_catalog import list_analysts
-
-        permitted_analysts = [a.key for a in list_analysts() if agent_access_map.get(a.key, True)]
-
-        config["runtime_tool_context"] = await build_global_runtime_context(db, user_id)
-        config["runtime_agent_context"] = await build_agent_runtime_context(db, user_id)
-        inject_tool_credentials(config)
+        permitted_analysts = await prepare_graph_config(db, user_id, config)
 
         ta = TradingAgentsGraph(selected_analysts=permitted_analysts, config=config)
         spm_node = create_super_portfolio_manager(ta.thinking_llm)
