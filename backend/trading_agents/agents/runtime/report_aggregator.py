@@ -26,11 +26,14 @@ def build_report_fields(news_label: str, fundamentals_label: str) -> dict[str, s
     }
 
 
-def build_resources(state, report_fields: dict[str, str]) -> str:
-    """Return labelled, newline-separated non-empty reports from ``state``."""
+def build_resources(state, report_fields: dict[str, str], prefix: str = "") -> str:
+    """Return labelled, newline-separated non-empty reports from ``state``.
+
+    ``prefix`` is prepended to each label (e.g. ``"### "`` for the synthesis
+    manager / auditor, which render the sections as markdown headings)."""
     resources = []
     for field, label in report_fields.items():
         content = state.get(field, "")
         if content and content.strip():
-            resources.append(f"{label}:\n{content.strip()}")
+            resources.append(f"{prefix}{label}:\n{content.strip()}")
     return "\n\n".join(resources)
