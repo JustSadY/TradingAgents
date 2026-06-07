@@ -72,8 +72,7 @@ class OpenAIClient(BaseLLMClient):
         api_key = self.kwargs.get("api_key")
         if api_key:
             llm_kwargs["api_key"] = api_key
-        elif self.provider != "openai":
-            # For providers other than OpenAI, we strictly require the key to be passed explicitly
+        else:
             raise ValueError(
                 f"API key for provider '{self.provider}' is not set. Please provide it in your Profile or Settings."
             )

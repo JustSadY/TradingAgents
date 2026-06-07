@@ -107,19 +107,28 @@ async def answer_report_question(
         payload.append(HumanMessage(content=msg.content) if msg.role == "user" else AIMessage(content=msg.content))
     payload.append(HumanMessage(content=message))
 
-    user_key = _resolve_user_api_key(user, settings.llm_provider)
+    # Prioritize the LLM used to generate the report (Portfolio Manager), fallback to user settings
+    active_provider = analysis.llm_provider or settings.llm_provider
+    active_model = analysis.llm_model or settings.llm_model
+
+    user_key = _resolve_user_api_key(user, active_provider)
     if not user_key and not getattr(user, "is_admin", False):
         raise HTTPException(
             status_code=400,
-            detail=f"No API key set for provider '{settings.llm_provider}'. Please add your API key in Settings.",
+            detail=f"No API key set for provider '{active_provider}'. Please add your API key in Settings.",
         )
 
     client = create_llm_client(
-        provider=settings.llm_provider,
-        model=settings.llm_model,
+        provider=active_provider,
+        model=active_model,
         api_key=user_key,
     )
-    response = await client.get_llm().ainvoke(payload)
+    
+    try:
+        llm = client.get_llm()
+        response = await llm.ainvoke(payload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
 
     db.add(AnalysisChat(analysis_id=analysis_id, role="user", content=message))
     assistant_chat = AnalysisChat(analysis_id=analysis_id, role="assistant", content=response.content)
