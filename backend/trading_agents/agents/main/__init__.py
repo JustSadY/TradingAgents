@@ -13,6 +13,7 @@ The top-level graph (see ``graph/setup.py``) wires these linearly:
           → Risk Debate → Portfolio Manager → END
 """
 
+from .agent_qa import create_agent_qa_node
 from .market_intelligence import create_market_intelligence_node
 from .portfolio import create_portfolio_manager_node
 from .research import create_research_manager_node
@@ -21,6 +22,7 @@ from .trade_execution import create_trader_node
 
 __all__ = [
     "create_market_intelligence_node",
+    "create_agent_qa_node",
     "create_research_manager_node",
     "create_trader_node",
     "create_risk_debate_node",

@@ -177,10 +177,7 @@ async def update_other_user_tools(
     target_user = await _require_target_user(db, user_id)
     from backend.services.tool_settings_service import apply_tool_settings_update
 
-    try:
-        return await apply_tool_settings_update(db, target_user, body)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return await apply_tool_settings_update(db, target_user, body)
 
 
 @router.get("/tools", response_model=ToolSettingsRead)
@@ -202,10 +199,7 @@ async def update_user_tools(
     await enforce_tool_settings_permission(db, current_user, body)
     from backend.services.tool_settings_service import apply_tool_settings_update
 
-    try:
-        return await apply_tool_settings_update(db, current_user, body)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return await apply_tool_settings_update(db, current_user, body)
 
 
 @router.get("/agents", response_model=AgentSettingsRead)
@@ -226,10 +220,7 @@ async def update_user_agents(
 ):
     from backend.services.agent_settings_service import apply_agent_settings_update
 
-    try:
-        return await apply_agent_settings_update(db, current_user, body)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return await apply_agent_settings_update(db, current_user, body)
 
 
 @router.get("/users/{user_id}/agents", response_model=AgentSettingsRead)
@@ -254,10 +245,7 @@ async def update_other_user_agents(
     target_user = await _require_target_user(db, user_id)
     from backend.services.agent_settings_service import apply_agent_settings_update
 
-    try:
-        return await apply_agent_settings_update(db, target_user, body)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return await apply_agent_settings_update(db, target_user, body)
 
 
 @router.get("/agents/server", response_model=AgentSettingsRead)
@@ -278,7 +266,4 @@ async def update_server_agents(
 ):
     from backend.services.agent_settings_service import apply_server_agent_settings_update
 
-    try:
-        return await apply_server_agent_settings_update(db, body)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return await apply_server_agent_settings_update(db, body)

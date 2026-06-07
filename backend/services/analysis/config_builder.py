@@ -171,6 +171,8 @@ async def prepare_graph_config(db: AsyncSession, user_id: int | None, config: di
     agent_access_map = await get_user_agent_access(db, user_id) if user_id else {}
     permitted_analysts = [a.key for a in list_analysts() if agent_access_map.get(a.key, True)]
 
+    # Graph nodes namespace episodic/agent memory by this.
+    config["user_id"] = user_id
     config["runtime_tool_context"] = await build_global_runtime_context(db, user_id)
     config["runtime_agent_context"] = await build_agent_runtime_context(db, user_id)
     inject_tool_credentials(config)
