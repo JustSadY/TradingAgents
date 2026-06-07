@@ -242,4 +242,16 @@ async def place_signal_order(
     )
     result = await trader.place_order(request)
     _logger.info("Order placed: %s %s %s -> %s", action, quantity, ticker, result.status)
+
+    # Notify the user's webhook if they subscribed to trade_executed events. This
+    # is the only place a trade actually fills, so it's where the (previously
+    # unwired) trade_executed notification belongs.
+    if result.filled_quantity and result.filled_price:
+        try:
+            from backend.services.notification_service import notify_trade_executed
+
+            await notify_trade_executed(ticker, action, result.filled_quantity, result.filled_price, settings)
+        except Exception as exc:
+            _logger.debug("trade_executed webhook failed (non-fatal): %s", exc)
+
     return result

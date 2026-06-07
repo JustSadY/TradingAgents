@@ -1,7 +1,6 @@
 import logging
 import re
 import pandas as pd
-import numpy as np
 
 _logger = logging.getLogger(__name__)
 

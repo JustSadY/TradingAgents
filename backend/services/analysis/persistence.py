@@ -1,8 +1,12 @@
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+if TYPE_CHECKING:
+    from backend.models.analysis import AnalysisResult
 
 _logger = logging.getLogger(__name__)
 

@@ -1,12 +1,10 @@
 import asyncio
 import logging
 from datetime import datetime
-from pathlib import Path
 
 import pandas as pd
 from langchain_core.tools import tool
 
-from backend.trading_agents.default_config import DEFAULT_CONFIG
 
 _logger = logging.getLogger(__name__)
 
