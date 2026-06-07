@@ -73,7 +73,12 @@ async def extract_and_save_annotations(
 
             row = await _repo_get(s, analysis_id)
             if row:
-                row.chart_annotations = annotations
+                # Merge rather than overwrite: finalize_result already stored the
+                # structured trader_proposal (entry/stop/target/confidence) that
+                # position sizing reads. A blind assignment here dropped it,
+                # leaving sizing to fall back to fragile text parsing.
+                existing = row.chart_annotations if isinstance(row.chart_annotations, dict) else {}
+                row.chart_annotations = {**existing, **annotations}
                 await s.commit()
     except Exception as exc:
         _logger.debug("Annotation save failed (non-fatal): %s", exc)
