@@ -1,7 +1,6 @@
-import logging
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -10,7 +9,6 @@ from backend.core.utils import safe_ticker_component
 from backend.services import mock_trading_service as svc
 
 router = APIRouter(prefix="/api/trading", tags=["trading"])
-_logger = logging.getLogger(__name__)
 
 
 class OrderRequest(BaseModel):
@@ -38,11 +36,7 @@ async def get_portfolio(
     db: AsyncSession = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    try:
-        return await svc.get_portfolio_with_live_prices(db, user=_)
-    except Exception as exc:
-        _logger.error("get_portfolio failed: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    return await svc.get_portfolio_with_live_prices(db, user=_)
 
 
 @router.post("/order", status_code=status.HTTP_201_CREATED)
@@ -51,22 +45,18 @@ async def create_order(
     db: AsyncSession = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    try:
-        result = await svc.execute_order(
-            db,
-            ticker=req.ticker,
-            action=req.action,
-            quantity=req.quantity,
-            analysis_id=req.analysis_id,
-            user=_,
-        )
-        await db.commit()
-        return result
-    except ValueError as exc:
-        raise HTTPException(status_code=400, detail=str(exc))
-    except Exception as exc:
-        _logger.error("create_order failed: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    # Service raises ValueError for business-rule violations (-> 400 centrally);
+    # unexpected errors are logged + 500'd by the global handler.
+    result = await svc.execute_order(
+        db,
+        ticker=req.ticker,
+        action=req.action,
+        quantity=req.quantity,
+        analysis_id=req.analysis_id,
+        user=_,
+    )
+    await db.commit()
+    return result
 
 
 @router.get("/performance")
@@ -74,11 +64,7 @@ async def get_performance(
     db: AsyncSession = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    try:
-        return await svc.get_performance(db, user=_)
-    except Exception as exc:
-        _logger.error("get_performance failed: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    return await svc.get_performance(db, user=_)
 
 
 @router.post("/reset")
@@ -87,10 +73,6 @@ async def reset_portfolio(
     db: AsyncSession = Depends(get_db),
     _=Depends(get_current_user),
 ):
-    try:
-        result = await svc.reset_portfolio(db, initial_capital=req.initial_capital, user=_)
-        await db.commit()
-        return result
-    except Exception as exc:
-        _logger.error("reset_portfolio failed: %s", exc, exc_info=True)
-        raise HTTPException(status_code=500, detail="Internal server error")
+    result = await svc.reset_portfolio(db, initial_capital=req.initial_capital, user=_)
+    await db.commit()
+    return result

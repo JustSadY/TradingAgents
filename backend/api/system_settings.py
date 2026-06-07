@@ -65,11 +65,6 @@ async def update_server_tools(
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    from fastapi import HTTPException
-
     from backend.services.tool_settings_service import apply_server_tool_settings_update
 
-    try:
-        return await apply_server_tool_settings_update(db, body)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+    return await apply_server_tool_settings_update(db, body)
