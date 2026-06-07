@@ -106,6 +106,8 @@ _ALLOWED_COLUMNS = {
 
 # (table, column, column_type) tuples applied additively on startup.
 _NEW_COLUMNS: list[tuple[str, str, str]] = [
+    ("analysis_results", "agent_qa_report", "TEXT DEFAULT ''"),
+    ("system_settings", "agent_qa_enabled", "BOOLEAN DEFAULT TRUE"),
     ("users", "email", "VARCHAR(255)"),
     ("users", "role", "VARCHAR(20) DEFAULT 'user'"),
     ("users", "display_name", "VARCHAR(100)"),

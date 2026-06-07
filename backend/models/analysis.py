@@ -23,6 +23,7 @@ class AnalysisResult(Base):
     quant_report: Mapped[str] = mapped_column(Text, default="")
     earnings_report: Mapped[str] = mapped_column(Text, default="")
     review_report: Mapped[str] = mapped_column(Text, default="")
+    agent_qa_report: Mapped[str] = mapped_column(Text, default="")
     investment_plan: Mapped[str] = mapped_column(Text, default="")
     trader_plan: Mapped[str] = mapped_column(Text, default="")
     final_decision: Mapped[str] = mapped_column(Text, default="")

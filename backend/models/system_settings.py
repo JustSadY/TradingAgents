@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import DateTime, Integer, String
+from sqlalchemy import Boolean, DateTime, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
@@ -20,6 +20,9 @@ class SystemSettings(Base):
     data_vendor_technicals: Mapped[str] = mapped_column(String(50), default="yfinance")
     data_vendor_fundamentals: Mapped[str] = mapped_column(String(50), default="yfinance")
     data_vendor_news: Mapped[str] = mapped_column(String(50), default="yfinance")
+
+    # Inter-agent cross-examination (vector-memory feature) — server-level toggle.
+    agent_qa_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
