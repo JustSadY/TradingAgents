@@ -22,27 +22,6 @@ def bind_structured(llm: Any, schema: type[T], agent_name: str) -> Any | None:
         return None
 
 
-def invoke_structured_or_freetext(
-    structured_llm: Any | None,
-    plain_llm: Any,
-    prompt: Any,
-    render: Callable[[T], str],
-    agent_name: str,
-) -> str:
-    if structured_llm is not None:
-        try:
-            result = structured_llm.invoke(prompt)
-            return render(result)
-        except Exception as exc:
-            logger.warning(
-                "%s: structured-output invocation failed (%s); retrying once as free text",
-                agent_name,
-                exc,
-            )
-    response = plain_llm.invoke(prompt)
-    return response.content
-
-
 async def ainvoke_structured_or_freetext(
     structured_llm: Any | None,
     plain_llm: Any,
@@ -50,7 +29,8 @@ async def ainvoke_structured_or_freetext(
     render: Callable[[T], str],
     agent_name: str,
 ) -> Any:
-    """Async version of invoke_structured_or_freetext.
+    """Invoke with structured output, falling back to free text on failure.
+
     Returns the structured object if successful, otherwise the free-text string content.
     """
     if structured_llm is not None:

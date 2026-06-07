@@ -113,9 +113,6 @@ def create_trader(llm):
             },
         ]
 
-        # invoke_structured_or_freetext is currently sync, but we'll await ainvoke directly here
-        # or update the helper. Let's update the helper or just call directly.
-        # Actually, let's just use ainvoke directly for better consistency.
         from backend.trading_agents.agents.runtime.structured import ainvoke_structured_or_freetext
 
         trader_proposal = await ainvoke_structured_or_freetext(
@@ -126,11 +123,8 @@ def create_trader(llm):
             "Trader",
         )
 
-        # If the helper returned a string (render_trader_proposal was called), it's already rendered.
-        # But wait, ainvoke_structured_or_freetext might return the object.
-        # Let's check the helper.
-
-        # Assuming it returns the Pydantic object if using structured_llm
+        # The helper returns a free-text string on fallback, or the structured
+        # TraderProposal object when structured output succeeds.
         if isinstance(trader_proposal, str):
             trader_plan = trader_proposal
             proposal_json = "{}"

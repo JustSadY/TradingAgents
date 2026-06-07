@@ -34,22 +34,6 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-# ---------------------------------------------------------------------------
-# Tier-1 branch roots. These are the agents the backend checks access for
-# *first*; everything else hangs beneath one of them.
-# ---------------------------------------------------------------------------
-
-MAIN_AGENT_KEYS: frozenset[str] = frozenset(
-    {
-        "portfolio_manager",  # root / final decision maker
-        "market_intelligence",  # owns the analyst sub-agents
-        "research_manager",  # owns synthesis + bull/bear debate + auditor
-        "trader",  # owns the execution planner
-        "risk_debate",  # owns the aggressive/neutral/conservative debate
-    }
-)
-
-
 class AgentHierarchy:
     """
     Parent → child registry with cascading enable checks, recursive LLM
@@ -91,30 +75,9 @@ class AgentHierarchy:
         """Direct child keys of *key*, in catalog order."""
         return list(self._children.get(key, []))
 
-    def descendants(self, key: str) -> list[str]:
-        """All recursive descendant keys of *key* (breadth-first)."""
-        out: list[str] = []
-        queue = list(self._children.get(key, []))
-        while queue:
-            child = queue.pop(0)
-            out.append(child)
-            queue.extend(self._children.get(child, []))
-        return out
-
     def parent_of(self, key: str) -> str | None:
         agent = self._info.get(key)
         return agent.parent_key if agent else None
-
-    def is_main_agent(self, key: str) -> bool:
-        return key in MAIN_AGENT_KEYS
-
-    def main_agents(self) -> list[Any]:
-        """AgentInfo objects for the Tier-1 agents, in catalog order."""
-        return [a for a in self._info.values() if a.key in MAIN_AGENT_KEYS]
-
-    def subagents_of(self, key: str) -> list[Any]:
-        """AgentInfo objects for the direct children of *key*."""
-        return [self._info[k] for k in self.children(key) if k in self._info]
 
     # ------------------------------------------------------------------
     # Enable / disable resolution (cascading kill-switch)
@@ -208,17 +171,6 @@ class AgentHierarchy:
             return self.resolve_llm("portfolio_manager", fallback_llm, llm_factory)
 
         return fallback_llm
-
-    def get_effective_settings(self, key: str) -> dict[str, Any]:
-        """Resolved settings for *key*, filling gaps from the parent chain."""
-        state = self._runtime_ctx.get(key) or {}
-        settings = dict(state.get("settings") or {})
-        parent = self.parent_of(key)
-        if parent:
-            for k, v in self.get_effective_settings(parent).items():
-                if settings.get(k) is None:
-                    settings[k] = v
-        return settings
 
     # ------------------------------------------------------------------
     # Tool reachability (Tier-3 gating)

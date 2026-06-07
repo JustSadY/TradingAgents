@@ -102,10 +102,6 @@ def list_analysts() -> list[str]:
     return sorted(_REGISTRY)
 
 
-def is_registered(key: str) -> bool:
-    return key in _REGISTRY
-
-
 def get_report_fields() -> dict[str, str]:
     """Return a mapping of report_key to the analyst's human-readable label."""
     from backend.trading_agents.agent_catalog import label_for

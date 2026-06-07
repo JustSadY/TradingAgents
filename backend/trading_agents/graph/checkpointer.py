@@ -46,10 +46,6 @@ async def get_async_checkpointer(data_dir: str | Path, ticker: str) -> AsyncGene
         yield saver
 
 
-def has_checkpoint(data_dir: str | Path, ticker: str, date: str) -> bool:
-    return checkpoint_step(data_dir, ticker, date) is not None
-
-
 def checkpoint_step(data_dir: str | Path, ticker: str, date: str) -> int | None:
     db = _db_path(data_dir, ticker)
     if not db.exists():
@@ -74,16 +70,6 @@ async def async_checkpoint_step(data_dir: str | Path, ticker: str, date: str) ->
         if cp is None:
             return None
         return cp.metadata.get("step")
-
-
-def clear_all_checkpoints(data_dir: str | Path) -> int:
-    cp_dir = Path(data_dir) / "checkpoints"
-    if not cp_dir.exists():
-        return 0
-    dbs = list(cp_dir.glob("*.db"))
-    for db in dbs:
-        db.unlink()
-    return len(dbs)
 
 
 def clear_checkpoint(data_dir: str | Path, ticker: str, date: str) -> None:
