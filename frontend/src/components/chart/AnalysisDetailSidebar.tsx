@@ -1,4 +1,5 @@
 import React from 'react'
+import { useNavigate } from 'react-router-dom'
 import { X, Calendar, Target, Shield } from 'lucide-react'
 import { SignalBadge } from '../analysis/SignalBadge'
 
@@ -11,6 +12,7 @@ interface AnalysisDetailSidebarProps {
 export const AnalysisDetailSidebar: React.FC<AnalysisDetailSidebarProps> = ({
   selected, setSelected, t
 }) => {
+  const navigate = useNavigate()
   if (!selected) return null
 
   return (
@@ -56,7 +58,7 @@ export const AnalysisDetailSidebar: React.FC<AnalysisDetailSidebarProps> = ({
 
         <div className="pt-4 border-t border-white/[0.04]">
             <button 
-                onClick={() => window.location.href = `/analysis?id=${selected.id}`}
+                onClick={() => navigate(`/analysis?id=${selected.id}`)}
                 className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition-all shadow-lg shadow-violet-600/20 cursor-pointer"
             >
                 View Full Report

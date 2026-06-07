@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
 import { getAccessToken } from '../contexts/AuthContext'
 import { useMeta } from '../hooks/useMeta'
@@ -650,7 +651,7 @@ function PortfolioHistorySection() {
   )
 }
 
-function HistoryTab() {
+function HistoryTab({ initialDetailId }: { initialDetailId?: number }) {
   const { t } = useTranslation()
   const [items, setItems] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
@@ -670,6 +671,11 @@ function HistoryTab() {
     try { const { data } = await axios.get(`/api/analysis/${id}`); setDetail(data) }
     finally { setDetailLoading(false) }
   }, [])
+
+  // Open the detail modal directly when arriving via a /analysis?id=… deep link.
+  useEffect(() => {
+    if (initialDetailId) openDetail(initialDetailId)
+  }, [initialDetailId, openDetail])
 
   if (loading) return <div className="p-8 text-slate-500 text-xs">{t('analysis.history.loading')}</div>
 
@@ -799,7 +805,9 @@ type Tab = 'run' | 'multi' | 'history'
 
 export default function Analysis() {
   const { t } = useTranslation()
-  const [tab, setTab] = useState<Tab>('run')
+  const [searchParams] = useSearchParams()
+  const deepLinkId = searchParams.get('id')
+  const [tab, setTab] = useState<Tab>(deepLinkId ? 'history' : 'run')
 
   const tabs = [
     { id: 'run' as Tab,     label: t('analysis.tab.single'), icon: <Zap size={13} /> },
@@ -831,7 +839,7 @@ export default function Analysis() {
 
       {tab === 'run'     && <RunTab />}
       {tab === 'multi'   && <MultiTab />}
-      {tab === 'history' && <HistoryTab />}
+      {tab === 'history' && <HistoryTab initialDetailId={deepLinkId ? Number(deepLinkId) : undefined} />}
     </div>
   )
 }
