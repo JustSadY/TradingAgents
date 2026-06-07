@@ -107,9 +107,14 @@ async def answer_report_question(
         payload.append(HumanMessage(content=msg.content) if msg.role == "user" else AIMessage(content=msg.content))
     payload.append(HumanMessage(content=message))
 
-    # Prioritize the LLM used to generate the report (Portfolio Manager), fallback to user settings
-    active_provider = analysis.llm_provider or settings.llm_provider
-    active_model = analysis.llm_model or settings.llm_model
+    # Determine LLM Provider/Model based on the portfolio_manager agent settings.
+    from backend.services.agent_settings_service import build_agent_runtime_context
+    agent_ctx = await build_agent_runtime_context(db, user.id if user else None)
+    pm_settings = agent_ctx.get("portfolio_manager", {}).get("settings", {})
+    
+    # Prioritize the Portfolio Manager's specific settings, then global fallback
+    active_provider = pm_settings.get("llm_provider") or settings.llm_provider
+    active_model = pm_settings.get("llm_model") or settings.llm_model
 
     user_key = _resolve_user_api_key(user, active_provider)
     if not user_key and not getattr(user, "is_admin", False):
