@@ -4,6 +4,7 @@ uvicorn[standard]>=0.34.0
 httpx>=0.28.0
 websockets>=14.0
 python-multipart>=0.0.20
+slowapi>=0.1.9
 
 # Database & ORM
 sqlalchemy[asyncio]>=2.0.0
