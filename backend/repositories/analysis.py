@@ -31,22 +31,6 @@ async def list_historical_analyses(
     return list(result.scalars().all())
 
 
-async def list_cross_ticker_lessons(
-    db: AsyncSession,
-    *,
-    exclude_ticker: str,
-    limit: int = 3,
-) -> list[AnalysisResult]:
-    result = await db.execute(
-        select(AnalysisResult)
-        .where(AnalysisResult.ticker != exclude_ticker)
-        .where(AnalysisResult.reflection != "")
-        .order_by(_desc(AnalysisResult.created_at))
-        .limit(limit)
-    )
-    return list(result.scalars().all())
-
-
 async def list_analyses(
     db: AsyncSession,
     *,

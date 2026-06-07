@@ -41,6 +41,7 @@ interface AnalysisDetail {
   market_report: string; sentiment_report: string; news_report: string
   fundamentals_report: string; macro_report: string; options_report: string
   quant_report: string; earnings_report: string; review_report: string
+  agent_qa_report: string
   investment_plan: string; trader_plan: string; final_decision: string
   bull_history: string; bear_history: string; investment_debate_history: string
   risk_debate_history: string; judge_decision: string
@@ -66,7 +67,8 @@ const SECTION_LABELS: Record<string, string> = {
   news_report: 'News', fundamentals_report: 'Fundamentals',
   macro_report: 'Macro', options_report: 'Options',
   quant_report: 'Quant', earnings_report: 'Earnings',
-  review_report: 'Review', investment_plan: 'Investment Plan',
+  review_report: 'Review', agent_qa_report: 'Cross-Examination',
+  investment_plan: 'Investment Plan',
   trader_investment_plan: 'Trader Plan', final_trade_decision: 'PM Decision',
   bull_history: 'Bull', bear_history: 'Bear',
   investment_debate_history: 'Debate', risk_debate_history: 'Risk Debate',
@@ -785,7 +787,8 @@ function HistoryTab({ initialDetailId }: { initialDetailId?: number }) {
                         ['news_report', detail.news_report], ['fundamentals_report', detail.fundamentals_report],
                         ['macro_report', detail.macro_report], ['options_report', detail.options_report],
                         ['quant_report', detail.quant_report], ['earnings_report', detail.earnings_report],
-                        ['review_report', detail.review_report], ['investment_plan', detail.investment_plan],
+                        ['review_report', detail.review_report], ['agent_qa_report', detail.agent_qa_report],
+                        ['investment_plan', detail.investment_plan],
                         ['trader_plan', detail.trader_plan], ['final_decision', detail.final_decision],
                         ['bull_history', detail.bull_history], ['bear_history', detail.bear_history],
                         ['judge_decision', detail.judge_decision],

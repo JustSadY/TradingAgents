@@ -32,6 +32,7 @@ class AnalysisResultRead(BaseModel):
     quant_report: str
     earnings_report: str
     review_report: str
+    agent_qa_report: str = ""
     investment_plan: str
     trader_plan: str
     final_decision: str

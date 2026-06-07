@@ -14,44 +14,6 @@ from backend.trading_agents.default_config import DEFAULT_CONFIG
 _logger = logging.getLogger(__name__)
 
 
-async def get_historical_analyses_context(
-    ticker: str, trade_date: str, db: AsyncSession, limit: int = 5, output_language: str = "English"
-) -> str:
-    from backend.repositories.analysis import list_cross_ticker_lessons, list_historical_analyses
-
-    # 1. Fetch same-ticker historical analyses
-    rows_same = await list_historical_analyses(db, ticker=ticker, before_trade_date=trade_date, limit=limit)
-
-    # 2. Fetch cross-ticker lessons (those with populated reflection)
-    rows_cross = await list_cross_ticker_lessons(db, exclude_ticker=ticker, limit=3)
-
-    if not rows_same and not rows_cross:
-        return ""
-
-    from backend.core.l10n import get_message
-
-    parts = []
-
-    if rows_same:
-        parts.append(get_message("historical_reports_title", output_language, ticker=ticker))
-        for row in reversed(rows_same):
-            date_label = get_message("date_signal_label", output_language, date=row.trade_date)
-            parts.append(f"--- {date_label}: {row.signal or 'N/A'} ---")
-            parts.append(f"Final Decision:\n{row.final_decision}")
-            if row.reflection:
-                parts.append(f"Reflection/Outcome:\n{row.reflection}")
-            parts.append("")
-
-    if rows_cross:
-        parts.append(get_message("cross_ticker_lessons_title", output_language))
-        for row in rows_cross:
-            parts.append(f"--- Ticker: {row.ticker} | Date: {row.trade_date} ---")
-            parts.append(f"Reflection:\n{row.reflection}")
-            parts.append("")
-
-    return "\n".join(parts)
-
-
 def inject_tool_credentials(config: dict) -> None:
     runtime_tool_context = config.get("runtime_tool_context")
     if not runtime_tool_context:
@@ -90,6 +52,8 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         "analyst_concurrency_limit": settings.analyst_concurrency_limit or DEFAULT_CONFIG["analyst_concurrency_limit"],
         "skip_disk_log": True,
         "checkpoint_enabled": True,
+        # Inter-agent cross-examination toggle (server-level system setting).
+        "agent_qa_enabled": getattr(sys_settings, "agent_qa_enabled", True) if sys_settings is not None else True,
         "node_retry_attempts": getattr(settings, "node_retry_attempts", DEFAULT_CONFIG["node_retry_attempts"])
         or DEFAULT_CONFIG["node_retry_attempts"],
         "node_retry_base_delay": getattr(settings, "node_retry_base_delay", DEFAULT_CONFIG["node_retry_base_delay"])

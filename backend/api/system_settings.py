@@ -13,6 +13,30 @@ from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate
 router = APIRouter(prefix="/api/system-settings", tags=["system-settings"])
 
 
+@router.get("/memory")
+async def get_memory_status(
+    _: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db),
+):
+    """Read-only status of the vector-memory subsystem (Pinecone is configured
+    via env vars, not the UI)."""
+    from backend.core.config import get_settings
+    from backend.core.memory import memory_enabled
+
+    cfg = get_settings()
+    ss = await _get_or_create_system_settings(db)
+    return {
+        "enabled": memory_enabled(),
+        "backend": cfg.MEMORY_BACKEND,
+        "index": cfg.PINECONE_INDEX,
+        "embedder": cfg.MEMORY_EMBEDDER,
+        "embed_model": (
+            cfg.PINECONE_EMBED_MODEL if cfg.MEMORY_EMBEDDER == "pinecone" else cfg.MEMORY_OPENAI_EMBED_MODEL
+        ),
+        "agent_qa_enabled": ss.agent_qa_enabled,
+    }
+
+
 async def _get_or_create_system_settings(db: AsyncSession) -> SystemSettings:
     result = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
     ss = result.scalar_one_or_none()

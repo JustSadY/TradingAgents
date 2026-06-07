@@ -62,6 +62,7 @@ export default function Admin() {
   const [keySaved, setKeySaved] = useState(false)
   const [keyError, setKeyError] = useState<string | null>(null)
   const [systemSettings, setSystemSettings] = useState<any>(null)
+  const [memoryStatus, setMemoryStatus] = useState<any>(null)
   const [sysSaved, setSysSaved] = useState(false)
 
   const loadUsers = useCallback(async () => {
@@ -73,6 +74,8 @@ export default function Admin() {
     try {
       const r = await axios.get('/api/system-settings')
       setSystemSettings(r.data)
+      const m = await axios.get('/api/system-settings/memory')
+      setMemoryStatus(m.data)
     } catch (err) {
       console.error('Failed to load system settings:', err)
     }
@@ -646,6 +649,53 @@ export default function Admin() {
                   ))}
                 </div>
               )}
+            </Section>
+
+            <Section title="Vector Memory & Inter-Agent Q&A">
+              <div className="space-y-4">
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="text-slate-400 font-semibold">Memory store:</span>
+                  {memoryStatus?.enabled ? (
+                    <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 font-bold border border-emerald-500/20">
+                      Enabled
+                    </span>
+                  ) : (
+                    <span className="px-2 py-0.5 rounded-lg bg-slate-700/40 text-slate-400 font-bold border border-white/[0.06]">
+                      Disabled (set PINECONE_API_KEY)
+                    </span>
+                  )}
+                </div>
+                {memoryStatus && (
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-[11px] text-slate-400">
+                    {([
+                      ['Backend', memoryStatus.backend],
+                      ['Index', memoryStatus.index],
+                      ['Embedder', memoryStatus.embedder],
+                      ['Model', memoryStatus.embed_model],
+                    ] as [string, string][]).map(([k, v]) => (
+                      <div key={k} className="bg-slate-900/40 rounded-xl px-3 py-2 border border-white/[0.03]">
+                        <div className="text-slate-600 uppercase tracking-wider text-[9px] font-bold">{k}</div>
+                        <div className="font-mono text-slate-300 truncate">{v}</div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                {systemSettings && (
+                  <label className="flex items-center gap-3 text-xs font-semibold text-slate-300 cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 rounded-xl px-3 py-2.5 border border-white/[0.03] transition-colors select-none w-fit">
+                    <input
+                      type="checkbox"
+                      className="accent-violet-500"
+                      checked={systemSettings.agent_qa_enabled ?? true}
+                      onChange={e => setSystemSettings({ ...systemSettings, agent_qa_enabled: e.target.checked })}
+                    />
+                    Enable inter-agent cross-examination (analysts question each other)
+                  </label>
+                )}
+                <p className="text-[10px] text-slate-600 leading-relaxed">
+                  Pinecone is configured via environment variables (PINECONE_API_KEY, PINECONE_INDEX, MEMORY_EMBEDDER).
+                  When disabled, episodic recall and the Q&A round are skipped.
+                </p>
+              </div>
             </Section>
           </div>
         )}

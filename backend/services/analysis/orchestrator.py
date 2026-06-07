@@ -14,7 +14,6 @@ from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
 
 from .config_builder import (
     build_analysis_config,
-    get_historical_analyses_context,
     history_json_from,
     prepare_graph_config,
 )
@@ -39,6 +38,7 @@ REPORT_FIELDS = (
     "quant_report",
     "earnings_report",
     "review_report",
+    "agent_qa_report",
     "investment_plan",
     "trader_investment_plan",
     "trader_proposal_json",
@@ -80,13 +80,11 @@ async def run_individual_analysis(
         market_pulse_md = await get_market_pulse()
         scenarios_md = get_active_scenarios()
         
-        hist_ctx = ""
-        if getattr(settings, "include_historical_analyses", False):
-            limit = getattr(settings, "historical_analyses_limit", 5) or 5
-            hist_ctx = await get_historical_analyses_context(
-                ticker, trade_date, db, limit=limit, output_language=settings.output_language
-            )
-        config["historical_context"] = attribution_md + market_pulse_md + scenarios_md + hist_ctx
+        # Historical/episodic memory is now recalled semantically inside the
+        # decision nodes (research manager + portfolio manager) from the vector
+        # store; this start-time context only carries attribution / pulse /
+        # scenario summaries.
+        config["historical_context"] = attribution_md + market_pulse_md + scenarios_md
 
         # 4. Agent & Tool Access (+ runtime context / credentials)
         permitted_analysts = await prepare_graph_config(db, user_id, config)
@@ -205,6 +203,7 @@ async def run_individual_analysis(
             "quant_report": result.quant_report,
             "earnings_report": result.earnings_report,
             "review_report": result.review_report,
+            "agent_qa_report": final_state.get("agent_qa_report", ""),
             "investment_plan": result.investment_plan,
             "trader_plan": result.trader_plan,
             "final_decision": result.final_decision,
