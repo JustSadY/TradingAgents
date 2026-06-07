@@ -9,6 +9,23 @@ prompt), so callers keep their own mapping and only share the loop.
 from __future__ import annotations
 
 
+def build_report_fields(news_label: str, fundamentals_label: str) -> dict[str, str]:
+    """The standard ``{state_field: label}`` mapping shared by the bull/bear
+    researchers and the three risk debators. Only the news and fundamentals
+    labels vary between them, so they're passed in."""
+    return {
+        "market_report": "Market Research Report",
+        "sentiment_report": "Social Media Sentiment Report",
+        "news_report": news_label,
+        "fundamentals_report": fundamentals_label,
+        "macro_report": "Macroeconomic Indicators Report",
+        "options_report": "Options Market Derivatives Report",
+        "quant_report": "Quantitative Metrics Report",
+        "earnings_report": "Corporate Guidance & Earnings Report",
+        "review_report": "Hindsight Performance Review Report",
+    }
+
+
 def build_resources(state, report_fields: dict[str, str]) -> str:
     """Return labelled, newline-separated non-empty reports from ``state``."""
     resources = []

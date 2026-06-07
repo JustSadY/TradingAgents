@@ -1,4 +1,4 @@
-from backend.trading_agents.agents.runtime.report_aggregator import build_resources
+from backend.trading_agents.agents.runtime.report_aggregator import build_report_fields, build_resources
 from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
 
 
@@ -11,17 +11,7 @@ def create_neutral_debator(llm):
         current_conservative_response = risk_debate_state.get("current_conservative_response", "")
         trader_decision = state["trader_investment_plan"]
 
-        report_fields = {
-            "market_report": "Market Research Report",
-            "sentiment_report": "Social Media Sentiment Report",
-            "news_report": "Latest World Affairs Report",
-            "fundamentals_report": "Company Fundamentals Report",
-            "macro_report": "Macroeconomic Indicators Report",
-            "options_report": "Options Market Derivatives Report",
-            "quant_report": "Quantitative Metrics Report",
-            "earnings_report": "Corporate Guidance & Earnings Report",
-            "review_report": "Hindsight Performance Review Report",
-        }
+        report_fields = build_report_fields("Latest World Affairs Report", "Company Fundamentals Report")
         resources_text = build_resources(state, report_fields)
 
         prompt = f"""As the Neutral Risk Analyst, your objective is to provide a balanced, objective evaluation that mediates between aggressive and conservative perspectives. Focus on realistic outcomes and evidence-based probabilities, neither leaning toward excessive optimism nor undue caution. When reviewing the trader's decision, weigh the potential rewards against the risks fairly. Respond to both the aggressive and conservative analysts by highlighting where their arguments are strong and where they are biased. Here is the trader's decision:

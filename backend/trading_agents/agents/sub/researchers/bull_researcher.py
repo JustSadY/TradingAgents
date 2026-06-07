@@ -1,4 +1,4 @@
-from backend.trading_agents.agents.runtime.report_aggregator import build_resources
+from backend.trading_agents.agents.runtime.report_aggregator import build_report_fields, build_resources
 from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
 
 
@@ -11,17 +11,7 @@ def create_bull_researcher(llm):
         asset_type = state.get("asset_type", "stock")
         target_label = "stock" if asset_type == "stock" else "asset"
         fundamentals_label = "Company fundamentals report" if asset_type == "stock" else "Asset fundamentals report"
-        report_fields = {
-            "market_report": "Market Research Report",
-            "sentiment_report": "Social Media Sentiment Report",
-            "news_report": "Latest World Affairs News",
-            "fundamentals_report": fundamentals_label,
-            "macro_report": "Macroeconomic Indicators Report",
-            "options_report": "Options Market Derivatives Report",
-            "quant_report": "Quantitative Metrics Report",
-            "earnings_report": "Corporate Guidance & Earnings Report",
-            "review_report": "Hindsight Performance Review Report",
-        }
+        report_fields = build_report_fields("Latest World Affairs News", fundamentals_label)
         synthesis_report = state.get("synthesis_report", "No synthesis report available.")
         resources_text = build_resources(state, report_fields)
 
