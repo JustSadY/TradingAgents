@@ -47,7 +47,22 @@ def create_portfolio_manager(llm):
             except Exception:
                 pass
 
-        past_context = state.get("past_context", "")
+        # Episodic memory: recall the most similar past situations (losses first)
+        # so the final sizing/decision can avoid repeating a losing action.
+        memory_lessons = ""
+        try:
+            from backend.services.memory_service import recall_episode_lessons
+
+            memory_lessons = await recall_episode_lessons(
+                user_id=get_config().get("user_id"),
+                situation_text=state.get("market_report") or research_plan or "",
+            )
+        except Exception:  # noqa: BLE001 — memory is best-effort
+            memory_lessons = ""
+
+        # past_context now carries attribution / market-pulse / scenario context
+        # (the old SQL recency memory has been replaced by the vector recall above).
+        past_context = "\n\n".join(p for p in (memory_lessons, state.get("past_context", "")) if p)
         if past_context:
             lessons_line = f"- Lessons from prior decisions and outcomes:\n{past_context}\n"
             conviction_instructions = (
