@@ -76,6 +76,22 @@ async def backfill_returns(db) -> int:
             except Exception as ref_exc:
                 _logger.warning("Could not generate reflection for analysis_id=%s: %s", row.id, ref_exc)
 
+            # Store this completed, outcome-known analysis as an episode so future
+            # runs can recall similar situations (and avoid repeating losing actions).
+            from backend.services.memory_service import record_episode
+
+            await record_episode(
+                user_id=row.user_id,
+                ticker=row.ticker,
+                trade_date=row.trade_date,
+                signal=row.signal,
+                situation_text=(getattr(row, "market_report", "") or "") or (row.final_decision or ""),
+                decision=row.final_decision or "",
+                raw_return=raw,
+                alpha_return=alpha,
+                reflection=row.reflection or "",
+            )
+
             updated += 1
     if updated:
         await db.commit()

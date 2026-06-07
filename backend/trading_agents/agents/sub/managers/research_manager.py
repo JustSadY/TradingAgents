@@ -22,6 +22,19 @@ def create_research_manager(llm):
 
         from backend.trading_agents.dataflows.config import get_config
 
+        # Recall the most similar past situations from episodic memory so the plan
+        # can avoid repeating an action that previously led to a loss.
+        memory_lessons = ""
+        try:
+            from backend.services.memory_service import recall_episode_lessons
+
+            situation = state.get("market_report") or state.get("synthesis_report") or ""
+            memory_lessons = await recall_episode_lessons(
+                user_id=get_config().get("user_id"), situation_text=situation
+            )
+        except Exception:  # noqa: BLE001 — memory is best-effort
+            memory_lessons = ""
+
         strict_learning = get_config().get("strict_backtest_learning", True)
         learning_instruction = ""
         if strict_learning:
@@ -35,6 +48,8 @@ def create_research_manager(llm):
 ---
 **Audit Report (Fact-Check):**
 {audit_report}
+---
+{memory_lessons}
 ---
 **Instructional Constraints:**
 {learning_instruction}
