@@ -36,6 +36,23 @@ def _parse_news_datetime(raw_value):
     return None
 
 
+def _to_utc(dt: datetime | None) -> datetime | None:
+    """Normalize a parsed publish datetime to aware UTC.
+
+    _parse_news_datetime returns a mix of aware (timestamps / ISO with offset)
+    and naive (ISO without offset) datetimes. Comparing those against date
+    boundaries inconsistently (the old code stripped tz and compared a UTC
+    wall-clock against naive local dates) skewed which articles fell inside the
+    window. Treat naive values as UTC and convert aware values to UTC so both
+    sides of the comparison share one timezone.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=UTC)
+    return dt.astimezone(UTC)
+
+
 def _extract_article_data(article: dict) -> dict:
     if "content" in article:
         content = article["content"]
@@ -78,8 +95,10 @@ async def get_news_yfinance(
         cached_items = await get_news_feed(ticker, article_limit)
         cached_items = cached_items or []
 
-        start_dt = datetime.strptime(start_date, "%Y-%m-%d")
-        end_dt = datetime.strptime(end_date, "%Y-%m-%d")
+        # Inclusive [start_date 00:00 UTC, end_date+1 00:00 UTC): keeps all of
+        # end_date in UTC and nothing after, so a backtest never sees next-day news.
+        start_boundary = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=UTC)
+        end_boundary = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=UTC) + relativedelta(days=1)
         news_str = ""
         filtered_count = 0
 
@@ -87,10 +106,9 @@ async def get_news_yfinance(
             item_ticker = (item.get("ticker") or "").upper()
             if item_ticker and item_ticker != ticker.upper():
                 continue
-            pub_date = _parse_news_datetime(item.get("published_at"))
+            pub_date = _to_utc(_parse_news_datetime(item.get("published_at")))
             if pub_date:
-                pub_date_naive = pub_date.replace(tzinfo=None)
-                if not (start_dt <= pub_date_naive <= end_dt + relativedelta(days=1)):
+                if not (start_boundary <= pub_date < end_boundary):
                     continue
             title = item.get("title") or "No title"
             summary = item.get("summary") or ""
@@ -152,17 +170,16 @@ def get_global_news_yfinance(
         curr_dt = datetime.strptime(curr_date, "%Y-%m-%d")
         start_dt = curr_dt - relativedelta(days=look_back_days)
         start_date = start_dt.strftime("%Y-%m-%d")
+        # Exclude anything from the day after curr_date onward (UTC) so a backtest
+        # never sees future news.
+        end_boundary = curr_dt.replace(tzinfo=UTC) + relativedelta(days=1)
         news_str = ""
         for article in all_news[:limit]:
             if "content" in article:
                 data = _extract_article_data(article)
                 if data.get("pub_date"):
-                    pub_naive = (
-                        data["pub_date"].replace(tzinfo=None)
-                        if hasattr(data["pub_date"], "replace")
-                        else data["pub_date"]
-                    )
-                    if pub_naive > curr_dt + relativedelta(days=1):
+                    pub_utc = _to_utc(data["pub_date"])
+                    if pub_utc and pub_utc >= end_boundary:
                         continue
                 title = data["title"]
                 publisher = data["publisher"]
