@@ -29,9 +29,21 @@ async def run_portfolio_analysis(
     db: AsyncSession,
     triggered_by: str = "manual",
     user=None,
+    task_id: str | None = None,
 ):
     username = user.username if user else "system"
     _logger.info("Starting portfolio analysis for tickers=%s user=%s triggered_by=%s", tickers, username, triggered_by)
+
+    # Portfolio-level emitter: streams aggregate progress to the WebSocket
+    # channel the API handed back to the client (``task_id``). Each ticker still
+    # gets its own emitter for detailed per-run streaming.
+    portfolio_emitter = AnalysisEmitter(task_id) if task_id else None
+    total = len(tickers)
+    completed = 0
+    progress_lock = asyncio.Lock()
+
+    if portfolio_emitter:
+        await portfolio_emitter.emit_progress(f"Starting portfolio analysis ({total} tickers)", "starting", "portfolio")
 
     sys_settings = await get_system_settings(db)
     config = build_analysis_config(settings, user=user, sys_settings=sys_settings)
@@ -39,15 +51,16 @@ async def run_portfolio_analysis(
     semaphore = asyncio.Semaphore(concurrency)
 
     async def _run_one(ticker: str):
+        nonlocal completed
         async with semaphore:
             _logger.info("Portfolio analysis: running %s for user=%s", ticker, username)
             async with AsyncSessionLocal() as t_db:
-                # Portfolio analysis doesn't have a single task_id for the whole thing yet in the UI,
-                # but each individual run gets its own.
+                # Each individual run gets its own task_id/emitter for detailed
+                # streaming; the portfolio_emitter above reports aggregate progress.
                 import uuid
 
-                task_id = str(uuid.uuid4())
-                emitter = AnalysisEmitter(task_id)
+                ticker_task_id = str(uuid.uuid4())
+                emitter = AnalysisEmitter(ticker_task_id)
                 _, row = await run_individual_analysis(
                     ticker, trade_date, asset_type, settings, t_db, emitter, triggered_by, user=user
                 )
@@ -57,6 +70,11 @@ async def run_portfolio_analysis(
                     "portfolio_decision": row.final_decision,
                 }
                 await t_db.commit()
+            if portfolio_emitter:
+                async with progress_lock:
+                    completed += 1
+                    done = completed
+                await portfolio_emitter.emit_progress(f"{ticker} complete ({done}/{total})", "running", "portfolio")
             return ticker, data
 
     results = await asyncio.gather(*[_run_one(t.upper()) for t in tickers], return_exceptions=True)
@@ -89,6 +107,18 @@ async def run_portfolio_analysis(
     db.add(multi_row)
     await db.flush()
     _logger.info("Portfolio analysis complete for user=%s tickers=%s", username, tickers)
+
+    if portfolio_emitter:
+        await portfolio_emitter.emit(
+            {
+                "type": "complete",
+                "multi_id": multi_row.id,
+                "analysis_ids": analysis_ids,
+                "completed": len(analysis_ids),
+                "total": total,
+            }
+        )
+        await portfolio_emitter.close()
     return multi_row
 
 

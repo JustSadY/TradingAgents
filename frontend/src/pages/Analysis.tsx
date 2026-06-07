@@ -497,8 +497,13 @@ function MultiTab() {
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<string>('')
+  const wsRef = useRef<WebSocket | null>(null)
   const meta = useMeta()
   const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Stock' }, { value: 'crypto', label: 'Crypto' }]
+
+  // Close the live-progress socket if the tab unmounts mid-run.
+  useEffect(() => () => { try { wsRef.current?.close() } catch { /* noop */ } }, [])
 
   const addTicker = () => {
     const tk = input.trim().toUpperCase()
@@ -509,13 +514,34 @@ function MultiTab() {
 
   const handleRun = async () => {
     if (tickers.length < 2) return
-    setRunning(true); setDone(false); setError(null)
+    setRunning(true); setDone(false); setError(null); setProgress('')
     try {
-      await axios.post('/api/analysis/run-portfolio', { tickers, trade_date: date, asset_type: assetType })
-      setDone(true)
+      const { data } = await axios.post('/api/analysis/run-portfolio', { tickers, trade_date: date, asset_type: assetType })
+      const taskId = data.task_id
+      if (!taskId) { setDone(true); setRunning(false); return }
+
+      try { wsRef.current?.close() } catch { /* noop */ }
+      const token = getAccessToken()
+      const ws = new WebSocket(`/ws/analysis/${taskId}?token=${token}`)
+      wsRef.current = ws
+      ws.onmessage = (e) => {
+        let ev: any
+        try { ev = JSON.parse(e.data) } catch { return }
+        if (ev.type === 'progress') {
+          setProgress(ev.label || '')
+        } else if (ev.type === 'complete') {
+          setDone(true); setRunning(false)
+          try { ws.close() } catch { /* noop */ }
+        } else if (ev.type === 'error') {
+          setError(ev.message || t('analysis.multi.error_default')); setRunning(false)
+          try { ws.close() } catch { /* noop */ }
+        }
+      }
+      ws.onerror = () => { setRunning(false) }
     } catch (err: any) {
       setError(err.response?.data?.detail || t('analysis.multi.error_default'))
-    } finally { setRunning(false) }
+      setRunning(false)
+    }
   }
 
   return (
@@ -566,6 +592,7 @@ function MultiTab() {
           </button>
         </div>
 
+        {running && progress && <div className="flex items-center gap-2 text-violet-300 text-xs font-semibold"><Loader2 size={14} className="animate-spin" /> {progress}</div>}
         {done && <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold"><CheckCircle size={14} /> {t('analysis.multi.started')}</div>}
         {error && <div className="flex items-center gap-2 text-rose-400 text-xs font-semibold"><AlertCircle size={14} /> {error}</div>}
       </div>

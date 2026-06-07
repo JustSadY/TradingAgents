@@ -158,6 +158,7 @@ async def run_portfolio_run(
         body.asset_type,
         settings,
         current_user,
+        task_id,
     )
     return MultiTickerRunResponse(task_id=task_id, tickers=tickers, trade_date=body.trade_date)
 

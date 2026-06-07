@@ -124,6 +124,7 @@ async def run_portfolio_task(
     asset_type: str,
     settings: AppSettings,
     user=None,
+    task_id: str | None = None,
 ) -> None:
     """Background entrypoint for a multi-ticker portfolio analysis run."""
     async with AsyncSessionLocal() as db:
@@ -136,8 +137,17 @@ async def run_portfolio_task(
                 db,
                 "manual",
                 user=user,
+                task_id=task_id,
             )
             await db.commit()
         except Exception as exc:
             _logger.error("Portfolio analysis failed: %s", exc, exc_info=True)
             await db.rollback()
+            if task_id:
+                # Surface the failure on the WebSocket channel so a subscribed
+                # client stops waiting instead of hanging on an open socket.
+                from backend.services.analysis.emitter import AnalysisEmitter
+
+                emitter = AnalysisEmitter(task_id)
+                await emitter.emit_error("Portfolio analysis failed")
+                await emitter.close()
