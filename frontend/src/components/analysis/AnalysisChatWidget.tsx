@@ -34,8 +34,9 @@ export function AnalysisChatWidget({ analysisId }: { analysisId: number }) {
     try {
       const { data } = await axios.post(`/api/analysis/${analysisId}/chat`, { message: msg })
       setMessages(prev => [...prev, data])
-    } catch {
-      notify('error', t('analysis.chat.error') || 'Chat error', 'Hata')
+    } catch (err: any) {
+      const detail = err.response?.data?.detail
+      notify('error', detail || t('analysis.chat.error') || 'Chat error', 'Hata')
     } finally {
       setLoading(false)
     }
