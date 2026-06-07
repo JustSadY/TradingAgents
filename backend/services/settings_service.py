@@ -121,3 +121,20 @@ async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
     settings.active_preset_name = preset.name
     await db.flush()
     return preset.name
+
+
+async def add_ticker_to_watchlist(db: AsyncSession, user, ticker: str) -> list[str]:
+    """Add ``ticker`` (already validated/normalized) to ``user``'s watchlist."""
+    settings = await get_or_create_settings(db, user)
+    if ticker not in settings.watchlist:
+        settings.watchlist = [*settings.watchlist, ticker]
+    await db.flush()
+    return settings.watchlist
+
+
+async def remove_ticker_from_watchlist(db: AsyncSession, user, ticker: str) -> list[str]:
+    """Remove ``ticker`` from ``user``'s watchlist."""
+    settings = await get_or_create_settings(db, user)
+    settings.watchlist = [t for t in settings.watchlist if t != ticker]
+    await db.flush()
+    return settings.watchlist
