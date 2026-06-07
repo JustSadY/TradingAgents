@@ -1,7 +1,9 @@
 from __future__ import annotations
 from typing import Any
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.user import User
+from backend.models.tool_settings import AgentToolSetting, UserAgentAccess, UserToolAccess, UserToolFieldAccess
 from backend.trading_agents.agents.tools.registry import registry
 from backend.trading_agents.agents.tools.base import BaseAgentTool
 from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingValue, ToolSettingsUpdate
@@ -286,7 +288,6 @@ async def build_global_runtime_context(db: AsyncSession, user_id: int | None) ->
     field_access = {}
 
     if user_id is not None:
-        from backend.models.tool_settings import UserAgentAccess, UserToolAccess, UserToolFieldAccess
         # Load agent access
         res = await db.execute(select(UserAgentAccess).where(UserAgentAccess.user_id == user_id))
         for row in res.scalars().all():
