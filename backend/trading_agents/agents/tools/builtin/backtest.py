@@ -1,8 +1,8 @@
 from backend.trading_agents.agents.data.backtest_tools import run_strategy_backtest
-from backend.trading_agents.agents.data.search_tools import search_web, get_crypto_fear_and_greed_index
 from backend.trading_agents.agents.data.review_tools import get_past_performance_data
-from backend.trading_agents.agents.tools.base import ToolSettingField
+from backend.trading_agents.agents.data.search_tools import get_crypto_fear_and_greed_index, search_web
 from backend.trading_agents.agents.tools.adapters import FunctionToolAdapter
+from backend.trading_agents.agents.tools.base import ToolSettingField
 from backend.trading_agents.agents.tools.registry import registry
 
 strategy_backtest_tool = FunctionToolAdapter(

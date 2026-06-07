@@ -1,7 +1,9 @@
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.models.alert import PriceAlert
 from backend.repositories.common import scope_to_user
+
 
 async def list_alerts(db: AsyncSession, user=None) -> list[PriceAlert]:
     q = select(PriceAlert).order_by(PriceAlert.created_at.desc())
@@ -9,11 +11,11 @@ async def list_alerts(db: AsyncSession, user=None) -> list[PriceAlert]:
     result = await db.execute(q)
     return list(result.scalars().all())
 
+
 async def get_enabled_alerts(db: AsyncSession) -> list[PriceAlert]:
-    result = await db.execute(
-        select(PriceAlert).where(PriceAlert.enabled == True, PriceAlert.triggered_at.is_(None))
-    )
+    result = await db.execute(select(PriceAlert).where(PriceAlert.enabled == True, PriceAlert.triggered_at.is_(None)))
     return list(result.scalars().all())
+
 
 async def get_alert_by_id(db: AsyncSession, alert_id: int, user=None) -> PriceAlert | None:
     q = select(PriceAlert).where(PriceAlert.id == alert_id)
@@ -21,7 +23,10 @@ async def get_alert_by_id(db: AsyncSession, alert_id: int, user=None) -> PriceAl
     result = await db.execute(q)
     return result.scalar_one_or_none()
 
-async def create_alert(db: AsyncSession, user_id: int, ticker: str, condition: str, target_price: float, auto_analyze: bool) -> PriceAlert:
+
+async def create_alert(
+    db: AsyncSession, user_id: int, ticker: str, condition: str, target_price: float, auto_analyze: bool
+) -> PriceAlert:
     alert = PriceAlert(
         ticker=ticker.upper(),
         condition=condition,

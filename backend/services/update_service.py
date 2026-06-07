@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import json
 import os
 import platform
@@ -6,6 +7,7 @@ import subprocess
 import threading
 import time
 from pathlib import Path
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATUS_FILE = PROJECT_ROOT / ".update.json"
 UPDATE_UNIT = os.environ.get("TRADINGAGENTS_UPDATE_UNIT", "")
@@ -15,21 +17,29 @@ _FETCH_TTL = 60.0
 _last_fetch = 0.0
 _fetch_lock = threading.Lock()
 _fetching = False
+
+
 def _git(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
     env = os.environ.copy()
     env["GIT_TERMINAL_PROMPT"] = "0"
     try:
         return subprocess.run(
             ["git", "-C", str(PROJECT_ROOT), *args],
-            capture_output=True, text=True, timeout=timeout,
+            capture_output=True,
+            text=True,
+            timeout=timeout,
             env=env,
         )
     except Exception as exc:
+
         class MockCompletedProcess:
             returncode = -1
             stdout = ""
             stderr = str(exc)
+
         return MockCompletedProcess()
+
+
 def _bg_fetch():
     global _last_fetch, _fetching
     try:
@@ -40,16 +50,22 @@ def _bg_fetch():
         _last_fetch = time.time()
         with _fetch_lock:
             _fetching = False
+
+
 def _read_status() -> dict | None:
     try:
         return json.loads(STATUS_FILE.read_text(encoding="utf-8"))
     except Exception:
         return None
+
+
 def _write_status(data: dict) -> None:
     try:
         STATUS_FILE.write_text(json.dumps(data), encoding="utf-8")
     except Exception:
         pass
+
+
 def get_status(do_fetch: bool = True) -> dict:
     global _last_fetch, _fetching
     if not (PROJECT_ROOT / ".git").is_dir():
@@ -117,6 +133,8 @@ def get_status(do_fetch: bool = True) -> dict:
         "last_update": status,
         "commits": commits,
     }
+
+
 def request_update() -> dict:
     if not UPDATE_SUPPORTED:
         raise RuntimeError(
@@ -130,7 +148,10 @@ def request_update() -> dict:
     try:
         subprocess.run(
             ["sudo", "-n", SYSTEMCTL, "start", "--no-block", UPDATE_UNIT],
-            check=True, capture_output=True, text=True, timeout=15,
+            check=True,
+            capture_output=True,
+            text=True,
+            timeout=15,
         )
     except Exception as exc:
         detail = getattr(exc, "stderr", "") or str(exc)

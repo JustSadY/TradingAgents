@@ -3,30 +3,33 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_language_instruction,
 )
 
+
 def create_auditor_node(llm):
     async def auditor_node(state) -> dict:
         from backend.trading_agents.dataflows.config import get_config
+
         if not get_config().get("auditor_enabled", True):
             return {"audit_report": "Audit disabled by user settings."}
 
         ticker = state["company_of_interest"]
         asset_type = state.get("asset_type", "stock")
         instrument_context = build_instrument_context(ticker, asset_type)
-        
+
         investment_debate_state = state["investment_debate_state"]
         debate_history = investment_debate_state.get("history", "")
-        
+
         from backend.trading_agents.agents.analyst_registry import get_report_fields
+
         report_fields = get_report_fields()
-        
+
         resources = []
         for field, label in report_fields.items():
             content = state.get(field, "")
             if content and content.strip():
                 resources.append(f"### {label}:\n{content.strip()}")
-        
+
         resources_text = "\n\n".join(resources)
-        
+
         prompt = f"""You are a Senior Compliance Auditor and Fact-Checker. Your goal is to review the investment debate for {ticker} and ensure all claims are grounded in the provided analyst reports.
 
 ### Objective:
@@ -53,5 +56,5 @@ Your audit report MUST follow this structure:
 """
         response = await llm.ainvoke(prompt)
         return {"audit_report": response.content}
-    
+
     return auditor_node

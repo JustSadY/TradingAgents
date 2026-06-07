@@ -17,19 +17,22 @@ Kill-switch behaviour:
     sub-agent (zero tokens).
   • a single sub disabled      → that step is skipped; the rest proceed.
 """
+
 from __future__ import annotations
 
-import logging
 import inspect
+import logging
 
 from backend.trading_agents.agents.base import (
-    AgentRunContext, NodeFn, neutral_invest_debate_state,
+    AgentRunContext,
+    NodeFn,
+    neutral_invest_debate_state,
 )
-from backend.trading_agents.agents.sub.managers.synthesis_manager import create_synthesis_manager
 from backend.trading_agents.agents.sub.managers.auditor_node import create_auditor_node
 from backend.trading_agents.agents.sub.managers.research_manager import create_research_manager
-from backend.trading_agents.agents.sub.researchers.bull_researcher import create_bull_researcher
+from backend.trading_agents.agents.sub.managers.synthesis_manager import create_synthesis_manager
 from backend.trading_agents.agents.sub.researchers.bear_researcher import create_bear_researcher
+from backend.trading_agents.agents.sub.researchers.bull_researcher import create_bull_researcher
 
 logger = logging.getLogger(__name__)
 
@@ -54,9 +57,7 @@ def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
             return {
                 "synthesis_report": "",
                 "audit_report": "",
-                "investment_debate_state": neutral_invest_debate_state(
-                    "Research branch disabled by configuration."
-                ),
+                "investment_debate_state": neutral_invest_debate_state("Research branch disabled by configuration."),
                 "investment_plan": "Research branch disabled; proceeding without a research plan.",
             }
 
@@ -91,11 +92,13 @@ def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
                 current = local["investment_debate_state"].get("current_response", "")
                 speaker = bear if current.startswith("Bull") else bull
                 label = "bear_researcher" if current.startswith("Bull") else "bull_researcher"
-                fb = {"investment_debate_state": {
-                    **local["investment_debate_state"],
-                    "count": local["investment_debate_state"]["count"] + 1,
-                    "current_response": f"({label} unavailable.)",
-                }}
+                fb = {
+                    "investment_debate_state": {
+                        **local["investment_debate_state"],
+                        "count": local["investment_debate_state"]["count"] + 1,
+                        "current_response": f"({label} unavailable.)",
+                    }
+                }
                 apply(await _safe(label, speaker, local, fb))
         else:
             logger.info("[research_manager] debate skipped (bull=%s bear=%s).", bull_on, bear_on)
@@ -111,9 +114,16 @@ def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
 
         # ---- Research Manager judgement (this main agent's own decision) ----
         judge = create_research_manager(ctx.llm_for("research_manager"))
-        apply(await _safe("research_manager", judge, local, {
-            "investment_plan": "Research manager unavailable; proceeding with available reports.",
-        }))
+        apply(
+            await _safe(
+                "research_manager",
+                judge,
+                local,
+                {
+                    "investment_plan": "Research manager unavailable; proceeding with available reports.",
+                },
+            )
+        )
 
         return out
 

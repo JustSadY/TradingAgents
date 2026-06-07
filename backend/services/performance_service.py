@@ -1,23 +1,24 @@
 import logging
-from datetime import date, datetime, timedelta, timezone
-from backend.core.utils import resolve_benchmark
+from datetime import UTC, datetime, timedelta
+
 from backend.core.constants import (
-    BUY_SIGNALS as _BUY_SIGNALS,
-    SELL_SIGNALS as _SELL_SIGNALS,
     DEFAULT_HOLDING_DAYS as HOLDING_DAYS,
 )
+from backend.core.utils import resolve_benchmark
 
 _logger = logging.getLogger(__name__)
 
 from backend.services.market_data_service import calculate_returns
 
+
 async def backfill_returns(db) -> int:
     from sqlalchemy import select
+
     from backend.models.analysis import AnalysisResult
     from backend.models.settings import AppSettings
     from backend.trading_agents.dataflows.config import get_config
 
-    cutoff = (datetime.now(timezone.utc) - timedelta(days=HOLDING_DAYS + 2)).strftime("%Y-%m-%d")
+    cutoff = (datetime.now(UTC) - timedelta(days=HOLDING_DAYS + 2)).strftime("%Y-%m-%d")
     result = await db.execute(
         select(AnalysisResult)
         .where(AnalysisResult.raw_return.is_(None))
@@ -32,9 +33,7 @@ async def backfill_returns(db) -> int:
     for row in rows:
         row_config = dict(config)
         if row.user_id:
-            res_settings = await db.execute(
-                select(AppSettings).where(AppSettings.user_id == row.user_id)
-            )
+            res_settings = await db.execute(select(AppSettings).where(AppSettings.user_id == row.user_id))
             settings_obj = res_settings.scalar_one_or_none()
             if settings_obj:
                 bt = getattr(settings_obj, "benchmark_ticker", None)
@@ -43,26 +42,29 @@ async def backfill_returns(db) -> int:
 
         benchmark = resolve_benchmark(row.ticker, row_config)
 
-        raw, alpha, days = await calculate_returns(row.ticker, row.trade_date, holding_days=HOLDING_DAYS, benchmark=benchmark)
+        raw, alpha, days = await calculate_returns(
+            row.ticker, row.trade_date, holding_days=HOLDING_DAYS, benchmark=benchmark
+        )
         if raw is not None:
             row.raw_return = raw
             row.alpha_return = alpha
             row.holding_days = days
-            
+
             # Generate reflection using the Reflector
             try:
                 import asyncio
+
+                from backend.trading_agents.default_config import DEFAULT_CONFIG
                 from backend.trading_agents.graph.reflection import Reflector
                 from backend.trading_agents.llm_clients import create_llm_client
-                from backend.trading_agents.default_config import DEFAULT_CONFIG
-                
+
                 # Use a lightweight client for reflection
                 client = create_llm_client(
                     provider=DEFAULT_CONFIG.get("llm_provider", "openai"),
                     model=DEFAULT_CONFIG.get("llm_model", "gpt-4o-mini"),
                 )
                 reflector = Reflector(client.get_llm())
-                
+
                 reflection = await asyncio.to_thread(
                     reflector.reflect_on_final_decision,
                     final_decision=row.final_decision,
@@ -79,28 +81,28 @@ async def backfill_returns(db) -> int:
         await db.commit()
     _logger.info("Performance backfill: updated %d rows with custom benchmarks", updated)
     return updated
+
+
 async def get_analyst_attribution_stats(db) -> dict:
     from sqlalchemy import select
+
     from backend.models.analysis import AnalysisResult
     from backend.trading_agents.agents.analyst_registry import get_report_fields
-    
+
     q = select(AnalysisResult).where(AnalysisResult.raw_return.isnot(None))
     result = await db.execute(q)
     rows = result.scalars().all()
-    
+
     # Dynamically build analyst map from registry
     report_fields = get_report_fields()
-    analysts = {
-        rf.replace("_report", ""): {"label": label, "report_field": rf}
-        for rf, label in report_fields.items()
-    }
-    
+    analysts = {rf.replace("_report", ""): {"label": label, "report_field": rf} for rf, label in report_fields.items()}
+
     stats = {
         k: {"key": k, "label": val["label"], "total_predictions": 0, "correct_predictions": 0, "win_rate": 50.0}
         for k, val in analysts.items()
     }
-    import re
     from backend.trading_agents.agents.runtime.rating import parse_rating
+
     for row in rows:
         for key, config in analysts.items():
             report_text = getattr(row, config["report_field"], "")
@@ -112,19 +114,19 @@ async def get_analyst_attribution_stats(db) -> dict:
                 pred = "Buy"
             elif pred in ("Underweight", "Sell"):
                 pred = "Sell"
-            
+
             raw_ret = row.raw_return
             is_correct = False
             has_graded = False
             if pred == "Buy":
                 has_graded = True
-                is_correct = (raw_ret > 0)
+                is_correct = raw_ret > 0
             elif pred == "Sell":
                 has_graded = True
-                is_correct = (raw_ret < 0)
+                is_correct = raw_ret < 0
             elif pred == "Hold":
                 has_graded = True
-                is_correct = (abs(raw_ret) <= 0.02)
+                is_correct = abs(raw_ret) <= 0.02
             if has_graded:
                 stats[key]["total_predictions"] += 1
                 if is_correct:
@@ -146,10 +148,7 @@ async def get_analyst_attribution_stats(db) -> dict:
             s["weight"] = round(100.0 / len(stats), 1)
     attribution_list = list(stats.values())
     total_runs_evaluated = sum(s["total_predictions"] for s in attribution_list)
-    return {
-        "attribution": attribution_list,
-        "total_evaluated_runs": total_runs_evaluated
-    }
+    return {"attribution": attribution_list, "total_evaluated_runs": total_runs_evaluated}
 
 
 async def get_analyst_performance_context(db) -> str:

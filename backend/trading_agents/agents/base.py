@@ -9,23 +9,27 @@ These are intentionally lightweight (protocols + a shared run-context dataclass
 + a couple of helpers) — the heavy lifting lives in the concrete ``main/``
 modules, which reuse the existing Tier-2 node factories.
 """
+
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Dict, List, Protocol
+from typing import Any, Protocol
 
 # A node/runner is just "state in → partial-state-update out".
-StateUpdate = Dict[str, Any]
+StateUpdate = dict[str, Any]
 NodeFn = Callable[[dict], StateUpdate]
 
 
 class MainAgentNode(Protocol):
     """A Tier-1 main agent: one graph node that orchestrates its sub-agents."""
+
     def __call__(self, state: dict) -> StateUpdate: ...
 
 
 class SubAgentRunner(Protocol):
     """A Tier-2 sub-agent runner invoked inside a main node."""
+
     def __call__(self, state: dict) -> StateUpdate: ...
 
 
@@ -37,13 +41,14 @@ class AgentRunContext:
     Built once by :class:`GraphSetup` and shared (read-only) across all main
     nodes.
     """
-    hierarchy: Any                      # AgentHierarchy
-    llms: Dict[str, Any]                # agent_key → resolved LLM
-    fallback_llm: Any                   # global thinking LLM
-    tool_nodes: Dict[str, Any]          # analyst_key → ToolNode
-    conditional_logic: Any              # ConditionalLogic
-    config: Dict[str, Any]              # the run config dict
-    selected_analysts: List[str]        # permitted + selected analyst keys
+
+    hierarchy: Any  # AgentHierarchy
+    llms: dict[str, Any]  # agent_key → resolved LLM
+    fallback_llm: Any  # global thinking LLM
+    tool_nodes: dict[str, Any]  # analyst_key → ToolNode
+    conditional_logic: Any  # ConditionalLogic
+    config: dict[str, Any]  # the run config dict
+    selected_analysts: list[str]  # permitted + selected analyst keys
 
     def llm_for(self, key: str) -> Any:
         """Resolved LLM for *key*, falling back to the global thinking LLM."""

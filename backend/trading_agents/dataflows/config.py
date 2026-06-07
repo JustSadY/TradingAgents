@@ -1,9 +1,9 @@
 import threading
 from copy import deepcopy
-from typing import Dict, Optional
+
 import backend.trading_agents.default_config as default_config
 
-_config: Optional[Dict] = None
+_config: dict | None = None
 # Guards the module-global ``_config`` so concurrent graph runs / set_config()
 # calls from worker threads cannot interleave a partial update with a read.
 _config_lock = threading.RLock()
@@ -30,7 +30,7 @@ def set_config(config):
                 _config[key] = value
 
 
-def get_config() -> Dict:
+def get_config() -> dict:
     with _config_lock:
         if _config is None:
             initialize_config()

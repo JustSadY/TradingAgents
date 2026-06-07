@@ -1,12 +1,20 @@
-from langchain_core.tools import tool
-from typing import Annotated, Optional
 import logging
+from typing import Annotated
+
+from langchain_core.tools import tool
+
 from backend.trading_agents.dataflows.interface import route_to_vendor
+
 _logger = logging.getLogger(__name__)
+
+
 @tool
 async def get_indicators(
     symbol: Annotated[str, "ticker symbol of the company"],
-    indicators: Annotated[str, "Comma-separated technical indicators: 'close_50_sma', 'close_200_sma', 'close_10_ema', 'macd', 'macds', 'macdh', 'rsi', 'boll', 'boll_ub', 'boll_lb', 'atr', 'vwma', 'mfi'"],
+    indicators: Annotated[
+        str,
+        "Comma-separated technical indicators: 'close_50_sma', 'close_200_sma', 'close_10_ema', 'macd', 'macds', 'macdh', 'rsi', 'boll', 'boll_ub', 'boll_lb', 'atr', 'vwma', 'mfi'",
+    ],
     curr_date: Annotated[str, "The current trading date, YYYY-mm-dd"],
     look_back_days: Annotated[int, "How many days to look back for context"] = 30,
 ) -> str:

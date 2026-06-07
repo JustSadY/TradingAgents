@@ -13,12 +13,13 @@ pure Tier-2 ``SubAgent`` uses. (The analyst branch currently still reuses the
 proven LangGraph sub-wiring via a compiled subgraph; this loop is the path for
 new sub-agents and for callers that want a node-free executor.)
 """
+
 from __future__ import annotations
 
-import logging
 import asyncio
 import inspect
-from typing import Any, List
+import logging
+from typing import Any
 
 from langchain_core.messages import AIMessage, ToolMessage
 
@@ -27,8 +28,8 @@ logger = logging.getLogger(__name__)
 
 def run_tool_loop(
     llm: Any,
-    tools: List[Any],
-    messages: List[Any],
+    tools: list[Any],
+    messages: list[Any],
     *,
     max_iters: int = 8,
     label: str = "sub_agent",
@@ -44,10 +45,7 @@ def run_tool_loop(
         return llm.invoke(messages)
 
     bound = llm.bind_tools(tools)
-    tools_by_name = {
-        (t.name if hasattr(t, "name") else getattr(t, "__name__", str(t))): t
-        for t in tools
-    }
+    tools_by_name = {(t.name if hasattr(t, "name") else getattr(t, "__name__", str(t))): t for t in tools}
 
     convo = list(messages)
     last: Any = None
@@ -65,20 +63,24 @@ def run_tool_loop(
             args = call.get("args", {}) or {}
             tool = tools_by_name.get(name)
             if tool is None:
-                convo.append(ToolMessage(
-                    content=f"Tool '{name}' is not available to this agent.",
-                    tool_call_id=call_id,
-                ))
+                convo.append(
+                    ToolMessage(
+                        content=f"Tool '{name}' is not available to this agent.",
+                        tool_call_id=call_id,
+                    )
+                )
                 continue
             try:
                 result = tool.invoke(args) if hasattr(tool, "invoke") else tool(**args)
                 convo.append(ToolMessage(content=str(result), tool_call_id=call_id))
             except Exception as exc:  # noqa: BLE001
                 logger.warning("[%s] tool '%s' failed: %s", label, name, exc)
-                convo.append(ToolMessage(
-                    content=f"Tool '{name}' failed: {exc}",
-                    tool_call_id=call_id,
-                ))
+                convo.append(
+                    ToolMessage(
+                        content=f"Tool '{name}' failed: {exc}",
+                        tool_call_id=call_id,
+                    )
+                )
 
     logger.warning("[%s] tool loop hit max_iters=%d; returning last message.", label, max_iters)
     return last if last is not None else AIMessage(content="")
@@ -86,8 +88,8 @@ def run_tool_loop(
 
 async def arun_tool_loop(
     llm: Any,
-    tools: List[Any],
-    messages: List[Any],
+    tools: list[Any],
+    messages: list[Any],
     *,
     max_iters: int = 8,
     label: str = "sub_agent",
@@ -99,10 +101,7 @@ async def arun_tool_loop(
         return await llm.ainvoke(messages)
 
     bound = llm.bind_tools(tools)
-    tools_by_name = {
-        (t.name if hasattr(t, "name") else getattr(t, "__name__", str(t))): t
-        for t in tools
-    }
+    tools_by_name = {(t.name if hasattr(t, "name") else getattr(t, "__name__", str(t))): t for t in tools}
 
     convo = list(messages)
     last: Any = None
@@ -120,13 +119,17 @@ async def arun_tool_loop(
             args = call.get("args", {}) or {}
             tool = tools_by_name.get(name)
             if tool is None:
-                convo.append(ToolMessage(
-                    content=f"Tool '{name}' is not available to this agent.",
-                    tool_call_id=call_id,
-                ))
+                convo.append(
+                    ToolMessage(
+                        content=f"Tool '{name}' is not available to this agent.",
+                        tool_call_id=call_id,
+                    )
+                )
                 continue
             try:
-                if inspect.iscoroutinefunction(tool) or (hasattr(tool, "ainvoke") and inspect.iscoroutinefunction(tool.ainvoke)):
+                if inspect.iscoroutinefunction(tool) or (
+                    hasattr(tool, "ainvoke") and inspect.iscoroutinefunction(tool.ainvoke)
+                ):
                     # Most LangChain tools have an async path
                     if hasattr(tool, "ainvoke"):
                         result = await tool.ainvoke(args)
@@ -135,14 +138,16 @@ async def arun_tool_loop(
                 else:
                     # Run sync tool in thread
                     result = await asyncio.to_thread(tool.invoke if hasattr(tool, "invoke") else tool, **args)
-                
+
                 convo.append(ToolMessage(content=str(result), tool_call_id=call_id))
             except Exception as exc:  # noqa: BLE001
                 logger.warning("[%s] tool '%s' failed: %s", label, name, exc)
-                convo.append(ToolMessage(
-                    content=f"Tool '{name}' failed: {exc}",
-                    tool_call_id=call_id,
-                ))
+                convo.append(
+                    ToolMessage(
+                        content=f"Tool '{name}' failed: {exc}",
+                        tool_call_id=call_id,
+                    )
+                )
 
     logger.warning("[%s] tool loop hit max_iters=%d; returning last message.", label, max_iters)
     return last if last is not None else AIMessage(content="")

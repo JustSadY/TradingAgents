@@ -1,12 +1,12 @@
 from fastapi import APIRouter, Depends, Query
+from sqlalchemy import desc, select
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
 
+from backend.api.deps import get_current_user
 from backend.core.database import get_db
 from backend.models.log import SystemLog
 from backend.models.user import User
 from backend.schemas.log import LogRead
-from backend.api.deps import get_current_user
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 

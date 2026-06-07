@@ -1,10 +1,9 @@
 from backend.trading_agents.agents.data.chart_tools import (
     add_chart_annotation,
     add_custom_indicator,
-    get_vision_chart_analysis,
     get_mtf_trend,
+    get_vision_chart_analysis,
 )
-from backend.trading_agents.agents.tools.base import ToolSettingField
 from backend.trading_agents.agents.tools.adapters import FunctionToolAdapter
 from backend.trading_agents.agents.tools.registry import registry
 

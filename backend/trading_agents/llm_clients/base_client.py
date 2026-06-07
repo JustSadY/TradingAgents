@@ -1,26 +1,35 @@
-from abc import ABC, abstractmethod
-from typing import Any, Optional
 import warnings
+from abc import ABC, abstractmethod
+from typing import Any
+
+
 def normalize_content(response):
     content = response.content
     if isinstance(content, list):
         texts = [
-            item.get("text", "") if isinstance(item, dict) and item.get("type") == "text"
-            else item if isinstance(item, str) else ""
+            item.get("text", "")
+            if isinstance(item, dict) and item.get("type") == "text"
+            else item
+            if isinstance(item, str)
+            else ""
             for item in content
         ]
         response.content = "\n".join(t for t in texts if t)
     return response
+
+
 class BaseLLMClient(ABC):
-    def __init__(self, model: str, base_url: Optional[str] = None, **kwargs):
+    def __init__(self, model: str, base_url: str | None = None, **kwargs):
         self.model = model
         self.base_url = base_url
         self.kwargs = kwargs
+
     def get_provider_name(self) -> str:
         provider = getattr(self, "provider", None)
         if provider:
             return str(provider)
         return self.__class__.__name__.removesuffix("Client").lower()
+
     def warn_if_unknown_model(self) -> None:
         if self.validate_model():
             return
@@ -32,9 +41,11 @@ class BaseLLMClient(ABC):
             RuntimeWarning,
             stacklevel=2,
         )
+
     @abstractmethod
     def get_llm(self) -> Any:
         pass
+
     @abstractmethod
     def validate_model(self) -> bool:
         pass

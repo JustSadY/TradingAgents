@@ -1,12 +1,13 @@
-import json
 from langchain_core.messages import SystemMessage
+
+from backend.trading_agents.agents.analyst_registry import register_analyst
+from backend.trading_agents.agents.data.review_tools import get_past_performance_data
 from backend.trading_agents.agents.runtime.agent_states import AgentState
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
 )
-from backend.trading_agents.agents.data.review_tools import get_past_performance_data
-from backend.trading_agents.agents.analyst_registry import register_analyst
+
 
 @register_analyst(
     key="review",
@@ -18,7 +19,7 @@ from backend.trading_agents.agents.analyst_registry import register_analyst
 )
 def create_review_analyst(llm):
     llm_with_tools = llm.bind_tools([get_past_performance_data])
-    
+
     async def review_analyst(state: AgentState):
         ticker = state.get("company_of_interest", "Unknown")
         asset_type = state.get("asset_type", "stock")
@@ -42,8 +43,7 @@ def create_review_analyst(llm):
             "2. **Hindsight Analysis:** Detailed comparison of past thesis vs. actual outcome, citing specific returns.\n"
             "3. **Lessons Learned:** Specific, actionable advice for the current day's analysts and managers.\n"
             "4. **Performance Audit Table:** A Markdown table summarizing the past decision, actual return, and audit status (Correct/Incorrect/Partial).\n"
-            f"{context_str}\n"
-            + get_language_instruction()
+            f"{context_str}\n" + get_language_instruction()
         )
 
         messages = [
@@ -54,4 +54,5 @@ def create_review_analyst(llm):
         # Use ainvoke for async compatibility
         response = await llm_with_tools.ainvoke(messages)
         return {"messages": [response], "review_report": response.content}
+
     return review_analyst

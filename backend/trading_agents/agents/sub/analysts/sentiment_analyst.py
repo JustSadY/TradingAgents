@@ -1,14 +1,19 @@
 from datetime import datetime, timedelta
+
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
-    get_news,
 )
-from backend.trading_agents.dataflows.interface import route_to_vendor, fetch_reddit_posts, fetch_stocktwits_messages
-from backend.trading_agents.agents.analyst_registry import register_analyst
+from backend.trading_agents.dataflows.interface import fetch_reddit_posts, fetch_stocktwits_messages, route_to_vendor
+
+
 def _seven_days_back(trade_date: str) -> str:
     return (datetime.strptime(trade_date, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
+
+
 @register_analyst(
     key="social",
     agent_node="Sentiment Analyst",
@@ -24,6 +29,7 @@ def create_sentiment_analyst(llm):
         start_date = _seven_days_back(end_date)
         instrument_context = build_instrument_context(ticker)
         from backend.trading_agents.agents.data.chart_tools import active_run_context
+
         ctx = active_run_context.get(None)
         reddit_enabled = True
         stocktwits_enabled = True
@@ -35,7 +41,7 @@ def create_sentiment_analyst(llm):
 
         # Use route_to_vendor directly
         news_block = await route_to_vendor("get_news", ticker, start_date, end_date)
-        
+
         if reddit_enabled:
             reddit_block = await route_to_vendor("fetch_reddit_posts", ticker)
         else:
@@ -76,7 +82,10 @@ def create_sentiment_analyst(llm):
             "messages": [result],
             "sentiment_report": result.content,
         }
+
     return sentiment_analyst_node
+
+
 def _build_system_message(
     *,
     ticker: str,

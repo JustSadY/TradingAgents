@@ -1,14 +1,13 @@
 from backend.trading_agents.agents.data.fundamental_data_tools import (
-    get_fundamentals,
     get_balance_sheet,
     get_cashflow,
+    get_fundamentals,
     get_income_statement,
 )
 from backend.trading_agents.agents.data.sec_tools import (
-    get_sec_filings,
     get_insider_transactions_deep,
+    get_sec_filings,
 )
-from backend.trading_agents.agents.tools.base import ToolSettingField
 from backend.trading_agents.agents.tools.adapters import FunctionToolAdapter
 from backend.trading_agents.agents.tools.registry import registry
 

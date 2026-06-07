@@ -1,21 +1,24 @@
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
-from backend.core.database import get_db
+
 from backend.api.deps import get_current_user
-from backend.models.alert import PriceAlert
+from backend.core.database import get_db
 from backend.models.user import User
-from backend.schemas.alert import AlertCreate, AlertUpdate, AlertRead
-from backend.repositories.common import scope_to_user
+from backend.schemas.alert import AlertCreate, AlertRead, AlertUpdate
+
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 _logger = logging.getLogger(__name__)
+
+
 @router.get("", response_model=list[AlertRead])
 async def list_alerts_run(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
     from backend.repositories.alerts import list_alerts as _repo_list
+
     return await _repo_list(db, user=current_user)
 
 
@@ -26,10 +29,14 @@ async def create_alert_run(
     current_user: User = Depends(get_current_user),
 ):
     from backend.repositories.alerts import create_alert as _repo_create
+
     return await _repo_create(
-        db, user_id=current_user.id, ticker=body.ticker,
-        condition=body.condition, target_price=body.target_price,
-        auto_analyze=body.auto_analyze
+        db,
+        user_id=current_user.id,
+        ticker=body.ticker,
+        condition=body.condition,
+        target_price=body.target_price,
+        auto_analyze=body.auto_analyze,
     )
 
 
@@ -41,6 +48,7 @@ async def update_alert(
     current_user: User = Depends(get_current_user),
 ):
     from backend.repositories.alerts import get_alert_by_id as _repo_get
+
     alert = await _repo_get(db, alert_id, user=current_user)
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
@@ -56,6 +64,7 @@ async def delete_alert(
     current_user: User = Depends(get_current_user),
 ):
     from backend.repositories.alerts import get_alert_by_id as _repo_get
+
     alert = await _repo_get(db, alert_id, user=current_user)
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")

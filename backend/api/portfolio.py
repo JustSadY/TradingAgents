@@ -1,15 +1,10 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, desc
-from sqlalchemy.orm import selectinload
 
-from backend.core.database import get_db
-from backend.models.portfolio import Portfolio, Holding
-from backend.models.order import Order
-from backend.models.user import User
-from backend.schemas.portfolio import PortfolioRead, HoldingRead, OrderRead
 from backend.api.deps import get_current_user
-from backend.repositories.common import scope_to_user
+from backend.core.database import get_db
+from backend.models.user import User
+from backend.schemas.portfolio import HoldingRead, OrderRead, PortfolioRead
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
@@ -20,6 +15,7 @@ async def list_portfolios(
     current_user: User = Depends(get_current_user),
 ):
     from backend.repositories.portfolio import list_portfolios as _repo_list
+
     return await _repo_list(db, user=current_user)
 
 
@@ -30,6 +26,7 @@ async def list_holdings(
     current_user: User = Depends(get_current_user),
 ):
     from backend.repositories.portfolio import list_holdings as _repo_list
+
     return await _repo_list(db, user=current_user, mode=mode)
 
 
@@ -43,4 +40,5 @@ async def list_orders(
     current_user: User = Depends(get_current_user),
 ):
     from backend.repositories.portfolio import list_orders as _repo_list
+
     return await _repo_list(db, user=current_user, mode=mode, ticker=ticker, limit=limit, offset=offset)

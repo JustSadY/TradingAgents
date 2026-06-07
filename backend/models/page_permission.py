@@ -1,7 +1,8 @@
 from sqlalchemy import Boolean, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
-from backend.core.database import Base
+
 from backend.core.constants import PAGE_KEYS, SETTING_KEYS
+from backend.core.database import Base
 
 ALL_PAGE_KEYS = [k for k in PAGE_KEYS if k != "settings"]
 ALWAYS_ALLOWED = {"settings"}
@@ -40,6 +41,8 @@ SECTION_FIELDS = {
         "cron_schedule",
     ],
 }
+
+
 class UserPagePermission(Base):
     __tablename__ = "user_page_permissions"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -47,6 +50,8 @@ class UserPagePermission(Base):
     page_key: Mapped[str] = mapped_column(String(50), nullable=False)
     allowed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     __table_args__ = (UniqueConstraint("user_id", "page_key", name="uq_user_page"),)
+
+
 class UserSettingPermission(Base):
     __tablename__ = "user_setting_permissions"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)

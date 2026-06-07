@@ -1,11 +1,20 @@
 from datetime import timedelta
-from typing import Set
 
 # Application Structure
 PAGE_KEYS = [
-    "dashboard", "analysis", "chart", "watchlist", "orders", 
-    "trading", "portfolio", "performance", "alerts", "ab-testing", 
-    "logs", "profile", "settings"
+    "dashboard",
+    "analysis",
+    "chart",
+    "watchlist",
+    "orders",
+    "trading",
+    "portfolio",
+    "performance",
+    "alerts",
+    "ab-testing",
+    "logs",
+    "profile",
+    "settings",
 ]
 
 SETTING_KEYS = ["general", "llm", "risk", "webhooks", "cron", "presets"]
@@ -20,9 +29,9 @@ PERIOD_DELTAS = {
 }
 
 # Analysis Signals
-BUY_SIGNALS: Set[str] = {"Buy", "Overweight"}
-SELL_SIGNALS: Set[str] = {"Sell", "Underweight"}
-HOLD_SIGNALS: Set[str] = {"Hold"}
+BUY_SIGNALS: set[str] = {"Buy", "Overweight"}
+SELL_SIGNALS: set[str] = {"Sell", "Underweight"}
+HOLD_SIGNALS: set[str] = {"Hold"}
 
 # Analysis Constants
 DEFAULT_HOLDING_DAYS: int = 5

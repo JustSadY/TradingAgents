@@ -6,19 +6,18 @@ event loop) inside ``api/market.py``. They live here now, with ticker
 validation applied consistently and the blocking yfinance/pandas work pushed to
 a worker thread.
 """
+
 from __future__ import annotations
 
-import asyncio
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from sqlalchemy import select
+import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.constants import PERIOD_DELTAS, SIGNAL_SENTIMENT_VALUES
 from backend.core.utils import safe_ticker_component
-from backend.models.analysis import AnalysisResult
 from backend.services.indicator_service import calculate_ema, calculate_macd, calculate_rsi, evaluate_formula_safely
-from backend.core.constants import SIGNAL_SENTIMENT_VALUES, PERIOD_DELTAS
 from backend.services.market_data_service import get_historical_data
 
 _logger = logging.getLogger(__name__)
@@ -58,6 +57,13 @@ def _resolve_dates(period: str, start_date: str | None, end_date: str | None) ->
 
 def _compute_candles(data) -> list[dict]:
     import numpy as np
+
+    # Ensure we have required columns and skip rows with missing OHLC data
+    data = data.dropna(subset=["Open", "High", "Low", "Close"])
+    
+    if data.empty:
+        return []
+
     data["sma"] = data["Close"].rolling(window=20).mean()
     data["ema"] = calculate_ema(data["Close"], span=20)
     data["rsi"] = calculate_rsi(data["Close"], period=14)
@@ -72,15 +78,22 @@ def _compute_candles(data) -> list[dict]:
 
     candles = []
     for ts, row in data.iterrows():
-        candles.append({
-            "time": ts.strftime("%Y-%m-%d"),
-            "open": _r(row["Open"]), "high": _r(row["High"]),
-            "low": _r(row["Low"]), "close": _r(row["Close"]),
-            "volume": int(row.get("Volume", 0) or 0),
-            "sma": _r(row["sma"]), "ema": _r(row["ema"]), "rsi": _r(row["rsi"]),
-            "macd_line": _r(row["macd_line"]), "macd_signal": _r(row["macd_signal"]),
-            "macd_hist": _r(row["macd_hist"]),
-        })
+        candles.append(
+            {
+                "time": ts.strftime("%Y-%m-%d"),
+                "open": _r(row["Open"]),
+                "high": _r(row["High"]),
+                "low": _r(row["Low"]),
+                "close": _r(row["Close"]),
+                "volume": int(row.get("Volume", 0) or 0),
+                "sma": _r(row["sma"]),
+                "ema": _r(row["ema"]),
+                "rsi": _r(row["rsi"]),
+                "macd_line": _r(row["macd_line"]),
+                "macd_signal": _r(row["macd_signal"]),
+                "macd_hist": _r(row["macd_hist"]),
+            }
+        )
     return candles
 
 
@@ -91,26 +104,30 @@ async def get_ohlcv(ticker: str, period: str, start_date: str | None, end_date: 
     data = await get_historical_data(ticker, s, e)
     if data.empty:
         raise MarketDataError(f"No data found for {ticker}", status_code=404)
-    
+
     candles = _compute_candles(data)
     return {"ticker": ticker, "start_date": s, "end_date": e, "candles": candles}
 
 
 async def get_custom_indicator_series(
-    ticker: str, formula: str, period: str, start_date: str | None, end_date: str | None,
+    ticker: str,
+    formula: str,
+    period: str,
+    start_date: str | None,
+    end_date: str | None,
 ) -> dict:
     ticker = _clean_ticker(ticker)
     s, e = _resolve_dates(period, start_date, end_date)
 
     import numpy as np
+
     data = await get_historical_data(ticker, s, e)
     if data.empty:
         raise MarketDataError(f"No data found for {ticker}", status_code=404)
 
     series = evaluate_formula_safely(data, formula).replace({np.nan: None})
     results = [
-        {"time": ts.strftime("%Y-%m-%d"),
-         "value": round(float(val), 4) if val is not None else None}
+        {"time": ts.strftime("%Y-%m-%d"), "value": round(float(val), 4) if val is not None else None}
         for ts, val in series.items()
     ]
 
@@ -120,11 +137,9 @@ async def get_custom_indicator_series(
 async def get_sentiment_history(db: AsyncSession, ticker: str) -> dict:
     ticker = _clean_ticker(ticker)
     from backend.repositories.analysis import get_sentiment_history_by_ticker
+
     rows = await get_sentiment_history_by_ticker(db, ticker)
-    history = [
-        {"time": trade_date, "value": SIGNAL_SENTIMENT_VALUES.get(signal, 0.0)}
-        for trade_date, signal in rows
-    ]
+    history = [{"time": trade_date, "value": SIGNAL_SENTIMENT_VALUES.get(signal, 0.0)} for trade_date, signal in rows]
     if not history:
         history = []
     return {"ticker": ticker, "history": history}

@@ -1,36 +1,21 @@
-import os
 import json
-import time
+import logging
+import os
 import sqlite3
 import threading
-import logging
+import time
 from pathlib import Path
+
 from .config import get_config
 
 _logger = logging.getLogger(__name__)
 
 TOOLS_CATEGORIES = {
-    "core_stock_apis": {
-        "description": "OHLCV stock price data",
-        "tools": [
-            "get_stock_data"
-        ]
-    },
-    "technical_indicators": {
-        "description": "Technical analysis indicators",
-        "tools": [
-            "get_indicators"
-        ]
-    },
+    "core_stock_apis": {"description": "OHLCV stock price data", "tools": ["get_stock_data"]},
+    "technical_indicators": {"description": "Technical analysis indicators", "tools": ["get_indicators"]},
     "fundamental_data": {
         "description": "Company fundamentals",
-        "tools": [
-            "get_fundamentals",
-            "get_balance_sheet",
-            "get_cashflow",
-            "get_income_statement",
-            "get_sec_filings"
-        ]
+        "tools": ["get_fundamentals", "get_balance_sheet", "get_cashflow", "get_income_statement", "get_sec_filings"],
     },
     "news_data": {
         "description": "News and insider data",
@@ -38,22 +23,24 @@ TOOLS_CATEGORIES = {
             "get_news",
             "get_global_news",
             "get_insider_transactions",
-        ]
+        ],
     },
     "social_sentiment_data": {
         "description": "Social media sentiment data",
         "tools": [
             "fetch_reddit_posts",
             "fetch_stocktwits_messages",
-        ]
-    }
+        ],
+    },
 }
+
 
 def get_category_for_method(method: str) -> str:
     for category, info in TOOLS_CATEGORIES.items():
         if method in info["tools"]:
             return category
     raise ValueError(f"Method '{method}' not found in any category")
+
 
 class APICache:
     _init_lock = threading.Lock()

@@ -1,5 +1,4 @@
 import re
-from typing import Optional
 
 _TICKER_PATH_RE = re.compile(r"^[A-Za-z0-9._\-\^]+$")
 
@@ -17,7 +16,7 @@ def safe_ticker_component(value: str, *, max_len: int = 32) -> str:
     return value
 
 
-def resolve_benchmark(ticker: str, config: Optional[dict] = None) -> str:
+def resolve_benchmark(ticker: str, config: dict | None = None) -> str:
     """Return the appropriate benchmark ticker for *ticker*.
 
     Priority chain (mirrors ``performance_service.backfill_returns``):
@@ -34,6 +33,7 @@ def resolve_benchmark(ticker: str, config: Optional[dict] = None) -> str:
     if config is None:
         try:
             from backend.trading_agents.dataflows.config import get_config
+
             config = get_config()
         except Exception:
             config = {}

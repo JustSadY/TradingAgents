@@ -1,17 +1,15 @@
+from backend.trading_agents.agents.analyst_registry import register_analyst
+from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_balance_sheet,
     get_cashflow,
     get_fundamentals,
     get_income_statement,
-    get_insider_transactions,
-    get_sec_filings,
     get_insider_transactions_deep,
     get_language_instruction,
+    get_sec_filings,
 )
-from backend.trading_agents.agents.analyst_registry import register_analyst
-from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
-from backend.trading_agents.dataflows.config import get_config
 
 
 @register_analyst(
@@ -42,8 +40,7 @@ def create_fundamentals_analyst(llm):
             get_insider_transactions_deep,
         ]
 
-        system_message = (
-            """You are a senior fundamental analyst. Your goal is to assess a company's corporate health and intrinsic value through rigorous financial analysis and regulatory monitoring.
+        system_message = """You are a senior fundamental analyst. Your goal is to assess a company's corporate health and intrinsic value through rigorous financial analysis and regulatory monitoring.
 
 ### Analytical Process (Chain-of-Thought):
 1. **Data Gathering:** Utilize financial statement tools and `get_sec_filings` to retrieve the latest data and regulatory filings.
@@ -63,13 +60,15 @@ Your final report MUST follow this structure:
 2. **Detailed Analysis:** In-depth review of financial statements and corporate history.
 3. **SEC & Insider Sentiment:** Specific breakdown of recent filings and insider trading activity.
 4. **Actionable Insights:** Specific strengths, weaknesses, or value-driven triggers.
-5. **Financial Data Table:** A Markdown table summarizing key fundamental metrics and current values."""
-            + get_language_instruction()
-        )
+5. **Financial Data Table:** A Markdown table summarizing key fundamental metrics and current values.""" + get_language_instruction()
 
         return await run_tool_analyst(
-            llm, state, tools=tools, system_message=system_message,
-            report_key="fundamentals_report", instrument_context=instrument_context,
+            llm,
+            state,
+            tools=tools,
+            system_message=system_message,
+            report_key="fundamentals_report",
+            instrument_context=instrument_context,
         )
 
     return fundamentals_analyst_node

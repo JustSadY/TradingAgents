@@ -8,18 +8,18 @@ simulation portfolio cash, and place the order through the configured trader.
 That logic used to be copy-pasted in three places (with a hardcoded $100k
 capital in two of them). It now lives here.
 """
+
 from __future__ import annotations
 
 import logging
 import re
-from typing import Optional
-
-from backend.trading_agents.agents.runtime.risk_math import calculate_kelly_size, get_risk_reward_from_plan
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.services.execution.base import OrderRequest, OrderResult
-from backend.services.mock_trading_service import get_or_create_sim_portfolio
 from backend.services.execution.factory import get_trader
+from backend.services.mock_trading_service import get_or_create_sim_portfolio
+from backend.trading_agents.agents.runtime.risk_math import calculate_kelly_size, get_risk_reward_from_plan
 
 _logger = logging.getLogger(__name__)
 
@@ -33,7 +33,7 @@ _SIGNAL_TO_ACTION = {
 }
 
 
-def is_actionable(signal: Optional[str]) -> bool:
+def is_actionable(signal: str | None) -> bool:
     return signal in _SIGNAL_TO_ACTION
 
 
@@ -46,7 +46,7 @@ def _extract_confidence_score(row) -> float | None:
             raw = trader_prop.get("confidence_score")
             if raw is not None:
                 return float(raw)
-        
+
         raw = chart_annotations.get("confidence_score")
         try:
             return float(raw) if raw is not None else None
@@ -76,11 +76,7 @@ def _extract_price_level(text: str, label: str, row=None) -> float | None:
     if row and hasattr(row, "chart_annotations") and isinstance(row.chart_annotations, dict):
         trader_prop = row.chart_annotations.get("trader_proposal")
         if isinstance(trader_prop, dict):
-            key_map = {
-                "Entry Price": "entry_price",
-                "Stop Loss": "stop_loss",
-                "Take Profit": "take_profit_price"
-            }
+            key_map = {"Entry Price": "entry_price", "Stop Loss": "stop_loss", "Take Profit": "take_profit_price"}
             struct_key = key_map.get(label)
             if struct_key and trader_prop.get(struct_key):
                 return float(trader_prop[struct_key])
@@ -162,7 +158,7 @@ async def place_signal_order(
     row,
     settings,
     user=None,
-) -> Optional[OrderResult]:
+) -> OrderResult | None:
     """Size and place a paper order for ``row``'s signal.
 
     Returns the ``OrderResult`` (so callers can persist their own order record),
@@ -175,6 +171,7 @@ async def place_signal_order(
 
     # Retrieve system settings to verify active broker mode
     from backend.repositories.analysis import get_system_settings
+
     sys_settings = await get_system_settings(db)
     sys_mode = sys_settings.trading_mode if sys_settings else "simulation"
     sys_broker = sys_settings.active_broker if sys_settings else "simulation"
@@ -193,8 +190,9 @@ async def place_signal_order(
         return None
 
     capital = float(portfolio.cash_available) if portfolio.cash_available > 0 else float(portfolio.initial_capital)
-    
+
     import json
+
     stop_loss = None
     if hasattr(row, "chart_annotations") and row.chart_annotations:
         try:

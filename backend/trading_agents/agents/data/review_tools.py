@@ -1,11 +1,11 @@
-import os
-import json
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
 import pandas as pd
-import yfinance as yf
 from langchain_core.tools import tool
+
 from backend.trading_agents.default_config import DEFAULT_CONFIG
+
 
 @tool
 async def get_past_performance_data(ticker: str, curr_date: str | None = None) -> str:
@@ -14,23 +14,23 @@ async def get_past_performance_data(ticker: str, curr_date: str | None = None) -
         results_dir = Path(DEFAULT_CONFIG["results_dir"]) / ticker
         if not results_dir.exists():
             return "No past analysis data found for this ticker."
-            
+
         date_dirs = [d for d in results_dir.iterdir() if d.is_dir()]
         if not date_dirs:
             return "No past analysis data found for this ticker."
-            
+
         date_dirs.sort(key=lambda x: x.name, reverse=True)
-        
+
         past_report = None
         past_date = None
         for d in date_dirs:
             report_file = d / "reports" / "trader_investment_plan.md"
             if report_file.exists():
-                with open(report_file, "r") as f:
+                with open(report_file) as f:
                     past_report = f.read()
                 past_date = d.name
                 break
-                
+
         if not past_report:
             return "No past trader investment plans found for this ticker."
 
@@ -40,30 +40,32 @@ async def get_past_performance_data(ticker: str, curr_date: str | None = None) -
             for d in date_dirs[1:]:
                 report_file = d / "reports" / "trader_investment_plan.md"
                 if report_file.exists():
-                    with open(report_file, "r") as f:
+                    with open(report_file) as f:
                         past_report = f.read()
                     past_date = d.name
                     break
 
         try:
             from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
+
             if not curr_date:
                 curr_date = datetime.now().strftime("%Y-%m-%d")
-            
+
             # load_ohlcv is sync
             import asyncio
+
             hist = await asyncio.to_thread(load_ohlcv, ticker, curr_date)
-            
-            hist_filtered = hist[hist['Date'] >= pd.to_datetime(past_date)]
+
+            hist_filtered = hist[hist["Date"] >= pd.to_datetime(past_date)]
             if hist_filtered.empty:
                 return f"Found past report from {past_date}, but could not fetch price history from local cache."
-                
-            past_price = hist_filtered.iloc[0]['Close']
-            current_price = hist_filtered.iloc[-1]['Close']
+
+            past_price = hist_filtered.iloc[0]["Close"]
+            current_price = hist_filtered.iloc[-1]["Close"]
             return_pct = ((current_price - past_price) / past_price) * 100
-            
+
             brief_report = past_report[:1000] + "..." if len(past_report) > 1000 else past_report
-            
+
             result = (
                 f"--- PAST PERFORMANCE DATA FOR {ticker} ---\n"
                 f"Past Analysis Date: {past_date}\n"
@@ -76,6 +78,6 @@ async def get_past_performance_data(ticker: str, curr_date: str | None = None) -
             return result
         except Exception as e:
             return f"Error fetching price data for {ticker}: {e}"
-            
+
     except Exception as e:
         return f"Error retrieving past performance data: {e}"

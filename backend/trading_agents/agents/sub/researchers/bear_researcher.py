@@ -1,5 +1,6 @@
-from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
 from backend.trading_agents.agents.runtime.report_aggregator import build_resources
+from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
+
 
 def create_bear_researcher(llm):
     async def bear_node(state) -> dict:
@@ -9,11 +10,7 @@ def create_bear_researcher(llm):
         current_response = investment_debate_state.get("current_response", "")
         asset_type = state.get("asset_type", "stock")
         target_label = "stock" if asset_type == "stock" else "asset"
-        fundamentals_label = (
-            "Company fundamentals report"
-            if asset_type == "stock"
-            else "Asset fundamentals report"
-        )
+        fundamentals_label = "Company fundamentals report" if asset_type == "stock" else "Asset fundamentals report"
         report_fields = {
             "market_report": "Market Research Report",
             "sentiment_report": "Social Media Sentiment Report",
@@ -27,7 +24,7 @@ def create_bear_researcher(llm):
         }
         synthesis_report = state.get("synthesis_report", "No synthesis report available.")
         resources_text = build_resources(state, report_fields)
-        
+
         prompt = f"""You are a High-Conviction Bear Analyst making the case against investing in the {target_label}. Your goal is to present a rigorous, evidence-based argument emphasizing risks, structural challenges, and negative catalysts.
 
 ### Objective:
@@ -63,4 +60,5 @@ Deliver a compelling bear argument that dismantling the bull case using specific
             "count": investment_debate_state["count"] + 1,
         }
         return {"investment_debate_state": new_investment_debate_state}
+
     return bear_node

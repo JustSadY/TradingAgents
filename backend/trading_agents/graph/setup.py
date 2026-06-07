@@ -12,26 +12,30 @@ ToolNode / message-clear / conditional-edge plumbing now lives *inside* the
 Market Intelligence node's analyst subgraph, so it no longer clutters the
 top-level graph.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict
+from typing import Any
 
 from langgraph.graph import END, START, StateGraph
 
 from backend.trading_agents.agents import AgentState
 from backend.trading_agents.agents.analyst_registry import sync_registry_to_graph
-from backend.trading_agents.agents.runtime.resilience import guard_node
 from backend.trading_agents.agents.base import (
-    AgentRunContext, neutral_invest_debate_state, neutral_risk_debate_state,
+    AgentRunContext,
+    neutral_invest_debate_state,
+    neutral_risk_debate_state,
 )
 from backend.trading_agents.agents.main import (
     create_market_intelligence_node,
-    create_research_manager_node,
-    create_trader_node,
-    create_risk_debate_node,
     create_portfolio_manager_node,
+    create_research_manager_node,
+    create_risk_debate_node,
+    create_trader_node,
 )
+from backend.trading_agents.agents.runtime.resilience import guard_node
+
 from .conditional_logic import ConditionalLogic
 
 logger = logging.getLogger(__name__)
@@ -41,12 +45,12 @@ class GraphSetup:
     def __init__(
         self,
         llm: Any,
-        tool_nodes: Dict[str, Any],
+        tool_nodes: dict[str, Any],
         conditional_logic: ConditionalLogic,
         analyst_concurrency_limit: int = 1,
-        agent_llms: Dict[str, Any] = None,
+        agent_llms: dict[str, Any] = None,
         agent_hierarchy=None,
-        config: Dict[str, Any] = None,
+        config: dict[str, Any] = None,
     ):
         self.llm = llm
         self.tool_nodes = tool_nodes
@@ -78,21 +82,23 @@ class GraphSetup:
         # ---- Main Agent nodes (guard-wrapped for resilience) ----
         market_intelligence = guard_node(
             create_market_intelligence_node(ctx),
-            name="Market Intelligence", kind="main",
+            name="Market Intelligence",
+            kind="main",
             fallback=lambda state, exc: {},
         )
         research_manager = guard_node(
             create_research_manager_node(ctx),
-            name="Research Manager", kind="main",
+            name="Research Manager",
+            kind="main",
             fallback=lambda state, exc: {
-                "investment_debate_state": neutral_invest_debate_state(
-                    "Research branch error; degraded."),
+                "investment_debate_state": neutral_invest_debate_state("Research branch error; degraded."),
                 "investment_plan": "Research manager unavailable; proceeding with available reports.",
             },
         )
         trader = guard_node(
             create_trader_node(ctx),
-            name="Trader", kind="main",
+            name="Trader",
+            kind="main",
             fallback=lambda state, exc: {
                 "trader_investment_plan": "Trader agent unavailable; deferring to risk debate.",
                 "trader_proposal_json": "{}",
@@ -100,14 +106,16 @@ class GraphSetup:
         )
         risk_debate = guard_node(
             create_risk_debate_node(ctx),
-            name="Risk Debate", kind="main",
+            name="Risk Debate",
+            kind="main",
             fallback=lambda state, exc: {
                 "risk_debate_state": neutral_risk_debate_state("Risk debate error; degraded."),
             },
         )
         portfolio_manager = guard_node(
             create_portfolio_manager_node(ctx),
-            name="Portfolio Manager", kind="decision",
+            name="Portfolio Manager",
+            kind="decision",
             fallback=lambda state, exc: {
                 "final_trade_decision": "Hold — automated fallback: Portfolio Manager unavailable.",
             },

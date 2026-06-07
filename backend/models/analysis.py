@@ -1,7 +1,11 @@
-from datetime import datetime, timezone
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, JSON
+from datetime import UTC, datetime
+
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
+
 from backend.core.database import Base
+
+
 class AnalysisResult(Base):
     __tablename__ = "analysis_results"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -28,7 +32,9 @@ class AnalysisResult(Base):
     investment_debate_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
     risk_debate_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
     judge_decision: Mapped[str] = mapped_column(Text, default="")
+    trader_proposal_json: Mapped[str] = mapped_column(Text, default="{}")
     chart_annotations: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    risk_metrics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     llm_calls: Mapped[int] = mapped_column(Integer, default=0)
     tool_calls: Mapped[int] = mapped_column(Integer, default=0)
     tokens_in: Mapped[int] = mapped_column(Integer, default=0)
@@ -43,12 +49,12 @@ class AnalysisResult(Base):
     raw_return: Mapped[float | None] = mapped_column(Float, nullable=True)
     alpha_return: Mapped[float | None] = mapped_column(Float, nullable=True)
     holding_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True)
     chats: Mapped[list["AnalysisChat"]] = relationship(
         "AnalysisChat", back_populates="analysis", cascade="all, delete-orphan"
     )
+
+
 class AnalysisChat(Base):
     __tablename__ = "analysis_chats"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -57,7 +63,5 @@ class AnalysisChat(Base):
     )
     role: Mapped[str] = mapped_column(String(20), nullable=False)
     content: Mapped[str] = mapped_column(Text, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True)
     analysis: Mapped[AnalysisResult] = relationship("AnalysisResult", back_populates="chats")

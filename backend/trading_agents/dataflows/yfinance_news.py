@@ -1,13 +1,14 @@
-import asyncio
 import logging
-from typing import Optional
+from datetime import UTC, datetime
+
 import yfinance as yf
-from datetime import datetime, timezone
 from dateutil.relativedelta import relativedelta
+
 from .config import get_config
 from .stockstats_utils import yf_retry
 
 _logger = logging.getLogger(__name__)
+
 
 def _parse_news_datetime(raw_value):
     if raw_value is None:
@@ -16,7 +17,7 @@ def _parse_news_datetime(raw_value):
         return raw_value
     if isinstance(raw_value, (int, float)):
         try:
-            return datetime.fromtimestamp(float(raw_value), tz=timezone.utc)
+            return datetime.fromtimestamp(float(raw_value), tz=UTC)
         except Exception:
             return None
     if isinstance(raw_value, str):
@@ -25,7 +26,7 @@ def _parse_news_datetime(raw_value):
             return None
         if raw.isdigit():
             try:
-                return datetime.fromtimestamp(float(raw), tz=timezone.utc)
+                return datetime.fromtimestamp(float(raw), tz=UTC)
             except Exception:
                 return None
         try:
@@ -33,6 +34,7 @@ def _parse_news_datetime(raw_value):
         except Exception:
             return None
     return None
+
 
 def _extract_article_data(article: dict) -> dict:
     if "content" in article:
@@ -62,6 +64,7 @@ def _extract_article_data(article: dict) -> dict:
             "pub_date": None,
         }
 
+
 async def get_news_yfinance(
     ticker: str,
     start_date: str,
@@ -74,7 +77,7 @@ async def get_news_yfinance(
         # Correctly await the async news feed service in the main loop
         cached_items = await get_news_feed(ticker, article_limit)
         cached_items = cached_items or []
-        
+
         start_dt = datetime.strptime(start_date, "%Y-%m-%d")
         end_dt = datetime.strptime(end_date, "%Y-%m-%d")
         news_str = ""
@@ -108,10 +111,11 @@ async def get_news_yfinance(
         _logger.error("Unexpected error fetching news for %s: %s", ticker, e, exc_info=True)
         return f"Error fetching news for {ticker}: {str(e)}"
 
+
 def get_global_news_yfinance(
     curr_date: str,
-    look_back_days: Optional[int] = None,
-    limit: Optional[int] = None,
+    look_back_days: int | None = None,
+    limit: int | None = None,
 ) -> str:
     # yfinance.Search is sync, so it will be wrapped by route_to_vendor's to_thread
     config = get_config()
@@ -124,11 +128,13 @@ def get_global_news_yfinance(
     seen_titles = set()
     try:
         for query in search_queries:
-            search = yf_retry(lambda q=query: yf.Search(
-                query=q,
-                news_count=limit,
-                enable_fuzzy_query=True,
-            ))
+            search = yf_retry(
+                lambda q=query: yf.Search(
+                    query=q,
+                    news_count=limit,
+                    enable_fuzzy_query=True,
+                )
+            )
             if search.news:
                 for article in search.news:
                     if "content" in article:
@@ -151,7 +157,11 @@ def get_global_news_yfinance(
             if "content" in article:
                 data = _extract_article_data(article)
                 if data.get("pub_date"):
-                    pub_naive = data["pub_date"].replace(tzinfo=None) if hasattr(data["pub_date"], "replace") else data["pub_date"]
+                    pub_naive = (
+                        data["pub_date"].replace(tzinfo=None)
+                        if hasattr(data["pub_date"], "replace")
+                        else data["pub_date"]
+                    )
                     if pub_naive > curr_dt + relativedelta(days=1):
                         continue
                 title = data["title"]

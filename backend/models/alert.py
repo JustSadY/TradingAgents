@@ -1,8 +1,12 @@
+from datetime import UTC, datetime
 from decimal import Decimal
-from datetime import datetime, timezone
-from sqlalchemy import Boolean, DateTime, Integer, String, ForeignKey
+
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
-from backend.core.database import Base, MONEY
+
+from backend.core.database import MONEY, Base
+
+
 class PriceAlert(Base):
     __tablename__ = "price_alerts"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -13,6 +17,4 @@ class PriceAlert(Base):
     auto_analyze: Mapped[bool] = mapped_column(Boolean, default=False)
     enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     triggered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))

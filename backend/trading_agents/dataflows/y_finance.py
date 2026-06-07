@@ -1,12 +1,17 @@
 import logging
-from typing import Annotated
+import re
 from datetime import datetime
-from dateutil.relativedelta import relativedelta
+from typing import Annotated
+
 import pandas as pd
 import yfinance as yf
-import os
-from .stockstats_utils import StockstatsUtils, _clean_dataframe, yf_retry, load_ohlcv, filter_financials_by_date
+from dateutil.relativedelta import relativedelta
+
+from .stockstats_utils import filter_financials_by_date, load_ohlcv, yf_retry
+
 _logger = logging.getLogger(__name__)
+
+
 def get_YFin_data_online(
     symbol: Annotated[str, "ticker symbol of the company"],
     start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
@@ -17,9 +22,7 @@ def get_YFin_data_online(
     ticker = yf.Ticker(symbol.upper())
     data = yf_retry(lambda: ticker.history(start=start_date, end=end_date))
     if data.empty:
-        return (
-            f"No data found for symbol '{symbol}' between {start_date} and {end_date}"
-        )
+        return f"No data found for symbol '{symbol}' between {start_date} and {end_date}"
     if data.index.tz is not None:
         data.index = data.index.tz_localize(None)
     numeric_columns = ["Open", "High", "Low", "Close", "Adj Close"]
@@ -31,12 +34,12 @@ def get_YFin_data_online(
     header += f"# Total records: {len(data)}\n"
     header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
     return header + csv_string
+
+
 def get_stock_stats_indicators_window(
     symbol: Annotated[str, "ticker symbol of the company"],
     indicator: Annotated[str, "technical indicator to get the analysis and report of"],
-    curr_date: Annotated[
-        str, "The current trading date you are trading on, YYYY-mm-dd"
-    ],
+    curr_date: Annotated[str, "The current trading date you are trading on, YYYY-mm-dd"],
     look_back_days: Annotated[int, "how many days to look back"],
 ) -> str:
     best_ind_params = {
@@ -50,22 +53,21 @@ def get_stock_stats_indicators_window(
         "boll_ub": ("Bollinger Upper", "SMA(20) + 2*STD(20)"),
         "boll_lb": ("Bollinger Lower", "SMA(20) - 2*STD(20)"),
     }
-    
+
     if indicator not in best_ind_params:
         # Fallback to direct indicator service or error
         pass
 
-    from backend.services.indicator_service import calculate_rsi, calculate_macd, calculate_ema
-    from .stockstats_utils import load_ohlcv
-    
+    from backend.services.indicator_service import calculate_ema, calculate_macd, calculate_rsi
+
     data = load_ohlcv(symbol, curr_date)
     if data.empty:
         return f"No data found for {symbol}"
-    
+
     # Calculate requested indicator using central service
     series = data["Close"]
     res_series = None
-    
+
     if indicator == "rsi":
         res_series = calculate_rsi(series)
     elif indicator == "macd":
@@ -80,22 +82,25 @@ def get_stock_stats_indicators_window(
     elif indicator.startswith("boll"):
         sma20 = series.rolling(window=20).mean()
         std20 = series.rolling(window=20).std()
-        if indicator == "boll": res_series = sma20
-        elif indicator == "boll_ub": res_series = sma20 + (std20 * 2)
-        elif indicator == "boll_lb": res_series = sma20 - (std20 * 2)
-    
+        if indicator == "boll":
+            res_series = sma20
+        elif indicator == "boll_ub":
+            res_series = sma20 + (std20 * 2)
+        elif indicator == "boll_lb":
+            res_series = sma20 - (std20 * 2)
+
     if res_series is None:
         return f"Indicator {indicator} not yet supported in centralized service"
 
     # Filter and format output
     end_dt = datetime.strptime(curr_date, "%Y-%m-%d")
     start_dt = end_dt - relativedelta(days=look_back_days)
-    
+
     # Align and filter
     df_res = pd.DataFrame({"value": res_series}, index=data.index)
     mask = (df_res.index >= start_dt) & (df_res.index <= end_dt)
     df_filtered = df_res.loc[mask].sort_index(ascending=False)
-    
+
     ind_string = ""
     for dt, row in df_filtered.iterrows():
         val = row["value"]
@@ -104,9 +109,10 @@ def get_stock_stats_indicators_window(
 
     return f"## {indicator} values for {symbol} (back to {start_dt.strftime('%Y-%m-%d')}):\n\n{ind_string}"
 
+
 def get_fundamentals(
     ticker: Annotated[str, "ticker symbol of the company"],
-    curr_date: Annotated[str, "current date (not used for yfinance)"] = None
+    curr_date: Annotated[str, "current date (not used for yfinance)"] = None,
 ):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
@@ -152,10 +158,12 @@ def get_fundamentals(
         return header + "\n".join(lines)
     except Exception as e:
         return f"Error retrieving fundamentals for {ticker}: {str(e)}"
+
+
 def get_balance_sheet(
     ticker: Annotated[str, "ticker symbol of the company"],
     freq: Annotated[str, "frequency of data: 'annual' or 'quarterly'"] = "quarterly",
-    curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None
+    curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None,
 ):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
@@ -172,10 +180,12 @@ def get_balance_sheet(
         return header + csv_string
     except Exception as e:
         return f"Error retrieving balance sheet for {ticker}: {str(e)}"
+
+
 def get_cashflow(
     ticker: Annotated[str, "ticker symbol of the company"],
     freq: Annotated[str, "frequency of data: 'annual' or 'quarterly'"] = "quarterly",
-    curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None
+    curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None,
 ):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
@@ -192,10 +202,12 @@ def get_cashflow(
         return header + csv_string
     except Exception as e:
         return f"Error retrieving cash flow for {ticker}: {str(e)}"
+
+
 def get_income_statement(
     ticker: Annotated[str, "ticker symbol of the company"],
     freq: Annotated[str, "frequency of data: 'annual' or 'quarterly'"] = "quarterly",
-    curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None
+    curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None,
 ):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
@@ -212,9 +224,9 @@ def get_income_statement(
         return header + csv_string
     except Exception as e:
         return f"Error retrieving income statement for {ticker}: {str(e)}"
-def get_insider_transactions(
-    ticker: Annotated[str, "ticker symbol of the company"]
-):
+
+
+def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the company"]):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
         data = yf_retry(lambda: ticker_obj.insider_transactions)
@@ -227,21 +239,21 @@ def get_insider_transactions(
     except Exception as e:
         return f"Error retrieving insider transactions for {ticker}: {str(e)}"
 
-def get_sec_filings(
-    ticker: Annotated[str, "ticker symbol of the company"]
-):
+
+def get_sec_filings(ticker: Annotated[str, "ticker symbol of the company"]):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
-        data = yf_retry(lambda: getattr(ticker_obj, 'sec_filings', None))
+        data = yf_retry(lambda: getattr(ticker_obj, "sec_filings", None))
         if data is None or len(data) == 0:
             return f"No SEC filings data found for symbol '{ticker}'"
-        
+
         import pandas as pd
+
         df = pd.DataFrame(data)
         # Drop excessive columns for context efficiency
-        cols_to_keep = ['date', 'type', 'title', 'edgarUrl']
+        cols_to_keep = ["date", "type", "title", "edgarUrl"]
         df = df[[c for m, c in enumerate(cols_to_keep) if c in df.columns]]
-        
+
         csv_string = df.to_csv(index=False)
         header = f"# SEC Filings for {ticker.upper()}\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"

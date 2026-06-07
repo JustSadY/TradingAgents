@@ -1,10 +1,9 @@
 from datetime import datetime
-from .alpha_vantage_common import _make_api_request, _filter_csv_by_date_range
-def get_stock(
-    symbol: str,
-    start_date: str,
-    end_date: str
-) -> str:
+
+from .alpha_vantage_common import _filter_csv_by_date_range, _make_api_request
+
+
+def get_stock(symbol: str, start_date: str, end_date: str) -> str:
     start_dt = datetime.strptime(start_date, "%Y-%m-%d")
     today = datetime.now()
     days_from_today_to_start = (today - start_dt).days

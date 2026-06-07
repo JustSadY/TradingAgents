@@ -12,6 +12,7 @@ Importing this module (idempotently) guarantees one thing the engine relies on:
 Import it early (before anything that pulls in ``backend.trading_agents``):
 ``import backend.bootstrap``.
 """
+
 from __future__ import annotations
 
 import os
@@ -20,6 +21,7 @@ import tempfile
 
 _BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_BACKEND_DIR)
+
 
 def _configure_env() -> None:
     """Point the engine's cache/results/log paths at the system temp dir."""

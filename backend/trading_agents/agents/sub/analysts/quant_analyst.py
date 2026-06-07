@@ -1,15 +1,15 @@
-from backend.trading_agents.agents.utils.agent_utils import (
-    build_instrument_context,
-    get_quant_data,
-    get_language_instruction,
-)
 from backend.trading_agents.agents.analyst_registry import register_analyst
-from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.data.chart_tools import (
     add_chart_annotation,
     add_custom_indicator,
-    get_vision_chart_analysis,
     get_mtf_trend,
+    get_vision_chart_analysis,
+)
+from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
+from backend.trading_agents.agents.utils.agent_utils import (
+    build_instrument_context,
+    get_language_instruction,
+    get_quant_data,
 )
 
 
@@ -40,8 +40,7 @@ def create_quant_analyst(llm):
             get_mtf_trend,
         ]
 
-        system_message = (
-            """You are a senior quantitative analyst. Your goal is to provide a statistically rigorous assessment of an asset's risk-return profile and market correlation.
+        system_message = """You are a senior quantitative analyst. Your goal is to provide a statistically rigorous assessment of an asset's risk-return profile and market correlation.
 
 ### Analytical Process (Chain-of-Thought):
 1. **Data Acquisition:** Use `get_quant_data` to retrieve statistical metrics (Beta, Sharpe Ratio, Volatility, Max Drawdown).
@@ -61,13 +60,15 @@ Your final report MUST follow this structure:
 1. **Executive Summary:** A 3-bullet point summary of the most critical quantitative risk and return signals.
 2. **Detailed Analysis:** Nuanced interpretation of statistical metrics, market correlation, and risk efficiency.
 3. **Actionable Insights:** Specific risk-adjusted triggers or portfolio fit considerations for traders.
-4. **Quantitative Data Table:** A Markdown table summarizing all calculated quant metrics and their current values."""
-            + get_language_instruction()
-        )
+4. **Quantitative Data Table:** A Markdown table summarizing all calculated quant metrics and their current values.""" + get_language_instruction()
 
         return await run_tool_analyst(
-            llm, state, tools=tools, system_message=system_message,
-            report_key="quant_report", instrument_context=instrument_context,
+            llm,
+            state,
+            tools=tools,
+            system_message=system_message,
+            report_key="quant_report",
+            instrument_context=instrument_context,
         )
 
     return quant_analyst_node

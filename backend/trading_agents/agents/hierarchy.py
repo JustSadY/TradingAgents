@@ -25,10 +25,12 @@ catalog and layers the runtime semantics on top:
     sub-agent still call this tool?", which the graph uses to strip tools off
     disabled branches.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -37,13 +39,15 @@ logger = logging.getLogger(__name__)
 # *first*; everything else hangs beneath one of them.
 # ---------------------------------------------------------------------------
 
-MAIN_AGENT_KEYS: frozenset[str] = frozenset({
-    "portfolio_manager",     # root / final decision maker
-    "market_intelligence",   # owns the analyst sub-agents
-    "research_manager",      # owns synthesis + bull/bear debate + auditor
-    "trader",                # owns the execution planner
-    "risk_debate",           # owns the aggressive/neutral/conservative debate
-})
+MAIN_AGENT_KEYS: frozenset[str] = frozenset(
+    {
+        "portfolio_manager",  # root / final decision maker
+        "market_intelligence",  # owns the analyst sub-agents
+        "research_manager",  # owns synthesis + bull/bear debate + auditor
+        "trader",  # owns the execution planner
+        "risk_debate",  # owns the aggressive/neutral/conservative debate
+    }
+)
 
 
 class AgentHierarchy:
@@ -69,12 +73,12 @@ class AgentHierarchy:
         ``default_enabled`` for that agent.
     """
 
-    def __init__(self, runtime_agent_context: Dict[str, Any] | None = None) -> None:
+    def __init__(self, runtime_agent_context: dict[str, Any] | None = None) -> None:
         from backend.trading_agents.agent_catalog import list_agents
 
-        self._runtime_ctx: Dict[str, Any] = runtime_agent_context or {}
-        self._info: Dict[str, Any] = {a.key: a for a in list_agents()}
-        self._children: Dict[str, List[str]] = {}
+        self._runtime_ctx: dict[str, Any] = runtime_agent_context or {}
+        self._info: dict[str, Any] = {a.key: a for a in list_agents()}
+        self._children: dict[str, list[str]] = {}
         for agent in self._info.values():
             if agent.parent_key:
                 self._children.setdefault(agent.parent_key, []).append(agent.key)
@@ -83,13 +87,13 @@ class AgentHierarchy:
     # Tree traversal
     # ------------------------------------------------------------------
 
-    def children(self, key: str) -> List[str]:
+    def children(self, key: str) -> list[str]:
         """Direct child keys of *key*, in catalog order."""
         return list(self._children.get(key, []))
 
-    def descendants(self, key: str) -> List[str]:
+    def descendants(self, key: str) -> list[str]:
         """All recursive descendant keys of *key* (breadth-first)."""
-        out: List[str] = []
+        out: list[str] = []
         queue = list(self._children.get(key, []))
         while queue:
             child = queue.pop(0)
@@ -97,18 +101,18 @@ class AgentHierarchy:
             queue.extend(self._children.get(child, []))
         return out
 
-    def parent_of(self, key: str) -> Optional[str]:
+    def parent_of(self, key: str) -> str | None:
         agent = self._info.get(key)
         return agent.parent_key if agent else None
 
     def is_main_agent(self, key: str) -> bool:
         return key in MAIN_AGENT_KEYS
 
-    def main_agents(self) -> List[Any]:
+    def main_agents(self) -> list[Any]:
         """AgentInfo objects for the Tier-1 agents, in catalog order."""
         return [a for a in self._info.values() if a.key in MAIN_AGENT_KEYS]
 
-    def subagents_of(self, key: str) -> List[Any]:
+    def subagents_of(self, key: str) -> list[Any]:
         """AgentInfo objects for the direct children of *key*."""
         return [self._info[k] for k in self.children(key) if k in self._info]
 
@@ -116,7 +120,7 @@ class AgentHierarchy:
     # Enable / disable resolution (cascading kill-switch)
     # ------------------------------------------------------------------
 
-    def _own_enabled(self, key: str) -> Optional[bool]:
+    def _own_enabled(self, key: str) -> bool | None:
         """Explicit enabled flag for *key*, or None when unset."""
         state = self._runtime_ctx.get(key)
         if not state:
@@ -190,7 +194,8 @@ class AgentHierarchy:
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
                     "Custom LLM for agent '%s' failed (%s); climbing parent chain.",
-                    agent_key, exc,
+                    agent_key,
+                    exc,
                 )
 
         parent = self.parent_of(agent_key)
@@ -204,7 +209,7 @@ class AgentHierarchy:
 
         return fallback_llm
 
-    def get_effective_settings(self, key: str) -> Dict[str, Any]:
+    def get_effective_settings(self, key: str) -> dict[str, Any]:
         """Resolved settings for *key*, filling gaps from the parent chain."""
         state = self._runtime_ctx.get(key) or {}
         settings = dict(state.get("settings") or {})

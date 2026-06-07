@@ -1,4 +1,5 @@
 from __future__ import annotations
+
 import logging
 from typing import Any
 
@@ -90,10 +91,14 @@ class StatsCallbackHandler(BaseCallbackHandler):
                 if usage is not None:
                     return usage
                 response_metadata = getattr(message, "response_metadata", None)
-                usage = cls._parse_usage_dict((response_metadata or {}).get("token_usage") if isinstance(response_metadata, dict) else None)
+                usage = cls._parse_usage_dict(
+                    (response_metadata or {}).get("token_usage") if isinstance(response_metadata, dict) else None
+                )
                 if usage is not None:
                     return usage
-                usage = cls._parse_usage_dict((response_metadata or {}).get("usage") if isinstance(response_metadata, dict) else None)
+                usage = cls._parse_usage_dict(
+                    (response_metadata or {}).get("usage") if isinstance(response_metadata, dict) else None
+                )
                 if usage is not None:
                     return usage
 

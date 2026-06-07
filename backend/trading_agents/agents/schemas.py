@@ -1,17 +1,24 @@
 from __future__ import annotations
+
 from enum import Enum
-from typing import Optional
+
 from pydantic import BaseModel, Field
+
+
 class PortfolioRating(str, Enum):
     BUY = "Buy"
     OVERWEIGHT = "Overweight"
     HOLD = "Hold"
     UNDERWEIGHT = "Underweight"
     SELL = "Sell"
+
+
 class TraderAction(str, Enum):
     BUY = "Buy"
     HOLD = "Hold"
     SELL = "Sell"
+
+
 class ResearchPlan(BaseModel):
     recommendation: PortfolioRating = Field(
         description=(
@@ -34,44 +41,59 @@ class ResearchPlan(BaseModel):
             "including position sizing guidance consistent with the rating."
         ),
     )
+
+
 def render_research_plan(plan: ResearchPlan) -> str:
-    return "\n".join([
-        f"**Recommendation**: {plan.recommendation.value}",
-        "",
-        f"**Rationale**: {plan.rationale}",
-        "",
-        f"**Strategic Actions**: {plan.strategic_actions}",
-    ])
+    return "\n".join(
+        [
+            f"**Recommendation**: {plan.recommendation.value}",
+            "",
+            f"**Rationale**: {plan.rationale}",
+            "",
+            f"**Strategic Actions**: {plan.strategic_actions}",
+        ]
+    )
+
+
 class TraderProposal(BaseModel):
     action: TraderAction = Field(
         description="The transaction direction. Exactly one of Buy / Hold / Sell.",
     )
     reasoning: str = Field(
         description=(
-            "The case for this action, anchored in the analysts' reports and "
-            "the research plan. Two to four sentences."
+            "The case for this action, anchored in the analysts' reports and the research plan. Two to four sentences."
         ),
     )
     confidence_score: float = Field(
         default=0.5,
         description="Probability of success for this trade, from 0.0 to 1.0. Critical for Kelly sizing.",
     )
-    entry_price: Optional[float] = Field(
+    entry_price: float | None = Field(
         default=None,
         description="Optional entry price target in the instrument's quote currency.",
     )
-    stop_loss: Optional[float] = Field(
+    stop_loss: float | None = Field(
         default=None,
         description="Optional stop-loss price in the instrument's quote currency.",
     )
-    take_profit_price: Optional[float] = Field(
+    take_profit_price: float | None = Field(
         default=None,
         description="Optional target price to take profit.",
     )
-    position_sizing: Optional[str] = Field(
+    position_sizing: str | None = Field(
         default=None,
         description="Optional sizing guidance, e.g. '5% of portfolio'.",
     )
+    kelly_size: float | None = Field(
+        default=None,
+        description="The calculated Kelly Criterion size (0.0 to 1.0) based on confidence and risk/reward.",
+    )
+    suggested_capital: float | None = Field(
+        default=None,
+        description="The actual currency amount to allocate based on Kelly size and portfolio balance.",
+    )
+
+
 def render_trader_proposal(proposal: TraderProposal) -> str:
     parts = [
         f"**Action**: {proposal.action.value}",
@@ -79,6 +101,10 @@ def render_trader_proposal(proposal: TraderProposal) -> str:
         f"**Reasoning**: {proposal.reasoning}",
         f"**Confidence Score**: {proposal.confidence_score:.2f}",
     ]
+    if proposal.kelly_size is not None:
+        parts.append(f"**Kelly Criterion Size**: {proposal.kelly_size:.2%}")
+    if proposal.suggested_capital is not None:
+        parts.append(f"**Suggested Capital Allocation**: ${proposal.suggested_capital:,.2f}")
     if proposal.entry_price is not None:
         parts.extend(["", f"**Entry Price**: {proposal.entry_price}"])
     if proposal.stop_loss is not None:
@@ -87,11 +113,15 @@ def render_trader_proposal(proposal: TraderProposal) -> str:
         parts.extend(["", f"**Take Profit**: {proposal.take_profit_price}"])
     if proposal.position_sizing:
         parts.extend(["", f"**Position Sizing**: {proposal.position_sizing}"])
-    parts.extend([
-        "",
-        f"FINAL TRANSACTION PROPOSAL: **{proposal.action.value.upper()}**",
-    ])
+    parts.extend(
+        [
+            "",
+            f"FINAL TRANSACTION PROPOSAL: **{proposal.action.value.upper()}**",
+        ]
+    )
     return "\n".join(parts)
+
+
 class PortfolioDecision(BaseModel):
     rating: PortfolioRating = Field(
         description=(
@@ -112,14 +142,16 @@ class PortfolioDecision(BaseModel):
             "incorporate them; otherwise rely solely on the current analysis."
         ),
     )
-    price_target: Optional[float] = Field(
+    price_target: float | None = Field(
         default=None,
         description="Optional target price in the instrument's quote currency.",
     )
-    time_horizon: Optional[str] = Field(
+    time_horizon: str | None = Field(
         default=None,
         description="Optional recommended holding period, e.g. '3-6 months'.",
     )
+
+
 def render_pm_decision(decision: PortfolioDecision) -> str:
     parts = [
         f"**Rating**: {decision.rating.value}",
@@ -133,6 +165,8 @@ def render_pm_decision(decision: PortfolioDecision) -> str:
     if decision.time_horizon:
         parts.extend(["", f"**Time Horizon**: {decision.time_horizon}"])
     return "\n".join(parts)
+
+
 class PropagateResult(BaseModel):
     ticker: str
     trade_date: str
@@ -150,9 +184,11 @@ class PropagateResult(BaseModel):
     investment_plan: str = ""
     trader_plan: str = ""
     final_decision: str = ""
+
     @classmethod
-    def from_state(cls, state: dict, signal: str) -> "PropagateResult":
+    def from_state(cls, state: dict, signal: str) -> PropagateResult:
         from backend.trading_agents.agents.runtime.agent_states import StateKeys
+
         return cls(
             ticker=state.get(StateKeys.COMPANY, ""),
             trade_date=state.get(StateKeys.TRADE_DATE, ""),

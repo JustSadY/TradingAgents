@@ -1,3 +1,6 @@
+from backend.trading_agents.agents.analyst_registry import register_analyst
+from backend.trading_agents.agents.data.search_tools import get_crypto_fear_and_greed_index
+from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_global_news,
@@ -5,10 +8,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_language_instruction,
     get_news,
 )
-from backend.trading_agents.agents.data.search_tools import get_crypto_fear_and_greed_index
-from backend.trading_agents.dataflows.config import get_config
-from backend.trading_agents.agents.analyst_registry import register_analyst
-from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 
 
 @register_analyst(
@@ -23,17 +22,14 @@ def create_news_analyst(llm):
     async def news_analyst_node(state):
         asset_type = state.get("asset_type", "stock")
         asset_label = "company" if asset_type == "stock" else "asset"
-        instrument_context = build_instrument_context(
-            state["company_of_interest"], asset_type
-        )
+        instrument_context = build_instrument_context(state["company_of_interest"], asset_type)
 
         tools = [
             get_news,
             get_global_news,
         ]
 
-        system_message = (
-            f"""You are a senior news and macro analyst. Your goal is to identify market-moving events and broader economic trends through rigorous news analysis.
+        system_message = f"""You are a senior news and macro analyst. Your goal is to identify market-moving events and broader economic trends through rigorous news analysis.
 
 ### Analytical Process (Chain-of-Thought):
 1. **Targeted Search:** Use `get_news` to find stories specific to the {asset_label} of interest.
@@ -51,13 +47,15 @@ Your final report MUST follow this structure:
 1. **Executive Summary:** A 3-bullet point summary of the most critical news catalysts.
 2. **Detailed Analysis:** Comprehensive review of {asset_label}-specific and global macroeconomic developments.
 3. **Actionable Insights:** Specific upcoming catalysts or risks for traders to monitor.
-4. **News Event Table:** A Markdown table summarizing key events, their dates, impact (High/Med/Low), and a brief description."""
-            + get_language_instruction()
-        )
+4. **News Event Table:** A Markdown table summarizing key events, their dates, impact (High/Med/Low), and a brief description.""" + get_language_instruction()
 
         return await run_tool_analyst(
-            llm, state, tools=tools, system_message=system_message,
-            report_key="news_report", instrument_context=instrument_context,
+            llm,
+            state,
+            tools=tools,
+            system_message=system_message,
+            report_key="news_report",
+            instrument_context=instrument_context,
         )
 
     return news_analyst_node

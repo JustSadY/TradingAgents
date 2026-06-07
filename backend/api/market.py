@@ -1,12 +1,13 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.api.deps import get_current_user
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.services.market_service import (
     MarketDataError,
-    get_ohlcv,
     get_custom_indicator_series,
+    get_ohlcv,
     get_sentiment_history,
 )
 

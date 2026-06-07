@@ -1,5 +1,7 @@
-from langchain_core.tools import tool
 from typing import Annotated
+
+from langchain_core.tools import tool
+
 from backend.trading_agents.dataflows.interface import route_to_vendor
 
 
@@ -12,6 +14,7 @@ async def get_options_data(
 
     try:
         from backend.trading_agents.agents.data.chart_tools import active_run_context
+
         ctx = active_run_context.get(None)
         trade_date_str = ctx.get("trade_date") if ctx else None
     except Exception:

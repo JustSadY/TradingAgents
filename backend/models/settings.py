@@ -1,8 +1,9 @@
 import json
-from datetime import datetime, timezone
-from typing import Any
+from datetime import UTC, datetime
+
 from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column
+
 from backend.core.database import Base
 
 
@@ -13,7 +14,7 @@ class AppSettings(Base):
     cron_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     cron_schedule: Mapped[str] = mapped_column(String(100), default="0 9 * * 1-5")
     price_tolerance_pct: Mapped[float] = mapped_column(Float, default=0.5)
-    _watchlist: Mapped[str] = mapped_column("watchlist", Text, default='[]')
+    _watchlist: Mapped[str] = mapped_column("watchlist", Text, default="[]")
     output_language: Mapped[str] = mapped_column(String(50), default="English")
     llm_provider: Mapped[str] = mapped_column(String(50), default="openai")
     llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini")
@@ -40,13 +41,15 @@ class AppSettings(Base):
     webhook_events: Mapped[str] = mapped_column(Text, default='["analysis_complete"]')
     active_preset_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     updated_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc),
-        onupdate=lambda: datetime.now(timezone.utc),
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        onupdate=lambda: datetime.now(UTC),
     )
+
     @property
     def watchlist(self) -> list[str]:
         return json.loads(self._watchlist or "[]")
+
     @watchlist.setter
     def watchlist(self, value: list[str]):
         self._watchlist = json.dumps(value)
-

@@ -1,6 +1,10 @@
-from langchain_core.tools import tool
 from typing import Annotated
+
+from langchain_core.tools import tool
+
 from backend.trading_agents.dataflows.interface import route_to_vendor
+
+
 @tool
 async def get_stock_data(
     symbol: Annotated[str, "ticker symbol of the company"],

@@ -1,11 +1,14 @@
 from __future__ import annotations
+
 import asyncio
 from typing import Any
+
 from backend.core.websocket import ws_manager
+
 
 class AnalysisEmitter:
     """Handles real-time event emission for analysis tasks."""
-    
+
     def __init__(self, task_id: str, loop: asyncio.AbstractEventLoop | None = None):
         self.task_id = task_id
         self.loop = loop or asyncio.get_running_loop()
@@ -30,17 +33,25 @@ class AnalysisEmitter:
     async def emit_debate_bubble(self, debate_type: str, message: str) -> None:
         await self.emit({"type": "debate_bubble", "debate_type": debate_type, "message": message})
 
+    async def emit_mental_model(self, agent: str, thought: str) -> None:
+        """Send a mental model (thought process) event for an agent."""
+        await self.emit({"type": "mental_model", "agent": agent, "thought": thought})
+
     async def emit_decision(self, signal: str | None, final_decision: str) -> None:
         await self.emit({"type": "decision", "signal": signal, "final_decision": final_decision})
 
-    async def emit_complete(self, analysis_id: int, signal: str | None, duration_seconds: float, llm_calls: int) -> None:
-        await self.emit({
-            "type": "complete",
-            "analysis_id": analysis_id,
-            "signal": signal,
-            "duration_seconds": round(duration_seconds, 2),
-            "llm_calls": llm_calls,
-        })
+    async def emit_complete(
+        self, analysis_id: int, signal: str | None, duration_seconds: float, llm_calls: int
+    ) -> None:
+        await self.emit(
+            {
+                "type": "complete",
+                "analysis_id": analysis_id,
+                "signal": signal,
+                "duration_seconds": round(duration_seconds, 2),
+                "llm_calls": llm_calls,
+            }
+        )
 
     async def emit_error(self, message: str) -> None:
         await self.emit({"type": "error", "message": message})

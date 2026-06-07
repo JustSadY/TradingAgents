@@ -1,12 +1,14 @@
 from __future__ import annotations
+
 import base64
 import json
 import logging
 import time
-from typing import Iterable
+from collections.abc import Iterable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
+
 logger = logging.getLogger(__name__)
 from backend.trading_agents.dataflows.config import get_config
 
@@ -76,13 +78,15 @@ def _fetch_subreddit(
     limit: int,
     timeout: float,
 ) -> list[dict]:
-    qs = urlencode({
-        "q": ticker,
-        "restrict_sr": "on",
-        "sort": "new",
-        "t": "week",
-        "limit": limit,
-    })
+    qs = urlencode(
+        {
+            "q": ticker,
+            "restrict_sr": "on",
+            "sort": "new",
+            "t": "week",
+            "limit": limit,
+        }
+    )
     user_agent = _get_user_agent()
 
     # Preferred path: authenticated OAuth API (higher rate limits, more reliable).
@@ -103,7 +107,9 @@ def _fetch_subreddit(
         except (HTTPError, URLError, json.JSONDecodeError, TimeoutError, ValueError) as exc:
             logger.warning(
                 "Reddit OAuth fetch failed for r/%s · %s (%s); falling back to public API",
-                sub, ticker, exc,
+                sub,
+                ticker,
+                exc,
             )
             _TOKEN_CACHE.pop(creds[0], None)  # drop a possibly-stale token
 
@@ -143,9 +149,7 @@ def fetch_reddit_posts(
             score = p.get("score", 0)
             comments = p.get("num_comments", 0)
             created = p.get("created_utc")
-            created_str = (
-                time.strftime("%Y-%m-%d", time.gmtime(created)) if created else "?"
-            )
+            created_str = time.strftime("%Y-%m-%d", time.gmtime(created)) if created else "?"
             selftext = (p.get("selftext") or "").replace("\n", " ").strip()
             if len(selftext) > 240:
                 selftext = selftext[:240] + "…"

@@ -14,26 +14,32 @@ Kill-switch behaviour:
   • a single analyst disabled               → it is dropped from the subgraph;
     the others still run.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import List
 
 from langgraph.graph import END, START, StateGraph
 
+from backend.trading_agents.agents.analyst_registry import get_factory, sync_registry_to_graph
 from backend.trading_agents.agents.base import AgentRunContext, NodeFn
 from backend.trading_agents.agents.runtime.agent_states import AgentState
-from backend.trading_agents.agents.utils.agent_utils import create_msg_delete
 from backend.trading_agents.agents.runtime.resilience import guard_node
-from backend.trading_agents.agents.analyst_registry import get_factory, sync_registry_to_graph
+from backend.trading_agents.agents.utils.agent_utils import create_msg_delete
 
 logger = logging.getLogger(__name__)
 
 MAIN_KEY = "market_intelligence"
 
 REPORT_KEYS = (
-    "market_report", "sentiment_report", "news_report", "fundamentals_report",
-    "macro_report", "options_report", "quant_report", "earnings_report",
+    "market_report",
+    "sentiment_report",
+    "news_report",
+    "fundamentals_report",
+    "macro_report",
+    "options_report",
+    "quant_report",
+    "earnings_report",
     "review_report",
 )
 
@@ -41,15 +47,17 @@ REPORT_KEYS = (
 def _fb_analyst(report_key: str):
     def fb(state, exc):
         from langchain_core.messages import AIMessage
+
         analyst = report_key.replace("_report", "").title()
         return {
             "messages": [AIMessage(content="")],
             report_key: f"⚠️ {analyst} analysis unavailable (agent error: {exc}).",
         }
+
     return fb
 
 
-def _build_analyst_subgraph(enabled_keys: List[str], ctx: AgentRunContext):
+def _build_analyst_subgraph(enabled_keys: list[str], ctx: AgentRunContext):
     """
     Build & compile the analyst chain for *enabled_keys*.
 
@@ -74,7 +82,8 @@ def _build_analyst_subgraph(enabled_keys: List[str], ctx: AgentRunContext):
         factory = get_factory(spec.key)
         node = guard_node(
             factory(ctx.llm_for(spec.key)),
-            name=spec.agent_node, kind="analyst",
+            name=spec.agent_node,
+            kind="analyst",
             fallback=_fb_analyst(spec.report_key),
         )
         workflow.add_node(spec.agent_node, node)

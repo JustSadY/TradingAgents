@@ -1,10 +1,11 @@
-import os
-from typing import Any, Optional
-from langchain_core.messages import AIMessage
+from typing import Any
+
 from langchain_openai import ChatOpenAI
+
 from .base_client import BaseLLMClient, normalize_content
 from .capabilities import get_capabilities
 from .validators import validate_model
+
 
 class NormalizedChatOpenAI(ChatOpenAI):
     def invoke(self, input, config=None, **kwargs):
@@ -31,20 +32,27 @@ class NormalizedChatOpenAI(ChatOpenAI):
             kwargs.setdefault("tool_choice", None)
         return super().with_structured_output(schema, method=method, **kwargs)
 
+
 _PASSTHROUGH_KWARGS = (
-    "timeout", "max_retries", "reasoning_effort",
-    "api_key", "callbacks", "http_client", "http_async_client",
+    "timeout",
+    "max_retries",
+    "reasoning_effort",
+    "api_key",
+    "callbacks",
+    "http_client",
+    "http_async_client",
 )
 
 _PROVIDER_BASE_URL = {
     "nvidia": "https://integrate.api.nvidia.com/v1",
 }
 
+
 class OpenAIClient(BaseLLMClient):
     def __init__(
         self,
         model: str,
-        base_url: Optional[str] = None,
+        base_url: str | None = None,
         provider: str = "openai",
         **kwargs,
     ):
@@ -54,7 +62,7 @@ class OpenAIClient(BaseLLMClient):
     def get_llm(self) -> Any:
         self.warn_if_unknown_model()
         llm_kwargs = {"model": self.model}
-        
+
         # Determine base URL
         resolved_base_url = self.base_url or _PROVIDER_BASE_URL.get(self.provider)
         if resolved_base_url:
@@ -67,8 +75,7 @@ class OpenAIClient(BaseLLMClient):
         elif self.provider != "openai":
             # For providers other than OpenAI, we strictly require the key to be passed explicitly
             raise ValueError(
-                f"API key for provider '{self.provider}' is not set. "
-                "Please provide it in your Profile or Settings."
+                f"API key for provider '{self.provider}' is not set. Please provide it in your Profile or Settings."
             )
 
         for key in _PASSTHROUGH_KWARGS:

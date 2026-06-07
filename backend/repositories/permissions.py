@@ -39,17 +39,16 @@ async def list_allowed_setting_sections(db: AsyncSession, user_id: int) -> set[s
     )
     return {r.setting_key for r in res.scalars().all()}
 
+
 async def get_user_page_permissions_map(db: AsyncSession, user_id: int) -> dict[str, bool]:
-    result = await db.execute(
-        select(UserPagePermission).where(UserPagePermission.user_id == user_id)
-    )
+    result = await db.execute(select(UserPagePermission).where(UserPagePermission.user_id == user_id))
     return {p.page_key: p.allowed for p in result.scalars().all()}
 
+
 async def get_user_setting_permissions_map(db: AsyncSession, user_id: int) -> dict[str, bool]:
-    result = await db.execute(
-        select(UserSettingPermission).where(UserSettingPermission.user_id == user_id)
-    )
+    result = await db.execute(select(UserSettingPermission).where(UserSettingPermission.user_id == user_id))
     return {p.setting_key: p.allowed for p in result.scalars().all()}
+
 
 async def set_user_page_permission(db: AsyncSession, user_id: int, page_key: str, allowed: bool) -> None:
     result = await db.execute(
@@ -62,6 +61,7 @@ async def set_user_page_permission(db: AsyncSession, user_id: int, page_key: str
         db.add(UserPagePermission(user_id=user_id, page_key=page_key, allowed=allowed))
     else:
         perm.allowed = allowed
+
 
 async def set_user_setting_permission(db: AsyncSession, user_id: int, setting_key: str, allowed: bool) -> None:
     result = await db.execute(

@@ -20,12 +20,16 @@ import { AnalysisControls } from '../components/analysis/AnalysisControls'
 import { AnalysisLog } from '../components/analysis/AnalysisLog'
 import { DebateHistoryWidget, parseDebateMessage } from '../components/analysis/DebateHistoryWidget'
 import { AnalysisChatWidget } from '../components/analysis/AnalysisChatWidget'
+import { RiskMetricsCard } from '../components/analysis/RiskMetricsCard'
+import { MentalModelTicker } from '../components/analysis/MentalModelTicker'
+import { KellyPositioningCard } from '../components/analysis/KellyPositioningCard'
 
 interface WsEvent {
   type: string; section?: string; content?: string; signal?: string
   final_decision?: string; message?: string; duration_seconds?: number
   llm_calls?: number; status?: string; agent?: string; analysis_id?: number
   label?: string; stage?: string; node?: string
+  thought?: string; metrics?: any
 }
 interface HistoryItem {
   id: number; ticker: string; trade_date: string; asset_type: string
@@ -39,7 +43,10 @@ interface AnalysisDetail {
   investment_plan: string; trader_plan: string; final_decision: string
   bull_history: string; bear_history: string; investment_debate_history: string
   risk_debate_history: string; judge_decision: string
+  trader_proposal_json?: string
   llm_calls: number; tokens_in: number; tokens_out: number; duration_seconds: number
+  risk_metrics?: any
+  chart_annotations?: any
 }
 interface PortfolioHistoryItem {
   id: number; tickers: string[]; trade_date: string; asset_type: string
@@ -104,6 +111,8 @@ function RunTab() {
   const [activeDetailTab, setActiveDetailTab] = useState<'reports' | 'debate' | 'chat'>('reports')
   const [leftTab, setLeftTab] = useState<'log' | 'debate'>('log')
   const [liveDebate, setLiveDebate] = useState<{ sender: string; content: string }[]>([])
+  const [riskMetrics, setRiskMetrics] = useState<any>(null)
+  const [mentalModel, setMentalModel] = useState<{ agent: string; thought: string } | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const taskIdRef = useRef<string | null>(null)
@@ -184,6 +193,10 @@ function RunTab() {
         setReports(r => ({ ...r, [ev.section!]: ev.content! }))
         setActiveSection(ev.section)
         appendLog(`✓ ${SECTION_LABELS[ev.section!] || ev.section}`)
+      } else if (ev.type === 'mental_model' && ev.agent && ev.thought) {
+        setMentalModel({ agent: ev.agent, thought: ev.thought })
+      } else if (ev.type === 'risk_metrics' && ev.metrics) {
+        setRiskMetrics(ev.metrics)
       } else if (ev.type === 'debate_bubble' && ev.message) {
         const parsed = parseDebateMessage(ev.message)
         setLiveDebate(prev => [...prev, parsed])
@@ -194,6 +207,7 @@ function RunTab() {
         setRunStatus('done')
         setRunning_(false)
         setCurrentStep(null)
+        setMentalModel(null)
         appendLog(`✓ Completed in ${ev.duration_seconds}s / ${ev.llm_calls} LLM calls`)
         sendBrowserNotification(
           `${ticker.toUpperCase()} Analysis Completed`,
@@ -404,6 +418,10 @@ function RunTab() {
         </div>
       )}
 
+      {running && mentalModel && (
+        <MentalModelTicker agent={mentalModel.agent} thought={mentalModel.thought} />
+      )}
+
       {(log.length > 0 || reportEntries.length > 0) && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <AnalysisLog leftTab={leftTab} setLeftTab={setLeftTab} log={log} liveDebate={liveDebate} t={t} />
@@ -419,6 +437,13 @@ function RunTab() {
                 <div className="flex-1 p-4 overflow-y-auto min-h-0">
                   {activeDetailTab === 'reports' && (
                     <div className="space-y-2">
+                      {detail.risk_metrics && <RiskMetricsCard metrics={detail.risk_metrics} />}
+                      {detail.trader_proposal_json && detail.trader_proposal_json !== '{}' && (
+                        <KellyPositioningCard 
+                          kellySize={JSON.parse(detail.trader_proposal_json).kelly_size} 
+                          suggestedCapital={JSON.parse(detail.trader_proposal_json).suggested_capital} 
+                        />
+                      )}
                       {reportEntries.map(([section, content]) => (
                         <ReportCard key={section} label={sectionLabels[section] || section} content={content} defaultOpen={section === activeSection} />
                       ))}
@@ -436,12 +461,20 @@ function RunTab() {
                   <span className="ml-auto text-[10px] text-slate-600 font-semibold">{reportEntries.length} {t('analysis.reports.sections')}</span>
                 </div>
                 <div className="flex-1 p-4 overflow-y-auto min-h-0 space-y-2">
-                  {reportEntries.length === 0 && (
+                  {riskMetrics && <RiskMetricsCard metrics={riskMetrics} />}
+                  {reports.trader_proposal_json && (
+                    <KellyPositioningCard 
+                      kellySize={JSON.parse(reports.trader_proposal_json).kelly_size}
+                      suggestedCapital={JSON.parse(reports.trader_proposal_json).suggested_capital}
+                    />
+                  )}
+                  {reportEntries.length === 0 && !riskMetrics && (
                     <div className="flex flex-col items-center justify-center py-16 text-slate-600">
                       <FileText size={28} className="opacity-25 mb-2" />
                       <p className="text-xs">{t('analysis.reports.empty')}</p>
                     </div>
                   )}
+                  
                   {reportEntries.map(([section, content]) => (
                     <ReportCard key={section} label={sectionLabels[section] || section} content={content} defaultOpen={section === activeSection} />
                   ))}
@@ -703,6 +736,13 @@ function HistoryTab() {
                 <div className="flex-1 min-h-0 overflow-y-auto">
                   {activeDetailTab === 'reports' && (
                     <div className="space-y-2 pr-1">
+                      {detail.risk_metrics && <RiskMetricsCard metrics={detail.risk_metrics} />}
+                      {detail.trader_proposal_json && detail.trader_proposal_json !== '{}' && (
+                        <KellyPositioningCard 
+                          kellySize={JSON.parse(detail.trader_proposal_json).kelly_size} 
+                          suggestedCapital={JSON.parse(detail.trader_proposal_json).suggested_capital} 
+                        />
+                      )}
                       {([
                         ['market_report', detail.market_report], ['sentiment_report', detail.sentiment_report],
                         ['news_report', detail.news_report], ['fundamentals_report', detail.fundamentals_report],

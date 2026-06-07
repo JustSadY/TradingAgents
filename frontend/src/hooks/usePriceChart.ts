@@ -5,7 +5,6 @@ import {
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
-  createSeriesMarkers,
 } from 'lightweight-charts'
 import type { IChartApi, ISeriesApi } from 'lightweight-charts'
 
@@ -30,14 +29,15 @@ export function usePriceChart(
   const volSeriesRef = useRef<ISeriesApi<'Histogram', any> | null>(null)
   const smaSeriesRef = useRef<ISeriesApi<'Line', any> | null>(null)
   const emaSeriesRef = useRef<ISeriesApi<'Line', any> | null>(null)
-  const markersRef = useRef<ReturnType<typeof createSeriesMarkers> | null>(null)
   const priceLineRefs = useRef<any[]>([])
   const trendlineSeriesRefs = useRef<any[]>([])
   const overlaySeriesRefs = useRef<any[]>([])
 
-  // Initialize Chart
+  // 1. Initialize Chart (Run once when container is available)
   useEffect(() => {
-    if (!containerRef.current) return
+    if (!containerRef.current || chartRef.current) return
+
+    console.log("Initializing Lightweight Charts v5...")
 
     const chart = createChart(containerRef.current, {
       layout: {
@@ -51,10 +51,11 @@ export function usePriceChart(
       crosshair: { mode: 1 },
       rightPriceScale: { borderColor: 'rgba(255,255,255,0.06)' },
       timeScale: { borderColor: 'rgba(255,255,255,0.06)', timeVisible: true },
-      width: containerRef.current.clientWidth,
+      width: containerRef.current.clientWidth || 800,
       height: 420,
     })
 
+    // In v5, we use addSeries(Type, options)
     const candleSeries = chart.addSeries(CandlestickSeries, {
       upColor: '#10b981',
       downColor: '#ef4444',
@@ -62,31 +63,25 @@ export function usePriceChart(
       borderDownColor: '#ef4444',
       wickUpColor: '#10b981',
       wickDownColor: '#ef4444',
-      priceScaleId: 'right',
     })
 
     const volSeries = chart.addSeries(HistogramSeries, {
       color: '#1f2937',
       priceFormat: { type: 'volume' },
-      priceScaleId: 'volume',
+      priceScaleId: 'volume-scale',
     })
 
-    chart.priceScale('volume').applyOptions({
+    chart.priceScale('volume-scale').applyOptions({
       scaleMargins: { top: 0.8, bottom: 0 },
-    })
-    chart.priceScale('right').applyOptions({
-      scaleMargins: { top: 0.05, bottom: 0.2 },
     })
 
     const smaSeries = chart.addSeries(LineSeries, {
       color: '#f59e0b',
       lineWidth: 2,
-      priceScaleId: 'right',
     })
     const emaSeries = chart.addSeries(LineSeries, {
       color: '#a855f7',
       lineWidth: 2,
-      priceScaleId: 'right',
     })
 
     chartRef.current = chart
@@ -96,8 +91,8 @@ export function usePriceChart(
     emaSeriesRef.current = emaSeries
 
     const handleResize = () => {
-      if (containerRef.current) {
-        chart.applyOptions({ width: containerRef.current.clientWidth })
+      if (containerRef.current && chartRef.current) {
+        chartRef.current.applyOptions({ width: containerRef.current.clientWidth })
       }
     }
     window.addEventListener('resize', handleResize)
@@ -107,21 +102,30 @@ export function usePriceChart(
     return () => {
       window.removeEventListener('resize', handleResize)
       ro.disconnect()
-      chart.remove()
-      chartRef.current = null
+      if (chartRef.current) {
+        chartRef.current.remove()
+        chartRef.current = null
+      }
       candleSeriesRef.current = null
       volSeriesRef.current = null
       smaSeriesRef.current = null
       emaSeriesRef.current = null
-      markersRef.current = null
     }
-  }, [])
+  }, []) // Initialize only once
 
   // Update Data and Overlays
   useEffect(() => {
     if (!candleSeriesRef.current || !volSeriesRef.current || candles.length === 0) return
 
-    candleSeriesRef.current.setData(candles.map(c => ({
+    // Sort and deduplicate candles to ensure lightweight-charts doesn't crash
+    const sortedCandles = [...candles]
+      .filter(c => c && c.time)
+      .sort((a, b) => a.time.localeCompare(b.time))
+      .filter((c, i, arr) => i === 0 || c.time !== arr[i - 1].time)
+
+    if (sortedCandles.length === 0) return
+
+    candleSeriesRef.current.setData(sortedCandles.map(c => ({
       time: c.time as any,
       open: c.open,
       high: c.high,
@@ -129,7 +133,7 @@ export function usePriceChart(
       close: c.close,
     })))
 
-    volSeriesRef.current.setData(candles.map(c => ({
+    volSeriesRef.current.setData(sortedCandles.map(c => ({
       time: c.time as any,
       value: c.volume,
       color: c.close >= c.open ? '#10b98125' : '#ef444425',
@@ -137,10 +141,10 @@ export function usePriceChart(
 
     // SMA / EMA
     if (smaSeriesRef.current) {
-        smaSeriesRef.current.setData(showSMA ? candles.filter(c => c.sma != null).map(c => ({ time: c.time as any, value: c.sma })) : [])
+        smaSeriesRef.current.setData(showSMA ? sortedCandles.filter(c => c.sma != null).map(c => ({ time: c.time as any, value: c.sma })) : [])
     }
     if (emaSeriesRef.current) {
-        emaSeriesRef.current.setData(showEMA ? candles.filter(c => c.ema != null).map(c => ({ time: c.time as any, value: c.ema })) : [])
+        emaSeriesRef.current.setData(showEMA ? sortedCandles.filter(c => c.ema != null).map(c => ({ time: c.time as any, value: c.ema })) : [])
     }
 
     // Cleanup previous overlays
@@ -153,10 +157,22 @@ export function usePriceChart(
 
     const tradeDatesInRange = new Set(candles.map(c => c.time))
 
+    // Helper for safe JSON parsing (backend might return string or object)
+    const getAnn = (a: any) => {
+        if (!a.chart_annotations) return {}
+        if (typeof a.chart_annotations === 'object') return a.chart_annotations
+        try {
+            return JSON.parse(a.chart_annotations)
+        } catch (e) {
+            console.error("Failed to parse annotations for analysis", a.id, e)
+            return {}
+        }
+    }
+
     // Draw Analysis Overlays
     analyses.forEach(a => {
         if (!tradeDatesInRange.has(a.trade_date)) return
-        const ann = a.chart_annotations ? JSON.parse(a.chart_annotations) : {}
+        const ann = getAnn(a)
         
         ;(ann.support_levels ?? []).forEach((price: number) => {
             const pl = candleSeriesRef.current!.createPriceLine({ price, color: 'rgba(239, 68, 68, 0.4)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' })
@@ -212,7 +228,7 @@ export function usePriceChart(
     const visualMarkers: any[] = []
     analyses.forEach(a => {
       if (!tradeDatesInRange.has(a.trade_date)) return
-      const ann = a.chart_annotations ? JSON.parse(a.chart_annotations) : {}
+      const ann = getAnn(a)
       if (ann.annotations && Array.isArray(ann.annotations)) {
         ann.annotations.forEach((va: any) => {
           if (va.type === 'arrowUp' || va.type === 'arrowDown' || va.type === 'circle') {
@@ -233,13 +249,21 @@ export function usePriceChart(
         (a.time as string).localeCompare(b.time as string)
     )
 
-    if (!markersRef.current) {
-        markersRef.current = createSeriesMarkers(candleSeriesRef.current as any, combinedMarkers)
-    } else {
-        markersRef.current.setMarkers(combinedMarkers)
+    if (candleSeriesRef.current) {
+        try {
+            if (typeof candleSeriesRef.current.setMarkers === 'function') {
+                candleSeriesRef.current.setMarkers(combinedMarkers)
+            } else {
+                console.warn("setMarkers is not available on candleSeriesRef.current", candleSeriesRef.current)
+            }
+        } catch (err) {
+            console.error("Error setting markers:", err)
+        }
     }
 
-    chartRef.current?.timeScale().fitContent()
+    if (chartRef.current) {
+        chartRef.current.timeScale().fitContent()
+    }
   }, [candles, analyses, showSMA, showEMA])
 
   return { chartRef }

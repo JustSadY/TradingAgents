@@ -1,11 +1,10 @@
-from backend.trading_agents.agents.utils.agent_utils import (
-    build_instrument_context,
-    get_macro_data,
-    get_language_instruction,
-)
-from backend.trading_agents.dataflows.config import get_config
 from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
+from backend.trading_agents.agents.utils.agent_utils import (
+    build_instrument_context,
+    get_language_instruction,
+    get_macro_data,
+)
 
 
 @register_analyst(
@@ -25,8 +24,7 @@ def create_macro_analyst(llm):
             get_macro_data,
         ]
 
-        system_message = (
-            """You are a senior macroeconomic analyst. Your goal is to interpret the broader economic climate and its ripple effects on financial markets.
+        system_message = """You are a senior macroeconomic analyst. Your goal is to interpret the broader economic climate and its ripple effects on financial markets.
 
 ### Analytical Process (Chain-of-Thought):
 1. **Data Acquisition:** Use `get_macro_data` to fetch latest values for VIX, 10-Year Yield, Crude Oil, Gold, etc.
@@ -44,13 +42,15 @@ Your final report MUST follow this structure:
 1. **Executive Summary:** A 3-bullet point summary of the dominant macro regime and its bias.
 2. **Detailed Analysis:** Nuanced breakdown of key indicators and their specific influence on the market.
 3. **Actionable Insights:** Potential macro-driven triggers or headwinds for the trader to consider.
-4. **Macro Data Table:** A Markdown table summarizing all fetched macro indicators and their current levels."""
-            + get_language_instruction()
-        )
+4. **Macro Data Table:** A Markdown table summarizing all fetched macro indicators and their current levels.""" + get_language_instruction()
 
         return await run_tool_analyst(
-            llm, state, tools=tools, system_message=system_message,
-            report_key="macro_report", instrument_context=instrument_context,
+            llm,
+            state,
+            tools=tools,
+            system_message=system_message,
+            report_key="macro_report",
+            instrument_context=instrument_context,
         )
 
     return macro_analyst_node

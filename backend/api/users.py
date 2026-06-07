@@ -2,7 +2,6 @@ import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_db, require_admin
@@ -44,13 +43,15 @@ async def update_me(
     if body.email is not None:
         if await email_exists(db, body.email, exclude_user_id=current_user.id):
             raise HTTPException(status_code=400, detail="Email already in use")
-    
+
     from backend.repositories.users import update_user_profile
+
     return await update_user_profile(
-        db, current_user, 
-        email=body.email, 
-        display_name=body.display_name, 
-        hashed_password=hash_password(body.password) if body.password else None
+        db,
+        current_user,
+        email=body.email,
+        display_name=body.display_name,
+        hashed_password=hash_password(body.password) if body.password else None,
     )
 
 
@@ -91,6 +92,7 @@ async def get_my_permissions(
     db: AsyncSession = Depends(get_db),
 ):
     from backend.core.constants import PAGE_KEYS
+
     if current_user.is_admin:
         return PagePermissionsRead(allowed_pages=PAGE_KEYS + ["admin"])
     allowed = sorted(list(await list_allowed_page_keys(db, current_user.id)))
@@ -105,6 +107,7 @@ async def list_users_run(
     db: AsyncSession = Depends(get_db),
 ):
     from backend.repositories.users import list_users as _repo_list
+
     return await _repo_list(db)
 
 
@@ -128,8 +131,9 @@ async def create_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Only the Server Owner can create administrator accounts.",
         )
-    
+
     from backend.repositories.users import create_user_with_permissions
+
     return await create_user_with_permissions(
         db,
         username=body.username,
@@ -150,13 +154,13 @@ async def update_user(
     user = await get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     if user.role == "owner":
         if body.role is not None and body.role != "owner":
             raise HTTPException(status_code=403, detail="The Server Owner role is immutable.")
         if body.is_active is not None and body.is_active != user.is_active:
             raise HTTPException(status_code=403, detail="The Server Owner account cannot be deactivated.")
-    
+
     if body.role is not None:
         if body.role == "owner" and user.role != "owner":
             raise HTTPException(status_code=403, detail="Assigning Server Owner is prohibited.")
@@ -164,12 +168,9 @@ async def update_user(
             raise HTTPException(status_code=403, detail="Only Server Owner can promote/demote admins.")
 
     from backend.repositories.users import update_user_admin
+
     return await update_user_admin(
-        db, user, 
-        role=body.role, 
-        is_active=body.is_active, 
-        email=body.email, 
-        display_name=body.display_name
+        db, user, role=body.role, is_active=body.is_active, email=body.email, display_name=body.display_name
     )
 
 
@@ -189,8 +190,9 @@ async def delete_user(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="The Server Owner account cannot be deleted.",
         )
-    
+
     from backend.core.events import emit
+
     emit("user_deleted", user_id=user_id)
 
     await db.delete(user)
@@ -203,6 +205,7 @@ async def get_user_permissions(
     db: AsyncSession = Depends(get_db),
 ):
     from backend.repositories.permissions import get_user_page_permissions_map
+
     perms = await get_user_page_permissions_map(db, user_id)
     full = {k: perms.get(k, False) for k in ALL_PAGE_KEYS}
     return {"user_id": user_id, "permissions": full}
@@ -218,13 +221,14 @@ async def set_user_permissions(
     user = await get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     from backend.repositories.permissions import set_user_page_permission
+
     for page_key, allowed in body.permissions.items():
         if page_key not in ALL_PAGE_KEYS:
             continue
         await set_user_page_permission(db, user_id, page_key, allowed)
-    
+
     await db.flush()
     return {"detail": "Permissions updated"}
 
@@ -283,6 +287,7 @@ async def get_my_setting_permissions(
     db: AsyncSession = Depends(get_db),
 ):
     from backend.core.constants import SETTING_KEYS
+
     if current_user.is_admin:
         return {"allowed_settings": SETTING_KEYS}
     allowed = sorted(list(await list_allowed_setting_sections(db, current_user.id)))
@@ -300,6 +305,7 @@ async def get_user_setting_permissions(
         raise HTTPException(status_code=404, detail="User not found")
     from backend.core.constants import SETTING_KEYS
     from backend.repositories.permissions import get_user_setting_permissions_map
+
     perms = await get_user_setting_permissions_map(db, user_id)
     full = {k: perms.get(k, False) for k in SETTING_KEYS}
     return {"user_id": user_id, "permissions": full}
@@ -319,14 +325,15 @@ async def set_user_setting_permissions(
     user = await get_user_by_id(db, user_id)
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
-    
+
     from backend.core.constants import SETTING_KEYS
     from backend.repositories.permissions import set_user_setting_permission
+
     for setting_key, allowed in body.permissions.items():
         if setting_key not in SETTING_KEYS:
             continue
         await set_user_setting_permission(db, user_id, setting_key, allowed)
-    
+
     await db.flush()
     return {"detail": "Setting permissions updated"}
 

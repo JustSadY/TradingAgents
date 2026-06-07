@@ -1,6 +1,6 @@
 from backend.trading_agents.agents.data.core_stock_tools import get_stock_data
-from backend.trading_agents.agents.tools.base import ToolSettingField
 from backend.trading_agents.agents.tools.adapters import FunctionToolAdapter
+from backend.trading_agents.agents.tools.base import ToolSettingField
 from backend.trading_agents.agents.tools.registry import registry
 
 core_stock_tool = FunctionToolAdapter(

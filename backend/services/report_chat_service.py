@@ -4,10 +4,10 @@ Encapsulates the report-grounded chat that used to live inline in the
 ``/analysis/{id}/chat`` route handler: ownership checks, report context
 assembly, LLM client construction, conversation history, and persistence.
 """
+
 from __future__ import annotations
 
 import logging
-from typing import Optional
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -46,9 +46,7 @@ async def _get_owned_analysis(db: AsyncSession, analysis_id: int, user) -> Analy
 async def get_chat_history(db: AsyncSession, analysis_id: int, user) -> list[AnalysisChat]:
     await _get_owned_analysis(db, analysis_id, user)
     result = await db.execute(
-        select(AnalysisChat)
-        .where(AnalysisChat.analysis_id == analysis_id)
-        .order_by(AnalysisChat.created_at.asc())
+        select(AnalysisChat).where(AnalysisChat.analysis_id == analysis_id).order_by(AnalysisChat.created_at.asc())
     )
     return list(result.scalars().all())
 
@@ -60,13 +58,11 @@ def _build_report_context(analysis: AnalysisResult) -> str:
         if getattr(analysis, attr, None)
     ]
     if analysis.final_decision:
-        parts.append(
-            f"### FINAL PORTFOLIO DECISION & SIGNAL ({analysis.signal})\n{analysis.final_decision}"
-        )
+        parts.append(f"### FINAL PORTFOLIO DECISION & SIGNAL ({analysis.signal})\n{analysis.final_decision}")
     return "\n\n".join(parts)
 
 
-def _build_system_prompt(analysis: AnalysisResult, output_language: Optional[str]) -> str:
+def _build_system_prompt(analysis: AnalysisResult, output_language: str | None) -> str:
     lang = (output_language or "English").strip()
     lang_inst = "" if lang.lower() == "english" else f" Write your entire response in {lang}."
     return (
@@ -81,20 +77,25 @@ def _build_system_prompt(analysis: AnalysisResult, output_language: Optional[str
     )
 
 
-def _resolve_user_api_key(user, provider: str) -> Optional[str]:
+def _resolve_user_api_key(user, provider: str) -> str | None:
     if user is None:
         return None
     try:
         from backend.core.config import get_settings
+
         return get_user_api_key(user, provider, get_settings().get_fernet())
     except Exception:
         return None
 
 
 async def answer_report_question(
-    db: AsyncSession, analysis_id: int, message: str, user,
+    db: AsyncSession,
+    analysis_id: int,
+    message: str,
+    user,
 ) -> AnalysisChat:
-    from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
+    from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
+
     from backend.trading_agents.llm_clients.factory import create_llm_client
 
     analysis = await _get_owned_analysis(db, analysis_id, user)
@@ -103,18 +104,14 @@ async def answer_report_question(
     past_messages = await get_chat_history(db, analysis_id, user)
     payload = [SystemMessage(content=_build_system_prompt(analysis, settings.output_language))]
     for msg in past_messages:
-        payload.append(
-            HumanMessage(content=msg.content) if msg.role == "user"
-            else AIMessage(content=msg.content)
-        )
+        payload.append(HumanMessage(content=msg.content) if msg.role == "user" else AIMessage(content=msg.content))
     payload.append(HumanMessage(content=message))
 
     user_key = _resolve_user_api_key(user, settings.llm_provider)
     if not user_key and not getattr(user, "is_admin", False):
         raise HTTPException(
             status_code=400,
-            detail=f"No API key set for provider '{settings.llm_provider}'. "
-                   "Please add your API key in Settings.",
+            detail=f"No API key set for provider '{settings.llm_provider}'. Please add your API key in Settings.",
         )
 
     client = create_llm_client(

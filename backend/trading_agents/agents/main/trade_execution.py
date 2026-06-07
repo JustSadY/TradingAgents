@@ -7,10 +7,11 @@ a concrete trade proposal (entry / stop / target / confidence).
 Kill-switch behaviour:
   • trader disabled  → emit a neutral plan and skip the sub-agent (zero tokens).
 """
+
 from __future__ import annotations
 
-import logging
 import inspect
+import logging
 
 from backend.trading_agents.agents.base import AgentRunContext, NodeFn
 from backend.trading_agents.agents.sub.trader.trader import create_trader

@@ -4,39 +4,42 @@ from backend.trading_agents.agents.utils.agent_utils import (
     run_strategy_backtest,
 )
 
+
 def create_synthesis_manager(llm):
     async def synthesis_manager_node(state) -> dict:
         from backend.trading_agents.dataflows.config import get_config
+
         if not get_config().get("synthesis_enabled", True):
             return {"synthesis_report": "Synthesis disabled by user settings."}
 
         ticker = state["company_of_interest"]
         asset_type = state.get("asset_type", "stock")
         instrument_context = build_instrument_context(ticker, asset_type)
-        
+
         # Pillar 3: Quantitative Baseline (Backtesting)
         macd_args = {"ticker": ticker, "strategy_type": "macd_crossover"}
         rsi_args = {"ticker": ticker, "strategy_type": "rsi_oversold"}
         if state.get("trade_date"):
             macd_args["curr_date"] = state["trade_date"]
             rsi_args["curr_date"] = state["trade_date"]
-            
+
         # run_strategy_backtest is sync, but we call it via invoke (which we'll keep sync for now or use ainvoke if it's async)
         # Actually, I didn't make run_strategy_backtest async yet.
         macd_results = run_strategy_backtest.invoke(macd_args)
         rsi_results = run_strategy_backtest.invoke(rsi_args)
-        
+
         from backend.trading_agents.agents.analyst_registry import get_report_fields
+
         report_fields = get_report_fields()
-        
+
         resources = []
         for field, label in report_fields.items():
             content = state.get(field, "")
             if content and content.strip():
                 resources.append(f"### {label}:\n{content.strip()}")
-        
+
         resources_text = "\n\n".join(resources)
-        
+
         prompt = f"""You are a Senior Investment Strategist. Your task is to synthesize the following analyst reports and historical backtests for {ticker}. Identify key alignments and critical conflicts.
 
 ### Objective:
@@ -65,5 +68,5 @@ Your synthesis MUST follow this structure:
 """
         response = await llm.ainvoke(prompt)
         return {"synthesis_report": response.content}
-    
+
     return synthesis_manager_node

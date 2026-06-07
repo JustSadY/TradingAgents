@@ -1,6 +1,6 @@
 """Shared query helpers used across repositories and routers."""
+
 from __future__ import annotations
-from sqlalchemy import select
 
 
 def scope_to_user(query, model, user):

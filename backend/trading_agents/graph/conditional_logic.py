@@ -3,15 +3,15 @@ from backend.trading_agents.agents.runtime.agent_states import AgentState
 # Mapping from analyst key to (tool_node_name, clear_node_name).
 # Add a new analyst here instead of writing a new should_continue_* method.
 _ANALYST_NODES: dict[str, tuple[str, str]] = {
-    "market":       ("tools_market",       "Msg Clear Market"),
-    "social":       ("tools_social",       "Msg Clear Sentiment"),
-    "news":         ("tools_news",         "Msg Clear News"),
+    "market": ("tools_market", "Msg Clear Market"),
+    "social": ("tools_social", "Msg Clear Sentiment"),
+    "news": ("tools_news", "Msg Clear News"),
     "fundamentals": ("tools_fundamentals", "Msg Clear Fundamentals"),
-    "macro":        ("tools_macro",        "Msg Clear Macro"),
-    "options":      ("tools_options",      "Msg Clear Options"),
-    "quant":        ("tools_quant",        "Msg Clear Quant"),
-    "earnings":     ("tools_earnings",     "Msg Clear Earnings"),
-    "review":       ("tools_review",       "Msg Clear Review"),
+    "macro": ("tools_macro", "Msg Clear Macro"),
+    "options": ("tools_options", "Msg Clear Options"),
+    "quant": ("tools_quant", "Msg Clear Quant"),
+    "earnings": ("tools_earnings", "Msg Clear Earnings"),
+    "review": ("tools_review", "Msg Clear Review"),
 }
 
 
@@ -55,18 +55,16 @@ class ConditionalLogic:
 
     def should_continue_review(self, state: AgentState):
         return self.should_continue(state, "review")
+
     def should_continue_debate(self, state: AgentState) -> str:
-        if (
-            state["investment_debate_state"]["count"] >= 2 * self.max_debate_rounds
-        ):
+        if state["investment_debate_state"]["count"] >= 2 * self.max_debate_rounds:
             return "Research Manager"
         if state["investment_debate_state"]["current_response"].startswith("Bull"):
             return "Bear Researcher"
         return "Bull Researcher"
+
     def should_continue_risk_analysis(self, state: AgentState) -> str:
-        if (
-            state["risk_debate_state"]["count"] >= 3 * self.max_risk_discuss_rounds
-        ):
+        if state["risk_debate_state"]["count"] >= 3 * self.max_risk_discuss_rounds:
             return "Portfolio Manager"
         if state["risk_debate_state"]["latest_speaker"].startswith("Aggressive"):
             return "Conservative Analyst"

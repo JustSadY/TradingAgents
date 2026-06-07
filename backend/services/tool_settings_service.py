@@ -1,17 +1,19 @@
 from __future__ import annotations
+
 from typing import Any
+
+from pydantic import Field as PydanticField
+from pydantic import create_model
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
-from backend.models.user import User
+
 from backend.models.tool_settings import AgentToolSetting, UserAgentAccess, UserToolAccess, UserToolFieldAccess
-from backend.trading_agents.agents.tools.registry import registry
+from backend.models.user import User
+from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate, ToolSettingValue
+from backend.services.tool_access_service import get_user_tool_access
 from backend.trading_agents.agents.tools.base import BaseAgentTool
-from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingValue, ToolSettingsUpdate
-from backend.services.tool_access_service import get_user_tool_access, get_user_agent_access
-from backend.services.settings_service import get_or_create_settings
+from backend.trading_agents.agents.tools.registry import registry
 
-
-from pydantic import create_model, Field as PydanticField
 
 def _get_pydantic_type(field_type: str) -> Any:
     mapping = {
@@ -26,69 +28,75 @@ def _get_pydantic_type(field_type: str) -> Any:
     }
     return mapping.get(field_type, Any)
 
+
 def validate_tool_settings(tool: BaseAgentTool, incoming: dict[str, Any]) -> dict[str, Any]:
     """Validate incoming settings against the tool's schema using dynamic Pydantic models."""
     fields = {}
     for field in tool.settings_schema:
         f_type = _get_pydantic_type(field.type)
         default = field.default
-        
+
         # Build field constraints
         extra_kwargs = {}
         if field.type == "number":
-            if field.min is not None: extra_kwargs["ge"] = field.min
-            if field.max is not None: extra_kwargs["le"] = field.max
-        
+            if field.min is not None:
+                extra_kwargs["ge"] = field.min
+            if field.max is not None:
+                extra_kwargs["le"] = field.max
+
         # For selects, we could add Literal or Validator, but keeping it simple for now
         # with basic type check + manual check if needed.
-        
+
         fields[field.key] = (f_type, PydanticField(default=default, **extra_kwargs))
 
     # Create a dynamic Pydantic model for this tool
     ToolModel = create_model(f"Dynamic{tool.key}Model", **fields)
-    
+
     try:
         validated_obj = ToolModel(**incoming)
         normalized = validated_obj.model_dump()
-        
+
         # Manual check for selects/options which are harder to do purely with create_model dynamic types
         for field in tool.settings_schema:
             if field.type in ("select", "multi_select") and field.options:
                 allowed = {opt.value for opt in field.options}
                 val = normalized.get(field.key)
                 if field.type == "select" and val not in allowed:
-                     raise ValueError(f"Field '{field.key}' value '{val}' must be one of {allowed}.")
+                    raise ValueError(f"Field '{field.key}' value '{val}' must be one of {allowed}.")
                 if field.type == "multi_select" and val:
                     if not all(v in allowed for v in val):
                         raise ValueError(f"Field '{field.key}' values {val} must be sub-elements of {allowed}.")
-        
+
         return normalized
     except Exception as e:
         # Re-wrap Pydantic errors for consistency
         raise ValueError(str(e))
 
+
 async def _check_tool_availability(db: AsyncSession, user_id: int, tool: BaseAgentTool) -> bool:
     """Helper to check if a tool is available based on the agent hierarchy."""
     if not tool.allowed_analysts:
         return True
-        
+
     from backend.services.agent_settings_service import build_agent_runtime_context
     from backend.trading_agents.agents.hierarchy import AgentHierarchy
-    
+
     agent_ctx = await build_agent_runtime_context(db, user_id)
     hierarchy = AgentHierarchy(agent_ctx)
-    
+
     return any(hierarchy.is_enabled(a) for a in tool.allowed_analysts)
+
 
 async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRead:
     # 1. Fetch DB overrides for this user
     from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
+
     user_rows_list = await _repo_get_user(db, user.id)
     user_rows = {row.tool_key: row for row in user_rows_list}
 
     # Also load tool access
     tool_access_map = await get_user_tool_access(db, user.id)
-    
+
     # 2. Build map of all registered tools
     tools_map = {}
     for tool in registry.list():
@@ -116,6 +124,7 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
 
 async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
     from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
+
     server_rows_list = await _repo_get_server(db)
     server_rows = {row.tool_key: row for row in server_rows_list}
 
@@ -138,11 +147,13 @@ async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
 async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSettingsUpdate) -> ToolSettingsRead:
     # Get existing user rows
     from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
+
     user_rows_list = await _repo_get_user(db, user.id)
     user_rows = {row.tool_key: row for row in user_rows_list}
 
     # Also load agent settings
     from backend.services.agent_settings_service import build_agent_runtime_context
+
     agent_ctx = await build_agent_runtime_context(db, user.id)
 
     for tool_key, update in body.tools.items():
@@ -152,21 +163,16 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
 
         # Check if any associated agent is active in the hierarchy
         if tool.allowed_analysts:
-            is_any_agent_enabled = any(
-                agent_ctx.get(a, {}).get("enabled", True) 
-                for a in tool.allowed_analysts
-            )
+            is_any_agent_enabled = any(agent_ctx.get(a, {}).get("enabled", True) for a in tool.allowed_analysts)
             if not is_any_agent_enabled:
-                raise ValueError(f"Tool '{tool_key}' is not available because none of its associated agents are enabled.")
+                raise ValueError(
+                    f"Tool '{tool_key}' is not available because none of its associated agents are enabled."
+                )
 
         row = user_rows.get(tool_key)
         if not row:
             row = AgentToolSetting(
-                scope="user",
-                user_id=user.id,
-                tool_key=tool_key,
-                enabled=tool.default_enabled,
-                settings={}
+                scope="user", user_id=user.id, tool_key=tool_key, enabled=tool.default_enabled, settings={}
             )
             db.add(row)
 
@@ -193,6 +199,7 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
 
 async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettingsUpdate) -> ToolSettingsRead:
     from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
+
     server_rows_list = await _repo_get_server(db)
     server_rows = {row.tool_key: row for row in server_rows_list}
 
@@ -204,11 +211,7 @@ async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettings
         row = server_rows.get(tool_key)
         if not row:
             row = AgentToolSetting(
-                scope="server",
-                user_id=None,
-                tool_key=tool_key,
-                enabled=tool.default_enabled,
-                settings={}
+                scope="server", user_id=None, tool_key=tool_key, enabled=tool.default_enabled, settings={}
             )
             db.add(row)
 
@@ -233,7 +236,9 @@ async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettings
     return await get_server_tool_settings(db)
 
 
-def build_tool_runtime_state(tool: BaseAgentTool, server_row: AgentToolSetting | None, user_row: AgentToolSetting | None) -> dict[str, Any]:
+def build_tool_runtime_state(
+    tool: BaseAgentTool, server_row: AgentToolSetting | None, user_row: AgentToolSetting | None
+) -> dict[str, Any]:
     server_settings = tool.default_settings(scope="server")
     user_settings = tool.default_settings(scope="user")
 
@@ -264,7 +269,9 @@ def build_tool_runtime_state(tool: BaseAgentTool, server_row: AgentToolSetting |
 
 async def build_global_runtime_context(db: AsyncSession, user_id: int | None) -> dict[str, Any]:
     # 1. Load Server Tool Settings
-    from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server, get_user_tool_settings as _repo_get_user
+    from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
+    from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
+
     server_rows_list = await _repo_get_server(db)
     server_rows = {row.tool_key: row for row in server_rows_list}
 
@@ -318,5 +325,5 @@ async def build_global_runtime_context(db: AsyncSession, user_id: int | None) ->
             "agent_access": agent_access,
             "tool_access": tool_access,
             "field_access": field_access,
-        }
+        },
     }

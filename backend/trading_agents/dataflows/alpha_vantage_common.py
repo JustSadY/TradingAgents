@@ -1,21 +1,27 @@
+import json
 import logging
 import os
-import requests
-import pandas as pd
-import json
 from datetime import datetime
 from io import StringIO
+
+import pandas as pd
+import requests
+
 _logger = logging.getLogger(__name__)
 API_BASE_URL = "https://www.alphavantage.co/query"
 from backend.trading_agents.dataflows.config import get_config
+
+
 def get_api_key() -> str:
     api_key = get_config().get("alpha_vantage_api_key") or os.getenv("ALPHA_VANTAGE_API_KEY")
     if not api_key:
         raise ValueError("ALPHA_VANTAGE_API_KEY environment variable is not set.")
     return api_key
+
+
 def format_datetime_for_api(date_input) -> str:
     if isinstance(date_input, str):
-        if len(date_input) == 13 and 'T' in date_input:
+        if len(date_input) == 13 and "T" in date_input:
             return date_input
         try:
             dt = datetime.strptime(date_input, "%Y-%m-%d")
@@ -30,16 +36,22 @@ def format_datetime_for_api(date_input) -> str:
         return date_input.strftime("%Y%m%dT%H%M")
     else:
         raise ValueError(f"Date must be string or datetime object, got {type(date_input)}")
+
+
 class AlphaVantageRateLimitError(Exception):
     pass
+
+
 def _make_api_request(function_name: str, params: dict) -> dict | str:
     api_params = params.copy()
-    api_params.update({
-        "function": function_name,
-        "apikey": get_api_key(),
-        "source": "trading_agents",
-    })
-    current_entitlement = globals().get('_current_entitlement')
+    api_params.update(
+        {
+            "function": function_name,
+            "apikey": get_api_key(),
+            "source": "trading_agents",
+        }
+    )
+    current_entitlement = globals().get("_current_entitlement")
     entitlement = api_params.get("entitlement") or current_entitlement
     if entitlement:
         api_params["entitlement"] = entitlement
@@ -57,6 +69,8 @@ def _make_api_request(function_name: str, params: dict) -> dict | str:
     except json.JSONDecodeError:
         pass
     return response_text
+
+
 def _filter_csv_by_date_range(csv_data: str, start_date: str, end_date: str) -> str:
     if not csv_data or csv_data.strip() == "":
         return csv_data

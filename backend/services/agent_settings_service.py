@@ -1,9 +1,12 @@
 from __future__ import annotations
+
 from typing import Any
+
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.models.user import User
-from backend.trading_agents.agent_catalog import list_agents, get_agent, AgentInfo
-from backend.schemas.agent_settings import AgentSettingsRead, AgentSettingValue, AgentSettingsUpdate
+from backend.schemas.agent_settings import AgentSettingsRead, AgentSettingsUpdate, AgentSettingValue
+from backend.trading_agents.agent_catalog import AgentInfo, get_agent, list_agents
 
 
 def validate_agent_settings(agent: AgentInfo, incoming: dict[str, Any]) -> dict[str, Any]:
@@ -27,6 +30,7 @@ def validate_agent_settings(agent: AgentInfo, incoming: dict[str, Any]) -> dict[
 
 async def get_agent_settings_by_scope(db: AsyncSession, scope: str, user_id: int | None = None) -> AgentSettingsRead:
     from backend.repositories.agent_settings import get_agent_settings_by_scope as _repo_get
+
     rows_list = await _repo_get(db, scope, user_id)
     rows = {row.agent_key: row for row in rows_list}
 
@@ -58,6 +62,7 @@ async def apply_agent_settings_update_by_scope(
     db: AsyncSession, scope: str, body: AgentSettingsUpdate, user_id: int | None = None
 ) -> AgentSettingsRead:
     from backend.repositories.agent_settings import get_agent_settings_by_scope as _repo_get
+
     rows_list = await _repo_get(db, scope, user_id)
     rows = {row.agent_key: row for row in rows_list}
 
@@ -78,7 +83,7 @@ async def apply_agent_settings_update_by_scope(
                 user_id=user_id if scope == "user" else None,
                 agent_key=agent_key,
                 enabled=agent.default_enabled,
-                settings={}
+                settings={},
             )
             db.add(row)
 
@@ -111,7 +116,9 @@ async def apply_server_agent_settings_update(db: AsyncSession, body: AgentSettin
     return await apply_agent_settings_update_by_scope(db, "server", body)
 
 
-def build_agent_runtime_state(agent: AgentInfo, server_row: AgentSetting | None, user_row: AgentSetting | None) -> dict[str, Any]:
+def build_agent_runtime_state(
+    agent: AgentInfo, server_row: AgentSetting | None, user_row: AgentSetting | None
+) -> dict[str, Any]:
     server_settings = {field.key: field.default for field in agent.settings_schema}
     user_settings = {field.key: field.default for field in agent.settings_schema}
 
@@ -135,7 +142,9 @@ def build_agent_runtime_state(agent: AgentInfo, server_row: AgentSetting | None,
 
 
 async def build_agent_runtime_context(db: AsyncSession, user_id: int | None) -> dict[str, Any]:
-    from backend.repositories.agent_settings import get_server_agent_settings as _repo_get_server, get_user_agent_settings as _repo_get_user
+    from backend.repositories.agent_settings import get_server_agent_settings as _repo_get_server
+    from backend.repositories.agent_settings import get_user_agent_settings as _repo_get_user
+
     server_rows_list = await _repo_get_server(db)
     server_rows = {row.agent_key: row for row in server_rows_list}
 

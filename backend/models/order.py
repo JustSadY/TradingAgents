@@ -1,8 +1,12 @@
+from datetime import UTC, datetime
 from decimal import Decimal
-from datetime import datetime, timezone
+
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
-from backend.core.database import Base, MONEY
+
+from backend.core.database import MONEY, Base
+
+
 class Order(Base):
     __tablename__ = "orders"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -17,13 +21,9 @@ class Order(Base):
     price_per_share: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     total_value: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     commission: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
-    analysis_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("analysis_results.id"), nullable=True
-    )
+    analysis_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("analysis_results.id"), nullable=True)
     ai_signal: Mapped[str] = mapped_column(String(50), default="")
     ai_reasoning: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True)
     executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     portfolio: Mapped["Portfolio"] = relationship("Portfolio", back_populates="orders")

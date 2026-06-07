@@ -11,10 +11,11 @@ Kill-switch behaviour:
     hierarchy's cascade also disables them, so the upstream main nodes will
     already have short-circuited.)
 """
+
 from __future__ import annotations
 
-import logging
 import inspect
+import logging
 
 from backend.trading_agents.agents.base import AgentRunContext, NodeFn
 from backend.trading_agents.agents.sub.managers.portfolio_manager import create_portfolio_manager

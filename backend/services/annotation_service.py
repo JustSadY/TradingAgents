@@ -25,8 +25,9 @@ Rules:
 # full prompt. Keys are lower-cased language identifiers.
 _LANG_PREFIXES: dict[str, str] = {
     "turkish": "Please respond in Turkish.\n\n",
-    "türkçe":  "Lütfen Türkçe yanıtla.\n\n",
+    "türkçe": "Lütfen Türkçe yanıtla.\n\n",
 }
+
 
 async def extract_chart_annotations(
     market_report: str,
@@ -36,14 +37,13 @@ async def extract_chart_annotations(
 ) -> dict:
     if not market_report and not final_decision:
         return {}
-    
+
     lang = (output_language or "English").strip().lower()
     prefix = _LANG_PREFIXES.get(lang, "")
     system_prompt = prefix + _SYSTEM_PROMPT_EN
 
     text = f"PIYASA RAPORU:\n{market_report[:2000]}\n\nSON KARAR:\n{final_decision[:1000]}"
     try:
-        from langchain_core.messages import HumanMessage, SystemMessage
         response = await _call_llm_async(quick_llm, text, system_prompt)
         raw = response.strip()
         if raw.startswith("```"):
@@ -57,9 +57,12 @@ async def extract_chart_annotations(
         _logger.debug("Annotation extraction failed (non-fatal): %s", exc)
         return {}
 
+
 async def _call_llm_async(llm, text: str, system_prompt: str) -> str:
     import asyncio
+
     from langchain_core.messages import HumanMessage, SystemMessage
+
     def _sync_call():
         messages = [
             SystemMessage(content=system_prompt),
@@ -67,7 +70,10 @@ async def _call_llm_async(llm, text: str, system_prompt: str) -> str:
         ]
         result = llm.invoke(messages)
         return result.content if hasattr(result, "content") else str(result)
+
     return await asyncio.to_thread(_sync_call)
+
+
 def _validate_annotations(data: dict) -> dict:
     def _floats(lst) -> list[float]:
         if not isinstance(lst, list):
@@ -84,11 +90,13 @@ def _validate_annotations(data: dict) -> dict:
     key_levels = []
     for kl in data.get("key_levels") or []:
         if isinstance(kl, dict) and isinstance(kl.get("price"), (int, float)):
-            key_levels.append({
-                "price": round(float(kl["price"]), 2),
-                "label": str(kl.get("label", ""))[:40],
-                "type": str(kl.get("type", "other")),
-            })
+            key_levels.append(
+                {
+                    "price": round(float(kl["price"]), 2),
+                    "label": str(kl.get("label", ""))[:40],
+                    "type": str(kl.get("type", "other")),
+                }
+            )
     return {
         "support_levels": _floats(data.get("support_levels")),
         "resistance_levels": _floats(data.get("resistance_levels")),

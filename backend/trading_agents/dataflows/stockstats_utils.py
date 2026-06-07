@@ -1,24 +1,33 @@
-import time
 import logging
+import time
+from typing import Annotated
+
 import pandas as pd
 import yfinance as yf
-from .cache import APICache
-from yfinance.exceptions import YFRateLimitError
 from stockstats import wrap
-from typing import Annotated
+from yfinance.exceptions import YFRateLimitError
+
+from .cache import APICache
 from .utils import safe_ticker_component
+
 logger = logging.getLogger(__name__)
+
+
 def yf_retry(func, max_retries=3, base_delay=2.0):
     for attempt in range(max_retries + 1):
         try:
             return func()
         except YFRateLimitError:
             if attempt < max_retries:
-                delay = base_delay * (2 ** attempt)
-                logger.warning(f"Yahoo Finance rate limited, retrying in {delay:.0f}s (attempt {attempt + 1}/{max_retries})")
+                delay = base_delay * (2**attempt)
+                logger.warning(
+                    f"Yahoo Finance rate limited, retrying in {delay:.0f}s (attempt {attempt + 1}/{max_retries})"
+                )
                 time.sleep(delay)
             else:
                 raise
+
+
 def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     data["Date"] = pd.to_datetime(data["Date"], errors="coerce")
     data = data.dropna(subset=["Date"])
@@ -27,6 +36,8 @@ def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     data = data.dropna(subset=["Close"])
     data[price_cols] = data[price_cols].ffill().bfill()
     return data
+
+
 def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     safe_ticker_component(symbol)
     cache_payload = APICache.get("stockstats_load_ohlcv", symbol, curr_date)
@@ -39,14 +50,16 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     start_date = today_date - pd.DateOffset(years=5)
     start_str = start_date.strftime("%Y-%m-%d")
     end_str = today_date.strftime("%Y-%m-%d")
-    data = yf_retry(lambda: yf.download(
-        symbol,
-        start=start_str,
-        end=end_str,
-        multi_level_index=False,
-        progress=False,
-        auto_adjust=True,
-    ))
+    data = yf_retry(
+        lambda: yf.download(
+            symbol,
+            start=start_str,
+            end=end_str,
+            multi_level_index=False,
+            progress=False,
+            auto_adjust=True,
+        )
+    )
     data = data.reset_index()
     data = _clean_dataframe(data)
     data = data[data["Date"] <= curr_date_dt]
@@ -54,22 +67,22 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     payload["Date"] = payload["Date"].dt.strftime("%Y-%m-%d")
     APICache.set("stockstats_load_ohlcv", {"rows": payload.to_dict(orient="records")}, symbol, curr_date)
     return data
+
+
 def filter_financials_by_date(data: pd.DataFrame, curr_date: str) -> pd.DataFrame:
     if not curr_date or data.empty:
         return data
     cutoff = pd.Timestamp(curr_date)
     mask = pd.to_datetime(data.columns, errors="coerce") <= cutoff
     return data.loc[:, mask]
+
+
 class StockstatsUtils:
     @staticmethod
     def get_stock_stats(
         symbol: Annotated[str, "ticker symbol for the company"],
-        indicator: Annotated[
-            str, "quantitative indicators based off of the stock data for the company"
-        ],
-        curr_date: Annotated[
-            str, "curr date for retrieving stock price data, YYYY-mm-dd"
-        ],
+        indicator: Annotated[str, "quantitative indicators based off of the stock data for the company"],
+        curr_date: Annotated[str, "curr date for retrieving stock price data, YYYY-mm-dd"],
     ):
         data = load_ohlcv(symbol, curr_date)
         df = wrap(data)

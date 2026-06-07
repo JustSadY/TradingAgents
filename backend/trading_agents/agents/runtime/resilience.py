@@ -15,12 +15,14 @@ Everything degrades gracefully: with no run context, no transient error and no
 config overrides, behaviour is identical to before — these helpers only change
 what happens *on failure*.
 """
+
 from __future__ import annotations
 
 import logging
 import time
 import traceback
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
 # Dedicated run-log stream. Filter logs by this logger name to get the
 # per-agent / per-tool execution trace.
@@ -28,17 +30,29 @@ run_logger = logging.getLogger("tradingagents.run")
 
 # Substrings that mark an error as worth retrying (rate limits, timeouts, 5xx…).
 _TRANSIENT_HINTS = (
-    "rate limit", "ratelimit", "429", "timeout", "timed out", "temporar",
-    "overload", "503", "502", "500", "connection", "unavailable", "again",
+    "rate limit",
+    "ratelimit",
+    "429",
+    "timeout",
+    "timed out",
+    "temporar",
+    "overload",
+    "503",
+    "502",
+    "500",
+    "connection",
+    "unavailable",
+    "again",
 )
 
 
-def _cfg(key: str, default, runtime_config: Optional[dict] = None):
+def _cfg(key: str, default, runtime_config: dict | None = None):
     try:
         if isinstance(runtime_config, dict):
             value = runtime_config.get(key, default)
             return value if value is not None else default
         from backend.trading_agents.dataflows.config import get_config
+
         value = get_config().get(key, default)
         return value if value is not None else default
     except Exception:
@@ -59,11 +73,11 @@ async def retry_call(
     fn: Callable[[], Any],
     *,
     label: str,
-    attempts: Optional[int] = None,
-    base_delay: Optional[float] = None,
+    attempts: int | None = None,
+    base_delay: float | None = None,
     retry_all: bool = True,
     run_in_thread: bool = False,
-    runtime_config: Optional[dict] = None,
+    runtime_config: dict | None = None,
 ) -> Any:
     """Call ``fn`` with retries + exponential backoff.
 
@@ -74,9 +88,10 @@ async def retry_call(
     attempts = int(attempts if attempts is not None else _cfg("node_retry_attempts", 2, runtime_config))
     base_delay = float(base_delay if base_delay is not None else _cfg("node_retry_base_delay", 1.0, runtime_config))
     attempts = max(1, attempts)
-    last: Optional[BaseException] = None
-    import inspect
+    last: BaseException | None = None
     import asyncio
+    import inspect
+
     for i in range(attempts):
         try:
             if run_in_thread:
@@ -91,10 +106,14 @@ async def retry_call(
             is_last = i + 1 >= attempts
             if is_last or (not retry_all and not is_transient(exc)):
                 break
-            delay = base_delay * (2 ** i)
+            delay = base_delay * (2**i)
             log_event(
-                "retry", level=logging.WARNING, label=label,
-                attempt=i + 1, attempts=attempts, delay=round(delay, 1),
+                "retry",
+                level=logging.WARNING,
+                label=label,
+                attempt=i + 1,
+                attempts=attempts,
+                delay=round(delay, 1),
                 error=str(exc)[:200],
             )
             await asyncio.sleep(delay)
@@ -117,14 +136,13 @@ def guard_node(
     *,
     name: str,
     kind: str = "agent",
-    fallback: Optional[Callable[[dict, BaseException], dict]] = None,
+    fallback: Callable[[dict, BaseException], dict] | None = None,
 ) -> Callable:
     """Wrap a graph node so it retries on failure, logs start/end/error, and —
     if it still fails — returns ``fallback(state, exc)`` (a safe partial state
     update) instead of aborting the run. With no ``fallback`` the error is
     logged and re-raised (previous behaviour)."""
     import inspect
-    import asyncio
 
     async def wrapped(state, *args, **kwargs):
         start = time.time()
@@ -152,8 +170,12 @@ def guard_node(
             return result
         except Exception as exc:  # noqa: BLE001
             log_event(
-                "node_error", level=logging.ERROR, node=name, kind=kind,
-                error=str(exc)[:300], traceback=traceback.format_exc()[-700:],
+                "node_error",
+                level=logging.ERROR,
+                node=name,
+                kind=kind,
+                error=str(exc)[:300],
+                traceback=traceback.format_exc()[-700:],
             )
             if fallback is None:
                 raise

@@ -1,24 +1,27 @@
 from __future__ import annotations
+
+from backend.trading_agents.agents.runtime.structured import (
+    ainvoke_structured_or_freetext,
+    bind_structured,
+)
 from backend.trading_agents.agents.schemas import ResearchPlan, render_research_plan
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
 )
-from backend.trading_agents.agents.runtime.structured import (
-    bind_structured,
-    ainvoke_structured_or_freetext,
-)
+
 
 def create_research_manager(llm):
     structured_llm = bind_structured(llm, ResearchPlan, "Research Manager")
-    
+
     async def research_manager_node(state) -> dict:
         instrument_context = build_instrument_context(state["company_of_interest"])
         history = state["investment_debate_state"].get("history", "")
         investment_debate_state = state["investment_debate_state"]
         audit_report = state.get("audit_report", "No audit report available.")
-        
+
         from backend.trading_agents.dataflows.config import get_config
+
         strict_learning = get_config().get("strict_backtest_learning", True)
         learning_instruction = ""
         if strict_learning:
@@ -46,7 +49,7 @@ Commit to a clear stance whenever the debate's strongest arguments warrant one; 
 ---
 **Debate History:**
 {history}""" + get_language_instruction()
-        
+
         result = await ainvoke_structured_or_freetext(
             structured_llm,
             llm,
@@ -54,12 +57,12 @@ Commit to a clear stance whenever the debate's strongest arguments warrant one; 
             render_research_plan,
             "Research Manager",
         )
-        
+
         if isinstance(result, str):
             investment_plan = result
         else:
             investment_plan = render_research_plan(result)
-            
+
         new_investment_debate_state = {
             "judge_decision": investment_plan,
             "history": investment_debate_state.get("history", ""),
@@ -72,5 +75,5 @@ Commit to a clear stance whenever the debate's strongest arguments warrant one; 
             "investment_debate_state": new_investment_debate_state,
             "investment_plan": investment_plan,
         }
-        
+
     return research_manager_node

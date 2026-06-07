@@ -1,19 +1,22 @@
 from __future__ import annotations
+
 import json
-from backend.trading_agents.agents.schemas import PortfolioDecision, render_pm_decision, TraderProposal
+
 from backend.trading_agents.agents.runtime.risk_math import calculate_kelly_size, get_risk_reward_from_plan
+from backend.trading_agents.agents.runtime.structured import (
+    ainvoke_structured_or_freetext,
+    bind_structured,
+)
+from backend.trading_agents.agents.schemas import PortfolioDecision, TraderProposal, render_pm_decision
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_language_instruction,
 )
-from backend.trading_agents.agents.runtime.structured import (
-    bind_structured,
-    ainvoke_structured_or_freetext,
-)
+
 
 def create_portfolio_manager(llm):
     structured_llm = bind_structured(llm, PortfolioDecision, "Portfolio Manager")
-    
+
     async def portfolio_manager_node(state) -> dict:
         instrument_context = build_instrument_context(state["company_of_interest"])
         history = state["risk_debate_state"]["history"]
@@ -23,8 +26,9 @@ def create_portfolio_manager(llm):
         trader_proposal_json = state.get("trader_proposal_json")
 
         from backend.trading_agents.dataflows.config import get_config
+
         kelly_enabled = get_config().get("kelly_sizing_enabled", True)
-        
+
         kelly_recommendation = ""
         if trader_proposal_json and kelly_enabled:
             try:
@@ -36,8 +40,8 @@ def create_portfolio_manager(llm):
                     kelly_recommendation = (
                         f"\n**Mathematical Risk Recommendation (Kelly Criterion):**\n"
                         f"- Calculated R/R Ratio: {rr:.2f}\n"
-                        f"- Estimated Win Probability: {tp.confidence_score*100:.1f}%\n"
-                        f"- Suggested Maximum Position Size: {kelly_pct*100:.1f}% of portfolio.\n"
+                        f"- Estimated Win Probability: {tp.confidence_score * 100:.1f}%\n"
+                        f"- Suggested Maximum Position Size: {kelly_pct * 100:.1f}% of portfolio.\n"
                         "Note: Use this as a ceiling for your final sizing decision.\n"
                     )
             except Exception:
@@ -49,18 +53,19 @@ def create_portfolio_manager(llm):
             conviction_instructions = (
                 "---\n\n"
                 "**Crucial Sizing & Conviction Instructions:**\n"
-                "- Carefully evaluate the \"Lessons from prior decisions and outcomes\" listed above.\n"
+                '- Carefully evaluate the "Lessons from prior decisions and outcomes" listed above.\n'
                 "- Identify which analysts or strategies were noted as over-optimistic or prone to error in prior hindsight reviews, and dynamically discount or adjust their conviction scores in your current thesis.\n"
                 "- Ground your final position sizing and entry target in these empirical learning adjustments.\n"
             )
         else:
             lessons_line = ""
             conviction_instructions = ""
-            
-        from backend.trading_agents.personas import get_persona_instructions, DEFAULT_PERSONA
+
+        from backend.trading_agents.personas import DEFAULT_PERSONA, get_persona_instructions
+
         persona = get_config().get("investor_persona", DEFAULT_PERSONA)
         persona_instructions = get_persona_instructions(persona)
-        
+
         prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
 {persona_instructions}
 {instrument_context}
@@ -80,7 +85,7 @@ def create_portfolio_manager(llm):
 {history}
 {conviction_instructions}---
 Be decisive and ground every conclusion in specific evidence from the analysts.{get_language_instruction()}"""
-        
+
         result = await ainvoke_structured_or_freetext(
             structured_llm,
             llm,
@@ -88,12 +93,12 @@ Be decisive and ground every conclusion in specific evidence from the analysts.{
             render_pm_decision,
             "Portfolio Manager",
         )
-        
+
         if isinstance(result, str):
             final_trade_decision = result
         else:
             final_trade_decision = render_pm_decision(result)
-            
+
         new_risk_debate_state = {
             "judge_decision": final_trade_decision,
             "history": risk_debate_state["history"],
@@ -110,5 +115,5 @@ Be decisive and ground every conclusion in specific evidence from the analysts.{
             "risk_debate_state": new_risk_debate_state,
             "final_trade_decision": final_trade_decision,
         }
-        
+
     return portfolio_manager_node

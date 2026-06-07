@@ -1,10 +1,11 @@
-from sqlalchemy import select, desc as _desc, update
+from sqlalchemy import desc as _desc
+from sqlalchemy import select, update
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
 from backend.models.analysis import AnalysisResult
-from backend.models.system_settings import SystemSettings
 from backend.models.portfolio_analysis import MultiTickerAnalysis
+from backend.models.system_settings import SystemSettings
 from backend.repositories.common import scope_to_user
 
 
@@ -120,12 +121,14 @@ async def cleanup_stale_analyses(db: AsyncSession) -> int:
     await db.commit()
     return res.rowcount
 
+
 async def create_analysis_result(db: AsyncSession, **kwargs) -> AnalysisResult:
     row = AnalysisResult(**kwargs)
     db.add(row)
     await db.commit()
     await db.refresh(row)
     return row
+
 
 async def update_analysis_result(db: AsyncSession, row_id: int, **fields) -> AnalysisResult | None:
     stmt = select(AnalysisResult).where(AnalysisResult.id == row_id)

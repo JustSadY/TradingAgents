@@ -9,6 +9,7 @@ This module is intentionally dependency-free and lives at the engine root (not
 under ``agents/``) so the backend can import it for metadata without triggering
 the heavy ``agents`` package import chain.
 """
+
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -79,10 +80,11 @@ def get_persona_instructions(key: str | None) -> str:
     key = key or ""
     try:
         from backend.trading_agents.dataflows.config import get_config
+
         lang = get_config().get("output_language", "English").strip().lower()
     except Exception:
         lang = "english"
-    
+
     is_tr = lang in ("turkish", "türkçe")
     if is_tr:
         return _INSTRUCTIONS_TR.get(key, "")
@@ -95,23 +97,29 @@ def list_personas() -> list[InvestorPersona]:
 
 # --- Built-in personas (instruction text preserved verbatim from the PM) -------
 
-register_persona(InvestorPersona(
-    key="conservative",
-    label="Conservative",
-    description="Capital preservation, dividend income, and focus on low-volatility blue-chip stocks",
-    instructions=_INSTRUCTIONS_EN["conservative"],
-))
+register_persona(
+    InvestorPersona(
+        key="conservative",
+        label="Conservative",
+        description="Capital preservation, dividend income, and focus on low-volatility blue-chip stocks",
+        instructions=_INSTRUCTIONS_EN["conservative"],
+    )
+)
 
-register_persona(InvestorPersona(
-    key="risk_loving",
-    label="Risk Loving",
-    description="High returns, momentum, growth, and acceptance of high volatility for crypto",
-    instructions=_INSTRUCTIONS_EN["risk_loving"],
-))
+register_persona(
+    InvestorPersona(
+        key="risk_loving",
+        label="Risk Loving",
+        description="High returns, momentum, growth, and acceptance of high volatility for crypto",
+        instructions=_INSTRUCTIONS_EN["risk_loving"],
+    )
+)
 
-register_persona(InvestorPersona(
-    key="esg_focused",
-    label="ESG Focused",
-    description="Environmental, social, and governance metrics are prioritized alongside financial returns",
-    instructions=_INSTRUCTIONS_EN["esg_focused"],
-))
+register_persona(
+    InvestorPersona(
+        key="esg_focused",
+        label="ESG Focused",
+        description="Environmental, social, and governance metrics are prioritized alongside financial returns",
+        instructions=_INSTRUCTIONS_EN["esg_focused"],
+    )
+)

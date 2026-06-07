@@ -1,17 +1,18 @@
 from __future__ import annotations
+
 import asyncio
 import logging
-from typing import Awaitable
-from sqlalchemy.ext.asyncio import AsyncSession
+from collections.abc import Awaitable
+
 from backend.core.database import AsyncSessionLocal
-from backend.repositories.analysis import get_analysis_by_id
-from backend.services.notification_service import notify_analysis_complete
 from backend.services.annotation_service import extract_chart_annotations
+from backend.services.notification_service import notify_analysis_complete
 
 _logger = logging.getLogger(__name__)
 
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
 _ANALYSIS_BACKGROUND_TASKS: dict[str, set[asyncio.Task]] = {}
+
 
 def track_background_task(coro: Awaitable[None], task_id: str | None = None):
     task = asyncio.create_task(coro)
@@ -56,7 +57,9 @@ async def extract_and_save_annotations(
     output_language: str = "English",
 ) -> None:
     try:
-        annotations = await extract_chart_annotations(market_report, final_decision, quick_llm, output_language=output_language)
+        annotations = await extract_chart_annotations(
+            market_report, final_decision, quick_llm, output_language=output_language
+        )
         if not annotations:
             annotations = {}
         if custom_indicators:
@@ -67,6 +70,7 @@ async def extract_and_save_annotations(
             return
         async with AsyncSessionLocal() as s:
             from backend.repositories.analysis import get_analysis_by_id as _repo_get
+
             row = await _repo_get(s, analysis_id)
             if row:
                 row.chart_annotations = annotations

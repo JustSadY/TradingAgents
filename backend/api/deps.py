@@ -14,6 +14,8 @@ from backend.services.tool_access_service import get_user_tool_access
 from backend.trading_agents.agents.tools.registry import registry
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+
+
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
@@ -31,12 +33,16 @@ async def get_current_user(
     if user is None or not user.is_active:
         raise credentials_exc
     return user
+
+
 async def require_admin(
     current_user: User = Depends(get_current_user),
 ) -> User:
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
+
+
 def require_page(page_key: str):
     async def _check(
         current_user: User = Depends(get_current_user),
@@ -53,6 +59,7 @@ def require_page(page_key: str):
                 detail=f"Access to page '{page_key}' is not permitted",
             )
         return current_user
+
     return _check
 
 
@@ -77,13 +84,17 @@ async def check_tool_settings_permission(
         perms = tool_access_map.get(tool_key, {})
         if not perms.get("can_view", True):
             raise HTTPException(status_code=403, detail=f"You do not have permission to view tool '{tool_key}'.")
-        
+
         if update.enabled is not None or update.reset_enabled:
             if not perms.get("can_enable", False):
-                raise HTTPException(status_code=403, detail=f"You do not have permission to enable/disable tool '{tool_key}'.")
-        
+                raise HTTPException(
+                    status_code=403, detail=f"You do not have permission to enable/disable tool '{tool_key}'."
+                )
+
         if update.settings is not None or update.reset_settings:
             if not perms.get("can_edit", False):
-                raise HTTPException(status_code=403, detail=f"You do not have permission to modify settings for tool '{tool_key}'.")
+                raise HTTPException(
+                    status_code=403, detail=f"You do not have permission to modify settings for tool '{tool_key}'."
+                )
 
     return user

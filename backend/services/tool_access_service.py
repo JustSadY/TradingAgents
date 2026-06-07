@@ -1,6 +1,8 @@
 from __future__ import annotations
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
+
 from backend.models.tool_settings import UserAgentAccess, UserToolAccess, UserToolFieldAccess
 from backend.trading_agents.agents.analyst_registry import list_analysts
 from backend.trading_agents.agents.tools.registry import registry
@@ -9,7 +11,7 @@ from backend.trading_agents.agents.tools.registry import registry
 async def get_user_agent_access(db: AsyncSession, user_id: int) -> dict[str, bool]:
     # Default to all registered analysts being allowed
     analysts = list_analysts()
-    access_map = {k: True for k in analysts}
+    access_map = dict.fromkeys(analysts, True)
 
     result = await db.execute(select(UserAgentAccess).where(UserAgentAccess.user_id == user_id))
     for row in result.scalars().all():
@@ -71,9 +73,7 @@ async def update_user_tool_access(db: AsyncSession, user_id: int, updates: dict[
         if not tool:
             continue
         result = await db.execute(
-            select(UserToolAccess)
-            .where(UserToolAccess.user_id == user_id)
-            .where(UserToolAccess.tool_key == tool_key)
+            select(UserToolAccess).where(UserToolAccess.user_id == user_id).where(UserToolAccess.tool_key == tool_key)
         )
         row = result.scalar_one_or_none()
         if row is None:

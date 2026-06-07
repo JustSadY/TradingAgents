@@ -3,6 +3,8 @@ import os
 import sys
 import traceback
 from logging.handlers import RotatingFileHandler
+
+
 def setup_unified_logging():
     tradingagents_home = os.environ.get(
         "TRADINGAGENTS_LOG_DIR",
@@ -13,12 +15,7 @@ def setup_unified_logging():
     log_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     formatter = logging.Formatter(log_format)
     try:
-        file_handler = RotatingFileHandler(
-            log_file_path,
-            maxBytes=10 * 1024 * 1024,
-            backupCount=5,
-            encoding="utf-8"
-        )
+        file_handler = RotatingFileHandler(log_file_path, maxBytes=10 * 1024 * 1024, backupCount=5, encoding="utf-8")
         file_handler.setLevel(logging.DEBUG)
         file_handler.setFormatter(formatter)
     except Exception as e:
@@ -44,11 +41,23 @@ def setup_unified_logging():
     tradingagents_logger.addHandler(console_handler)
     tradingagents_logger.propagate = True
     for logger_name in [
-        "urllib3", "asyncio", "openai", "httpcore", "httpx", "peewee",
-        "yfinance", "charset_normalizer", "matplotlib", "google",
-        "httpcore.connection", "httpcore.http11", "openai._base_client", "rich"
+        "urllib3",
+        "asyncio",
+        "openai",
+        "httpcore",
+        "httpx",
+        "peewee",
+        "yfinance",
+        "charset_normalizer",
+        "matplotlib",
+        "google",
+        "httpcore.connection",
+        "httpcore.http11",
+        "openai._base_client",
+        "rich",
     ]:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
+
     def handle_unhandled_exception(exc_type, exc_value, exc_traceback):
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)
@@ -58,6 +67,7 @@ def setup_unified_logging():
         logger = logging.getLogger("tradingagents.error_tracker")
         logger.error(f"Unhandled exception occurred:\n{tb_str}")
         sys.__excepthook__(exc_type, exc_value, exc_traceback)
+
     sys.excepthook = handle_unhandled_exception
     logger = logging.getLogger("tradingagents.initializer")
     logger.info("Unified logging initialized successfully.")

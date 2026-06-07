@@ -1,8 +1,11 @@
 from typing import Any
+
+
 class Reflector:
     def __init__(self, llm: Any):
         self.llm = llm
         self.log_reflection_prompt = self._get_log_reflection_prompt()
+
     def _get_log_reflection_prompt(self) -> str:
         return (
             "You are a trading analyst reviewing your own past decision now that the outcome is known.\n"
@@ -14,6 +17,7 @@ class Reflector:
             "Be specific and terse. Your output will be stored verbatim in a decision log "
             "and re-read by future analysts, so every word must earn its place."
         )
+
     def reflect_on_final_decision(
         self,
         final_decision: str,

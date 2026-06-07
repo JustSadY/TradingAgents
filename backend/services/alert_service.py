@@ -1,20 +1,18 @@
 import asyncio
 import logging
 import uuid
-import yfinance as yf
-from datetime import datetime, timezone
+from datetime import UTC, datetime
+
 from sqlalchemy import select
 
 from backend.core.database import AsyncSessionLocal
 from backend.models.alert import PriceAlert
-from backend.models.settings import AppSettings
-from backend.models.user import User
 from backend.models.analysis import AnalysisResult
-from backend.services.notification_service import notify_alert_triggered
+from backend.models.user import User
 from backend.services.analysis_service import run_analysis
-from backend.services.settings_service import get_or_create_settings
-
 from backend.services.market_data_service import get_live_prices_batch
+from backend.services.notification_service import notify_alert_triggered
+from backend.services.settings_service import get_or_create_settings
 
 _logger = logging.getLogger(__name__)
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
@@ -23,45 +21,53 @@ _BACKGROUND_TASKS: set[asyncio.Task] = set()
 _RECOVERY_SEMAPHORE = asyncio.Semaphore(3)
 _ALERT_SEMAPHORE = asyncio.Semaphore(5)
 
+
 async def check_price_alerts() -> None:
     async with AsyncSessionLocal() as db:
         from backend.repositories.alerts import get_enabled_alerts
+
         alerts = await get_enabled_alerts(db)
         if not alerts:
             return
-        
+
         from backend.repositories.analysis import get_system_settings
+
         settings = await get_system_settings(db)
-        
+
         prices = await get_live_prices_batch([a.ticker for a in alerts])
-        
+
         for alert in alerts:
             price = prices.get(alert.ticker)
             if price is None:
                 continue
-            
-            hit = (alert.condition == "above" and price >= alert.target_price) or \
-                  (alert.condition == "below" and price <= alert.target_price)
+
+            hit = (alert.condition == "above" and price >= alert.target_price) or (
+                alert.condition == "below" and price <= alert.target_price
+            )
             if not hit:
                 continue
-            
-            alert.triggered_at = datetime.now(timezone.utc)
-            _logger.info("Alert triggered: %s %s $%.2f (current: $%.2f)",
-                         alert.ticker, alert.condition, alert.target_price, price)
-            
+
+            alert.triggered_at = datetime.now(UTC)
+            _logger.info(
+                "Alert triggered: %s %s $%.2f (current: $%.2f)",
+                alert.ticker,
+                alert.condition,
+                alert.target_price,
+                price,
+            )
+
             if settings:
                 from backend.services.settings_service import get_or_create_settings
+
                 # settings here is SystemSettings from repo, we need AppSettings for user if possible
                 # but the original code used id=1 which might be global settings
                 # For now, keeping original notification logic but using user settings if possible
                 user_settings = await get_or_create_settings(db, user_id=alert.user_id)
                 await notify_alert_triggered(alert.ticker, alert.condition, alert.target_price, user_settings)
-            
+
             if alert.auto_analyze:
-                today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
-                task = asyncio.create_task(
-                    _throttled_analyze(alert.ticker, today, alert.user_id, _ALERT_SEMAPHORE)
-                )
+                today = datetime.now(UTC).strftime("%Y-%m-%d")
+                task = asyncio.create_task(_throttled_analyze(alert.ticker, today, alert.user_id, _ALERT_SEMAPHORE))
                 _BACKGROUND_TASKS.add(task)
                 task.add_done_callback(_BACKGROUND_TASKS.discard)
         await db.commit()
@@ -82,8 +88,9 @@ async def _auto_analyze(ticker: str, trade_date: str, user_id: int) -> None:
                 return
             settings = await get_or_create_settings(new_db, user)
             task_id = str(uuid.uuid4())
-            await run_analysis(ticker, trade_date, "stock", settings, new_db,
-                               triggered_by="alert", task_id=task_id, user=user)
+            await run_analysis(
+                ticker, trade_date, "stock", settings, new_db, triggered_by="alert", task_id=task_id, user=user
+            )
             await new_db.commit()
     except Exception as exc:
         _logger.error("Auto-analyze from alert failed %s: %s", ticker, exc)
@@ -112,7 +119,8 @@ async def check_and_recover_lost_alerts() -> None:
             if not analysis:
                 _logger.warning(
                     "Recovering lost alert analysis task for %s (triggered at %s)",
-                    alert.ticker, trigger_date,
+                    alert.ticker,
+                    trigger_date,
                 )
                 missing.append((alert.ticker, trigger_date, alert.user_id))
 
@@ -121,10 +129,13 @@ async def check_and_recover_lost_alerts() -> None:
 
         batch_size = 3
         for i in range(0, len(missing), batch_size):
-            batch = missing[i:i + batch_size]
-            await asyncio.gather(*[
-                _throttled_analyze(ticker, trade_date, user_id, _RECOVERY_SEMAPHORE)
-                for ticker, trade_date, user_id in batch
-            ], return_exceptions=True)
+            batch = missing[i : i + batch_size]
+            await asyncio.gather(
+                *[
+                    _throttled_analyze(ticker, trade_date, user_id, _RECOVERY_SEMAPHORE)
+                    for ticker, trade_date, user_id in batch
+                ],
+                return_exceptions=True,
+            )
             if i + batch_size < len(missing):
                 await asyncio.sleep(0.5)

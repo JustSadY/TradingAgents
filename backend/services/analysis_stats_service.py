@@ -5,6 +5,7 @@ all computed inline inside ``api/analysis.py`` route handlers. They live here
 now so the routes stay thin and the (previously duplicated) model cost table has
 a single home.
 """
+
 from __future__ import annotations
 
 import logging
@@ -12,13 +13,19 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.analysis import AnalysisResult
 from backend.core.constants import (
     BUY_SIGNALS as _BUY_SIGNALS,
-    SELL_SIGNALS as _SELL_SIGNALS,
-    TOKENS_PER_ANALYST as _TOKENS_PER_ANALYST,
+)
+from backend.core.constants import (
     MODEL_COST_PER_1K,
 )
+from backend.core.constants import (
+    SELL_SIGNALS as _SELL_SIGNALS,
+)
+from backend.core.constants import (
+    TOKENS_PER_ANALYST as _TOKENS_PER_ANALYST,
+)
+from backend.models.analysis import AnalysisResult
 
 _logger = logging.getLogger(__name__)
 
@@ -44,9 +51,7 @@ def estimate_cost(analysts: str, debate_rounds: int, model: str) -> dict:
 
 
 def _is_correct(signal: str | None, raw_return: float) -> bool:
-    return (signal in _BUY_SIGNALS and raw_return > 0) or (
-        signal in _SELL_SIGNALS and raw_return < 0
-    )
+    return (signal in _BUY_SIGNALS and raw_return > 0) or (signal in _SELL_SIGNALS and raw_return < 0)
 
 
 # Static placeholder definition deleted to avoid returning fake/mock data in production.
@@ -75,15 +80,17 @@ async def get_ab_comparison(db: AsyncSession) -> list[dict]:
         ]
         graded = [r for r in runs if r.raw_return is not None and r.signal in (_BUY_SIGNALS | _SELL_SIGNALS)]
         wins = sum(1 for r in graded if _is_correct(r.signal, r.raw_return))
-        comparison.append({
-            "preset_name": preset,
-            "total_runs": total,
-            "avg_duration": round(sum(durations) / len(durations), 1) if durations else 0.0,
-            "avg_tokens": int(sum(tokens) / total) if tokens else 0,
-            "avg_cost_usd": round(sum(costs) / total, 4) if costs else 0.0,
-            "win_rate": round(wins / len(graded) * 100, 1) if graded else None,
-            "total_graded": len(graded),
-        })
+        comparison.append(
+            {
+                "preset_name": preset,
+                "total_runs": total,
+                "avg_duration": round(sum(durations) / len(durations), 1) if durations else 0.0,
+                "avg_tokens": int(sum(tokens) / total) if tokens else 0,
+                "avg_cost_usd": round(sum(costs) / total, 4) if costs else 0.0,
+                "win_rate": round(wins / len(graded) * 100, 1) if graded else None,
+                "total_graded": len(graded),
+            }
+        )
     return comparison
 
 
@@ -93,8 +100,7 @@ async def get_signal_performance(db: AsyncSession, ticker: str | None = None) ->
         q = q.where(AnalysisResult.ticker == ticker.upper())
     rows = (await db.execute(q)).scalars().all()
     if not rows:
-        return {"total": 0, "win_rate": None, "avg_raw_return": None,
-                "avg_alpha_return": None, "by_signal": {}}
+        return {"total": 0, "win_rate": None, "avg_raw_return": None, "avg_alpha_return": None, "by_signal": {}}
 
     wins = 0
     total_raw = 0.0

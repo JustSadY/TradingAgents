@@ -1,8 +1,11 @@
 import os
 from pathlib import Path
-from typing import Optional
+
 from pydantic import BaseModel, Field, field_validator
+
 _HOME = Path.home() / ".tradingagents"
+
+
 class TradingAgentsConfig(BaseModel):
     project_dir: str = Field(
         default_factory=lambda: str(Path(__file__).parent.resolve()),
@@ -12,22 +15,20 @@ class TradingAgentsConfig(BaseModel):
     )
     data_cache_dir: str = Field(
         default_factory=lambda: os.environ.get(
-            "TRADINGAGENTS_CACHE_DIR",
-            os.environ.get("TRADINGAGENTS_DATA_CACHE_DIR", str(_HOME / "cache"))
+            "TRADINGAGENTS_CACHE_DIR", os.environ.get("TRADINGAGENTS_DATA_CACHE_DIR", str(_HOME / "cache"))
         ),
     )
     memory_log_path: str = Field(
         default_factory=lambda: os.environ.get(
-            "TRADINGAGENTS_MEMORY_LOG_PATH",
-            str(_HOME / "memory" / "trading_memory.md")
+            "TRADINGAGENTS_MEMORY_LOG_PATH", str(_HOME / "memory" / "trading_memory.md")
         ),
     )
-    memory_log_max_entries: Optional[int] = Field(default=None, ge=1)
+    memory_log_max_entries: int | None = Field(default=None, ge=1)
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
-    google_thinking_level: Optional[str] = None
-    openai_reasoning_effort: Optional[str] = None
-    anthropic_effort: Optional[str] = None
+    google_thinking_level: str | None = None
+    openai_reasoning_effort: str | None = None
+    anthropic_effort: str | None = None
     output_language: str = "English"
     investor_persona: str = "conservative"
     max_debate_rounds: int = Field(default=1, ge=1, le=10)
@@ -73,28 +74,31 @@ class TradingAgentsConfig(BaseModel):
         }
     )
     tool_vendors: dict[str, str] = Field(default_factory=dict)
-    benchmark_ticker: Optional[str] = None
+    benchmark_ticker: str | None = None
     benchmark_map: dict[str, str] = Field(
         default_factory=lambda: {
-            ".NS":  "^NSEI",
-            ".BO":  "^BSESN",
-            ".T":   "^N225",
-            ".HK":  "^HSI",
-            ".L":   "^FTSE",
-            ".TO":  "^GSPTSE",
-            ".AX":  "^AXJO",
-            "":     "SPY",
+            ".NS": "^NSEI",
+            ".BO": "^BSESN",
+            ".T": "^N225",
+            ".HK": "^HSI",
+            ".L": "^FTSE",
+            ".TO": "^GSPTSE",
+            ".AX": "^AXJO",
+            "": "SPY",
         }
     )
+
     @field_validator("llm_provider", mode="before")
     @classmethod
     def normalise_provider(cls, v: str) -> str:
         return v.strip().lower()
+
     @field_validator("anthropic_effort", "openai_reasoning_effort", mode="before")
     @classmethod
     def normalise_effort(cls, v):
         if v is None:
             return v
         return v.strip().lower()
+
     def to_dict(self) -> dict:
         return self.model_dump()

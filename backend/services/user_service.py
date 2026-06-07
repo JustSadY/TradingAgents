@@ -1,6 +1,8 @@
 import json
 import logging
+
 from cryptography.fernet import Fernet
+
 from backend.models.user import User
 
 _logger = logging.getLogger(__name__)
@@ -21,7 +23,9 @@ def get_user_api_key(user: User, provider: str, fernet: Fernet) -> str | None:
         keys = decrypt_api_keys(user.api_keys_enc, fernet)
         return keys.get(provider.lower())
     except Exception as e:
-        _logger.warning("Failed to decrypt user %s API keys for provider %s: %s", getattr(user, "id", "unknown"), provider, e)
+        _logger.warning(
+            "Failed to decrypt user %s API keys for provider %s: %s", getattr(user, "id", "unknown"), provider, e
+        )
         return None
 
 
@@ -31,7 +35,11 @@ def set_user_api_key(user: User, provider: str, api_key: str, fernet: Fernet) ->
         try:
             existing = decrypt_api_keys(user.api_keys_enc, fernet)
         except Exception as e:
-            _logger.warning("Failed to decrypt existing API keys during set for user %s: %s (initializing empty)", getattr(user, "id", "unknown"), e)
+            _logger.warning(
+                "Failed to decrypt existing API keys during set for user %s: %s (initializing empty)",
+                getattr(user, "id", "unknown"),
+                e,
+            )
             existing = {}
     existing[provider.lower()] = api_key
     user.api_keys_enc = encrypt_api_keys(existing, fernet)
@@ -59,5 +67,9 @@ def list_user_api_key_providers(user: User, fernet: Fernet) -> list[str]:
         keys = decrypt_api_keys(user.api_keys_enc, fernet)
         return list(keys.keys())
     except Exception as e:
-        _logger.warning("Failed to list API key providers for user %s due to decryption failure: %s", getattr(user, "id", "unknown"), e)
+        _logger.warning(
+            "Failed to list API key providers for user %s due to decryption failure: %s",
+            getattr(user, "id", "unknown"),
+            e,
+        )
         return []

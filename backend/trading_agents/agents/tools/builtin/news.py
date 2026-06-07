@@ -1,6 +1,6 @@
-from backend.trading_agents.agents.data.news_data_tools import get_news, get_global_news, get_insider_transactions
-from backend.trading_agents.agents.tools.base import ToolSettingField
+from backend.trading_agents.agents.data.news_data_tools import get_global_news, get_insider_transactions, get_news
 from backend.trading_agents.agents.tools.adapters import FunctionToolAdapter
+from backend.trading_agents.agents.tools.base import ToolSettingField
 from backend.trading_agents.agents.tools.registry import registry
 
 company_news_tool = FunctionToolAdapter(

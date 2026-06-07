@@ -1,13 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from backend.core.database import get_db
-from backend.models.settings import AppSettings
-from backend.models.user import User
 from backend.api.deps import get_current_user
-from backend.services.settings_service import get_or_create_settings
+from backend.core.database import get_db
 from backend.core.utils import safe_ticker_component
+from backend.models.user import User
+from backend.services.settings_service import get_or_create_settings
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 

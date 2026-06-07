@@ -5,6 +5,7 @@ loop: iterate a ``{state_field: label}`` mapping, keep non-empty reports, and
 join them. The label wording differs between agents (it is part of each agent's
 prompt), so callers keep their own mapping and only share the loop.
 """
+
 from __future__ import annotations
 
 

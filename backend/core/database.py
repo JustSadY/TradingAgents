@@ -1,7 +1,9 @@
 from sqlalchemy import Numeric, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 from sqlalchemy.orm import DeclarativeBase
+
 from .config import get_settings
+
 settings = get_settings()
 engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
@@ -16,6 +18,8 @@ MONEY = Numeric(20, 8, asdecimal=True)
 
 class Base(DeclarativeBase):
     pass
+
+
 async def get_db() -> AsyncSession:
     async with AsyncSessionLocal() as session:
         try:
@@ -24,24 +28,24 @@ async def get_db() -> AsyncSession:
         except Exception:
             await session.rollback()
             raise
+
+
 async def _has_alembic_version(conn) -> bool:
     if conn.dialect.name == "sqlite":
-        row = (await conn.execute(text(
-            "SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'"
-        ))).fetchone()
+        row = (
+            await conn.execute(text("SELECT name FROM sqlite_master WHERE type='table' AND name='alembic_version'"))
+        ).fetchone()
         return row is not None
-    row = (await conn.execute(text(
-        "SELECT to_regclass('public.alembic_version')"
-    ))).scalar_one_or_none()
+    row = (await conn.execute(text("SELECT to_regclass('public.alembic_version')"))).scalar_one_or_none()
     return row is not None
 
 
 async def create_all_tables():
-    import backend.models
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         if await _has_alembic_version(conn):
             return
         from backend.core.migrations import apply_column_migrations, apply_type_migrations
+
         await apply_column_migrations(conn)
         await apply_type_migrations(conn)

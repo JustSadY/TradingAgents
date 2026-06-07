@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
+
 _BATCH_SIZE = 30
 _FLUSH_INTERVAL = 3.0
 _QUEUE_MAXSIZE = 2000
@@ -10,6 +10,8 @@ _VERBOSE_PREFIXES = (
     "backend.core.websocket",
     "tradingagents.run",
 )
+
+
 class _BackendFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if record.levelno >= logging.WARNING:
@@ -17,51 +19,64 @@ class _BackendFilter(logging.Filter):
         if record.levelno == logging.INFO:
             return any(record.name.startswith(p) for p in _VERBOSE_PREFIXES)
         return False
+
+
 class DatabaseLogHandler(logging.Handler):
     def __init__(self):
         super().__init__()
         self.addFilter(_BackendFilter())
         from backend.core.log_redaction import redaction_filter
+
         self.addFilter(redaction_filter)
         self._queue: asyncio.Queue | None = None
         self._task: asyncio.Task | None = None
         self._started = False
+
     async def start(self):
         if self._started:
             return
         self._queue = asyncio.Queue(maxsize=_QUEUE_MAXSIZE)
         self._task = asyncio.create_task(self._worker(), name="db-log-worker")
         self._started = True
+
     def stop(self):
         if self._queue is not None:
             try:
                 self._queue.put_nowait(None)
             except asyncio.QueueFull:
                 pass
+
     def emit(self, record: logging.LogRecord):
         if not self._started or self._queue is None:
             return
         try:
-            self._queue.put_nowait({
-                "level":   record.levelname,
-                "source":  record.name,
-                "message": self.format(record),
-                "details": self._exc_text(record),
-            })
+            self._queue.put_nowait(
+                {
+                    "level": record.levelname,
+                    "source": record.name,
+                    "message": self.format(record),
+                    "details": self._exc_text(record),
+                }
+            )
         except asyncio.QueueFull:
             pass
+
     @staticmethod
     def _exc_text(record: logging.LogRecord) -> str | None:
         if record.exc_text:
             return record.exc_text
         if record.exc_info:
             import traceback
+
             return "".join(traceback.format_exception(*record.exc_info))
         return None
+
     async def _worker(self):
         from backend.core.database import AsyncSessionLocal
         from backend.models.log import SystemLog
+
         batch: list[dict] = []
+
         async def flush():
             if not batch:
                 return
@@ -70,15 +85,18 @@ class DatabaseLogHandler(logging.Handler):
             try:
                 async with AsyncSessionLocal() as db:
                     for entry in items:
-                        db.add(SystemLog(
-                            level=entry["level"],
-                            source=entry["source"],
-                            message=entry["message"],
-                            details=entry["details"],
-                        ))
+                        db.add(
+                            SystemLog(
+                                level=entry["level"],
+                                source=entry["source"],
+                                message=entry["message"],
+                                details=entry["details"],
+                            )
+                        )
                     await db.commit()
             except Exception:
                 pass
+
         while True:
             try:
                 entry = await asyncio.wait_for(
@@ -91,8 +109,10 @@ class DatabaseLogHandler(logging.Handler):
                 batch.append(entry)
                 if len(batch) >= _BATCH_SIZE:
                     await flush()
-            except asyncio.TimeoutError:
+            except TimeoutError:
                 await flush()
+
+
 db_log_handler = DatabaseLogHandler()
 _fmt = logging.Formatter("%(message)s")
 db_log_handler.setFormatter(_fmt)

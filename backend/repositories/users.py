@@ -1,4 +1,5 @@
 """Data-access helpers for the User model."""
+
 from __future__ import annotations
 
 from sqlalchemy import select
@@ -43,16 +44,12 @@ async def list_users(db: AsyncSession) -> list[User]:
     result = await db.execute(select(User).order_by(User.id))
     return list(result.scalars().all())
 
+
 async def create_user_with_permissions(
-    db: AsyncSession, 
-    username: str, 
-    hashed_password: str, 
-    email: str | None, 
-    display_name: str | None, 
-    role: str
+    db: AsyncSession, username: str, hashed_password: str, email: str | None, display_name: str | None, role: str
 ) -> User:
-    from backend.models.page_permission import UserPagePermission, UserSettingPermission
     from backend.core.constants import SETTING_KEYS
+    from backend.models.page_permission import UserPagePermission, UserSettingPermission
 
     user = User(
         username=username,
@@ -63,24 +60,24 @@ async def create_user_with_permissions(
     )
     db.add(user)
     await db.flush()
-    
+
     # Default permissions
     db.add(UserPagePermission(user_id=user.id, page_key="dashboard", allowed=True))
     db.add(UserPagePermission(user_id=user.id, page_key="portfolio", allowed=True))
-    
+
     for s_key in SETTING_KEYS:
         db.add(UserSettingPermission(user_id=user.id, setting_key=s_key, allowed=True))
-    
+
     await db.flush()
     return user
 
 
 async def update_user_profile(
-    db: AsyncSession, 
-    user: User, 
-    email: str | None = None, 
-    display_name: str | None = None, 
-    hashed_password: str | None = None
+    db: AsyncSession,
+    user: User,
+    email: str | None = None,
+    display_name: str | None = None,
+    hashed_password: str | None = None,
 ) -> User:
     """Update a user's basic profile fields."""
     if email is not None:
@@ -93,12 +90,12 @@ async def update_user_profile(
 
 
 async def update_user_admin(
-    db: AsyncSession, 
-    user: User, 
-    role: str | None = None, 
-    is_active: bool | None = None, 
-    email: str | None = None, 
-    display_name: str | None = None
+    db: AsyncSession,
+    user: User,
+    role: str | None = None,
+    is_active: bool | None = None,
+    email: str | None = None,
+    display_name: str | None = None,
 ) -> User:
     """Update a user's administrative fields."""
     if role is not None:

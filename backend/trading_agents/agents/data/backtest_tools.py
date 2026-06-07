@@ -1,35 +1,39 @@
 import logging
+
 import pandas as pd
 from langchain_core.tools import tool
-from backend.services.indicator_service import calculate_rsi, calculate_macd
+
+from backend.services.indicator_service import calculate_macd, calculate_rsi
 
 _logger = logging.getLogger(__name__)
+
 
 @tool
 def run_strategy_backtest(ticker: str, strategy_type: str, curr_date: str | None = None) -> str:
     """Run a strategy backtest (e.g. macd_crossover, rsi_oversold) for a stock ticker up to a specific date."""
     try:
         from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
+
         if not curr_date:
             curr_date = pd.Timestamp.today().strftime("%Y-%m-%d")
         data = load_ohlcv(ticker, curr_date)
         if len(data) < 200:
             return f"Not enough data to backtest {ticker}."
-        close = data['Close']
+        close = data["Close"]
         trades = []
         in_position = False
         buy_price = 0
-        if strategy_type == 'macd_crossover':
+        if strategy_type == "macd_crossover":
             macd, signal = calculate_macd(close)
             for i in range(1, len(close)):
-                if macd.iloc[i] > signal.iloc[i] and macd.iloc[i-1] <= signal.iloc[i-1] and not in_position:
+                if macd.iloc[i] > signal.iloc[i] and macd.iloc[i - 1] <= signal.iloc[i - 1] and not in_position:
                     buy_price = close.iloc[i]
                     in_position = True
-                elif macd.iloc[i] < signal.iloc[i] and macd.iloc[i-1] >= signal.iloc[i-1] and in_position:
+                elif macd.iloc[i] < signal.iloc[i] and macd.iloc[i - 1] >= signal.iloc[i - 1] and in_position:
                     sell_price = close.iloc[i]
                     trades.append((sell_price - buy_price) / buy_price)
                     in_position = False
-        elif strategy_type == 'rsi_oversold':
+        elif strategy_type == "rsi_oversold":
             rsi = calculate_rsi(close)
             for i in range(14, len(close)):
                 if rsi.iloc[i] < 30 and not in_position:

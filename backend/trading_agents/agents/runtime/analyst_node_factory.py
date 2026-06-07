@@ -9,6 +9,7 @@ message, the tool list, the instrument context and the report column differ.
 string below is byte-identical to what each analyst previously inlined, so the
 prompt sent to the LLM is unchanged.
 """
+
 from __future__ import annotations
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
@@ -38,6 +39,7 @@ async def run_tool_analyst(
 ):
     """Run the standard tool-using analyst turn and return its state update."""
     from backend.trading_agents.agents.data.chart_tools import active_run_context
+
     ctx = active_run_context.get(None)
     if ctx and "graph" in ctx:
         graph = ctx["graph"]
@@ -76,12 +78,29 @@ async def run_tool_analyst(
     else:
         bound_llm = llm
 
-    from backend.trading_agents.agents.runtime.resilience import retry_call, log_event
-    from langchain_core.messages import AIMessage
     import time as _time
+
+    from langchain_core.messages import AIMessage
+
+    from backend.trading_agents.agents.runtime.resilience import log_event, retry_call
+
     analyst = report_key.replace("_report", "")
     _start = _time.time()
     log_event("node_start", node=analyst, kind="analyst")
+
+    # Mental Model: Emit thinking event
+    if ctx and "emitter" in ctx:
+        emitter = ctx["emitter"]
+        thought = f"Examining {state['company_of_interest']} {analyst.title()} data..."
+        if analyst == "market":
+            thought = f"Analyzing technical indicators and price action for {state['company_of_interest']}..."
+        elif analyst == "fundamentals":
+            thought = f"Reviewing financial statements and valuation for {state['company_of_interest']}..."
+        elif analyst == "news":
+            thought = f"Scanning latest news and insider activity for {state['company_of_interest']}..."
+        
+        await emitter.emit_mental_model(analyst, thought)
+
     try:
         # Use ainvoke directly for better consistency and to stay on the main loop
         result = await retry_call(
@@ -95,10 +114,16 @@ async def run_tool_analyst(
         # aborting the whole run. The empty AIMessage carries no tool calls, so
         # the graph routes straight to the next analyst.
         import traceback as _tb
-        log_event("node_error", level=40, node=analyst, kind="analyst",
-                  error=str(exc)[:300],
-                  exc_type=type(exc).__name__,
-                  traceback=_tb.format_exc()[-1500:])
+
+        log_event(
+            "node_error",
+            level=40,
+            node=analyst,
+            kind="analyst",
+            error=str(exc)[:300],
+            exc_type=type(exc).__name__,
+            traceback=_tb.format_exc()[-1500:],
+        )
         log_event("node_skipped", level=30, node=analyst, kind="analyst")
         return {
             "messages": [AIMessage(content="")],

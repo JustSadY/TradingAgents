@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Query
+
 from backend.api.deps import get_current_user
 from backend.models.user import User
 from backend.services.news_service import get_news_feed

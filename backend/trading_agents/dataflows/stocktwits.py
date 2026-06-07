@@ -1,13 +1,15 @@
 from __future__ import annotations
+
 import json
 import logging
-from datetime import datetime, timezone
-from typing import Optional
 from urllib.error import HTTPError, URLError
 from urllib.request import Request, urlopen
+
 logger = logging.getLogger(__name__)
 _API = "https://api.stocktwits.com/api/2/streams/symbol/{ticker}.json"
 _UA = "tradingagents/0.2 (+https://github.com/TauricResearch/TradingAgents)"
+
+
 def fetch_stocktwits_messages(ticker: str, limit: int = 30, timeout: float = 10.0) -> str:
     url = _API.format(ticker=ticker.upper())
     req = Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends
-from backend.models.user import User
+
 from backend.api.deps import get_current_user
+from backend.models.user import User
 from backend.services.cron_service import get_cron_service
 
 router = APIRouter(prefix="/api/cron", tags=["cron"])

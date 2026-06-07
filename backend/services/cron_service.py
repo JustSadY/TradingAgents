@@ -1,20 +1,20 @@
-import asyncio
 import logging
-from datetime import date, datetime, timezone
+from datetime import date
 from typing import Optional
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from sqlalchemy import select
 
 from backend.core.database import AsyncSessionLocal
-from backend.models.user import User
 from backend.models.settings import AppSettings
 from backend.models.system_settings import SystemSettings
+from backend.models.user import User
+from backend.services.alert_service import check_price_alerts
 from backend.services.analysis_service import run_analysis
 from backend.services.execution.factory import get_trader
-from backend.services.trading_orchestrator import place_signal_order
-from backend.services.alert_service import check_price_alerts
 from backend.services.performance_service import backfill_returns
+from backend.services.trading_orchestrator import place_signal_order
 
 _logger = logging.getLogger(__name__)
 _cron_service: Optional["CronService"] = None
@@ -30,12 +30,20 @@ class CronService:
             self.scheduler.start()
             self._running = True
             self.scheduler.add_job(
-                _run_alert_checker, "interval", minutes=15,
-                id="alert_checker", replace_existing=True, misfire_grace_time=120,
+                _run_alert_checker,
+                "interval",
+                minutes=15,
+                id="alert_checker",
+                replace_existing=True,
+                misfire_grace_time=120,
             )
             self.scheduler.add_job(
-                _run_performance_backfill, "interval", hours=6,
-                id="perf_backfill", replace_existing=True, misfire_grace_time=3600,
+                _run_performance_backfill,
+                "interval",
+                hours=6,
+                id="perf_backfill",
+                replace_existing=True,
+                misfire_grace_time=3600,
             )
             _logger.info("CronService started")
 
@@ -111,11 +119,13 @@ class CronService:
                     if row.signal in ("Buy", "Overweight", "Sell", "Underweight"):
                         await _maybe_execute_user(user_id, ticker, row, app_settings, trader, db, sys_mode, sys_broker)
                 except Exception as e:
-                    _logger.error("User cron scan failed for user=%s, ticker=%s: %s", user.username, ticker, e, exc_info=True)
+                    _logger.error(
+                        "User cron scan failed for user=%s, ticker=%s: %s", user.username, ticker, e, exc_info=True
+                    )
                     await db.rollback()
             _logger.info("User cron watchlist scan completed for user=%s (id=%d)", user.username, user_id)
 
-    def get_status(self, user_id: Optional[int] = None) -> dict:
+    def get_status(self, user_id: int | None = None) -> dict:
         if not user_id:
             return {"running": self._running, "job_configured": False, "next_run_time": None}
         job_id = f"watchlist_scan_user_{user_id}"
@@ -153,7 +163,7 @@ async def _run_performance_backfill():
 def init_cron_service() -> CronService:
     global _cron_service
     _cron_service = CronService()
-    
+
     from backend.core.events import subscribe
 
     # Register settings change listener
@@ -171,5 +181,5 @@ def init_cron_service() -> CronService:
     return _cron_service
 
 
-def get_cron_service() -> Optional[CronService]:
+def get_cron_service() -> CronService | None:
     return _cron_service
