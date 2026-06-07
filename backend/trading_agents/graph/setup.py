@@ -28,6 +28,7 @@ from backend.trading_agents.agents.base import (
     neutral_risk_debate_state,
 )
 from backend.trading_agents.agents.main import (
+    create_agent_qa_node,
     create_market_intelligence_node,
     create_portfolio_manager_node,
     create_research_manager_node,
@@ -86,6 +87,14 @@ class GraphSetup:
             kind="main",
             fallback=lambda state, exc: {},
         )
+        # After analysts finish, they cross-examine each other; on any error this
+        # contributes nothing and the run proceeds to synthesis unchanged.
+        agent_qa = guard_node(
+            create_agent_qa_node(ctx),
+            name="Agent Q&A",
+            kind="main",
+            fallback=lambda state, exc: {},
+        )
         research_manager = guard_node(
             create_research_manager_node(ctx),
             name="Research Manager",
@@ -124,13 +133,15 @@ class GraphSetup:
         # ---- Wire the five main nodes linearly ----
         workflow = StateGraph(AgentState)
         workflow.add_node("Market Intelligence", market_intelligence)
+        workflow.add_node("Agent Q&A", agent_qa)
         workflow.add_node("Research Manager", research_manager)
         workflow.add_node("Trader", trader)
         workflow.add_node("Risk Debate", risk_debate)
         workflow.add_node("Portfolio Manager", portfolio_manager)
 
         workflow.add_edge(START, "Market Intelligence")
-        workflow.add_edge("Market Intelligence", "Research Manager")
+        workflow.add_edge("Market Intelligence", "Agent Q&A")
+        workflow.add_edge("Agent Q&A", "Research Manager")
         workflow.add_edge("Research Manager", "Trader")
         workflow.add_edge("Trader", "Risk Debate")
         workflow.add_edge("Risk Debate", "Portfolio Manager")

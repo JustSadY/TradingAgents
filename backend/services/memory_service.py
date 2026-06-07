@@ -126,3 +126,61 @@ def _format_hit(h) -> str:
     )
     reflection = m.get("reflection")
     return f"{header}\n  {reflection}" if reflection else header
+
+
+# ---------------------------------------------------------------------------
+# Inter-agent Q&A memory: cross-examination transcripts so future runs can see
+# how analysts reconciled a similar set of conflicting reports.
+# ---------------------------------------------------------------------------
+_QA_MAX_CHARS = 6000
+
+
+def _qa_namespace(user_id: int | None) -> str:
+    return f"qa_user_{user_id}" if user_id else f"qa_{_SYSTEM_OWNER}"
+
+
+async def record_agent_qa(
+    *,
+    user_id: int | None,
+    ticker: str,
+    trade_date: str,
+    situation_text: str,
+    transcript: str,
+    store: MemoryStore | None = None,
+) -> bool:
+    store = store or get_memory_store()
+    if store is None or not transcript.strip():
+        return False
+    record = MemoryRecord(
+        id=_episode_id(user_id, ticker, trade_date),
+        text=f"{(situation_text or '')[:1500]}\n\n{transcript}"[:_QA_MAX_CHARS],
+        metadata={"ticker": ticker, "trade_date": trade_date},
+    )
+    try:
+        await store.upsert(_qa_namespace(user_id), [record])
+        return True
+    except Exception as exc:  # noqa: BLE001
+        _logger.warning("record_agent_qa failed for %s %s: %s", ticker, trade_date, exc)
+        return False
+
+
+async def recall_agent_qa(
+    *,
+    user_id: int | None,
+    situation_text: str,
+    top_k: int = 2,
+    store: MemoryStore | None = None,
+) -> str:
+    """Return prior cross-examinations of similar situations, to seed the current
+    Q&A. Empty when memory is disabled or nothing relevant."""
+    store = store or get_memory_store()
+    if store is None or not situation_text.strip():
+        return ""
+    hits = await store.query(_qa_namespace(user_id), situation_text, top_k=top_k)
+    if not hits:
+        return ""
+    parts = ["### How analysts reconciled similar situations before:"]
+    for h in hits:
+        parts.append(f"--- {h.metadata.get('ticker', '?')} {h.metadata.get('trade_date', '?')} ---")
+        parts.append(h.text)
+    return "\n".join(parts)

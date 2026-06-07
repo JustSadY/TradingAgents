@@ -19,6 +19,7 @@ def create_research_manager(llm):
         history = state["investment_debate_state"].get("history", "")
         investment_debate_state = state["investment_debate_state"]
         audit_report = state.get("audit_report", "No audit report available.")
+        agent_qa_report = state.get("agent_qa_report") or "No cross-examination available."
 
         from backend.trading_agents.dataflows.config import get_config
 
@@ -48,6 +49,9 @@ def create_research_manager(llm):
 ---
 **Audit Report (Fact-Check):**
 {audit_report}
+---
+**Analyst Cross-Examination (how the analysts reconciled their conflicts):**
+{agent_qa_report}
 ---
 {memory_lessons}
 ---
