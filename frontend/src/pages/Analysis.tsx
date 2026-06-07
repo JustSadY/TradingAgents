@@ -94,6 +94,17 @@ function loadRunState() {
   } catch { return EMPTY_RUN }
 }
 
+// Safely render the Kelly card from a (possibly malformed/partial) JSON string.
+// trader_proposal_json is streamed over the WebSocket, so an unguarded JSON.parse
+// in the render path could throw and take down the whole tab.
+function KellyPositioningFromJson({ json }: { json?: string | null }) {
+  if (!json || json === '{}') return null
+  let parsed: any
+  try { parsed = JSON.parse(json) } catch { return null }
+  if (!parsed || typeof parsed !== 'object') return null
+  return <KellyPositioningCard kellySize={parsed.kelly_size} suggestedCapital={parsed.suggested_capital} />
+}
+
 function RunTab() {
   const { t } = useTranslation()
   const saved = loadRunState()
@@ -183,7 +194,8 @@ function RunTab() {
     }
 
     ws.onmessage = (e) => {
-      const ev: WsEvent = JSON.parse(e.data)
+      let ev: WsEvent
+      try { ev = JSON.parse(e.data) } catch { return }
       if (ev.type === 'status') {
         appendLog(`${ev.agent}`)
       } else if (ev.type === 'progress') {
@@ -438,12 +450,7 @@ function RunTab() {
                   {activeDetailTab === 'reports' && (
                     <div className="space-y-2">
                       {detail.risk_metrics && <RiskMetricsCard metrics={detail.risk_metrics} />}
-                      {detail.trader_proposal_json && detail.trader_proposal_json !== '{}' && (
-                        <KellyPositioningCard 
-                          kellySize={JSON.parse(detail.trader_proposal_json).kelly_size} 
-                          suggestedCapital={JSON.parse(detail.trader_proposal_json).suggested_capital} 
-                        />
-                      )}
+                      <KellyPositioningFromJson json={detail.trader_proposal_json} />
                       {reportEntries.map(([section, content]) => (
                         <ReportCard key={section} label={sectionLabels[section] || section} content={content} defaultOpen={section === activeSection} />
                       ))}
@@ -462,12 +469,7 @@ function RunTab() {
                 </div>
                 <div className="flex-1 p-4 overflow-y-auto min-h-0 space-y-2">
                   {riskMetrics && <RiskMetricsCard metrics={riskMetrics} />}
-                  {reports.trader_proposal_json && (
-                    <KellyPositioningCard 
-                      kellySize={JSON.parse(reports.trader_proposal_json).kelly_size}
-                      suggestedCapital={JSON.parse(reports.trader_proposal_json).suggested_capital}
-                    />
-                  )}
+                  <KellyPositioningFromJson json={reports.trader_proposal_json} />
                   {reportEntries.length === 0 && !riskMetrics && (
                     <div className="flex flex-col items-center justify-center py-16 text-slate-600">
                       <FileText size={28} className="opacity-25 mb-2" />
@@ -764,12 +766,7 @@ function HistoryTab() {
                   {activeDetailTab === 'reports' && (
                     <div className="space-y-2 pr-1">
                       {detail.risk_metrics && <RiskMetricsCard metrics={detail.risk_metrics} />}
-                      {detail.trader_proposal_json && detail.trader_proposal_json !== '{}' && (
-                        <KellyPositioningCard 
-                          kellySize={JSON.parse(detail.trader_proposal_json).kelly_size} 
-                          suggestedCapital={JSON.parse(detail.trader_proposal_json).suggested_capital} 
-                        />
-                      )}
+                      <KellyPositioningFromJson json={detail.trader_proposal_json} />
                       {([
                         ['market_report', detail.market_report], ['sentiment_report', detail.sentiment_report],
                         ['news_report', detail.news_report], ['fundamentals_report', detail.fundamentals_report],
