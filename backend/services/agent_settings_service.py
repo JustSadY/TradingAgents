@@ -4,6 +4,7 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.models.agent_settings import AgentSetting
 from backend.models.user import User
 from backend.schemas.agent_settings import AgentSettingsRead, AgentSettingsUpdate, AgentSettingValue
 from backend.trading_agents.agent_catalog import AgentInfo, get_agent, list_agents
