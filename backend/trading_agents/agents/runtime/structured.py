@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import logging
-from collections.abc import Callable
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
@@ -26,12 +25,12 @@ async def ainvoke_structured_or_freetext(
     structured_llm: Any | None,
     plain_llm: Any,
     prompt: Any,
-    render: Callable[[T], str],
     agent_name: str,
 ) -> Any:
     """Invoke with structured output, falling back to free text on failure.
 
-    Returns the structured object if successful, otherwise the free-text string content.
+    Returns the structured object if successful, otherwise the free-text string
+    content (callers render the structured object themselves).
     """
     if structured_llm is not None:
         try:

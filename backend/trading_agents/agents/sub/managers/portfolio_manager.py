@@ -90,7 +90,6 @@ Be decisive and ground every conclusion in specific evidence from the analysts.{
             structured_llm,
             llm,
             prompt,
-            render_pm_decision,
             "Portfolio Manager",
         )
 

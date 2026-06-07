@@ -119,7 +119,6 @@ def create_trader(llm):
             structured_llm,
             llm,
             messages,
-            render_trader_proposal,
             "Trader",
         )
 
