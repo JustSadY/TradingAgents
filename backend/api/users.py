@@ -204,6 +204,7 @@ async def get_user_permissions(
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
+    from backend.models.page_permission import ALL_PAGE_KEYS
     from backend.repositories.permissions import get_user_page_permissions_map
 
     perms = await get_user_page_permissions_map(db, user_id)
@@ -222,6 +223,7 @@ async def set_user_permissions(
     if not user:
         raise HTTPException(status_code=404, detail="User not found")
 
+    from backend.models.page_permission import ALL_PAGE_KEYS
     from backend.repositories.permissions import set_user_page_permission
 
     for page_key, allowed in body.permissions.items():

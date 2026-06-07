@@ -19,14 +19,14 @@ interface UserRecord {
 
 const ALL_PAGE_KEYS = [
   'dashboard', 'analysis', 'chart', 'trading', 'portfolio',
-  'watchlist', 'orders', 'performance', 'alerts', 'ab-testing', 'logs',
+  'watchlist', 'orders', 'performance', 'alerts', 'ab-testing', 'logs', 'profile'
 ]
 
 const PAGE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard', analysis: 'Analysis', chart: 'Charts',
   trading: 'Simulation', portfolio: 'Portfolio', watchlist: 'Watchlist',
   orders: 'Orders', performance: 'Performance', alerts: 'Alerts',
-  'ab-testing': 'A/B Testing', logs: 'Logs',
+  'ab-testing': 'A/B Testing', logs: 'Logs', profile: 'Profile'
 }
 
 const Input = "w-full glass-input rounded-xl px-3 py-2 text-xs outline-none"
@@ -433,8 +433,7 @@ export default function Admin() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {[
                         { key: 'general',  label: t('settings.general') || 'Preferences' },
-                        { key: 'agents',   label: 'AI Configuration' },
-                        { key: 'tools',    label: t('settings.section_tools') || 'Agent Tools' },
+                        { key: 'llm',      label: 'LLM & AI Config' },
                         { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety' },
                         { key: 'webhooks', label: t('settings.section_notifications') || 'Personal Webhooks' },
                         { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler' },
