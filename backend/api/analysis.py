@@ -44,8 +44,9 @@ async def run_analysis(
         raise HTTPException(status_code=422, detail=str(e))
     settings = await get_or_create_settings(db, current_user)
     task_id = str(uuid.uuid4())
-    from backend.services.analysis_service import run_analysis_task
+    from backend.services.analysis_service import register_task_owner, run_analysis_task
 
+    register_task_owner(task_id, current_user.id)
     background_tasks.add_task(
         run_analysis_task,
         body.ticker,
@@ -149,8 +150,9 @@ async def run_portfolio_run(
             raise HTTPException(status_code=422, detail=f"Invalid ticker {ticker}: {e}")
     settings = await get_or_create_settings(db, current_user)
     task_id = str(uuid.uuid4())
-    from backend.services.analysis_service import run_portfolio_task
+    from backend.services.analysis_service import register_task_owner, run_portfolio_task
 
+    register_task_owner(task_id, current_user.id)
     background_tasks.add_task(
         run_portfolio_task,
         tickers,
