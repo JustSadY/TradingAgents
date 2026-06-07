@@ -60,7 +60,7 @@ At least one LLM provider key is required to run agent analyses:
 
 1.  Edit the environment configuration:
     ```bash
-    sudo nano .env # Fill in OPENAI_API_KEY, ANTHROPIC_API_KEY, or others.
+    sudo nano .env
     ```
 2.  Restart the service daemon to apply changes:
     ```bash

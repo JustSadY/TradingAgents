@@ -170,7 +170,6 @@ if [ ! -f "$ENV_FILE" ]; then
         printf "DATABASE_URL='postgresql+asyncpg://%s:%s@localhost:5432/%s'\n" "$DB_USER" "$DB_PASS" "$DB_NAME"
         printf "CORS_ORIGINS='[\"http://localhost:%s\"]'\n" "$APP_PORT"
         printf '\n# LLM sağlayıcı anahtarları — en az birini doldurun, sonra: systemctl restart %s\n' "$SERVICE_NAME"
-        printf 'OPENAI_API_KEY=\nANTHROPIC_API_KEY=\nGOOGLE_API_KEY=\nXAI_API_KEY=\nDEEPSEEK_API_KEY=\n'
         printf '\n# Veri sağlayıcı anahtarları (opsiyonel)\nALPHA_VANTAGE_API_KEY=\nREDDIT_CLIENT_ID=\nREDDIT_CLIENT_SECRET=\n'
     } > "$ENV_FILE"
     chmod 600 "$ENV_FILE"

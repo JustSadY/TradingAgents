@@ -41,17 +41,6 @@ sudo APP_PORT=80 ADMIN_USERNAME=manager bash deploy/install.sh
 ### Post-Installation Key Configuration:
 To activate agent analysis, you can configure LLM provider keys (OpenAI, Anthropic, Gemini, etc.) directly in the Web UI under **Settings → API Keys** (or via the **Admin Panel → User API Keys** for specific users). 
 
-Alternatively, you can configure system-wide default keys in the `.env` file:
-1.  Open the environment configuration file:
-    ```bash
-    sudo nano .env
-    ```
-2.  Uncomment and insert your LLM credentials (e.g. `OPENAI_API_KEY`, `ANTHROPIC_API_KEY`, etc.).
-3.  Save the file and restart the system daemon:
-    ```bash
-    sudo systemctl restart tradingagents
-    ```
-
 ---
 
 ## 🐳 2. Docker Compose Deployment
@@ -98,7 +87,6 @@ To configure a local workspace on Windows, macOS, or Linux for active code contr
 5.  Create a `.env` file from the example and add your database URL:
     ```ini
     DATABASE_URL=postgresql+asyncpg://youruser:yourpass@localhost:5432/tradingagents
-    OPENAI_API_KEY=your-openai-api-key-here
     ```
 6.  Start the FastAPI application with reload enabled:
     ```bash

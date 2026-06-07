@@ -162,10 +162,6 @@ The following configurations can be loaded into your `.env` file:
 | :--- | :--- | :--- |
 | `SECRET_KEY` | Hexadecimal key used to secure JWT access tokens | `secret-token-key-string` |
 | `DATABASE_URL` | Async PG database URL | `postgresql+asyncpg://user:pass@host:5432/db` |
-| `OPENAI_API_KEY` | OpenAI API key (optional) | `sk-proj-...` |
-| `ANTHROPIC_API_KEY`| Anthropic Claude API key (optional) | `sk-ant-...` |
-| `GOOGLE_API_KEY` | Google Gemini API key (optional) | `AIzaSy...` |
-| `SEARXNG_URL` | (Deprecated - now set in Web UI under Tools tab) | `http://localhost:8080` |
 | `ADMIN_USERNAME` | First administrator username | `admin` |
 
 ---
