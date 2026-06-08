@@ -13,6 +13,8 @@ def create_bull_researcher(llm):
         fundamentals_label = "Company fundamentals report" if asset_type == "stock" else "Asset fundamentals report"
         report_fields = build_report_fields("Latest World Affairs News", fundamentals_label)
         synthesis_report = state.get("synthesis_report", "No synthesis report available.")
+        qa = state.get("agent_qa_report") or ""
+        qa_block = f"\n### Analyst Cross-Examination (peer Q&A that probed these conflicts):\n{qa}\n" if qa else ""
         resources_text = build_resources(state, report_fields)
 
         prompt = f"""You are a High-Conviction Bull Analyst advocating for a long position in the {target_label}. Your task is to build a rigorous, evidence-based case emphasizing growth potential and market strength.
@@ -27,7 +29,7 @@ def create_bull_researcher(llm):
 
 ### Synthesis Report (Conflicts & Alignments):
 {synthesis_report}
-
+{qa_block}
 ### Debate Context:
 - **Conversation History:** {history}
 - **Last Bear Argument:** {current_response}

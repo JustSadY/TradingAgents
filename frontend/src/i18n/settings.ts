@@ -79,9 +79,6 @@ const translations = {
 
 
     'settings.row_checkpoint': 'Checkpoint (Resume)',
-    'settings.row_historical_analyses': 'Historical Analyses',
-    'settings.historical_analyses_hint': 'Include previous reports for AI',
-    'settings.historical_limit_label': 'Number of recent analyses to include:',
     'settings.row_news_limit_ticker': 'News Count (Ticker)',
     'settings.row_global_news_limit': 'Global News Count',
     'settings.row_global_news_lookback': 'Global News Lookback (Days)',
@@ -199,9 +196,6 @@ const translations = {
 
 
     'settings.row_checkpoint': 'Checkpoint (Devam Etme)',
-    'settings.row_historical_analyses': 'Eskiye Dönük Analizler',
-    'settings.historical_analyses_hint': 'Önceki raporları AI\'ya dahil et',
-    'settings.historical_limit_label': 'Dahil edilecek son analiz sayısı:',
     'settings.row_news_limit_ticker': 'Haber Sayısı (Ticker)',
     'settings.row_global_news_limit': 'Global Haber Sayısı',
     'settings.row_global_news_lookback': 'Global Haber Geriye (Gün)',

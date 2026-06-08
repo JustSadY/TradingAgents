@@ -32,8 +32,6 @@ interface Settings {
   max_position_size_pct: number
   max_risk_per_trade_pct: number
   strict_stop_loss_mode: boolean
-  include_historical_analyses: boolean
-  historical_analyses_limit: number
   strict_backtest_learning: boolean
   webhook_url: string | null
   webhook_enabled: boolean
@@ -283,33 +281,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     value={s.max_recur_limit}
                     onChange={e => update('max_recur_limit', parseInt(e.target.value) || 1000)}
                   />
-                </Row>
-
-                <Row label={t('settings.row_historical_analyses')}>
-                  <div className="flex flex-col gap-2 pt-1">
-                    <label className="flex items-center gap-2.5 cursor-pointer text-slate-300 hover:text-white select-none">
-                      <input
-                        type="checkbox"
-                        checked={s.include_historical_analyses}
-                        onChange={e => update('include_historical_analyses', e.target.checked)}
-                        className="w-4 h-4 accent-violet-600 rounded"
-                      />
-                      <span className="text-xs font-semibold">{t('settings.historical_analyses_hint')}</span>
-                    </label>
-                    {s.include_historical_analyses && (
-                      <div className="flex items-center gap-2 pt-1 pl-6">
-                        <span className="text-[10px] text-slate-500 font-semibold">{t('settings.historical_limit_label')}:</span>
-                        <input
-                          type="number"
-                          min="1"
-                          max="50"
-                          className={`${Input} w-20 py-1 font-mono`}
-                          value={s.historical_analyses_limit}
-                          onChange={e => update('historical_analyses_limit', parseInt(e.target.value) || 5)}
-                        />
-                      </div>
-                    )}
-                  </div>
                 </Row>
               </Section>
             </div>

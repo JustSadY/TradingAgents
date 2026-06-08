@@ -6,6 +6,7 @@ from backend.trading_agents.agents.utils.agent_utils import get_language_instruc
 def create_super_portfolio_manager(llm):
     def super_portfolio_manager_node(state: dict):
         ticker_reports = state.get("ticker_reports", {})
+        portfolio_context = state.get("portfolio_context", "")
         context_str = ""
         for ticker, report in ticker_reports.items():
             context_str += f"\n--- Ticker: {ticker} ---\n"
@@ -20,12 +21,16 @@ def create_super_portfolio_manager(llm):
             )
             + get_language_instruction()
         )
+        portfolio_block = f"{portfolio_context}\n\n" if portfolio_context else ""
         prompt = ChatPromptTemplate.from_messages(
             [
                 ("system", system_message),
                 (
                     "user",
-                    f"Here are the final decisions from the trading team for the selected assets:\n\n{context_str}\n\nPlease provide the final portfolio allocation and strategy.",
+                    f"{portfolio_block}Here are the final decisions from the trading team for the selected assets:"
+                    f"\n\n{context_str}\n\nAllocate the user's actual cash available across these assets "
+                    "(use the real figures above; keep an explicit cash position when appropriate). "
+                    "Provide the final portfolio allocation and strategy.",
                 ),
             ]
         )

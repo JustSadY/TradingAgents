@@ -19,8 +19,6 @@ SECTION_FIELDS = {
         "openai_reasoning_effort",
         "anthropic_effort",
         "google_thinking_level",
-        "include_historical_analyses",
-        "historical_analyses_limit",
     ],
     "risk": [
         "max_risk_per_trade_pct",

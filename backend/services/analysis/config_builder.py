@@ -42,7 +42,6 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
     cfg: dict = {
         "data_cache_dir": os.environ.get("TRADINGAGENTS_DATA_CACHE_DIR", DEFAULT_CONFIG["data_cache_dir"]),
         "results_dir": os.environ.get("TRADINGAGENTS_RESULTS_DIR", DEFAULT_CONFIG["results_dir"]),
-        "memory_log_path": os.environ.get("TRADINGAGENTS_MEMORY_LOG_PATH", DEFAULT_CONFIG["memory_log_path"]),
         "llm_provider": settings.llm_provider,
         "llm_model": settings.llm_model,
         "max_debate_rounds": settings.max_debate_rounds,

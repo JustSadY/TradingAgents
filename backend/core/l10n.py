@@ -1,18 +1,6 @@
 from typing import Any
 
 MESSAGES = {
-    "historical_reports_title": {
-        "en": "=== {ticker} HISTORICAL ANALYSIS REPORTS ===\n",
-        "tr": "=== {ticker} GEÇMİŞ ANALİZ RAPORLARI ===\n",
-    },
-    "date_signal_label": {
-        "en": "Date: {date} | Signal",
-        "tr": "Tarih: {date} | Sinyal",
-    },
-    "cross_ticker_lessons_title": {
-        "en": "=== RECENT CROSS-TICKER LESSONS ===\n",
-        "tr": "=== ÇAPRAZ HİSSE DERSLERİ ===\n",
-    },
     "insufficient_funds": {
         "en": "Insufficient funds. Required: ${required:.2f}, Available: ${available:.2f}",
         "tr": "Yetersiz bakiye. Gerekli: ${required:.2f}, Mevcut: ${available:.2f}",

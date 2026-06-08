@@ -13,6 +13,8 @@ def create_bear_researcher(llm):
         fundamentals_label = "Company fundamentals report" if asset_type == "stock" else "Asset fundamentals report"
         report_fields = build_report_fields("Latest World Affairs News", fundamentals_label)
         synthesis_report = state.get("synthesis_report", "No synthesis report available.")
+        qa = state.get("agent_qa_report") or ""
+        qa_block = f"\n### Analyst Cross-Examination (peer Q&A that probed these conflicts):\n{qa}\n" if qa else ""
         resources_text = build_resources(state, report_fields)
 
         prompt = f"""You are a High-Conviction Bear Analyst making the case against investing in the {target_label}. Your goal is to present a rigorous, evidence-based argument emphasizing risks, structural challenges, and negative catalysts.
@@ -27,7 +29,7 @@ def create_bear_researcher(llm):
 
 ### Synthesis Report (Conflicts & Alignments):
 {synthesis_report}
-
+{qa_block}
 ### Debate Context:
 - **Conversation History:** {history}
 - **Last Bull Argument:** {current_response}
