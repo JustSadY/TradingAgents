@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import axios from 'axios'
 import {
   Save, BookmarkPlus, Trash2, Play, Bell,
-  Settings as SettingsIcon, Brain, ShieldAlert, Clock, Wrench
+  Settings as SettingsIcon, Brain, ShieldAlert, Clock, Wrench, Database
 } from 'lucide-react'
 import { useMeta, triggerMetaRefetch } from '../hooks/useMeta'
 import { useAuth } from '../contexts/AuthContext'
@@ -39,6 +39,13 @@ interface Settings {
   watchlist: string[]
   node_retry_attempts: number
   node_retry_base_delay: number
+  pinecone_index: string
+  pinecone_cloud: string
+  pinecone_region: string
+  memory_embedder: string
+  pinecone_embed_model: string
+  memory_openai_embed_model: string
+  agent_qa_enabled: boolean
 }
 
 interface Preset { id: number; name: string; description: string | null; created_at: string }
@@ -75,7 +82,11 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const [browserNotify, setBrowserNotify] = useState(isBrowserNotifyEnabled())
   const [webhookTesting, setWebhookTesting] = useState(false)
   const [webhookTestResult, setWebhookTestResult] = useState<string | null>(null)
-  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'agents' | 'risk' | 'webhooks' | 'presets' | 'advanced' | 'cron' | 'tools'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'agents' | 'risk' | 'webhooks' | 'presets' | 'advanced' | 'cron' | 'tools' | 'memory'>('general')
+  const [memoryStatus, setMemoryStatus] = useState<any>(null)
+  const [pineconeKey, setPineconeKey] = useState('')
+  const [pineconeSaving, setPineconeSaving] = useState(false)
+  const loadMemoryStatus = () => axios.get('/api/settings/memory').then(r => setMemoryStatus(r.data)).catch(() => {})
   const [allowedSettings, setAllowedSettings] = useState<string[]>([])
   const [cronStatus, setCronStatus] = useState<{ running: boolean; job_configured: boolean; next_run_time: string | null } | null>(null)
   const meta = useMeta()
@@ -93,6 +104,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
       setPresets(presetList)
       setAllowedSettings(userId ? ['general', 'llm', 'risk', 'webhooks', 'cron'] : allowedSet)
       setCronStatus(cStatus)
+      if (!userId) loadMemoryStatus()
 
       const defaultTabs = ['general', 'llm', 'risk', 'webhooks', 'cron']
       const activeDefault = defaultTabs.find(tab => userId || allowedSet.includes(tab))
@@ -165,6 +177,20 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
   const update = (k: keyof Settings, v: any) => setS(prev => prev ? { ...prev, [k]: v } : prev)
 
+  const savePineconeKey = async () => {
+    if (!pineconeKey.trim()) return
+    setPineconeSaving(true)
+    try {
+      await axios.put('/api/users/me/api-keys', { provider: 'pinecone', api_key: pineconeKey.trim() })
+      setPineconeKey('')
+      await loadMemoryStatus()
+    } finally { setPineconeSaving(false) }
+  }
+  const deletePineconeKey = async () => {
+    await axios.delete('/api/users/me/api-keys/pinecone').catch(() => {})
+    await loadMemoryStatus()
+  }
+
   const languages = meta?.languages ?? [{ value: 'English', label: 'English' }, { value: 'Turkish', label: 'Türkçe' }]
 
   const TABS = [
@@ -174,8 +200,9 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety', icon: <ShieldAlert size={14} /> },
     { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={14} /> },
     { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={14} /> },
+    ...(userId ? [] : [{ key: 'memory',   label: 'Memory',                          icon: <Database size={14} /> }]),
     ...(userId ? [] : [{ key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={14} /> }]),
-  ].filter(tab => isAdmin || tab.key === 'tools' || tab.key === 'agents' || allowedSettings.includes(tab.key))
+  ].filter(tab => isAdmin || tab.key === 'tools' || tab.key === 'agents' || tab.key === 'memory' || allowedSettings.includes(tab.key))
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
@@ -496,6 +523,58 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 <p className="text-[10px] text-slate-500 mt-1.5 font-medium leading-relaxed">
                   Standard 5-field cron schedule format (UTC time). <br/>
                   Example: <code className="text-violet-400">0 9 * * 1-5</code> runs every weekday at 09:00 UTC.
+                </p>
+              </Row>
+            </Section>
+          )}
+
+          {activeTab === 'memory' && (
+            <Section title="Vector Memory (Pinecone)">
+              <Row label="Status">
+                {memoryStatus?.enabled ? (
+                  <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">ENABLED</span>
+                ) : (
+                  <span className="px-2 py-0.5 rounded-lg bg-slate-700/40 text-slate-400 text-[10px] font-bold border border-white/[0.06]">DISABLED — add a Pinecone API key</span>
+                )}
+              </Row>
+              <Row label="Pinecone API Key">
+                {memoryStatus?.enabled ? (
+                  <button onClick={deletePineconeKey} className="flex items-center gap-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300">
+                    <Trash2 size={13} /> Remove key
+                  </button>
+                ) : (
+                  <div className="flex gap-2 items-center">
+                    <input type="password" className={Input} value={pineconeKey} onChange={e => setPineconeKey(e.target.value)} placeholder="pcsk_..." />
+                    <button onClick={savePineconeKey} disabled={pineconeSaving || !pineconeKey.trim()} className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-violet-600 hover:bg-violet-500 disabled:opacity-40">Save</button>
+                  </div>
+                )}
+              </Row>
+              <Row label="Index Name"><input className={Input} value={s.pinecone_index} onChange={e => update('pinecone_index', e.target.value)} /></Row>
+              <Row label="Cloud"><input className={Input} value={s.pinecone_cloud} onChange={e => update('pinecone_cloud', e.target.value)} placeholder="aws" /></Row>
+              <Row label="Region"><input className={Input} value={s.pinecone_region} onChange={e => update('pinecone_region', e.target.value)} placeholder="us-east-1" /></Row>
+              <Row label="Embedder">
+                <select className={Input} value={s.memory_embedder} onChange={e => update('memory_embedder', e.target.value)}>
+                  <option value="pinecone">Pinecone hosted (no extra key)</option>
+                  <option value="openai">OpenAI (uses your OpenAI key)</option>
+                </select>
+              </Row>
+              {s.memory_embedder === 'openai' ? (
+                <Row label="OpenAI Embed Model"><input className={Input} value={s.memory_openai_embed_model} onChange={e => update('memory_openai_embed_model', e.target.value)} /></Row>
+              ) : (
+                <Row label="Embed Model"><input className={Input} value={s.pinecone_embed_model} onChange={e => update('pinecone_embed_model', e.target.value)} /></Row>
+              )}
+              {memoryStatus?.needs_openai_key && (
+                <Row label=""><span className="text-[11px] text-amber-400">Add your OpenAI API key in Profile to use the OpenAI embedder.</span></Row>
+              )}
+              <Row label="Inter-Agent Q&A">
+                <label className="flex items-center gap-2.5 cursor-pointer text-slate-300 select-none">
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded" checked={s.agent_qa_enabled} onChange={e => update('agent_qa_enabled', e.target.checked)} />
+                  <span className="text-xs font-semibold">Analysts question each other after their reports</span>
+                </label>
+              </Row>
+              <Row label="">
+                <p className="text-[10px] text-slate-600 leading-relaxed">
+                  Use the Save button above to persist the index/embedder settings. Memory stays off until a Pinecone API key is added, and each user's memory is isolated. The OpenAI embedder reuses your OpenAI API key from Profile.
                 </p>
               </Row>
             </Section>

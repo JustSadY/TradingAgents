@@ -31,21 +31,23 @@ Callers depend only on the `MemoryStore` **protocol** and the domain functions i
 `MemoryStore` and return it from `factory.get_memory_store()` — nothing else
 changes.
 
-## Configuration
+## Configuration (per user)
 
-Memory is **disabled** (all record/recall calls become no-ops) unless
-`PINECONE_API_KEY` is set — there is no fallback by design.
+Everything is **per user** and set from the app's **Settings → Memory** tab —
+there are no server-level memory env vars. Memory is **disabled** (all
+record/recall calls become no-ops) for a user until they add a Pinecone API key.
 
-| Env var | Default | Meaning |
+| Setting | Where | Default |
 |---|---|---|
-| `PINECONE_API_KEY` | _(empty → memory off)_ | Pinecone key |
-| `PINECONE_INDEX` | `tradingagents-memory` | index name |
-| `PINECONE_CLOUD` / `PINECONE_REGION` | `aws` / `us-east-1` | serverless location |
-| `MEMORY_EMBEDDER` | `pinecone` | `pinecone` (hosted) or `openai` (client-side) |
-| `PINECONE_EMBED_MODEL` | `llama-text-embed-v2` | hosted embedding model |
-| `MEMORY_OPENAI_API_KEY` / `MEMORY_OPENAI_EMBED_MODEL` | _(empty)_ / `text-embedding-3-small` | only for `MEMORY_EMBEDDER=openai` |
+| Pinecone API key | encrypted per-user API key, provider `pinecone` | _(none → memory off)_ |
+| `pinecone_index` | AppSettings | `tradingagents-memory` |
+| `pinecone_cloud` / `pinecone_region` | AppSettings | `aws` / `us-east-1` |
+| `memory_embedder` | AppSettings | `pinecone` (hosted) or `openai` (client-side) |
+| `pinecone_embed_model` | AppSettings | `llama-text-embed-v2` |
+| `memory_openai_embed_model` | AppSettings | `text-embedding-3-small` (uses the user's `openai` key) |
+| `agent_qa_enabled` | AppSettings | on |
 
-Episodes and Q&A are namespaced per user (`ep_user_<id>` / `qa_user_<id>`), so one
-user's history never leaks into another's recall.
-
-The Q&A node is gated by the runtime flag `agent_qa_enabled` (default on).
+`services.memory_service.get_user_memory_store(user_id)` resolves and caches a
+store from that user's settings + keys. Episodes and Q&A are namespaced per user
+(`ep_user_<id>` / `qa_user_<id>`), so one user's history never leaks into
+another's recall.

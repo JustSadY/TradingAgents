@@ -26,20 +26,6 @@ class Settings(BaseSettings):
     ENCRYPTION_KEY: str = ""
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
 
-    # --- Vector memory (episodic + inter-agent Q&A) ---
-    # Memory is disabled unless PINECONE_API_KEY is set (no fallback).
-    MEMORY_BACKEND: str = "pinecone"
-    PINECONE_API_KEY: str = ""
-    PINECONE_INDEX: str = "tradingagents-memory"
-    PINECONE_CLOUD: str = "aws"
-    PINECONE_REGION: str = "us-east-1"
-    # Embedder: "pinecone" = hosted/server-side inference (no extra key needed);
-    # "openai" = client-side OpenAI embeddings (needs MEMORY_OPENAI_API_KEY).
-    MEMORY_EMBEDDER: str = "pinecone"
-    PINECONE_EMBED_MODEL: str = "llama-text-embed-v2"
-    MEMORY_OPENAI_API_KEY: str = ""
-    MEMORY_OPENAI_EMBED_MODEL: str = "text-embedding-3-small"
-
     @model_validator(mode="after")
     def _reject_insecure_production_defaults(self) -> "Settings":
         """Refuse to boot in production with shipped-default secrets.

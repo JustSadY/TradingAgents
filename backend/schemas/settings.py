@@ -30,6 +30,15 @@ class SettingsBase(BaseModel):
     webhook_enabled: bool = False
     webhook_events: str = '["analysis_complete"]'
     active_preset_name: str | None = None
+    # Per-user vector memory config (the Pinecone/OpenAI keys are stored
+    # separately as encrypted API keys).
+    pinecone_index: str = "tradingagents-memory"
+    pinecone_cloud: str = "aws"
+    pinecone_region: str = "us-east-1"
+    memory_embedder: str = "pinecone"
+    pinecone_embed_model: str = "llama-text-embed-v2"
+    memory_openai_embed_model: str = "text-embedding-3-small"
+    agent_qa_enabled: bool = True
 
 
 class SettingsRead(SettingsBase):
@@ -67,3 +76,10 @@ class SettingsUpdate(BaseModel):
     webhook_enabled: bool | None = None
     webhook_events: str | None = None
     active_preset_name: str | None = None
+    pinecone_index: str | None = None
+    pinecone_cloud: str | None = None
+    pinecone_region: str | None = None
+    memory_embedder: str | None = None
+    pinecone_embed_model: str | None = None
+    memory_openai_embed_model: str | None = None
+    agent_qa_enabled: bool | None = None

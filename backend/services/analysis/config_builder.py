@@ -51,8 +51,8 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         "analyst_concurrency_limit": settings.analyst_concurrency_limit or DEFAULT_CONFIG["analyst_concurrency_limit"],
         "skip_disk_log": True,
         "checkpoint_enabled": True,
-        # Inter-agent cross-examination toggle (server-level system setting).
-        "agent_qa_enabled": getattr(sys_settings, "agent_qa_enabled", True) if sys_settings is not None else True,
+        # Inter-agent cross-examination toggle (per-user setting).
+        "agent_qa_enabled": getattr(settings, "agent_qa_enabled", True),
         "node_retry_attempts": getattr(settings, "node_retry_attempts", DEFAULT_CONFIG["node_retry_attempts"])
         or DEFAULT_CONFIG["node_retry_attempts"],
         "node_retry_base_delay": getattr(settings, "node_retry_base_delay", DEFAULT_CONFIG["node_retry_base_delay"])
