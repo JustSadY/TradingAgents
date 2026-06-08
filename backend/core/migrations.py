@@ -38,6 +38,7 @@ _ALLOWED_COLUMNS = {
         "trading_mode",
         "active_broker",
         "active_data_vendor",
+        "agent_qa_enabled",
         "updated_at",
     },
     "app_settings": {
@@ -94,6 +95,7 @@ _ALLOWED_COLUMNS = {
         "duration_seconds",
         "triggered_by",
         "task_id",
+        "agent_qa_report",
         "status",
     },
     "portfolios": {"user_id", "initial_capital", "current_balance", "cash_available"},
