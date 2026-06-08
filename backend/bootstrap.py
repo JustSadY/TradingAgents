@@ -29,7 +29,6 @@ def _configure_env() -> None:
     os.environ.setdefault("TRADINGAGENTS_LOG_DIR", tmp)
     os.environ.setdefault("TRADINGAGENTS_DATA_CACHE_DIR", os.path.join(tmp, "ta_cache"))
     os.environ.setdefault("TRADINGAGENTS_RESULTS_DIR", os.path.join(tmp, "ta_results"))
-    os.environ.setdefault("TRADINGAGENTS_MEMORY_LOG_PATH", os.path.join(tmp, "ta_memory.md"))
 
 
 def _ensure_project_on_path() -> None:

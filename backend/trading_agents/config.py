@@ -18,12 +18,6 @@ class TradingAgentsConfig(BaseModel):
             "TRADINGAGENTS_CACHE_DIR", os.environ.get("TRADINGAGENTS_DATA_CACHE_DIR", str(_HOME / "cache"))
         ),
     )
-    memory_log_path: str = Field(
-        default_factory=lambda: os.environ.get(
-            "TRADINGAGENTS_MEMORY_LOG_PATH", str(_HOME / "memory" / "trading_memory.md")
-        ),
-    )
-    memory_log_max_entries: int | None = Field(default=None, ge=1)
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
     google_thinking_level: str | None = None
@@ -38,8 +32,6 @@ class TradingAgentsConfig(BaseModel):
     node_retry_attempts: int = Field(default=2, ge=1)
     node_retry_base_delay: float = Field(default=1.0, ge=0.0)
     strict_backtest_learning: bool = True
-    include_historical_analyses: bool = False
-    historical_analyses_limit: int = Field(default=5, ge=1, le=50)
     super_portfolio_manager_prompt: str = (
         "You are a Super Portfolio Manager advising a new investor with a $100,000 portfolio. "
         "Your team of analysts and traders has analyzed multiple assets, and your job is to build a "
