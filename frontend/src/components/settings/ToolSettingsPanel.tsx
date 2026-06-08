@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, forwardRef, useImperativeHandle } from 'react'
 import axios from 'axios'
 import { Save, RefreshCw, AlertCircle } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
@@ -18,9 +18,13 @@ interface ToolSettingsPanelProps {
   serverScope?: boolean // If true, read/edit server-scope global settings
 }
 
+export interface ToolSettingsPanelHandle {
+  save: () => Promise<void>
+}
+
 const InputClass = 'w-full glass-input rounded-xl px-3 py-2 text-xs outline-none text-slate-300 placeholder-slate-600'
 
-export default function ToolSettingsPanel({ userId, serverScope = false }: ToolSettingsPanelProps) {
+const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelProps>(({ userId, serverScope = false }, ref) => {
   const { t } = useTranslation()
   const meta = useMeta()
   const [settings, setSettings] = useState<ToolSettings | null>(null)
@@ -336,4 +340,6 @@ export default function ToolSettingsPanel({ userId, serverScope = false }: ToolS
       })}
     </div>
   )
-}
+})
+
+export default ToolSettingsPanel

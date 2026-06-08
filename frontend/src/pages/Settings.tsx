@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useRef } from 'react'
 import axios from 'axios'
 import {
   Save, BookmarkPlus, Trash2, Play, Bell,
@@ -8,9 +8,10 @@ import { useMeta, triggerMetaRefetch } from '../hooks/useMeta'
 import { useAuth } from '../contexts/AuthContext'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
 import { useTranslation } from '../contexts/LanguageContext'
-import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
-import AgentSettingsPanel from '../components/settings/AgentSettingsPanel'
+import ToolSettingsPanel, { ToolSettingsPanelHandle } from '../components/settings/ToolSettingsPanel'
+import AgentSettingsPanel, { AgentSettingsPanelHandle } from '../components/settings/AgentSettingsPanel'
 
+// ... (interfaces unchanged) ...
 interface Settings {
   cron_enabled: boolean
   cron_schedule: string
@@ -74,6 +75,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const { isAdmin } = useAuth()
   const [s, setS] = useState<Settings | null>(null)
   const [saved, setSaved] = useState(false)
+  const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const [presets, setPresets] = useState<Preset[]>([])
   const [presetName, setPresetName] = useState('')
@@ -89,6 +91,9 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const [allowedSettings, setAllowedSettings] = useState<string[]>([])
   const [cronStatus, setCronStatus] = useState<{ running: boolean; job_configured: boolean; next_run_time: string | null } | null>(null)
   const meta = useMeta()
+  
+  const toolPanelRef = useRef<ToolSettingsPanelHandle>(null)
+  const agentPanelRef = useRef<AgentSettingsPanelHandle>(null)
 
   useEffect(() => {
     const settingsUrl = userId ? `/api/settings/users/${userId}` : '/api/settings'
@@ -161,14 +166,23 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
   const save = async () => {
     setSaveError(null)
+    setSaving(true)
     try {
-      const url = userId ? `/api/settings/users/${userId}` : '/api/settings'
-      await axios.put(url, s)
-      triggerMetaRefetch()
+      if (activeTab === 'agents') {
+        if (agentPanelRef.current) await agentPanelRef.current.save()
+      } else if (activeTab === 'tools') {
+        if (toolPanelRef.current) await toolPanelRef.current.save()
+      } else {
+        const url = userId ? `/api/settings/users/${userId}` : '/api/settings'
+        await axios.put(url, s)
+        triggerMetaRefetch()
+      }
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
     } catch (err: any) {
-      setSaveError(err.response?.data?.detail || t('settings.save_error_default'))
+      setSaveError(err.message || err.response?.data?.detail || t('settings.save_error_default'))
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -213,8 +227,8 @@ export default function Settings({ userId }: { userId?: number } = {}) {
         </div>
         <div className="flex items-center gap-3">
           {saveError && <span className="text-rose-400 text-xs font-semibold">{saveError}</span>}
-          <button onClick={save} className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl px-5 py-2.5 text-xs font-semibold shadow-md shadow-violet-500/20 transition-all shrink-0 cursor-pointer">
-            <Save size={14} /> {saved ? t('settings.save_button_saved') : t('settings.save_button')}
+          <button onClick={save} disabled={saving} className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl px-5 py-2.5 text-xs font-semibold shadow-md shadow-violet-500/20 transition-all shrink-0 cursor-pointer disabled:opacity-50">
+            <Save size={14} /> {saving ? 'Saving...' : saved ? t('settings.save_button_saved') : t('settings.save_button')}
           </button>
         </div>
       </div>
@@ -575,11 +589,11 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           )}
 
           {activeTab === 'tools' && (
-            <ToolSettingsPanel userId={userId} />
+            <ToolSettingsPanel ref={toolPanelRef} userId={userId} />
           )}
 
           {activeTab === 'agents' && (
-            <AgentSettingsPanel userId={userId} />
+            <AgentSettingsPanel ref={agentPanelRef} userId={userId} />
           )}
 
         </div>

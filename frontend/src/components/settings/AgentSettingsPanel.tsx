@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState } from 'react'
+import { type ReactNode, useEffect, useMemo, useState, forwardRef, useImperativeHandle } from 'react'
 import axios from 'axios'
 import { AlertCircle, ChevronDown, ChevronRight, Save, Settings2 } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
@@ -515,10 +515,14 @@ function MainAgentSection({
 // Main panel
 // ---------------------------------------------------------------------------
 
-export default function AgentSettingsPanel({
+export interface AgentSettingsPanelHandle {
+  save: () => Promise<void>
+}
+
+const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPanelProps>(({
   userId,
   serverScope = false,
-}: AgentSettingsPanelProps) {
+}, ref) => {
   const { t } = useTranslation()
   const meta = useMeta()
   const [settings, setSettings] = useState<AgentSettingsData | null>(null)
@@ -558,13 +562,18 @@ export default function AgentSettingsPanel({
       triggerMetaRefetch()
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 2000)
-    }
- catch (err: any) {
-      setSaveError(err.response?.data?.detail || 'Failed to save agent settings.')
+    } catch (err: any) {
+      const msg = err.response?.data?.detail || 'Failed to save agent settings.'
+      setSaveError(msg)
+      throw new Error(msg)
     } finally {
       setSaving(false)
     }
   }
+
+  useImperativeHandle(ref, () => ({
+    save
+  }))
 
   // State updaters (immutable)
   const handleToggleEnabled = (agentKey: string, enabled: boolean) => {
@@ -642,7 +651,7 @@ export default function AgentSettingsPanel({
 
   return (
     <div className="space-y-5 animate-in fade-in duration-150">
-      {/* Save bar */}
+      {/* Header banner */}
       <div className="flex justify-between items-center bg-white/[0.01] border border-white/[0.04] p-3 rounded-2xl sticky top-0 z-10 backdrop-blur-sm">
         <div>
           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
@@ -659,14 +668,6 @@ export default function AgentSettingsPanel({
           {saveSuccess && (
             <span className="text-emerald-400 text-xs font-semibold">Saved!</span>
           )}
-          <button
-            onClick={save}
-            disabled={saving}
-            className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl px-4 py-2 text-xs font-semibold transition-all shadow-md shadow-violet-500/10 cursor-pointer disabled:opacity-50"
-          >
-            <Save size={13} />
-            {saving ? 'Saving…' : 'Save'}
-          </button>
         </div>
       </div>
 
@@ -701,4 +702,6 @@ export default function AgentSettingsPanel({
       </div>
     </div>
   )
-}
+})
+
+export default AgentSettingsPanel
