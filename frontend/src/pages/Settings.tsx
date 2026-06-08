@@ -32,7 +32,6 @@ interface Settings {
   max_position_size_pct: number
   max_risk_per_trade_pct: number
   strict_stop_loss_mode: boolean
-  strict_backtest_learning: boolean
   webhook_url: string | null
   webhook_enabled: boolean
   webhook_events: string
@@ -320,17 +319,12 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
               <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
                 <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Institutional Features</h4>
-                
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">Strict Backtest Learning</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.strict_backtest_learning} onChange={e => update('strict_backtest_learning', e.target.checked)} />
-                </label>
 
                 <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
                   <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_strict_stop_loss')}</span>
                   <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.strict_stop_loss_mode} onChange={e => update('strict_stop_loss_mode', e.target.checked)} />
                 </label>
-              </div>
+                </div>
             </Section>
           )}
 

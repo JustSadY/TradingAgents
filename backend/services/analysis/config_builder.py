@@ -57,11 +57,6 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         or DEFAULT_CONFIG["node_retry_attempts"],
         "node_retry_base_delay": getattr(settings, "node_retry_base_delay", DEFAULT_CONFIG["node_retry_base_delay"])
         or DEFAULT_CONFIG["node_retry_base_delay"],
-        "strict_backtest_learning": getattr(
-            settings, "strict_backtest_learning", DEFAULT_CONFIG["strict_backtest_learning"]
-        )
-        if getattr(settings, "strict_backtest_learning", None) is not None
-        else DEFAULT_CONFIG["strict_backtest_learning"],
         "max_recur_limit": getattr(settings, "max_recur_limit", DEFAULT_CONFIG["max_recur_limit"])
         or DEFAULT_CONFIG["max_recur_limit"],
         "news_article_limit": getattr(settings, "news_article_limit", DEFAULT_CONFIG["news_article_limit"])

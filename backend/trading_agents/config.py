@@ -31,7 +31,6 @@ class TradingAgentsConfig(BaseModel):
     analyst_concurrency_limit: int = Field(default=1, ge=1)
     node_retry_attempts: int = Field(default=2, ge=1)
     node_retry_base_delay: float = Field(default=1.0, ge=0.0)
-    strict_backtest_learning: bool = True
     super_portfolio_manager_prompt: str = (
         "You are a Super Portfolio Manager. The user's actual portfolio (cash available and current "
         "holdings) is provided in the prompt when available — build the allocation against those real "

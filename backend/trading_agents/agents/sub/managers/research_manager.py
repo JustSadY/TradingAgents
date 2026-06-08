@@ -36,14 +36,6 @@ def create_research_manager(llm):
         except Exception:  # noqa: BLE001 — memory is best-effort
             memory_lessons = ""
 
-        strict_learning = get_config().get("strict_backtest_learning", True)
-        learning_instruction = ""
-        if strict_learning:
-            learning_instruction = (
-                "- **STRICT LEARNING:** You MUST explicitly weight the 'Historical Baseline' (backtests) provided in the Synthesis report.\n"
-                "- If historical win rates are below 50%, you MUST provide a high-caution justification if you recommend a Buy.\n"
-            )
-
         prompt = f"""As the Research Manager and debate facilitator, your role is to critically evaluate this round of debate and deliver a clear, actionable investment plan for the trader.
 {instrument_context}
 ---
@@ -54,9 +46,6 @@ def create_research_manager(llm):
 {agent_qa_report}
 ---
 {memory_lessons}
----
-**Instructional Constraints:**
-{learning_instruction}
 ---
 **Rating Scale** (use exactly one):
 - **Buy**: Strong conviction in the bull thesis; recommend taking or growing the position
