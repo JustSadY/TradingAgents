@@ -12,7 +12,6 @@ class SystemSettingsRead(BaseModel):
     data_vendor_technicals: str = "yfinance"
     data_vendor_fundamentals: str = "yfinance"
     data_vendor_news: str = "yfinance"
-    agent_qa_enabled: bool = True
     updated_at: datetime | None = None
 
     class Config:
@@ -27,4 +26,3 @@ class SystemSettingsUpdate(BaseModel):
     data_vendor_technicals: str | None = None
     data_vendor_fundamentals: str | None = None
     data_vendor_news: str | None = None
-    agent_qa_enabled: bool | None = None

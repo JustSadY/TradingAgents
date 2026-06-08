@@ -106,7 +106,13 @@ _ALLOWED_COLUMNS = {
 # (table, column, column_type) tuples applied additively on startup.
 _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("analysis_results", "agent_qa_report", "TEXT DEFAULT ''"),
-    ("system_settings", "agent_qa_enabled", "BOOLEAN DEFAULT TRUE"),
+    ("app_settings", "agent_qa_enabled", "BOOLEAN DEFAULT TRUE"),
+    ("app_settings", "pinecone_index", "VARCHAR(100) DEFAULT 'tradingagents-memory'"),
+    ("app_settings", "pinecone_cloud", "VARCHAR(20) DEFAULT 'aws'"),
+    ("app_settings", "pinecone_region", "VARCHAR(30) DEFAULT 'us-east-1'"),
+    ("app_settings", "memory_embedder", "VARCHAR(20) DEFAULT 'pinecone'"),
+    ("app_settings", "pinecone_embed_model", "VARCHAR(60) DEFAULT 'llama-text-embed-v2'"),
+    ("app_settings", "memory_openai_embed_model", "VARCHAR(60) DEFAULT 'text-embedding-3-small'"),
     ("users", "email", "VARCHAR(255)"),
     ("users", "role", "VARCHAR(20) DEFAULT 'user'"),
     ("users", "display_name", "VARCHAR(100)"),

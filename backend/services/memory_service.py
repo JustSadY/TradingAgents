@@ -13,9 +13,71 @@ from __future__ import annotations
 
 import logging
 
-from backend.core.memory import MemoryRecord, MemoryStore, get_memory_store
+from backend.core.memory import MemoryRecord, MemoryStore, build_pinecone_store
 
 _logger = logging.getLogger(__name__)
+
+# Cache built stores by their resolved config so we don't rebuild a Pinecone
+# client on every record/recall. Keyed by the full config tuple, so a user
+# changing their settings transparently gets a new store.
+_store_cache: dict[tuple, MemoryStore | None] = {}
+
+
+async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
+    """Build the calling user's own memory store from their settings + encrypted
+    keys. Returns None (memory off) when the user hasn't configured Pinecone.
+
+    Everything is per-user: the Pinecone API key (provider "pinecone"), the
+    index/region/embedder choice (AppSettings), and the OpenAI key (provider
+    "openai") when the OpenAI embedder is selected.
+    """
+    if not user_id:
+        return None
+    try:
+        from sqlalchemy import select
+
+        from backend.core.config import get_settings
+        from backend.core.database import AsyncSessionLocal
+        from backend.models.settings import AppSettings
+        from backend.models.user import User
+        from backend.services.user_service import get_user_api_key
+
+        fernet = get_settings().get_fernet()
+        async with AsyncSessionLocal() as db:
+            user = await db.get(User, user_id)
+            if not user:
+                return None
+            pinecone_key = get_user_api_key(user, "pinecone", fernet)
+            if not pinecone_key:
+                return None  # this user hasn't enabled memory
+
+            row = (await db.execute(select(AppSettings).where(AppSettings.user_id == user_id))).scalar_one_or_none()
+            index = getattr(row, "pinecone_index", None) or "tradingagents-memory"
+            cloud = getattr(row, "pinecone_cloud", None) or "aws"
+            region = getattr(row, "pinecone_region", None) or "us-east-1"
+            embedder_kind = getattr(row, "memory_embedder", None) or "pinecone"
+            embed_model = getattr(row, "pinecone_embed_model", None) or "llama-text-embed-v2"
+            openai_embed_model = getattr(row, "memory_openai_embed_model", None) or "text-embedding-3-small"
+            openai_key = get_user_api_key(user, "openai", fernet) if embedder_kind == "openai" else None
+            if embedder_kind == "openai" and not openai_key:
+                return None
+    except Exception as exc:  # noqa: BLE001 — memory must never break the pipeline
+        _logger.warning("Could not resolve memory store for user_id=%s: %s", user_id, exc)
+        return None
+
+    cache_key = (index, cloud, region, embedder_kind, embed_model, openai_embed_model, pinecone_key, openai_key)
+    if cache_key not in _store_cache:
+        _store_cache[cache_key] = build_pinecone_store(
+            api_key=pinecone_key,
+            index_name=index,
+            cloud=cloud,
+            region=region,
+            embedder_kind=embedder_kind,
+            embed_model=embed_model,
+            openai_api_key=openai_key,
+            openai_embed_model=openai_embed_model,
+        )
+    return _store_cache[cache_key]
 
 # Episodes are isolated per owner so one user's trading history never leaks into
 # another's recall.
@@ -47,7 +109,7 @@ async def record_episode(
 ) -> bool:
     """Store one completed, outcome-known analysis as an episode. Returns True if
     written, False if memory is disabled. Best-effort: never raises."""
-    store = store or get_memory_store()
+    store = store or await get_user_memory_store(user_id)
     if store is None:
         return False
 
@@ -92,7 +154,7 @@ async def recall_episode_lessons(
 
     Losses are listed first under an explicit "avoid repeating" header so the
     model gives them weight."""
-    store = store or get_memory_store()
+    store = store or await get_user_memory_store(user_id)
     if store is None or not situation_text.strip():
         return ""
 
@@ -148,7 +210,7 @@ async def record_agent_qa(
     transcript: str,
     store: MemoryStore | None = None,
 ) -> bool:
-    store = store or get_memory_store()
+    store = store or await get_user_memory_store(user_id)
     if store is None or not transcript.strip():
         return False
     record = MemoryRecord(
@@ -173,7 +235,7 @@ async def recall_agent_qa(
 ) -> str:
     """Return prior cross-examinations of similar situations, to seed the current
     Q&A. Empty when memory is disabled or nothing relevant."""
-    store = store or get_memory_store()
+    store = store or await get_user_memory_store(user_id)
     if store is None or not situation_text.strip():
         return ""
     hits = await store.query(_qa_namespace(user_id), situation_text, top_k=top_k)

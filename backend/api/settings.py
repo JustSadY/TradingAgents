@@ -24,6 +24,29 @@ from backend.services.settings_service import (
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 
+@router.get("/memory")
+async def get_memory_status(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """The calling user's own vector-memory status (everything is per-user)."""
+    from backend.core.config import get_settings as _cfg
+    from backend.services.user_service import list_user_api_key_providers
+
+    fernet = _cfg().get_fernet()
+    providers = list_user_api_key_providers(current_user, fernet)
+    settings = await get_or_create_settings(db, current_user)
+    using_openai = settings.memory_embedder == "openai"
+    return {
+        "enabled": "pinecone" in providers,
+        "embedder": settings.memory_embedder,
+        "index": settings.pinecone_index,
+        "embed_model": settings.memory_openai_embed_model if using_openai else settings.pinecone_embed_model,
+        "needs_openai_key": using_openai and "openai" not in providers,
+        "agent_qa_enabled": settings.agent_qa_enabled,
+    }
+
+
 @router.get("", response_model=SettingsRead)
 async def get_settings(
     db: AsyncSession = Depends(get_db),
