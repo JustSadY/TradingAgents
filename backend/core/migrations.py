@@ -118,6 +118,7 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("app_settings", "memory_embedder", "VARCHAR(20) DEFAULT 'pinecone'"),
     ("app_settings", "pinecone_embed_model", "VARCHAR(60) DEFAULT 'llama-text-embed-v2'"),
     ("app_settings", "memory_openai_embed_model", "VARCHAR(60) DEFAULT 'text-embedding-3-small'"),
+    ("app_settings", "agent_qa_enabled", "BOOLEAN DEFAULT TRUE"),
     ("users", "email", "VARCHAR(255)"),
     ("users", "role", "VARCHAR(20) DEFAULT 'user'"),
     ("users", "display_name", "VARCHAR(100)"),
