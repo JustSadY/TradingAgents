@@ -38,7 +38,6 @@ _ALLOWED_COLUMNS = {
         "trading_mode",
         "active_broker",
         "active_data_vendor",
-        "agent_qa_enabled",
         "updated_at",
     },
     "app_settings": {
@@ -67,6 +66,13 @@ _ALLOWED_COLUMNS = {
         "cron_enabled",
         "cron_schedule",
         "price_tolerance_pct",
+        "agent_qa_enabled",
+        "pinecone_index",
+        "pinecone_cloud",
+        "pinecone_region",
+        "memory_embedder",
+        "pinecone_embed_model",
+        "memory_openai_embed_model",
         "watchlist",
         "updated_at",
     },
@@ -106,7 +112,6 @@ _ALLOWED_COLUMNS = {
 # (table, column, column_type) tuples applied additively on startup.
 _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("analysis_results", "agent_qa_report", "TEXT DEFAULT ''"),
-    ("app_settings", "agent_qa_enabled", "BOOLEAN DEFAULT TRUE"),
     ("app_settings", "pinecone_index", "VARCHAR(100) DEFAULT 'tradingagents-memory'"),
     ("app_settings", "pinecone_cloud", "VARCHAR(20) DEFAULT 'aws'"),
     ("app_settings", "pinecone_region", "VARCHAR(30) DEFAULT 'us-east-1'"),
