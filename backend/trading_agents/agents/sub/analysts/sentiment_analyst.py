@@ -64,10 +64,9 @@ def create_sentiment_analyst(llm):
             [
                 (
                     "system",
-                    "You are a helpful AI assistant, collaborating with other assistants."
-                    " If you or any other assistant has the FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** or deliverable,"
-                    " prefix your response with FINAL TRANSACTION PROPOSAL: **BUY/HOLD/SELL** so the team knows to stop."
-                    "\n{system_message}\n"
+                    # The sentiment analyst produces a sentiment report only — it does not
+                    # issue BUY/HOLD/SELL calls (that's the trader/PM's job downstream).
+                    "{system_message}\n"
                     "For your reference, the current date is {current_date}. {instrument_context}",
                 ),
                 MessagesPlaceholder(variable_name="messages"),
