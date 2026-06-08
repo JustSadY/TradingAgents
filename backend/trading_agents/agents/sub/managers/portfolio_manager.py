@@ -60,6 +60,11 @@ def create_portfolio_manager(llm):
         except Exception:  # noqa: BLE001 — memory is best-effort
             memory_lessons = ""
 
+        # Auto-pull the user's real account (cash + holdings) for grounded sizing.
+        from backend.trading_agents.agents.runtime.portfolio_context import get_portfolio_context
+
+        portfolio_context = await get_portfolio_context(get_config().get("user_id"))
+
         # past_context now carries attribution / market-pulse / scenario context
         # (the old SQL recency memory has been replaced by the vector recall above).
         past_context = "\n\n".join(p for p in (memory_lessons, state.get("past_context", "")) if p)
@@ -91,11 +96,13 @@ def create_portfolio_manager(llm):
 - **Hold**: Maintain current position, no action needed
 - **Underweight**: Reduce exposure, take partial profits
 - **Sell**: Exit position or avoid entry
+{portfolio_context}
 **Context:**
 - Research Manager's investment plan: **{research_plan}**
 - Trader's transaction proposal: **{trader_plan}**
 {kelly_recommendation}
 {lessons_line}
+- Base your final position size on the user's actual cash available and existing holdings shown above; never exceed available cash and account for any position the user already holds in this ticker.
 **Risk Analysts Debate History:**
 {history}
 {conviction_instructions}---

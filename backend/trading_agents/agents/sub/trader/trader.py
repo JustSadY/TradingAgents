@@ -24,52 +24,14 @@ def create_trader(llm):
         asset_type = state.get("asset_type", "stock")
         instrument_context = build_instrument_context(company_name, asset_type)
         investment_plan = state["investment_plan"]
-        user_id = state.get("user_id")
 
-        # 1. Fetch Portfolio Balance & Sector Concentration if available
-        portfolio_balance = None
-        sector_context = ""
-        if user_id:
-            try:
-                from backend.core.database import AsyncSessionLocal
-                from backend.repositories.portfolio import get_simulation_portfolio
-                import yfinance as yf
+        # Auto-pull the user's real account state (cash + holdings) so sizing is
+        # grounded in actual figures instead of manually-entered ones.
+        from backend.trading_agents.agents.runtime.portfolio_context import get_portfolio_context
+        from backend.trading_agents.dataflows.config import get_config
 
-                async with AsyncSessionLocal() as db:
-                    portfolio = await get_simulation_portfolio(db, user_id=user_id)
-                    if portfolio:
-                        portfolio_balance = float(portfolio.current_balance)
-                        
-                        # Calculate Sector Concentration
-                        holdings = portfolio.holdings
-                        if holdings:
-                            sectors = {}
-                            total_value = float(portfolio.current_balance)
-                            for h in holdings:
-                                try:
-                                    # Run the blocking yfinance lookup off the event loop.
-                                    # (In a real system, cache sector info on the Holding model.)
-                                    info = await asyncio.to_thread(lambda t=h.ticker: yf.Ticker(t).info)
-                                    sector = info.get("sector", "Unknown")
-                                    h_value = float(h.quantity) * float(h.current_price)
-                                    sectors[sector] = sectors.get(sector, 0) + h_value
-                                except Exception:
-                                    continue
-                            
-                            if sectors:
-                                sector_context = "=== PORTFOLIO SECTOR CONCENTRATION ===\n"
-                                for sector, val in sectors.items():
-                                    pct = (val / total_value) * 100
-                                    sector_context += f"- {sector}: {pct:.1f}%\n"
-                                sector_context += "\n"
-
-            except Exception as e:
-                import logging
-                logging.getLogger(__name__).warning("Could not fetch portfolio context for trader: %s", e)
-
-        balance_context = ""
-        if portfolio_balance is not None:
-            balance_context = f"User's Current Portfolio Balance: ${portfolio_balance:,.2f}\n"
+        portfolio_context = await get_portfolio_context(get_config().get("user_id"))
+        portfolio_block = f"{portfolio_context}\n\n" if portfolio_context else ""
 
         macd_args = {"ticker": company_name, "strategy_type": "macd_crossover"}
         rsi_args = {"ticker": company_name, "strategy_type": "rsi_oversold"}
@@ -92,9 +54,9 @@ def create_trader(llm):
                     "strength of the research plan and technical backtests. "
                     "You must also calculate the 'Kelly Criterion Size' (0.0 to 1.0) using the formula: K% = W - (1-W)/R, "
                     "where W is Confidence Score and R is Risk/Reward Ratio ((Take Profit - Entry) / (Entry - Stop Loss)). "
-                    "If a 'User's Current Portfolio Balance' is provided, multiply the Kelly Size by the balance to provide the 'Suggested Capital Allocation'. "
+                    "When the user's current portfolio (cash available + holdings) is provided, multiply the Kelly Size by the cash available to provide the 'Suggested Capital Allocation', and never size a position larger than the available cash. "
                     "If Action is 'Hold' or 'Sell' (to close), set Kelly Size and Suggested Capital to 0. "
-                    "Check the 'PORTFOLIO SECTOR CONCENTRATION' context. If adding this trade significantly increases exposure to a single sector (e.g., >30% in one sector), issue a warning in the reasoning. "
+                    "If the user already holds this ticker (see their portfolio), account for the existing position when proposing an action. "
                     "Consider the 'GLOBAL MARKET PULSE' for overall market conditions. "
                     "Anchor your reasoning in the analysts' reports and the quantitative backtest results provided."
                     + get_language_instruction()
@@ -103,8 +65,7 @@ def create_trader(llm):
             {
                 "role": "user",
                 "content": (
-                    f"{balance_context}"
-                    f"{sector_context}"
+                    f"{portfolio_block}"
                     f"Research Plan: {investment_plan}\n\n"
                     f"Historical Strategy Backtests:\n{macd_results}\n\n{rsi_results}\n\n"
                     f"{instrument_context}\n\n"

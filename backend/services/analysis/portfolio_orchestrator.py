@@ -126,9 +126,17 @@ async def _generate_super_report(db, user, config, ticker_reports) -> str:
         user_id = user.id if user else None
         permitted_analysts = await prepare_graph_config(db, user_id, config)
 
+        # Auto-pull the user's real account so the allocation is built against
+        # actual cash/holdings, not a hardcoded balance.
+        from backend.trading_agents.agents.runtime.portfolio_context import get_portfolio_context
+
+        portfolio_context = await get_portfolio_context(user_id)
+
         ta = TradingAgentsGraph(selected_analysts=permitted_analysts, config=config)
         spm_node = create_super_portfolio_manager(ta.thinking_llm)
-        state_out = await asyncio.to_thread(spm_node, {"ticker_reports": ticker_reports})
+        state_out = await asyncio.to_thread(
+            spm_node, {"ticker_reports": ticker_reports, "portfolio_context": portfolio_context}
+        )
         return state_out.get("super_portfolio_report", "")
     except Exception as e:
         _logger.error("SuperPortfolioManager failed for user=%s: %s", username, e, exc_info=True)
