@@ -56,6 +56,10 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
     fetchSettings()
   }, [apiPath, meta])
 
+  useImperativeHandle(ref, () => ({
+    save
+  }))
+
   const save = async () => {
     if (!settings) return
     setSaving(true)

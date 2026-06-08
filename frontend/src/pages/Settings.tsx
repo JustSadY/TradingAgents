@@ -8,8 +8,10 @@ import { useMeta, triggerMetaRefetch } from '../hooks/useMeta'
 import { useAuth } from '../contexts/AuthContext'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
 import { useTranslation } from '../contexts/LanguageContext'
-import ToolSettingsPanel, { ToolSettingsPanelHandle } from '../components/settings/ToolSettingsPanel'
-import AgentSettingsPanel, { AgentSettingsPanelHandle } from '../components/settings/AgentSettingsPanel'
+import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
+import type { ToolSettingsPanelHandle } from '../components/settings/ToolSettingsPanel'
+import AgentSettingsPanel from '../components/settings/AgentSettingsPanel'
+import type { AgentSettingsPanelHandle } from '../components/settings/AgentSettingsPanel'
 
 // ... (interfaces unchanged) ...
 interface Settings {

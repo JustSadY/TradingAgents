@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useState, forwardRef, useImperativeHandle } from 'react'
 import axios from 'axios'
-import { AlertCircle, ChevronDown, ChevronRight, Save, Settings2 } from 'lucide-react'
+import { AlertCircle, ChevronDown, ChevronRight, Settings2 } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
 import { useMeta, triggerMetaRefetch } from '../../hooks/useMeta'
 
@@ -527,7 +527,6 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
   const meta = useMeta()
   const [settings, setSettings] = useState<AgentSettingsData | null>(null)
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
 
@@ -553,7 +552,6 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
   // Save
   const save = async () => {
     if (!settings) return
-    setSaving(true)
     setSaveSuccess(false)
     setSaveError(null)
     try {
@@ -566,8 +564,6 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
       const msg = err.response?.data?.detail || 'Failed to save agent settings.'
       setSaveError(msg)
       throw new Error(msg)
-    } finally {
-      setSaving(false)
     }
   }
 
