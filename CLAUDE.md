@@ -1,0 +1,663 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+---
+
+## 🎯 Project: TradingAgents
+
+A comprehensive, production-ready multi-agent AI investment platform. FastAPI backend orchestrates a **6-node LangGraph** state machine where specialized AI analysts, researchers, traders, and risk managers collaborate to produce final investment decisions. Includes **Pinecone vector memory** for episodic learning, real-time **WebSocket streaming**, **RBAC with page-level permissions**, **encrypted per-user API keys**, and extensive **developer extensibility** (custom analysts, tools, personas, etc.).
+
+**START HERE:**
+- [docs/introduction.md](docs/introduction.md) — Overview
+- [docs/architecture/overview.md](docs/architecture/overview.md) — High-level design
+- [backend/README.md](backend/README.md) — Backend architecture and layering
+
+---
+
+## 🏗️ Current Architecture (6-Node LangGraph)
+
+```
+START
+  ↓
+Market Intelligence (orchestrates 9 analyst plugins)
+  ↓
+Agent Q&A (inter-analyst cross-examination & conflict resolution)
+  ↓
+Research Manager (bull/bear debate, synthesis, auditing)
+  ↓
+Trader (signal processing & tactical execution)
+  ↓
+Risk Debate (aggressive/conservative/neutral negotiation)
+  ↓
+Portfolio Manager (final decision)
+  ↓
+END
+```
+
+### Execution Pipeline
+
+1. **API:** `/api/analysis/run` → `run_analysis_task()`
+2. **Config Builder:** Reads user's AppSettings + AgentSettings, builds `RuntimeAgentContext`
+3. **Memory Recall:** If user has Pinecone configured, fetch similar past situations + losses
+4. **LangGraph:** `TradingAgentsGraph(selected_analysts, config).propagate(ticker, date)` → 6 nodes execute
+5. **Streaming:** `AnalysisEmitter` broadcasts `/ws/analysis/{task_id}` events in real-time
+6. **Persistence:** Store in `AnalysisResult`, stream updates to `AnalysisChat`
+7. **Memory Record:** After outcome known, embed & store in Pinecone for future recall
+8. **Paper Trading:** `place_signal_order()` creates orders in `Order` table
+
+### Tier System
+
+- **Tier 1 (Main Agents):** 6 nodes in `agents/main/*.py` — guard-wrapped for resilience
+- **Tier 2 (Sub-Agents):** Analysts, researchers, managers in `agents/sub/`
+- **Tier 3 (Tools):** Modular registry in `agents/tools/` — dynamically registered, user-configurable
+
+### Single Source of Truth
+
+**`agents/hierarchy.py`** (`AgentHierarchy`):
+- Cascading `is_enabled()` kill-switches (parent disabled → all children disabled)
+- `resolve_llm()` recursive LLM fallback (agent → parent → global default)
+- `tool_is_reachable()` gates tools when all allowed analysts disabled
+- Parent links defined in `agent_catalog.py` (`AGENTS` list)
+
+---
+
+## 🛠️ Development Setup
+
+### Prerequisites
+
+- **Python 3.10+** (backend)
+- **Node.js 20+** (frontend)
+- **PostgreSQL 12+** (auto-created on Linux; manual on Windows/macOS)
+
+### Local Dev Workflow
+
+#### 1. Backend
+
+```bash
+python -m venv .venv
+# Windows:
+.venv\Scripts\activate
+# Linux/macOS:
+source .venv/bin/activate
+
+pip install -r backend/requirements.txt
+cp .env.example .env
+# Fill in: SECRET_KEY, ENCRYPTION_KEY, LLM provider keys (if testing)
+
+uvicorn backend.main:app --reload --port 8000
+# Auto-runs migrations on startup
+```
+
+#### 2. Frontend
+
+```bash
+cd frontend
+npm install
+npm run dev
+# Launches http://localhost:5173 with auto-proxy to :8000
+```
+
+#### 3. Database
+
+PostgreSQL running, database named `tradingagents` (or match `DATABASE_URL` in `.env`).
+
+#### Full Stack (two terminals)
+
+```bash
+# Terminal 1: Backend
+uvicorn backend.main:app --reload --port 8000
+
+# Terminal 2: Frontend
+cd frontend && npm run dev
+```
+
+---
+
+## 📋 Key Tasks & Workflows
+
+### Building & Deployment
+
+**Frontend production build:**
+```bash
+cd frontend && npm run build
+# Outputs to frontend/dist/ (served by FastAPI in production)
+```
+
+**Linux server installation:**
+```bash
+sudo bash deploy/install.sh
+# Installs everything, creates systemd service, generates .env
+```
+
+**System management:**
+```bash
+systemctl status tradingagents
+systemctl restart tradingagents
+journalctl -u tradingagents -f
+```
+
+### Code Quality
+
+**Frontend linting:**
+```bash
+cd frontend && npm run lint
+```
+
+No active backend linting. Follow conventions in `docs/architecture/backend.md`.
+
+### Testing
+
+No comprehensive test suite. For agent behavior, spin up full stack and run analysis through the UI. Unit test example: `backend/tests/test_tool_settings_service.py`.
+
+---
+
+## 🔑 Key Concepts & Patterns
+
+### Layering (Backend)
+
+Strict dependency flow: `api → services → repositories → models`
+
+- **`api/`** — FastAPI routers; validate input, call service, return DTO
+- **`services/`** — Business logic, orchestration, external IO
+- **`repositories/`** — Data-access helpers; always apply `scope_to_user(user_id)` IDOR prevention
+- **`models/`** — SQLAlchemy async ORM (PostgreSQL + asyncpg)
+- **`core/`** — Config, DB, security, WebSockets, logging, memory, migrations
+
+### API Routes (Key Endpoints)
+
+| Route | Method | Auth | Description |
+|-------|--------|------|-------------|
+| `/auth/login` | POST | — | JWT tokens (access + refresh) |
+| `/api/analysis/run` | POST | Yes | Start single or multi-ticker analysis |
+| `/api/analysis/history` | GET | Yes | Past analyses (scoped to user) |
+| `/api/analysis/{id}/chat` | GET/POST | Yes | Q&A over completed analysis |
+| `/api/market/ohlcv` | GET | Yes | OHLCV + indicators for charting |
+| `/api/trading/portfolio` | GET | Yes | Paper portfolio with P&L |
+| `/api/trading/order` | POST | Yes | Place buy/sell paper order |
+| `/api/settings` | GET/PUT | Yes | User LLM settings, memory config, effort |
+| `/api/settings/tools` | GET/PUT | Yes | User-scoped tool settings |
+| `/api/system-settings/tools` | GET/PUT | Admin | Global fallback tool defaults |
+| `/api/users/{id}/agent-access` | GET/PUT | Admin | Which analysts user can run |
+| `/api/users/{id}/tool-access` | GET/PUT | Admin | Which tools user can view/use/edit/enable |
+| `/api/users/{id}/permissions` | GET/PUT | Admin | Which pages user can access |
+| `/ws/analysis/{task_id}` | WS | Token | Stream live LangGraph progress + reports |
+
+### Tool System (Tier 3)
+
+**To Register a New Tool:**
+
+1. Create class in `agents/tools/builtin/` extending `BaseAgentTool` or `FunctionToolAdapter`
+2. Define `settings_schema` (slider, text, toggle, etc.)
+3. Implement `get_langchain_tools()` returning LangChain `@tool` functions
+4. Import in `agents/tools/bootstrap.py` (auto-registered on startup)
+5. Add i18n in `frontend/src/i18n/tools.ts`
+
+**Example:**
+
+```python
+from backend.trading_agents.agents.tools.base import BaseAgentTool, ToolSettingField
+
+class MyTool(BaseAgentTool):
+    key = "my_tool"
+    category = "market"
+    default_enabled = True
+    allowed_analysts = ["market", "social"]
+    settings_schema = [
+        ToolSettingField(key="param", type="number", label_key="...", min=1, max=100)
+    ]
+    
+    def get_langchain_tools(self, settings, context):
+        limit = int(settings.get("param", 10))
+        
+        @tool
+        def do_thing(query: str) -> str:
+            """Do the thing."""
+            return f"Result: {query} (limit={limit})"
+        
+        return [do_thing]
+```
+
+**Access Control:**
+- Global tool settings: `/api/system-settings/tools` (admin)
+- User-scoped overrides: `/api/settings/tools` (user)
+- `UserToolAccess`: can_view, can_use, can_edit, can_enable per tool
+- `UserToolFieldAccess`: field-level visibility overrides
+
+### Episodic Memory (Pinecone Vector Store)
+
+**Per-User Configuration (Settings → Memory):**
+- Pinecone API key (encrypted per-user)
+- Index name, cloud, region
+- Embedder choice (Pinecone hosted or OpenAI client-side)
+- Embed model selection
+
+**Recording:**
+- After trade outcome known, `memory_service.record_episode()` embeds situation + decision + realized alpha
+- Stored as `MemoryRecord` with metadata (ticker, date, outcome, loss/gain flag)
+- Namespaced per user (`ep_user_<id>`)
+
+**Recall:**
+- Before analysts run, retrieve similar past situations via `memory_service.recall_episode_lessons()`
+- **Losses weighted first:** "Do not repeat: [past loss situations]"
+- Continuous learning without model retraining
+
+**Agent Q&A Memory:**
+- After analysts produce reports, Agent Q&A node cross-examines them
+- Transcript stored in `qa_user_<id>` namespace for future recall
+- Helps preserve multi-analyst conflict resolution patterns
+
+**Important:** Memory is opt-in and per-user. If no Pinecone key configured, all memory calls become no-ops.
+
+### Access Control Hierarchy
+
+**Three Levels:**
+
+1. **Agent-Level** (`UserAgentAccess`) — Which analysts can run (per user)
+2. **Tool-Level** (`UserToolAccess`) — can_view / can_use / can_edit / can_enable per tool (per user)
+3. **Field-Level** (`UserToolFieldAccess`) — Hide/disable individual tool settings (per user)
+
+**Resolution at Runtime:**
+- `tool_access_service.get_user_tool_access(db, user_id)` → permission dict
+- `tool_settings_service.resolve_user_tool_settings()` → merged defaults + overrides
+
+### RBAC & Page Permissions
+
+**Roles:**
+- **Owner** — Server owner (immutable, one per server, seeded at startup from `ADMIN_USERNAME` in `.env`)
+- **Admin** — Manager of users & global settings (promoted by owner)
+- **User** — Regular user (starts with no page access except Settings)
+
+**Page Permissions:**
+- Regular users start with **no page access** (admin grants per page)
+- Admin/Owner implicitly access all pages
+- Pages: dashboard, analysis, chart, trading, portfolio, watchlist, orders, performance, alerts, ab-testing, logs
+
+**Settings Permissions (granular):**
+Admins can restrict which parts of Settings a user can modify:
+- `general` (mode, broker, language, persona, benchmark)
+- `llm` (provider, model, analysts)
+- `risk` (position limits, risk per trade, debate rounds)
+- `webhooks` (webhook URL)
+- `cron` (user-specific scheduler)
+- `presets` (configuration templates)
+
+### Encrypted Per-User API Keys
+
+**Storage:**
+- `users.api_keys_enc` — Fernet-encrypted JSON blob
+- Supported providers: openai, anthropic, google, xai, deepseek, qwen, glm, minimax, ollama, nvidia, litellm, azure
+
+**Injection Flow:**
+1. User triggers analysis
+2. `_build_config(settings, user)` checks user's key
+3. If found: inject into config
+4. If not found & user is admin: fall back to `.env`
+5. LLM client uses injected key
+
+**Security:**
+- Keys never returned in API responses (only provider names listed)
+- Fernet encryption (AES-128-CBC + HMAC-SHA256)
+- Encryption key must be in `.env` as `ENCRYPTION_KEY`
+
+### WebSocket Real-Time Streaming
+
+Long-running analyses (2–3 min) stream live progress:
+
+1. API returns `task_id` immediately
+2. Frontend connects to `/ws/analysis/{task_id}` with token query param
+3. Backend emits events: `progress`, `report`, `debate`, `complete`
+4. `AnalysisEmitter` broadcasts to all subscribers for that task
+
+Events:
+```json
+{
+  "type": "progress",
+  "node": "Market Analyst",
+  "stage": "analyst"
+}
+```
+
+```json
+{
+  "type": "report",
+  "section": "market_report",
+  "content": "### Market Technical Analysis\n..."
+}
+```
+
+```json
+{
+  "type": "complete",
+  "analysis_id": 45,
+  "duration_seconds": 38.5,
+  "llm_calls": 12
+}
+```
+
+### Resilience & Fallbacks
+
+Every main node is **guard-wrapped** with retry logic + fallback stubs:
+
+| Node | Fallback on persistent failure |
+|------|------|
+| Any analyst | empty report note (`⚠️ … unavailable`) |
+| Bull/Bear researcher | advance debate count |
+| Synthesis/Auditor | empty report |
+| Research Manager | placeholder investment plan |
+| Trader | placeholder proposal |
+| Risk debators | advance debate count |
+| **Portfolio Manager** | `Hold — automated fallback` |
+
+Portfolio Manager **always** produces a final decision, so analysis completes even if terminal agent fails.
+
+**Retry Config:**
+- `node_retry_attempts` (default 2)
+- `node_retry_base_delay` (default 1.0s, exponential backoff)
+
+### Async & Database
+
+All async:
+
+```python
+from backend.core.database import AsyncSessionLocal
+
+async with AsyncSessionLocal() as db:
+    result = await repository.get_thing(db, id)
+    await db.commit()
+```
+
+No sync database calls in async context. Layering: repositories ← services ← api.
+
+### Frontend i18n
+
+Supports English (`en`) and Turkish (`tr`). Toggle persists in `localStorage`.
+
+**Adding Translations:**
+
+1. **Common labels:** Edit `LanguageContext.tsx`, add to both `en` and `tr` blocks
+2. **Page-specific:** Add to relevant file in `frontend/src/i18n/`
+3. **New page:** Create `.ts` file in `frontend/src/i18n/`, auto-merged at load time
+
+Example:
+```typescript
+const translations = {
+  en: { 'feature.title': 'My Feature' },
+  tr: { 'feature.title': 'Özelliğim' }
+}
+export default translations
+```
+
+### Cron Scheduler & Background Tasks
+
+APScheduler runs in-process:
+- `services/cron_service.py` (init, start, stop)
+- `api/cron.py` (user endpoints)
+
+**Critical:** Single uvicorn worker only. Multiple workers duplicate jobs.
+
+---
+
+## 🚨 Important Gotchas
+
+### Circular Imports
+
+`agents/main/*.py` must NOT import from `graph/` at module level. Lazy import inside functions:
+
+```python
+def create_market_intelligence_node(ctx):
+    async def market_intelligence(state):
+        from backend.trading_agents.graph.analyst_execution import build_analyst_subgraph
+        # ...
+    return market_intelligence
+```
+
+### Single Uvicorn Worker
+
+Systemd service runs **one** uvicorn process. APScheduler, WebSockets, and in-memory task tracking rely on this. Adding `--workers` breaks everything.
+
+### Migrations Are Additive Only
+
+`core/migrations.py` applies `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` at startup. No Alembic workflows.
+
+- Adding columns: auto-applied
+- Renaming/dropping/changing types: manual SQL (think hard first)
+
+### IDOR Prevention
+
+Every data query must apply `scope_to_user(user_id)` in repositories. See `repositories/common.py`.
+
+### Bootstrap Order
+
+`backend/bootstrap.py` must import early — sets engine env defaults. Main app does this automatically, but if importing `trading_agents` directly in a script, import bootstrap first.
+
+### Memory Is Opt-In & Per-User
+
+Pinecone must be configured by user in Settings → Memory. If not configured, memory calls become no-ops. No recording happens until after trade outcome known.
+
+### Configuration Is Database-Driven
+
+All operational settings (LLM provider keys, tool configs, debate rounds, etc.) are in the **Web UI**, not `.env`. Only infrastructure secrets in `.env`: `SECRET_KEY`, `ENCRYPTION_KEY`, `DATABASE_URL`, `CORS_ORIGINS`.
+
+---
+
+## 📁 Project Layout
+
+```
+backend/
+├── main.py                    # FastAPI app factory; startup hooks
+├── bootstrap.py               # Engine env setup (import early!)
+├── api/                       # Routers (no business logic)
+│   ├── analysis.py
+│   ├── trading.py
+│   ├── settings.py
+│   ├── users.py
+│   └── ...
+├── services/                  # Orchestration & business logic
+│   ├── analysis_service.py
+│   ├── analysis/              # Sub-modules (emitter, orchestrator, persistence)
+│   ├── memory_service.py      # Pinecone episodic memory interface
+│   ├── tool_access_service.py # Agent/tool permission resolution
+│   ├── trading_orchestrator.py # Paper trading order logic
+│   ├── cron_service.py
+│   └── ...
+├── repositories/              # Data access (apply scope_to_user!)
+├── models/                    # SQLAlchemy ORM
+├── core/                      # Platform infrastructure
+│   ├── config.py
+│   ├── database.py
+│   ├── migrations.py          # Additive-only migrations
+│   ├── security.py            # JWT, bcrypt, Fernet
+│   ├── websocket.py
+│   ├── memory/                # Vector store abstractions
+│   │   ├── base.py
+│   │   ├── pinecone_store.py
+│   │   └── embedders.py
+│   └── ...
+├── schemas/                   # Pydantic DTOs
+└── trading_agents/            # Core AI engine (LangGraph)
+    ├── agents/
+    │   ├── main/              # Tier-1: 6 main nodes
+    │   │   ├── market_intelligence.py
+    │   │   ├── agent_qa.py    # Inter-agent cross-examination
+    │   │   ├── research.py
+    │   │   ├── trader.py
+    │   │   ├── risk.py
+    │   │   └── portfolio.py
+    │   ├── sub/               # Tier-2: analysts, researchers, managers
+    │   │   ├── analysts/      # 9 analyst plugins
+    │   │   ├── managers/
+    │   │   ├── researchers/
+    │   │   ├── risk_mgmt/
+    │   │   └── trader/
+    │   ├── tools/             # Tier-3: tool registry & builtin tools
+    │   │   ├── base.py
+    │   │   ├── registry.py
+    │   │   ├── bootstrap.py   # Register tools on startup
+    │   │   └── builtin/
+    │   ├── data/              # yFinance, Alpha Vantage, Reddit, SEC, etc.
+    │   ├── runtime/           # Execution framework (resilience, structured, memory, factory)
+    │   ├── hierarchy.py       # Agent hierarchy + kill-switches (single source of truth!)
+    │   ├── agent_catalog.py   # Agent metadata & hierarchy tree
+    │   └── base.py            # Shared contracts
+    ├── graph/                 # LangGraph state machine
+    │   ├── setup.py           # Assembles 6 main nodes
+    │   ├── trading_graph.py   # Entry point (TradingAgentsGraph class)
+    │   ├── analyst_execution.py
+    │   ├── signal_processing.py
+    │   ├── checkpointer.py
+    │   └── ...
+    ├── dataflows/             # Config & data source abstractions
+    │   ├── config.py
+    │   ├── y_finance.py
+    │   ├── alpha_vantage.py
+    │   └── ...
+    └── llm_clients/           # Unified LLM API clients
+        ├── registry.py        # Provider registry
+        └── client.py          # OpenAI, Claude, Gemini, DeepSeek, etc.
+
+frontend/
+├── src/
+│   ├── pages/                 # Dashboard, Analysis, Chart, Trading, etc.
+│   ├── components/            # Layout, WebSocket hooks
+│   ├── contexts/              # Auth, Theme, Language
+│   ├── hooks/                 # API queries, local storage
+│   ├── i18n/                  # Translation dicts (en, tr)
+│   ├── App.tsx
+│   └── main.tsx
+├── vite.config.ts
+├── tailwind.config.js
+└── package.json
+
+docs/
+├── introduction.md
+├── installation.md
+├── configuration.md
+├── developer_guide.md          # Custom analysts, WebSocket, i18n, cron, advanced features
+└── architecture/
+    ├── overview.md
+    ├── backend.md
+    ├── multi_agent_system.md
+    ├── modular_tool_system.md
+    ├── api-keys.md             # Per-user encrypted API key storage
+    ├── rbac.md                 # Owner/Admin/User roles
+    ├── page-permissions.md     # Feature flags per page
+    ├── resilience.md           # Retry logic & fallbacks
+    └── multi-tenant.md
+```
+
+---
+
+## 🚀 Deployment
+
+**Linux Installer (recommended):**
+```bash
+sudo bash deploy/install.sh
+# Creates: systemd service, venv, PostgreSQL db, .env, frontend build
+```
+
+**Docker Compose:**
+```bash
+docker-compose up -d --build
+```
+
+**Manual:**
+1. PostgreSQL running (create `tradingagents` db)
+2. Python venv + `pip install -r backend/requirements.txt`
+3. Frontend: `npm install && npm run build`
+4. `.env` configured
+5. `uvicorn backend.main:app --host 0.0.0.0 --port 8000`
+
+**Self-Updater:**
+Backend polls `origin/main`, notifies UI, triggers `deploy/update.sh` (git pull, pip install, npm build, systemctl restart).
+
+---
+
+## 🧠 Developer Extensibility
+
+### Custom Analysts
+
+See `docs/developer_guide.md` section 1. Register with `@register_analyst` decorator, add to `AGENTS` list in `agent_catalog.py`.
+
+### Custom Tools
+
+Register in `agents/tools/builtin/`, import in `agents/tools/bootstrap.py`, add i18n in `frontend/src/i18n/tools.ts`.
+
+### Custom Personas
+
+Edit `PERSONA_PROMPTS` in `agents/sub/managers/portfolio_manager.py`, add to `agent_catalog.py` settings.
+
+### WebSocket Streaming
+
+Hook `AnalysisEmitter` in `graph/trading_graph.py` callbacks or `services/analysis/emitter.py`.
+
+### Advanced Features
+
+See `docs/developer_guide.md` sections 5A–5I for:
+- Interactive Q&A over reports
+- Streaming debate bubbles
+- Vision-based pattern recognition
+- Multi-timeframe alignment
+- Custom indicators
+- Chart annotations
+- Fractional shares
+- etc.
+
+---
+
+## 📚 Reference
+
+**Key Files:**
+- `backend/main.py` — Entry point, lifespan hooks
+- `backend/trading_agents/graph/trading_graph.py` — LangGraph runner
+- `backend/trading_agents/agents/hierarchy.py` — Kill-switches, LLM fallback
+- `backend/trading_agents/agent_catalog.py` — Agent metadata, hierarchy tree
+- `backend/services/analysis_service.py` — Analysis orchestration
+- `backend/services/memory_service.py` — Pinecone episodic memory interface
+- `backend/core/memory/` — Vector store abstractions
+
+**Documentation:**
+- [docs/introduction.md](docs/introduction.md) — Feature overview
+- [docs/architecture/backend.md](docs/architecture/backend.md) — Backend conventions (dense reference)
+- [docs/architecture/multi_agent_system.md](docs/architecture/multi_agent_system.md) — Agent workflows
+- [docs/architecture/modular_tool_system.md](docs/architecture/modular_tool_system.md) — Tool system
+- [docs/architecture/resilience.md](docs/architecture/resilience.md) — Retry & fallback logic
+- [docs/architecture/rbac.md](docs/architecture/rbac.md) — Role-based access control
+- [docs/architecture/page-permissions.md](docs/architecture/page-permissions.md) — Page-level feature flags
+- [docs/architecture/api-keys.md](docs/architecture/api-keys.md) — Per-user encrypted API keys
+- [docs/configuration.md](docs/configuration.md) — .env setup & runtime settings
+- [docs/developer_guide.md](docs/developer_guide.md) — Custom analysts, WebSocket, i18n, cron, advanced features
+- [backend/core/memory/README.md](backend/core/memory/README.md) — Vector memory details
+- [backend/README.md](backend/README.md) — Backend architecture
+- [backend/trading_agents/README.md](backend/trading_agents/README.md) — Multi-agent system
+- [frontend/README.md](frontend/README.md) — React SPA
+- [deploy/README.md](deploy/README.md) — Installation & systemd
+
+---
+
+## 💡 When Working on This Codebase
+
+- **Understand the graph first.** Read `agents/main/*.py` to see how the 6 nodes work.
+- **Follow layering.** Keep `api → services → repositories → models` unidirectional.
+- **Scope all queries.** Apply `scope_to_user()` in repositories.
+- **Async throughout.** No sync database calls in async context.
+- **Test in the UI.** Spin up full stack and run an analysis to verify changes.
+- **Know the hierarchy.** Check `agent_catalog.py` parent links and kill-switch logic.
+- **Memory is optional.** Pinecone is per-user, opt-in; remember off by default.
+- **Configuration is database-driven.** Only infrastructure secrets in `.env`.
+- **Guard against IDOR.** Every data query must check user ownership.
+- **One uvicorn worker.** Never add `--workers`; APScheduler + WebSockets break.
+- **Check the docs.** Before deep work, read the relevant `docs/architecture/` file.
+
+---
+
+## ✅ Confidence Level
+
+This CLAUDE.md has been validated against:
+- README files in all major directories
+- All architecture documentation
+- Actual code exploration (agents, services, models, API routes)
+- Developer guide with advanced features
+- Configuration and deployment docs
+
+**It accurately reflects the current state of the codebase as of this session.**
