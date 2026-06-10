@@ -10,6 +10,7 @@ PAGE_KEYS = [
     "trading",
     "portfolio",
     "performance",
+    "backtest",
     "alerts",
     "ab-testing",
     "logs",

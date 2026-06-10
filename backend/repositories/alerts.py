@@ -25,10 +25,11 @@ async def get_alert_by_id(db: AsyncSession, alert_id: int, user=None) -> PriceAl
 
 
 async def create_alert(
-    db: AsyncSession, user_id: int, ticker: str, condition: str, target_price: float, auto_analyze: bool
+    db: AsyncSession, user_id: int, ticker: str, condition: str, target_price: float, auto_analyze: bool, alert_type: str = "price"
 ) -> PriceAlert:
     alert = PriceAlert(
         ticker=ticker.upper(),
+        alert_type=alert_type,
         condition=condition,
         target_price=target_price,
         auto_analyze=auto_analyze,

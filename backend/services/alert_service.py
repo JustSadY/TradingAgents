@@ -61,7 +61,13 @@ async def check_price_alerts() -> None:
                 # notification respects that user's delivery preferences.
                 user = await db.get(User, alert.user_id)
                 user_settings = await get_or_create_settings(db, user)
-                await notify_alert_triggered(alert.ticker, alert.condition, alert.target_price, user_settings)
+                await notify_alert_triggered(
+                    alert.ticker,
+                    alert.condition,
+                    alert.target_price,
+                    user_settings,
+                    alert_type=getattr(alert, "alert_type", "price")
+                )
 
             if alert.auto_analyze:
                 today = datetime.now(UTC).strftime("%Y-%m-%d")

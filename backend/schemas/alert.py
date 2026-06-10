@@ -19,6 +19,7 @@ class AlertUpdate(BaseModel):
 class AlertRead(BaseModel):
     id: int
     ticker: str
+    alert_type: str
     condition: str
     target_price: float
     auto_analyze: bool

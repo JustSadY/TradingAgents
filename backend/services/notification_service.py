@@ -37,10 +37,17 @@ def _format_text(event: str, data: dict) -> str:
             f"Quantity: {data.get('quantity', 0):.4f} @ ${data.get('price', 0):.2f}"
         )
     if event == "alert_triggered":
-        return (
-            f"**{data.get('ticker', '?')}** alert triggered\n"
-            f"Target: ${data.get('target_price', 0):.2f} ({data.get('condition', '')})"
-        )
+        alert_type = data.get("alert_type", "price")
+        if alert_type == "support":
+            return f"🚨 **SUPPORT BREACH** on **{data.get('ticker', '?')}**\nPrice crossed below support level: **${data.get('target_price', 0):.2f}**"
+        elif alert_type == "resistance":
+            return f"🚀 **RESISTANCE BREACH** on **{data.get('ticker', '?')}**\nPrice crossed above resistance level: **${data.get('target_price', 0):.2f}**"
+        else:
+            cond_str = "crossed above" if data.get('condition', '') == 'above' else "crossed below"
+            return (
+                f"🔔 **Price Alert** on **{data.get('ticker', '?')}**\n"
+                f"Price {cond_str} target of **${data.get('target_price', 0):.2f}**"
+            )
     return json.dumps(data)[:500]
 
 
@@ -101,14 +108,14 @@ async def notify_trade_executed(ticker: str, action: str, quantity: float, price
     )
 
 
-async def notify_alert_triggered(ticker: str, condition: str, target_price: float, settings) -> None:
+async def notify_alert_triggered(ticker: str, condition: str, target_price: float, settings, alert_type: str = "price") -> None:
     if not getattr(settings, "webhook_enabled", False):
         return
     url = getattr(settings, "webhook_url", "") or ""
     events = _parse_events(getattr(settings, "webhook_events", "[]"))
     if "alert_triggered" not in events or not url:
         return
-    await send_webhook(url, "alert_triggered", {"ticker": ticker, "condition": condition, "target_price": target_price})
+    await send_webhook(url, "alert_triggered", {"ticker": ticker, "condition": condition, "target_price": target_price, "alert_type": alert_type})
 
 
 def _parse_events(raw: str) -> list[str]:

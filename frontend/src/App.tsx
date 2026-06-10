@@ -13,6 +13,7 @@ import Logs from './pages/Logs'
 import MockTrading from './pages/MockTrading'
 import Portfolio from './pages/Portfolio'
 import Chart from './pages/Chart'
+import Backtest from './pages/Backtest'
 import Performance from './pages/Performance'
 import Alerts from './pages/Alerts'
 import ABTesting from './pages/ABTesting'
@@ -80,6 +81,7 @@ function AppRoutes() {
         <Route path="settings" element={<Settings />} />
         <Route path="preferences" element={<Settings />} />
         <Route path="performance" element={<Performance />} />
+        <Route path="backtest" element={<Backtest />} />
         <Route path="alerts" element={<Alerts />} />
         <Route path="ab-testing" element={<ABTesting />} />
         <Route path="logs" element={<Logs />} />
