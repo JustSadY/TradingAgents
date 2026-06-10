@@ -154,3 +154,44 @@ async def test_leverage_clamped_to_max(db, portfolio, monkeypatch):
     _set_price(monkeypatch, 100.0)
     res = await mts.execute_order(db, "AAPL", "BUY", 10.0, portfolio_id=portfolio.id, leverage=999.0)
     assert res["leverage"] == 10.0  # capped
+
+
+@pytest.mark.asyncio
+async def test_stop_loss_auto_closes(db, portfolio, monkeypatch):
+    _set_price(monkeypatch, 100.0)
+    await mts.execute_order(
+        db, "AAPL", "BUY", 10.0, portfolio_id=portfolio.id, stop_loss=90.0, take_profit=130.0
+    )
+    h = await _get_holding(db, "AAPL")
+    assert float(h.stop_loss) == 90.0 and float(h.take_profit) == 130.0
+
+    # Drop to the stop level → auto-close with reason STOP_LOSS.
+    _set_price(monkeypatch, 89.0)
+    db.expunge_all()
+    data = await mts.get_portfolio_with_live_prices(db, portfolio_id=portfolio.id)
+    assert any(c["reason"] == "STOP_LOSS" for c in data["auto_closes"])
+    assert len(data["holdings"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_take_profit_auto_closes(db, portfolio, monkeypatch):
+    _set_price(monkeypatch, 100.0)
+    await mts.execute_order(
+        db, "AAPL", "BUY", 10.0, portfolio_id=portfolio.id, stop_loss=90.0, take_profit=130.0
+    )
+    # Rally past the target → auto-close with reason TAKE_PROFIT.
+    _set_price(monkeypatch, 131.0)
+    db.expunge_all()
+    data = await mts.get_portfolio_with_live_prices(db, portfolio_id=portfolio.id)
+    assert any(c["reason"] == "TAKE_PROFIT" for c in data["auto_closes"])
+    assert len(data["holdings"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_monitor_open_positions_sweeps(db, portfolio, monkeypatch):
+    _set_price(monkeypatch, 100.0)
+    await mts.execute_order(db, "AAPL", "BUY", 10.0, portfolio_id=portfolio.id, stop_loss=95.0)
+    _set_price(monkeypatch, 94.0)
+    db.expunge_all()
+    closed = await mts.monitor_open_positions(db)
+    assert any(c["reason"] == "STOP_LOSS" and c["ticker"] == "AAPL" for c in closed)

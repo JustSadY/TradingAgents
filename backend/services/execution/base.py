@@ -12,6 +12,8 @@ class OrderRequest:
     ai_signal: str = ""
     ai_reasoning: str = ""
     leverage: float = 1.0
+    stop_loss: float | None = None
+    take_profit: float | None = None
 
 
 @dataclass

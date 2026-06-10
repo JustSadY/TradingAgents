@@ -1,7 +1,7 @@
 import logging
 import math
 from datetime import UTC, datetime
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 from sqlalchemy import delete, select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -91,7 +91,7 @@ async def get_portfolio_with_live_prices(
     holdings_data = []
     positions_equity = Decimal("0.0")
     margin_used_total = Decimal("0.0")
-    liquidations: list[dict] = []
+    auto_closes: list[dict] = []
     for h in list(portfolio.holdings):
         fetched = prices.get(h.ticker)
         if fetched is not None:
@@ -116,9 +116,19 @@ async def get_portfolio_with_live_prices(
                 portfolio.cash_available -= interest
                 h.interest_accrued = (h.interest_accrued or Decimal("0.0")) + interest
 
-        # Force-liquidate a leveraged long whose equity has collapsed to the
-        # maintenance threshold (price at/below the precomputed liquidation level).
+        # Auto-close on, in priority order: liquidation (forced), stop-loss, or
+        # take-profit. Liquidation wins because it is an involuntary margin event.
+        stop = h.stop_loss or Decimal("0.0")
+        target = h.take_profit or Decimal("0.0")
+        close_status = None
         if is_liquidatable_long(price, h.liquidation_price or Decimal("0.0")):
+            close_status = "LIQUIDATED"
+        elif stop > 0 and price <= stop:
+            close_status = "STOP_LOSS"
+        elif target > 0 and price >= target:
+            close_status = "TAKE_PROFIT"
+
+        if close_status is not None:
             proceeds = price * h.quantity
             commission = (proceeds * _DEFAULT_COMMISSION_RATE).quantize(Decimal("0.0001"))
             realized = (price - h.avg_buy_price) * h.quantity - commission
@@ -135,7 +145,7 @@ async def get_portfolio_with_live_prices(
                     leverage=h.leverage or Decimal("1.0"),
                     quantity_requested=h.quantity,
                     quantity_filled=h.quantity,
-                    status="LIQUIDATED",
+                    status=close_status,
                     price_per_share=price,
                     total_value=proceeds,
                     commission=commission,
@@ -143,7 +153,14 @@ async def get_portfolio_with_live_prices(
                     executed_at=now,
                 )
             )
-            liquidations.append({"ticker": h.ticker, "price": float(price), "realized_pnl": round(float(realized), 2)})
+            auto_closes.append(
+                {
+                    "ticker": h.ticker,
+                    "reason": close_status,
+                    "price": float(price),
+                    "realized_pnl": round(float(realized), 2),
+                }
+            )
             await db.delete(h)
             continue
 
@@ -172,6 +189,8 @@ async def get_portfolio_with_live_prices(
                 "borrowed_amount": round(float(borrowed), 2),
                 "margin_used": round(float(h.margin_used or Decimal("0.0")), 2),
                 "liquidation_price": round(float(h.liquidation_price or Decimal("0.0")), 2),
+                "stop_loss": round(float(h.stop_loss or Decimal("0.0")), 2),
+                "take_profit": round(float(h.take_profit or Decimal("0.0")), 2),
                 "unrealized_pnl": round(float(unrealized_pnl), 2),
                 "pnl_pct": round(float(pnl_pct), 2),
             }
@@ -199,7 +218,10 @@ async def get_portfolio_with_live_prices(
         "total_pnl": round(float(total_pnl), 2),
         "total_pnl_pct": round(float(total_pnl_pct), 2),
         "holdings": holdings_data,
-        "liquidations": liquidations,
+        # Positions force-closed this pass (liquidation / stop-loss / take-profit).
+        "auto_closes": auto_closes,
+        # Back-compat: callers/tests that only care about forced liquidations.
+        "liquidations": [c for c in auto_closes if c["reason"] == "LIQUIDATED"],
     }
 
 
@@ -212,6 +234,8 @@ async def execute_order(
     user=None,
     portfolio_id: int | None = None,
     leverage: float = 1.0,
+    stop_loss: float | None = None,
+    take_profit: float | None = None,
 ) -> dict:
     from backend.core.l10n import get_message
     from backend.repositories.portfolio import get_holding
@@ -247,6 +271,18 @@ async def execute_order(
     realized_pnl = Decimal("0.0")
     status = "FILLED"
 
+    def _exit_level(value) -> Decimal:
+        if value is None:
+            return Decimal("0.0")
+        try:
+            dec = Decimal(str(value))
+        except (TypeError, ValueError, InvalidOperation):
+            return Decimal("0.0")
+        return dec if dec.is_finite() and dec > 0 else Decimal("0.0")
+
+    stop_dec = _exit_level(stop_loss)
+    target_dec = _exit_level(take_profit)
+
     if action == "BUY":
         # Only the margin portion of a leveraged position is funded from cash;
         # the broker lends the rest (borrowed). Spot trades are leverage == 1.
@@ -279,6 +315,11 @@ async def execute_order(
                 holding.quantity, holding.borrowed_amount, holding.leverage
             )
             holding.current_price = price
+            # Update exit levels only when the caller supplies new ones.
+            if stop_dec > 0:
+                holding.stop_loss = stop_dec
+            if target_dec > 0:
+                holding.take_profit = target_dec
         else:
             db.add(
                 Holding(
@@ -293,6 +334,8 @@ async def execute_order(
                     margin_used=margin,
                     borrowed_amount=borrowed,
                     liquidation_price=_liquidation_for_holding(qty_dec, borrowed, lev),
+                    stop_loss=stop_dec,
+                    take_profit=target_dec,
                 )
             )
     else:
@@ -391,6 +434,30 @@ async def reset_portfolio(db: AsyncSession, initial_capital: float = 100_000.0, 
     lang = await get_user_language(db, user)
     msg = get_message("portfolio_reset", lang)
     return {"message": msg, "initial_capital": initial_capital}
+
+
+async def monitor_open_positions(db: AsyncSession) -> list[dict]:
+    """Mark every simulation portfolio and auto-close breached positions.
+
+    ``get_portfolio_with_live_prices`` already accrues interest and enforces
+    liquidation / stop-loss / take-profit; running it across all portfolios lets
+    exits fire on schedule even when no user is looking at the page. Returns the
+    list of positions that were auto-closed this pass.
+    """
+    from backend.repositories.portfolio import list_portfolios
+
+    portfolios = await list_portfolios(db, user=None)
+    closed: list[dict] = []
+    for p in portfolios:
+        if p.mode != "simulation":
+            continue
+        try:
+            data = await get_portfolio_with_live_prices(db, portfolio_id=p.id)
+            for c in data.get("auto_closes", []):
+                closed.append({"portfolio_id": p.id, **c})
+        except Exception as exc:  # noqa: BLE001 — one bad portfolio shouldn't halt the sweep
+            _logger.warning("Position monitor failed for portfolio %s: %s", p.id, exc)
+    return closed
 
 
 async def get_performance(db: AsyncSession, user=None) -> dict:

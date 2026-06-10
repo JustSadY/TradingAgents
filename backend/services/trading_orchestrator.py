@@ -232,6 +232,7 @@ async def place_signal_order(
     import json
 
     stop_loss = None
+    take_profit = None
     if hasattr(row, "chart_annotations") and row.chart_annotations:
         try:
             if isinstance(row.chart_annotations, str):
@@ -240,6 +241,7 @@ async def place_signal_order(
                 ann = row.chart_annotations
             if isinstance(ann, dict):
                 stop_loss = ann.get("stop_loss")
+                take_profit = ann.get("target_price")
         except Exception:
             pass
 
@@ -281,6 +283,9 @@ async def place_signal_order(
         ai_signal=row.signal or "",
         ai_reasoning=(row.final_decision or "")[:500],
         leverage=leverage,
+        # Attach the AI's exit levels so the position monitor can auto-close.
+        stop_loss=stop_loss if action == "BUY" else None,
+        take_profit=take_profit if action == "BUY" else None,
     )
     result = await trader.place_order(request)
     _logger.info("Order placed: %s %s %s -> %s", action, quantity, ticker, result.status)

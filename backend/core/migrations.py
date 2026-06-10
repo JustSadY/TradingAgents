@@ -129,6 +129,8 @@ _ALLOWED_COLUMNS = {
         "liquidation_price",
         "interest_accrued",
         "opened_at",
+        "stop_loss",
+        "take_profit",
     },
 }
 
@@ -219,6 +221,8 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("holdings", "liquidation_price", "NUMERIC(20, 8) DEFAULT 0"),
     ("holdings", "interest_accrued", "NUMERIC(20, 8) DEFAULT 0"),
     ("holdings", "opened_at", "TIMESTAMP WITH TIME ZONE"),
+    ("holdings", "stop_loss", "NUMERIC(20, 8) DEFAULT 0"),
+    ("holdings", "take_profit", "NUMERIC(20, 8) DEFAULT 0"),
     ("orders", "leverage", "NUMERIC(20, 8) DEFAULT 1"),
     ("orders", "side", "VARCHAR(5) DEFAULT 'long'"),
     ("orders", "realized_pnl", "NUMERIC(20, 8) DEFAULT 0"),

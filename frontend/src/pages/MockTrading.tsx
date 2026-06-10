@@ -17,6 +17,8 @@ interface Holding {
   leverage?: number
   liquidation_price?: number
   borrowed_amount?: number
+  stop_loss?: number
+  take_profit?: number
 }
 
 interface PortfolioData {
@@ -367,6 +369,8 @@ export default function MockTrading() {
                     <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_current_price')}</th>
                     <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_leverage')}</th>
                     <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_liquidation')}</th>
+                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_stop_loss')}</th>
+                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_take_profit')}</th>
                     <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_market_value')}</th>
                     <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_pnl')}</th>
                     <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_pnl_pct')}</th>
@@ -385,6 +389,16 @@ export default function MockTrading() {
                       <td className="px-3 py-3 text-right font-mono text-slate-400">
                         {(h.liquidation_price ?? 0) > 0
                           ? `$${(h.liquidation_price ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : '—'}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-rose-400/80">
+                        {(h.stop_loss ?? 0) > 0
+                          ? `$${(h.stop_loss ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : '—'}
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-emerald-400/80">
+                        {(h.take_profit ?? 0) > 0
+                          ? `$${(h.take_profit ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                           : '—'}
                       </td>
                       <td className="px-3 py-3 text-right font-mono text-slate-400">${h.market_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
