@@ -26,7 +26,7 @@ def create_trader_node(ctx: AgentRunContext) -> NodeFn:
         if not ctx.is_enabled(MAIN_KEY):
             logger.info("[trader] branch disabled — skipping trade planning.")
             return {
-                "trader_investment_plan": "Trader disabled by configuration; deferring to risk debate.",
+                "trader_investment_plan": "",
                 "trader_proposal_json": "{}",
             }
 

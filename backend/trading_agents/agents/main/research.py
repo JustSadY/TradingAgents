@@ -57,8 +57,8 @@ def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
             return {
                 "synthesis_report": "",
                 "audit_report": "",
-                "investment_debate_state": neutral_invest_debate_state("Research branch disabled by configuration."),
-                "investment_plan": "Research branch disabled; proceeding without a research plan.",
+                "investment_debate_state": neutral_invest_debate_state(""),
+                "investment_plan": "",
             }
 
         local = dict(state)
