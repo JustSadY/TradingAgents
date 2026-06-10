@@ -189,6 +189,50 @@ def _position_quantity(
     return min(quantity, max_qty)
 
 
+async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, leverage, quantity, settings) -> float:
+    """Shrink ``quantity`` so the resulting position respects the portfolio's
+    single-name concentration and gross-exposure limits. Returns the (possibly
+    reduced) quantity; 0 means the order should be skipped."""
+    from backend.services.mock_trading_service import get_portfolio_with_live_prices
+    from backend.services.portfolio_risk_service import (
+        DEFAULT_MAX_CONCENTRATION_PCT,
+        DEFAULT_MAX_GROSS_EXPOSURE,
+        cap_order_notional,
+    )
+
+    try:
+        snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id)
+    except Exception as exc:  # noqa: BLE001 — never block trading on the risk snapshot
+        _logger.debug("Risk snapshot failed for %s (allowing order): %s", ticker, exc)
+        return quantity
+
+    equity = float(snapshot.get("total_value") or 0.0)
+    holdings = snapshot.get("holdings", [])
+    existing_gross = sum(float(h.get("market_value") or 0.0) for h in holdings)
+    existing_ticker = sum(
+        float(h.get("market_value") or 0.0) for h in holdings if h.get("ticker") == ticker
+    )
+    proposed_notional = price * quantity
+
+    assessment = cap_order_notional(
+        equity=equity,
+        proposed_notional=proposed_notional,
+        existing_ticker_notional=existing_ticker,
+        existing_gross_notional=existing_gross,
+        max_concentration_pct=getattr(settings, "max_concentration_pct", DEFAULT_MAX_CONCENTRATION_PCT),
+        max_gross_exposure=getattr(settings, "max_gross_exposure", DEFAULT_MAX_GROSS_EXPOSURE),
+    )
+    if assessment.capped:
+        _logger.info(
+            "Risk cap (%s) reduced %s order notional %.2f -> %.2f",
+            assessment.reason,
+            ticker,
+            proposed_notional,
+            assessment.allowed_notional,
+        )
+    return assessment.allowed_notional / price if price > 0 else 0.0
+
+
 async def place_signal_order(
     db: AsyncSession,
     *,
@@ -275,6 +319,18 @@ async def place_signal_order(
     # Leverage only applies when opening/adding exposure (BUY). Closing a
     # position (SELL) inherits the existing holding's leverage in the engine.
     leverage = _extract_leverage(row) if action == "BUY" else 1.0
+
+    # Portfolio-level risk guard: cap a new BUY so no single name and no overall
+    # gross exposure exceeds the configured limits (only meaningful when adding
+    # leveraged exposure; closing positions is always allowed through).
+    if action == "BUY":
+        quantity = await _apply_portfolio_risk_caps(
+            db, portfolio=portfolio, ticker=ticker, price=price, leverage=leverage, quantity=quantity, settings=settings
+        )
+        if quantity <= 0:
+            _logger.info("Portfolio risk caps left no room for %s; skipping order", ticker)
+            return None
+
     request = OrderRequest(
         ticker=ticker,
         action=action,
