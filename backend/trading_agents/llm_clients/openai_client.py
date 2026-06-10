@@ -61,7 +61,7 @@ class OpenAIClient(BaseLLMClient):
 
     def get_llm(self) -> Any:
         self.warn_if_unknown_model()
-        llm_kwargs = {"model": self.model}
+        llm_kwargs = {"model": self.model, "streaming": True}
 
         # Determine base URL
         resolved_base_url = self.base_url or _PROVIDER_BASE_URL.get(self.provider)

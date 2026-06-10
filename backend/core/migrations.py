@@ -106,7 +106,7 @@ _ALLOWED_COLUMNS = {
     },
     "portfolios": {"user_id", "initial_capital", "current_balance", "cash_available", "margin_used"},
     "config_presets": {"user_id"},
-    "price_alerts": {"user_id", "target_price"},
+    "price_alerts": {"user_id", "target_price", "alert_type"},
     "multi_ticker_analyses": {"user_id"},
     "orders": {
         "quantity_requested",
@@ -228,6 +228,7 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("orders", "leverage", "NUMERIC(20, 8) DEFAULT 1"),
     ("orders", "side", "VARCHAR(5) DEFAULT 'long'"),
     ("orders", "realized_pnl", "NUMERIC(20, 8) DEFAULT 0"),
+    ("price_alerts", "alert_type", "VARCHAR(20) DEFAULT 'price'"),
 ]
 
 

@@ -79,6 +79,57 @@ async def extract_and_save_annotations(
                 # leaving sizing to fall back to fragile text parsing.
                 existing = row.chart_annotations if isinstance(row.chart_annotations, dict) else {}
                 row.chart_annotations = {**existing, **annotations}
+                
+                # Auto-generate support/resistance alerts if user_id is set
+                if row.user_id:
+                    from decimal import Decimal
+                    from sqlalchemy import select
+                    from backend.models.alert import PriceAlert
+                    from backend.repositories.alerts import create_alert as _create_alert
+
+                    for sup in annotations.get("support_levels") or []:
+                        price_dec = Decimal(str(round(float(sup), 2)))
+                        stmt = select(PriceAlert).where(
+                            PriceAlert.user_id == row.user_id,
+                            PriceAlert.ticker == row.ticker.upper(),
+                            PriceAlert.condition == "below",
+                            PriceAlert.target_price == price_dec,
+                            PriceAlert.enabled == True,
+                            PriceAlert.triggered_at.is_(None)
+                        )
+                        existing_alert = (await s.execute(stmt)).scalar_one_or_none()
+                        if not existing_alert:
+                            await _create_alert(
+                                s,
+                                user_id=row.user_id,
+                                ticker=row.ticker,
+                                condition="below",
+                                target_price=float(price_dec),
+                                auto_analyze=True,
+                                alert_type="support"
+                            )
+
+                    for res in annotations.get("resistance_levels") or []:
+                        price_dec = Decimal(str(round(float(res), 2)))
+                        stmt = select(PriceAlert).where(
+                            PriceAlert.user_id == row.user_id,
+                            PriceAlert.ticker == row.ticker.upper(),
+                            PriceAlert.condition == "above",
+                            PriceAlert.target_price == price_dec,
+                            PriceAlert.enabled == True,
+                            PriceAlert.triggered_at.is_(None)
+                        )
+                        existing_alert = (await s.execute(stmt)).scalar_one_or_none()
+                        if not existing_alert:
+                            await _create_alert(
+                                s,
+                                user_id=row.user_id,
+                                ticker=row.ticker,
+                                condition="above",
+                                target_price=float(price_dec),
+                                auto_analyze=True,
+                                alert_type="resistance"
+                            )
                 await s.commit()
     except Exception as exc:
         _logger.debug("Annotation save failed (non-fatal): %s", exc)

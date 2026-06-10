@@ -15,6 +15,16 @@ export const AnalysisDetailSidebar: React.FC<AnalysisDetailSidebarProps> = ({
   const navigate = useNavigate()
   if (!selected) return null
 
+  const getAnn = (a: any) => {
+    if (!a || !a.chart_annotations) return {}
+    if (typeof a.chart_annotations === 'object') return a.chart_annotations
+    try {
+      return JSON.parse(a.chart_annotations)
+    } catch (e) {
+      return {}
+    }
+  }
+
   return (
     <div className="lg:col-span-1 glass-panel rounded-2xl p-5 border-violet-500/20 shadow-xl shadow-violet-500/5 animate-in slide-in-from-right-4 duration-300">
       <div className="flex items-center justify-between mb-6">
@@ -50,11 +60,69 @@ export const AnalysisDetailSidebar: React.FC<AnalysisDetailSidebarProps> = ({
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
                <Shield size={12} className="text-blue-400" /> Executive Summary
             </p>
-            <p className="text-xs text-slate-300 leading-relaxed max-h-60 overflow-y-auto pr-2 custom-scrollbar">
+            <p className="text-xs text-slate-300 leading-relaxed max-h-40 overflow-y-auto pr-2 custom-scrollbar">
               {selected.final_decision}
             </p>
           </div>
         )}
+
+        {/* Technical Boundaries */}
+        {(() => {
+          const ann = getAnn(selected)
+          const hasLevels = ann.target_price || ann.stop_loss || ann.liquidation_price || (ann.support_levels && ann.support_levels.length > 0) || (ann.resistance_levels && ann.resistance_levels.length > 0)
+          if (!hasLevels) return null
+
+          return (
+            <div className="bg-slate-900/40 rounded-xl p-4 border border-white/[0.04] space-y-3">
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
+                 <Shield size={12} className="text-violet-400" /> Technical Levels
+              </p>
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                {ann.target_price && (
+                  <div>
+                    <span className="text-[10px] text-slate-500 block uppercase tracking-wider">Target Price</span>
+                    <span className="font-mono font-bold text-emerald-400">${ann.target_price.toFixed(2)}</span>
+                  </div>
+                )}
+                {ann.stop_loss && (
+                  <div>
+                    <span className="text-[10px] text-slate-500 block uppercase tracking-wider">Stop Loss</span>
+                    <span className="font-mono font-bold text-rose-400">${ann.stop_loss.toFixed(2)}</span>
+                  </div>
+                )}
+                {ann.leverage && (
+                  <div>
+                    <span className="text-[10px] text-slate-500 block uppercase tracking-wider">Rec. Leverage</span>
+                    <span className="font-mono font-bold text-violet-400">{ann.leverage}x</span>
+                  </div>
+                )}
+                {ann.liquidation_price && (
+                  <div>
+                    <span className="text-[10px] text-slate-500 block uppercase tracking-wider">Liquidation</span>
+                    <span className="font-mono font-bold text-amber-400">${ann.liquidation_price.toFixed(2)}</span>
+                  </div>
+                )}
+              </div>
+
+              {((ann.support_levels && ann.support_levels.length > 0) || (ann.resistance_levels && ann.resistance_levels.length > 0)) && (
+                <div className="pt-2 border-t border-white/[0.02] space-y-1.5 text-[10px]">
+                  {ann.support_levels && ann.support_levels.length > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 font-bold uppercase tracking-wider">Support</span>
+                      <span className="font-mono text-emerald-400 font-bold">{ann.support_levels.map((x: number) => `$${x.toFixed(2)}`).join(', ')}</span>
+                    </div>
+                  )}
+                  {ann.resistance_levels && ann.resistance_levels.length > 0 && (
+                    <div className="flex items-center justify-between">
+                      <span className="text-slate-500 font-bold uppercase tracking-wider">Resistance</span>
+                      <span className="font-mono text-blue-400 font-bold">{ann.resistance_levels.map((x: number) => `$${x.toFixed(2)}`).join(', ')}</span>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )
+        })()}
 
         <div className="pt-4 border-t border-white/[0.04]">
             <button 

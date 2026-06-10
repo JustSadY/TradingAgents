@@ -63,6 +63,7 @@ Commit to a clear stance whenever the debate's strongest arguments warrant one; 
             llm,
             prompt,
             "Research Manager",
+            schema=ResearchPlan,
         )
 
         if isinstance(result, str):

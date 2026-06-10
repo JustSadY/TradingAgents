@@ -1,12 +1,13 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, status, HTTPException
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_db
 from backend.core.utils import safe_ticker_component
 from backend.services import mock_trading_service as svc
+from backend.services.backtest_service import run_backtest_simulation
 
 router = APIRouter(prefix="/api/trading", tags=["trading"])
 
@@ -31,6 +32,23 @@ class OrderRequest(BaseModel):
 
 class ResetRequest(BaseModel):
     initial_capital: float = Field(default=100_000.0, gt=0, le=10_000_000)
+
+
+class BacktestRequest(BaseModel):
+    ticker: str = Field(..., min_length=1, max_length=20)
+    strategy_type: str = Field(..., pattern="^(macd_crossover|rsi_oversold|consensus)$")
+    start_date: str
+    end_date: str
+    initial_capital: float = Field(default=100_000.0, gt=0, le=10_000_000)
+
+    @field_validator("ticker")
+    @classmethod
+    def validate_ticker(cls, v: str) -> str:
+        v = v.upper()
+        try:
+            return safe_ticker_component(v, max_len=20)
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
 
 
 @router.get("/portfolio")
@@ -80,3 +98,23 @@ async def reset_portfolio(
     result = await svc.reset_portfolio(db, initial_capital=req.initial_capital, user=_)
     await db.commit()
     return result
+
+
+@router.post("/backtest")
+async def run_backtest(
+    req: BacktestRequest,
+    db: AsyncSession = Depends(get_db),
+    _=Depends(get_current_user),
+):
+    res = await run_backtest_simulation(
+        db,
+        ticker=req.ticker,
+        strategy_type=req.strategy_type,
+        start_date=req.start_date,
+        end_date=req.end_date,
+        initial_capital=req.initial_capital,
+        user=_
+    )
+    if "error" in res:
+        raise HTTPException(status_code=400, detail=res["error"])
+    return res

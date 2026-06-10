@@ -116,6 +116,29 @@ async def retry_call(
                 delay=round(delay, 1),
                 error=str(exc)[:200],
             )
+            from backend.trading_agents.agents.data.chart_tools import active_run_context
+            ctx = active_run_context.get(None)
+            if ctx and "emitter" in ctx:
+                try:
+                    emitter = ctx["emitter"]
+                    clean_label = label.replace("analyst:", "").replace("main:", "").title()
+                    err_msg = str(exc)
+                    if "429" in err_msg or "rate_limit" in err_msg.lower() or "rate limit" in err_msg.lower():
+                        err_msg = "Rate limit (429) detected"
+                    elif "503" in err_msg or "service unavailable" in err_msg.lower():
+                        err_msg = "Service unavailable (503)"
+                    else:
+                        err_msg = err_msg[:60]
+                    
+                    warning_msg = f"Warning: Retrying {clean_label} (Attempt {i+1}/{attempts}) due to: {err_msg}"
+                    await emitter.emit({
+                        "type": "progress",
+                        "node": label,
+                        "label": warning_msg,
+                        "stage": "warning",
+                    })
+                except Exception:
+                    pass
             await asyncio.sleep(delay)
     assert last is not None
     raise last
@@ -126,7 +149,7 @@ def tool_error_handler(exc: Exception) -> str:
     can act on, so a failing tool falls through to the next one."""
     log_event("tool_error", level=logging.WARNING, error=str(exc)[:300])
     return (
-        f"⚠️ This tool failed ({exc}). Do not retry it; use a different tool or "
+        f"This tool failed ({exc}). Do not retry it; use a different tool or "
         "continue your analysis with the data already gathered."
     )
 

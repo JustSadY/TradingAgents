@@ -59,7 +59,7 @@ def _is_correct(signal: str | None, raw_return: float) -> bool:
 
 async def get_ab_comparison(db: AsyncSession) -> list[dict]:
     try:
-        rows = (await db.execute(select(AnalysisResult))).scalars().all()
+        rows = (await db.execute(select(AnalysisResult).where(AnalysisResult.status == "completed"))).scalars().all()
     except Exception as exc:  # tolerate an un-migrated DB
         _logger.warning("Failed to query AnalysisResult (DB may be unmigrated): %s", exc)
         rows = []
@@ -95,7 +95,7 @@ async def get_ab_comparison(db: AsyncSession) -> list[dict]:
 
 
 async def get_signal_performance(db: AsyncSession, ticker: str | None = None) -> dict:
-    q = select(AnalysisResult).where(AnalysisResult.raw_return.isnot(None))
+    q = select(AnalysisResult).where(AnalysisResult.status == "completed").where(AnalysisResult.raw_return.isnot(None))
     if ticker:
         q = q.where(AnalysisResult.ticker == ticker.upper())
     rows = (await db.execute(q)).scalars().all()

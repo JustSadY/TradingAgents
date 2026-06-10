@@ -249,3 +249,65 @@ async def ask_analysis_report(
     from backend.services.report_chat_service import answer_report_question
 
     return await answer_report_question(db, analysis_id, body.message, current_user)
+
+
+from pydantic import BaseModel
+
+class TimeTravelRequest(BaseModel):
+    checkpoint_id: str
+    update_state: dict
+
+
+@router.get("/{analysis_id}/checkpoints")
+async def list_checkpoints(
+    analysis_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from backend.repositories.analysis import get_analysis_by_id
+    from backend.trading_agents.graph.checkpointer import list_checkpoints_for_thread
+    from backend.services.settings_service import get_or_create_settings
+    from backend.repositories.analysis import get_system_settings
+    from backend.services.analysis.config_builder import build_analysis_config
+
+    analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    settings = await get_or_create_settings(db, current_user)
+    sys_settings = await get_system_settings(db)
+    config = build_analysis_config(settings, user=current_user, sys_settings=sys_settings)
+
+    checkpoints = await list_checkpoints_for_thread(config["data_cache_dir"], analysis.ticker, analysis.trade_date)
+    return checkpoints
+
+
+@router.post("/{analysis_id}/time-travel")
+async def time_travel_resume(
+    analysis_id: int,
+    body: TimeTravelRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from backend.repositories.analysis import get_analysis_by_id
+    from backend.services.analysis_service import rollback_and_resume_analysis
+    import uuid
+
+    analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+
+    task_id = str(uuid.uuid4())
+    try:
+        await rollback_and_resume_analysis(
+            analysis_id=analysis_id,
+            checkpoint_id=body.checkpoint_id,
+            update_state=body.update_state,
+            current_user=current_user,
+            task_id=task_id,
+            db=db,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    return {"task_id": task_id, "ticker": analysis.ticker, "trade_date": analysis.trade_date}

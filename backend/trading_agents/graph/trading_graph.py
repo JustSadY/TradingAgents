@@ -72,7 +72,7 @@ class TradingAgentsGraph:
             model=main_model,
             **main_kwargs,
         )
-        self.thinking_llm = client.get_llm()
+        self.thinking_llm = client.get_llm().with_config(tags=["portfolio_manager"], metadata={"agent": "portfolio_manager"})
 
         # LLM factory used by the hierarchy for recursive resolution
         def _make_llm(provider: str, model: str, temperature=None) -> Any:
@@ -96,10 +96,11 @@ class TradingAgentsGraph:
         for agent_info in list_agents():
             key = agent_info.key
             try:
-                self.agent_llms[key] = self.hierarchy.resolve_llm(key, self.thinking_llm, _make_llm)
+                resolved = self.hierarchy.resolve_llm(key, self.thinking_llm, _make_llm)
+                self.agent_llms[key] = resolved.with_config(tags=[key], metadata={"agent": key})
             except Exception as e:
                 logger.warning("LLM resolution failed for agent '%s': %s – using global LLM.", key, e)
-                self.agent_llms[key] = self.thinking_llm
+                self.agent_llms[key] = self.thinking_llm.with_config(tags=[key], metadata={"agent": key})
 
         # ------------------------------------------------------------------
         # Filter selected analysts using hierarchy enable state.
@@ -254,9 +255,13 @@ class TradingAgentsGraph:
         args = self.propagator.get_graph_args()
         tid = thread_id(company_name, str(trade_date))
         args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = tid
+        
+        step = checkpoint_step(self.config["data_cache_dir"], company_name, str(trade_date))
+        state_input = None if step is not None else init_agent_state
+
         if self.debug:
             trace = []
-            for chunk in self.graph.stream(init_agent_state, **args):
+            for chunk in self.graph.stream(state_input, **args):
                 if len(chunk["messages"]) == 0:
                     pass
                 else:
@@ -266,10 +271,13 @@ class TradingAgentsGraph:
             for chunk in trace:
                 final_state.update(chunk)
         else:
-            final_state = self.graph.invoke(init_agent_state, **args)
+            final_state = self.graph.invoke(state_input, **args)
         self.curr_state = final_state
         self._log_state(trade_date, final_state)
-        clear_checkpoint(self.config["data_cache_dir"], company_name, str(trade_date))
+        
+        if not self.config.get("keep_checkpoints", True):
+            clear_checkpoint(self.config["data_cache_dir"], company_name, str(trade_date))
+            
         return final_state, self.process_signal(final_state["final_trade_decision"])
 
     def _log_state(self, trade_date, final_state):
@@ -360,14 +368,17 @@ class TradingAgentsGraph:
         args = self.propagator.get_graph_args()
         tid = thread_id(company_name, str(trade_date))
         args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = tid
+        step = await async_checkpoint_step(self.config["data_cache_dir"], company_name, str(trade_date))
+        state_input = None if step is not None else init_state
+
         if stream_observer is None:
-            final_state = await self.graph.ainvoke(init_state, **args)
+            final_state = await self.graph.ainvoke(state_input, **args)
         else:
             cfg = dict(args.get("config") or {})
             prev_state: dict[str, Any] = {}
             final_state: dict[str, Any] = {}
             async for mode, chunk in self.graph.astream(
-                init_state,
+                state_input,
                 stream_mode=["updates", "values"],
                 config=cfg,
             ):
@@ -380,10 +391,13 @@ class TradingAgentsGraph:
                     prev_state.update(curr)
                     final_state = dict(prev_state)
             if not final_state:
-                final_state = await self.graph.ainvoke(init_state, **args)
+                final_state = await self.graph.ainvoke(state_input, **args)
         self.curr_state = final_state
         await asyncio.to_thread(self._log_state, trade_date, final_state)
-        clear_checkpoint(self.config["data_cache_dir"], company_name, str(trade_date))
+        
+        if not self.config.get("keep_checkpoints", True):
+            clear_checkpoint(self.config["data_cache_dir"], company_name, str(trade_date))
+            
         return final_state, self.process_signal(final_state["final_trade_decision"])
 
     def process_signal(self, full_signal):

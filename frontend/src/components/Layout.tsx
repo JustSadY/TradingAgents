@@ -6,7 +6,7 @@ import {
   Settings, ScrollText, TrendingUp, LogOut, Clock,
   FlaskConical, PieChart, Loader2, ChevronRight,
   AlertCircle, AlertTriangle, CheckCircle, Info, X,
-  BarChart2, Bell, Menu, GitCompare, Shield, UserCircle,
+  BarChart2, Bell, Menu, GitCompare, Shield, UserCircle, History,
 } from 'lucide-react'
 import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
@@ -46,6 +46,7 @@ const NAV_SECTIONS: NavSection[] = [
       { to: '/trading',     key: 'nav.simulation',   page: 'trading',     icon: FlaskConical },
       { to: '/orders',      key: 'nav.orders',       page: 'orders',      icon: Briefcase },
       { to: '/performance', key: 'nav.performance',  page: 'performance', icon: BarChart2 },
+      { to: '/backtest',    key: 'nav.backtest',     page: 'backtest',    icon: History },
     ]
   },
   {

@@ -190,10 +190,13 @@ async def build_meta(db=None, user=None) -> dict:
 
 
 _STATIC_NODE_LABELS: dict[str, tuple[str, str]] = {
+    "Market Intelligence": ("Market Intelligence", "analyst"),
+    "Agent Q&A": ("Agent Q&A Cross-Examination", "analyst"),
     "Bull Researcher": ("Bull Researcher", "research"),
     "Bear Researcher": ("Bear Researcher", "research"),
     "Research Manager": ("Research Manager — investment plan", "research"),
     "Trader": ("Trader — execution plan", "trade"),
+    "Risk Debate": ("Risk Debate", "risk"),
     "Aggressive Analyst": ("Aggressive Risk Analyst", "risk"),
     "Conservative Analyst": ("Conservative Risk Analyst", "risk"),
     "Neutral Analyst": ("Neutral Risk Analyst", "risk"),
