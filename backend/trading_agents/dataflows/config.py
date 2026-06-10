@@ -53,10 +53,13 @@ def set_config(config):
     _run_config.set(run_config)
 
     # Keep the process-global updated as a fallback for out-of-run readers
-    # (last-writer-wins, matching the previous behaviour).
+    # (last-writer-wins, matching the previous behaviour). Merge a fresh copy:
+    # reusing ``incoming`` would alias the same nested dicts into both the
+    # global and this run's config, letting a later run's in-place update leak
+    # into another run's supposedly isolated ContextVar config.
     with _config_lock:
         initialize_config()
-        _merge_into(_config, incoming)
+        _merge_into(_config, deepcopy(incoming))
 
 
 def get_config() -> dict:

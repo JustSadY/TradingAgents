@@ -84,10 +84,13 @@ async def list_analysis(
 @router.post("/{task_id}/cancel")
 async def cancel_analysis(
     task_id: str,
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     from backend.services.analysis_service import cancel_analysis as _cancel
+    from backend.services.analysis_service import is_task_owner
 
+    if not is_task_owner(task_id, current_user.id, getattr(current_user, "is_admin", False)):
+        raise HTTPException(status_code=404, detail="Task not found")
     cancelled = await _cancel(task_id)
     return {"cancelled": cancelled, "task_id": task_id}
 

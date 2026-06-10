@@ -17,7 +17,12 @@ export function ReportCard({ label, content, defaultOpen }: ReportCardProps) {
   if (content.includes('IMAGE_DATA:')) {
     const parts = content.split('IMAGE_DATA:')
     const subParts = parts[1].split('\n\n')
-    imageSrc = subParts[0]
+    const candidate = subParts[0].trim()
+    // Only render base64 image data URIs; reject anything else (javascript:,
+    // data:text/html, external URLs) since the content originates from LLM output.
+    if (/^data:image\/(png|jpe?g|gif|webp|svg\+xml);base64,[A-Za-z0-9+/=\s]+$/.test(candidate)) {
+      imageSrc = candidate
+    }
     textContent = parts[0] + (subParts.length > 1 ? subParts.slice(1).join('\n\n') : '')
   }
 

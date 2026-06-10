@@ -1,11 +1,11 @@
 from datetime import datetime
 
-from pydantic import BaseModel, field_validator
+from pydantic import BaseModel, Field, field_validator
 
 
 class UserCreate(BaseModel):
     username: str
-    password: str
+    password: str = Field(min_length=8, max_length=128)
     email: str | None = None
     display_name: str | None = None
     role: str = "user"
@@ -34,7 +34,7 @@ class UserRead(BaseModel):
 class ProfileUpdate(BaseModel):
     email: str | None = None
     display_name: str | None = None
-    password: str | None = None
+    password: str | None = Field(default=None, min_length=8, max_length=128)
 
 
 class UserAdminUpdate(BaseModel):

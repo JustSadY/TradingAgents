@@ -133,10 +133,10 @@ async def get_custom_indicator_series(
     return {"ticker": ticker, "formula": formula, "series": results}
 
 
-async def get_sentiment_history(db: AsyncSession, ticker: str) -> dict:
+async def get_sentiment_history(db: AsyncSession, ticker: str, user=None) -> dict:
     ticker = _clean_ticker(ticker)
     from backend.repositories.analysis import get_sentiment_history_by_ticker
 
-    rows = await get_sentiment_history_by_ticker(db, ticker)
+    rows = await get_sentiment_history_by_ticker(db, ticker, user=user)
     history = [{"time": trade_date, "value": SIGNAL_SENTIMENT_VALUES.get(signal, 0.0)} for trade_date, signal in rows]
     return {"ticker": ticker, "history": history}
