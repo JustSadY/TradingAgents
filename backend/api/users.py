@@ -46,6 +46,10 @@ async def update_me(
 
     from backend.repositories.users import update_user_profile
 
+    # Changing the password revokes all existing tokens (force re-login).
+    if body.password:
+        current_user.token_version = (getattr(current_user, "token_version", 0) or 0) + 1
+
     return await update_user_profile(
         db,
         current_user,

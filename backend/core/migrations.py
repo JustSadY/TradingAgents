@@ -29,7 +29,7 @@ _ALLOWED_TABLES = {
 
 # Strict mapping of table names to their permitted column names.
 _ALLOWED_COLUMNS = {
-    "users": {"email", "role", "display_name", "api_keys_enc"},
+    "users": {"email", "role", "display_name", "api_keys_enc", "token_version"},
     "system_settings": {
         "data_vendor_core_stock",
         "data_vendor_technicals",
@@ -148,6 +148,7 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("users", "role", "VARCHAR(20) DEFAULT 'user'"),
     ("users", "display_name", "VARCHAR(100)"),
     ("users", "api_keys_enc", "TEXT"),
+    ("users", "token_version", "INTEGER DEFAULT 0"),
     ("system_settings", "data_vendor_core_stock", "VARCHAR(50) DEFAULT 'yfinance'"),
     ("system_settings", "data_vendor_technicals", "VARCHAR(50) DEFAULT 'yfinance'"),
     ("system_settings", "data_vendor_fundamentals", "VARCHAR(50) DEFAULT 'yfinance'"),

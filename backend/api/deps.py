@@ -3,7 +3,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import get_db
-from backend.core.security import decode_token
+from backend.core.security import decode_token_payload
 from backend.models.user import User
 from backend.repositories.permissions import get_user_page_permission
 from backend.repositories.users import get_user_by_username
@@ -24,11 +24,15 @@ async def get_current_user(
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        username = decode_token(token, expected_type="access")
+        payload = decode_token_payload(token, expected_type="access")
     except ValueError:
         raise credentials_exc
-    user = await get_user_by_username(db, username)
+    user = await get_user_by_username(db, payload["sub"])
     if user is None or not user.is_active:
+        raise credentials_exc
+    # Reject tokens minted before the user's current version (logout / password
+    # change bumps token_version, immediately invalidating older tokens).
+    if payload.get("ver", 0) != getattr(user, "token_version", 0):
         raise credentials_exc
     return user
 
