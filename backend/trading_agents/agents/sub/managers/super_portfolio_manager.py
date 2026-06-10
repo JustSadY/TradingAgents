@@ -1,6 +1,11 @@
 from langchain_core.prompts import ChatPromptTemplate
 
+from backend.trading_agents.agents.runtime.report_aggregator import middle_truncate
 from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
+
+# Per-section cap: with many tickers the combined plans/decisions dominate the
+# prompt, and the allocation needs each ticker's conclusion, not every detail.
+_MAX_SECTION_CHARS = 4000
 
 
 def create_super_portfolio_manager(llm):
@@ -10,8 +15,11 @@ def create_super_portfolio_manager(llm):
         context_str = ""
         for ticker, report in ticker_reports.items():
             context_str += f"\n--- Ticker: {ticker} ---\n"
-            context_str += f"Trader Plan: {report.get('trader_plan', 'No plan')}\n"
-            context_str += f"Portfolio Manager Decision: {report.get('portfolio_decision', 'No decision')}\n"
+            context_str += f"Trader Plan: {middle_truncate(report.get('trader_plan') or 'No plan', _MAX_SECTION_CHARS)}\n"
+            context_str += (
+                "Portfolio Manager Decision: "
+                f"{middle_truncate(report.get('portfolio_decision') or 'No decision', _MAX_SECTION_CHARS)}\n"
+            )
         from backend.trading_agents.default_config import DEFAULT_CONFIG
 
         system_message = (

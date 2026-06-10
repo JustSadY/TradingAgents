@@ -1,4 +1,8 @@
-from backend.trading_agents.agents.runtime.report_aggregator import build_report_fields, build_resources
+from backend.trading_agents.agents.runtime.report_aggregator import (
+    build_report_fields,
+    build_resources,
+    tail_history,
+)
 from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
 
 
@@ -31,7 +35,7 @@ def create_bull_researcher(llm):
 {synthesis_report}
 {qa_block}
 ### Debate Context:
-- **Conversation History:** {history}
+- **Conversation History:** {tail_history(history)}
 - **Last Bear Argument:** {current_response}
 
 ### Guidelines:

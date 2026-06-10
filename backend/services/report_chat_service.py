@@ -30,7 +30,22 @@ _REPORT_SECTIONS = [
     ("OPTIONS REPORT", "options_report"),
     ("QUANT REPORT", "quant_report"),
     ("EARNINGS REPORT", "earnings_report"),
+    ("INSIDER ACTIVITY REPORT", "insider_report"),
+    ("INSTITUTIONAL OWNERSHIP REPORT", "ownership_report"),
+    ("UPCOMING CATALYSTS REPORT", "catalyst_report"),
 ]
+
+# Per-section cap for the chat grounding context. The full system prompt is
+# re-sent on EVERY chat message, so uncapped reports make each follow-up
+# question cost as much as re-reading the entire analysis.
+_MAX_SECTION_CHARS = 5000
+
+
+def _capped(text: str) -> str:
+    text = (text or "").strip()
+    if len(text) <= _MAX_SECTION_CHARS:
+        return text
+    return text[:_MAX_SECTION_CHARS].rstrip() + "\n…[section truncated to conserve tokens]"
 
 
 async def _get_owned_analysis(db: AsyncSession, analysis_id: int, user) -> AnalysisResult:
@@ -53,11 +68,12 @@ async def get_chat_history(db: AsyncSession, analysis_id: int, user) -> list[Ana
 
 def _build_report_context(analysis: AnalysisResult) -> str:
     parts = [
-        f"### {heading}\n{getattr(analysis, attr)}"
+        f"### {heading}\n{_capped(getattr(analysis, attr))}"
         for heading, attr in _REPORT_SECTIONS
         if getattr(analysis, attr, None)
     ]
     if analysis.final_decision:
+        # The final decision is what users ask about most — never truncate it.
         parts.append(f"### FINAL PORTFOLIO DECISION & SIGNAL ({analysis.signal})\n{analysis.final_decision}")
     return "\n\n".join(parts)
 

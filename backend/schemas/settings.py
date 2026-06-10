@@ -38,6 +38,11 @@ class SettingsBase(BaseModel):
     pinecone_embed_model: str = "llama-text-embed-v2"
     memory_openai_embed_model: str = "text-embedding-3-small"
     agent_qa_enabled: bool = True
+    # Token-budget controls.
+    anthropic_prompt_caching: bool = True
+    max_report_chars_in_prompts: int = 6000
+    max_debate_history_chars: int = 8000
+    max_tool_output_chars: int = 12000
 
 
 class SettingsRead(SettingsBase):
@@ -81,3 +86,7 @@ class SettingsUpdate(BaseModel):
     pinecone_embed_model: str | None = None
     memory_openai_embed_model: str | None = None
     agent_qa_enabled: bool | None = None
+    anthropic_prompt_caching: bool | None = None
+    max_report_chars_in_prompts: int | None = Field(default=None, ge=500, le=50000)
+    max_debate_history_chars: int | None = Field(default=None, ge=1000, le=100000)
+    max_tool_output_chars: int | None = Field(default=None, ge=1000, le=100000)

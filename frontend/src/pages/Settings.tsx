@@ -48,6 +48,10 @@ interface Settings {
   pinecone_embed_model: string
   memory_openai_embed_model: string
   agent_qa_enabled: boolean
+  anthropic_prompt_caching: boolean
+  max_report_chars_in_prompts: number
+  max_debate_history_chars: number
+  max_tool_output_chars: number
 }
 
 interface Preset { id: number; name: string; description: string | null; created_at: string }
@@ -357,6 +361,25 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 </Row>
                 <Row label={t('settings.row_node_retry_base_delay') || 'Retry Base Delay (s)'}>
                   <input type="number" step="0.1" min="0.1" max="10" className={Input} value={s.node_retry_base_delay ?? 1.0} onChange={e => update('node_retry_base_delay', parseFloat(e.target.value))} />
+                </Row>
+              </div>
+
+              <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
+                <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">{t('settings.token_budget') || 'Token Budget'}</h4>
+                <p className="text-[10px] text-slate-500 px-1 leading-snug">{t('settings.token_budget_hint') || 'Lower values reduce LLM token cost per analysis at the expense of how much detail each agent re-reads.'}</p>
+
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_prompt_caching') || 'Anthropic Prompt Caching'}</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.anthropic_prompt_caching ?? true} onChange={e => update('anthropic_prompt_caching', e.target.checked)} />
+                </label>
+                <Row label={t('settings.row_max_report_chars') || 'Max Report Chars / Prompt'}>
+                  <input type="number" min="500" max="50000" step="500" className={Input} value={s.max_report_chars_in_prompts ?? 6000} onChange={e => update('max_report_chars_in_prompts', parseInt(e.target.value) || 6000)} />
+                </Row>
+                <Row label={t('settings.row_max_debate_history') || 'Max Debate History Chars'}>
+                  <input type="number" min="1000" max="100000" step="1000" className={Input} value={s.max_debate_history_chars ?? 8000} onChange={e => update('max_debate_history_chars', parseInt(e.target.value) || 8000)} />
+                </Row>
+                <Row label={t('settings.row_max_tool_output') || 'Max Tool Output Chars'}>
+                  <input type="number" min="1000" max="100000" step="1000" className={Input} value={s.max_tool_output_chars ?? 12000} onChange={e => update('max_tool_output_chars', parseInt(e.target.value) || 12000)} />
                 </Row>
               </div>
 

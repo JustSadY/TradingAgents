@@ -48,6 +48,11 @@ class AppSettings(Base):
     pinecone_embed_model: Mapped[str] = mapped_column(String(60), default="llama-text-embed-v2")
     memory_openai_embed_model: Mapped[str] = mapped_column(String(60), default="text-embedding-3-small")
     agent_qa_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    # Token-budget controls (see TradingAgentsConfig for semantics).
+    anthropic_prompt_caching: Mapped[bool] = mapped_column(Boolean, default=True)
+    max_report_chars_in_prompts: Mapped[int] = mapped_column(Integer, default=6000)
+    max_debate_history_chars: Mapped[int] = mapped_column(Integer, default=8000)
+    max_tool_output_chars: Mapped[int] = mapped_column(Integer, default=12000)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

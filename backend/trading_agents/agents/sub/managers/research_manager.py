@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from backend.trading_agents.agents.runtime.report_aggregator import tail_history
 from backend.trading_agents.agents.runtime.structured import (
     ainvoke_structured_or_freetext,
     bind_structured,
@@ -16,7 +17,7 @@ def create_research_manager(llm):
 
     async def research_manager_node(state) -> dict:
         instrument_context = build_instrument_context(state["company_of_interest"])
-        history = state["investment_debate_state"].get("history", "")
+        history = tail_history(state["investment_debate_state"].get("history", ""))
         investment_debate_state = state["investment_debate_state"]
         audit_report = state.get("audit_report", "No audit report available.")
         agent_qa_report = state.get("agent_qa_report") or "No cross-examination available."

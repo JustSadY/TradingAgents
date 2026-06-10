@@ -35,6 +35,9 @@ _ANALYST_REPORTS: list[tuple[str, str, str]] = [
     ("options", "options_report", "Options Analyst"),
     ("quant", "quant_report", "Quant Analyst"),
     ("earnings", "earnings_report", "Earnings Analyst"),
+    ("insider", "insider_report", "Insider Activity Analyst"),
+    ("ownership", "ownership_report", "Institutional Ownership Analyst"),
+    ("catalyst", "catalyst_report", "Catalyst Calendar Analyst"),
     ("review", "review_report", "Performance Review Analyst"),
 ]
 
