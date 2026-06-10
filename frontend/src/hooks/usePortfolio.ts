@@ -16,19 +16,24 @@ export function usePortfolio() {
   const [portfolios, setPortfolios] = useState<Portfolio[]>([])
   const [loading, setLoading] = useState(true)
 
-  const fetchPortfolios = useCallback(async () => {
+  const fetchPortfolios = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true)
     try {
       const { data } = await api.get('/api/portfolio')
       setPortfolios(Array.isArray(data) ? data : [])
     } catch (error) {
       console.error('Failed to fetch portfolios:', error)
     } finally {
-      setLoading(false)
+      if (!quiet) setLoading(false)
     }
   }, [])
 
   useEffect(() => {
     fetchPortfolios()
+    const interval = setInterval(() => {
+      fetchPortfolios(true)
+    }, 15000)
+    return () => clearInterval(interval)
   }, [fetchPortfolios])
 
   const sim = useMemo(() => portfolios.find(p => p.mode === 'simulation') || portfolios[0], [portfolios])
