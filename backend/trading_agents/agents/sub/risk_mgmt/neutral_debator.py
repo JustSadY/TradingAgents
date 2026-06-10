@@ -1,4 +1,8 @@
-from backend.trading_agents.agents.runtime.report_aggregator import build_report_fields, build_resources
+from backend.trading_agents.agents.runtime.report_aggregator import (
+    build_report_fields,
+    build_resources,
+    tail_history,
+)
 from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
 
 
@@ -18,7 +22,7 @@ def create_neutral_debator(llm):
 {trader_decision}
 Your task is to critique and refine the trader's proposal by identifying a middle ground. Address the points from the aggressive and conservative viewpoints, using data to bring a more grounded perspective to the debate. Use insights from the following:
 {resources_text}
-Current conversation history: {history}. Last argument from the aggressive analyst: {current_aggressive_response}. Last argument from the conservative analyst: {current_conservative_response}. If no other arguments are available, provide your baseline neutral assessment.
+Current conversation history: {tail_history(history)}. Last argument from the aggressive analyst: {current_aggressive_response}. Last argument from the conservative analyst: {current_conservative_response}. If no other arguments are available, provide your baseline neutral assessment.
 Focus on being an objective mediator. Highlight divergences in the other analysts' logic and suggest a balanced approach based on the available facts. Output conversationally as if you are speaking without any special formatting.""" + get_language_instruction()
 
         response = await llm.ainvoke(prompt)

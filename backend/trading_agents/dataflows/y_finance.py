@@ -218,7 +218,9 @@ def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the compan
         data = yf_retry(lambda: ticker_obj.insider_transactions)
         if data is None or data.empty:
             return f"No insider transactions data found for symbol '{ticker}'"
-        csv_string = data.to_csv()
+        # Keep only the most recent rows; older Form 4 filings add tokens without
+        # changing the signal the analyst is reading.
+        csv_string = data.head(25).to_csv()
         header = f"# Insider Transactions data for {ticker.upper()}\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
@@ -246,7 +248,7 @@ def get_catalyst_calendar(ticker: Annotated[str, "ticker symbol of the company"]
             earnings_dates = None
         if earnings_dates is not None and not earnings_dates.empty:
             parts.append("\n## Recent & Upcoming Earnings Dates")
-            parts.append(earnings_dates.to_csv())
+            parts.append(earnings_dates.head(8).to_csv())
 
         if len(parts) <= 2:
             return f"No upcoming catalyst data found for symbol '{ticker}'"
@@ -270,12 +272,12 @@ def get_institutional_holdings(ticker: Annotated[str, "ticker symbol of the comp
         inst = yf_retry(lambda: ticker_obj.institutional_holders)
         if inst is not None and not inst.empty:
             parts.append("## Top Institutional Holders (13F)")
-            parts.append(inst.to_csv(index=False))
+            parts.append(inst.head(15).to_csv(index=False))
 
         funds = yf_retry(lambda: ticker_obj.mutualfund_holders)
         if funds is not None and not funds.empty:
             parts.append("## Top Mutual Fund Holders")
-            parts.append(funds.to_csv(index=False))
+            parts.append(funds.head(15).to_csv(index=False))
 
         if len(parts) <= 2:
             return f"No institutional holdings data found for symbol '{ticker}'"

@@ -32,6 +32,10 @@ class TradingAgentsConfig(BaseModel):
     analyst_concurrency_limit: int = Field(default=1, ge=1)
     node_retry_attempts: int = Field(default=2, ge=1)
     node_retry_base_delay: float = Field(default=1.0, ge=0.0)
+    # Token-budget controls: cap how much of each analyst report and how much
+    # accumulated debate history is re-sent to downstream agents on every call.
+    max_report_chars_in_prompts: int = Field(default=6000, ge=500)
+    max_debate_history_chars: int = Field(default=8000, ge=1000)
     super_portfolio_manager_prompt: str = (
         "You are a Super Portfolio Manager. The user's actual portfolio (cash available and current "
         "holdings) is provided in the prompt when available — build the allocation against those real "
