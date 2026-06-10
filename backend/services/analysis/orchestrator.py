@@ -235,9 +235,9 @@ async def run_individual_analysis(
             "tokens_in": stats.get("tokens_in", 0),
             "tokens_out": stats.get("tokens_out", 0),
             "duration_seconds": duration,
-            "llm_provider": settings.llm_provider,
-            "llm_model": settings.llm_model,
-            "preset_name": settings.active_preset_name or f"{settings.llm_provider}:{settings.llm_model}",
+            "llm_provider": ta.llm_provider,
+            "llm_model": ta.llm_model,
+            "preset_name": settings.active_preset_name or f"{ta.llm_provider}:{ta.llm_model}",
         }
         await finalize_result(db, row.id, **final_payload)
         await emitter.emit({"type": "risk_metrics", "metrics": risk_metrics})

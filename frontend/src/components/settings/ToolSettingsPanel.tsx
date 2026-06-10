@@ -16,6 +16,7 @@ interface ToolSettings {
 interface ToolSettingsPanelProps {
   userId?: number // If specified, read/edit user-specific settings (admin mode)
   serverScope?: boolean // If true, read/edit server-scope global settings
+  hideSaveButton?: boolean // If true, hide the save button
 }
 
 export interface ToolSettingsPanelHandle {
@@ -24,7 +25,7 @@ export interface ToolSettingsPanelHandle {
 
 const InputClass = 'w-full glass-input rounded-xl px-3 py-2 text-xs outline-none text-slate-300 placeholder-slate-600'
 
-const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelProps>(({ userId, serverScope = false }, ref) => {
+const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelProps>(({ userId, serverScope = false, hideSaveButton = false }, ref) => {
   const { t } = useTranslation()
   const meta = useMeta()
   const [settings, setSettings] = useState<ToolSettings | null>(null)
@@ -71,7 +72,9 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
       setSaveSuccess(true)
       setTimeout(() => setSaveSuccess(false), 2000)
     } catch (err: any) {
-      setSaveError(err.response?.data?.detail || 'Failed to save tool settings.')
+      const msg = err.response?.data?.detail || 'Failed to save tool settings.'
+      setSaveError(msg)
+      throw new Error(msg)
     } finally {
       setSaving(false)
     }
@@ -155,14 +158,16 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
         <div className="flex items-center gap-3">
           {saveError && <span className="text-rose-400 text-xs font-semibold">{saveError}</span>}
           {saveSuccess && <span className="text-emerald-400 text-xs font-semibold">Saved successfully!</span>}
-          <button
-            onClick={save}
-            disabled={saving}
-            className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl px-4 py-2 text-xs font-semibold transition-all shadow-md shadow-violet-500/10 cursor-pointer disabled:opacity-50"
-          >
-            <Save size={14} />
-            {saving ? 'Saving...' : 'Save Tools'}
-          </button>
+          {!hideSaveButton && (
+            <button
+              onClick={save}
+              disabled={saving}
+              className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl px-4 py-2 text-xs font-semibold transition-all shadow-md shadow-violet-500/10 cursor-pointer disabled:opacity-50"
+            >
+              <Save size={14} />
+              {saving ? 'Saving...' : 'Save Tools'}
+            </button>
+          )}
         </div>
       </div>
 

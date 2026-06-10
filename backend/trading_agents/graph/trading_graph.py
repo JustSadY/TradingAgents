@@ -81,6 +81,8 @@ class TradingAgentsGraph:
 
         main_prov = pm_settings.get("llm_provider") or self.config.get("llm_provider") or "openai"
         main_model = pm_settings.get("llm_model") or self.config.get("llm_model") or "gpt-4o-mini"
+        self.llm_provider = main_prov
+        self.llm_model = main_model
 
         main_kwargs = self._get_provider_kwargs(main_prov)
         if self.callbacks:
