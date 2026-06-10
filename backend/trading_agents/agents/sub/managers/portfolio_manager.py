@@ -103,6 +103,7 @@ def create_portfolio_manager(llm):
 {kelly_recommendation}
 {lessons_line}
 - Base your final position size on the user's actual cash available and existing holdings shown above; never exceed available cash and account for any position the user already holds in this ticker.
+- **Leverage (recommended_leverage):** Set a per-stock leverage multiplier between 1.0 (cash, no leverage) and 10.0. Default to 1.0 unless this is a high-conviction (Buy) setup on a liquid instrument with a clearly defined stop-loss. Volatile or speculative names must stay at 1.0-2.0. Remember that higher leverage moves the liquidation price closer to entry — never set leverage so high that ordinary volatility would liquidate the position before the stop-loss is hit. Honour the investor persona: conservative profiles should keep leverage at or near 1.0.
 **Risk Analysts Debate History:**
 {history}
 {conviction_instructions}---

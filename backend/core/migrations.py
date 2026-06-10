@@ -101,12 +101,33 @@ _ALLOWED_COLUMNS = {
         "agent_qa_report",
         "status",
     },
-    "portfolios": {"user_id", "initial_capital", "current_balance", "cash_available"},
+    "portfolios": {"user_id", "initial_capital", "current_balance", "cash_available", "margin_used"},
     "config_presets": {"user_id"},
     "price_alerts": {"user_id", "target_price"},
     "multi_ticker_analyses": {"user_id"},
-    "orders": {"quantity_requested", "quantity_filled", "price_per_share", "total_value", "commission"},
-    "holdings": {"quantity", "avg_buy_price", "current_price", "unrealized_pnl"},
+    "orders": {
+        "quantity_requested",
+        "quantity_filled",
+        "price_per_share",
+        "total_value",
+        "commission",
+        "leverage",
+        "side",
+        "realized_pnl",
+    },
+    "holdings": {
+        "quantity",
+        "avg_buy_price",
+        "current_price",
+        "unrealized_pnl",
+        "side",
+        "leverage",
+        "margin_used",
+        "borrowed_amount",
+        "liquidation_price",
+        "interest_accrued",
+        "opened_at",
+    },
 }
 
 # (table, column, column_type) tuples applied additively on startup.
@@ -184,6 +205,18 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("app_settings", "price_tolerance_pct", "FLOAT DEFAULT 0.5"),
     ("app_settings", "watchlist", "TEXT DEFAULT '[]'"),
     ("app_settings", "updated_at", "TIMESTAMP WITH TIME ZONE"),
+    # Leverage / margin trading.
+    ("portfolios", "margin_used", "NUMERIC(20, 8) DEFAULT 0"),
+    ("holdings", "side", "VARCHAR(5) DEFAULT 'long'"),
+    ("holdings", "leverage", "NUMERIC(20, 8) DEFAULT 1"),
+    ("holdings", "margin_used", "NUMERIC(20, 8) DEFAULT 0"),
+    ("holdings", "borrowed_amount", "NUMERIC(20, 8) DEFAULT 0"),
+    ("holdings", "liquidation_price", "NUMERIC(20, 8) DEFAULT 0"),
+    ("holdings", "interest_accrued", "NUMERIC(20, 8) DEFAULT 0"),
+    ("holdings", "opened_at", "TIMESTAMP WITH TIME ZONE"),
+    ("orders", "leverage", "NUMERIC(20, 8) DEFAULT 1"),
+    ("orders", "side", "VARCHAR(5) DEFAULT 'long'"),
+    ("orders", "realized_pnl", "NUMERIC(20, 8) DEFAULT 0"),
 ]
 
 

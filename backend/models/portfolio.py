@@ -20,6 +20,8 @@ class Portfolio(Base):
     initial_capital: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     current_balance: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     cash_available: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    # Total equity currently locked as margin across all leveraged positions.
+    margin_used: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     status: Mapped[str] = mapped_column(String(20), default="active")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
@@ -41,6 +43,17 @@ class Holding(Base):
     avg_buy_price: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     current_price: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     unrealized_pnl: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    # Leverage / margin fields. A spot (cash) position is side='long', leverage=1,
+    # borrowed_amount=0, so the defaults keep pre-leverage behaviour intact.
+    side: Mapped[str] = mapped_column(String(5), default="long")  # 'long' | 'short'
+    leverage: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("1.0"))
+    margin_used: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    borrowed_amount: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    liquidation_price: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    interest_accrued: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    opened_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC)
+    )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

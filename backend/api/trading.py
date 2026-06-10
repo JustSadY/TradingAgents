@@ -15,6 +15,7 @@ class OrderRequest(BaseModel):
     ticker: str = Field(..., min_length=1, max_length=20)
     action: Literal["BUY", "SELL"]
     quantity: float = Field(..., gt=0, le=100_000)
+    leverage: float = Field(default=1.0, ge=1.0, le=10.0)
     analysis_id: int | None = None
 
     @field_validator("ticker")
@@ -54,6 +55,7 @@ async def create_order(
         quantity=req.quantity,
         analysis_id=req.analysis_id,
         user=_,
+        leverage=req.leverage,
     )
     await db.commit()
     return result

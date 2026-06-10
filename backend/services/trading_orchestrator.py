@@ -71,6 +71,44 @@ def _extract_confidence_score(row) -> float | None:
     return None
 
 
+def _extract_leverage(row) -> float:
+    """Pull the AI's per-stock leverage recommendation, clamped to [1, 10].
+
+    Prefers the structured PortfolioDecision / TraderProposal carried in
+    ``chart_annotations``; falls back to a "**Recommended Leverage**: Nx" line
+    in the rendered decision text. Defaults to 1.0 (cash) when unspecified.
+    """
+    candidates: list = []
+    chart_annotations = getattr(row, "chart_annotations", None)
+    if isinstance(chart_annotations, dict):
+        candidates.append(chart_annotations.get("recommended_leverage"))
+        for nested_key in ("portfolio_decision", "trader_proposal"):
+            nested = chart_annotations.get(nested_key)
+            if isinstance(nested, dict):
+                candidates.append(nested.get("recommended_leverage"))
+
+    for raw in candidates:
+        if raw is None:
+            continue
+        try:
+            value = float(raw)
+        except (TypeError, ValueError):
+            continue
+        if value >= 1.0:
+            return min(value, 10.0)
+
+    for text in (getattr(row, "final_decision", "") or "", getattr(row, "trader_plan", "") or ""):
+        match = re.search(r"Recommended\s+Leverage\s*[:=]\s*\*?\*?\s*([0-9]+(?:\.[0-9]+)?)\s*x", text, re.IGNORECASE)
+        if match:
+            try:
+                value = float(match.group(1))
+            except ValueError:
+                continue
+            if value >= 1.0:
+                return min(value, 10.0)
+    return 1.0
+
+
 def _extract_price_level(text: str, label: str, row=None) -> float | None:
     # Try structured extraction first
     if row and hasattr(row, "chart_annotations") and isinstance(row.chart_annotations, dict):
@@ -232,6 +270,9 @@ async def place_signal_order(
         max_position_size_pct=max_position_size_pct,
         kelly_multiplier=kelly_multiplier,
     )
+    # Leverage only applies when opening/adding exposure (BUY). Closing a
+    # position (SELL) inherits the existing holding's leverage in the engine.
+    leverage = _extract_leverage(row) if action == "BUY" else 1.0
     request = OrderRequest(
         ticker=ticker,
         action=action,
@@ -239,6 +280,7 @@ async def place_signal_order(
         reference_price=price,
         ai_signal=row.signal or "",
         ai_reasoning=(row.final_decision or "")[:500],
+        leverage=leverage,
     )
     result = await trader.place_order(request)
     _logger.info("Order placed: %s %s %s -> %s", action, quantity, ticker, result.status)

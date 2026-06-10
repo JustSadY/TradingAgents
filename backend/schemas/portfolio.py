@@ -10,6 +10,11 @@ class HoldingRead(BaseModel):
     avg_buy_price: float
     current_price: float
     unrealized_pnl: float
+    side: str = "long"
+    leverage: float = 1.0
+    margin_used: float = 0.0
+    borrowed_amount: float = 0.0
+    liquidation_price: float = 0.0
     updated_at: datetime
 
     class Config:
@@ -45,6 +50,9 @@ class OrderRead(BaseModel):
     price_per_share: float | None
     total_value: float | None
     commission: float
+    leverage: float = 1.0
+    side: str = "long"
+    realized_pnl: float = 0.0
     analysis_id: int | None
     ai_signal: str
     created_at: datetime
