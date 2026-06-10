@@ -114,6 +114,7 @@ Be decisive and ground every conclusion in specific evidence from the analysts.{
             llm,
             prompt,
             "Portfolio Manager",
+            schema=PortfolioDecision,
         )
 
         if isinstance(result, str):

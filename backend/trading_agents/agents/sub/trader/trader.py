@@ -81,6 +81,7 @@ def create_trader(llm):
             llm,
             messages,
             "Trader",
+            schema=TraderProposal,
         )
 
         # The helper returns a free-text string on fallback, or the structured

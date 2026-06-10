@@ -125,7 +125,7 @@ async def _generate_questions(moderator, available: list[tuple[str, str, str]]) 
         f"{reports_block}"
     )
     structured = bind_structured(moderator, _Questions, "Q&A Moderator")
-    result = await ainvoke_structured_or_freetext(structured, moderator, prompt, "Q&A Moderator")
+    result = await ainvoke_structured_or_freetext(structured, moderator, prompt, "Q&A Moderator", schema=_Questions)
     if isinstance(result, _Questions):
         return result.questions
     return []  # free-text fallback isn't reliably parseable; skip Q&A this run
