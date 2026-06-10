@@ -36,6 +36,9 @@ class TradingAgentsConfig(BaseModel):
     # accumulated debate history is re-sent to downstream agents on every call.
     max_report_chars_in_prompts: int = Field(default=6000, ge=500)
     max_debate_history_chars: int = Field(default=8000, ge=1000)
+    # Cap a single tool result before it enters the analyst's conversation
+    # (tool outputs are re-sent on every LLM round-trip within an analyst run).
+    max_tool_output_chars: int = Field(default=12000, ge=1000)
     super_portfolio_manager_prompt: str = (
         "You are a Super Portfolio Manager. The user's actual portfolio (cash available and current "
         "holdings) is provided in the prompt when available — build the allocation against those real "

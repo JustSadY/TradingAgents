@@ -47,6 +47,25 @@ def tail_history(history: str, limit: int | None = None) -> str:
     return "…[earlier debate turns omitted]\n" + history[-limit:]
 
 
+def middle_truncate(text: str, limit: int) -> str:
+    """Trim oversized text while keeping both the head and the tail.
+
+    Tool outputs are often chronological CSVs: the header/context sits at the
+    top and the most recent (most relevant) rows at the bottom, so plain head
+    truncation would discard exactly the data the analyst needs. Keeps ~25% of
+    the budget from the head and ~75% from the tail."""
+    text = (text or "").strip()
+    if limit <= 0 or len(text) <= limit:
+        return text
+    head = max(1, limit // 4)
+    tail = max(1, limit - head)
+    return (
+        text[:head].rstrip()
+        + "\n…[middle truncated to conserve tokens]…\n"
+        + text[-tail:].lstrip()
+    )
+
+
 def _truncate_report(content: str, limit: int) -> str:
     """Trim a single report to ``limit`` chars, keeping the head (where analysts
     put the executive summary) and flagging the cut so the LLM knows it's partial."""

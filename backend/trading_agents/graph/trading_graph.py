@@ -31,6 +31,29 @@ from .setup import GraphSetup
 from .signal_processing import SignalProcessor
 
 
+def _cap_tool_outputs(tool_node: ToolNode, max_chars: int):
+    """Wrap a ToolNode so oversized tool results are middle-truncated before
+    they enter the analyst's conversation.
+
+    Every tool result stays in the message list and is re-sent on each LLM
+    round-trip within the analyst's run, so one unbounded CSV dump multiplies
+    across turns. Middle truncation keeps the head (CSV headers/context) and
+    the tail (most recent rows) — see ``middle_truncate``."""
+
+    async def _run(state, *args, **kwargs):
+        from backend.trading_agents.agents.runtime.report_aggregator import middle_truncate
+
+        result = await tool_node.ainvoke(state, *args, **kwargs)
+        messages = result.get("messages", []) if isinstance(result, dict) else []
+        for message in messages:
+            content = getattr(message, "content", None)
+            if isinstance(content, str) and len(content) > max_chars:
+                message.content = middle_truncate(content, max_chars)
+        return result
+
+    return _run
+
+
 class TradingAgentsGraph:
     def __init__(
         self,
@@ -210,7 +233,7 @@ class TradingAgentsGraph:
 
         return filtered
 
-    def _create_tool_nodes(self) -> dict[str, ToolNode]:
+    def _create_tool_nodes(self) -> dict[str, Any]:
         from backend.trading_agents.agents.analyst_registry import get_tools, list_analysts
         from backend.trading_agents.agents.runtime.resilience import tool_error_handler
 
@@ -218,9 +241,10 @@ class TradingAgentsGraph:
         for key in list_analysts():
             tools = self._filter_tools_for_analyst(key, get_tools(key))
             try:
-                nodes[key] = ToolNode(tools, handle_tool_errors=tool_error_handler)
+                tool_node = ToolNode(tools, handle_tool_errors=tool_error_handler)
             except TypeError:
-                nodes[key] = ToolNode(tools)
+                tool_node = ToolNode(tools)
+            nodes[key] = _cap_tool_outputs(tool_node, int(self.config.get("max_tool_output_chars", 12000)))
         return nodes
 
     def propagate(self, company_name, trade_date, asset_type: str = "stock"):

@@ -3,6 +3,7 @@
 from backend.trading_agents.agents.runtime.report_aggregator import (
     _truncate_report,
     build_resources,
+    middle_truncate,
     tail_history,
 )
 
@@ -45,3 +46,18 @@ def test_tail_history_keeps_recent_tail():
 
 def test_tail_history_noop_when_short():
     assert tail_history("only one turn", 4000) == "only one turn"
+
+
+def test_middle_truncate_keeps_head_and_tail():
+    # Chronological CSV: header at the top, the newest rows at the bottom.
+    rows = ["Date,Close"] + [f"2024-01-{i:02d},{100+i}" for i in range(1, 100)]
+    text = "\n".join(rows) * 20  # force it well past the limit
+    out = middle_truncate(text, 2000)
+    assert len(out) < len(text)
+    assert out.startswith("Date,Close")  # CSV header survives
+    assert text[-50:].strip() in out  # the most recent rows survive
+    assert "middle truncated" in out
+
+
+def test_middle_truncate_noop_when_short():
+    assert middle_truncate("tiny", 2000) == "tiny"
