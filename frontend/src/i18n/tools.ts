@@ -33,6 +33,9 @@ const toolTranslations = {
     'tools.insider_transactions.label': 'Insider Transactions (Standard)',
     'tools.insider_transactions.description': 'Pulls recent Form 4 filings representing standard insider buy/sell transactions.',
 
+    'tools.institutional_holdings.label': 'Institutional Holdings (13F)',
+    'tools.institutional_holdings.description': 'Pulls institutional/13F ownership, major-holder breakdown, and top mutual-fund holders.',
+
     'tools.fundamentals_data.label': 'Fundamentals Summary',
     'tools.fundamentals_data.description': 'Calculates valuation ratios, profit margins, and key financial ratios.',
 
@@ -129,6 +132,9 @@ const toolTranslations = {
 
     'tools.insider_transactions.label': 'İçeriden Öğrenenlerin İşlemleri (Standart)',
     'tools.insider_transactions.description': 'Standart içeriden alım/satım işlemlerini temsil eden son Form 4 başvurularını çeker.',
+
+    'tools.institutional_holdings.label': 'Kurumsal Sahiplik (13F)',
+    'tools.institutional_holdings.description': 'Kurumsal/13F sahipliği, başlıca hissedar dağılımı ve en büyük yatırım fonu sahiplerini çeker.',
 
     'tools.fundamentals_data.label': 'Temel Rasyolar Özeti',
     'tools.fundamentals_data.description': 'Değerleme oranlarını, kâr marjlarını ve temel finansal rasyoları hesaplar.',

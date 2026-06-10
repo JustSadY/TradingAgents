@@ -191,6 +191,11 @@ export function usePriceChart(
             const pl = candleSeriesRef.current!.createPriceLine({ price: ann.stop_loss, color: 'rgba(239, 68, 68, 0.7)', lineWidth: 2, lineStyle: 3, axisLabelVisible: true, title: 'Stop Loss' })
             priceLineRefs.current.push(pl)
         }
+        if (ann.liquidation_price) {
+            const levTitle = ann.leverage && ann.leverage > 1 ? `Liq. ${ann.leverage}x` : 'Liquidation'
+            const pl = candleSeriesRef.current!.createPriceLine({ price: ann.liquidation_price, color: 'rgba(245, 158, 11, 0.9)', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: levTitle })
+            priceLineRefs.current.push(pl)
+        }
 
         if (ann.annotations && Array.isArray(ann.annotations)) {
             ann.annotations.forEach((va: any) => {

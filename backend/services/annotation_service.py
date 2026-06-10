@@ -9,6 +9,8 @@ _SYSTEM_PROMPT_EN = """You are a financial analyst assistant. Extract numerical 
   "resistance_levels": [number, number],
   "target_price": number_or_null,
   "stop_loss": number_or_null,
+  "leverage": number_or_null,
+  "liquidation_price": number_or_null,
   "key_levels": [
     {"price": number, "label": "short_description", "type": "ma|indicator|other"}
   ]
@@ -17,6 +19,8 @@ Rules:
 - Extract at most 2-3 support and resistance levels.
 - Prices might be rounded — show clean values close to integers.
 - Use null for missing or ambiguous values.
+- leverage: the recommended leverage multiplier if the report states one (e.g. "3x" -> 3), else null.
+- liquidation_price: the price at which a leveraged long would be liquidated if stated, else null.
 - key_levels: list technical levels like moving average, Bollinger bands, etc. (max 4).
 - Use only numerical values explicitly mentioned in the report, do not estimate or extrapolate."""
 
@@ -97,10 +101,20 @@ def _validate_annotations(data: dict) -> dict:
                     "type": str(kl.get("type", "other")),
                 }
             )
+    def _leverage_or_none(val):
+        try:
+            v = float(val)
+        except (TypeError, ValueError):
+            return None
+        # Only surface meaningful (>1x) leverage, clamped to the engine's max.
+        return round(min(v, 10.0), 1) if v > 1.0 else None
+
     return {
         "support_levels": _floats(data.get("support_levels")),
         "resistance_levels": _floats(data.get("resistance_levels")),
         "target_price": _float_or_none(data.get("target_price")),
         "stop_loss": _float_or_none(data.get("stop_loss")),
+        "leverage": _leverage_or_none(data.get("leverage")),
+        "liquidation_price": _float_or_none(data.get("liquidation_price")),
         "key_levels": key_levels[:4],
     }

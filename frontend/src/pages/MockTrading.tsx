@@ -14,6 +14,9 @@ interface Holding {
   market_value: number
   unrealized_pnl: number
   pnl_pct: number
+  leverage?: number
+  liquidation_price?: number
+  borrowed_amount?: number
 }
 
 interface PortfolioData {
@@ -76,6 +79,7 @@ export default function MockTrading() {
   const [ticker, setTicker] = useState('')
   const [action, setAction] = useState<'BUY' | 'SELL'>('BUY')
   const [quantity, setQuantity] = useState('')
+  const [leverage, setLeverage] = useState(1)
   const [submitting, setSubmitting] = useState(false)
   const [orderResult, setOrderResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
@@ -108,10 +112,12 @@ export default function MockTrading() {
         ticker: ticker.toUpperCase(),
         action,
         quantity: parseFloat(quantity),
+        leverage: action === 'BUY' ? leverage : 1,
       })
+      const levTag = action === 'BUY' && leverage > 1 ? ` (${leverage}x)` : ''
       setOrderResult({
         ok: true,
-        msg: `✓ ${data.action} ${data.quantity} ${data.ticker} @ $${data.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} — Total: $${data.total_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+        msg: `✓ ${data.action} ${data.quantity} ${data.ticker}${levTag} @ $${data.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} — Total: $${data.total_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
       })
       setTicker('')
       setQuantity('')
@@ -286,6 +292,33 @@ export default function MockTrading() {
                 required
               />
 
+              {action === 'BUY' && (
+                <div className="space-y-1.5">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
+                      {t('mocktrading.leverage_label')}
+                    </label>
+                    <span className={`text-xs font-mono font-bold ${leverage > 1 ? 'text-amber-400' : 'text-slate-400'}`}>
+                      {leverage}x
+                    </span>
+                  </div>
+                  <input
+                    type="range"
+                    min={1}
+                    max={10}
+                    step={1}
+                    value={leverage}
+                    onChange={e => setLeverage(parseInt(e.target.value, 10))}
+                    className="w-full accent-amber-500 cursor-pointer"
+                  />
+                  {leverage > 1 && (
+                    <p className="text-[10px] text-amber-400/80 leading-snug">
+                      {t('mocktrading.leverage_warning')}
+                    </p>
+                  )}
+                </div>
+              )}
+
               <button
                 type="submit"
                 disabled={submitting}
@@ -332,6 +365,8 @@ export default function MockTrading() {
                     <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_quantity')}</th>
                     <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_avg_cost')}</th>
                     <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_current_price')}</th>
+                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_leverage')}</th>
+                    <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_liquidation')}</th>
                     <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_market_value')}</th>
                     <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_pnl')}</th>
                     <th className="px-3 py-2 text-right font-bold">{t('mocktrading.col_pnl_pct')}</th>
@@ -344,6 +379,14 @@ export default function MockTrading() {
                        <td className="px-3 py-3 text-right font-mono text-slate-400">{(h.quantity ?? 0).toFixed(4)}</td>
                       <td className="px-3 py-3 text-right font-mono text-slate-400">${h.avg_buy_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className="px-3 py-3 text-right font-mono text-slate-400">${h.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className={`px-3 py-3 text-right font-mono font-semibold ${(h.leverage ?? 1) > 1 ? 'text-amber-400' : 'text-slate-500'}`}>
+                        {(h.leverage ?? 1).toFixed(1)}x
+                      </td>
+                      <td className="px-3 py-3 text-right font-mono text-slate-400">
+                        {(h.liquidation_price ?? 0) > 0
+                          ? `$${(h.liquidation_price ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+                          : '—'}
+                      </td>
                       <td className="px-3 py-3 text-right font-mono text-slate-400">${h.market_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className={`px-3 py-3 text-right font-mono font-semibold ${h.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {h.unrealized_pnl >= 0 ? '+' : ''}${h.unrealized_pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}

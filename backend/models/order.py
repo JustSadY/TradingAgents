@@ -25,6 +25,12 @@ class Order(Base):
     price_per_share: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     total_value: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     commission: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    # Leverage applied to this order (1.0 = spot/cash). 'side' records the
+    # position direction; 'realized_pnl' is populated when an order closes a
+    # position (SELL/liquidation), otherwise 0.
+    leverage: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("1.0"))
+    side: Mapped[str] = mapped_column(String(5), default="long")
+    realized_pnl: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     analysis_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("analysis_results.id"), nullable=True)
     ai_signal: Mapped[str] = mapped_column(String(50), default="")
     ai_reasoning: Mapped[str] = mapped_column(Text, default="")

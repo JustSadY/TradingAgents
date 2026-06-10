@@ -54,6 +54,8 @@ SECTION_LABELS: dict[str, str] = {
     "options_report": "Options Analysis",
     "quant_report": "Quantitative Analysis",
     "earnings_report": "Earnings Analysis",
+    "insider_report": "Insider Activity",
+    "ownership_report": "Institutional Ownership",
     "review_report": "Performance Review",
     "agent_qa_report": "Analyst Cross-Examination",
     "investment_plan": "Investment Plan",

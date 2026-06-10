@@ -60,7 +60,7 @@ insider_transactions_tool = FunctionToolAdapter(
     label_key="tools.insider_transactions.label",
     description_key="tools.insider_transactions.description",
     func=get_insider_transactions,
-    allowed_analysts=["news", "fundamentals"],
+    allowed_analysts=["news", "fundamentals", "insider"],
     default_enabled=True,
 )
 

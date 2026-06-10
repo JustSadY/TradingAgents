@@ -22,6 +22,8 @@ def build_report_fields(news_label: str, fundamentals_label: str) -> dict[str, s
         "options_report": "Options Market Derivatives Report",
         "quant_report": "Quantitative Metrics Report",
         "earnings_report": "Corporate Guidance & Earnings Report",
+        "insider_report": "Insider Activity Report",
+        "ownership_report": "Institutional Ownership Report",
         "review_report": "Hindsight Performance Review Report",
     }
 

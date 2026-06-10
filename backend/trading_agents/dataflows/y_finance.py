@@ -226,6 +226,35 @@ def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the compan
         raise
 
 
+def get_institutional_holdings(ticker: Annotated[str, "ticker symbol of the company"]):
+    """Institutional (13F) and major-holder breakdown for a company."""
+    try:
+        ticker_obj = yf.Ticker(ticker.upper())
+        parts: list[str] = [f"# Institutional & Major Holders for {ticker.upper()}"]
+        parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+        major = yf_retry(lambda: ticker_obj.major_holders)
+        if major is not None and not major.empty:
+            parts.append("## Major Holders Breakdown")
+            parts.append(major.to_csv())
+
+        inst = yf_retry(lambda: ticker_obj.institutional_holders)
+        if inst is not None and not inst.empty:
+            parts.append("## Top Institutional Holders (13F)")
+            parts.append(inst.to_csv(index=False))
+
+        funds = yf_retry(lambda: ticker_obj.mutualfund_holders)
+        if funds is not None and not funds.empty:
+            parts.append("## Top Mutual Fund Holders")
+            parts.append(funds.to_csv(index=False))
+
+        if len(parts) <= 2:
+            return f"No institutional holdings data found for symbol '{ticker}'"
+        return "\n".join(parts)
+    except Exception:
+        raise
+
+
 def get_sec_filings(ticker: Annotated[str, "ticker symbol of the company"]):
     try:
         ticker_obj = yf.Ticker(ticker.upper())

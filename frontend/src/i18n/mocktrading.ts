@@ -28,9 +28,13 @@ const translations = {
     'mocktrading.col_quantity': 'Quantity',
     'mocktrading.col_avg_cost': 'Avg. Cost',
     'mocktrading.col_current_price': 'Current Price',
+    'mocktrading.col_leverage': 'Leverage',
+    'mocktrading.col_liquidation': 'Liq. Price',
     'mocktrading.col_market_value': 'Market Value',
     'mocktrading.col_pnl': 'P&L',
     'mocktrading.col_pnl_pct': 'P&L %',
+    'mocktrading.leverage_label': 'Leverage',
+    'mocktrading.leverage_warning': 'Leveraged positions can be force-liquidated and accrue interest on borrowed funds.',
   },
   tr: {
     'mocktrading.title': 'Simülasyon Trading',
@@ -61,9 +65,13 @@ const translations = {
     'mocktrading.col_quantity': 'Adet',
     'mocktrading.col_avg_cost': 'Ort. Maliyet',
     'mocktrading.col_current_price': 'Güncel Fiyat',
+    'mocktrading.col_leverage': 'Kaldıraç',
+    'mocktrading.col_liquidation': 'Tasfiye Fiyatı',
     'mocktrading.col_market_value': 'Piyasa Değeri',
     'mocktrading.col_pnl': 'K/Z',
     'mocktrading.col_pnl_pct': 'K/Z %',
+    'mocktrading.leverage_label': 'Kaldıraç',
+    'mocktrading.leverage_warning': 'Kaldıraçlı pozisyonlar zorla tasfiye edilebilir ve borç alınan fonlara faiz işler.',
   },
 }
 

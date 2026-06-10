@@ -1,6 +1,8 @@
 from .runtime.agent_states import AgentState, InvestDebateState, RiskDebateState
 from .sub.analysts.earnings_analyst import create_earnings_analyst
 from .sub.analysts.fundamentals_analyst import create_fundamentals_analyst
+from .sub.analysts.institutional_analyst import create_institutional_analyst
+from .sub.analysts.insider_analyst import create_insider_analyst
 from .sub.analysts.macro_analyst import create_macro_analyst
 from .sub.analysts.market_analyst import create_market_analyst
 from .sub.analysts.news_analyst import create_news_analyst
@@ -45,5 +47,7 @@ __all__ = [
     "create_options_analyst",
     "create_quant_analyst",
     "create_earnings_analyst",
+    "create_insider_analyst",
+    "create_institutional_analyst",
     "create_review_analyst",
 ]

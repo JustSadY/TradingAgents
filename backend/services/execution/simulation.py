@@ -41,6 +41,7 @@ class SimulationTrader(BaseTraderInterface):
                 action=request.action,
                 quantity=request.quantity,
                 portfolio_id=self._portfolio_id,
+                leverage=getattr(request, "leverage", 1.0),
             )
             return OrderResult(
                 order_id=str(res["order_id"]),

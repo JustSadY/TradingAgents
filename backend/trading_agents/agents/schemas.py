@@ -84,6 +84,17 @@ class TraderProposal(BaseModel):
         default=None,
         description="Optional sizing guidance, e.g. '5% of portfolio'.",
     )
+    recommended_leverage: float = Field(
+        default=1.0,
+        description=(
+            "Per-stock leverage multiplier for this trade, from 1.0 (no leverage / "
+            "cash) up to 10.0. Choose based on conviction AND the instrument's "
+            "volatility: use 1.0-2.0 for volatile or speculative names, only raise "
+            "leverage for high-confidence setups on liquid, stable instruments with "
+            "a well-defined stop-loss. Higher leverage tightens the liquidation "
+            "price, so size it against the stop, not just the conviction."
+        ),
+    )
     kelly_size: float | None = Field(
         default=None,
         description="The calculated Kelly Criterion size (0.0 to 1.0) based on confidence and risk/reward.",
@@ -113,6 +124,8 @@ def render_trader_proposal(proposal: TraderProposal) -> str:
         parts.extend(["", f"**Take Profit**: {proposal.take_profit_price}"])
     if proposal.position_sizing:
         parts.extend(["", f"**Position Sizing**: {proposal.position_sizing}"])
+    if proposal.recommended_leverage and proposal.recommended_leverage != 1.0:
+        parts.extend(["", f"**Recommended Leverage**: {proposal.recommended_leverage:.1f}x"])
     parts.extend(
         [
             "",
@@ -146,6 +159,23 @@ class PortfolioDecision(BaseModel):
         default=None,
         description="Optional target price in the instrument's quote currency.",
     )
+    recommended_leverage: float = Field(
+        default=1.0,
+        description=(
+            "Final per-stock leverage multiplier for this decision, 1.0 (cash) to "
+            "10.0. This is the trader's recommended_leverage adjusted for the risk "
+            "debate outcome and the persona's risk tolerance. Conservative personas "
+            "should cap this near 1.0; only use elevated leverage on high-conviction "
+            "ratings (Buy) for liquid instruments with a defined stop-loss."
+        ),
+    )
+    liquidation_price: float | None = Field(
+        default=None,
+        description=(
+            "Optional approximate price at which a leveraged long would be "
+            "force-liquidated, for the user's awareness. Leave null when leverage is 1.0."
+        ),
+    )
     time_horizon: str | None = Field(
         default=None,
         description="Optional recommended holding period, e.g. '3-6 months'.",
@@ -162,6 +192,10 @@ def render_pm_decision(decision: PortfolioDecision) -> str:
     ]
     if decision.price_target is not None:
         parts.extend(["", f"**Price Target**: {decision.price_target}"])
+    if decision.recommended_leverage and decision.recommended_leverage != 1.0:
+        parts.extend(["", f"**Recommended Leverage**: {decision.recommended_leverage:.1f}x"])
+    if decision.liquidation_price is not None:
+        parts.extend(["", f"**Liquidation Price**: {decision.liquidation_price}"])
     if decision.time_horizon:
         parts.extend(["", f"**Time Horizon**: {decision.time_horizon}"])
     return "\n".join(parts)
@@ -180,6 +214,8 @@ class PropagateResult(BaseModel):
     options_report: str = ""
     quant_report: str = ""
     earnings_report: str = ""
+    insider_report: str = ""
+    ownership_report: str = ""
     review_report: str = ""
     investment_plan: str = ""
     trader_plan: str = ""
@@ -202,6 +238,8 @@ class PropagateResult(BaseModel):
             options_report=state.get(StateKeys.OPTIONS_REPORT, ""),
             quant_report=state.get(StateKeys.QUANT_REPORT, ""),
             earnings_report=state.get(StateKeys.EARNINGS_REPORT, ""),
+            insider_report=state.get(StateKeys.INSIDER_REPORT, ""),
+            ownership_report=state.get(StateKeys.OWNERSHIP_REPORT, ""),
             review_report=state.get(StateKeys.REVIEW_REPORT, ""),
             investment_plan=state.get(StateKeys.INVESTMENT_PLAN, ""),
             trader_plan=state.get(StateKeys.TRADER_INVESTMENT_PLAN, ""),

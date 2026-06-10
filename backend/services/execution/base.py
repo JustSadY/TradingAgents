@@ -11,6 +11,7 @@ class OrderRequest:
     reference_price: float
     ai_signal: str = ""
     ai_reasoning: str = ""
+    leverage: float = 1.0
 
 
 @dataclass
