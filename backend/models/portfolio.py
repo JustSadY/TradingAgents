@@ -51,6 +51,9 @@ class Holding(Base):
     borrowed_amount: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     liquidation_price: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     interest_accrued: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    # Optional AI-set exit levels; the position monitor auto-closes on breach.
+    stop_loss: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    take_profit: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     opened_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(UTC)
     )

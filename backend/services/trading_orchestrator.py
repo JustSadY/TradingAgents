@@ -189,6 +189,60 @@ def _position_quantity(
     return min(quantity, max_qty)
 
 
+async def _existing_long_quantity(db, portfolio_id: int, ticker: str) -> float:
+    """Current long quantity held in ``ticker`` (0 if none / short / absent)."""
+    from backend.repositories.portfolio import get_holding
+
+    holding = await get_holding(db, portfolio_id, ticker)
+    if holding is None or getattr(holding, "side", "long") != "long":
+        return 0.0
+    return float(holding.quantity)
+
+
+async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, leverage, quantity, settings) -> float:
+    """Shrink ``quantity`` so the resulting position respects the portfolio's
+    single-name concentration and gross-exposure limits. Returns the (possibly
+    reduced) quantity; 0 means the order should be skipped."""
+    from backend.services.mock_trading_service import get_portfolio_with_live_prices
+    from backend.services.portfolio_risk_service import (
+        DEFAULT_MAX_CONCENTRATION_PCT,
+        DEFAULT_MAX_GROSS_EXPOSURE,
+        cap_order_notional,
+    )
+
+    try:
+        snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id)
+    except Exception as exc:  # noqa: BLE001 — never block trading on the risk snapshot
+        _logger.debug("Risk snapshot failed for %s (allowing order): %s", ticker, exc)
+        return quantity
+
+    equity = float(snapshot.get("total_value") or 0.0)
+    holdings = snapshot.get("holdings", [])
+    existing_gross = sum(float(h.get("market_value") or 0.0) for h in holdings)
+    existing_ticker = sum(
+        float(h.get("market_value") or 0.0) for h in holdings if h.get("ticker") == ticker
+    )
+    proposed_notional = price * quantity
+
+    assessment = cap_order_notional(
+        equity=equity,
+        proposed_notional=proposed_notional,
+        existing_ticker_notional=existing_ticker,
+        existing_gross_notional=existing_gross,
+        max_concentration_pct=getattr(settings, "max_concentration_pct", DEFAULT_MAX_CONCENTRATION_PCT),
+        max_gross_exposure=getattr(settings, "max_gross_exposure", DEFAULT_MAX_GROSS_EXPOSURE),
+    )
+    if assessment.capped:
+        _logger.info(
+            "Risk cap (%s) reduced %s order notional %.2f -> %.2f",
+            assessment.reason,
+            ticker,
+            proposed_notional,
+            assessment.allowed_notional,
+        )
+    return assessment.allowed_notional / price if price > 0 else 0.0
+
+
 async def place_signal_order(
     db: AsyncSession,
     *,
@@ -232,6 +286,7 @@ async def place_signal_order(
     import json
 
     stop_loss = None
+    take_profit = None
     if hasattr(row, "chart_annotations") and row.chart_annotations:
         try:
             if isinstance(row.chart_annotations, str):
@@ -240,6 +295,7 @@ async def place_signal_order(
                 ann = row.chart_annotations
             if isinstance(ann, dict):
                 stop_loss = ann.get("stop_loss")
+                take_profit = ann.get("target_price")
         except Exception:
             pass
 
@@ -270,9 +326,28 @@ async def place_signal_order(
         max_position_size_pct=max_position_size_pct,
         kelly_multiplier=kelly_multiplier,
     )
-    # Leverage only applies when opening/adding exposure (BUY). Closing a
-    # position (SELL) inherits the existing holding's leverage in the engine.
-    leverage = _extract_leverage(row) if action == "BUY" else 1.0
+    # Short selling lets a Sell/Underweight signal open a real short instead of
+    # just closing a long. Whether a SELL opens a short depends on the live
+    # position, which the engine resolves; here we only need to know if it's
+    # *possible* so we attach leverage / exit levels and apply risk caps.
+    allow_short = bool(getattr(settings, "allow_short_selling", True))
+    existing_long_qty = await _existing_long_quantity(db, portfolio.id, ticker)
+    opening_exposure = action == "BUY" or (action == "SELL" and allow_short and existing_long_qty <= 0)
+
+    # Leverage applies only when opening/adding exposure; a pure close inherits
+    # the existing holding's leverage in the engine.
+    leverage = _extract_leverage(row) if opening_exposure else 1.0
+
+    # Portfolio-level risk guard: cap a position that adds exposure so no single
+    # name and no overall gross exposure exceeds the configured limits.
+    if opening_exposure:
+        quantity = await _apply_portfolio_risk_caps(
+            db, portfolio=portfolio, ticker=ticker, price=price, leverage=leverage, quantity=quantity, settings=settings
+        )
+        if quantity <= 0:
+            _logger.info("Portfolio risk caps left no room for %s; skipping order", ticker)
+            return None
+
     request = OrderRequest(
         ticker=ticker,
         action=action,
@@ -281,6 +356,10 @@ async def place_signal_order(
         ai_signal=row.signal or "",
         ai_reasoning=(row.final_decision or "")[:500],
         leverage=leverage,
+        # Attach the AI's exit levels so the position monitor can auto-close.
+        stop_loss=stop_loss if opening_exposure else None,
+        take_profit=take_profit if opening_exposure else None,
+        allow_short=allow_short,
     )
     result = await trader.place_order(request)
     _logger.info("Order placed: %s %s %s -> %s", action, quantity, ticker, result.status)

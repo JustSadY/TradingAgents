@@ -44,6 +44,14 @@ class CronService:
                 replace_existing=True,
                 misfire_grace_time=3600,
             )
+            self.scheduler.add_job(
+                _run_position_monitor,
+                "interval",
+                minutes=5,
+                id="position_monitor",
+                replace_existing=True,
+                misfire_grace_time=120,
+            )
             _logger.info("CronService started")
 
     def stop(self):
@@ -149,6 +157,20 @@ async def _run_performance_backfill():
             await backfill_returns(db)
     except Exception as exc:
         _logger.error("Performance backfill error: %s", exc)
+
+
+async def _run_position_monitor():
+    """Periodically enforce stop-loss / take-profit / liquidation on open positions."""
+    try:
+        from backend.services.mock_trading_service import monitor_open_positions
+
+        async with AsyncSessionLocal() as db:
+            closed = await monitor_open_positions(db)
+            await db.commit()
+            if closed:
+                _logger.info("Position monitor auto-closed %d position(s): %s", len(closed), closed)
+    except Exception as exc:
+        _logger.error("Position monitor error: %s", exc)
 
 
 def init_cron_service() -> CronService:

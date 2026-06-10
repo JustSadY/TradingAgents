@@ -29,7 +29,7 @@ _ALLOWED_TABLES = {
 
 # Strict mapping of table names to their permitted column names.
 _ALLOWED_COLUMNS = {
-    "users": {"email", "role", "display_name", "api_keys_enc"},
+    "users": {"email", "role", "display_name", "api_keys_enc", "token_version"},
     "system_settings": {
         "data_vendor_core_stock",
         "data_vendor_technicals",
@@ -129,6 +129,8 @@ _ALLOWED_COLUMNS = {
         "liquidation_price",
         "interest_accrued",
         "opened_at",
+        "stop_loss",
+        "take_profit",
     },
 }
 
@@ -148,6 +150,7 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("users", "role", "VARCHAR(20) DEFAULT 'user'"),
     ("users", "display_name", "VARCHAR(100)"),
     ("users", "api_keys_enc", "TEXT"),
+    ("users", "token_version", "INTEGER DEFAULT 0"),
     ("system_settings", "data_vendor_core_stock", "VARCHAR(50) DEFAULT 'yfinance'"),
     ("system_settings", "data_vendor_technicals", "VARCHAR(50) DEFAULT 'yfinance'"),
     ("system_settings", "data_vendor_fundamentals", "VARCHAR(50) DEFAULT 'yfinance'"),
@@ -218,6 +221,8 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("holdings", "liquidation_price", "NUMERIC(20, 8) DEFAULT 0"),
     ("holdings", "interest_accrued", "NUMERIC(20, 8) DEFAULT 0"),
     ("holdings", "opened_at", "TIMESTAMP WITH TIME ZONE"),
+    ("holdings", "stop_loss", "NUMERIC(20, 8) DEFAULT 0"),
+    ("holdings", "take_profit", "NUMERIC(20, 8) DEFAULT 0"),
     ("orders", "leverage", "NUMERIC(20, 8) DEFAULT 1"),
     ("orders", "side", "VARCHAR(5) DEFAULT 'long'"),
     ("orders", "realized_pnl", "NUMERIC(20, 8) DEFAULT 0"),

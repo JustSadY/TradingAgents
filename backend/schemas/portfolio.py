@@ -15,6 +15,8 @@ class HoldingRead(BaseModel):
     margin_used: float = 0.0
     borrowed_amount: float = 0.0
     liquidation_price: float = 0.0
+    stop_loss: float = 0.0
+    take_profit: float = 0.0
     updated_at: datetime
 
     class Config:

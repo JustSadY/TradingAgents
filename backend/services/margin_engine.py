@@ -114,3 +114,42 @@ def accrue_interest(
 def is_liquidatable_long(price: Decimal, liquidation_price: Decimal) -> bool:
     """True when a long's mark price has reached/breached its liquidation level."""
     return liquidation_price > 0 and price <= liquidation_price
+
+
+# ── Short positions ───────────────────────────────────────────────────────────
+# A short borrows shares and sells them, owing the shares back. The trader posts
+# ``margin`` collateral; profit accrues as the price falls and loss as it rises,
+# so a short is liquidated when the price rises far enough to eat the margin.
+
+
+def liquidation_price_short(
+    quantity: Decimal,
+    entry_price: Decimal,
+    margin: Decimal,
+    maintenance_rate: Decimal,
+) -> Decimal:
+    """Price at which a leveraged short is force-closed (price rising).
+
+    Equity at price p is ``margin + (entry - p) * qty``. Liquidation triggers
+    when equity falls to ``maintenance_rate`` of the current notional (qty*p):
+        margin + (entry - p)*qty = maintenance_rate * qty * p
+        => p = (margin + entry*qty) / (qty * (1 + maintenance_rate))
+
+    Returns 0 for a non-leveraged/empty short (no forced liquidation modelled).
+    """
+    if quantity <= 0 or margin <= 0:
+        return Decimal("0")
+    denom = quantity * (Decimal("1") + maintenance_rate)
+    if denom <= 0:
+        return Decimal("0")
+    return (margin + entry_price * quantity) / denom
+
+
+def position_equity_short(quantity: Decimal, entry_price: Decimal, price: Decimal, margin: Decimal) -> Decimal:
+    """Trader's equity in a short position at the given mark price."""
+    return margin + (entry_price - price) * quantity
+
+
+def is_liquidatable_short(price: Decimal, liquidation_price: Decimal) -> bool:
+    """True when a short's mark price has risen to/through its liquidation level."""
+    return liquidation_price > 0 and price >= liquidation_price
