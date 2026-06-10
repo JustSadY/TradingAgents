@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 
+from backend.trading_agents.agents.runtime.report_aggregator import tail_history
 from backend.trading_agents.agents.runtime.risk_math import calculate_kelly_size, get_risk_reward_from_plan
 from backend.trading_agents.agents.runtime.structured import (
     ainvoke_structured_or_freetext,
@@ -19,7 +20,8 @@ def create_portfolio_manager(llm):
 
     async def portfolio_manager_node(state) -> dict:
         instrument_context = build_instrument_context(state["company_of_interest"])
-        history = state["risk_debate_state"]["history"]
+        # Trim only the prompt copy; the full transcript stays in state below.
+        history = tail_history(state["risk_debate_state"]["history"])
         risk_debate_state = state["risk_debate_state"]
         research_plan = state["investment_plan"]
         trader_plan = state["trader_investment_plan"]
