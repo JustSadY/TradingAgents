@@ -44,6 +44,7 @@ class SimulationTrader(BaseTraderInterface):
                 leverage=getattr(request, "leverage", 1.0),
                 stop_loss=getattr(request, "stop_loss", None),
                 take_profit=getattr(request, "take_profit", None),
+                allow_short=getattr(request, "allow_short", False),
             )
             return OrderResult(
                 order_id=str(res["order_id"]),

@@ -189,6 +189,16 @@ def _position_quantity(
     return min(quantity, max_qty)
 
 
+async def _existing_long_quantity(db, portfolio_id: int, ticker: str) -> float:
+    """Current long quantity held in ``ticker`` (0 if none / short / absent)."""
+    from backend.repositories.portfolio import get_holding
+
+    holding = await get_holding(db, portfolio_id, ticker)
+    if holding is None or getattr(holding, "side", "long") != "long":
+        return 0.0
+    return float(holding.quantity)
+
+
 async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, leverage, quantity, settings) -> float:
     """Shrink ``quantity`` so the resulting position respects the portfolio's
     single-name concentration and gross-exposure limits. Returns the (possibly
@@ -316,14 +326,21 @@ async def place_signal_order(
         max_position_size_pct=max_position_size_pct,
         kelly_multiplier=kelly_multiplier,
     )
-    # Leverage only applies when opening/adding exposure (BUY). Closing a
-    # position (SELL) inherits the existing holding's leverage in the engine.
-    leverage = _extract_leverage(row) if action == "BUY" else 1.0
+    # Short selling lets a Sell/Underweight signal open a real short instead of
+    # just closing a long. Whether a SELL opens a short depends on the live
+    # position, which the engine resolves; here we only need to know if it's
+    # *possible* so we attach leverage / exit levels and apply risk caps.
+    allow_short = bool(getattr(settings, "allow_short_selling", True))
+    existing_long_qty = await _existing_long_quantity(db, portfolio.id, ticker)
+    opening_exposure = action == "BUY" or (action == "SELL" and allow_short and existing_long_qty <= 0)
 
-    # Portfolio-level risk guard: cap a new BUY so no single name and no overall
-    # gross exposure exceeds the configured limits (only meaningful when adding
-    # leveraged exposure; closing positions is always allowed through).
-    if action == "BUY":
+    # Leverage applies only when opening/adding exposure; a pure close inherits
+    # the existing holding's leverage in the engine.
+    leverage = _extract_leverage(row) if opening_exposure else 1.0
+
+    # Portfolio-level risk guard: cap a position that adds exposure so no single
+    # name and no overall gross exposure exceeds the configured limits.
+    if opening_exposure:
         quantity = await _apply_portfolio_risk_caps(
             db, portfolio=portfolio, ticker=ticker, price=price, leverage=leverage, quantity=quantity, settings=settings
         )
@@ -340,8 +357,9 @@ async def place_signal_order(
         ai_reasoning=(row.final_decision or "")[:500],
         leverage=leverage,
         # Attach the AI's exit levels so the position monitor can auto-close.
-        stop_loss=stop_loss if action == "BUY" else None,
-        take_profit=take_profit if action == "BUY" else None,
+        stop_loss=stop_loss if opening_exposure else None,
+        take_profit=take_profit if opening_exposure else None,
+        allow_short=allow_short,
     )
     result = await trader.place_order(request)
     _logger.info("Order placed: %s %s %s -> %s", action, quantity, ticker, result.status)

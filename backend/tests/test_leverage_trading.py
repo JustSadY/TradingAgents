@@ -195,3 +195,56 @@ async def test_monitor_open_positions_sweeps(db, portfolio, monkeypatch):
     db.expunge_all()
     closed = await mts.monitor_open_positions(db)
     assert any(c["reason"] == "STOP_LOSS" and c["ticker"] == "AAPL" for c in closed)
+
+
+@pytest.mark.asyncio
+async def test_open_short_posts_margin(db, portfolio, monkeypatch):
+    _set_price(monkeypatch, 100.0)
+    # SELL with no long + allow_short opens a 2x short of 100 shares.
+    res = await mts.execute_order(
+        db, "AAPL", "SELL", 100.0, portfolio_id=portfolio.id, leverage=2.0, allow_short=True
+    )
+    assert res["status"] == "FILLED"
+    h = await _get_holding(db, "AAPL")
+    assert h.side == "short"
+    # margin = 10000/2 = 5000; cash drops by margin + commission(10).
+    assert h.margin_used == Decimal("5000")
+    assert portfolio.cash_available == Decimal("100000") - Decimal("5000") - Decimal("10")
+    # Short liquidation is ABOVE the entry price.
+    assert h.liquidation_price > Decimal("100")
+
+
+@pytest.mark.asyncio
+async def test_short_profits_when_price_falls(db, portfolio, monkeypatch):
+    _set_price(monkeypatch, 100.0)
+    await mts.execute_order(db, "AAPL", "SELL", 100.0, portfolio_id=portfolio.id, leverage=2.0, allow_short=True)
+    cash_after_open = portfolio.cash_available
+    # Cover the short at 80 → profit (100-80)*100 = 2000 minus commission(8).
+    _set_price(monkeypatch, 80.0)
+    res = await mts.execute_order(db, "AAPL", "BUY", 100.0, portfolio_id=portfolio.id)
+    assert abs(res["realized_pnl"] - (2000.0 - 8.0)) < 0.01
+    # margin (5000) + realized returned to cash.
+    assert abs(float(portfolio.cash_available - cash_after_open) - (5000 + 2000 - 8)) < 0.01
+    assert await _get_holding(db, "AAPL") is None
+
+
+@pytest.mark.asyncio
+async def test_short_liquidates_when_price_rises(db, portfolio, monkeypatch):
+    _set_price(monkeypatch, 100.0)
+    await mts.execute_order(db, "AAPL", "SELL", 100.0, portfolio_id=portfolio.id, leverage=2.0, allow_short=True)
+    h = await _get_holding(db, "AAPL")
+    liq = float(h.liquidation_price)
+    # Push price above the liquidation level → forced cover.
+    _set_price(monkeypatch, liq + 5)
+    db.expunge_all()
+    data = await mts.get_portfolio_with_live_prices(db, portfolio_id=portfolio.id)
+    assert any(c["reason"] == "LIQUIDATED" and c["side"] == "short" for c in data["auto_closes"])
+    assert len(data["holdings"]) == 0
+
+
+@pytest.mark.asyncio
+async def test_sell_without_short_flag_still_errors(db, portfolio, monkeypatch):
+    _set_price(monkeypatch, 100.0)
+    # Legacy behaviour preserved: selling a name with no long and no allow_short.
+    with pytest.raises(ValueError):
+        await mts.execute_order(db, "AAPL", "SELL", 10.0, portfolio_id=portfolio.id)

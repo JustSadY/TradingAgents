@@ -16,6 +16,7 @@ class OrderRequest(BaseModel):
     action: Literal["BUY", "SELL"]
     quantity: float = Field(..., gt=0, le=100_000)
     leverage: float = Field(default=1.0, ge=1.0, le=10.0)
+    allow_short: bool = False
     analysis_id: int | None = None
 
     @field_validator("ticker")
@@ -56,6 +57,7 @@ async def create_order(
         analysis_id=req.analysis_id,
         user=_,
         leverage=req.leverage,
+        allow_short=req.allow_short,
     )
     await db.commit()
     return result

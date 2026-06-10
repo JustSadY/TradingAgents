@@ -14,6 +14,7 @@ interface Holding {
   market_value: number
   unrealized_pnl: number
   pnl_pct: number
+  side?: string
   leverage?: number
   liquidation_price?: number
   borrowed_amount?: number
@@ -114,9 +115,11 @@ export default function MockTrading() {
         ticker: ticker.toUpperCase(),
         action,
         quantity: parseFloat(quantity),
-        leverage: action === 'BUY' ? leverage : 1,
+        leverage,
+        // A SELL with no existing long opens a short; closing a long ignores this.
+        allow_short: action === 'SELL',
       })
-      const levTag = action === 'BUY' && leverage > 1 ? ` (${leverage}x)` : ''
+      const levTag = leverage > 1 ? ` (${leverage}x)` : ''
       setOrderResult({
         ok: true,
         msg: `✓ ${data.action} ${data.quantity} ${data.ticker}${levTag} @ $${data.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} — Total: $${data.total_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
@@ -294,7 +297,7 @@ export default function MockTrading() {
                 required
               />
 
-              {action === 'BUY' && (
+              {(
                 <div className="space-y-1.5">
                   <div className="flex items-center justify-between">
                     <label className="text-[10px] font-semibold uppercase tracking-wider text-slate-500">
@@ -379,7 +382,16 @@ export default function MockTrading() {
                 <tbody className="divide-y divide-white/[0.02]">
                   {p.holdings.map(h => (
                     <tr key={h.ticker} className="hover:bg-white/[0.01] transition-colors">
-                      <td className="px-3 py-3 font-mono font-bold text-white text-sm">{h.ticker}</td>
+                      <td className="px-3 py-3 font-mono font-bold text-white text-sm">
+                        <span className="inline-flex items-center gap-1.5">
+                          {h.ticker}
+                          {h.side === 'short' && (
+                            <span className="px-1.5 py-0.5 rounded text-[9px] font-bold bg-rose-500/15 text-rose-400 border border-rose-500/20">
+                              SHORT
+                            </span>
+                          )}
+                        </span>
+                      </td>
                        <td className="px-3 py-3 text-right font-mono text-slate-400">{(h.quantity ?? 0).toFixed(4)}</td>
                       <td className="px-3 py-3 text-right font-mono text-slate-400">${h.avg_buy_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className="px-3 py-3 text-right font-mono text-slate-400">${h.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>

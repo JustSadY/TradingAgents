@@ -14,6 +14,7 @@ class OrderRequest:
     leverage: float = 1.0
     stop_loss: float | None = None
     take_profit: float | None = None
+    allow_short: bool = False
 
 
 @dataclass

@@ -13,15 +13,21 @@ from backend.services.margin_engine import (
     accrue_interest,
     clamp_leverage,
     is_liquidatable_long,
+    is_liquidatable_short,
     liquidation_price_long,
+    liquidation_price_short,
     maintenance_rate_for_leverage,
     margin_required,
 )
 
 
-def _liquidation_for_holding(quantity: Decimal, borrowed: Decimal, leverage: Decimal) -> Decimal:
-    """Liquidation price using the maintenance rate implied by the holding's leverage."""
+def _liquidation_for_position(
+    side: str, quantity: Decimal, entry_price: Decimal, borrowed: Decimal, margin: Decimal, leverage: Decimal
+) -> Decimal:
+    """Side-aware liquidation price using the leverage-implied maintenance rate."""
     maintenance_rate = maintenance_rate_for_leverage(leverage)
+    if side == "short":
+        return liquidation_price_short(quantity, entry_price, margin, maintenance_rate)
     return liquidation_price_long(quantity, borrowed, maintenance_rate)
 from backend.services.market_data_service import get_live_price, get_live_prices_batch
 
@@ -116,38 +122,54 @@ async def get_portfolio_with_live_prices(
                 portfolio.cash_available -= interest
                 h.interest_accrued = (h.interest_accrued or Decimal("0.0")) + interest
 
-        # Auto-close on, in priority order: liquidation (forced), stop-loss, or
-        # take-profit. Liquidation wins because it is an involuntary margin event.
+        is_short = h.side == "short"
+        margin = h.margin_used or Decimal("0.0")
+
+        # Auto-close on, in priority order: liquidation (forced), stop-loss, then
+        # take-profit. Direction flips the breach comparisons for shorts.
         stop = h.stop_loss or Decimal("0.0")
         target = h.take_profit or Decimal("0.0")
+        liq = h.liquidation_price or Decimal("0.0")
         close_status = None
-        if is_liquidatable_long(price, h.liquidation_price or Decimal("0.0")):
-            close_status = "LIQUIDATED"
-        elif stop > 0 and price <= stop:
-            close_status = "STOP_LOSS"
-        elif target > 0 and price >= target:
-            close_status = "TAKE_PROFIT"
+        if is_short:
+            if is_liquidatable_short(price, liq):
+                close_status = "LIQUIDATED"
+            elif stop > 0 and price >= stop:  # short stop-loss is above entry
+                close_status = "STOP_LOSS"
+            elif target > 0 and price <= target:  # short take-profit is below entry
+                close_status = "TAKE_PROFIT"
+        else:
+            if is_liquidatable_long(price, liq):
+                close_status = "LIQUIDATED"
+            elif stop > 0 and price <= stop:
+                close_status = "STOP_LOSS"
+            elif target > 0 and price >= target:
+                close_status = "TAKE_PROFIT"
 
         if close_status is not None:
-            proceeds = price * h.quantity
-            commission = (proceeds * _DEFAULT_COMMISSION_RATE).quantize(Decimal("0.0001"))
-            realized = (price - h.avg_buy_price) * h.quantity - commission
-            portfolio.cash_available += proceeds - borrowed - commission
-            portfolio.margin_used -= h.margin_used or Decimal("0.0")
+            notional_now = price * h.quantity
+            commission = (notional_now * _DEFAULT_COMMISSION_RATE).quantize(Decimal("0.0001"))
+            if is_short:
+                realized = (h.avg_buy_price - price) * h.quantity - commission
+                portfolio.cash_available += margin + realized
+            else:
+                realized = (price - h.avg_buy_price) * h.quantity - commission
+                portfolio.cash_available += notional_now - borrowed - commission
+            portfolio.margin_used -= margin
             db.add(
                 Order(
                     portfolio_id=portfolio.id,
                     mode=portfolio.mode,
                     broker=portfolio.broker,
                     ticker=h.ticker,
-                    action="SELL",
+                    action="BUY" if is_short else "SELL",  # covering a short is a BUY
                     side=h.side,
                     leverage=h.leverage or Decimal("1.0"),
                     quantity_requested=h.quantity,
                     quantity_filled=h.quantity,
                     status=close_status,
                     price_per_share=price,
-                    total_value=proceeds,
+                    total_value=notional_now,
                     commission=commission,
                     realized_pnl=realized,
                     executed_at=now,
@@ -157,6 +179,7 @@ async def get_portfolio_with_live_prices(
                 {
                     "ticker": h.ticker,
                     "reason": close_status,
+                    "side": h.side,
                     "price": float(price),
                     "realized_pnl": round(float(realized), 2),
                 }
@@ -165,11 +188,14 @@ async def get_portfolio_with_live_prices(
             continue
 
         market_value = price * h.quantity
-        equity = market_value - borrowed
-        cost_basis = h.avg_buy_price * h.quantity
-        # P&L on the trader's own equity (margin), not the leveraged notional.
-        unrealized_pnl = market_value - cost_basis
-        invested = (h.margin_used or Decimal("0.0")) or cost_basis
+        if is_short:
+            # Short equity = posted margin + (entry - mark) * qty.
+            unrealized_pnl = (h.avg_buy_price - price) * h.quantity
+            equity = margin + unrealized_pnl
+        else:
+            equity = market_value - borrowed
+            unrealized_pnl = market_value - h.avg_buy_price * h.quantity
+        invested = margin or (h.avg_buy_price * h.quantity)
         pnl_pct = (unrealized_pnl / invested * Decimal("100")) if invested else Decimal("0.0")
 
         h.current_price = price
@@ -236,6 +262,7 @@ async def execute_order(
     leverage: float = 1.0,
     stop_loss: float | None = None,
     take_profit: float | None = None,
+    allow_short: bool = False,
 ) -> dict:
     from backend.core.l10n import get_message
     from backend.repositories.portfolio import get_holding
@@ -283,11 +310,29 @@ async def execute_order(
     stop_dec = _exit_level(stop_loss)
     target_dec = _exit_level(take_profit)
 
-    if action == "BUY":
-        # Only the margin portion of a leveraged position is funded from cash;
-        # the broker lends the rest (borrowed). Spot trades are leverage == 1.
+    holding = await get_holding(db, portfolio.id, ticker)
+    existing_side = holding.side if holding else None
+    # BUY adds to / opens a long, or covers an existing short. SELL closes a long,
+    # or (when shorting is allowed) opens / adds to a short.
+    if action == "BUY" and existing_side == "short":
+        intent = "close_short"
+    elif action == "SELL" and existing_side == "long":
+        intent = "close_long"
+    elif action == "BUY":
+        intent = "open_long"
+    elif existing_side == "short" or allow_short:
+        intent = "open_short"
+    else:
+        # Legacy behaviour: selling a name you don't hold long is rejected unless
+        # short selling is explicitly enabled for this order.
+        available = holding.quantity if holding else Decimal("0.0")
+        raise ValueError(get_message("insufficient_position", lang, available=float(available), requested=quantity))
+
+    pos_side = "short" if intent in ("open_short", "close_short") else "long"
+
+    if intent in ("open_long", "open_short"):
+        # Post margin; the broker funds the rest. Spot long is leverage == 1.
         margin = margin_required(notional, lev)
-        borrowed = notional - margin
         required = margin + commission
         if portfolio.cash_available < required:
             raise ValueError(
@@ -297,25 +342,25 @@ async def execute_order(
             )
         portfolio.cash_available -= required
         portfolio.margin_used = (portfolio.margin_used or Decimal("0.0")) + margin
+        # Long borrows cash (notional - margin); short borrows shares, so the
+        # whole notional accrues a borrow fee via interest on borrowed_amount.
+        borrowed = (notional - margin) if pos_side == "long" else notional
 
-        holding = await get_holding(db, portfolio.id, ticker)
         if holding:
             new_qty = holding.quantity + qty_dec
             holding.avg_buy_price = (holding.avg_buy_price * holding.quantity + price * qty_dec) / new_qty
             holding.quantity = new_qty
             holding.margin_used = (holding.margin_used or Decimal("0.0")) + margin
             holding.borrowed_amount = (holding.borrowed_amount or Decimal("0.0")) + borrowed
-            # Blended leverage = total notional / total equity posted.
+            # Blended leverage = total notional exposure / total equity posted.
+            total_notional = holding.avg_buy_price * holding.quantity
             holding.leverage = (
-                (holding.margin_used + holding.borrowed_amount) / holding.margin_used
-                if holding.margin_used > 0
-                else Decimal("1.0")
+                total_notional / holding.margin_used if holding.margin_used > 0 else Decimal("1.0")
             )
-            holding.liquidation_price = _liquidation_for_holding(
-                holding.quantity, holding.borrowed_amount, holding.leverage
+            holding.liquidation_price = _liquidation_for_position(
+                pos_side, holding.quantity, holding.avg_buy_price, holding.borrowed_amount, holding.margin_used, holding.leverage
             )
             holding.current_price = price
-            # Update exit levels only when the caller supplies new ones.
             if stop_dec > 0:
                 holding.stop_loss = stop_dec
             if target_dec > 0:
@@ -329,41 +374,45 @@ async def execute_order(
                     avg_buy_price=price,
                     current_price=price,
                     unrealized_pnl=Decimal("0.0"),
-                    side="long",
+                    side=pos_side,
                     leverage=lev,
                     margin_used=margin,
                     borrowed_amount=borrowed,
-                    liquidation_price=_liquidation_for_holding(qty_dec, borrowed, lev),
+                    liquidation_price=_liquidation_for_position(pos_side, qty_dec, price, borrowed, margin, lev),
                     stop_loss=stop_dec,
                     take_profit=target_dec,
                 )
             )
     else:
-        holding = await get_holding(db, portfolio.id, ticker)
+        # Close (fully or partially) a long or short position.
         if holding is None or holding.quantity < qty_dec:
             available = holding.quantity if holding else Decimal("0.0")
             raise ValueError(get_message("insufficient_position", lang, available=float(available), requested=quantity))
 
-        # Close (fully or partially). Repay the borrowed principal pro-rata; the
-        # remainder of the proceeds returns to free cash.
         fraction = qty_dec / holding.quantity
-        repaid_borrowed = (holding.borrowed_amount or Decimal("0.0")) * fraction
         released_margin = (holding.margin_used or Decimal("0.0")) * fraction
-        proceeds = notional
-        realized_pnl = (price - holding.avg_buy_price) * qty_dec - commission
-
-        portfolio.cash_available += proceeds - repaid_borrowed - commission
-        portfolio.margin_used = (portfolio.margin_used or Decimal("0.0")) - released_margin
+        borrowed_portion = (holding.borrowed_amount or Decimal("0.0")) * fraction
         lev = holding.leverage or Decimal("1.0")
 
+        if pos_side == "long":
+            # Sell the shares; repay the loan, return the rest (margin ± P&L).
+            realized_pnl = (price - holding.avg_buy_price) * qty_dec - commission
+            portfolio.cash_available += notional - borrowed_portion - commission
+        else:
+            # Buy the shares back; return the posted margin plus the short P&L
+            # (profit when the cover price is below the short entry).
+            realized_pnl = (holding.avg_buy_price - price) * qty_dec - commission
+            portfolio.cash_available += released_margin + realized_pnl
+        portfolio.margin_used = (portfolio.margin_used or Decimal("0.0")) - released_margin
+
         holding.quantity -= qty_dec
-        holding.borrowed_amount = (holding.borrowed_amount or Decimal("0.0")) - repaid_borrowed
+        holding.borrowed_amount = (holding.borrowed_amount or Decimal("0.0")) - borrowed_portion
         holding.margin_used = (holding.margin_used or Decimal("0.0")) - released_margin
         if holding.quantity < _DUST:
             await db.delete(holding)
         else:
-            holding.liquidation_price = _liquidation_for_holding(
-                holding.quantity, holding.borrowed_amount, holding.leverage
+            holding.liquidation_price = _liquidation_for_position(
+                pos_side, holding.quantity, holding.avg_buy_price, holding.borrowed_amount, holding.margin_used, holding.leverage
             )
             holding.current_price = price
 
@@ -373,7 +422,7 @@ async def execute_order(
         broker="paper",
         ticker=ticker,
         action=action,
-        side="long",
+        side=pos_side,
         leverage=lev,
         quantity_requested=qty_dec,
         quantity_filled=qty_dec,
