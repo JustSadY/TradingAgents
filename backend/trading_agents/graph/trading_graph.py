@@ -176,6 +176,7 @@ class TradingAgentsGraph:
             effort = self.config.get("anthropic_effort")
             if effort:
                 kwargs["effort"] = effort
+            kwargs["prompt_caching"] = bool(self.config.get("anthropic_prompt_caching", True))
         user_keys = self.config.get("user_api_keys") or {}
         user_key = user_keys.get(prov_lower)
         if user_key:

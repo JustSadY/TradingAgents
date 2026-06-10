@@ -67,6 +67,12 @@ const translations = {
     'settings.row_strict_stop_loss': 'Strict Stop Loss Mode',
     'settings.row_node_retry_attempts': 'Node Retry Attempts',
     'settings.row_node_retry_base_delay': 'Retry Base Delay (s)',
+    'settings.token_budget': 'Token Budget',
+    'settings.token_budget_hint': 'Lower values reduce LLM token cost per analysis at the expense of how much detail each agent re-reads.',
+    'settings.row_prompt_caching': 'Anthropic Prompt Caching',
+    'settings.row_max_report_chars': 'Max Report Chars / Prompt',
+    'settings.row_max_debate_history': 'Max Debate History Chars',
+    'settings.row_max_tool_output': 'Max Tool Output Chars',
 
 
     'settings.analysts_loading': 'Loading...',
@@ -182,6 +188,12 @@ const translations = {
     'settings.row_max_position_size': 'Maks. Pozisyon Büyüklüğü (%)',
     'settings.row_risk_per_trade': 'Trade Başına Risk (%)',
     'settings.row_strict_stop_loss': 'Sıkı Stop-Loss Modu',
+    'settings.token_budget': 'Token Bütçesi',
+    'settings.token_budget_hint': 'Daha düşük değerler analiz başına LLM token maliyetini azaltır; karşılığında her ajanın yeniden okuduğu ayrıntı miktarı düşer.',
+    'settings.row_prompt_caching': 'Anthropic Prompt Önbellekleme',
+    'settings.row_max_report_chars': 'Maks. Rapor Karakteri / Prompt',
+    'settings.row_max_debate_history': 'Maks. Müzakere Geçmişi Karakteri',
+    'settings.row_max_tool_output': 'Maks. Araç Çıktısı Karakteri',
     'settings.row_node_retry_attempts': 'Ajan Düğüm Deneme Sayısı',
     'settings.row_node_retry_base_delay': 'Deneme Gecikme Süresi (sn)',
 

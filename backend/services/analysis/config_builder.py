@@ -53,6 +53,18 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         "checkpoint_enabled": True,
         # Inter-agent cross-examination toggle (per-user setting).
         "agent_qa_enabled": getattr(settings, "agent_qa_enabled", True),
+        # Token-budget controls (fall back to engine defaults when unset).
+        "anthropic_prompt_caching": getattr(settings, "anthropic_prompt_caching", True),
+        "max_report_chars_in_prompts": getattr(
+            settings, "max_report_chars_in_prompts", DEFAULT_CONFIG["max_report_chars_in_prompts"]
+        )
+        or DEFAULT_CONFIG["max_report_chars_in_prompts"],
+        "max_debate_history_chars": getattr(
+            settings, "max_debate_history_chars", DEFAULT_CONFIG["max_debate_history_chars"]
+        )
+        or DEFAULT_CONFIG["max_debate_history_chars"],
+        "max_tool_output_chars": getattr(settings, "max_tool_output_chars", DEFAULT_CONFIG["max_tool_output_chars"])
+        or DEFAULT_CONFIG["max_tool_output_chars"],
         "node_retry_attempts": getattr(settings, "node_retry_attempts", DEFAULT_CONFIG["node_retry_attempts"])
         or DEFAULT_CONFIG["node_retry_attempts"],
         "node_retry_base_delay": getattr(settings, "node_retry_base_delay", DEFAULT_CONFIG["node_retry_base_delay"])
