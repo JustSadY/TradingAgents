@@ -74,7 +74,7 @@ function renderLogMessage(l: Log) {
         case 'node_start':
           return (
             <span className="flex items-center gap-2">
-              <span className="text-violet-400 font-bold shrink-0">🚀 Start</span>
+              <span className="text-violet-400 font-bold shrink-0">Start</span>
               <span className="text-slate-400 capitalize shrink-0">{kind}:</span>
               <span className="text-white font-semibold font-mono break-all">{node}</span>
             </span>
@@ -82,7 +82,7 @@ function renderLogMessage(l: Log) {
         case 'node_end':
           return (
             <span className="flex items-center gap-2 flex-wrap">
-              <span className="text-emerald-400 font-bold shrink-0">✅ Success</span>
+              <span className="text-emerald-400 font-bold shrink-0">Success</span>
               <span className="text-slate-400 capitalize shrink-0">{kind}:</span>
               <span className="text-white font-semibold font-mono break-all">{node}</span>
               <span className="text-emerald-400 font-bold font-mono text-xs bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/15 shrink-0">{ms}ms</span>
@@ -92,7 +92,7 @@ function renderLogMessage(l: Log) {
           return (
             <span className="flex flex-col gap-1 w-full">
               <span className="flex items-center gap-2 flex-wrap">
-                <span className="text-amber-400 font-bold shrink-0">🔄 Retry</span>
+                <span className="text-amber-400 font-bold shrink-0">Retry</span>
                 <span className="text-slate-400 font-mono text-[10px] bg-white/[0.04] px-2 py-0.5 rounded border border-white/[0.04] shrink-0 font-semibold">{label}</span>
                 <span className="text-amber-500 font-mono text-xs font-semibold bg-amber-500/10 border border-amber-500/15 px-2 py-0.5 rounded shrink-0">Attempt {attempt}/{attempts}</span>
                 <span className="text-slate-400 font-mono text-xs shrink-0">(backoff {delay}s)</span>
@@ -104,7 +104,7 @@ function renderLogMessage(l: Log) {
           return (
             <span className="flex flex-col gap-1 w-full">
               <span className="flex items-center gap-2">
-                <span className="text-rose-400 font-bold shrink-0">❌ Error</span>
+                <span className="text-rose-400 font-bold shrink-0">Error</span>
                 <span className="text-slate-400 capitalize shrink-0">{kind}:</span>
                 <span className="text-white font-semibold font-mono break-all">{node}</span>
               </span>
@@ -114,7 +114,7 @@ function renderLogMessage(l: Log) {
         case 'node_skipped':
           return (
             <span className="flex items-center gap-2 flex-wrap">
-              <span className="text-amber-400 font-bold shrink-0">⚠️ Fallback</span>
+              <span className="text-amber-400 font-bold shrink-0">Fallback</span>
               <span className="text-slate-400 capitalize shrink-0">{kind}:</span>
               <span className="text-white font-semibold font-mono break-all">{node}</span>
               <span className="text-slate-500 text-xs italic shrink-0">(skipped on retry exhaustion)</span>
@@ -123,7 +123,7 @@ function renderLogMessage(l: Log) {
         case 'tool_error':
           return (
             <span className="flex flex-col gap-1 w-full">
-              <span className="text-rose-400 font-bold">🛠️ Tool Failed</span>
+              <span className="text-rose-400 font-bold">Tool Failed</span>
               {error && <span className="text-[11px] text-rose-400/80 font-mono pl-2 border-l border-rose-500/20">{error}</span>}
             </span>
           )
@@ -131,7 +131,7 @@ function renderLogMessage(l: Log) {
           return (
             <span className="flex flex-col gap-1 w-full">
               <span className="flex items-center gap-2">
-                <span className="text-red-400 font-bold shrink-0">🚨 Fallback Failed</span>
+                <span className="text-red-400 font-bold shrink-0">Fallback Failed</span>
                 <span className="text-slate-400 shrink-0">node:</span>
                 <span className="text-white font-semibold font-mono break-all">{node}</span>
               </span>
