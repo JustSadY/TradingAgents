@@ -92,8 +92,15 @@ async def run_individual_analysis(
         permitted_analysts = await prepare_graph_config(db, user_id, config)
 
         # 5. Initialize & Run Graph
+        from .streaming_handler import TokenStreamingCallbackHandler
+
         stats_handler = StatsCallbackHandler()
-        ta = TradingAgentsGraph(selected_analysts=permitted_analysts, config=config, callbacks=[stats_handler])
+        streaming_handler = TokenStreamingCallbackHandler(emitter)
+        ta = TradingAgentsGraph(
+            selected_analysts=permitted_analysts,
+            config=config,
+            callbacks=[stats_handler, streaming_handler],
+        )
 
         # Inject emitter into active_run_context for mental model updates
         from backend.trading_agents.agents.data.chart_tools import active_run_context
@@ -278,5 +285,19 @@ async def run_individual_analysis(
     except Exception as exc:
         _logger.error("Analysis failed task=%s user=%s: %s", emitter.task_id, username, exc, exc_info=True)
         await mark_as_failed(db, row.id)
-        await emitter.emit_error(str(exc))
+        
+        exc_str = str(exc)
+        err_msg = exc_str
+        
+        # Check for model not found / 404 or configuration errors
+        if "404" in exc_str or "not_found" in exc_str.lower() or "not found" in exc_str.lower():
+            err_msg = f"Model not found or invalid provider configuration (404 Error: {exc_str})"
+        elif "401" in exc_str or "unauthorized" in exc_str.lower() or "invalid api key" in exc_str.lower():
+            err_msg = f"Authentication failed or invalid API key (401 Error: {exc_str})"
+        elif "400" in exc_str or "bad_request" in exc_str.lower() or "bad request" in exc_str.lower():
+            err_msg = f"Invalid request parameters or model settings (400 Error: {exc_str})"
+        elif "429" in exc_str or "rate_limit" in exc_str.lower() or "rate limit" in exc_str.lower():
+            err_msg = f"Rate limit exceeded (429 Error: {exc_str})"
+            
+        await emitter.emit_error(err_msg)
         raise

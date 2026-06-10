@@ -28,6 +28,7 @@ class TradingAgentsConfig(BaseModel):
     max_debate_rounds: int = Field(default=1, ge=1, le=10)
     max_risk_discuss_rounds: int = Field(default=1, ge=1, le=10)
     max_recur_limit: int = Field(default=1000, ge=1)
+    keep_checkpoints: bool = True
     analyst_concurrency_limit: int = Field(default=1, ge=1)
     node_retry_attempts: int = Field(default=2, ge=1)
     node_retry_base_delay: float = Field(default=1.0, ge=0.0)

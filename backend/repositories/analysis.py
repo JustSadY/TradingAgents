@@ -41,6 +41,7 @@ async def list_analyses(
 ) -> list[AnalysisResult]:
     q = (
         select(AnalysisResult)
+        .where(AnalysisResult.status == "completed")
         .options(
             defer(AnalysisResult.bull_history),
             defer(AnalysisResult.bear_history),

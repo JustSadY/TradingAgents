@@ -11,7 +11,7 @@ import { useTranslation } from '../contexts/LanguageContext'
 import {
   Loader2, CheckCircle, AlertCircle, History,
   X, BarChart2, FileText, Zap,
-  Download, FileDown, AlertTriangle
+  Download, FileDown, AlertTriangle, Scale
 } from 'lucide-react'
 
 // Components
@@ -30,7 +30,7 @@ interface WsEvent {
   final_decision?: string; message?: string; duration_seconds?: number
   llm_calls?: number; status?: string; agent?: string; analysis_id?: number
   label?: string; stage?: string; node?: string
-  thought?: string; metrics?: any
+  thought?: string; metrics?: any; token?: string; tokens_in?: number; tokens_out?: number
 }
 interface HistoryItem {
   id: number; ticker: string; trade_date: string; asset_type: string
@@ -122,11 +122,12 @@ function RunTab() {
   const [activeSection, setActiveSection] = useState<string | null>(saved.activeSection)
   const [analysisId, setAnalysisId] = useState<number | null>(saved.analysisId || null)
   const [detail, setDetail] = useState<AnalysisDetail | null>(null)
-  const [activeDetailTab, setActiveDetailTab] = useState<'reports' | 'debate' | 'chat'>('reports')
+  const [activeDetailTab, setActiveDetailTab] = useState<'reports' | 'debate' | 'chat' | 'timetravel'>('reports')
   const [leftTab, setLeftTab] = useState<'log' | 'debate'>('log')
   const [liveDebate, setLiveDebate] = useState<{ sender: string; content: string }[]>([])
   const [riskMetrics, setRiskMetrics] = useState<any>(null)
   const [mentalModel, setMentalModel] = useState<{ agent: string; thought: string } | null>(null)
+  const [stats, setStats] = useState<{ llmCalls: number; tokensIn: number; tokensOut: number } | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const taskIdRef = useRef<string | null>(null)
@@ -208,11 +209,30 @@ function RunTab() {
         appendLog(`${ev.agent}`)
       } else if (ev.type === 'progress') {
         setCurrentStep({ label: ev.label || '', stage: ev.stage || '' })
-        appendLog(`▸ ${ev.label}`)
+        appendLog(`Progress: ${ev.label}`)
+      } else if (ev.type === 'token' && ev.agent && ev.token) {
+        let reportKey = ev.agent
+        if (ev.agent === 'portfolio_manager') {
+          reportKey = 'final_decision'
+        } else if (ev.agent === 'trader') {
+          reportKey = 'trader_plan'
+        } else if (ev.agent === 'research_manager') {
+          reportKey = 'investment_plan'
+        } else if (!ev.agent.endsWith('_report')) {
+          reportKey = `${ev.agent}_report`
+        }
+
+        setReports(r => {
+          const prevContent = r[reportKey] || ''
+          return { ...r, [reportKey]: prevContent + ev.token }
+        })
+        setActiveSection(reportKey)
+      } else if (ev.type === 'stats') {
+        setStats({ llmCalls: ev.llm_calls || 0, tokensIn: ev.tokens_in || 0, tokensOut: ev.tokens_out || 0 })
       } else if (ev.type === 'report' && ev.section && ev.content) {
         setReports(r => ({ ...r, [ev.section!]: ev.content! }))
         setActiveSection(ev.section)
-        appendLog(`✓ ${SECTION_LABELS[ev.section!] || ev.section}`)
+        appendLog(`Completed: ${SECTION_LABELS[ev.section!] || ev.section}`)
       } else if (ev.type === 'mental_model' && ev.agent && ev.thought) {
         setMentalModel({ agent: ev.agent, thought: ev.thought })
       } else if (ev.type === 'risk_metrics' && ev.metrics) {
@@ -228,7 +248,8 @@ function RunTab() {
         setRunning_(false)
         setCurrentStep(null)
         setMentalModel(null)
-        appendLog(`✓ Completed in ${ev.duration_seconds}s / ${ev.llm_calls} LLM calls`)
+        setStats(prev => prev ? { ...prev, llmCalls: ev.llm_calls || prev.llmCalls } : null)
+        appendLog(`Completed in ${ev.duration_seconds}s / ${ev.llm_calls} LLM calls`)
         sendBrowserNotification(
           `${tickerRef.current.toUpperCase()} Analysis Completed`,
           `Signal: ${ev.signal ?? 'N/A'} • Duration: ${ev.duration_seconds?.toFixed(0)}s`
@@ -242,7 +263,7 @@ function RunTab() {
         setRunStatus('error')
         setRunning_(false)
         setCurrentStep(null)
-        appendLog(`✗ Error: ${ev.message}`)
+        appendLog(`Error: ${ev.message}`)
         notify('error', ev.message ?? t('analysis.ws.analysis_failed'), t('analysis.ws.analysis_error_title'))
       }
     }
@@ -365,6 +386,7 @@ function RunTab() {
     setDetail(null)
     setActiveSection(null)
     setCurrentStep(null)
+    setStats(null)
     preRefreshLogRef.current = null
 
     try {
@@ -377,7 +399,7 @@ function RunTab() {
     } catch (err: any) {
       setRunStatus('error')
       setRunning_(false)
-      setLog(l => [...l, `✗ ${err.response?.data?.detail || t('analysis.ws.failed_to_start')}`])
+      setLog(l => [...l, `Error: ${err.response?.data?.detail || t('analysis.ws.failed_to_start')}`])
     }
   }
 
@@ -389,7 +411,25 @@ function RunTab() {
 
   const handleClear = () => {
     setRunStatus('idle'); setSignal(null); setReports({}); setLog([]); setActiveSection(null); setCurrentStep(null)
-    setAnalysisId(null); setDetail(null); setLiveDebate([])
+    setAnalysisId(null); setDetail(null); setLiveDebate([]); setStats(null)
+  }
+
+  const handleRollbackStart = (taskId: string) => {
+    setRunning(true)
+    setRunStatus('running')
+    setSignal(null)
+    setReports({})
+    setLog([])
+    setLiveDebate([])
+    setAnalysisId(null)
+    setDetail(null)
+    setActiveSection(null)
+    setCurrentStep(null)
+    setStats(null)
+    preRefreshLogRef.current = null
+
+    localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: ticker.toUpperCase(), taskId, startedAt: new Date().toISOString() }))
+    attachWs(taskId, false)
   }
 
   const reportEntries = Object.entries(reports)
@@ -446,7 +486,7 @@ function RunTab() {
 
       {(log.length > 0 || reportEntries.length > 0) && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <AnalysisLog leftTab={leftTab} setLeftTab={setLeftTab} log={log} liveDebate={liveDebate} currentStep={currentStep} t={t} />
+          <AnalysisLog leftTab={leftTab} setLeftTab={setLeftTab} log={log} liveDebate={liveDebate} currentStep={currentStep} stats={stats} t={t} />
 
           <div className="lg:col-span-2 glass-panel rounded-2xl overflow-hidden flex flex-col h-[55vh] lg:h-[65vh]">
             {detail ? (
@@ -455,6 +495,7 @@ function RunTab() {
                   <button onClick={() => setActiveDetailTab('reports')} className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'reports' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.reports')}</button>
                   <button onClick={() => setActiveDetailTab('debate')} className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.debate')}</button>
                   <button onClick={() => setActiveDetailTab('chat')} className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'chat' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.qa')}</button>
+                  <button onClick={() => setActiveDetailTab('timetravel')} className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'timetravel' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.timetravel')}</button>
                 </div>
                 <div className="flex-1 p-4 overflow-y-auto min-h-0">
                   {activeDetailTab === 'reports' && (
@@ -468,6 +509,7 @@ function RunTab() {
                   )}
                   {activeDetailTab === 'debate' && <DebateHistoryWidget investmentHistory={detail.investment_debate_history} riskHistory={detail.risk_debate_history} />}
                   {activeDetailTab === 'chat' && <AnalysisChatWidget analysisId={detail.id} />}
+                  {activeDetailTab === 'timetravel' && <TimeTravelWidget analysisId={detail.id} onRollbackStart={handleRollbackStart} />}
                 </div>
               </>
             ) : (
@@ -660,13 +702,19 @@ function PortfolioHistorySection() {
   )
 }
 
-function HistoryTab({ initialDetailId }: { initialDetailId?: number }) {
+function HistoryTab({
+  initialDetailId,
+  onRollbackStart,
+}: {
+  initialDetailId?: number
+  onRollbackStart: (taskId: string, ticker: string) => void
+}) {
   const { t } = useTranslation()
   const [items, setItems] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState<AnalysisDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
-  const [activeDetailTab, setActiveDetailTab] = useState<'reports' | 'debate' | 'chat'>('reports')
+  const [activeDetailTab, setActiveDetailTab] = useState<'reports' | 'debate' | 'chat' | 'timetravel'>('reports')
   const meta = useMeta()
   const sectionLabels = meta?.section_labels ?? SECTION_LABELS
 
@@ -775,6 +823,14 @@ function HistoryTab({ initialDetailId }: { initialDetailId?: number }) {
                   >
                     {t('analysis.tab.qa')}
                   </button>
+                  <button
+                    onClick={() => setActiveDetailTab('timetravel')}
+                    className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
+                      activeDetailTab === 'timetravel' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
+                    }`}
+                  >
+                    {t('analysis.tab.timetravel')}
+                  </button>
                 </div>
 
                 <div className="flex-1 min-h-0 overflow-y-auto">
@@ -800,6 +856,12 @@ function HistoryTab({ initialDetailId }: { initialDetailId?: number }) {
                   )}
                   {activeDetailTab === 'chat' && (
                     <AnalysisChatWidget analysisId={detail.id} />
+                  )}
+                  {activeDetailTab === 'timetravel' && (
+                    <TimeTravelWidget
+                      analysisId={detail.id}
+                      onRollbackStart={(taskId) => onRollbackStart(taskId, detail.ticker)}
+                    />
                   )}
                 </div>
               </>
@@ -849,7 +911,192 @@ export default function Analysis() {
 
       {tab === 'run'     && <RunTab />}
       {tab === 'multi'   && <MultiTab />}
-      {tab === 'history' && <HistoryTab initialDetailId={deepLinkId ? Number(deepLinkId) : undefined} />}
+      {tab === 'history' && (
+        <HistoryTab
+          initialDetailId={deepLinkId ? Number(deepLinkId) : undefined}
+          onRollbackStart={(taskId, ticker) => {
+            localStorage.setItem(
+              TASK_KEY,
+              JSON.stringify({
+                ticker: ticker.toUpperCase(),
+                taskId,
+                startedAt: new Date().toISOString(),
+              })
+            )
+            localStorage.setItem(
+              STORAGE_KEY,
+              JSON.stringify({
+                ticker: ticker.toUpperCase(),
+                date: new Date().toISOString().slice(0, 10),
+                assetType: 'stock',
+                runStatus: 'running',
+                signal: null,
+                reports: {},
+                log: [],
+                activeSection: null,
+                analysisId: null,
+              })
+            )
+            setTab('run')
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function TimeTravelWidget({
+  analysisId,
+  onRollbackStart,
+}: {
+  analysisId: number
+  onRollbackStart: (taskId: string) => void
+}) {
+  const { t } = useTranslation()
+  const [checkpoints, setCheckpoints] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedCp, setSelectedCp] = useState<any>(null)
+  const [updateFields, setUpdateFields] = useState<Record<string, string>>({})
+  const [rollbackLoading, setRollbackLoading] = useState(false)
+
+  useEffect(() => {
+    axios
+      .get(`/api/analysis/${analysisId}/checkpoints`)
+      .then((r) => {
+        setCheckpoints(r.data)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [analysisId])
+
+  const handleSelectCheckpoint = (cp: any) => {
+    setSelectedCp(cp)
+    const fields: Record<string, string> = {}
+    if (cp.node === 'Research Manager' || cp.node === 'ResearchManager') {
+      fields['investment_plan'] = ''
+    } else if (cp.node === 'Trader') {
+      fields['trader_investment_plan'] = ''
+      fields['trader_proposal_json'] = '{}'
+    } else if (cp.node === 'Agent Q&A' || cp.node === 'agent_qa') {
+      fields['agent_qa_report'] = ''
+    } else {
+      fields['investment_plan'] = ''
+    }
+    setUpdateFields(fields)
+  }
+
+  const handleRollback = async () => {
+    if (!selectedCp) return
+    setRollbackLoading(true)
+    try {
+      const { data } = await axios.post(`/api/analysis/${analysisId}/time-travel`, {
+        checkpoint_id: selectedCp.checkpoint_id,
+        update_state: updateFields,
+      })
+      notify('success', t('language') === 'tr' ? 'Zaman yolculuğu başlatıldı!' : 'Time travel initiated!')
+      onRollbackStart(data.task_id)
+    } catch (err: any) {
+      notify('error', err.response?.data?.detail || 'Rollback failed')
+    } finally {
+      setRollbackLoading(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-slate-400 py-12 justify-center">
+        <Loader2 className="animate-spin" size={16} /> {t('analysis.timetravel.loading_checkpoints')}
+      </div>
+    )
+  }
+
+  if (checkpoints.length === 0) {
+    return (
+      <div className="text-center py-12 text-slate-500 text-xs">
+        {t('analysis.timetravel.no_checkpoints')}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5 p-1">
+      <div className="space-y-2">
+        <h4 className="text-white text-xs font-bold uppercase tracking-wider">
+          {t('analysis.timetravel.title')}
+        </h4>
+        <p className="text-slate-400 text-[11px] leading-relaxed">
+          {t('language') === 'tr'
+            ? 'Mevcut analizi seçtiğiniz bir adıma geri sarıp durum verilerini değiştirerek oradan itibaren yeniden çalıştırabilirsiniz.'
+            : 'Roll back the execution flow to a selected checkpoint step, edit state fields, and resume propagation.'}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-[10px] font-bold text-slate-500 block uppercase tracking-wider">
+          {t('analysis.timetravel.select_checkpoint')}
+        </label>
+        <div className="grid grid-cols-1 gap-2 max-h-36 overflow-y-auto pr-1">
+          {checkpoints.map((cp) => (
+            <div
+              key={cp.checkpoint_id}
+              onClick={() => handleSelectCheckpoint(cp)}
+              className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-center justify-between ${
+                selectedCp?.checkpoint_id === cp.checkpoint_id
+                  ? 'bg-violet-600/10 border-violet-500 text-white'
+                  : 'bg-slate-900/40 border-white/[0.04] text-slate-300 hover:border-white/[0.1]'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-semibold">
+                <span className="text-[10px] text-slate-500 font-mono">#{cp.step}</span>
+                <span>{cp.label}</span>
+              </div>
+              <span className="text-[9px] text-slate-600 font-mono">
+                {cp.checkpoint_id.slice(0, 8)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {selectedCp && (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-500 block uppercase tracking-wider">
+              {t('analysis.timetravel.edit_fields')}
+            </label>
+            {Object.keys(updateFields).map((field) => (
+              <div key={field} className="space-y-1.5">
+                <span className="text-[10px] font-semibold text-slate-400 font-mono">{field}</span>
+                <textarea
+                  value={updateFields[field]}
+                  onChange={(e) =>
+                    setUpdateFields((prev) => ({ ...prev, [field]: e.target.value }))
+                  }
+                  className="w-full h-24 bg-slate-950 border border-white/[0.08] rounded-xl p-3 text-xs text-white outline-none focus:border-violet-500/50 font-mono leading-relaxed"
+                  placeholder={
+                    field === 'trader_proposal_json'
+                      ? '{"action": "Buy", "entry_price": 150.0}'
+                      : `Enter custom ${field} value...`
+                  }
+                />
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={handleRollback}
+            disabled={rollbackLoading}
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 py-2.5 rounded-xl text-xs font-semibold text-white cursor-pointer shadow shadow-violet-600/20 transition disabled:opacity-40"
+          >
+            {rollbackLoading ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Scale size={13} />
+            )}
+            {t('analysis.timetravel.btn_rollback')}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

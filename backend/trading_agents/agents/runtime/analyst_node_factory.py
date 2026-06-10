@@ -88,6 +88,14 @@ async def run_tool_analyst(
     _start = _time.time()
     log_event("node_start", node=analyst, kind="analyst")
 
+    # Progress: Emit analyst progress event
+    if ctx and "emitter" in ctx:
+        emitter = ctx["emitter"]
+        from backend.core.catalog import node_progress
+        prog = node_progress(f"{analyst}_analyst")
+        if prog:
+            await emitter.emit(prog)
+
     # Mental Model: Emit thinking event
     if ctx and "emitter" in ctx:
         emitter = ctx["emitter"]
@@ -127,7 +135,7 @@ async def run_tool_analyst(
         log_event("node_skipped", level=30, node=analyst, kind="analyst")
         return {
             "messages": [AIMessage(content="")],
-            report_key: f"⚠️ {analyst.title()} analysis unavailable (agent error: {exc}).",
+            report_key: f"{analyst.title()} analysis unavailable (agent error: {exc}).",
         }
     log_event("node_end", node=analyst, kind="analyst", ms=int((_time.time() - _start) * 1000))
     report = result.content if len(result.tool_calls) == 0 else ""

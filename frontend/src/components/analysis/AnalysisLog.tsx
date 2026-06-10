@@ -8,11 +8,12 @@ interface AnalysisLogProps {
   log: string[]
   liveDebate: any[]
   currentStep?: { label: string; stage: string; node?: string } | null
+  stats?: { llmCalls: number; tokensIn: number; tokensOut: number } | null
   t: any
 }
 
 export const AnalysisLog: React.FC<AnalysisLogProps> = ({
-  leftTab, setLeftTab, log, liveDebate, currentStep, t
+  leftTab, setLeftTab, log, liveDebate, currentStep, stats, t
 }) => {
   const scrollContainerRef = useRef<HTMLDivElement>(null)
 
@@ -57,9 +58,9 @@ export const AnalysisLog: React.FC<AnalysisLogProps> = ({
               <div key={i} className="flex gap-3 text-[11px] animate-in fade-in slide-in-from-left-2 duration-300">
                 <span className="text-slate-600 font-mono shrink-0">{(i + 1).toString().padStart(2, '0')}</span>
                 <span className={`font-mono leading-relaxed ${
-                  line.startsWith('✓') ? 'text-emerald-400' :
-                  line.startsWith('✗') ? 'text-rose-400' :
-                  line.startsWith('▸') ? 'text-violet-400' : 'text-slate-400'
+                  line.startsWith('Completed') ? 'text-emerald-400' :
+                  line.startsWith('Error') ? 'text-rose-400' :
+                  line.startsWith('Progress') ? 'text-violet-400' : 'text-slate-400'
                 }`}>
                   {line}
                 </span>
@@ -122,6 +123,12 @@ export const AnalysisLog: React.FC<AnalysisLogProps> = ({
           </div>
         )}
       </div>
+      {stats && (stats.llmCalls > 0 || stats.tokensIn > 0 || stats.tokensOut > 0) && (
+        <div className="flex items-center justify-between px-4 py-2 bg-slate-950/80 border-t border-white/[0.04] text-[10px] text-slate-500 font-semibold font-mono">
+          <span>LLM Calls: <span className="text-slate-300 font-bold">{stats.llmCalls}</span></span>
+          <span>Tokens: <span className="text-slate-300 font-bold">{(stats.tokensIn + stats.tokensOut).toLocaleString()}</span></span>
+        </div>
+      )}
     </div>
   )
 }

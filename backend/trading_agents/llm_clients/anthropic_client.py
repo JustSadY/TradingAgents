@@ -42,7 +42,7 @@ class AnthropicClient(BaseLLMClient):
 
     def get_llm(self) -> Any:
         self.warn_if_unknown_model()
-        llm_kwargs = {"model": self.model}
+        llm_kwargs = {"model": self.model, "streaming": True}
 
         # Determine API Key (NO .env lookup)
         api_key = self.kwargs.get("api_key")

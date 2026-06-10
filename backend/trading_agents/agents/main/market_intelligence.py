@@ -52,7 +52,7 @@ def _fb_analyst(report_key: str):
         analyst = report_key.replace("_report", "").title()
         return {
             "messages": [AIMessage(content="")],
-            report_key: f"⚠️ {analyst} analysis unavailable (agent error: {exc}).",
+            report_key: f"{analyst} analysis unavailable (agent error: {exc}).",
         }
 
     return fb
@@ -161,22 +161,31 @@ def create_market_intelligence_node(ctx: AgentRunContext) -> NodeFn:
             result = await subgraph.ainvoke(state, config={"recursion_limit": recur})
             return {rk: result.get(rk, "") for rk in REPORT_KEYS if rk in result}
 
-        # Parallel: run each analyst as an isolated subgraph over its own copy of
-        # ``messages`` so the per-analyst message clears never race. Each analyst
-        # only writes its own report key, so merging the results is conflict-free.
-        from backend.trading_agents.graph.analyst_execution import build_analyst_execution_plan
+        # Parallel: group enabled analysts into 3 logical teams and run them in
+        # parallel team subgraphs to prevent message clears from racing while optimizing execution.
+        TEAMS = {
+            "technical": ["market", "quant"],
+            "fundamental": ["fundamentals", "earnings", "insider", "ownership"],
+            "macro_sentiment": ["macro", "social", "news", "review"]
+        }
+        
+        active_teams = {}
+        for team_name, team_keys in TEAMS.items():
+            team_enabled = [k for k in enabled if k in team_keys]
+            if team_enabled:
+                active_teams[team_name] = team_enabled
 
-        plan = build_analyst_execution_plan(enabled, concurrency_limit=concurrency)
         semaphore = asyncio.Semaphore(concurrency)
 
-        async def _run_analyst(spec) -> dict:
+        async def _run_team(team_keys: list[str]) -> dict:
             async with semaphore:
-                sub = _build_single_analyst_subgraph(spec, ctx)
+                # Compile a sequential subgraph for this specific team
+                sub = _build_analyst_subgraph(team_keys, ctx)
                 analyst_state = {**state, "messages": list(state.get("messages", []))}
                 res = await sub.ainvoke(analyst_state, config={"recursion_limit": recur})
                 return {rk: res.get(rk, "") for rk in REPORT_KEYS if rk in res}
 
-        results = await asyncio.gather(*[_run_analyst(spec) for spec in plan.specs])
+        results = await asyncio.gather(*[_run_team(keys) for keys in active_teams.values()])
         merged: dict = {}
         for r in results:
             merged.update(r)

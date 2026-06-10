@@ -186,3 +186,114 @@ async def run_portfolio_task(
         finally:
             if task_id:
                 clear_task_owner(task_id)
+
+
+async def rollback_and_resume_analysis(
+    analysis_id: int,
+    checkpoint_id: str,
+    update_state: dict,
+    current_user,
+    task_id: str,
+    db: AsyncSession,
+) -> None:
+    """Rollback analysis to a specific checkpoint, update the state, and resume execution in the background."""
+    from backend.repositories.analysis import get_analysis_by_id
+    from backend.services.settings_service import get_or_create_settings
+    from backend.trading_agents.graph.checkpointer import get_async_checkpointer, thread_id
+    from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
+    from backend.services.analysis.config_builder import build_analysis_config, prepare_graph_config
+    from backend.repositories.analysis import get_system_settings
+    from backend.core.database import AsyncSessionLocal
+    import time
+
+    # 1. Fetch analysis and verify access
+    analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
+    if analysis is None:
+        raise ValueError("Analysis not found or access denied")
+
+    # 2. Get user and system settings
+    settings = await get_or_create_settings(db, current_user)
+    sys_settings = await get_system_settings(db)
+    config = build_analysis_config(settings, user=current_user, sys_settings=sys_settings)
+    permitted_analysts = await prepare_graph_config(db, current_user.id if current_user else None, config)
+
+    # 3. Resolve the target node name from checkpoint_id
+    ta = TradingAgentsGraph(selected_analysts=permitted_analysts, config=config)
+    tid = thread_id(analysis.ticker, analysis.trade_date)
+    node_name = "START"
+    config_param = {"configurable": {"thread_id": tid}}
+    
+    async with get_async_checkpointer(config["data_cache_dir"], analysis.ticker) as saver:
+        async for cp in saver.alist(config_param):
+            if cp.config["configurable"]["checkpoint_id"] == checkpoint_id:
+                metadata = cp.metadata or {}
+                writes = metadata.get("writes") or {}
+                node_name = next(iter(writes.keys()), "START") if writes else "START"
+                break
+
+    # 4. Save the updated state on the selected checkpoint (this creates a new checkpoint fork)
+    async with get_async_checkpointer(config["data_cache_dir"], analysis.ticker) as saver:
+        graph = ta.workflow.compile(checkpointer=saver)
+        update_config = {"configurable": {"thread_id": tid, "checkpoint_id": checkpoint_id}}
+        await graph.aupdate_state(update_config, update_state, as_node=node_name)
+
+    # 5. Update database record status back to running for progressive updates
+    analysis.status = "running"
+    analysis.task_id = task_id
+    analysis.signal = None
+    analysis.final_decision = ""
+    await db.commit()
+
+    # 6. Register task owner and spawn background task to resume graph execution
+    register_task_owner(task_id, current_user.id if current_user else None)
+    
+    async def run_resume():
+        async with AsyncSessionLocal() as session:
+            try:
+                from backend.services.analysis.emitter import AnalysisEmitter
+                from backend.services.analysis.orchestrator import run_individual_analysis
+                
+                emitter = AnalysisEmitter(task_id)
+                current_task = asyncio.current_task()
+                if current_task:
+                    _RUNNING_TASKS[task_id] = current_task
+                    _TASK_REGISTRY[task_id] = {
+                        "ticker": analysis.ticker,
+                        "trade_date": analysis.trade_date,
+                        "asset_type": analysis.asset_type,
+                        "user_id": current_user.id if current_user else None,
+                        "started_at": time.time(),
+                        "status": "running",
+                    }
+                
+                try:
+                    await run_individual_analysis(
+                        analysis.ticker,
+                        analysis.trade_date,
+                        analysis.asset_type,
+                        settings,
+                        session,
+                        emitter,
+                        triggered_by="time-travel",
+                        user=current_user,
+                    )
+                    # Place order if signal triggers
+                    try:
+                        # Fetch the updated row
+                        from backend.repositories.analysis import get_analysis_by_id as _get_row
+                        updated_row = await _get_row(session, analysis_id, user=current_user)
+                        if updated_row:
+                            await place_signal_order(session, ticker=analysis.ticker, row=updated_row, settings=settings, user=current_user)
+                            await session.commit()
+                    except Exception as order_exc:
+                        _logger.warning("Order execution skipped on time-travel resume: %s", order_exc)
+                        await session.rollback()
+                finally:
+                    _RUNNING_TASKS.pop(task_id, None)
+                    _TASK_REGISTRY.pop(task_id, None)
+                    clear_task_owner(task_id)
+                    await emitter.close()
+            except Exception as exc:
+                _logger.error("Time-travel resume task failed: %s", exc, exc_info=True)
+
+    asyncio.create_task(run_resume())
