@@ -24,6 +24,7 @@ class AnalysisResult(Base):
     earnings_report: Mapped[str] = mapped_column(Text, default="")
     insider_report: Mapped[str] = mapped_column(Text, default="")
     ownership_report: Mapped[str] = mapped_column(Text, default="")
+    catalyst_report: Mapped[str] = mapped_column(Text, default="")
     review_report: Mapped[str] = mapped_column(Text, default="")
     agent_qa_report: Mapped[str] = mapped_column(Text, default="")
     investment_plan: Mapped[str] = mapped_column(Text, default="")

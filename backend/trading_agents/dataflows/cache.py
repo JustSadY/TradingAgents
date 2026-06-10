@@ -24,6 +24,7 @@ TOOLS_CATEGORIES = {
             "get_global_news",
             "get_insider_transactions",
             "get_institutional_holdings",
+            "get_catalyst_calendar",
         ],
     },
     "social_sentiment_data": {

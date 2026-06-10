@@ -37,8 +37,8 @@ class ResetRequest(BaseModel):
 class BacktestRequest(BaseModel):
     ticker: str = Field(..., min_length=1, max_length=20)
     strategy_type: str = Field(..., pattern="^(macd_crossover|rsi_oversold|consensus)$")
-    start_date: str
-    end_date: str
+    start_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
+    end_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
     initial_capital: float = Field(default=100_000.0, gt=0, le=10_000_000)
 
     @field_validator("ticker")

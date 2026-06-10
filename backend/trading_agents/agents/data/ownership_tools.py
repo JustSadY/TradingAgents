@@ -11,3 +11,11 @@ async def get_institutional_holdings(
 ) -> str:
     """Retrieve institutional (13F) ownership, major-holder breakdown, and top mutual-fund holders for a company."""
     return await route_to_vendor("get_institutional_holdings", ticker)
+
+
+@tool
+async def get_catalyst_calendar(
+    ticker: Annotated[str, "ticker symbol"],
+) -> str:
+    """Retrieve upcoming known catalysts: next earnings date, ex-dividend date, and scheduled earnings dates."""
+    return await route_to_vendor("get_catalyst_calendar", ticker)

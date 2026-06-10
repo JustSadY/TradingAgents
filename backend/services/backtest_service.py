@@ -1,3 +1,4 @@
+import asyncio
 import logging
 import math
 import json
@@ -20,8 +21,10 @@ async def run_backtest_simulation(
     user = None,
 ) -> dict:
     try:
-        # Load daily stock data up to end_date
-        data = load_ohlcv(ticker, end_date)
+        # Load daily stock data up to end_date. load_ohlcv does synchronous
+        # network/disk IO, so run it in a worker thread to keep the event loop
+        # responsive for other requests during the download.
+        data = await asyncio.to_thread(load_ohlcv, ticker, end_date)
         if data.empty or len(data) < 20:
             return {"error": f"Not enough historical price data for {ticker}."}
 

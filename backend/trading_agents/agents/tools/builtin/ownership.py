@@ -1,4 +1,4 @@
-from backend.trading_agents.agents.data.ownership_tools import get_institutional_holdings
+from backend.trading_agents.agents.data.ownership_tools import get_catalyst_calendar, get_institutional_holdings
 from backend.trading_agents.agents.tools.adapters import FunctionToolAdapter
 from backend.trading_agents.agents.tools.registry import registry
 
@@ -12,4 +12,15 @@ institutional_holdings_tool = FunctionToolAdapter(
     default_enabled=True,
 )
 
+catalyst_calendar_tool = FunctionToolAdapter(
+    key="catalyst_calendar",
+    category="news",
+    label_key="tools.catalyst_calendar.label",
+    description_key="tools.catalyst_calendar.description",
+    func=get_catalyst_calendar,
+    allowed_analysts=["catalyst", "earnings"],
+    default_enabled=True,
+)
+
 registry.register(institutional_holdings_tool)
+registry.register(catalyst_calendar_tool)
