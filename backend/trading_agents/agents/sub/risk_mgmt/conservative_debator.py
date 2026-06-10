@@ -16,7 +16,9 @@ def create_conservative_debator(llm):
         trader_decision = state["trader_investment_plan"]
 
         report_fields = build_report_fields("Latest World Affairs Report", "Company Fundamentals Report")
-        resources_text = build_resources(state, report_fields)
+        # Risk debators argue over the trade decision, not the raw data, so send
+        # each analyst's Executive Summary instead of the full report.
+        resources_text = build_resources(state, report_fields, summary_only=True)
 
         prompt = f"""As the Conservative Risk Analyst, your role is to prioritize capital preservation and emphasize high-probability, low-risk outcomes. When evaluating the trader's decision or plan, look specifically for potential downsides, hidden risks, and worst-case scenarios. Challenge the arguments of the aggressive and neutral analysts by highlighting where their optimism may lead to significant losses. Use the provided market data and sentiment insights to justify a more cautious approach. Respond directly to the points raised by your counterparts, identifying logical flaws and risks they have overlooked. Here is the trader's decision:
 {trader_decision}

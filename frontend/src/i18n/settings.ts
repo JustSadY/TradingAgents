@@ -73,6 +73,10 @@ const translations = {
     'settings.row_max_report_chars': 'Max Report Chars / Prompt',
     'settings.row_max_debate_history': 'Max Debate History Chars',
     'settings.row_max_tool_output': 'Max Tool Output Chars',
+    'settings.row_prefilter_enabled': 'Pre-screen Weak Analysts',
+    'settings.prefilter_hint': 'Skip analysts whose past calls on the analysed ticker have a poor hit rate. Needs realized history; core analysts are always kept.',
+    'settings.row_prefilter_min_samples': 'Min. Graded Calls',
+    'settings.row_prefilter_max_win_rate': 'Drop Below Win Rate (%)',
 
 
     'settings.analysts_loading': 'Loading...',
@@ -194,6 +198,10 @@ const translations = {
     'settings.row_max_report_chars': 'Maks. Rapor Karakteri / Prompt',
     'settings.row_max_debate_history': 'Maks. Müzakere Geçmişi Karakteri',
     'settings.row_max_tool_output': 'Maks. Araç Çıktısı Karakteri',
+    'settings.row_prefilter_enabled': 'Zayıf Analistleri Ön-ele',
+    'settings.prefilter_hint': 'Analiz edilen hissede geçmiş çağrıları düşük isabetli olan analistleri atla. Gerçekleşmiş geçmiş gerektirir; çekirdek analistler her zaman korunur.',
+    'settings.row_prefilter_min_samples': 'Min. Derecelendirilmiş Çağrı',
+    'settings.row_prefilter_max_win_rate': 'Şu İsabet Altında Ele (%)',
     'settings.row_node_retry_attempts': 'Ajan Düğüm Deneme Sayısı',
     'settings.row_node_retry_base_delay': 'Deneme Gecikme Süresi (sn)',
 
