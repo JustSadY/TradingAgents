@@ -9,7 +9,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_news,
 )
 
-
 # Single source of truth for this analyst's tools: the ToolNode (built from the
 # registration) and the LLM binding below must use the same list, otherwise the
 # model is bound to tools the ToolNode can run but can never invoke (or vice

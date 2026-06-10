@@ -6,7 +6,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_language_instruction,
 )
 
-
 # Single source of truth shared by the ToolNode registration and the LLM binding.
 _OWNERSHIP_TOOLS = [get_institutional_holdings]
 

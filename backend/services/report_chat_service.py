@@ -127,7 +127,7 @@ async def answer_report_question(
     from backend.services.agent_settings_service import build_agent_runtime_context
     agent_ctx = await build_agent_runtime_context(db, user.id if user else None)
     pm_settings = agent_ctx.get("portfolio_manager", {}).get("settings", {})
-    
+
     # Prioritize the Portfolio Manager's specific settings, then global fallback
     active_provider = pm_settings.get("llm_provider") or settings.llm_provider
     active_model = pm_settings.get("llm_model") or settings.llm_model
@@ -144,7 +144,7 @@ async def answer_report_question(
         model=active_model,
         api_key=user_key,
     )
-    
+
     try:
         llm = client.get_llm()
         response = await llm.ainvoke(payload)

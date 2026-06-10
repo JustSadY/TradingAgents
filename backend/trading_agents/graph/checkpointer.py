@@ -94,10 +94,10 @@ async def list_checkpoints_for_thread(data_dir: str | Path, ticker: str, date: s
     db = _db_path(data_dir, ticker)
     if not db.exists():
         return []
-    
+
     tid = thread_id(ticker, date)
     config = {"configurable": {"thread_id": tid}}
-    
+
     checkpoints = []
     async with get_async_checkpointer(data_dir, ticker) as saver:
         async for cp in saver.alist(config):
@@ -106,12 +106,12 @@ async def list_checkpoints_for_thread(data_dir: str | Path, ticker: str, date: s
             writes = metadata.get("writes") or {}
             # Try to identify which node executed to generate this checkpoint
             node_name = next(iter(writes.keys()), "START") if writes else "START"
-            
+
             # Translate node name into a user-friendly label if possible
             from backend.core.catalog import node_progress
             prog = node_progress(node_name)
             node_label = prog.get("label") if prog else node_name
-            
+
             checkpoints.append({
                 "checkpoint_id": cp.config["configurable"]["checkpoint_id"],
                 "step": step,
@@ -119,7 +119,7 @@ async def list_checkpoints_for_thread(data_dir: str | Path, ticker: str, date: s
                 "label": node_label,
                 "ts": metadata.get("ts", ""),
             })
-            
+
     # Sort checkpoints by step number ascending
     checkpoints.sort(key=lambda x: x["step"])
     return checkpoints

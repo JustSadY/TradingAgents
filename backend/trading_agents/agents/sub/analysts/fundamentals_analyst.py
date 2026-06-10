@@ -11,7 +11,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_sec_filings,
 )
 
-
 # Single source of truth shared by the ToolNode registration and the LLM binding.
 _FUNDAMENTALS_TOOLS = [
     get_fundamentals,

@@ -113,14 +113,14 @@ async def get_historical_data(ticker: str, start_date: str, end_date: str):
         data = yf.Ticker(ticker).history(start=start_date, end=end_date)
         if data.empty:
             return data
-        
+
         # Handle MultiIndex columns (common in newer yfinance versions)
         if isinstance(data.columns, pd.MultiIndex):
             data.columns = data.columns.get_level_values(0)
-            
+
         if data.index.tz is not None:
             data.index = data.index.tz_localize(None)
-        
+
         # Ensure data is sorted by date and remove any duplicates
         data = data[~data.index.duplicated(keep="last")]
         data = data.sort_index()

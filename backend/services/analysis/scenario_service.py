@@ -27,11 +27,11 @@ def get_active_scenarios() -> str:
     """Return a Markdown summary of current 'What-If' scenarios for agent analysis."""
     md = "=== 'WHAT-IF' STRESS TEST SCENARIOS ===\n"
     md += "Evaluate how the following hypothetical market shifts would impact this instrument and the portfolio:\n\n"
-    
+
     for s in SCENARIOS:
         md += f"#### {s['title']}\n"
         md += f"- **Situation**: {s['description']}\n"
         md += f"- **Expected Sector Impact**: {s['impact_hint']}\n\n"
-    
+
     md += "[TASK] In your report (specifically in the Risk/Macro sections), explicitly discuss at least one of these scenarios and provide a 'What-If Resilience' rating (High/Medium/Low).\n\n"
     return md

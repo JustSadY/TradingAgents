@@ -1,7 +1,10 @@
-import pytest
+from unittest.mock import MagicMock, patch
+
 import pandas as pd
-from unittest.mock import patch, MagicMock
+import pytest
+
 from backend.services.backtest_service import run_backtest_simulation
+
 
 @pytest.mark.asyncio
 async def test_run_backtest_macd_crossover():

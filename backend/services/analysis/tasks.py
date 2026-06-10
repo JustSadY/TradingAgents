@@ -54,6 +54,8 @@ async def extract_and_save_annotations(
     quick_llm,
     custom_indicators: list = None,
     visual_annotations: list = None,
+    support_levels: list = None,
+    resistance_levels: list = None,
     output_language: str = "English",
 ) -> None:
     try:
@@ -66,6 +68,16 @@ async def extract_and_save_annotations(
             annotations["custom_indicators"] = custom_indicators
         if visual_annotations:
             annotations["annotations"] = visual_annotations
+        if support_levels:
+            existing_sups = annotations.setdefault("support_levels", [])
+            for s in support_levels:
+                if s not in existing_sups:
+                    existing_sups.append(s)
+        if resistance_levels:
+            existing_res = annotations.setdefault("resistance_levels", [])
+            for r in resistance_levels:
+                if r not in existing_res:
+                    existing_res.append(r)
         if not annotations:
             return
         async with AsyncSessionLocal() as s:
@@ -79,11 +91,13 @@ async def extract_and_save_annotations(
                 # leaving sizing to fall back to fragile text parsing.
                 existing = row.chart_annotations if isinstance(row.chart_annotations, dict) else {}
                 row.chart_annotations = {**existing, **annotations}
-                
+
                 # Auto-generate support/resistance alerts if user_id is set
                 if row.user_id:
                     from decimal import Decimal
+
                     from sqlalchemy import select
+
                     from backend.models.alert import PriceAlert
                     from backend.repositories.alerts import create_alert as _create_alert
 

@@ -63,17 +63,17 @@ def middle_truncate(text: str, limit: int) -> str:
         return text
     head = max(1, limit // 4)
     tail = max(1, limit - head)
-    
+
     head_text = text[:head]
     last_nl_head = head_text.rfind("\n")
     if last_nl_head != -1:
         head_text = head_text[:last_nl_head]
-        
+
     tail_text = text[-tail:]
     first_nl_tail = tail_text.find("\n")
     if first_nl_tail != -1:
         tail_text = tail_text[first_nl_tail + 1:]
-        
+
     return (
         head_text.rstrip()
         + "\n\n…[middle truncated to conserve tokens]…\n\n"

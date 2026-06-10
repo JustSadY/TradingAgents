@@ -144,11 +144,25 @@ journalctl -u tradingagents -f
 cd frontend && npm run lint
 ```
 
-No active backend linting. Follow conventions in `docs/architecture/backend.md`.
+**Backend linting and formatting:**
+Backend code style is enforced using Ruff.
+```bash
+cd backend
+ruff check .        # Lint checks
+ruff check . --fix  # Auto-fix lint issues
+ruff format --check # Format checks
+ruff format         # Format code
+```
 
 ### Testing
 
-No comprehensive test suite. For agent behavior, spin up full stack and run analysis through the UI. Unit test example: `backend/tests/test_tool_settings_service.py`.
+**Running backend tests:**
+Backend unit and integration tests are written in Pytest.
+```bash
+cd backend
+pytest
+```
+For agent behavior, you can also spin up the full stack and run analyses through the UI.
 
 ---
 
@@ -402,15 +416,7 @@ APScheduler runs in-process:
 
 ### Circular Imports
 
-`agents/main/*.py` must NOT import from `graph/` at module level. Lazy import inside functions:
-
-```python
-def create_market_intelligence_node(ctx):
-    async def market_intelligence(state):
-        from backend.trading_agents.graph.analyst_execution import build_analyst_subgraph
-        # ...
-    return market_intelligence
-```
+`agents/main/*.py` must NOT import from `graph/` at module level. Analyst execution structures have been relocated to `agents/runtime/analyst_execution.py` to prevent circular dependency cycles between `agents` and `graph` compilation.
 
 ### Single Uvicorn Worker
 

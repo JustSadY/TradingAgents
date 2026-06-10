@@ -45,10 +45,10 @@ install_redaction(*logging.getLogger().handlers)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _logger.info("Starting TradingAgents Web API...")
-    
+
     # Register all tools during startup
     import backend.trading_agents.agents.tools.bootstrap  # noqa: F401
-    
+
     await create_all_tables()
     await _seed_admin_user()
 

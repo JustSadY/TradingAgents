@@ -253,6 +253,7 @@ async def ask_analysis_report(
 
 from pydantic import BaseModel
 
+
 class TimeTravelRequest(BaseModel):
     checkpoint_id: str
     update_state: dict
@@ -264,11 +265,10 @@ async def list_checkpoints(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from backend.repositories.analysis import get_analysis_by_id
-    from backend.trading_agents.graph.checkpointer import list_checkpoints_for_thread
-    from backend.services.settings_service import get_or_create_settings
-    from backend.repositories.analysis import get_system_settings
+    from backend.repositories.analysis import get_analysis_by_id, get_system_settings
     from backend.services.analysis.config_builder import build_analysis_config
+    from backend.services.settings_service import get_or_create_settings
+    from backend.trading_agents.graph.checkpointer import list_checkpoints_for_thread
 
     analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
     if not analysis:
@@ -289,9 +289,10 @@ async def time_travel_resume(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    import uuid
+
     from backend.repositories.analysis import get_analysis_by_id
     from backend.services.analysis_service import rollback_and_resume_analysis
-    import uuid
 
     analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
     if not analysis:

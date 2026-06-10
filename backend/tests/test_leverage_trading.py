@@ -58,7 +58,7 @@ def _set_price(monkeypatch, price):
         return price
 
     async def fake_batch(tickers):
-        return {t: price for t in tickers}
+        return dict.fromkeys(tickers, price)
 
     monkeypatch.setattr(mts, "get_live_price", fake_price)
     monkeypatch.setattr(mts, "get_live_prices_batch", fake_batch)

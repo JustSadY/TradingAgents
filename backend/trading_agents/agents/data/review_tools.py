@@ -5,7 +5,6 @@ from datetime import datetime
 import pandas as pd
 from langchain_core.tools import tool
 
-
 _logger = logging.getLogger(__name__)
 
 

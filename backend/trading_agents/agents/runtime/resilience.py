@@ -129,7 +129,7 @@ async def retry_call(
                         err_msg = "Service unavailable (503)"
                     else:
                         err_msg = err_msg[:60]
-                    
+
                     warning_msg = f"Warning: Retrying {clean_label} (Attempt {i+1}/{attempts}) due to: {err_msg}"
                     await emitter.emit({
                         "type": "progress",

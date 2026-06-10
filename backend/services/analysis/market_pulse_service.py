@@ -1,4 +1,5 @@
 import logging
+
 from backend.services.market_data_service import get_live_prices_batch
 
 _logger = logging.getLogger(__name__)
@@ -12,17 +13,17 @@ async def get_market_pulse() -> str:
         "BTC-USD": "Bitcoin",
         "GC=F": "Gold"
     }
-    
+
     try:
         prices = await get_live_prices_batch(tickers)
         if not prices:
             return ""
-            
+
         md = "=== GLOBAL MARKET PULSE ===\n"
         for ticker, price in prices.items():
             name = names.get(ticker, ticker)
             md += f"- {name}: ${price:,.2f}\n"
-        
+
         # Add sentiment hint based on VIX
         vix = prices.get("^VIX")
         if vix:
@@ -32,7 +33,7 @@ async def get_market_pulse() -> str:
                 md += "\n[MARKET HINT] VIX is elevated (>20). Expect increased volatility.\n"
             else:
                 md += "\n[MARKET HINT] VIX is low (<20). Market sentiment is generally calm.\n"
-        
+
         md += "\n"
         return md
     except Exception as e:

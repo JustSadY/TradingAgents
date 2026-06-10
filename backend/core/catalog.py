@@ -6,7 +6,7 @@ from backend.trading_agents.agent_catalog import list_analysts as _engine_analys
 
 def _node_specs() -> dict:
     try:
-        from backend.trading_agents.graph.analyst_execution import ANALYST_NODE_SPECS
+        from backend.trading_agents.agents.runtime.analyst_execution import ANALYST_NODE_SPECS
 
         return ANALYST_NODE_SPECS
     except Exception:

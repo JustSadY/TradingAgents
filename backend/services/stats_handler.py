@@ -72,7 +72,7 @@ class StatsCallbackHandler(BaseCallbackHandler):
     def _parse_usage_dict(cls, usage: Any) -> dict[str, int] | None:
         if usage is None:
             return None
-        
+
         # If it's a dict or dict-like
         if isinstance(usage, dict) or hasattr(usage, "get"):
             input_tokens = cls._to_int(

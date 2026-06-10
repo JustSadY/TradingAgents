@@ -6,7 +6,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_macro_data,
 )
 
-
 # Single source of truth shared by the ToolNode registration and the LLM binding.
 _MACRO_TOOLS = [get_macro_data]
 

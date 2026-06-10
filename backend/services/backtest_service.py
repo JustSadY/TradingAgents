@@ -1,13 +1,14 @@
 import asyncio
+import json
 import logging
 import math
-import json
+
 import pandas as pd
 from sqlalchemy import select
-from datetime import datetime
-from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
-from backend.services.indicator_service import calculate_macd, calculate_rsi
+
 from backend.models.analysis import AnalysisResult
+from backend.services.indicator_service import calculate_macd, calculate_rsi
+from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
 
 _logger = logging.getLogger(__name__)
 
@@ -30,7 +31,7 @@ async def run_backtest_simulation(
 
         # Ensure Date column is datetime
         data["Date"] = pd.to_datetime(data["Date"])
-        
+
         # Sort values
         data = data.sort_values("Date").reset_index(drop=True)
 
@@ -47,7 +48,7 @@ async def run_backtest_simulation(
         start_dt = pd.to_datetime(start_date)
         end_dt = pd.to_datetime(end_date)
         backtest_data = data[(data["Date"] >= start_dt) & (data["Date"] <= end_dt)].copy()
-        
+
         if backtest_data.empty:
             return {"error": f"No trading days found in the range {start_date} to {end_date}."}
 
@@ -121,7 +122,7 @@ async def run_backtest_simulation(
                 if exit_reason:
                     notional = position_size * exit_price
                     commission = notional * commission_rate
-                    
+
                     if position_side == "long":
                         pnl = (exit_price - entry_price) * position_size - commission - (entry_price * position_size * commission_rate)
                     else: # short
@@ -129,7 +130,7 @@ async def run_backtest_simulation(
 
                     cash += notional + pnl if position_side == "long" else (entry_price * position_size) + pnl
                     return_pct = (pnl / (entry_price * position_size))
-                    
+
                     trades.append({
                         "entry_date": entry_date,
                         "exit_date": date_str,
@@ -185,7 +186,7 @@ async def run_backtest_simulation(
                             signal = "BUY"
                         elif sig in ("sell", "underweight"):
                             signal = "SELL"
-                        
+
                         # Extract SL/TP if available
                         ann = analysis.chart_annotations
                         if isinstance(ann, str):
@@ -270,7 +271,7 @@ async def run_backtest_simulation(
                 # Short equity = initial short value + short pnl = (entry_price * size) + (entry_price - close_price) * size
                 pnl = (entry_price - close_price) * position_size
                 holdings_value = (entry_price * position_size) + pnl
-            
+
             total_value = cash + holdings_value
             daily_values.append(total_value)
             equity_curve.append({
@@ -287,7 +288,7 @@ async def run_backtest_simulation(
             close_price = float(last_day["Close"])
             notional = position_size * close_price
             commission = notional * commission_rate
-            
+
             if position_side == "long":
                 pnl = (close_price - entry_price) * position_size - commission - (entry_price * position_size * commission_rate)
             else: # short
@@ -295,7 +296,7 @@ async def run_backtest_simulation(
 
             cash += notional + pnl if position_side == "long" else (entry_price * position_size) + pnl
             return_pct = (pnl / (entry_price * position_size))
-            
+
             trades.append({
                 "entry_date": entry_date,
                 "exit_date": date_str,
@@ -306,7 +307,7 @@ async def run_backtest_simulation(
                 "pnl": round(pnl, 2),
                 "reason": "END_OF_SIMULATION"
             })
-            
+
             # Recalculate last equity curve value
             equity_curve[-1] = {
                 "date": date_str,
@@ -334,7 +335,7 @@ async def run_backtest_simulation(
         mean_return = sum(daily_returns) / len(daily_returns) if daily_returns else 0.0
         var_return = sum((r - mean_return) ** 2 for r in daily_returns) / len(daily_returns) if daily_returns else 0.0
         std_return = math.sqrt(var_return)
-        
+
         sharpe_ratio = 0.0
         if std_return > 0:
             # Annualize daily Sharpe ratio

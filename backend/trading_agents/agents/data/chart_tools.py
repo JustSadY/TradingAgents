@@ -168,7 +168,7 @@ async def get_vision_chart_analysis(
 
         res = await llm.ainvoke([message])
         content = res.content if hasattr(res, "content") else str(res)
-        
+
         # Include image in the output string for frontend to pick up if it wants
         return f"--- Vision Chart Analysis for {symbol} ---\nIMAGE_DATA:data:image/png;base64,{base64_image}\n\n{content}"
 
@@ -180,6 +180,66 @@ async def get_vision_chart_analysis(
         return f"Error performing vision chart analysis: {err_msg}"
 
 
+def _local_calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
+    delta = series.diff()
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
+
+    avg_gain = gain.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+
+    rs = avg_gain / avg_loss.replace(0, 1e-9)
+    rsi = 100 - (100 / (1 + rs))
+    return rsi
+
+
+def _local_calculate_macd(series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> tuple[pd.Series, pd.Series, pd.Series]:
+    ema_fast = series.ewm(span=fast, adjust=False).mean()
+    ema_slow = series.ewm(span=slow, adjust=False).mean()
+    macd_line = ema_fast - ema_slow
+    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
+    macd_hist = macd_line - signal_line
+    return macd_line, signal_line, macd_hist
+
+
+def _local_find_support_resistance(df: pd.DataFrame, current_price: float, window: int = 5) -> tuple[list[float], list[float]]:
+    supports = []
+    resistances = []
+
+    if len(df) <= window * 2:
+        return [round(float(df["Low"].min()), 2)], [round(float(df["High"].max()), 2)]
+
+    for i in range(window, len(df) - window):
+        low_val = df["Low"].iloc[i]
+        high_val = df["High"].iloc[i]
+
+        is_support = True
+        is_resistance = True
+        for j in range(i - window, i + window + 1):
+            if df["Low"].iloc[j] < low_val:
+                is_support = False
+            if df["High"].iloc[j] > high_val:
+                is_resistance = False
+
+        if is_support:
+            supports.append(round(float(low_val), 2))
+        if is_resistance:
+            resistances.append(round(float(high_val), 2))
+
+    unique_supports = sorted(list(set(supports)))
+    unique_resistances = sorted(list(set(resistances)))
+
+    valid_supports = [s for s in unique_supports if s < current_price]
+    valid_resistances = [r for r in unique_resistances if r > current_price]
+
+    if not valid_supports:
+        valid_supports = [round(float(df["Low"].min()), 2)]
+    if not valid_resistances:
+        valid_resistances = [round(float(df["High"].max()), 2)]
+
+    return valid_supports[-3:], valid_resistances[:3]
+
+
 @tool
 async def get_mtf_trend(
     symbol: Annotated[str, "ticker symbol of the company"],
@@ -188,7 +248,8 @@ async def get_mtf_trend(
 ) -> str:
     """
     Fetches stock data from a higher timeframe (e.g., Weekly '1wk' or Monthly '1mo'),
-    calculates a smoothed trend (20-period EMA), and maps/overlays it back onto the primary daily chart.
+    calculates a smoothed trend (20-period EMA), RSI, MACD, and major support/resistance levels,
+    and maps/overlays the indicators and levels back onto the primary daily chart.
     """
     ctx = active_run_context.get(None)
     if ctx is None:
@@ -219,8 +280,22 @@ async def get_mtf_trend(
         if df_mtf.index.tz is not None:
             df_mtf.index = df_mtf.index.tz_localize(None)
 
-        # Calculate 20 EMA
+        df_mtf = df_mtf.dropna(subset=["Close", "High", "Low"])
+
+        # Calculate Indicators
         df_mtf["EMA_20"] = df_mtf["Close"].ewm(span=20, adjust=False).mean()
+        df_mtf["RSI_14"] = _local_calculate_rsi(df_mtf["Close"], 14)
+        macd_line, signal_line, macd_hist = _local_calculate_macd(df_mtf["Close"], 12, 26, 9)
+        df_mtf["MACD_Line"] = macd_line
+        df_mtf["MACD_Signal"] = signal_line
+        df_mtf["MACD_Hist"] = macd_hist
+
+        latest_close = float(df_mtf["Close"].iloc[-1])
+        latest_ema = float(df_mtf["EMA_20"].iloc[-1])
+        latest_rsi = float(df_mtf["RSI_14"].iloc[-1]) if not pd.isna(df_mtf["RSI_14"].iloc[-1]) else 50.0
+        latest_macd = float(df_mtf["MACD_Line"].iloc[-1])
+        latest_macd_sig = float(df_mtf["MACD_Signal"].iloc[-1])
+        latest_macd_hist = float(df_mtf["MACD_Hist"].iloc[-1])
 
         # Map MTF EMA to Daily dates (forward-fill)
         df_mtf_reset = df_mtf.reset_index()
@@ -235,7 +310,7 @@ async def get_mtf_trend(
             df_daily, df_mtf_reset[["MTF_Date", "EMA_20"]], left_on="Date", right_on="MTF_Date", direction="backward"
         )
 
-        # Register this series as a custom indicator, labeled for overlay
+        # Register EMA series as a custom indicator, labeled for overlay
         col_name = f"EMA20_{timeframe}"
         overlay_name = f"{timeframe.upper()} EMA(20) Trend"
 
@@ -243,7 +318,7 @@ async def get_mtf_trend(
         ctx["custom_indicators"].append(
             {
                 "name": col_name,
-                "formula": f"Close * 0 + {col_name}",  # dummy formula, but we pass custom calculated values in the series endpoint
+                "formula": f"Close * 0 + {col_name}",  # dummy formula
                 "label": overlay_name,
                 "overlay": True,
                 "values": {
@@ -254,10 +329,34 @@ async def get_mtf_trend(
             }
         )
 
-        latest_val = df_mtf["EMA_20"].iloc[-1]
+        # Determine trend conditions
+        ema_trend = "BULLISH" if latest_close > latest_ema else "BEARISH"
+        rsi_condition = "OVERBOUGHT" if latest_rsi >= 70 else ("OVERSOLD" if latest_rsi <= 30 else "NEUTRAL")
+        macd_trend = "BULLISH (MACD Line is above Signal Line)" if latest_macd > latest_macd_sig else "BEARISH (MACD Line is below Signal Line)"
+
+        # Calculate support/resistance
+        valid_supports, valid_resistances = _local_find_support_resistance(df_mtf, latest_close, window=5)
+
+        # Add support/resistance to ctx if available
+        if "support_levels" in ctx:
+            ctx["support_levels"].extend(valid_supports)
+        if "resistance_levels" in ctx:
+            ctx["resistance_levels"].extend(valid_resistances)
+
         latest_date = df_mtf.index[-1].strftime("%Y-%m-%d")
 
-        return f"Successfully registered MTF Trend ({overlay_name}) onto the main chart. Latest trend value on {latest_date} is ${latest_val:.2f}."
+        summary = (
+            f"--- Multi-Timeframe Trend Analysis ({timeframe.upper()}) for {symbol.upper()} ---\n"
+            f"Current Reference Date: {curr_date}\n"
+            f"Latest Ticker Close Price: ${latest_close:.2f} (on {latest_date})\n"
+            f"1. EMA (20): ${latest_ema:.2f} ({ema_trend} - Price is {'above' if ema_trend == 'BULLISH' else 'below'} 20 EMA)\n"
+            f"2. RSI (14): {latest_rsi:.1f} ({rsi_condition})\n"
+            f"3. MACD (12, 26, 9): Line = {latest_macd:.4f}, Signal = {latest_macd_sig:.4f}, Hist = {latest_macd_hist:.4f} ({macd_trend})\n"
+            f"4. Major Support Levels (Below Price): {', '.join([f'${s:.2f}' for s in valid_supports])}\n"
+            f"5. Major Resistance Levels (Above Price): {', '.join([f'${r:.2f}' for r in valid_resistances])}\n"
+            f"--------------------------------------------------------------------------------"
+        )
+        return summary
 
     except Exception as e:
         _logger.exception("MTF Trend calculation failed: %s", e)

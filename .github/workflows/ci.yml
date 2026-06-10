@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_DB: tradingagents
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    steps:
+    - uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install ruff pytest pytest-asyncio
+        pip install -r backend/requirements.txt
+
+    - name: Run Ruff Lint check
+      run: |
+        ruff check backend/ || true
+
+    - name: Run Ruff Format check
+      run: |
+        ruff format --check backend/ || true
+
+    - name: Run Backend Tests
+      env:
+        DATABASE_URL: postgresql+asyncpg://postgres:postgres@localhost:5432/tradingagents
+        SECRET_KEY: test_secret_key_change_me_in_production
+        ENCRYPTION_KEY: fP2S_N9xG9gK9pD3V3F9fT9gK9pD3V3F9fT9gK9pD3U=
+        ADMIN_USERNAME: admin
+      run: |
+        cd backend
+        pytest
