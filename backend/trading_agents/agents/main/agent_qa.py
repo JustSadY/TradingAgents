@@ -67,7 +67,10 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
         if len(available) < 2:
             return {}  # nothing to cross-examine
 
-        by_label = {label: (key, report) for key, label, report in available}
+        def _normalize(name: str) -> str:
+            return "".join(c for c in name.lower() if c.isalnum()).replace("analyst", "").replace("researcher", "").strip()
+
+        by_normalized = {_normalize(label): (key, label, report) for key, label, report in available}
         moderator = ctx.llm_for(MAIN_KEY)
 
         try:
@@ -80,16 +83,16 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
 
         transcript_parts: list[str] = []
         for q in questions[:_MAX_QUESTIONS]:
-            target = by_label.get(q.to)
+            target = by_normalized.get(_normalize(q.to or ""))
             if not target:
                 continue
-            target_key, target_report = target
+            target_key, target_label, target_report = target
             try:
-                answer = await _answer_as_analyst(ctx, target_key, q.to, target_report, q.question)
+                answer = await _answer_as_analyst(ctx, target_key, target_label, target_report, q.question)
             except Exception as exc:  # noqa: BLE001
                 logger.warning("[agent_qa] answer by %s failed: %s", q.to, exc)
                 continue
-            transcript_parts.append(f"**Q → {q.to}:** {q.question}\n**{q.to}:** {answer}")
+            transcript_parts.append(f"**Q → {target_label}:** {q.question}\n**{target_label}:** {answer}")
 
         if not transcript_parts:
             return {}

@@ -21,6 +21,7 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         self.llm_calls = 0
         self.tokens_in = 0
         self.tokens_out = 0
+        self._seen_runs: set[UUID] = set()
 
     async def _emit_stats(self) -> None:
         try:
@@ -44,8 +45,10 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        self.llm_calls += 1
-        await self._emit_stats()
+        if run_id not in self._seen_runs:
+            self._seen_runs.add(run_id)
+            self.llm_calls += 1
+            await self._emit_stats()
 
     async def on_llm_start(
         self,
@@ -58,8 +61,10 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        self.llm_calls += 1
-        await self._emit_stats()
+        if run_id not in self._seen_runs:
+            self._seen_runs.add(run_id)
+            self.llm_calls += 1
+            await self._emit_stats()
 
     async def on_llm_end(
         self,

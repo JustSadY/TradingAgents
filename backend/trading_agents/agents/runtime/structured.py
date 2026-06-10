@@ -144,6 +144,14 @@ async def ainvoke_structured_or_freetext(
                     return result
                 if isinstance(result, dict):
                     return validate_schema(schema, result)
+                # Handle AIMessage or string returned by with_structured_output fallback
+                content = getattr(result, "content", result)
+                if isinstance(content, str):
+                    try:
+                        parsed = json.loads(extract_json_block(content) or content.strip())
+                        return validate_schema(schema, parsed)
+                    except Exception:
+                        pass
             return result
         except Exception as exc:
             logger.warning(
