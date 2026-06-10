@@ -12,9 +12,16 @@ class StatsCallbackHandler(BaseCallbackHandler):
     def __init__(self) -> None:
         self.llm_calls = 0
         self.tool_calls = 0
-        self.tokens_in = 0
-        self.tokens_out = 0
+        self._run_usage: dict[Any, dict[str, int]] = {}
         self._seen_runs: set[Any] = set()
+
+    @property
+    def tokens_in(self) -> int:
+        return sum(u["input"] for u in self._run_usage.values())
+
+    @property
+    def tokens_out(self) -> int:
+        return sum(u["output"] for u in self._run_usage.values())
 
     def on_chat_model_start(self, *args: Any, **kwargs: Any) -> None:
         run_id = kwargs.get("run_id")
@@ -37,8 +44,8 @@ class StatsCallbackHandler(BaseCallbackHandler):
         if usage is None:
             _logger.warning("LLM token usage metadata not found; skipping token counters")
             return
-        self.tokens_in += usage["input"]
-        self.tokens_out += usage["output"]
+        run_id = kwargs.get("run_id") or f"fallback_{len(self._run_usage)}"
+        self._run_usage[run_id] = usage
 
     def on_tool_start(self, *args: Any, **kwargs: Any) -> None:
         self.tool_calls += 1

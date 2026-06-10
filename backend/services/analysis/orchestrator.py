@@ -237,7 +237,11 @@ async def run_individual_analysis(
             "duration_seconds": duration,
             "llm_provider": ta.llm_provider,
             "llm_model": ta.llm_model,
-            "preset_name": settings.active_preset_name or f"{ta.llm_provider}:{ta.llm_model}",
+            "preset_name": (
+                settings.active_preset_name
+                if (settings.active_preset_name and settings.active_preset_name.lower() not in ("unknown", "unknown:unknown", "unknown/unknown"))
+                else f"{(ta.llm_provider or 'Custom').strip() if ta.llm_provider and ta.llm_provider.lower() not in ('unknown', 'none') else 'Custom'}:{(ta.llm_model or 'Model').strip() if ta.llm_model and ta.llm_model.lower() not in ('unknown', 'none') else 'Model'}"
+            ),
         }
         await finalize_result(db, row.id, **final_payload)
         await emitter.emit({"type": "risk_metrics", "metrics": risk_metrics})
