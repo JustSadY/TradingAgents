@@ -94,6 +94,23 @@ async def run_individual_analysis(
         # 4. Agent & Tool Access (+ runtime context / credentials)
         permitted_analysts = await prepare_graph_config(db, user_id, config)
 
+        # 4b. Optional per-ticker pre-screen: drop analysts with a poor realized
+        # hit rate on THIS ticker so the run doesn't pay for a voice that has
+        # been consistently wrong here. Off by default; needs enough history.
+        if getattr(settings, "analyst_prefilter_enabled", False):
+            from backend.services.analyst_prefilter_service import filter_analysts_by_history
+
+            permitted_analysts, dropped = await filter_analysts_by_history(
+                db,
+                ticker,
+                user_id,
+                permitted_analysts,
+                min_samples=int(getattr(settings, "analyst_prefilter_min_samples", 5) or 5),
+                max_win_rate=float(getattr(settings, "analyst_prefilter_max_win_rate", 40.0) or 40.0),
+            )
+            if dropped:
+                await emitter.emit_status(f"Pre-screened out underperforming analysts: {', '.join(dropped)}")
+
         # 5. Initialize & Run Graph
         from .streaming_handler import TokenStreamingCallbackHandler
 

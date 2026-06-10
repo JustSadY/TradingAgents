@@ -52,6 +52,9 @@ interface Settings {
   max_report_chars_in_prompts: number
   max_debate_history_chars: number
   max_tool_output_chars: number
+  analyst_prefilter_enabled: boolean
+  analyst_prefilter_min_samples: number
+  analyst_prefilter_max_win_rate: number
 }
 
 interface Preset { id: number; name: string; description: string | null; created_at: string }
@@ -381,6 +384,22 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 <Row label={t('settings.row_max_tool_output') || 'Max Tool Output Chars'}>
                   <input type="number" min="1000" max="100000" step="1000" className={Input} value={s.max_tool_output_chars ?? 12000} onChange={e => update('max_tool_output_chars', parseInt(e.target.value) || 12000)} />
                 </Row>
+
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group mt-1">
+                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_prefilter_enabled') || 'Pre-screen Weak Analysts'}</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.analyst_prefilter_enabled ?? false} onChange={e => update('analyst_prefilter_enabled', e.target.checked)} />
+                </label>
+                <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.prefilter_hint') || 'Skip analysts whose past calls on the analysed ticker have a poor hit rate. Needs realized history; core analysts are always kept.'}</p>
+                {s.analyst_prefilter_enabled && (
+                  <>
+                    <Row label={t('settings.row_prefilter_min_samples') || 'Min. Graded Calls'}>
+                      <input type="number" min="1" max="100" className={Input} value={s.analyst_prefilter_min_samples ?? 5} onChange={e => update('analyst_prefilter_min_samples', parseInt(e.target.value) || 5)} />
+                    </Row>
+                    <Row label={t('settings.row_prefilter_max_win_rate') || 'Drop Below Win Rate (%)'}>
+                      <input type="number" min="0" max="100" step="1" className={Input} value={s.analyst_prefilter_max_win_rate ?? 40} onChange={e => update('analyst_prefilter_max_win_rate', parseFloat(e.target.value) || 40)} />
+                    </Row>
+                  </>
+                )}
               </div>
 
               <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">

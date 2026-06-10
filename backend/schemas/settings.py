@@ -43,6 +43,9 @@ class SettingsBase(BaseModel):
     max_report_chars_in_prompts: int = 6000
     max_debate_history_chars: int = 8000
     max_tool_output_chars: int = 12000
+    analyst_prefilter_enabled: bool = False
+    analyst_prefilter_min_samples: int = 5
+    analyst_prefilter_max_win_rate: float = 40.0
 
 
 class SettingsRead(SettingsBase):
@@ -90,3 +93,6 @@ class SettingsUpdate(BaseModel):
     max_report_chars_in_prompts: int | None = Field(default=None, ge=500, le=50000)
     max_debate_history_chars: int | None = Field(default=None, ge=1000, le=100000)
     max_tool_output_chars: int | None = Field(default=None, ge=1000, le=100000)
+    analyst_prefilter_enabled: bool | None = None
+    analyst_prefilter_min_samples: int | None = Field(default=None, ge=1, le=100)
+    analyst_prefilter_max_win_rate: float | None = Field(default=None, ge=0, le=100)

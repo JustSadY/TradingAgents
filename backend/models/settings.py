@@ -53,6 +53,11 @@ class AppSettings(Base):
     max_report_chars_in_prompts: Mapped[int] = mapped_column(Integer, default=6000)
     max_debate_history_chars: Mapped[int] = mapped_column(Integer, default=8000)
     max_tool_output_chars: Mapped[int] = mapped_column(Integer, default=12000)
+    # Per-ticker analyst pre-screening (drop analysts with a poor realized hit
+    # rate on the ticker being analysed).
+    analyst_prefilter_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    analyst_prefilter_min_samples: Mapped[int] = mapped_column(Integer, default=5)
+    analyst_prefilter_max_win_rate: Mapped[float] = mapped_column(Float, default=40.0)
 
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
