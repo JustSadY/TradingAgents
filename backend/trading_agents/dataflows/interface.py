@@ -51,6 +51,9 @@ from .y_finance import (
     get_insider_transactions as get_yfinance_insider_transactions,
 )
 from .y_finance import (
+    get_institutional_holdings as get_yfinance_institutional_holdings,
+)
+from .y_finance import (
     get_sec_filings as get_yfinance_sec_filings,
 )
 from .y_finance import (
@@ -72,6 +75,7 @@ _TICKER_FIRST_METHODS = frozenset(
         "get_news",
         "get_insider_transactions",
         "get_sec_filings",
+        "get_institutional_holdings",
         "fetch_reddit_posts",
         "fetch_stocktwits_messages",
     }
@@ -121,6 +125,9 @@ VENDOR_METHODS = {
     },
     "get_sec_filings": {
         "yfinance": get_yfinance_sec_filings,
+    },
+    "get_institutional_holdings": {
+        "yfinance": get_yfinance_institutional_holdings,
     },
     "fetch_reddit_posts": {
         "reddit": fetch_reddit_posts,

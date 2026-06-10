@@ -15,6 +15,7 @@ from backend.trading_agents.agents.data.news_data_tools import (
     get_news,
 )
 from backend.trading_agents.agents.data.options_tools import get_options_data
+from backend.trading_agents.agents.data.ownership_tools import get_institutional_holdings
 from backend.trading_agents.agents.data.quant_tools import get_quant_data
 from backend.trading_agents.agents.data.search_tools import search_web
 from backend.trading_agents.agents.data.sec_tools import get_insider_transactions_deep, get_sec_filings
@@ -33,6 +34,7 @@ __all__ = [
     "get_global_news",
     "get_insider_transactions",
     "get_insider_transactions_deep",
+    "get_institutional_holdings",
     "get_sec_filings",
     "get_news",
     "get_options_data",

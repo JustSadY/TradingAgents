@@ -214,6 +214,8 @@ class PropagateResult(BaseModel):
     options_report: str = ""
     quant_report: str = ""
     earnings_report: str = ""
+    insider_report: str = ""
+    ownership_report: str = ""
     review_report: str = ""
     investment_plan: str = ""
     trader_plan: str = ""
@@ -236,6 +238,8 @@ class PropagateResult(BaseModel):
             options_report=state.get(StateKeys.OPTIONS_REPORT, ""),
             quant_report=state.get(StateKeys.QUANT_REPORT, ""),
             earnings_report=state.get(StateKeys.EARNINGS_REPORT, ""),
+            insider_report=state.get(StateKeys.INSIDER_REPORT, ""),
+            ownership_report=state.get(StateKeys.OWNERSHIP_REPORT, ""),
             review_report=state.get(StateKeys.REVIEW_REPORT, ""),
             investment_plan=state.get(StateKeys.INVESTMENT_PLAN, ""),
             trader_plan=state.get(StateKeys.TRADER_INVESTMENT_PLAN, ""),

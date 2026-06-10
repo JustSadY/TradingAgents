@@ -18,6 +18,8 @@ class StateKeys:
     OPTIONS_REPORT = "options_report"
     QUANT_REPORT = "quant_report"
     EARNINGS_REPORT = "earnings_report"
+    INSIDER_REPORT = "insider_report"
+    OWNERSHIP_REPORT = "ownership_report"
     REVIEW_REPORT = "review_report"
     SYNTHESIS_REPORT = "synthesis_report"
     AUDIT_REPORT = "audit_report"
@@ -36,6 +38,8 @@ class StateKeys:
         OPTIONS_REPORT,
         QUANT_REPORT,
         EARNINGS_REPORT,
+        INSIDER_REPORT,
+        OWNERSHIP_REPORT,
         REVIEW_REPORT,
         SYNTHESIS_REPORT,
         AUDIT_REPORT,
@@ -80,6 +84,8 @@ class AgentState(MessagesState):
     options_report: Annotated[str, "Report from the Options Analyst"]
     quant_report: Annotated[str, "Report from the Quant Analyst"]
     earnings_report: Annotated[str, "Report from the Earnings Analyst"]
+    insider_report: Annotated[str, "Report from the Insider Activity Analyst"]
+    ownership_report: Annotated[str, "Report from the Institutional Ownership Analyst"]
     review_report: Annotated[str, "Report from the Performance Review Analyst"]
     synthesis_report: Annotated[str, "Report identifying alignments and conflicts between analyst reports"]
     audit_report: Annotated[str, "Real-time audit report checking for hallucinations and reasoning gaps"]

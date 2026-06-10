@@ -84,6 +84,8 @@ _ALLOWED_COLUMNS = {
         "risk_debate_history",
         "judge_decision",
         "chart_annotations",
+        "insider_report",
+        "ownership_report",
         "raw_return",
         "alpha_return",
         "holding_days",
@@ -133,6 +135,8 @@ _ALLOWED_COLUMNS = {
 # (table, column, column_type) tuples applied additively on startup.
 _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("analysis_results", "agent_qa_report", "TEXT DEFAULT ''"),
+    ("analysis_results", "insider_report", "TEXT DEFAULT ''"),
+    ("analysis_results", "ownership_report", "TEXT DEFAULT ''"),
     ("app_settings", "pinecone_index", "VARCHAR(100) DEFAULT 'tradingagents-memory'"),
     ("app_settings", "pinecone_cloud", "VARCHAR(20) DEFAULT 'aws'"),
     ("app_settings", "pinecone_region", "VARCHAR(30) DEFAULT 'us-east-1'"),

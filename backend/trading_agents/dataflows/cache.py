@@ -23,6 +23,7 @@ TOOLS_CATEGORIES = {
             "get_news",
             "get_global_news",
             "get_insider_transactions",
+            "get_institutional_holdings",
         ],
     },
     "social_sentiment_data": {
