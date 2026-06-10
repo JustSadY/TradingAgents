@@ -140,53 +140,49 @@ export default function ChartPage() {
               </div>
             )}
 
-            {activeTicker && (
-              <div className="space-y-4">
-                <div className="flex items-center justify-between px-1">
-                    <div className="flex items-center gap-4">
-                        <h2 className="text-2xl font-display font-bold text-white tracking-tight font-mono">{activeTicker}</h2>
-                        {candles.length > 0 && (
-                            <span className={`text-sm font-mono font-bold ${candles[candles.length-1].close >= candles[candles.length-1].open ? 'text-emerald-400' : 'text-rose-400'}`}>
-                                ${candles[candles.length-1].close.toFixed(2)}
-                            </span>
-                        )}
-                    </div>
-                    <TechnicalControls 
-                        showSMA={showSMA} setShowSMA={setShowSMA}
-                        showEMA={showEMA} setShowEMA={setShowEMA}
-                        showRSI={showRSI} setShowRSI={setShowRSI}
-                        showMACD={showMACD} setShowMACD={setShowMACD}
-                        showSentiment={showSentiment} setShowSentiment={setShowSentiment}
-                        t={t}
-                    />
-                </div>
-
-                <ErrorBoundary name="Price Chart">
-                    <div ref={chartContainerRef} className="w-full h-[420px] rounded-2xl overflow-hidden border border-white/[0.04] bg-[#090d16]" />
-                </ErrorBoundary>
-
-                {activeTicker && (
-                  <div className="flex items-center gap-3 pt-2">
-                    <div className="flex-1 relative group">
-                      <BarChart2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={14} />
-                      <input
-                        className="glass-input pl-10 pr-4 py-2.5 w-full rounded-xl text-xs font-mono placeholder-slate-600 outline-none transition-all"
-                        placeholder="Custom Formula (e.g. SMA(20) / Close)"
-                        value={userFormula}
-                        onChange={e => setUserFormula(e.target.value)}
-                        onKeyDown={e => e.key === 'Enter' && handleCalculateUserIndicator()}
-                      />
-                    </div>
-                    <button
-                      onClick={handleCalculateUserIndicator}
-                      className="bg-white/5 hover:bg-white/10 text-slate-300 px-5 py-2.5 rounded-xl text-xs font-bold transition-all border border-white/[0.04] cursor-pointer"
-                    >
-                      Calculate
-                    </button>
+            <div className={activeTicker ? 'space-y-4' : 'hidden'}>
+              <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-4">
+                      <h2 className="text-2xl font-display font-bold text-white tracking-tight font-mono">{activeTicker}</h2>
+                      {candles.length > 0 && (
+                          <span className={`text-sm font-mono font-bold ${candles[candles.length-1].close >= candles[candles.length-1].open ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              ${candles[candles.length-1].close.toFixed(2)}
+                          </span>
+                      )}
                   </div>
-                )}
+                  <TechnicalControls 
+                      showSMA={showSMA} setShowSMA={setShowSMA}
+                      showEMA={showEMA} setShowEMA={setShowEMA}
+                      showRSI={showRSI} setShowRSI={setShowRSI}
+                      showMACD={showMACD} setShowMACD={setShowMACD}
+                      showSentiment={showSentiment} setShowSentiment={setShowSentiment}
+                      t={t}
+                  />
               </div>
-            )}
+
+              <ErrorBoundary name="Price Chart">
+                  <div ref={chartContainerRef} className="w-full h-[420px] rounded-2xl overflow-hidden border border-white/[0.04] bg-[#090d16]" />
+              </ErrorBoundary>
+
+              <div className="flex items-center gap-3 pt-2">
+                <div className="flex-1 relative group">
+                  <BarChart2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={14} />
+                  <input
+                    className="glass-input pl-10 pr-4 py-2.5 w-full rounded-xl text-xs font-mono placeholder-slate-600 outline-none transition-all"
+                    placeholder="Custom Formula (e.g. SMA(20) / Close)"
+                    value={userFormula}
+                    onChange={e => setUserFormula(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleCalculateUserIndicator()}
+                  />
+                </div>
+                <button
+                  onClick={handleCalculateUserIndicator}
+                  className="bg-white/5 hover:bg-white/10 text-slate-300 px-5 py-2.5 rounded-xl text-xs font-bold transition-all border border-white/[0.04] cursor-pointer"
+                >
+                  Calculate
+                </button>
+              </div>
+            </div>
           </div>
 
           <AnalysisDetailSidebar selected={selected} setSelected={setSelected} t={t} />
