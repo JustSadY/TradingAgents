@@ -47,9 +47,9 @@ async def custom_indicator(
 async def sentiment_history(
     ticker: str = Query(..., description="Ticker symbol, e.g. AAPL"),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     try:
-        return await get_sentiment_history(db, ticker)
+        return await get_sentiment_history(db, ticker, user=current_user)
     except MarketDataError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc))

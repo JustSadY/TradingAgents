@@ -142,8 +142,8 @@ async def execute_order(
     action = action.upper()
     if action not in ("BUY", "SELL"):
         raise ValueError(get_message("invalid_action", lang))
-    if quantity <= 0:
-        raise ValueError("quantity must be positive")
+    if not math.isfinite(quantity) or quantity <= 0:
+        raise ValueError("quantity must be a positive finite number")
 
     price_val = await get_live_price(ticker)
     if price_val is None or not math.isfinite(price_val) or price_val <= 0:

@@ -53,7 +53,13 @@ class Settings(BaseSettings):
         key = self.ENCRYPTION_KEY
         if key:
             key_bytes = key.encode() if isinstance(key, str) else key
-            return Fernet(key_bytes)
+            try:
+                return Fernet(key_bytes)
+            except (ValueError, TypeError) as exc:
+                raise RuntimeError(
+                    "ENCRYPTION_KEY is not a valid Fernet key. Generate one with: "
+                    'python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"'
+                ) from exc
         with _TEMP_KEY_LOCK:
             if _TEMP_KEY is None:
                 _TEMP_KEY = Fernet.generate_key().decode()

@@ -3,18 +3,23 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import get_db
 from backend.core.limiter import limiter
-from backend.core.security import create_access_token, create_refresh_token, decode_token, verify_password
+from backend.core.security import create_access_token, create_refresh_token, decode_token, hash_password, verify_password
 from backend.repositories.users import get_user_by_username
 from backend.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+# Verified against when the username does not exist, so login latency does not
+# reveal whether an account exists (timing-based user enumeration).
+_DUMMY_PASSWORD_HASH = hash_password("dummy-password-for-timing-equalization")
 
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("10/minute")
 async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)):
     user = await get_user_by_username(db, body.username)
-    if not user or not verify_password(body.password, user.hashed_password) or not user.is_active:
+    password_ok = verify_password(body.password, user.hashed_password if user else _DUMMY_PASSWORD_HASH)
+    if not user or not password_ok or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect username or password")
     return TokenResponse(
         access_token=create_access_token(user.username, role=user.role),
