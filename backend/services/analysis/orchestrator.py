@@ -78,16 +78,18 @@ async def run_individual_analysis(
         from backend.services.performance_service import get_analyst_performance_context
         from backend.services.analysis.market_pulse_service import get_market_pulse
         from backend.services.analysis.scenario_service import get_active_scenarios
+        from backend.services.signal_backtest_service import get_signal_replay_context
 
         attribution_md = await get_analyst_performance_context(db)
         market_pulse_md = await get_market_pulse()
         scenarios_md = get_active_scenarios()
-        
+        signal_replay_md = await get_signal_replay_context(db, ticker, user_id)
+
         # Historical/episodic memory is now recalled semantically inside the
         # decision nodes (research manager + portfolio manager) from the vector
-        # store; this start-time context only carries attribution / pulse /
-        # scenario summaries.
-        config["historical_context"] = attribution_md + market_pulse_md + scenarios_md
+        # store; this start-time context carries attribution / pulse / scenario
+        # summaries plus the replay of past signals on this exact ticker.
+        config["historical_context"] = attribution_md + market_pulse_md + scenarios_md + signal_replay_md
 
         # 4. Agent & Tool Access (+ runtime context / credentials)
         permitted_analysts = await prepare_graph_config(db, user_id, config)
