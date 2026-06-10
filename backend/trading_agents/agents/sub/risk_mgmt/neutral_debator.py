@@ -16,7 +16,9 @@ def create_neutral_debator(llm):
         trader_decision = state["trader_investment_plan"]
 
         report_fields = build_report_fields("Latest World Affairs Report", "Company Fundamentals Report")
-        resources_text = build_resources(state, report_fields)
+        # Risk debators argue over the trade decision, not the raw data, so send
+        # each analyst's Executive Summary instead of the full report.
+        resources_text = build_resources(state, report_fields, summary_only=True)
 
         prompt = f"""As the Neutral Risk Analyst, your objective is to provide a balanced, objective evaluation that mediates between aggressive and conservative perspectives. Focus on realistic outcomes and evidence-based probabilities, neither leaning toward excessive optimism nor undue caution. When reviewing the trader's decision, weigh the potential rewards against the risks fairly. Respond to both the aggressive and conservative analysts by highlighting where their arguments are strong and where they are biased. Here is the trader's decision:
 {trader_decision}
