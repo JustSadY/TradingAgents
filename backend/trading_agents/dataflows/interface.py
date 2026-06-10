@@ -51,6 +51,9 @@ from .y_finance import (
     get_insider_transactions as get_yfinance_insider_transactions,
 )
 from .y_finance import (
+    get_catalyst_calendar as get_yfinance_catalyst_calendar,
+)
+from .y_finance import (
     get_institutional_holdings as get_yfinance_institutional_holdings,
 )
 from .y_finance import (
@@ -76,6 +79,7 @@ _TICKER_FIRST_METHODS = frozenset(
         "get_insider_transactions",
         "get_sec_filings",
         "get_institutional_holdings",
+        "get_catalyst_calendar",
         "fetch_reddit_posts",
         "fetch_stocktwits_messages",
     }
@@ -128,6 +132,9 @@ VENDOR_METHODS = {
     },
     "get_institutional_holdings": {
         "yfinance": get_yfinance_institutional_holdings,
+    },
+    "get_catalyst_calendar": {
+        "yfinance": get_yfinance_catalyst_calendar,
     },
     "fetch_reddit_posts": {
         "reddit": fetch_reddit_posts,

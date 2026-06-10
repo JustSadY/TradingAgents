@@ -36,6 +36,9 @@ const toolTranslations = {
     'tools.institutional_holdings.label': 'Institutional Holdings (13F)',
     'tools.institutional_holdings.description': 'Pulls institutional/13F ownership, major-holder breakdown, and top mutual-fund holders.',
 
+    'tools.catalyst_calendar.label': 'Catalyst Calendar',
+    'tools.catalyst_calendar.description': 'Pulls upcoming earnings dates, ex-dividend dates, and scheduled corporate events.',
+
     'tools.fundamentals_data.label': 'Fundamentals Summary',
     'tools.fundamentals_data.description': 'Calculates valuation ratios, profit margins, and key financial ratios.',
 
@@ -135,6 +138,9 @@ const toolTranslations = {
 
     'tools.institutional_holdings.label': 'Kurumsal Sahiplik (13F)',
     'tools.institutional_holdings.description': 'Kurumsal/13F sahipliği, başlıca hissedar dağılımı ve en büyük yatırım fonu sahiplerini çeker.',
+
+    'tools.catalyst_calendar.label': 'Katalizör Takvimi',
+    'tools.catalyst_calendar.description': 'Yaklaşan kazanç tarihlerini, temettü tarihlerini ve planlı şirket etkinliklerini çeker.',
 
     'tools.fundamentals_data.label': 'Temel Rasyolar Özeti',
     'tools.fundamentals_data.description': 'Değerleme oranlarını, kâr marjlarını ve temel finansal rasyoları hesaplar.',

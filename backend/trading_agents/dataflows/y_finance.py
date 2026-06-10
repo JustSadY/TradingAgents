@@ -226,6 +226,35 @@ def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the compan
         raise
 
 
+def get_catalyst_calendar(ticker: Annotated[str, "ticker symbol of the company"]):
+    """Upcoming known catalysts: next earnings date, ex-dividend date, and any
+    recent/scheduled earnings dates with EPS estimates."""
+    try:
+        ticker_obj = yf.Ticker(ticker.upper())
+        parts: list[str] = [f"# Upcoming Catalysts for {ticker.upper()}"]
+        parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+        calendar = yf_retry(lambda: ticker_obj.calendar)
+        if isinstance(calendar, dict) and calendar:
+            parts.append("## Scheduled Events")
+            for key, value in calendar.items():
+                parts.append(f"- {key}: {value}")
+
+        try:
+            earnings_dates = yf_retry(lambda: ticker_obj.get_earnings_dates(limit=8))
+        except Exception:
+            earnings_dates = None
+        if earnings_dates is not None and not earnings_dates.empty:
+            parts.append("\n## Recent & Upcoming Earnings Dates")
+            parts.append(earnings_dates.to_csv())
+
+        if len(parts) <= 2:
+            return f"No upcoming catalyst data found for symbol '{ticker}'"
+        return "\n".join(parts)
+    except Exception:
+        raise
+
+
 def get_institutional_holdings(ticker: Annotated[str, "ticker symbol of the company"]):
     """Institutional (13F) and major-holder breakdown for a company."""
     try:
