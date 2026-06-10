@@ -61,3 +61,42 @@ def test_middle_truncate_keeps_head_and_tail():
 
 def test_middle_truncate_noop_when_short():
     assert middle_truncate("tiny", 2000) == "tiny"
+
+
+def test_extract_executive_summary_inline_heading():
+    from backend.trading_agents.agents.runtime.report_aggregator import extract_executive_summary
+
+    report = (
+        "1. **Executive Summary:** Uptrend intact; RSI 58; volume rising.\n"
+        "2. **Detailed Analysis:** " + "X" * 5000 + "\n"
+        "3. **Actionable Insights:** buy dips"
+    )
+    summary = extract_executive_summary(report)
+    assert summary is not None
+    assert "Uptrend intact" in summary
+    assert "XXXX" not in summary  # the data section is excluded
+    assert not summary.startswith("*")  # markdown wrapper stripped
+
+
+def test_extract_executive_summary_markdown_heading():
+    from backend.trading_agents.agents.runtime.report_aggregator import extract_executive_summary
+
+    report = "### Executive Summary\n- Bearish divergence\n\n### Detailed Analysis\n" + "Y" * 3000
+    summary = extract_executive_summary(report)
+    assert summary == "- Bearish divergence"
+
+
+def test_extract_executive_summary_missing_returns_none():
+    from backend.trading_agents.agents.runtime.report_aggregator import extract_executive_summary
+
+    assert extract_executive_summary("Freeform text, no heading at all.") is None
+    assert extract_executive_summary("") is None
+
+
+def test_summary_only_falls_back_to_truncation():
+    from backend.trading_agents.agents.runtime.report_aggregator import build_resources
+
+    state = {"market_report": "no summary heading here " * 500}
+    out = build_resources(state, {"market_report": "Market"}, summary_only=True, max_chars_per_report=400)
+    assert "Market:" in out
+    assert "truncated" in out  # fell back to truncated full report

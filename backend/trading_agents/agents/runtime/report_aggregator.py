@@ -8,6 +8,41 @@ prompt), so callers keep their own mapping and only share the loop.
 
 from __future__ import annotations
 
+import re
+
+# Analyst reports follow a fixed template whose first section is an "Executive
+# Summary" (see each analyst's system prompt). Downstream debators argue over
+# the *conclusions*, not the raw tables, so we extract just the summary for them.
+# The heading may carry inline content, e.g. "1. **Executive Summary:** ...".
+_SUMMARY_HEADING = re.compile(
+    r"#{0,4}\s*(?:\d+[.)]\s*)?\**\s*executive\s+summary\b[:*\s]*",
+    re.IGNORECASE,
+)
+# Start of the section that follows the summary: a markdown heading, or a
+# numbered/bold section title such as "2." / "**Detailed Analysis**".
+_NEXT_HEADING = re.compile(
+    r"\n\s{0,3}(?:#{1,4}\s|\**\s*\d+[.)]\s|\*\*[A-Z])",
+)
+
+
+def extract_executive_summary(report: str, max_chars: int = 1200) -> str | None:
+    """Return just the Executive Summary section of an analyst report, or None
+    when the report has no recognisable summary heading.
+
+    Lets downstream agents reason over each analyst's conclusion (a few hundred
+    tokens) instead of the full report with all its data tables (thousands)."""
+    if not report:
+        return None
+    m = _SUMMARY_HEADING.search(report)
+    if not m:
+        return None
+    start = m.end()
+    nxt = _NEXT_HEADING.search(report, start)
+    summary = (report[start : nxt.start()] if nxt else report[start:]).strip()
+    if not summary:
+        return None
+    return summary[:max_chars].rstrip() + ("…" if len(summary) > max_chars else "")
+
 
 def build_report_fields(news_label: str, fundamentals_label: str) -> dict[str, str]:
     """The standard ``{state_field: label}`` mapping shared by the bull/bear
@@ -75,7 +110,13 @@ def _truncate_report(content: str, limit: int) -> str:
     return content[:limit].rstrip() + "\n…[report truncated to conserve tokens]"
 
 
-def build_resources(state, report_fields: dict[str, str], prefix: str = "", max_chars_per_report: int | None = None) -> str:
+def build_resources(
+    state,
+    report_fields: dict[str, str],
+    prefix: str = "",
+    max_chars_per_report: int | None = None,
+    summary_only: bool = False,
+) -> str:
     """Return labelled, newline-separated non-empty reports from ``state``.
 
     ``prefix`` is prepended to each label (e.g. ``"### "`` for the synthesis
@@ -85,7 +126,12 @@ def build_resources(state, report_fields: dict[str, str], prefix: str = "", max_
     downstream agent. The bull/bear researchers and the three risk debators each
     receive the *full* set of analyst reports on every turn, so an uncapped
     11-analyst run re-sends tens of thousands of tokens per debate round. When
-    omitted, the cap is read from the run config (``max_report_chars_in_prompts``)."""
+    omitted, the cap is read from the run config (``max_report_chars_in_prompts``).
+
+    ``summary_only`` sends just each report's Executive Summary when one exists
+    (falling back to the truncated full report otherwise). Use it for agents that
+    debate the analysts' *conclusions* rather than re-deriving from raw tables —
+    the synthesis manager already produced the conflict map they actually need."""
     if max_chars_per_report is None:
         try:
             from backend.trading_agents.dataflows.config import get_config
@@ -97,6 +143,12 @@ def build_resources(state, report_fields: dict[str, str], prefix: str = "", max_
     resources = []
     for field, label in report_fields.items():
         content = state.get(field, "")
-        if content and content.strip():
-            resources.append(f"{prefix}{label}:\n{_truncate_report(content, max_chars_per_report)}")
+        if not (content and content.strip()):
+            continue
+        if summary_only:
+            summary = extract_executive_summary(content)
+            rendered = summary if summary is not None else _truncate_report(content, max_chars_per_report)
+        else:
+            rendered = _truncate_report(content, max_chars_per_report)
+        resources.append(f"{prefix}{label}:\n{rendered}")
     return "\n\n".join(resources)
