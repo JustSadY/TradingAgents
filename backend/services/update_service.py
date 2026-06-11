@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
 import platform
 import subprocess
 import threading
 import time
 from pathlib import Path
+
+_logger = logging.getLogger(__name__)
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATUS_FILE = PROJECT_ROOT / ".update.json"
@@ -119,7 +122,7 @@ def get_status(do_fetch: bool = True) -> dict:
         if behind:
             lg = _git("log", "--pretty=format:%h %s", f"HEAD..{upstream}", "-n", "15")
             if lg.returncode == 0:
-                commits = [l for l in lg.stdout.splitlines() if l.strip()]
+                commits = [line for line in lg.stdout.splitlines() if line.strip()]
     status = _read_status() or {}
     return {
         "git": True,
@@ -156,5 +159,19 @@ def request_update() -> dict:
     except Exception as exc:
         detail = getattr(exc, "stderr", "") or str(exc)
         _write_status({"state": "failed", "error": detail})
-        raise RuntimeError(f"Could not start update: {detail}")
+        raise RuntimeError(f"Could not start update: {detail}") from exc
     return {"started": True}
+
+
+def reset_stuck_update() -> None:
+    """Reset the update state to failed if it was left in running state on server startup/restart."""
+    status = _read_status()
+    if status and status.get("state") == "running":
+        _logger.info("Resetting stuck update state to 'failed' (interrupted by server restart).")
+        _write_status(
+            {
+                "state": "failed",
+                "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "error": "Server restarted during update.",
+            }
+        )

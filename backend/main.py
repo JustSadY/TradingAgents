@@ -48,6 +48,9 @@ async def lifespan(app: FastAPI):
 
     # Register all tools during startup
     import backend.trading_agents.agents.tools.bootstrap  # noqa: F401
+    from backend.services.update_service import reset_stuck_update
+
+    reset_stuck_update()
 
     await create_all_tables()
     await _seed_admin_user()
@@ -130,7 +133,7 @@ async def _load_cron_settings(cron):
         from backend.models.settings import AppSettings
 
         async with AsyncSessionLocal() as db:
-            app_res = await db.execute(select(AppSettings).where(AppSettings.cron_enabled == True))
+            app_res = await db.execute(select(AppSettings).where(AppSettings.cron_enabled))
             for app_settings in app_res.scalars():
                 await cron.apply_user_settings(app_settings)
     except Exception as e:
