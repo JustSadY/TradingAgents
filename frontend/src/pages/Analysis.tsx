@@ -336,7 +336,7 @@ function RunTab() {
           wsRef.current.onerror = null
           wsRef.current.onclose = null
           wsRef.current.close()
-        } catch {}
+        } catch { /* ws already closed */ }
       }
     }
   }, [])
@@ -372,7 +372,7 @@ function RunTab() {
     setRunning_(false)
     setLog(l => [...l, t('analysis.ws.stopped')])
     if (tid) {
-      try { await axios.post(`/api/analysis/${tid}/cancel`) } catch {  }
+      try { await axios.post(`/api/analysis/${tid}/cancel`) } catch { /* best-effort cancel */ }
     }
   }
 

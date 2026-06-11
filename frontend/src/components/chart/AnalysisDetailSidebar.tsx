@@ -20,8 +20,8 @@ export const AnalysisDetailSidebar: React.FC<AnalysisDetailSidebarProps> = ({
     if (typeof a.chart_annotations === 'object') return a.chart_annotations
     try {
       return JSON.parse(a.chart_annotations)
-    } catch (e) {
-      return {}
+    } catch {
+      return {}  // annotations stored as a non-JSON string — treat as empty
     }
   }
 

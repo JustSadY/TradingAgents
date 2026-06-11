@@ -112,7 +112,7 @@ export default function Layout() {
           const nextJson = JSON.stringify(val)
           return prevJson === nextJson ? prev : val
         })
-      } catch {  }
+      } catch { /* malformed task json — ignore */ }
     }, 1000)
     return () => { window.removeEventListener('storage', onStorage); clearInterval(id) }
   }, [])

@@ -70,7 +70,7 @@ export function DebateHistoryWidget({ investmentHistory, riskHistory }: { invest
       try {
         const parsed = JSON.parse(historyStr)
         if (Array.isArray(parsed)) return parsed.map((msg: string) => parseDebateMessage(msg))
-      } catch {  }
+      } catch { /* not JSON — fall through */ }
     }
     if (typeof historyStr !== 'string') {
         if (Array.isArray(historyStr)) return historyStr.map((msg: any) => parseDebateMessage(String(msg)))
