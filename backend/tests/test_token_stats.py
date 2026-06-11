@@ -165,7 +165,8 @@ def test_cumulative_response_metadata_and_generation_info_stripped():
     from langchain_core.messages import AIMessageChunk
     from langchain_core.outputs import ChatGenerationChunk
 
-    usage = lambda i, o: {"input_tokens": i, "output_tokens": o, "total_tokens": i + o}
+    def usage(i, o):
+        return {"input_tokens": i, "output_tokens": o, "total_tokens": i + o}
 
     # Simulate chunks where provider embeds cumulative usage in response_metadata and generation_info
     chunks = [

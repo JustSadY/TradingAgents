@@ -1,8 +1,11 @@
-import pytest
 from unittest.mock import AsyncMock, MagicMock, patch
-from backend.services.execution.base import OrderRequest
+
+import pytest
+
 from backend.services.execution.alpaca import AlpacaTrader
+from backend.services.execution.base import OrderRequest
 from backend.services.execution.factory import get_trader
+
 
 @pytest.mark.asyncio
 async def test_alpaca_trader_init_and_url():
@@ -22,17 +25,17 @@ async def test_alpaca_trader_get_credentials():
     db_mock = AsyncMock()
     user_mock = MagicMock()
     user_mock.role = "owner"
-    
+
     # Mock db execution to return a mock owner user
     scalar_mock = MagicMock()
     scalar_mock.scalar_one_or_none.return_value = user_mock
     db_mock.execute.return_value = scalar_mock
 
     trader = AlpacaTrader(db=db_mock)
-    
+
     with patch("backend.services.user_service.get_user_api_key") as mock_get_key, \
          patch("backend.core.config.get_settings") as mock_get_settings:
-        
+
         mock_get_settings.return_value.get_fernet.return_value = "fake_fernet"
         mock_get_key.side_effect = lambda user, provider, fernet: f"decrypted_{provider}"
 
@@ -47,7 +50,7 @@ async def test_alpaca_trader_get_credentials():
 async def test_alpaca_trader_place_order_success(mock_post, mock_get):
     db_mock = AsyncMock()
     trader = AlpacaTrader(db=db_mock, mode="simulation")
-    
+
     # Mock credentials method
     trader._get_credentials = AsyncMock(return_value=("key_123", "sec_456"))
 
@@ -87,7 +90,7 @@ async def test_alpaca_trader_place_order_success(mock_post, mock_get):
     assert res.status == "FILLED"
     assert res.filled_price == 180.50
     assert res.filled_quantity == 10.0
-    
+
     # Verify mock POST call carries bracket fields
     mock_post.assert_called_once()
     args, kwargs = mock_post.call_args

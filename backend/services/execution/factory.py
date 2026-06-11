@@ -1,6 +1,6 @@
+from .alpaca import AlpacaTrader
 from .base import BaseTraderInterface
 from .simulation import SimulationTrader
-from .alpaca import AlpacaTrader
 
 _REGISTRY: dict[str, type[BaseTraderInterface]] = {
     "simulation": SimulationTrader,

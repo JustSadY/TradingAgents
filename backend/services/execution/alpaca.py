@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import UTC, datetime
+
 import httpx
 
 import backend.bootstrap  # noqa: F401
@@ -37,8 +37,9 @@ class AlpacaTrader(BaseTraderInterface):
 
     async def _get_credentials(self) -> tuple[str | None, str | None]:
         from sqlalchemy import select
-        from backend.models.user import User
+
         from backend.core.config import get_settings
+        from backend.models.user import User
         from backend.services.user_service import get_user_api_key
 
         try:

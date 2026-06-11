@@ -96,7 +96,7 @@ async def get_ab_comparison(db: AsyncSession) -> list[dict]:
         last_50 = runs_sorted[:50]
         graded_last_50 = [r for r in last_50 if r.raw_return is not None and r.signal in (_BUY_SIGNALS | _SELL_SIGNALS)]
         wins_last_50 = sum(1 for r in graded_last_50 if _is_correct(r.signal, r.raw_return))
-        
+
         alphas_last_50 = [r.alpha_return for r in last_50 if r.alpha_return is not None]
         raws_last_50 = [r.raw_return for r in last_50 if r.raw_return is not None]
 

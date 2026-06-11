@@ -64,8 +64,9 @@ async def test_upsert_raises_on_non_postgres():
 
 
 async def test_roundtrip_against_postgres():
-    from backend.core.database import engine
     from sqlalchemy import text
+
+    from backend.core.database import engine
 
     if engine.dialect.name != "postgresql":
         pytest.skip("requires a PostgreSQL test database (pgvector)")
