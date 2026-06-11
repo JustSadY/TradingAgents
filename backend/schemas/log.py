@@ -9,6 +9,7 @@ class LogRead(BaseModel):
     source: str
     message: str
     details: str | None
+    user_id: int | None
     created_at: datetime
 
     class Config:

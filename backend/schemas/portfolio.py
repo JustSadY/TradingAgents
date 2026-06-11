@@ -42,7 +42,6 @@ class PortfolioRead(BaseModel):
 class OrderRead(BaseModel):
     id: int
     portfolio_id: int
-    mode: str
     broker: str
     ticker: str
     action: str

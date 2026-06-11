@@ -13,7 +13,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_stock_data,
 )
 
-
 # Single source of truth: the ToolNode (built from the registration) and the LLM
 # binding in the node must use the same list, or the model is bound to tools the
 # ToolNode can run but can't invoke (or vice versa).

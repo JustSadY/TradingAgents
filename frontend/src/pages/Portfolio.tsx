@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
 import { TrendingUp, TrendingDown, DollarSign, Briefcase, Loader2, AlertCircle, RefreshCw, PieChart } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
@@ -30,8 +30,8 @@ export default function Portfolio() {
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
 
-  const fetchPortfolioData = () => {
-    setLoading(true)
+  const fetchPortfolioData = useCallback((quiet = false) => {
+    if (!quiet) setLoading(true)
     setError(false)
     Promise.all([
       axios.get<PortfolioRow[]>('/api/portfolio').then(r => r.data),
@@ -39,11 +39,20 @@ export default function Portfolio() {
     ]).then(([p, h]) => {
       setPortfolios(p)
       setHoldings(h)
-    }).catch(() => setError(true))
-      .finally(() => setLoading(false))
-  }
+    }).catch(() => {
+      if (!quiet) setError(true)
+    }).finally(() => {
+      if (!quiet) setLoading(false)
+    })
+  }, [])
 
-  useEffect(() => { fetchPortfolioData() }, [])
+  useEffect(() => {
+    fetchPortfolioData()
+    const interval = setInterval(() => {
+      fetchPortfolioData(true)
+    }, 15000)
+    return () => clearInterval(interval)
+  }, [fetchPortfolioData])
 
   if (loading && portfolios.length === 0) {
     return (
@@ -65,7 +74,7 @@ export default function Portfolio() {
           <p className="text-xs text-slate-500 leading-relaxed">Ensure backend service is running and retry the connection request</p>
         </div>
         <button
-          onClick={fetchPortfolioData}
+          onClick={() => fetchPortfolioData(false)}
           className="bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition duration-200 cursor-pointer shadow-lg shadow-violet-600/25"
         >
           {t('common.retry') || 'Retry Connection'}
@@ -86,7 +95,7 @@ export default function Portfolio() {
           <p className="text-xs text-slate-500 mt-1">Review active assets allocations, average cost basis, and real-time ledger returns</p>
         </div>
         <button
-          onClick={fetchPortfolioData}
+          onClick={() => fetchPortfolioData(false)}
           disabled={loading}
           className="flex items-center justify-center p-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white transition-all cursor-pointer"
           title="Refresh"
@@ -113,7 +122,7 @@ export default function Portfolio() {
             >
               <div className="flex items-center justify-between">
                 <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest bg-white/[0.03] px-2 py-0.5 rounded-lg border border-white/[0.04]">
-                  {p.mode} / {p.broker}
+                  {p.mode === 'simulation' ? t('orders.filter_simulation') : p.mode === 'live' ? t('orders.filter_live') : p.mode} / {p.broker}
                 </span>
                 <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider border ${
                   p.status === 'active' 

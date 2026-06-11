@@ -159,7 +159,6 @@ async def get_portfolio_with_live_prices(
             db.add(
                 Order(
                     portfolio_id=portfolio.id,
-                    mode=portfolio.mode,
                     broker=portfolio.broker,
                     ticker=h.ticker,
                     action="BUY" if is_short else "SELL",  # covering a short is a BUY
@@ -418,8 +417,7 @@ async def execute_order(
 
     order = Order(
         portfolio_id=portfolio.id,
-        mode="simulation",
-        broker="paper",
+        broker=portfolio.broker,
         ticker=ticker,
         action=action,
         side=pos_side,

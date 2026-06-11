@@ -79,7 +79,11 @@ def tail_history(history: str, limit: int | None = None) -> str:
             limit = 0
     if limit <= 0 or len(history) <= limit:
         return history
-    return "…[earlier debate turns omitted]\n" + history[-limit:]
+    truncated = history[-limit:]
+    first_newline = truncated.find("\n")
+    if first_newline != -1:
+        truncated = truncated[first_newline + 1:]
+    return "…[earlier debate turns omitted]\n" + truncated
 
 
 def middle_truncate(text: str, limit: int) -> str:
@@ -94,10 +98,21 @@ def middle_truncate(text: str, limit: int) -> str:
         return text
     head = max(1, limit // 4)
     tail = max(1, limit - head)
+
+    head_text = text[:head]
+    last_nl_head = head_text.rfind("\n")
+    if last_nl_head != -1:
+        head_text = head_text[:last_nl_head]
+
+    tail_text = text[-tail:]
+    first_nl_tail = tail_text.find("\n")
+    if first_nl_tail != -1:
+        tail_text = tail_text[first_nl_tail + 1:]
+
     return (
-        text[:head].rstrip()
-        + "\n…[middle truncated to conserve tokens]…\n"
-        + text[-tail:].lstrip()
+        head_text.rstrip()
+        + "\n\n…[middle truncated to conserve tokens]…\n\n"
+        + tail_text.lstrip()
     )
 
 
@@ -107,7 +122,11 @@ def _truncate_report(content: str, limit: int) -> str:
     content = content.strip()
     if limit <= 0 or len(content) <= limit:
         return content
-    return content[:limit].rstrip() + "\n…[report truncated to conserve tokens]"
+    truncated = content[:limit]
+    last_nl = truncated.rfind("\n")
+    if last_nl != -1:
+        truncated = truncated[:last_nl]
+    return truncated.rstrip() + "\n…[report truncated to conserve tokens]"
 
 
 def build_resources(

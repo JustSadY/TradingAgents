@@ -42,6 +42,9 @@ from .y_finance import (
     get_cashflow as get_yfinance_cashflow,
 )
 from .y_finance import (
+    get_catalyst_calendar as get_yfinance_catalyst_calendar,
+)
+from .y_finance import (
     get_fundamentals as get_yfinance_fundamentals,
 )
 from .y_finance import (
@@ -49,9 +52,6 @@ from .y_finance import (
 )
 from .y_finance import (
     get_insider_transactions as get_yfinance_insider_transactions,
-)
-from .y_finance import (
-    get_catalyst_calendar as get_yfinance_catalyst_calendar,
 )
 from .y_finance import (
     get_institutional_holdings as get_yfinance_institutional_holdings,

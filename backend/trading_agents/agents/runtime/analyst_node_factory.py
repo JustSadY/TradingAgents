@@ -106,7 +106,7 @@ async def run_tool_analyst(
             thought = f"Reviewing financial statements and valuation for {state['company_of_interest']}..."
         elif analyst == "news":
             thought = f"Scanning latest news and insider activity for {state['company_of_interest']}..."
-        
+
         await emitter.emit_mental_model(analyst, thought)
 
     try:

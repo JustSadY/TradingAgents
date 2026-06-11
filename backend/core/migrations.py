@@ -25,6 +25,7 @@ _ALLOWED_TABLES = {
     "config_presets",
     "price_alerts",
     "system_settings",
+    "system_logs",
 }
 
 # Strict mapping of table names to their permitted column names.
@@ -140,6 +141,14 @@ _ALLOWED_COLUMNS = {
         "stop_loss",
         "take_profit",
     },
+    "system_logs": {
+        "level",
+        "source",
+        "message",
+        "details",
+        "user_id",
+        "created_at",
+    },
 }
 
 # (table, column, column_type) tuples applied additively on startup.
@@ -243,6 +252,7 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("orders", "side", "VARCHAR(5) DEFAULT 'long'"),
     ("orders", "realized_pnl", "NUMERIC(20, 8) DEFAULT 0"),
     ("price_alerts", "alert_type", "VARCHAR(20) DEFAULT 'price'"),
+    ("system_logs", "user_id", "INTEGER REFERENCES users(id)"),
 ]
 
 

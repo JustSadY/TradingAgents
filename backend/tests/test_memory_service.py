@@ -1,7 +1,7 @@
 """Tests for episodic memory record/recall against a fake store."""
 
 from backend.core.memory import MemoryHit, MemoryRecord
-from backend.services.memory_service import record_episode, recall_episode_lessons
+from backend.services.memory_service import recall_episode_lessons, record_episode
 
 
 class FakeStore:

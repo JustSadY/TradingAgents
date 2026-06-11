@@ -37,7 +37,8 @@ frontend/
 │   │   ├── Alerts.tsx      # Target price and signal change notifications manager
 │   │   ├── Performance.tsx # Historical strategy return review charts
 │   │   ├── ABTesting.tsx   # Compare performance of different LLM/agent models
-│   │   ├── Admin.tsx       # System logs browser and user manager (Admin only)
+│   │   ├── Admin.tsx       # User management and RBAC access control panel (Admin only)
+│   │   ├── Logs.tsx        # System logs browser (Admin has full logs; User has scoped logs)
 │   │   └── Settings.tsx    # LLM API keys config, scheduler times, and system updates
 │   ├── utils/              # Helper utilities (date formatters, local storage helper, etc.)
 │   ├── App.tsx             # Route definitions, route guarding, and translation wrapper

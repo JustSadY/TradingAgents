@@ -49,6 +49,8 @@ On startup, `_seed_admin_user()` in `main.py` reads `ADMIN_USERNAME` from `.env`
 | Admin page (`/admin`) | ✓ | ✓ | ✗ | ✗ |
 | User-specific Cron | ✓ | ✓ | ✓ (if permitted) | ✗ |
 | Global System Cron | ✗ | ✗ | ✗ | ✗ (Removed) |
+| System logs (`/api/logs`) | ✓ | ✓ | ✗ | ✗ |
+| My scoped logs (`/api/logs/me`) | ✓ | ✓ | ✓ (if `logs` page permitted) | ✗ |
 
 ## Settings Permission System
 

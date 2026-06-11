@@ -47,7 +47,7 @@ def register_analyst(
 
 
 def sync_registry_to_graph() -> None:
-    from backend.trading_agents.graph.analyst_execution import ANALYST_NODE_SPECS, AnalystNodeSpec
+    from backend.trading_agents.agents.runtime.analyst_execution import ANALYST_NODE_SPECS, AnalystNodeSpec
     from backend.trading_agents.graph.conditional_logic import ConditionalLogic
 
     for reg in _REGISTRY.values():

@@ -144,11 +144,28 @@ journalctl -u tradingagents -f
 cd frontend && npm run lint
 ```
 
-No active backend linting. Follow conventions in `docs/architecture/backend.md`.
+**Backend linting and formatting:**
+Backend code style is enforced using Ruff.
+```bash
+cd backend
+ruff check .        # Lint checks
+ruff check . --fix  # Auto-fix lint issues
+ruff format --check # Format checks
+ruff format         # Format code
+```
 
 ### Testing
 
-No comprehensive test suite. For agent behavior, spin up full stack and run analysis through the UI. Unit test example: `backend/tests/test_tool_settings_service.py`.
+**Running backend tests:**
+Backend unit and integration tests are written in Pytest.
+```bash
+cd backend
+pytest
+```
+- **Test Database:** Integration tests run against an in-memory SQLite database (`sqlite+aiosqlite:///:memory:`).
+- **Mocking Market Data:** Live price feeds are stubbed during tests by monkeypatching the `mock_trading_service` (specifically `get_live_price` and `get_live_prices_batch`). See [backend/tests/test_leverage_trading.py](file:///home/lykia/Desktop/TradingAgents/backend/tests/test_leverage_trading.py) for examples.
+For agent behavior, you can also spin up the full stack and run analyses through the UI.
+
 
 ---
 
@@ -158,11 +175,20 @@ No comprehensive test suite. For agent behavior, spin up full stack and run anal
 
 Strict dependency flow: `api → services → repositories → models`
 
-- **`api/`** — FastAPI routers; validate input, call service, return DTO
+- **`api/`** — FastAPI routers; validate input, call service, return DTO. Keep handlers **thin** (no business logic, DB commits, or external API calls in handlers).
 - **`services/`** — Business logic, orchestration, external IO
 - **`repositories/`** — Data-access helpers; always apply `scope_to_user(user_id)` IDOR prevention
 - **`models/`** — SQLAlchemy async ORM (PostgreSQL + asyncpg)
 - **`core/`** — Config, DB, security, WebSockets, logging, memory, migrations
+
+**Route Ordering Rule:**
+In FastAPI routers, always declare **static paths before dynamic/parameterized paths** (e.g., register static `/history` before variable `/{id}`) to prevent route shadowing and 422 validation errors.
+
+### Exact Decimal Arithmetic (Fixed Precision)
+
+- **Monetary Fields:** Price, quantity, balance, and margin columns are defined as SQLAlchemy `MONEY = Numeric(20, 8, asdecimal=True)`.
+- **Decimal End-to-End:** All calculations inside backend trading and risk services must use Python's `Decimal` type. Do not use float types to avoid accumulative rounding and precision errors.
+
 
 ### API Routes (Key Endpoints)
 
@@ -181,6 +207,8 @@ Strict dependency flow: `api → services → repositories → models`
 | `/api/users/{id}/agent-access` | GET/PUT | Admin | Which analysts user can run |
 | `/api/users/{id}/tool-access` | GET/PUT | Admin | Which tools user can view/use/edit/enable |
 | `/api/users/{id}/permissions` | GET/PUT | Admin | Which pages user can access |
+| `/api/logs` | GET | Admin | List all system logs (level, source, user_id filters) |
+| `/api/logs/me` | GET | Yes | Scoped system logs for the authenticated user |
 | `/ws/analysis/{task_id}` | WS | Token | Stream live LangGraph progress + reports |
 
 ### Tool System (Tier 3)
@@ -300,6 +328,16 @@ Admins can restrict which parts of Settings a user can modify:
 - Fernet encryption (AES-128-CBC + HMAC-SHA256)
 - Encryption key must be in `.env` as `ENCRYPTION_KEY`
 
+### UI Metadata Single Source of Truth
+
+- Frontend configuration templates, dropdown options, language keys, and investor personas must never be hardcoded.
+- The React client fetches these values dynamically via **`GET /api/meta`** and **`GET /api/settings/llm-catalog`**. Color maps for statuses/signals are determined via backend-returned tone values (`positive`, `neutral`, `negative`).
+
+### Logging & Security Redaction
+
+- System logs are captured asynchronously and saved via `DatabaseLogHandler` to the `SystemLog` table in batches of 30 or every 3 seconds.
+- The logger automatically applies a redaction filter (`log_redaction.py`) to prevent leakage of credentials, passwords, or JWT secrets. Never log raw API keys or passwords.
+
 ### WebSocket Real-Time Streaming
 
 Long-running analyses (2–3 min) stream live progress:
@@ -402,15 +440,7 @@ APScheduler runs in-process:
 
 ### Circular Imports
 
-`agents/main/*.py` must NOT import from `graph/` at module level. Lazy import inside functions:
-
-```python
-def create_market_intelligence_node(ctx):
-    async def market_intelligence(state):
-        from backend.trading_agents.graph.analyst_execution import build_analyst_subgraph
-        # ...
-    return market_intelligence
-```
+`agents/main/*.py` must NOT import from `graph/` at module level. Analyst execution structures have been relocated to `agents/runtime/analyst_execution.py` to prevent circular dependency cycles between `agents` and `graph` compilation.
 
 ### Single Uvicorn Worker
 
@@ -425,11 +455,12 @@ Systemd service runs **one** uvicorn process. APScheduler, WebSockets, and in-me
 
 ### IDOR Prevention
 
-Every data query must apply `scope_to_user(user_id)` in repositories. See `repositories/common.py`.
+Every data query must apply `scope_to_user(query, Model, user)` in repositories (or API route helpers) to enforce user boundaries (e.g., scoping `/api/logs/me` or `/api/analysis/history`). See `repositories/common.py`.
 
 ### Bootstrap Order
 
-`backend/bootstrap.py` must import early — sets engine env defaults. Main app does this automatically, but if importing `trading_agents` directly in a script, import bootstrap first.
+- `backend/bootstrap.py` must be imported early — it sets engine temp-dir defaults (`TRADINGAGENTS_LOG_DIR`, etc.) dynamically, preventing writing results/caches to a read-only source tree. Main app does this automatically, but if importing `trading_agents` directly in a custom script, runner, or test, import bootstrap first.
+- **Lazy Imports:** Import heavy AI engine/LangGraph packages lazily inside functions to speed up main application boot time.
 
 ### Memory Is Opt-In & Per-User
 

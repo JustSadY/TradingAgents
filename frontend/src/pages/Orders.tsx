@@ -5,7 +5,6 @@ import { useTranslation } from '../contexts/LanguageContext'
 
 interface Order {
   id: number
-  mode: string
   ticker: string
   action: string
   quantity_requested: number
@@ -33,12 +32,10 @@ export default function Orders() {
   const { t } = useTranslation()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
-  const [mode, setMode] = useState<string>('')
 
   const fetch = () => {
     setLoading(true)
-    const params = mode ? `?mode=${mode}` : ''
-    axios.get(`/api/portfolio/orders${params}`)
+    axios.get('/api/portfolio/orders')
       .then(r => {
         setOrders(r.data)
         setLoading(false)
@@ -46,7 +43,7 @@ export default function Orders() {
       .catch(() => setLoading(false))
   }
 
-  useEffect(() => { fetch() }, [mode])
+  useEffect(() => { fetch() }, [])
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
@@ -61,16 +58,6 @@ export default function Orders() {
         </div>
         
         <div className="flex items-center gap-2 self-end sm:self-auto">
-          <select
-            className="glass-input rounded-xl px-3 py-2 text-xs outline-none cursor-pointer w-40"
-            value={mode}
-            onChange={e => setMode(e.target.value)}
-          >
-            <option value="">{t('orders.filter_all')}</option>
-            <option value="simulation">{t('orders.filter_simulation')}</option>
-            <option value="live">{t('orders.filter_live')}</option>
-          </select>
-          
           <button
             onClick={fetch}
             disabled={loading}
@@ -106,7 +93,6 @@ export default function Orders() {
                   <th className="px-5 py-3.5 text-right font-bold">{t('orders.col_total')}</th>
                   <th className="px-5 py-3.5 text-center font-bold">{t('orders.col_status')}</th>
                   <th className="px-5 py-3.5 text-left font-bold">{t('orders.col_signal')}</th>
-                  <th className="px-5 py-3.5 text-center font-bold">{t('orders.col_mode')}</th>
                   <th className="px-5 py-3.5 text-right font-bold">{t('orders.col_date')}</th>
                 </tr>
               </thead>
@@ -132,11 +118,6 @@ export default function Orders() {
                       </span>
                     </td>
                     <td className="px-5 py-3 text-slate-400 font-medium truncate max-w-xs">{o.ai_signal || '—'}</td>
-                    <td className="px-5 py-3 text-center">
-                      <span className="inline-flex items-center gap-1 text-[9px] font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20 uppercase tracking-wide">
-                        {o.mode}
-                      </span>
-                    </td>
                     <td className="px-5 py-3 text-right text-slate-500 font-mono text-[10px]">
                       {new Date(o.created_at).toLocaleString()}
                     </td>

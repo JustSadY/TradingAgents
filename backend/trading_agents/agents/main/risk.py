@@ -38,7 +38,7 @@ def create_risk_debate_node(ctx: AgentRunContext) -> NodeFn:
     async def risk_debate_node(state) -> dict:
         if not ctx.is_enabled(MAIN_KEY):
             logger.info("[risk_debate] branch disabled — skipping risk debate.")
-            return {"risk_debate_state": neutral_risk_debate_state("Risk debate disabled by configuration.")}
+            return {"risk_debate_state": neutral_risk_debate_state("")}
 
         llm = ctx.llm_for("risk_debate")
         # The three debators are not separately registered in the agent catalog

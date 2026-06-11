@@ -12,7 +12,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_quant_data,
 )
 
-
 # Single source of truth shared by the ToolNode registration and the LLM binding.
 _QUANT_TOOLS = [
     get_quant_data,

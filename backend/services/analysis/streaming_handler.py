@@ -19,8 +19,16 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         self.emitter = emitter
         self._tool_starts: dict[UUID, float] = {}
         self.llm_calls = 0
-        self.tokens_in = 0
-        self.tokens_out = 0
+        self._run_usage: dict[UUID, dict[str, int]] = {}
+        self._seen_runs: set[UUID] = set()
+
+    @property
+    def tokens_in(self) -> int:
+        return sum(u["input"] for u in self._run_usage.values())
+
+    @property
+    def tokens_out(self) -> int:
+        return sum(u["output"] for u in self._run_usage.values())
 
     async def _emit_stats(self) -> None:
         try:
@@ -44,8 +52,10 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        self.llm_calls += 1
-        await self._emit_stats()
+        if run_id not in self._seen_runs:
+            self._seen_runs.add(run_id)
+            self.llm_calls += 1
+            await self._emit_stats()
 
     async def on_llm_start(
         self,
@@ -58,8 +68,10 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        self.llm_calls += 1
-        await self._emit_stats()
+        if run_id not in self._seen_runs:
+            self._seen_runs.add(run_id)
+            self.llm_calls += 1
+            await self._emit_stats()
 
     async def on_llm_end(
         self,
@@ -75,8 +87,7 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
 
         usage = StatsCallbackHandler._extract_usage(response)
         if usage:
-            self.tokens_in += usage["input"]
-            self.tokens_out += usage["output"]
+            self._run_usage[run_id] = usage
             await self._emit_stats()
 
     async def on_llm_new_token(

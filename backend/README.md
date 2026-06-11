@@ -77,6 +77,7 @@ backend/
 ### 1. Asynchronous Database Logging & Redaction
 To aid system diagnostics, all application warnings, info logs, and agent runs are captured and written to the database (`system_logs` table) via [log_handler.py](core/log_handler.py).
 *   **Redaction:** An interception layer automatically sanitizes API keys (e.g., `sk-...`) or passwords before they hit any logging sinks to prevent leakage into the terminal or DB logs.
+*   **Scoping:** Logs can be associated with a specific user account (scoped logs) via the `current_user_id` context variable. Standard users only see logs related to their own actions.
 
 ### 2. WebSocket Stream Multiplexing
 Long-running AI debates can take up to 2-3 minutes. Instead of blocking HTTP connections, the API accepts a request and runs the graph on an asynchronous worker. The React frontend connects via [websocket.py](core/websocket.py) to `/ws/analysis/{task_id}` to watch real-time node outputs, LLM token streams, and process states.
@@ -164,6 +165,8 @@ Ensure you have a PostgreSQL database server running and a database named `tradi
 | `/api/system-settings/tools` | `GET/PUT` | Admin | Manage system-default fallback tool settings. |
 | `/api/users/{id}/agent-access` | `GET/PUT` | Admin | Read / update user permissions for analyst nodes. |
 | `/api/users/{id}/tool-access` | `GET/PUT` | Admin | Read / update user permissions for agent tools. |
+| `/api/logs` | `GET` | Admin | List all system logs (level, source, user_id filters). |
+| `/api/logs/me` | `GET` | Yes | Scoped system logs for the authenticated user. |
 | `/api/meta` | `GET` | No | Returns system metadata, dynamic tool schemas and lists. |
 | `/ws/analysis/{task_id}` | `WS` | Yes² | Stream live LangGraph progress events. |
 | `/health` | `GET` | No | Health check. Returns `{"status": "ok"}`. |

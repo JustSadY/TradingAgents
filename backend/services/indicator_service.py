@@ -1,5 +1,6 @@
 import logging
 import re
+
 import pandas as pd
 
 _logger = logging.getLogger(__name__)
@@ -37,7 +38,7 @@ def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
 
     plus_dm = high.diff()
     minus_dm = low.diff()
-    
+
     # DM calculation logic
     plus_dm = plus_dm.where((plus_dm > 0) & (plus_dm > minus_dm.abs()), 0)
     minus_dm = minus_dm.where((minus_dm > 0) & (minus_dm > plus_dm.abs()), 0)

@@ -59,7 +59,7 @@ def _compute_candles(data) -> list[dict]:
 
     # Ensure we have required columns and skip rows with missing OHLC data
     data = data.dropna(subset=["Open", "High", "Low", "Close"])
-    
+
     if data.empty:
         return []
 

@@ -66,7 +66,15 @@ async def get_ab_comparison(db: AsyncSession) -> list[dict]:
 
     groups: dict[str, list] = {}
     for row in rows:
-        preset = row.preset_name or f"{row.llm_provider or 'unknown'}:{row.llm_model or 'unknown'}"
+        preset = row.preset_name
+        if not preset or preset.lower() in ("unknown", "unknown:unknown", "unknown/unknown"):
+            prov = (row.llm_provider or "Custom").strip()
+            mod = (row.llm_model or "Model").strip()
+            if not prov or prov.lower() in ("unknown", "none"):
+                prov = "Custom"
+            if not mod or mod.lower() in ("unknown", "none"):
+                mod = "Model"
+            preset = f"{prov}:{mod}"
         groups.setdefault(preset, []).append(row)
 
     comparison = []

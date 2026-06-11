@@ -8,7 +8,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_language_instruction,
 )
 
-
 # Single source of truth shared by the ToolNode registration and the LLM binding.
 _REVIEW_TOOLS = [get_past_performance_data]
 

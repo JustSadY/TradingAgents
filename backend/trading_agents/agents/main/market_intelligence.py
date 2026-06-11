@@ -25,6 +25,7 @@ from langgraph.graph import END, START, StateGraph
 from backend.trading_agents.agents.analyst_registry import get_factory, sync_registry_to_graph
 from backend.trading_agents.agents.base import AgentRunContext, NodeFn
 from backend.trading_agents.agents.runtime.agent_states import AgentState
+from backend.trading_agents.agents.runtime.analyst_execution import build_analyst_execution_plan
 from backend.trading_agents.agents.runtime.resilience import guard_node
 from backend.trading_agents.agents.utils.agent_utils import create_msg_delete
 
@@ -68,10 +69,6 @@ def _build_analyst_subgraph(enabled_keys: list[str], ctx: AgentRunContext):
     router and the message-clear node — so the analyst/tool behaviour is
     byte-for-byte the proven path.
     """
-    # Imported lazily: graph/__init__ pulls in graph.setup, which imports this
-    # package — a top-level import here would create an agents.main ↔ graph cycle.
-    from backend.trading_agents.graph.analyst_execution import build_analyst_execution_plan
-
     sync_registry_to_graph()
     plan = build_analyst_execution_plan(
         enabled_keys,
@@ -168,7 +165,7 @@ def create_market_intelligence_node(ctx: AgentRunContext) -> NodeFn:
             "fundamental": ["fundamentals", "earnings", "insider", "ownership"],
             "macro_sentiment": ["macro", "social", "news", "review"]
         }
-        
+
         active_teams = {}
         for team_name, team_keys in TEAMS.items():
             team_enabled = [k for k in enabled if k in team_keys]

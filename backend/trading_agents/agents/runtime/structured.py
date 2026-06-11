@@ -31,7 +31,7 @@ def extract_json_block(text: str) -> str | None:
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
     if match:
         return match.group(1).strip()
-    
+
     # Try finding any markdown code blocks
     match = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
     if match:
@@ -41,7 +41,7 @@ def extract_json_block(text: str) -> str | None:
     match = re.search(r"(\{.*\})", text, re.DOTALL)
     if match:
         return match.group(1).strip()
-        
+
     return None
 
 
@@ -79,7 +79,7 @@ async def self_correct_structured(
         attempt,
         validation_error,
     )
-    
+
     # Convert original prompt to a readable string representation
     if isinstance(original_prompt, list):
         prompt_str = "\n".join(str(m) for m in original_prompt)
@@ -92,7 +92,7 @@ async def self_correct_structured(
         f"to the following JSON Schema:\n{get_json_schema(schema)}\n\n"
         "Return ONLY raw JSON. Do not include markdown code blocks, explanation text, or greeting prefixes/suffixes."
     )
-    
+
     user_content = (
         f"We tried to process the task, but the generated output failed schema validation.\n\n"
         f"--- ORIGINAL TASK/PROMPT ---\n{prompt_str[:1500]}\n"
@@ -144,6 +144,14 @@ async def ainvoke_structured_or_freetext(
                     return result
                 if isinstance(result, dict):
                     return validate_schema(schema, result)
+                # Handle AIMessage or string returned by with_structured_output fallback
+                content = getattr(result, "content", result)
+                if isinstance(content, str):
+                    try:
+                        parsed = json.loads(extract_json_block(content) or content.strip())
+                        return validate_schema(schema, parsed)
+                    except Exception:
+                        pass
             return result
         except Exception as exc:
             logger.warning(
@@ -185,7 +193,7 @@ async def ainvoke_structured_or_freetext(
         )
         if corrected is not None:
             return corrected
-        
+
     # 5. Ultimate fallback if all attempts fail: log error and return raw text
     logger.error(
         "%s: All parsing and self-correction attempts failed. Returning unvalidated free text.",

@@ -44,10 +44,10 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
         if not cached_df.empty:
             return _clean_dataframe(cached_df)
     curr_date_dt = pd.to_datetime(curr_date)
-    today_date = pd.Timestamp.today()
-    start_date = today_date - pd.DateOffset(years=5)
+    start_date = curr_date_dt - pd.DateOffset(years=5)
     start_str = start_date.strftime("%Y-%m-%d")
-    end_str = today_date.strftime("%Y-%m-%d")
+    end_date = curr_date_dt + pd.DateOffset(days=1)
+    end_str = end_date.strftime("%Y-%m-%d")
     data = yf_retry(
         lambda: yf.download(
             symbol,
@@ -58,7 +58,10 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
             auto_adjust=True,
         )
     )
-    data = data.reset_index()
+    if "Date" not in data.columns:
+        if data.index.name != "Date":
+            data.index.name = "Date"
+        data = data.reset_index()
     data = _clean_dataframe(data)
     data = data[data["Date"] <= curr_date_dt]
     payload = data.copy()

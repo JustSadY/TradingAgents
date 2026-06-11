@@ -18,6 +18,11 @@ const dashboard = {
     'dashboard.pnl_timeline_sub': 'Portfolio Net Asset Value (NAV) over the last 30 days',
     'dashboard.asset_allocation': 'Asset Allocation',
     'dashboard.asset_allocation_sub': 'Distribution of cash and open stock positions',
+    'dashboard.scorecard_title': 'AI Analyst Success Scorecard',
+    'dashboard.scorecard_empty': 'No Analyst Predictions Rated Yet',
+    'dashboard.scorecard_empty_sub': 'Run historical analyses to build scorecard metrics',
+    'dashboard.scorecard_predictions': 'predictions',
+    'dashboard.scorecard_accuracy': 'Accuracy',
   },
   tr: {
     'dashboard.title': 'Dashboard',
@@ -38,6 +43,11 @@ const dashboard = {
     'dashboard.pnl_timeline_sub': 'Son 30 gündeki portföy net aktif değeri (NAV)',
     'dashboard.asset_allocation': 'Varlık Dağılımı',
     'dashboard.asset_allocation_sub': 'Nakit ve açık hisse senedi pozisyonlarının dağılımı',
+    'dashboard.scorecard_title': 'Yapısal Analist Başarı Oranları',
+    'dashboard.scorecard_empty': 'Henüz Değerlendirilmiş Analist Tahmini Yok',
+    'dashboard.scorecard_empty_sub': 'Skor kartı metriklerini oluşturmak için geçmiş analizleri çalıştırın',
+    'dashboard.scorecard_predictions': 'tahmin',
+    'dashboard.scorecard_accuracy': 'İsabet',
   },
 }
 

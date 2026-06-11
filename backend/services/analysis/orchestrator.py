@@ -75,9 +75,9 @@ async def run_individual_analysis(
         config = build_analysis_config(settings, user=user, sys_settings=sys_settings)
 
         # 3. Context & Intelligence gathering
-        from backend.services.performance_service import get_analyst_performance_context
         from backend.services.analysis.market_pulse_service import get_market_pulse
         from backend.services.analysis.scenario_service import get_active_scenarios
+        from backend.services.performance_service import get_analyst_performance_context
         from backend.services.signal_backtest_service import get_signal_replay_context
 
         attribution_md = await get_analyst_performance_context(db)
@@ -129,6 +129,8 @@ async def run_individual_analysis(
             "emitter": emitter,
             "custom_indicators": [],
             "visual_annotations": [],
+            "support_levels": [],
+            "resistance_levels": [],
         })
 
         prev_state = {}
@@ -183,19 +185,20 @@ async def run_individual_analysis(
         # Risk Metrics Calculation
         risk_metrics = {}
         try:
-            from backend.services.market_data_service import get_historical_data
-            from backend.services.analysis.risk_metrics_service import get_risk_metrics
-            from backend.core.utils import resolve_benchmark
             from datetime import datetime, timedelta
-            
+
+            from backend.core.utils import resolve_benchmark
+            from backend.services.analysis.risk_metrics_service import get_risk_metrics
+            from backend.services.market_data_service import get_historical_data
+
             # Resolve benchmark
             benchmark_ticker = resolve_benchmark(ticker, config)
-            
+
             # Fetch 1 year of data for risk metrics
             risk_start = (datetime.strptime(trade_date, "%Y-%m-%d") - timedelta(days=365)).strftime("%Y-%m-%d")
             hist_df = await get_historical_data(ticker, risk_start, trade_date)
             bench_df = await get_historical_data(benchmark_ticker, risk_start, trade_date)
-            
+
             if not hist_df.empty:
                 benchmark_prices = bench_df["Close"] if not bench_df.empty else None
                 risk_metrics = get_risk_metrics(hist_df["Close"], benchmark_prices=benchmark_prices)
@@ -252,9 +255,13 @@ async def run_individual_analysis(
             "tokens_in": stats.get("tokens_in", 0),
             "tokens_out": stats.get("tokens_out", 0),
             "duration_seconds": duration,
-            "llm_provider": settings.llm_provider,
-            "llm_model": settings.llm_model,
-            "preset_name": settings.active_preset_name or f"{settings.llm_provider}:{settings.llm_model}",
+            "llm_provider": ta.llm_provider,
+            "llm_model": ta.llm_model,
+            "preset_name": (
+                settings.active_preset_name
+                if (settings.active_preset_name and settings.active_preset_name.lower() not in ("unknown", "unknown:unknown", "unknown/unknown"))
+                else f"{(ta.llm_provider or 'Custom').strip() if ta.llm_provider and ta.llm_provider.lower() not in ('unknown', 'none') else 'Custom'}:{(ta.llm_model or 'Model').strip() if ta.llm_model and ta.llm_model.lower() not in ('unknown', 'none') else 'Model'}"
+            ),
         }
         await finalize_result(db, row.id, **final_payload)
         await emitter.emit({"type": "risk_metrics", "metrics": risk_metrics})
@@ -275,6 +282,8 @@ async def run_individual_analysis(
                 ta.thinking_llm,
                 getattr(ta, "custom_indicators", []),
                 getattr(ta, "visual_annotations", []),
+                getattr(ta, "support_levels", []),
+                getattr(ta, "resistance_levels", []),
                 output_language=settings.output_language,
             ),
             task_id=emitter.task_id,
@@ -306,10 +315,10 @@ async def run_individual_analysis(
     except Exception as exc:
         _logger.error("Analysis failed task=%s user=%s: %s", emitter.task_id, username, exc, exc_info=True)
         await mark_as_failed(db, row.id)
-        
+
         exc_str = str(exc)
         err_msg = exc_str
-        
+
         # Check for model not found / 404 or configuration errors
         if "404" in exc_str or "not_found" in exc_str.lower() or "not found" in exc_str.lower():
             err_msg = f"Model not found or invalid provider configuration (404 Error: {exc_str})"
@@ -319,6 +328,6 @@ async def run_individual_analysis(
             err_msg = f"Invalid request parameters or model settings (400 Error: {exc_str})"
         elif "429" in exc_str or "rate_limit" in exc_str.lower() or "rate limit" in exc_str.lower():
             err_msg = f"Rate limit exceeded (429 Error: {exc_str})"
-            
+
         await emitter.emit_error(err_msg)
         raise

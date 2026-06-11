@@ -59,11 +59,12 @@ async def list_orders(
     offset: int = 0,
 ) -> list[Order]:
     q = select(Order).order_by(desc(Order.created_at)).limit(limit).offset(offset)
-    if user and not getattr(user, "is_admin", False):
+    need_portfolio_join = (user and not getattr(user, "is_admin", False)) or mode
+    if need_portfolio_join:
         q = q.join(Portfolio)
     q = scope_to_user(q, Portfolio, user)
     if mode:
-        q = q.where(Order.mode == mode)
+        q = q.where(Portfolio.mode == mode)
     if ticker:
         q = q.where(Order.ticker == ticker.upper())
     result = await db.execute(q)

@@ -633,7 +633,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           )}
 
           {activeTab === 'tools' && (
-            <ToolSettingsPanel ref={toolPanelRef} userId={userId} />
+            <ToolSettingsPanel ref={toolPanelRef} userId={userId} hideSaveButton={true} />
           )}
 
           {activeTab === 'agents' && (

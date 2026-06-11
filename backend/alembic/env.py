@@ -12,17 +12,18 @@ import pathlib
 import sys
 from logging.config import fileConfig
 
-from alembic import context
 from sqlalchemy import pool
 from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
+from alembic import context
+
 # Make ``import backend...`` work no matter the current working directory.
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[2]))
 
+import backend.models  # noqa: E402,F401  (importing registers every table on Base.metadata)
 from backend.core.config import get_settings  # noqa: E402
 from backend.core.database import Base  # noqa: E402
-import backend.models  # noqa: E402,F401  (importing registers every table on Base.metadata)
 
 config = context.config
 

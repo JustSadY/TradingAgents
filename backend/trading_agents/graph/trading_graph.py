@@ -5,7 +5,6 @@ from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
 
-
 logger = logging.getLogger(__name__)
 from langgraph.prebuilt import ToolNode
 
@@ -81,6 +80,8 @@ class TradingAgentsGraph:
 
         main_prov = pm_settings.get("llm_provider") or self.config.get("llm_provider") or "openai"
         main_model = pm_settings.get("llm_model") or self.config.get("llm_model") or "gpt-4o-mini"
+        self.llm_provider = main_prov
+        self.llm_model = main_model
 
         main_kwargs = self._get_provider_kwargs(main_prov)
         if self.callbacks:
@@ -252,8 +253,16 @@ class TradingAgentsGraph:
         self.ticker = company_name
         self.custom_indicators = []
         self.visual_annotations = []
+        self.support_levels = []
+        self.resistance_levels = []
         token = active_run_context.set(
-            {"graph": self, "custom_indicators": self.custom_indicators, "visual_annotations": self.visual_annotations}
+            {
+                "graph": self,
+                "custom_indicators": self.custom_indicators,
+                "visual_annotations": self.visual_annotations,
+                "support_levels": self.support_levels,
+                "resistance_levels": self.resistance_levels,
+            }
         )
         self._checkpointer_ctx = get_checkpointer(self.config["data_cache_dir"], company_name)
         saver = self._checkpointer_ctx.__enter__()
@@ -280,7 +289,7 @@ class TradingAgentsGraph:
         args = self.propagator.get_graph_args()
         tid = thread_id(company_name, str(trade_date))
         args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = tid
-        
+
         step = checkpoint_step(self.config["data_cache_dir"], company_name, str(trade_date))
         state_input = None if step is not None else init_agent_state
 
@@ -299,10 +308,10 @@ class TradingAgentsGraph:
             final_state = self.graph.invoke(state_input, **args)
         self.curr_state = final_state
         self._log_state(trade_date, final_state)
-        
+
         if not self.config.get("keep_checkpoints", True):
             clear_checkpoint(self.config["data_cache_dir"], company_name, str(trade_date))
-            
+
         return final_state, self.process_signal(final_state["final_trade_decision"])
 
     def _log_state(self, trade_date, final_state):
@@ -357,8 +366,16 @@ class TradingAgentsGraph:
         self.ticker = company_name
         self.custom_indicators = []
         self.visual_annotations = []
+        self.support_levels = []
+        self.resistance_levels = []
         token = active_run_context.set(
-            {"graph": self, "custom_indicators": self.custom_indicators, "visual_annotations": self.visual_annotations}
+            {
+                "graph": self,
+                "custom_indicators": self.custom_indicators,
+                "visual_annotations": self.visual_annotations,
+                "support_levels": self.support_levels,
+                "resistance_levels": self.resistance_levels,
+            }
         )
 
         try:
@@ -419,10 +436,10 @@ class TradingAgentsGraph:
                 final_state = await self.graph.ainvoke(state_input, **args)
         self.curr_state = final_state
         await asyncio.to_thread(self._log_state, trade_date, final_state)
-        
+
         if not self.config.get("keep_checkpoints", True):
             clear_checkpoint(self.config["data_cache_dir"], company_name, str(trade_date))
-            
+
         return final_state, self.process_signal(final_state["final_trade_decision"])
 
     def process_signal(self, full_signal):

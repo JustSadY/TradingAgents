@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import axios from 'axios'
 import { RefreshCw, Terminal, Clock, ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
+import { useAuth } from '../contexts/AuthContext'
 
 interface Log {
   id: number
@@ -9,6 +10,7 @@ interface Log {
   source: string
   message: string
   details: string | null
+  user_id: number | null
   created_at: string
 }
 
@@ -148,9 +150,11 @@ function renderLogMessage(l: Log) {
 
 export default function Logs() {
   const { t } = useTranslation()
+  const { isAdmin } = useAuth()
   const [logs, setLogs] = useState<Log[]>([])
   const [level, setLevel] = useState('')
   const [source, setSource] = useState('')
+  const [userIdFilter, setUserIdFilter] = useState('')
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<number | null>(null)
 
@@ -159,8 +163,11 @@ export default function Logs() {
     const queryParts: string[] = []
     if (level) queryParts.push(`level=${level}`)
     if (source) queryParts.push(`source=${source}`)
+    if (isAdmin && userIdFilter) queryParts.push(`user_id=${userIdFilter}`)
     const params = queryParts.length > 0 ? `?${queryParts.join('&')}` : ''
-    axios.get(`/api/logs${params}`)
+    
+    const endpoint = isAdmin ? '/api/logs' : '/api/logs/me'
+    axios.get(`${endpoint}${params}`)
       .then(r => {
         setLogs(r.data)
         setLoading(false)
@@ -170,7 +177,7 @@ export default function Logs() {
       })
   }
 
-  useEffect(() => { fetch() }, [level, source])
+  useEffect(() => { fetch() }, [level, source, userIdFilter])
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
@@ -184,7 +191,16 @@ export default function Logs() {
           <p className="text-xs text-slate-500 mt-1">Audit active process outputs, exception callstacks, and database migrations events</p>
         </div>
         
-        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end">
+        <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end flex-wrap sm:flex-nowrap">
+          {isAdmin && (
+            <input
+              type="number"
+              placeholder="User ID"
+              className="glass-input rounded-xl px-3 py-2 text-xs outline-none w-20 sm:w-24 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+              value={userIdFilter}
+              onChange={e => setUserIdFilter(e.target.value)}
+            />
+          )}
           <select
             className="glass-input rounded-xl px-3 py-2 text-xs outline-none cursor-pointer w-full sm:w-44"
             value={source}
@@ -242,13 +258,18 @@ export default function Logs() {
                 <div className="flex flex-col gap-3 md:flex-row md:items-center p-4">
                   {/* Status Badges & Time */}
                   <div className="flex items-center justify-between md:justify-start gap-3 shrink-0">
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 flex-wrap">
                       <span className={`text-[9px] font-bold px-2 py-0.5 rounded uppercase tracking-wider ${LEVEL_BADGES[l.level] || 'text-slate-400'}`}>
                         {l.level}
                       </span>
                       <span className="text-violet-400 text-[10px] font-mono font-semibold bg-violet-500/10 px-2 py-0.5 rounded border border-violet-500/15">
                         {l.source}
                       </span>
+                      {l.user_id !== null && l.user_id !== undefined && (
+                        <span className="text-emerald-400 text-[10px] font-mono font-semibold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/15">
+                          User #{l.user_id}
+                        </span>
+                      )}
                     </div>
                     
                     <span className="text-slate-500 text-[10px] font-mono md:hidden flex items-center gap-1">

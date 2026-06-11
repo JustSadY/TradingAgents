@@ -14,8 +14,7 @@ Implementation: [`backend/trading_agents/agents/runtime/resilience.py`](../../ba
 
 All agent/tool execution events are emitted on the **`tradingagents.run`** Python
 logger as structured `run_event` records. Because the backend's DB log handler
-captures standard logging, these show up under `/api/logs` and can be filtered by
-the logger name to get a per-run, per-agent, per-tool trace.
+captures standard logging, these show up under `/api/logs` (for admins) or `/api/logs/me` (for authenticated users) and can be filtered by the logger name to get a per-run, per-agent, per-tool trace.
 
 Events: `node_start`, `node_end` (with `ms` duration), `retry` (with attempt /
 delay / error), `node_error` (with truncated traceback), `node_skipped`,

@@ -1,32 +1,56 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
 import { Plus, Trash2, RefreshCw, Star, TrendingUp } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 
 export default function Watchlist() {
   const [tickers, setTickers] = useState<string[]>([])
+  const [prices, setPrices] = useState<Record<string, { price: number; change_percent: number }>>({})
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(true)
   const { t } = useTranslation()
 
-  const fetch = () => {
-    setLoading(true)
-    axios.get('/api/watchlist')
-      .then(r => {
-        setTickers(r.data)
-        setLoading(false)
-      })
-      .catch(() => setLoading(false))
-  }
+  const fetchPrices = useCallback(async (tickersList: string[]) => {
+    if (tickersList.length === 0) {
+      setPrices({})
+      return
+    }
+    try {
+      const { data } = await axios.get<Record<string, { price: number; change_percent: number }>>('/api/watchlist/prices')
+      setPrices(data || {})
+    } catch (e) {
+      console.error('Failed to fetch watchlist prices:', e)
+    }
+  }, [])
 
-  useEffect(() => { fetch() }, [])
+  const fetchWatchlist = useCallback(async (quiet = false) => {
+    if (!quiet) setLoading(true)
+    try {
+      const { data } = await axios.get<string[]>('/api/watchlist')
+      setTickers(data || [])
+      await fetchPrices(data || [])
+    } catch (e) {
+      console.error('Failed to fetch watchlist:', e)
+    } finally {
+      if (!quiet) setLoading(false)
+    }
+  }, [fetchPrices])
+
+  useEffect(() => {
+    fetchWatchlist()
+    const interval = setInterval(() => {
+      fetchWatchlist(true)
+    }, 15000)
+    return () => clearInterval(interval)
+  }, [fetchWatchlist])
 
   const add = async () => {
     if (!input.trim()) return
     try {
-      const res = await axios.post(`/api/watchlist/${input.trim().toUpperCase()}`)
+      const res = await axios.post<string[]>(`/api/watchlist/${input.trim().toUpperCase()}`)
       setTickers(res.data)
       setInput('')
+      await fetchPrices(res.data)
     } catch (e) {
       console.error(e)
     }
@@ -34,8 +58,13 @@ export default function Watchlist() {
 
   const remove = async (tickerVal: string) => {
     try {
-      const res = await axios.delete(`/api/watchlist/${tickerVal}`)
+      const res = await axios.delete<string[]>(`/api/watchlist/${tickerVal}`)
       setTickers(res.data)
+      setPrices(prev => {
+        const next = { ...prev }
+        delete next[tickerVal]
+        return next
+      })
     } catch (e) {
       console.error(e)
     }
@@ -53,7 +82,7 @@ export default function Watchlist() {
           <p className="text-xs text-slate-500 mt-1">Track and monitor your favorite assets and prompt live analyses</p>
         </div>
         <button
-          onClick={fetch}
+          onClick={() => fetchWatchlist(false)}
           disabled={loading}
           className="flex items-center justify-center p-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white transition-all cursor-pointer"
           title="Refresh"
@@ -110,13 +139,29 @@ export default function Watchlist() {
                   <span className="text-[9px] text-slate-500 font-semibold uppercase tracking-wider block mt-0.5">Asset Tracker</span>
                 </div>
               </div>
-              <button
-                onClick={() => remove(item)}
-                className="text-slate-500 hover:text-rose-400 transition-colors p-2 hover:bg-white/5 rounded-lg shrink-0 cursor-pointer"
-                title="Remove"
-              >
-                <Trash2 size={14} />
-              </button>
+              <div className="flex items-center gap-2">
+                {prices[item] ? (
+                  <div className="text-right font-mono pr-2">
+                    <span className="text-xs font-bold text-white block">
+                      ${prices[item].price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                    </span>
+                    <span className={`text-[10px] font-bold ${prices[item].change_percent >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                      {prices[item].change_percent >= 0 ? '+' : ''}{prices[item].change_percent.toFixed(2)}%
+                    </span>
+                  </div>
+                ) : (
+                  <div className="text-right font-mono pr-2 text-slate-600 text-xs">
+                    --
+                  </div>
+                )}
+                <button
+                  onClick={() => remove(item)}
+                  className="text-slate-500 hover:text-rose-400 transition-colors p-2 hover:bg-white/5 rounded-lg shrink-0 cursor-pointer"
+                  title="Remove"
+                >
+                  <Trash2 size={14} />
+                </button>
+              </div>
             </div>
           ))}
         </div>

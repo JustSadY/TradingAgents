@@ -125,7 +125,10 @@ async def run_analysis_task(
     task_id: str,
     user=None,
 ) -> None:
-    """Background entrypoint for a single manual analysis run."""
+    """Background entrypoint for a manual analysis run."""
+    if user:
+        from backend.core.log_handler import current_user_id
+        current_user_id.set(user.id)
     async with AsyncSessionLocal() as db:
         try:
             _, row = await run_analysis(
@@ -159,6 +162,9 @@ async def run_portfolio_task(
     task_id: str | None = None,
 ) -> None:
     """Background entrypoint for a multi-ticker portfolio analysis run."""
+    if user:
+        from backend.core.log_handler import current_user_id
+        current_user_id.set(user.id)
     async with AsyncSessionLocal() as db:
         try:
             await run_portfolio_analysis(
@@ -197,14 +203,14 @@ async def rollback_and_resume_analysis(
     db: AsyncSession,
 ) -> None:
     """Rollback analysis to a specific checkpoint, update the state, and resume execution in the background."""
-    from backend.repositories.analysis import get_analysis_by_id
+    import time
+
+    from backend.core.database import AsyncSessionLocal
+    from backend.repositories.analysis import get_analysis_by_id, get_system_settings
+    from backend.services.analysis.config_builder import build_analysis_config, prepare_graph_config
     from backend.services.settings_service import get_or_create_settings
     from backend.trading_agents.graph.checkpointer import get_async_checkpointer, thread_id
     from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
-    from backend.services.analysis.config_builder import build_analysis_config, prepare_graph_config
-    from backend.repositories.analysis import get_system_settings
-    from backend.core.database import AsyncSessionLocal
-    import time
 
     # 1. Fetch analysis and verify access
     analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
@@ -222,7 +228,7 @@ async def rollback_and_resume_analysis(
     tid = thread_id(analysis.ticker, analysis.trade_date)
     node_name = "START"
     config_param = {"configurable": {"thread_id": tid}}
-    
+
     async with get_async_checkpointer(config["data_cache_dir"], analysis.ticker) as saver:
         async for cp in saver.alist(config_param):
             if cp.config["configurable"]["checkpoint_id"] == checkpoint_id:
@@ -246,13 +252,16 @@ async def rollback_and_resume_analysis(
 
     # 6. Register task owner and spawn background task to resume graph execution
     register_task_owner(task_id, current_user.id if current_user else None)
-    
+
     async def run_resume():
+        if current_user:
+            from backend.core.log_handler import current_user_id
+            current_user_id.set(current_user.id)
         async with AsyncSessionLocal() as session:
             try:
                 from backend.services.analysis.emitter import AnalysisEmitter
                 from backend.services.analysis.orchestrator import run_individual_analysis
-                
+
                 emitter = AnalysisEmitter(task_id)
                 current_task = asyncio.current_task()
                 if current_task:
@@ -265,7 +274,7 @@ async def rollback_and_resume_analysis(
                         "started_at": time.time(),
                         "status": "running",
                     }
-                
+
                 try:
                     await run_individual_analysis(
                         analysis.ticker,

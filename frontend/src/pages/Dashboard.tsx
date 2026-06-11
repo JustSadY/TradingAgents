@@ -25,6 +25,7 @@ export default function Dashboard() {
   const { news } = useNewsFeed(watchlistSlice)
   
   const [recentAnalysis, setRecentAnalysis] = useState<any[]>([])
+  const [attribution, setAttribution] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -32,9 +33,11 @@ export default function Dashboard() {
     Promise.all([
       api.get('/api/analysis/history?limit=8').then(r => r.data).catch(() => []),
       api.get('/api/settings').then(r => r.data.watchlist || []).catch(() => []),
-    ]).then(([a, w]) => {
+      api.get('/api/analysis/performance-attribution').then(r => r.data).catch(() => ({ attribution: [] })),
+    ]).then(([a, w, attr]) => {
       setRecentAnalysis(Array.isArray(a) ? a : [])
       setWatchlist(w)
+      setAttribution(attr.attribution || [])
     })
       .catch(() => {})
       .finally(() => setLoading(false))
@@ -93,11 +96,34 @@ export default function Dashboard() {
           </div>
         </div>
 
-        <div className="glass-panel rounded-2xl p-6 border-white/[0.04] bg-slate-900/20 flex flex-col justify-center items-center opacity-40">
-             <Activity size={48} className="text-slate-600 mb-4" />
-             <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 text-center">
-                 Advanced Risk Analytics Coming Soon
-             </p>
+        <div className="glass-panel rounded-2xl p-6 border-white/[0.04] bg-slate-900/20">
+          <h3 className="text-xs font-bold text-white uppercase tracking-widest mb-6">{t('dashboard.scorecard_title')}</h3>
+          {attribution.length > 0 ? (
+            <div className="space-y-4 overflow-y-auto max-h-64 pr-1">
+              {attribution.map(item => (
+                <div key={item.key} className="flex items-center justify-between p-3 rounded-xl bg-slate-950/40 border border-white/[0.02] hover:border-white/[0.06] transition-all">
+                  <div className="min-w-0">
+                    <p className="text-xs font-bold text-white truncate">{item.label}</p>
+                    <p className="text-[10px] text-slate-500 font-mono mt-0.5">{item.total_predictions} {t('dashboard.scorecard_predictions')}</p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-xs font-mono font-bold text-emerald-400">{item.win_rate}% {t('dashboard.scorecard_accuracy')}</span>
+                    <div className="w-16 bg-slate-800 rounded-full h-1 overflow-hidden shrink-0">
+                      <div className="bg-emerald-500 h-full rounded-full" style={{ width: `${item.win_rate}%` }} />
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="h-64 flex flex-col justify-center items-center opacity-40">
+                 <Activity size={32} className="text-slate-600 mb-3" />
+                 <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500 text-center">
+                     {t('dashboard.scorecard_empty')}
+                 </p>
+                 <p className="text-[9px] text-slate-600 text-center mt-1">{t('dashboard.scorecard_empty_sub')}</p>
+            </div>
+          )}
         </div>
       </div>
     </div>
