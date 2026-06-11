@@ -48,6 +48,9 @@ def get_stock_stats_indicators_window(
     if data.empty:
         return f"No data found for {symbol}"
 
+    if "Date" in data.columns:
+        data = data.set_index("Date")
+
     # Calculate requested indicator using central service
     series = data["Close"]
     res_series = None

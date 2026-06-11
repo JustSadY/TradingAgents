@@ -194,12 +194,23 @@ async def calculate_returns(
             stock = yf.Ticker(ticker).history(start=start_date, end=end_str)
             bench = yf.Ticker(benchmark).history(start=start_date, end=end_str)
 
-            if len(stock) < 2 or len(bench) < 2:
+            if stock.empty or bench.empty:
                 return None, None, None
 
-            actual = min(holding_days, len(stock) - 1, len(bench) - 1)
-            raw = float((stock["Close"].iloc[actual] - stock["Close"].iloc[0]) / stock["Close"].iloc[0])
-            bench_r = float((bench["Close"].iloc[actual] - bench["Close"].iloc[0]) / bench["Close"].iloc[0])
+            # Drop NaNs to prevent returning NaN if last/current day has NaN values
+            stock_close = stock["Close"].dropna()
+            bench_close = bench["Close"].dropna()
+
+            if len(stock_close) < 2 or len(bench_close) < 2:
+                return None, None, None
+
+            actual = min(holding_days, len(stock_close) - 1, len(bench_close) - 1)
+            raw = float((stock_close.iloc[actual] - stock_close.iloc[0]) / stock_close.iloc[0])
+            bench_r = float((bench_close.iloc[actual] - bench_close.iloc[0]) / bench_close.iloc[0])
+
+            import math
+            if math.isnan(raw) or math.isnan(bench_r):
+                return None, None, None
 
             return round(raw, 4), round(raw - bench_r, 4), actual
         except Exception as e:
@@ -215,10 +226,63 @@ async def get_benchmark_return(benchmark: str = "SPY", period: str = "1y") -> fl
     def _fetch():
         try:
             spy = yf.Ticker(benchmark).history(period=period)
-            if len(spy) >= 2:
-                return float((spy["Close"].iloc[-1] - spy["Close"].iloc[0]) / spy["Close"].iloc[0] * 100)
+            if not spy.empty:
+                # Drop NaNs to prevent returning NaN if last/current day has NaN values
+                close_series = spy["Close"].dropna()
+                if len(close_series) >= 2:
+                    ret = float((close_series.iloc[-1] - close_series.iloc[0]) / close_series.iloc[0] * 100)
+                    import math
+                    if not math.isnan(ret):
+                        return ret
             return None
         except Exception:
             return None
 
     return await asyncio.to_thread(_fetch)
+
+
+async def get_live_prices_details_batch(tickers: list[str]) -> dict[str, dict[str, float]]:
+    """Fetch live prices and daily change percentage for multiple tickers in a single batch call."""
+    if not tickers:
+        return {}
+
+    unique = list(dict.fromkeys([t.upper() for t in tickers]))
+    details: dict[str, dict[str, float]] = {}
+
+    symbols_str = ",".join(unique)
+    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    url = f"https://query2.finance.yahoo.com/v7/finance/quote?symbols={symbols_str}"
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get(url, headers=headers, timeout=8.0)
+            if resp.status_code == 200:
+                data = resp.json()
+                results = data.get("quoteResponse", {}).get("result", [])
+                for item in results:
+                    symbol = item.get("symbol", "").upper()
+                    price = (
+                        item.get("regularMarketPrice")
+                        or item.get("preMarketPrice")
+                        or item.get("postMarketPrice")
+                    )
+                    change_percent = item.get("regularMarketChangePercent", 0.0)
+                    if price is not None and symbol in unique:
+                        details[symbol] = {
+                            "price": float(price),
+                            "change_percent": float(change_percent),
+                        }
+    except Exception as exc:
+        _logger.debug("Direct batch details query failed for %s: %s", unique, exc)
+
+    # Fallback to standard price batch helper for any missing tickers
+    missing = [symbol for symbol in unique if symbol not in details]
+    if missing:
+        fallback_prices = await get_live_prices_batch(missing)
+        for symbol, price in fallback_prices.items():
+            details[symbol] = {
+                "price": price,
+                "change_percent": 0.0,
+            }
+
+    return details

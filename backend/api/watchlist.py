@@ -5,6 +5,7 @@ from backend.api.deps import get_current_user
 from backend.core.database import get_db
 from backend.core.utils import safe_ticker_component
 from backend.models.user import User
+from backend.services.market_data_service import get_live_prices_details_batch
 from backend.services.settings_service import (
     add_ticker_to_watchlist,
     get_or_create_settings,
@@ -23,6 +24,17 @@ async def get_watchlist(
     return settings.watchlist
 
 
+@router.get("/prices", response_model=dict[str, dict[str, float]])
+async def get_watchlist_prices(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    settings = await get_or_create_settings(db, current_user)
+    if not settings.watchlist:
+        return {}
+    return await get_live_prices_details_batch(settings.watchlist)
+
+
 @router.post("/{ticker}", response_model=list[str])
 async def add_to_watchlist(
     ticker: str,
@@ -32,7 +44,7 @@ async def add_to_watchlist(
     try:
         safe_ticker_component(ticker)
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
 
     return await add_ticker_to_watchlist(db, current_user, ticker.upper())
 
