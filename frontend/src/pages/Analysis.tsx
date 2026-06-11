@@ -260,11 +260,19 @@ function RunTab() {
         }
       } else if (ev.type === 'error') {
         finished = true
-        setRunStatus('error')
-        setRunning_(false)
-        setCurrentStep(null)
-        appendLog(`Error: ${ev.message}`)
-        notify('error', ev.message ?? t('analysis.ws.analysis_failed'), t('analysis.ws.analysis_error_title'))
+        if (ev.message === "Analysis cancelled.") {
+          setRunStatus('idle')
+          setRunning_(false)
+          setCurrentStep(null)
+          setMentalModel(null)
+          appendLog(t('analysis.ws.stopped'))
+        } else {
+          setRunStatus('error')
+          setRunning_(false)
+          setCurrentStep(null)
+          appendLog(`Error: ${ev.message}`)
+          notify('error', ev.message ?? t('analysis.ws.analysis_failed'), t('analysis.ws.analysis_error_title'))
+        }
       }
     }
     ws.onerror = () => {
@@ -364,8 +372,13 @@ function RunTab() {
 
   const handleStop = async () => {
     const tid = taskIdRef.current
-    wsRef.current?.close()
-    wsRef.current = null
+    if (wsRef.current) {
+      wsRef.current.onmessage = null
+      wsRef.current.onerror = null
+      wsRef.current.onclose = null
+      wsRef.current.close()
+      wsRef.current = null
+    }
     setRunStatus('idle')
     setRunning_(false)
     setLog(l => [...l, t('analysis.ws.stopped')])
