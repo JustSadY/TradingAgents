@@ -31,6 +31,9 @@ class AnalysisResultRead(BaseModel):
     options_report: str
     quant_report: str
     earnings_report: str
+    insider_report: str = ""
+    ownership_report: str = ""
+    catalyst_report: str = ""
     review_report: str
     agent_qa_report: str = ""
     investment_plan: str

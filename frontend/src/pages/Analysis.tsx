@@ -41,6 +41,7 @@ interface AnalysisDetail {
   market_report: string; sentiment_report: string; news_report: string
   fundamentals_report: string; macro_report: string; options_report: string
   quant_report: string; earnings_report: string; review_report: string
+  insider_report?: string; ownership_report?: string; catalyst_report?: string
   agent_qa_report: string
   investment_plan: string; trader_plan: string; final_decision: string
   bull_history: string; bear_history: string; investment_debate_history: string
@@ -499,7 +500,7 @@ function RunTab() {
         <MentalModelTicker agent={mentalModel.agent} thought={mentalModel.thought} />
       )}
 
-      {(log.length > 0 || reportEntries.length > 0) && (
+      {(log.length > 0 || reportEntries.length > 0 || !!detail) && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <AnalysisLog leftTab={leftTab} setLeftTab={setLeftTab} log={log} liveDebate={liveDebate} currentStep={currentStep} stats={stats} t={t} />
 
@@ -517,8 +518,28 @@ function RunTab() {
                     <div className="space-y-2">
                       {detail.risk_metrics && <RiskMetricsCard metrics={detail.risk_metrics} />}
                       <KellyPositioningFromJson json={detail.trader_proposal_json} />
-                      {reportEntries.map(([section, content]) => (
-                        <ReportCard key={section} label={sectionLabels[section] || section} content={content} defaultOpen={section === activeSection} />
+                      {([
+                        ['market_report', detail.market_report],
+                        ['sentiment_report', detail.sentiment_report],
+                        ['news_report', detail.news_report],
+                        ['fundamentals_report', detail.fundamentals_report],
+                        ['macro_report', detail.macro_report],
+                        ['options_report', detail.options_report],
+                        ['quant_report', detail.quant_report],
+                        ['earnings_report', detail.earnings_report],
+                        ['insider_report', detail.insider_report],
+                        ['ownership_report', detail.ownership_report],
+                        ['catalyst_report', detail.catalyst_report],
+                        ['review_report', detail.review_report],
+                        ['agent_qa_report', detail.agent_qa_report],
+                        ['investment_plan', detail.investment_plan],
+                        ['trader_plan', detail.trader_plan],
+                        ['final_decision', detail.final_decision],
+                        ['bull_history', detail.bull_history],
+                        ['bear_history', detail.bear_history],
+                        ['judge_decision', detail.judge_decision],
+                      ] as [string, string | undefined][]).map(([k, v]) => (
+                        <ReportCard key={k} label={sectionLabels[k] || k} content={v || ''} />
                       ))}
                     </div>
                   )}
@@ -545,7 +566,13 @@ function RunTab() {
                   )}
                   
                   {reportEntries.map(([section, content]) => (
-                    <ReportCard key={section} label={sectionLabels[section] || section} content={content} defaultOpen={section === activeSection} />
+                    <ReportCard
+                      key={section}
+                      label={sectionLabels[section] || section}
+                      content={content}
+                      defaultOpen={section === activeSection}
+                      isStreaming={running && section === activeSection}
+                    />
                   ))}
                 </div>
               </>
