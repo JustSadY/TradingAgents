@@ -61,7 +61,10 @@ class OpenAIClient(BaseLLMClient):
 
     def get_llm(self) -> Any:
         self.warn_if_unknown_model()
-        llm_kwargs = {"model": self.model, "streaming": True}
+        # stream_usage makes OpenAI include token usage in streamed responses;
+        # without it every streaming call reports no usage and the per-analysis
+        # token counters silently stay at zero.
+        llm_kwargs = {"model": self.model, "streaming": True, "stream_usage": True}
 
         # Determine base URL
         resolved_base_url = self.base_url or _PROVIDER_BASE_URL.get(self.provider)

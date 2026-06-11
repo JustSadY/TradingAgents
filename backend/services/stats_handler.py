@@ -60,6 +60,14 @@ class StatsCallbackHandler(BaseCallbackHandler):
             or usage.get("prompt_token_count")
             or usage.get("input_token_count")
         )
+        # Anthropic's RAW usage dict reports cached prompt tokens separately:
+        # its input_tokens covers only the uncached remainder, so with prompt
+        # caching enabled the counters under-report massively unless the cache
+        # buckets are added back. (LangChain's normalized usage_metadata already
+        # includes them in input_tokens under different detail keys, so these
+        # raw key names never double-count.)
+        input_tokens += cls._to_int(usage.get("cache_read_input_tokens"))
+        input_tokens += cls._to_int(usage.get("cache_creation_input_tokens"))
         output_tokens = cls._to_int(
             usage.get("completion_tokens")
             or usage.get("output_tokens")
@@ -72,14 +80,11 @@ class StatsCallbackHandler(BaseCallbackHandler):
 
     @classmethod
     def _extract_usage(cls, response: Any) -> dict[str, int] | None:
-        llm_output = getattr(response, "llm_output", None)
-        usage = cls._parse_usage_dict((llm_output or {}).get("token_usage") if isinstance(llm_output, dict) else None)
-        if usage is not None:
-            return usage
-        usage = cls._parse_usage_dict((llm_output or {}).get("usage") if isinstance(llm_output, dict) else None)
-        if usage is not None:
-            return usage
-
+        # Prefer the standardized usage_metadata (on the result or its
+        # messages): LangChain normalizes provider quirks there — e.g. Anthropic
+        # cache reads/creations are already folded into input_tokens. The raw
+        # llm_output dict is checked LAST because for some providers it
+        # under-reports (Anthropic raw input_tokens excludes cached tokens).
         direct_usage = cls._parse_usage_dict(getattr(response, "usage_metadata", None))
         if direct_usage is not None:
             return direct_usage
@@ -101,6 +106,14 @@ class StatsCallbackHandler(BaseCallbackHandler):
                 )
                 if usage is not None:
                     return usage
+
+        llm_output = getattr(response, "llm_output", None)
+        usage = cls._parse_usage_dict((llm_output or {}).get("token_usage") if isinstance(llm_output, dict) else None)
+        if usage is not None:
+            return usage
+        usage = cls._parse_usage_dict((llm_output or {}).get("usage") if isinstance(llm_output, dict) else None)
+        if usage is not None:
+            return usage
 
         return None
 
