@@ -65,12 +65,19 @@ async def test_upsert_raises_on_non_postgres():
 
 async def test_roundtrip_against_postgres():
     from backend.core.database import engine
+    from sqlalchemy import text
 
     if engine.dialect.name != "postgresql":
         pytest.skip("requires a PostgreSQL test database (pgvector)")
 
     # Clear any connections in the pool created in previous event loops
     await engine.dispose()
+
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SELECT 1"))
+    except Exception:
+        pytest.skip("PostgreSQL database is not reachable/running")
 
     namespace = "test_pgvector_roundtrip"
     embedder = _MappedEmbedder(

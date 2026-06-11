@@ -42,6 +42,9 @@ async def _has_alembic_version(conn) -> bool:
 
 async def create_all_tables():
     async with engine.begin() as conn:
+        if conn.dialect.name == "postgresql":
+            await conn.execute(text("SET LOCAL statement_timeout = 0"))
+            await conn.execute(text("SET LOCAL lock_timeout = 0"))
         await conn.run_sync(Base.metadata.create_all)
         if await _has_alembic_version(conn):
             return
@@ -49,3 +52,4 @@ async def create_all_tables():
 
         await apply_column_migrations(conn)
         await apply_type_migrations(conn)
+
