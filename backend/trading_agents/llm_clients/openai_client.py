@@ -1,5 +1,7 @@
 from typing import Any
 
+from langchain_core.messages import AIMessageChunk
+from langchain_core.outputs import ChatGenerationChunk
 from langchain_openai import ChatOpenAI
 
 from .base_client import BaseLLMClient, normalize_content
@@ -7,7 +9,51 @@ from .capabilities import get_capabilities
 from .validators import validate_model
 
 
+def _strip_chunk_usage(chunk) -> Any | None:
+    """Remove (and return) the usage_metadata carried by a streamed chunk."""
+    message = getattr(chunk, "message", None)
+    usage = getattr(message, "usage_metadata", None) if message is not None else None
+    if usage:
+        message.usage_metadata = None
+    return usage or None
+
+
+def _final_usage_chunk(usage) -> ChatGenerationChunk:
+    return ChatGenerationChunk(message=AIMessageChunk(content="", usage_metadata=usage))
+
+
 class NormalizedChatOpenAI(ChatOpenAI):
+    """ChatOpenAI with normalized content and sane streamed token usage.
+
+    LangChain SUMS usage_metadata when merging stream chunks. Real OpenAI sends
+    usage once (final chunk), so the sum is correct — but several
+    OpenAI-compatible providers (DeepSeek/Qwen/GLM/LiteLLM proxies, …) emit
+    CUMULATIVE usage on every chunk, so the merged total becomes
+    input_tokens × chunk_count and the per-analysis counters explode into the
+    billions. We strip per-chunk usage and re-emit only the LAST snapshot at
+    the end of the stream, which is correct for both behaviours (cumulative →
+    last snapshot is the total; final-only → last snapshot is the only one)."""
+
+    def _stream(self, *args, **kwargs):
+        last_usage = None
+        for chunk in super()._stream(*args, **kwargs):
+            usage = _strip_chunk_usage(chunk)
+            if usage is not None:
+                last_usage = usage
+            yield chunk
+        if last_usage is not None:
+            yield _final_usage_chunk(last_usage)
+
+    async def _astream(self, *args, **kwargs):
+        last_usage = None
+        async for chunk in super()._astream(*args, **kwargs):
+            usage = _strip_chunk_usage(chunk)
+            if usage is not None:
+                last_usage = usage
+            yield chunk
+        if last_usage is not None:
+            yield _final_usage_chunk(last_usage)
+
     def invoke(self, input, config=None, **kwargs):
         return normalize_content(super().invoke(input, config, **kwargs))
 
@@ -61,7 +107,10 @@ class OpenAIClient(BaseLLMClient):
 
     def get_llm(self) -> Any:
         self.warn_if_unknown_model()
-        llm_kwargs = {"model": self.model, "streaming": True}
+        # stream_usage makes OpenAI include token usage in streamed responses;
+        # without it every streaming call reports no usage and the per-analysis
+        # token counters silently stay at zero.
+        llm_kwargs = {"model": self.model, "streaming": True, "stream_usage": True}
 
         # Determine base URL
         resolved_base_url = self.base_url or _PROVIDER_BASE_URL.get(self.provider)

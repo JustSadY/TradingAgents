@@ -73,49 +73,45 @@ class StatsCallbackHandler(BaseCallbackHandler):
         if usage is None:
             return None
 
-        # If it's a dict or dict-like
+        # Providers hand usage back either as a dict (LangChain-normalized) or
+        # as an SDK object with attributes; read both through one getter.
         if isinstance(usage, dict) or hasattr(usage, "get"):
-            input_tokens = cls._to_int(
-                usage.get("prompt_tokens")
-                or usage.get("input_tokens")
-                or usage.get("prompt_token_count")
-                or usage.get("input_token_count")
-            )
-            output_tokens = cls._to_int(
-                usage.get("completion_tokens")
-                or usage.get("output_tokens")
-                or usage.get("candidates_token_count")
-                or usage.get("output_token_count")
-            )
+            getter = usage.get
         else:
-            # If it's an object with attributes
-            input_tokens = cls._to_int(
-                getattr(usage, "prompt_tokens", 0)
-                or getattr(usage, "input_tokens", 0)
-                or getattr(usage, "prompt_token_count", 0)
-                or getattr(usage, "input_token_count", 0)
-            )
-            output_tokens = cls._to_int(
-                getattr(usage, "completion_tokens", 0)
-                or getattr(usage, "output_tokens", 0)
-                or getattr(usage, "candidates_token_count", 0)
-                or getattr(usage, "output_token_count", 0)
-            )
+            def getter(key, default=None):
+                return getattr(usage, key, default)
 
+        input_tokens = cls._to_int(
+            getter("prompt_tokens")
+            or getter("input_tokens")
+            or getter("prompt_token_count")
+            or getter("input_token_count")
+        )
+        # Anthropic's RAW usage reports cached prompt tokens separately: its
+        # input_tokens covers only the uncached remainder, so with prompt
+        # caching enabled the counters under-report massively unless the cache
+        # buckets are added back. (LangChain's normalized usage_metadata already
+        # includes them in input_tokens under different detail keys, so these
+        # raw key names never double-count.)
+        input_tokens += cls._to_int(getter("cache_read_input_tokens"))
+        input_tokens += cls._to_int(getter("cache_creation_input_tokens"))
+        output_tokens = cls._to_int(
+            getter("completion_tokens")
+            or getter("output_tokens")
+            or getter("candidates_token_count")
+            or getter("output_token_count")
+        )
         if input_tokens == 0 and output_tokens == 0:
             return None
         return {"input": input_tokens, "output": output_tokens}
 
     @classmethod
     def _extract_usage(cls, response: Any) -> dict[str, int] | None:
-        llm_output = getattr(response, "llm_output", None)
-        usage = cls._parse_usage_dict((llm_output or {}).get("token_usage") if isinstance(llm_output, dict) else None)
-        if usage is not None:
-            return usage
-        usage = cls._parse_usage_dict((llm_output or {}).get("usage") if isinstance(llm_output, dict) else None)
-        if usage is not None:
-            return usage
-
+        # Prefer the standardized usage_metadata (on the result or its
+        # messages): LangChain normalizes provider quirks there — e.g. Anthropic
+        # cache reads/creations are already folded into input_tokens. The raw
+        # llm_output dict is checked LAST because for some providers it
+        # under-reports (Anthropic raw input_tokens excludes cached tokens).
         direct_usage = cls._parse_usage_dict(getattr(response, "usage_metadata", None))
         if direct_usage is not None:
             return direct_usage
@@ -137,6 +133,14 @@ class StatsCallbackHandler(BaseCallbackHandler):
                 )
                 if usage is not None:
                     return usage
+
+        llm_output = getattr(response, "llm_output", None)
+        usage = cls._parse_usage_dict((llm_output or {}).get("token_usage") if isinstance(llm_output, dict) else None)
+        if usage is not None:
+            return usage
+        usage = cls._parse_usage_dict((llm_output or {}).get("usage") if isinstance(llm_output, dict) else None)
+        if usage is not None:
+            return usage
 
         return None
 
