@@ -69,6 +69,9 @@ async def test_roundtrip_against_postgres():
     if engine.dialect.name != "postgresql":
         pytest.skip("requires a PostgreSQL test database (pgvector)")
 
+    # Clear any connections in the pool created in previous event loops
+    await engine.dispose()
+
     namespace = "test_pgvector_roundtrip"
     embedder = _MappedEmbedder(
         {
@@ -106,5 +109,10 @@ async def test_roundtrip_against_postgres():
         assert len(hits) == 2
         assert hits[0].metadata["outcome"] == "gain"
     finally:
-        async with engine.begin() as conn:
-            await conn.execute(sql_text("DELETE FROM memory_vectors WHERE namespace = :ns"), {"ns": namespace})
+        try:
+            async with engine.begin() as conn:
+                await conn.execute(sql_text("DELETE FROM memory_vectors WHERE namespace = :ns"), {"ns": namespace})
+        except Exception:
+            pass
+        await engine.dispose()
+
