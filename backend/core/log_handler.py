@@ -1,5 +1,8 @@
 import asyncio
+import contextvars
 import logging
+
+current_user_id: contextvars.ContextVar[int | None] = contextvars.ContextVar("current_user_id", default=None)
 
 _BATCH_SIZE = 30
 _FLUSH_INTERVAL = 3.0
@@ -49,6 +52,9 @@ class DatabaseLogHandler(logging.Handler):
     def emit(self, record: logging.LogRecord):
         if not self._started or self._queue is None:
             return
+        user_id = getattr(record, "user_id", None)
+        if user_id is None:
+            user_id = current_user_id.get(None)
         try:
             self._queue.put_nowait(
                 {
@@ -56,6 +62,7 @@ class DatabaseLogHandler(logging.Handler):
                     "source": record.name,
                     "message": self.format(record),
                     "details": self._exc_text(record),
+                    "user_id": user_id,
                 }
             )
         except asyncio.QueueFull:
@@ -91,6 +98,7 @@ class DatabaseLogHandler(logging.Handler):
                                 source=entry["source"],
                                 message=entry["message"],
                                 details=entry["details"],
+                                user_id=entry["user_id"],
                             )
                         )
                     await db.commit()

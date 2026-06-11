@@ -125,7 +125,10 @@ async def run_analysis_task(
     task_id: str,
     user=None,
 ) -> None:
-    """Background entrypoint for a single manual analysis run."""
+    """Background entrypoint for a manual analysis run."""
+    if user:
+        from backend.core.log_handler import current_user_id
+        current_user_id.set(user.id)
     async with AsyncSessionLocal() as db:
         try:
             _, row = await run_analysis(
@@ -159,6 +162,9 @@ async def run_portfolio_task(
     task_id: str | None = None,
 ) -> None:
     """Background entrypoint for a multi-ticker portfolio analysis run."""
+    if user:
+        from backend.core.log_handler import current_user_id
+        current_user_id.set(user.id)
     async with AsyncSessionLocal() as db:
         try:
             await run_portfolio_analysis(
@@ -248,6 +254,9 @@ async def rollback_and_resume_analysis(
     register_task_owner(task_id, current_user.id if current_user else None)
 
     async def run_resume():
+        if current_user:
+            from backend.core.log_handler import current_user_id
+            current_user_id.set(current_user.id)
         async with AsyncSessionLocal() as session:
             try:
                 from backend.services.analysis.emitter import AnalysisEmitter

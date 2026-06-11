@@ -34,6 +34,8 @@ async def get_current_user(
     # change bumps token_version, immediately invalidating older tokens).
     if payload.get("ver", 0) != getattr(user, "token_version", 0):
         raise credentials_exc
+    from backend.core.log_handler import current_user_id
+    current_user_id.set(user.id)
     return user
 
 
