@@ -11,6 +11,8 @@ class SettingsBase(BaseModel):
     output_language: str = "English"
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
+    fallback_llm_provider: str | None = None
+    fallback_llm_model: str | None = None
     investor_persona: str = "conservative"
     analyst_concurrency_limit: int = 1
     max_recur_limit: int = 1000
@@ -31,6 +33,7 @@ class SettingsBase(BaseModel):
     active_preset_name: str | None = None
     # Per-user vector memory config (the Pinecone/OpenAI keys are stored
     # separately as encrypted API keys).
+    memory_store: str = "pinecone"
     pinecone_index: str = "tradingagents-memory"
     pinecone_cloud: str = "aws"
     pinecone_region: str = "us-east-1"
@@ -64,6 +67,8 @@ class SettingsUpdate(BaseModel):
     output_language: str | None = None
     llm_provider: str | None = None
     llm_model: str | None = None
+    fallback_llm_provider: str | None = None
+    fallback_llm_model: str | None = None
     investor_persona: str | None = None
     analyst_concurrency_limit: int | None = Field(default=None, ge=1, le=16)
     max_recur_limit: int | None = Field(default=None, ge=100, le=5000)
@@ -82,6 +87,7 @@ class SettingsUpdate(BaseModel):
     webhook_enabled: bool | None = None
     webhook_events: str | None = None
     active_preset_name: str | None = None
+    memory_store: str | None = None
     pinecone_index: str | None = None
     pinecone_cloud: str | None = None
     pinecone_region: str | None = None

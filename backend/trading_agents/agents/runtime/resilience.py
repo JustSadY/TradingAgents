@@ -59,6 +59,16 @@ def _cfg(key: str, default, runtime_config: dict | None = None):
         return default
 
 
+def _metrics():
+    """Prometheus metrics module, or None — metrics must never break a run."""
+    try:
+        from backend.core import metrics
+
+        return metrics
+    except Exception:
+        return None
+
+
 def log_event(event: str, *, level: int = logging.INFO, **fields) -> None:
     """Emit one structured run event to the dedicated run logger."""
     payload = {"event": event, **{k: v for k, v in fields.items() if v is not None}}
@@ -116,7 +126,11 @@ async def retry_call(
                 delay=round(delay, 1),
                 error=str(exc)[:200],
             )
+            m = _metrics()
+            if m:
+                m.NODE_RETRIES.labels(label=label).inc()
             from backend.trading_agents.agents.data.chart_tools import active_run_context
+
             ctx = active_run_context.get(None)
             if ctx and "emitter" in ctx:
                 try:
@@ -130,13 +144,15 @@ async def retry_call(
                     else:
                         err_msg = err_msg[:60]
 
-                    warning_msg = f"Warning: Retrying {clean_label} (Attempt {i+1}/{attempts}) due to: {err_msg}"
-                    await emitter.emit({
-                        "type": "progress",
-                        "node": label,
-                        "label": warning_msg,
-                        "stage": "warning",
-                    })
+                    warning_msg = f"Warning: Retrying {clean_label} (Attempt {i + 1}/{attempts}) due to: {err_msg}"
+                    await emitter.emit(
+                        {
+                            "type": "progress",
+                            "node": label,
+                            "label": warning_msg,
+                            "stage": "warning",
+                        }
+                    )
                 except Exception:
                     pass
             await asyncio.sleep(delay)
@@ -190,6 +206,9 @@ def guard_node(
                     run_in_thread=True,
                 )
             log_event("node_end", node=name, kind=kind, ms=int((time.time() - start) * 1000))
+            m = _metrics()
+            if m:
+                m.NODE_DURATION.labels(node=name, kind=kind).observe(time.time() - start)
             return result
         except Exception as exc:  # noqa: BLE001
             log_event(
@@ -200,6 +219,9 @@ def guard_node(
                 error=str(exc)[:300],
                 traceback=traceback.format_exc()[-700:],
             )
+            m = _metrics()
+            if m:
+                m.NODE_ERRORS.labels(node=name, kind=kind).inc()
             if fallback is None:
                 raise
             try:
@@ -211,6 +233,8 @@ def guard_node(
                 log_event("fallback_error", level=logging.ERROR, node=name, error=str(fb_exc)[:200])
                 raise exc from fb_exc
             log_event("node_skipped", level=logging.WARNING, node=name, kind=kind)
+            if m:
+                m.NODE_FALLBACKS.labels(node=name, kind=kind).inc()
             return update
 
     wrapped.__name__ = getattr(fn, "__name__", name)

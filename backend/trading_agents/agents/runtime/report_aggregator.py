@@ -82,7 +82,7 @@ def tail_history(history: str, limit: int | None = None) -> str:
     truncated = history[-limit:]
     first_newline = truncated.find("\n")
     if first_newline != -1:
-        truncated = truncated[first_newline + 1:]
+        truncated = truncated[first_newline + 1 :]
     return "…[earlier debate turns omitted]\n" + truncated
 
 
@@ -107,13 +107,9 @@ def middle_truncate(text: str, limit: int) -> str:
     tail_text = text[-tail:]
     first_nl_tail = tail_text.find("\n")
     if first_nl_tail != -1:
-        tail_text = tail_text[first_nl_tail + 1:]
+        tail_text = tail_text[first_nl_tail + 1 :]
 
-    return (
-        head_text.rstrip()
-        + "\n\n…[middle truncated to conserve tokens]…\n\n"
-        + tail_text.lstrip()
-    )
+    return head_text.rstrip() + "\n\n…[middle truncated to conserve tokens]…\n\n" + tail_text.lstrip()
 
 
 def _truncate_report(content: str, limit: int) -> str:

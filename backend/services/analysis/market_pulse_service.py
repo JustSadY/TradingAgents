@@ -4,15 +4,11 @@ from backend.services.market_data_service import get_live_prices_batch
 
 _logger = logging.getLogger(__name__)
 
+
 async def get_market_pulse() -> str:
     """Fetch and summarize major market indicators for global context."""
-    tickers = ["^GSPC", "^VIX", "BTC-USD", "GC=F"] # S&P 500, VIX, Bitcoin, Gold
-    names = {
-        "^GSPC": "S&P 500",
-        "^VIX": "VIX (Fear Index)",
-        "BTC-USD": "Bitcoin",
-        "GC=F": "Gold"
-    }
+    tickers = ["^GSPC", "^VIX", "BTC-USD", "GC=F"]  # S&P 500, VIX, Bitcoin, Gold
+    names = {"^GSPC": "S&P 500", "^VIX": "VIX (Fear Index)", "BTC-USD": "Bitcoin", "GC=F": "Gold"}
 
     try:
         prices = await get_live_prices_batch(tickers)

@@ -66,7 +66,7 @@ async def check_price_alerts() -> None:
                     alert.condition,
                     alert.target_price,
                     user_settings,
-                    alert_type=getattr(alert, "alert_type", "price")
+                    alert_type=getattr(alert, "alert_type", "price"),
                 )
 
             if alert.auto_analyze:
@@ -104,9 +104,9 @@ async def check_and_recover_lost_alerts() -> None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(PriceAlert)
-            .where(PriceAlert.enabled == True)
+            .where(PriceAlert.enabled.is_(True))
             .where(PriceAlert.triggered_at.isnot(None))
-            .where(PriceAlert.auto_analyze == True)
+            .where(PriceAlert.auto_analyze.is_(True))
         )
         triggered_alerts = result.scalars().all()
         missing: list[tuple[str, str, int]] = []

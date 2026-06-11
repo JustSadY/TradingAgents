@@ -12,6 +12,7 @@ from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
 
 _logger = logging.getLogger(__name__)
 
+
 async def run_backtest_simulation(
     db,
     ticker: str,
@@ -19,7 +20,7 @@ async def run_backtest_simulation(
     start_date: str,
     end_date: str,
     initial_capital: float = 100000.0,
-    user = None,
+    user=None,
 ) -> dict:
     try:
         # Load daily stock data up to end_date. load_ohlcv does synchronous
@@ -59,7 +60,7 @@ async def run_backtest_simulation(
                 AnalysisResult.ticker == ticker.upper(),
                 AnalysisResult.trade_date >= start_date,
                 AnalysisResult.trade_date <= end_date,
-                AnalysisResult.user_id == user.id
+                AnalysisResult.user_id == user.id,
             )
             res = await db.execute(stmt)
             for row in res.scalars().all():
@@ -69,20 +70,20 @@ async def run_backtest_simulation(
         cash = initial_capital
         position_size = 0.0
         entry_price = 0.0
-        position_side = None # None, "long", "short"
+        position_side = None  # None, "long", "short"
         entry_date = None
         stop_loss = None
         take_profit = None
         holding_days = 0
         max_holding_days = 10
-        commission_rate = 0.001 # 0.1%
+        commission_rate = 0.001  # 0.1%
 
         trades = []
         equity_curve = []
         daily_values = []
 
         # Iterate chronologically day by day
-        for idx, row in backtest_data.iterrows():
+        for _idx, row in backtest_data.iterrows():
             date_str = row["Date"].strftime("%Y-%m-%d")
             close_price = float(row["Close"])
             high_price = float(row["High"])
@@ -102,7 +103,7 @@ async def run_backtest_simulation(
                         exit_price = min(open_price, stop_loss)  # Exit at stop loss or open if gap down
                         exit_reason = "STOP_LOSS"
                     elif take_profit is not None and high_price >= take_profit:
-                        exit_price = max(open_price, take_profit) # Exit at target or open if gap up
+                        exit_price = max(open_price, take_profit)  # Exit at target or open if gap up
                         exit_reason = "TAKE_PROFIT"
                     elif holding_days >= max_holding_days:
                         exit_price = close_price
@@ -124,23 +125,33 @@ async def run_backtest_simulation(
                     commission = notional * commission_rate
 
                     if position_side == "long":
-                        pnl = (exit_price - entry_price) * position_size - commission - (entry_price * position_size * commission_rate)
-                    else: # short
-                        pnl = (entry_price - exit_price) * position_size - commission - (entry_price * position_size * commission_rate)
+                        pnl = (
+                            (exit_price - entry_price) * position_size
+                            - commission
+                            - (entry_price * position_size * commission_rate)
+                        )
+                    else:  # short
+                        pnl = (
+                            (entry_price - exit_price) * position_size
+                            - commission
+                            - (entry_price * position_size * commission_rate)
+                        )
 
                     cash += notional + pnl if position_side == "long" else (entry_price * position_size) + pnl
-                    return_pct = (pnl / (entry_price * position_size))
+                    return_pct = pnl / (entry_price * position_size)
 
-                    trades.append({
-                        "entry_date": entry_date,
-                        "exit_date": date_str,
-                        "side": position_side,
-                        "entry_price": round(entry_price, 2),
-                        "exit_price": round(exit_price, 2),
-                        "return_pct": round(return_pct * 100, 2),
-                        "pnl": round(pnl, 2),
-                        "reason": exit_reason
-                    })
+                    trades.append(
+                        {
+                            "entry_date": entry_date,
+                            "exit_date": date_str,
+                            "side": position_side,
+                            "entry_price": round(entry_price, 2),
+                            "exit_price": round(exit_price, 2),
+                            "return_pct": round(return_pct * 100, 2),
+                            "pnl": round(pnl, 2),
+                            "reason": exit_reason,
+                        }
+                    )
 
                     position_side = None
                     position_size = 0.0
@@ -151,7 +162,7 @@ async def run_backtest_simulation(
 
             # 2. Strategy Signal Entries / Flip Exits
             if not exited:
-                signal = None # "BUY", "SELL", or None
+                signal = None  # "BUY", "SELL", or None
                 rec_stop_loss = None
                 rec_take_profit = None
 
@@ -192,7 +203,7 @@ async def run_backtest_simulation(
                         if isinstance(ann, str):
                             try:
                                 ann = json.loads(ann)
-                            except:
+                            except Exception:
                                 ann = {}
                         if isinstance(ann, dict):
                             rec_stop_loss = ann.get("stop_loss")
@@ -204,18 +215,24 @@ async def run_backtest_simulation(
                     if position_side == "short":
                         notional = position_size * close_price
                         commission = notional * commission_rate
-                        pnl = (entry_price - close_price) * position_size - commission - (entry_price * position_size * commission_rate)
+                        pnl = (
+                            (entry_price - close_price) * position_size
+                            - commission
+                            - (entry_price * position_size * commission_rate)
+                        )
                         cash += (entry_price * position_size) + pnl
-                        trades.append({
-                            "entry_date": entry_date,
-                            "exit_date": date_str,
-                            "side": "short",
-                            "entry_price": round(entry_price, 2),
-                            "exit_price": round(close_price, 2),
-                            "return_pct": round((pnl / (entry_price * position_size)) * 100, 2),
-                            "pnl": round(pnl, 2),
-                            "reason": "SIGNAL"
-                        })
+                        trades.append(
+                            {
+                                "entry_date": entry_date,
+                                "exit_date": date_str,
+                                "side": "short",
+                                "entry_price": round(entry_price, 2),
+                                "exit_price": round(close_price, 2),
+                                "return_pct": round((pnl / (entry_price * position_size)) * 100, 2),
+                                "pnl": round(pnl, 2),
+                                "reason": "SIGNAL",
+                            }
+                        )
                         position_side = None
                         position_size = 0.0
 
@@ -223,7 +240,7 @@ async def run_backtest_simulation(
                     allocated = cash * 0.95  # Allocate 95% to allow for commission room
                     position_size = allocated / close_price
                     commission = allocated * commission_rate
-                    cash -= (allocated + commission)
+                    cash -= allocated + commission
                     entry_price = close_price
                     entry_date = date_str
                     position_side = "long"
@@ -236,18 +253,24 @@ async def run_backtest_simulation(
                     if position_side == "long":
                         notional = position_size * close_price
                         commission = notional * commission_rate
-                        pnl = (close_price - entry_price) * position_size - commission - (entry_price * position_size * commission_rate)
+                        pnl = (
+                            (close_price - entry_price) * position_size
+                            - commission
+                            - (entry_price * position_size * commission_rate)
+                        )
                         cash += notional + pnl
-                        trades.append({
-                            "entry_date": entry_date,
-                            "exit_date": date_str,
-                            "side": "long",
-                            "entry_price": round(entry_price, 2),
-                            "exit_price": round(close_price, 2),
-                            "return_pct": round((pnl / (entry_price * position_size)) * 100, 2),
-                            "pnl": round(pnl, 2),
-                            "reason": "SIGNAL"
-                        })
+                        trades.append(
+                            {
+                                "entry_date": entry_date,
+                                "exit_date": date_str,
+                                "side": "long",
+                                "entry_price": round(entry_price, 2),
+                                "exit_price": round(close_price, 2),
+                                "return_pct": round((pnl / (entry_price * position_size)) * 100, 2),
+                                "pnl": round(pnl, 2),
+                                "reason": "SIGNAL",
+                            }
+                        )
                         position_side = None
                         position_size = 0.0
 
@@ -274,12 +297,14 @@ async def run_backtest_simulation(
 
             total_value = cash + holdings_value
             daily_values.append(total_value)
-            equity_curve.append({
-                "date": date_str,
-                "value": round(total_value, 2),
-                "cash": round(cash, 2),
-                "holdings_value": round(holdings_value, 2)
-            })
+            equity_curve.append(
+                {
+                    "date": date_str,
+                    "value": round(total_value, 2),
+                    "cash": round(cash, 2),
+                    "holdings_value": round(holdings_value, 2),
+                }
+            )
 
         # Close out any remaining position at the end of the simulation
         if position_side is not None:
@@ -290,30 +315,40 @@ async def run_backtest_simulation(
             commission = notional * commission_rate
 
             if position_side == "long":
-                pnl = (close_price - entry_price) * position_size - commission - (entry_price * position_size * commission_rate)
-            else: # short
-                pnl = (entry_price - close_price) * position_size - commission - (entry_price * position_size * commission_rate)
+                pnl = (
+                    (close_price - entry_price) * position_size
+                    - commission
+                    - (entry_price * position_size * commission_rate)
+                )
+            else:  # short
+                pnl = (
+                    (entry_price - close_price) * position_size
+                    - commission
+                    - (entry_price * position_size * commission_rate)
+                )
 
             cash += notional + pnl if position_side == "long" else (entry_price * position_size) + pnl
-            return_pct = (pnl / (entry_price * position_size))
+            return_pct = pnl / (entry_price * position_size)
 
-            trades.append({
-                "entry_date": entry_date,
-                "exit_date": date_str,
-                "side": position_side,
-                "entry_price": round(entry_price, 2),
-                "exit_price": round(close_price, 2),
-                "return_pct": round(return_pct * 100, 2),
-                "pnl": round(pnl, 2),
-                "reason": "END_OF_SIMULATION"
-            })
+            trades.append(
+                {
+                    "entry_date": entry_date,
+                    "exit_date": date_str,
+                    "side": position_side,
+                    "entry_price": round(entry_price, 2),
+                    "exit_price": round(close_price, 2),
+                    "return_pct": round(return_pct * 100, 2),
+                    "pnl": round(pnl, 2),
+                    "reason": "END_OF_SIMULATION",
+                }
+            )
 
             # Recalculate last equity curve value
             equity_curve[-1] = {
                 "date": date_str,
                 "value": round(cash, 2),
                 "cash": round(cash, 2),
-                "holdings_value": 0.0
+                "holdings_value": 0.0,
             }
             daily_values[-1] = cash
 
@@ -328,7 +363,7 @@ async def run_backtest_simulation(
         # Sharpe ratio
         daily_returns = []
         for i in range(1, len(daily_values)):
-            prev = daily_values[i-1]
+            prev = daily_values[i - 1]
             curr = daily_values[i]
             daily_returns.append((curr - prev) / prev if prev > 0 else 0)
 
@@ -360,7 +395,7 @@ async def run_backtest_simulation(
             "sharpe_ratio": round(sharpe_ratio, 2),
             "trades_count": len(trades),
             "trades": trades,
-            "equity_curve": equity_curve
+            "equity_curve": equity_curve,
         }
 
     except Exception as e:

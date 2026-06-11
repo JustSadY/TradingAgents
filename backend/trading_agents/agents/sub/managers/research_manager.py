@@ -31,9 +31,7 @@ def create_research_manager(llm):
             from backend.services.memory_service import recall_episode_lessons
 
             situation = state.get("market_report") or state.get("synthesis_report") or ""
-            memory_lessons = await recall_episode_lessons(
-                user_id=get_config().get("user_id"), situation_text=situation
-            )
+            memory_lessons = await recall_episode_lessons(user_id=get_config().get("user_id"), situation_text=situation)
         except Exception:  # noqa: BLE001 — memory is best-effort
             memory_lessons = ""
 

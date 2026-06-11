@@ -5,9 +5,11 @@ import pandas as pd
 
 _logger = logging.getLogger(__name__)
 
+
 def calculate_ema(prices: pd.Series, span: int = 20) -> pd.Series:
     """Compute Exponential Moving Average."""
     return prices.ewm(span=span, adjust=False).mean()
+
 
 def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
     """Compute RSI using Wilder's smoothed-average method."""
@@ -16,6 +18,7 @@ def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
     loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
     rs = gain / loss
     return 100 - (100 / (1 + rs))
+
 
 def calculate_macd(
     prices: pd.Series,
@@ -29,6 +32,7 @@ def calculate_macd(
     macd_line = ema_fast - ema_slow
     signal_line = calculate_ema(macd_line, signal)
     return macd_line, signal_line
+
 
 def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """Compute Average Directional Index (ADX)."""
@@ -54,6 +58,7 @@ def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
     dx = 100 * ((plus_di - minus_di).abs() / (plus_di + minus_di))
     adx = dx.rolling(window=period).mean()
     return adx
+
 
 def calculate_ichimoku(df: pd.DataFrame) -> dict[str, pd.Series]:
     """Compute Ichimoku Cloud components."""
@@ -81,6 +86,7 @@ def calculate_ichimoku(df: pd.DataFrame) -> dict[str, pd.Series]:
         "chikou_span": chikou_span,
     }
 
+
 def calculate_fibonacci_levels(df: pd.DataFrame, period: int = 100) -> dict[str, float]:
     """Calculate Fibonacci Retracement levels based on a period high/low."""
     recent_df = df.tail(period)
@@ -98,12 +104,16 @@ def calculate_fibonacci_levels(df: pd.DataFrame, period: int = 100) -> dict[str,
         "level_100": low,
     }
 
+
 def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
     """Evaluates a mathematical formula containing technical indicators."""
     processed_formula = formula
     local_dict = {
-        "Open": df["Open"], "High": df["High"], "Low": df["Low"],
-        "Close": df["Close"], "Volume": df["Volume"],
+        "Open": df["Open"],
+        "High": df["High"],
+        "Low": df["Low"],
+        "Close": df["Close"],
+        "Volume": df["Volume"],
     }
 
     # SMA/EMA/STD/RSI/ADX extraction (case-insensitive)
@@ -130,4 +140,4 @@ def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
         return pd.Series(res, index=df.index)
     except Exception as e:
         _logger.error("Error evaluating formula %s: %s", formula, e)
-        raise ValueError(f"Formula could not be calculated: {str(e)}")
+        raise ValueError(f"Formula could not be calculated: {str(e)}") from e

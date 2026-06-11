@@ -8,7 +8,6 @@ from typing import Any
 logger = logging.getLogger(__name__)
 from langgraph.prebuilt import ToolNode
 
-from backend.trading_agents.agents import *
 from backend.trading_agents.agents.data.chart_tools import active_run_context
 from backend.trading_agents.agents.hierarchy import AgentHierarchy
 from backend.trading_agents.dataflows.config import set_config
@@ -56,11 +55,13 @@ def _cap_tool_outputs(tool_node: ToolNode, max_chars: int):
 class TradingAgentsGraph:
     def __init__(
         self,
-        selected_analysts=["market", "social", "news", "fundamentals"],
+        selected_analysts=None,
         debug=False,
         config: dict[str, Any] = None,
         callbacks: list | None = None,
     ):
+        if selected_analysts is None:
+            selected_analysts = ["market", "social", "news", "fundamentals"]
         self.debug = debug
         self.config = config or DEFAULT_CONFIG
         self.callbacks = callbacks or []
@@ -96,7 +97,8 @@ class TradingAgentsGraph:
             model=main_model,
             **main_kwargs,
         )
-        self.thinking_llm = client.get_llm().with_config(tags=["portfolio_manager"], metadata={"agent": "portfolio_manager"})
+        main_llm = self._with_fallback(client.get_llm(), main_prov, main_model)
+        self.thinking_llm = main_llm.with_config(tags=["portfolio_manager"], metadata={"agent": "portfolio_manager"})
 
         # LLM factory used by the hierarchy for recursive resolution
         def _make_llm(provider: str, model: str, temperature=None) -> Any:
@@ -111,7 +113,7 @@ class TradingAgentsGraph:
                 model=model,
                 **kwargs,
             )
-            return c.get_llm()
+            return self._with_fallback(c.get_llm(), prov_lower, model, temperature)
 
         # Resolve per-agent LLMs via hierarchy (supports parent fallback)
         from backend.trading_agents.agent_catalog import list_agents
@@ -161,6 +163,30 @@ class TradingAgentsGraph:
         self.workflow = self.graph_setup.setup_graph(_effective_analysts)
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None
+
+    def _with_fallback(self, llm, provider: str, model: str, temperature=None):
+        """Wrap *llm* with the user's opt-in fallback provider/model, when one is
+        configured and differs from the primary. Failure to build the fallback
+        never blocks the run — the primary is returned unwrapped."""
+        fb_prov = (self.config.get("fallback_llm_provider") or "").strip().lower()
+        fb_model = (self.config.get("fallback_llm_model") or "").strip()
+        if not fb_prov or not fb_model:
+            return llm
+        if fb_prov == (provider or "").lower() and fb_model == model:
+            return llm
+        kwargs = self._get_provider_kwargs(fb_prov)
+        if temperature is not None:
+            kwargs["temperature"] = float(temperature)
+        if self.callbacks:
+            kwargs["callbacks"] = self.callbacks
+        try:
+            fallback_llm = create_llm_client(provider=fb_prov, model=fb_model, **kwargs).get_llm()
+        except Exception as exc:
+            logger.warning("Fallback LLM %s/%s unavailable: %s — continuing without failover.", fb_prov, fb_model, exc)
+            return llm
+        from backend.trading_agents.llm_clients.fallback import FallbackLLM
+
+        return FallbackLLM(llm, fallback_llm)
 
     def _get_provider_kwargs(self, provider: str = None) -> dict[str, Any]:
         kwargs = {}

@@ -18,9 +18,7 @@ _config_lock = threading.RLock()
 # portfolio orchestrator fanning out tickers via ``asyncio.gather``, or several
 # alert-triggered analyses) can no longer clobber each other's provider API
 # keys, persona, or output language through the shared global.
-_run_config: contextvars.ContextVar[dict | None] = contextvars.ContextVar(
-    "trading_agents_run_config", default=None
-)
+_run_config: contextvars.ContextVar[dict | None] = contextvars.ContextVar("trading_agents_run_config", default=None)
 
 
 def _merge_into(target: dict, incoming: dict) -> None:

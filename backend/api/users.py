@@ -99,7 +99,7 @@ async def get_my_permissions(
 
     if current_user.is_admin:
         return PagePermissionsRead(allowed_pages=PAGE_KEYS + ["admin"])
-    allowed = sorted(list(await list_allowed_page_keys(db, current_user.id)))
+    allowed = sorted(await list_allowed_page_keys(db, current_user.id))
     if "settings" not in allowed:
         allowed.append("settings")
     return PagePermissionsRead(allowed_pages=allowed)
@@ -296,7 +296,7 @@ async def get_my_setting_permissions(
 
     if current_user.is_admin:
         return {"allowed_settings": SETTING_KEYS}
-    allowed = sorted(list(await list_allowed_setting_sections(db, current_user.id)))
+    allowed = sorted(await list_allowed_setting_sections(db, current_user.id))
     return {"allowed_settings": allowed}
 
 

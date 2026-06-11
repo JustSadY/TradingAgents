@@ -130,7 +130,7 @@ async def get_vision_chart_analysis(
             style="charles",
             volume=True,
             title=f"{symbol.upper()} - Last 90 Trading Days",
-            savefig=dict(fname=buf, format="png", dpi=100),
+            savefig={"fname": buf, "format": "png", "dpi": 100},
         )
         buf.seek(0)
         base64_image = base64.b64encode(buf.read()).decode("utf-8")
@@ -170,7 +170,9 @@ async def get_vision_chart_analysis(
         content = res.content if hasattr(res, "content") else str(res)
 
         # Include image in the output string for frontend to pick up if it wants
-        return f"--- Vision Chart Analysis for {symbol} ---\nIMAGE_DATA:data:image/png;base64,{base64_image}\n\n{content}"
+        return (
+            f"--- Vision Chart Analysis for {symbol} ---\nIMAGE_DATA:data:image/png;base64,{base64_image}\n\n{content}"
+        )
 
     except Exception as e:
         err_msg = str(e)
@@ -185,15 +187,17 @@ def _local_calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
     gain = delta.where(delta > 0, 0.0)
     loss = -delta.where(delta < 0, 0.0)
 
-    avg_gain = gain.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1/period, min_periods=period, adjust=False).mean()
+    avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
 
     rs = avg_gain / avg_loss.replace(0, 1e-9)
     rsi = 100 - (100 / (1 + rs))
     return rsi
 
 
-def _local_calculate_macd(series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9) -> tuple[pd.Series, pd.Series, pd.Series]:
+def _local_calculate_macd(
+    series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9
+) -> tuple[pd.Series, pd.Series, pd.Series]:
     ema_fast = series.ewm(span=fast, adjust=False).mean()
     ema_slow = series.ewm(span=slow, adjust=False).mean()
     macd_line = ema_fast - ema_slow
@@ -202,7 +206,9 @@ def _local_calculate_macd(series: pd.Series, fast: int = 12, slow: int = 26, sig
     return macd_line, signal_line, macd_hist
 
 
-def _local_find_support_resistance(df: pd.DataFrame, current_price: float, window: int = 5) -> tuple[list[float], list[float]]:
+def _local_find_support_resistance(
+    df: pd.DataFrame, current_price: float, window: int = 5
+) -> tuple[list[float], list[float]]:
     supports = []
     resistances = []
 
@@ -226,8 +232,8 @@ def _local_find_support_resistance(df: pd.DataFrame, current_price: float, windo
         if is_resistance:
             resistances.append(round(float(high_val), 2))
 
-    unique_supports = sorted(list(set(supports)))
-    unique_resistances = sorted(list(set(resistances)))
+    unique_supports = sorted(set(supports))
+    unique_resistances = sorted(set(resistances))
 
     valid_supports = [s for s in unique_supports if s < current_price]
     valid_resistances = [r for r in unique_resistances if r > current_price]
@@ -332,7 +338,11 @@ async def get_mtf_trend(
         # Determine trend conditions
         ema_trend = "BULLISH" if latest_close > latest_ema else "BEARISH"
         rsi_condition = "OVERBOUGHT" if latest_rsi >= 70 else ("OVERSOLD" if latest_rsi <= 30 else "NEUTRAL")
-        macd_trend = "BULLISH (MACD Line is above Signal Line)" if latest_macd > latest_macd_sig else "BEARISH (MACD Line is below Signal Line)"
+        macd_trend = (
+            "BULLISH (MACD Line is above Signal Line)"
+            if latest_macd > latest_macd_sig
+            else "BEARISH (MACD Line is below Signal Line)"
+        )
 
         # Calculate support/resistance
         valid_supports, valid_resistances = _local_find_support_resistance(df_mtf, latest_close, window=5)

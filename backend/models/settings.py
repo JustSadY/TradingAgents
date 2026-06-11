@@ -18,6 +18,8 @@ class AppSettings(Base):
     output_language: Mapped[str] = mapped_column(String(50), default="English")
     llm_provider: Mapped[str] = mapped_column(String(50), default="openai")
     llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini")
+    fallback_llm_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    fallback_llm_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
     investor_persona: Mapped[str] = mapped_column(String(50), default="conservative")
     analyst_concurrency_limit: Mapped[int] = mapped_column(Integer, default=1)
     max_recur_limit: Mapped[int] = mapped_column(Integer, default=1000)
@@ -38,9 +40,12 @@ class AppSettings(Base):
     webhook_events: Mapped[str] = mapped_column(Text, default='["analysis_complete"]')
     active_preset_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
-    # Per-user vector memory (Pinecone). The Pinecone API key (and the OpenAI key
-    # when MEMORY_EMBEDDER=openai) are stored as encrypted per-user API keys
+    # Per-user vector memory. The Pinecone API key (and the OpenAI key when
+    # embedding client-side) are stored as encrypted per-user API keys
     # (providers "pinecone" / "openai"); these are the non-secret settings.
+    # memory_store: "pinecone" (default) or "pgvector" (self-hosted, in the
+    # app's own PostgreSQL; requires the OpenAI key for client-side embedding).
+    memory_store: Mapped[str] = mapped_column(String(20), default="pinecone")
     pinecone_index: Mapped[str] = mapped_column(String(100), default="tradingagents-memory")
     pinecone_cloud: Mapped[str] = mapped_column(String(20), default="aws")
     pinecone_region: Mapped[str] = mapped_column(String(30), default="us-east-1")

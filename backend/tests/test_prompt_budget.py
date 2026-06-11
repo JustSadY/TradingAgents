@@ -50,7 +50,7 @@ def test_tail_history_noop_when_short():
 
 def test_middle_truncate_keeps_head_and_tail():
     # Chronological CSV: header at the top, the newest rows at the bottom.
-    rows = ["Date,Close"] + [f"2024-01-{i:02d},{100+i}" for i in range(1, 100)]
+    rows = ["Date,Close"] + [f"2024-01-{i:02d},{100 + i}" for i in range(1, 100)]
     text = "\n".join(rows) * 20  # force it well past the limit
     out = middle_truncate(text, 2000)
     assert len(out) < len(text)

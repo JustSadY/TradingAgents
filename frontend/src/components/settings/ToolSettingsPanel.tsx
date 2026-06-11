@@ -74,7 +74,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
     } catch (err: any) {
       const msg = err.response?.data?.detail || 'Failed to save tool settings.'
       setSaveError(msg)
-      throw new Error(msg)
+      throw new Error(msg, { cause: err })
     } finally {
       setSaving(false)
     }

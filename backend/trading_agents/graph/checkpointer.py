@@ -109,16 +109,19 @@ async def list_checkpoints_for_thread(data_dir: str | Path, ticker: str, date: s
 
             # Translate node name into a user-friendly label if possible
             from backend.core.catalog import node_progress
+
             prog = node_progress(node_name)
             node_label = prog.get("label") if prog else node_name
 
-            checkpoints.append({
-                "checkpoint_id": cp.config["configurable"]["checkpoint_id"],
-                "step": step,
-                "node": node_name,
-                "label": node_label,
-                "ts": metadata.get("ts", ""),
-            })
+            checkpoints.append(
+                {
+                    "checkpoint_id": cp.config["configurable"]["checkpoint_id"],
+                    "step": step,
+                    "node": node_name,
+                    "label": node_label,
+                    "ts": metadata.get("ts", ""),
+                }
+            )
 
     # Sort checkpoints by step number ascending
     checkpoints.sort(key=lambda x: x["step"])

@@ -113,7 +113,7 @@ async def run_backtest(
         start_date=req.start_date,
         end_date=req.end_date,
         initial_capital=req.initial_capital,
-        user=_
+        user=_,
     )
     if "error" in res:
         raise HTTPException(status_code=400, detail=res["error"])

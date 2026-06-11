@@ -79,11 +79,7 @@ async def get_live_prices_batch(tickers: list[str]) -> dict[str, float]:
                 results = data.get("quoteResponse", {}).get("result", [])
                 for item in results:
                     symbol = item.get("symbol", "").upper()
-                    price = (
-                        item.get("regularMarketPrice")
-                        or item.get("preMarketPrice")
-                        or item.get("postMarketPrice")
-                    )
+                    price = item.get("regularMarketPrice") or item.get("preMarketPrice") or item.get("postMarketPrice")
                     if price is not None and symbol in unique:
                         val = float(price)
                         if math.isfinite(val) and val > 0:
@@ -131,9 +127,7 @@ async def get_live_prices_batch(tickers: list[str]) -> dict[str, float]:
             return fallback_prices
 
         try:
-            fallback_res = await asyncio.wait_for(
-                asyncio.to_thread(_batch_fallback), timeout=_BATCH_PRICE_TIMEOUT_SEC
-            )
+            fallback_res = await asyncio.wait_for(asyncio.to_thread(_batch_fallback), timeout=_BATCH_PRICE_TIMEOUT_SEC)
             prices.update(fallback_res)
         except TimeoutError:
             _logger.warning("Batch fallback download timed out for %s", missing)
@@ -141,7 +135,9 @@ async def get_live_prices_batch(tickers: list[str]) -> dict[str, float]:
         # 3. Final individual fallback for any remaining missing tickers
         still_missing = [symbol for symbol in unique if symbol not in prices]
         if still_missing:
-            fallbacks = await asyncio.gather(*[get_live_price(symbol) for symbol in still_missing], return_exceptions=True)
+            fallbacks = await asyncio.gather(
+                *[get_live_price(symbol) for symbol in still_missing], return_exceptions=True
+            )
             for symbol, fetched in zip(still_missing, fallbacks, strict=True):
                 if isinstance(fetched, BaseException) or fetched is None:
                     continue
@@ -209,6 +205,7 @@ async def calculate_returns(
             bench_r = float((bench_close.iloc[actual] - bench_close.iloc[0]) / bench_close.iloc[0])
 
             import math
+
             if math.isnan(raw) or math.isnan(bench_r):
                 return None, None, None
 
@@ -232,6 +229,7 @@ async def get_benchmark_return(benchmark: str = "SPY", period: str = "1y") -> fl
                 if len(close_series) >= 2:
                     ret = float((close_series.iloc[-1] - close_series.iloc[0]) / close_series.iloc[0] * 100)
                     import math
+
                     if not math.isnan(ret):
                         return ret
             return None
@@ -261,11 +259,7 @@ async def get_live_prices_details_batch(tickers: list[str]) -> dict[str, dict[st
                 results = data.get("quoteResponse", {}).get("result", [])
                 for item in results:
                     symbol = item.get("symbol", "").upper()
-                    price = (
-                        item.get("regularMarketPrice")
-                        or item.get("preMarketPrice")
-                        or item.get("postMarketPrice")
-                    )
+                    price = item.get("regularMarketPrice") or item.get("preMarketPrice") or item.get("postMarketPrice")
                     change_percent = item.get("regularMarketChangePercent", 0.0)
                     if price is not None and symbol in unique:
                         details[symbol] = {

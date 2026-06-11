@@ -12,7 +12,7 @@ jobs:
 
     services:
       postgres:
-        image: postgres:15
+        image: pgvector/pgvector:pg15
         env:
           POSTGRES_DB: tradingagents
           POSTGRES_USER: postgres
@@ -26,10 +26,10 @@ jobs:
           --health-retries 5
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
 
     - name: Set up Python
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: '3.11'
         cache: 'pip'
@@ -42,11 +42,11 @@ jobs:
 
     - name: Run Ruff Lint check
       run: |
-        ruff check backend/ || true
+        ruff check backend/
 
     - name: Run Ruff Format check
       run: |
-        ruff format --check backend/ || true
+        ruff format --check backend/
 
     - name: Run Backend Tests
       env:
@@ -57,3 +57,32 @@ jobs:
       run: |
         cd backend
         pytest
+
+  frontend:
+    runs-on: ubuntu-latest
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+        cache: 'npm'
+        cache-dependency-path: frontend/package-lock.json
+
+    - name: Install dependencies
+      working-directory: frontend
+      run: npm ci
+
+    - name: Lint
+      working-directory: frontend
+      run: npm run lint
+
+    - name: Test
+      working-directory: frontend
+      run: npm test
+
+    - name: Build
+      working-directory: frontend
+      run: npm run build

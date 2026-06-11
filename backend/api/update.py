@@ -19,4 +19,4 @@ async def update_apply(_: User = Depends(require_admin)):
     try:
         return await asyncio.to_thread(update_service.request_update)
     except RuntimeError as exc:
-        raise HTTPException(status_code=409, detail=str(exc))
+        raise HTTPException(status_code=409, detail=str(exc)) from exc

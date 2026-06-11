@@ -17,6 +17,7 @@ from backend.api.cron import router as cron_router
 from backend.api.logs import router as logs_router
 from backend.api.market import router as market_router
 from backend.api.meta import router as meta_router
+from backend.api.metrics import router as metrics_router
 from backend.api.news import router as news_router
 from backend.api.portfolio import router as portfolio_router
 from backend.api.preset import router as preset_router
@@ -173,6 +174,7 @@ app.include_router(logs_router)
 app.include_router(cron_router)
 app.include_router(trading_router)
 app.include_router(meta_router)
+app.include_router(metrics_router)
 app.include_router(update_router)
 app.include_router(market_router)
 app.include_router(preset_router)

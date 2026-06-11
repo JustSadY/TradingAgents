@@ -83,5 +83,5 @@ async def apply_preset(
     try:
         preset_name = await apply_preset_to_settings(db, current_user, preset)
     except ValueError as exc:
-        raise HTTPException(status_code=422, detail=str(exc))
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
     return {"applied": True, "preset_name": preset_name}

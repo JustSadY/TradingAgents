@@ -145,7 +145,7 @@ cd frontend && npm run lint
 ```
 
 **Backend linting and formatting:**
-Backend code style is enforced using Ruff.
+Backend code style is enforced using Ruff (config in `backend/pyproject.toml`).
 ```bash
 cd backend
 ruff check .        # Lint checks
@@ -154,16 +154,28 @@ ruff format --check # Format checks
 ruff format         # Format code
 ```
 
+**Continuous Integration:**
+`.github/workflows/ci.yml` runs on every push/PR to `main` and is blocking:
+- Backend: ruff lint + format check, pytest (against a PostgreSQL service)
+- Frontend: ESLint (errors fail; known debt is downgraded to warnings in `eslint.config.js`), Vitest, production build (`tsc -b && vite build`)
+
 ### Testing
 
 **Running backend tests:**
-Backend unit and integration tests are written in Pytest.
+Backend unit and integration tests are written in Pytest (~20 modules in `backend/tests/` covering leverage/margin trading, backtests, screeners, token accounting, permissions, and agent plumbing).
 ```bash
 cd backend
 pytest
 ```
 - **Test Database:** Integration tests run against an in-memory SQLite database (`sqlite+aiosqlite:///:memory:`).
-- **Mocking Market Data:** Live price feeds are stubbed during tests by monkeypatching the `mock_trading_service` (specifically `get_live_price` and `get_live_prices_batch`). See [backend/tests/test_leverage_trading.py](file:///home/lykia/Desktop/TradingAgents/backend/tests/test_leverage_trading.py) for examples.
+- **Mocking Market Data:** Live price feeds are stubbed during tests by monkeypatching the `mock_trading_service` (specifically `get_live_price` and `get_live_prices_batch`). See [backend/tests/test_leverage_trading.py](backend/tests/test_leverage_trading.py) for examples.
+
+**Running frontend tests:**
+Frontend unit tests use Vitest + Testing Library (jsdom), co-located as `*.test.ts(x)` next to their sources (e.g. `src/contexts/PermissionsContext.test.tsx` for RBAC logic).
+```bash
+cd frontend && npm test
+```
+
 For agent behavior, you can also spin up the full stack and run analyses through the UI.
 
 
@@ -209,6 +221,7 @@ In FastAPI routers, always declare **static paths before dynamic/parameterized p
 | `/api/users/{id}/permissions` | GET/PUT | Admin | Which pages user can access |
 | `/api/logs` | GET | Admin | List all system logs (level, source, user_id filters) |
 | `/api/logs/me` | GET | Yes | Scoped system logs for the authenticated user |
+| `/metrics` | GET | Bearer token | Prometheus metrics (enabled via `METRICS_TOKEN` in `.env`; 404 when unset) |
 | `/ws/analysis/{task_id}` | WS | Token | Stream live LangGraph progress + reports |
 
 ### Tool System (Tier 3)
@@ -252,9 +265,10 @@ class MyTool(BaseAgentTool):
 - `UserToolAccess`: can_view, can_use, can_edit, can_enable per tool
 - `UserToolFieldAccess`: field-level visibility overrides
 
-### Episodic Memory (Pinecone Vector Store)
+### Episodic Memory (Vector Store)
 
 **Per-User Configuration (Settings → Memory):**
+- Store choice: `pinecone` (managed, default) or `pgvector` (self-hosted in the app's own PostgreSQL; requires the pgvector extension + the user's OpenAI key for client-side embedding)
 - Pinecone API key (encrypted per-user)
 - Index name, cloud, region
 - Embedder choice (Pinecone hosted or OpenAI client-side)
@@ -446,12 +460,13 @@ APScheduler runs in-process:
 
 Systemd service runs **one** uvicorn process. APScheduler, WebSockets, and in-memory task tracking rely on this. Adding `--workers` breaks everything.
 
-### Migrations Are Additive Only
+### Migrations: Additive at Startup, Alembic Opt-In
 
-`core/migrations.py` applies `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` at startup. No Alembic workflows.
+`core/migrations.py` applies `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` at startup — this is the default mechanism for every deployment.
 
 - Adding columns: auto-applied
 - Renaming/dropping/changing types: manual SQL (think hard first)
+- Alembic is scaffolded as the opt-in successor (see `backend/alembic/README.md`). Once a database is stamped with a baseline (`alembic_version` table exists), the startup migrator defers to Alembic for that database. No revisions are committed yet — generate the baseline per that README before relying on it.
 
 ### IDOR Prevention
 
@@ -464,7 +479,7 @@ Every data query must apply `scope_to_user(query, Model, user)` in repositories 
 
 ### Memory Is Opt-In & Per-User
 
-Pinecone must be configured by user in Settings → Memory. If not configured, memory calls become no-ops. No recording happens until after trade outcome known.
+A vector store must be configured by the user in Settings → Memory: Pinecone (API key) or pgvector (`memory_store='pgvector'`, self-hosted; needs the pgvector extension and the user's OpenAI key). If not configured, memory calls become no-ops. No recording happens until after trade outcome known.
 
 ### Configuration Is Database-Driven
 
@@ -682,13 +697,6 @@ See `docs/developer_guide.md` sections 5A–5I for:
 
 ---
 
-## ✅ Confidence Level
+## ✅ Maintenance Note
 
-This CLAUDE.md has been validated against:
-- README files in all major directories
-- All architecture documentation
-- Actual code exploration (agents, services, models, API routes)
-- Developer guide with advanced features
-- Configuration and deployment docs
-
-**It accurately reflects the current state of the codebase as of this session.**
+Last validated against the codebase on 2026-06-11 (READMEs, architecture docs, and direct code exploration). If behaviour described here diverges from the code, trust the code — and update this file in the same change.

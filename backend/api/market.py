@@ -25,7 +25,7 @@ async def ohlcv(
     try:
         return await get_ohlcv(ticker, period, start_date, end_date)
     except MarketDataError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 @router.get("/custom-indicator")
@@ -40,7 +40,7 @@ async def custom_indicator(
     try:
         return await get_custom_indicator_series(ticker, formula, period, start_date, end_date)
     except MarketDataError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 @router.get("/sentiment-history")
@@ -52,4 +52,4 @@ async def sentiment_history(
     try:
         return await get_sentiment_history(db, ticker, user=current_user)
     except MarketDataError as exc:
-        raise HTTPException(status_code=exc.status_code, detail=str(exc))
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

@@ -19,6 +19,7 @@ def calculate_sharpe_ratio(returns: pd.Series, risk_free_rate: float = 0.02) -> 
     sharpe = (mean_return - (risk_free_rate / 252)) / std_return
     return float(sharpe * np.sqrt(252))
 
+
 def calculate_max_drawdown(prices: pd.Series) -> float:
     """Calculate the Maximum Drawdown."""
     if len(prices) < 2:
@@ -27,6 +28,7 @@ def calculate_max_drawdown(prices: pd.Series) -> float:
     rolling_max = prices.cummax()
     drawdown = (prices - rolling_max) / rolling_max
     return float(drawdown.min())
+
 
 def calculate_volatility(returns: pd.Series) -> float:
     """Calculate the annualized volatility."""

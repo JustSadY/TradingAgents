@@ -128,6 +128,7 @@ async def run_analysis_task(
     """Background entrypoint for a manual analysis run."""
     if user:
         from backend.core.log_handler import current_user_id
+
         current_user_id.set(user.id)
     async with AsyncSessionLocal() as db:
         try:
@@ -164,6 +165,7 @@ async def run_portfolio_task(
     """Background entrypoint for a multi-ticker portfolio analysis run."""
     if user:
         from backend.core.log_handler import current_user_id
+
         current_user_id.set(user.id)
     async with AsyncSessionLocal() as db:
         try:
@@ -256,6 +258,7 @@ async def rollback_and_resume_analysis(
     async def run_resume():
         if current_user:
             from backend.core.log_handler import current_user_id
+
             current_user_id.set(current_user.id)
         async with AsyncSessionLocal() as session:
             try:
@@ -290,9 +293,12 @@ async def rollback_and_resume_analysis(
                     try:
                         # Fetch the updated row
                         from backend.repositories.analysis import get_analysis_by_id as _get_row
+
                         updated_row = await _get_row(session, analysis_id, user=current_user)
                         if updated_row:
-                            await place_signal_order(session, ticker=analysis.ticker, row=updated_row, settings=settings, user=current_user)
+                            await place_signal_order(
+                                session, ticker=analysis.ticker, row=updated_row, settings=settings, user=current_user
+                            )
                             await session.commit()
                     except Exception as order_exc:
                         _logger.warning("Order execution skipped on time-travel resume: %s", order_exc)

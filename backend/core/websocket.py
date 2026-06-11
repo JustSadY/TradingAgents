@@ -6,6 +6,8 @@ from typing import Any
 
 from fastapi import WebSocket
 
+from backend.core.metrics import WS_CONNECTIONS
+
 _logger = logging.getLogger(__name__)
 _BUFFER_SIZE = 64
 _BUFFER_TTL = 30
@@ -17,9 +19,13 @@ class WebSocketManager:
         self._buffers: dict[str, deque] = {}
         self._cleanup_handles: dict[str, asyncio.TimerHandle] = {}
 
+    def _refresh_connection_gauge(self):
+        WS_CONNECTIONS.set(sum(len(conns) for conns in self._connections.values()))
+
     async def connect(self, task_id: str, ws: WebSocket):
         await ws.accept()
         self._connections.setdefault(task_id, []).append(ws)
+        self._refresh_connection_gauge()
         _logger.debug("WS connected: task=%s", task_id)
         buffered = list(self._buffers.get(task_id, []))
         if buffered:
@@ -36,6 +42,7 @@ class WebSocketManager:
             conns.remove(ws)
         if not conns:
             self._connections.pop(task_id, None)
+        self._refresh_connection_gauge()
 
     async def send(self, task_id: str, event: dict[str, Any]):
         buf = self._buffers.setdefault(task_id, deque(maxlen=_BUFFER_SIZE))
@@ -66,6 +73,7 @@ class WebSocketManager:
             except Exception:
                 pass
         self._connections.pop(task_id, None)
+        self._refresh_connection_gauge()
         self._schedule_buffer_cleanup(task_id, ttl=_BUFFER_TTL)
 
     def _schedule_buffer_cleanup(self, task_id: str, ttl: int = _BUFFER_TTL):
@@ -83,6 +91,7 @@ class WebSocketManager:
         self._buffers.pop(task_id, None)
         self._cleanup_handles.pop(task_id, None)
         conns = self._connections.pop(task_id, None)
+        self._refresh_connection_gauge()
         if conns:
             _logger.debug("Closing %d lingering WS connections for task=%s during buffer cleanup", len(conns), task_id)
             for ws in conns:

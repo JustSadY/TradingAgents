@@ -32,12 +32,14 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
 
     async def _emit_stats(self) -> None:
         try:
-            await self.emitter.emit({
-                "type": "stats",
-                "llm_calls": self.llm_calls,
-                "tokens_in": self.tokens_in,
-                "tokens_out": self.tokens_out,
-            })
+            await self.emitter.emit(
+                {
+                    "type": "stats",
+                    "llm_calls": self.llm_calls,
+                    "tokens_in": self.tokens_in,
+                    "tokens_out": self.tokens_out,
+                }
+            )
         except Exception as e:
             _logger.debug("Failed to emit live stats: %s", e)
 
@@ -111,11 +113,13 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
             agent_name = "thinking"
 
         try:
-            await self.emitter.emit({
-                "type": "token",
-                "agent": agent_name,
-                "token": token,
-            })
+            await self.emitter.emit(
+                {
+                    "type": "token",
+                    "agent": agent_name,
+                    "token": token,
+                }
+            )
         except Exception as e:
             # Prevent token streaming errors from interrupting model execution
             _logger.debug("Failed to emit token: %s", e)
@@ -142,6 +146,7 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         if agent_name:
             try:
                 from backend.core.catalog import node_progress
+
                 prog = node_progress(f"{agent_name}_tools")
                 if prog:
                     await self.emitter.emit(prog)
@@ -174,15 +179,18 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         if agent_name:
             try:
                 from backend.core.catalog import node_progress
+
                 prog = node_progress(f"{agent_name}_tools")
                 if prog:
                     # Update label to include duration
                     label = f"{prog['label']}{duration_str}"
-                    await self.emitter.emit({
-                        "type": "progress",
-                        "node": prog["node"],
-                        "label": label,
-                        "stage": prog["stage"],
-                    })
+                    await self.emitter.emit(
+                        {
+                            "type": "progress",
+                            "node": prog["node"],
+                            "label": label,
+                            "stage": prog["stage"],
+                        }
+                    )
             except Exception as e:
                 _logger.debug("Failed to emit tool end progress: %s", e)

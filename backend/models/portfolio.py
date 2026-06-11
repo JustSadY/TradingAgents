@@ -54,9 +54,7 @@ class Holding(Base):
     # Optional AI-set exit levels; the position monitor auto-closes on breach.
     stop_loss: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     take_profit: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
-    opened_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(UTC)
-    )
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         default=lambda: datetime.now(UTC),

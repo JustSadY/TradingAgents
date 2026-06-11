@@ -101,10 +101,7 @@ async def self_correct_structured(
         "Please fix the invalid output so that it conforms strictly to the schema, and output the corrected JSON block now."
     )
 
-    correction_messages = [
-        {"role": "system", "content": system_content},
-        {"role": "user", "content": user_content}
-    ]
+    correction_messages = [{"role": "system", "content": system_content}, {"role": "user", "content": user_content}]
 
     try:
         response = await plain_llm.ainvoke(correction_messages)

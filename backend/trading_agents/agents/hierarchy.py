@@ -34,6 +34,7 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+
 class AgentHierarchy:
     """
     Parent → child registry with cascading enable checks, recursive LLM

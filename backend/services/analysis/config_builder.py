@@ -44,6 +44,8 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         "results_dir": os.environ.get("TRADINGAGENTS_RESULTS_DIR", DEFAULT_CONFIG["results_dir"]),
         "llm_provider": settings.llm_provider,
         "llm_model": settings.llm_model,
+        "fallback_llm_provider": getattr(settings, "fallback_llm_provider", None),
+        "fallback_llm_model": getattr(settings, "fallback_llm_model", None),
         "max_debate_rounds": settings.max_debate_rounds,
         "max_risk_discuss_rounds": settings.max_risk_rounds,
         "output_language": settings.output_language or DEFAULT_CONFIG["output_language"],

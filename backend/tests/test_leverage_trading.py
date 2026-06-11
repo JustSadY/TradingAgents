@@ -81,9 +81,7 @@ def _patch_lang(monkeypatch):
 async def test_leveraged_buy_posts_margin_and_borrows(db, portfolio, monkeypatch):
     _set_price(monkeypatch, 100.0)
     # Buy 100 shares @ $100 = $10,000 notional at 5x leverage.
-    res = await mts.execute_order(
-        db, "AAPL", "BUY", 100.0, portfolio_id=portfolio.id, leverage=5.0
-    )
+    res = await mts.execute_order(db, "AAPL", "BUY", 100.0, portfolio_id=portfolio.id, leverage=5.0)
     assert res["leverage"] == 5.0
 
     h = await _get_holding(db, "AAPL")
@@ -159,9 +157,7 @@ async def test_leverage_clamped_to_max(db, portfolio, monkeypatch):
 @pytest.mark.asyncio
 async def test_stop_loss_auto_closes(db, portfolio, monkeypatch):
     _set_price(monkeypatch, 100.0)
-    await mts.execute_order(
-        db, "AAPL", "BUY", 10.0, portfolio_id=portfolio.id, stop_loss=90.0, take_profit=130.0
-    )
+    await mts.execute_order(db, "AAPL", "BUY", 10.0, portfolio_id=portfolio.id, stop_loss=90.0, take_profit=130.0)
     h = await _get_holding(db, "AAPL")
     assert float(h.stop_loss) == 90.0 and float(h.take_profit) == 130.0
 
@@ -176,9 +172,7 @@ async def test_stop_loss_auto_closes(db, portfolio, monkeypatch):
 @pytest.mark.asyncio
 async def test_take_profit_auto_closes(db, portfolio, monkeypatch):
     _set_price(monkeypatch, 100.0)
-    await mts.execute_order(
-        db, "AAPL", "BUY", 10.0, portfolio_id=portfolio.id, stop_loss=90.0, take_profit=130.0
-    )
+    await mts.execute_order(db, "AAPL", "BUY", 10.0, portfolio_id=portfolio.id, stop_loss=90.0, take_profit=130.0)
     # Rally past the target → auto-close with reason TAKE_PROFIT.
     _set_price(monkeypatch, 131.0)
     db.expunge_all()
@@ -201,9 +195,7 @@ async def test_monitor_open_positions_sweeps(db, portfolio, monkeypatch):
 async def test_open_short_posts_margin(db, portfolio, monkeypatch):
     _set_price(monkeypatch, 100.0)
     # SELL with no long + allow_short opens a 2x short of 100 shares.
-    res = await mts.execute_order(
-        db, "AAPL", "SELL", 100.0, portfolio_id=portfolio.id, leverage=2.0, allow_short=True
-    )
+    res = await mts.execute_order(db, "AAPL", "SELL", 100.0, portfolio_id=portfolio.id, leverage=2.0, allow_short=True)
     assert res["status"] == "FILLED"
     h = await _get_holding(db, "AAPL")
     assert h.side == "short"

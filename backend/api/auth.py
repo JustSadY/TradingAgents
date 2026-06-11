@@ -42,7 +42,7 @@ async def refresh(request: Request, body: RefreshRequest, db: AsyncSession = Dep
     try:
         payload = decode_token_payload(body.refresh_token, expected_type="refresh")
     except ValueError:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid refresh token") from None
 
     user = await get_user_by_username(db, payload["sub"])
     if not user or not user.is_active:

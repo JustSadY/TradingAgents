@@ -108,8 +108,8 @@ async def extract_and_save_annotations(
                             PriceAlert.ticker == row.ticker.upper(),
                             PriceAlert.condition == "below",
                             PriceAlert.target_price == price_dec,
-                            PriceAlert.enabled == True,
-                            PriceAlert.triggered_at.is_(None)
+                            PriceAlert.enabled.is_(True),
+                            PriceAlert.triggered_at.is_(None),
                         )
                         existing_alert = (await s.execute(stmt)).scalar_one_or_none()
                         if not existing_alert:
@@ -120,7 +120,7 @@ async def extract_and_save_annotations(
                                 condition="below",
                                 target_price=float(price_dec),
                                 auto_analyze=True,
-                                alert_type="support"
+                                alert_type="support",
                             )
 
                     for res in annotations.get("resistance_levels") or []:
@@ -130,8 +130,8 @@ async def extract_and_save_annotations(
                             PriceAlert.ticker == row.ticker.upper(),
                             PriceAlert.condition == "above",
                             PriceAlert.target_price == price_dec,
-                            PriceAlert.enabled == True,
-                            PriceAlert.triggered_at.is_(None)
+                            PriceAlert.enabled.is_(True),
+                            PriceAlert.triggered_at.is_(None),
                         )
                         existing_alert = (await s.execute(stmt)).scalar_one_or_none()
                         if not existing_alert:
@@ -142,7 +142,7 @@ async def extract_and_save_annotations(
                                 condition="above",
                                 target_price=float(price_dec),
                                 auto_analyze=True,
-                                alert_type="resistance"
+                                alert_type="resistance",
                             )
                 await s.commit()
     except Exception as exc:

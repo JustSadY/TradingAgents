@@ -20,8 +20,26 @@ _logger = logging.getLogger(__name__)
 
 # A compact default universe of liquid large caps; users can pass their own.
 DEFAULT_UNIVERSE = [
-    "AAPL", "MSFT", "GOOGL", "AMZN", "NVDA", "META", "TSLA", "AMD", "AVGO",
-    "JPM", "V", "UNH", "XOM", "LLY", "COST", "HD", "NFLX", "CRM", "ORCL", "ADBE",
+    "AAPL",
+    "MSFT",
+    "GOOGL",
+    "AMZN",
+    "NVDA",
+    "META",
+    "TSLA",
+    "AMD",
+    "AVGO",
+    "JPM",
+    "V",
+    "UNH",
+    "XOM",
+    "LLY",
+    "COST",
+    "HD",
+    "NFLX",
+    "CRM",
+    "ORCL",
+    "ADBE",
 ]
 MAX_UNIVERSE = 50
 

@@ -37,14 +37,13 @@ def _apply_cache_control(input_value: Any) -> Any:
         for msg in messages:
             if isinstance(msg, SystemMessage) and isinstance(msg.content, str):
                 if len(msg.content) >= _MIN_CACHEABLE_CHARS:
-                    msg.content = [
-                        {"type": "text", "text": msg.content, "cache_control": {"type": "ephemeral"}}
-                    ]
+                    msg.content = [{"type": "text", "text": msg.content, "cache_control": {"type": "ephemeral"}}]
                 break  # one breakpoint on the system prefix is enough
         return messages
     except Exception as exc:  # noqa: BLE001 — caching is an optimisation, never break the call
         _logger.debug("prompt caching skipped: %s", exc)
         return input_value
+
 
 _PASSTHROUGH_KWARGS = (
     "timeout",

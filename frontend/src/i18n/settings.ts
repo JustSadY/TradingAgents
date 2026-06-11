@@ -56,6 +56,21 @@ const translations = {
     'settings.effort_high_deepest': 'High — Deepest',
 
 
+    'settings.row_fallback_provider': 'Fallback Provider',
+    'settings.row_fallback_model': 'Fallback Model',
+    'settings.fallback_disabled': 'Disabled',
+    'settings.fallback_model_placeholder': 'e.g. gpt-4o-mini',
+    'settings.fallback_hint': 'Used when the primary provider fails mid-analysis. Requires an API key for the fallback provider.',
+
+
+    'settings.row_memory_store': 'Memory Store',
+    'settings.memory_store_pinecone': 'Pinecone (managed)',
+    'settings.memory_store_pgvector': 'PostgreSQL (pgvector, self-hosted)',
+    'settings.memory_disabled_pinecone': 'DISABLED — add a Pinecone API key',
+    'settings.memory_disabled_pgvector': 'DISABLED — add an OpenAI API key',
+    'settings.pgvector_hint': "Episodes are stored in the app's own PostgreSQL database. Requires the pgvector extension on the database server and your OpenAI API key (Profile → API Keys) for embedding.",
+
+
     'settings.row_investor_persona': 'Investor Persona',
     'settings.persona_conservative': 'Conservative Dividend Investor',
     'settings.persona_risk_loving': 'Risk-Loving Crypto/Growth Trader',
@@ -181,6 +196,21 @@ const translations = {
     'settings.effort_high_extended': 'High — Extended thinking',
     'settings.effort_minimal_fastest': 'Minimal — En hızlı',
     'settings.effort_high_deepest': 'High — En derin',
+
+
+    'settings.row_fallback_provider': 'Yedek Sağlayıcı',
+    'settings.row_fallback_model': 'Yedek Model',
+    'settings.fallback_disabled': 'Kapalı',
+    'settings.fallback_model_placeholder': 'örn. gpt-4o-mini',
+    'settings.fallback_hint': 'Birincil sağlayıcı analiz sırasında hata verdiğinde kullanılır. Yedek sağlayıcı için API anahtarı gerekir.',
+
+
+    'settings.row_memory_store': 'Bellek Deposu',
+    'settings.memory_store_pinecone': 'Pinecone (yönetilen)',
+    'settings.memory_store_pgvector': 'PostgreSQL (pgvector, kendi sunucunda)',
+    'settings.memory_disabled_pinecone': 'KAPALI — Pinecone API anahtarı ekleyin',
+    'settings.memory_disabled_pgvector': 'KAPALI — OpenAI API anahtarı ekleyin',
+    'settings.pgvector_hint': 'Epizotlar uygulamanın kendi PostgreSQL veritabanında saklanır. Veritabanı sunucusunda pgvector eklentisi ve embedding için OpenAI API anahtarınız (Profil → API Anahtarları) gerekir.',
 
 
     'settings.row_investor_persona': 'Yatırımcı Kişiliği',

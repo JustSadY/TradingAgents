@@ -29,6 +29,8 @@ def _liquidation_for_position(
     if side == "short":
         return liquidation_price_short(quantity, entry_price, margin, maintenance_rate)
     return liquidation_price_long(quantity, borrowed, maintenance_rate)
+
+
 from backend.services.market_data_service import get_live_price, get_live_prices_batch
 
 _logger = logging.getLogger(__name__)
@@ -353,11 +355,14 @@ async def execute_order(
             holding.borrowed_amount = (holding.borrowed_amount or Decimal("0.0")) + borrowed
             # Blended leverage = total notional exposure / total equity posted.
             total_notional = holding.avg_buy_price * holding.quantity
-            holding.leverage = (
-                total_notional / holding.margin_used if holding.margin_used > 0 else Decimal("1.0")
-            )
+            holding.leverage = total_notional / holding.margin_used if holding.margin_used > 0 else Decimal("1.0")
             holding.liquidation_price = _liquidation_for_position(
-                pos_side, holding.quantity, holding.avg_buy_price, holding.borrowed_amount, holding.margin_used, holding.leverage
+                pos_side,
+                holding.quantity,
+                holding.avg_buy_price,
+                holding.borrowed_amount,
+                holding.margin_used,
+                holding.leverage,
             )
             holding.current_price = price
             if stop_dec > 0:
@@ -411,7 +416,12 @@ async def execute_order(
             await db.delete(holding)
         else:
             holding.liquidation_price = _liquidation_for_position(
-                pos_side, holding.quantity, holding.avg_buy_price, holding.borrowed_amount, holding.margin_used, holding.leverage
+                pos_side,
+                holding.quantity,
+                holding.avg_buy_price,
+                holding.borrowed_amount,
+                holding.margin_used,
+                holding.leverage,
             )
             holding.current_price = price
 

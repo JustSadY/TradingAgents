@@ -219,9 +219,7 @@ async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, leverage, 
     equity = float(snapshot.get("total_value") or 0.0)
     holdings = snapshot.get("holdings", [])
     existing_gross = sum(float(h.get("market_value") or 0.0) for h in holdings)
-    existing_ticker = sum(
-        float(h.get("market_value") or 0.0) for h in holdings if h.get("ticker") == ticker
-    )
+    existing_ticker = sum(float(h.get("market_value") or 0.0) for h in holdings if h.get("ticker") == ticker)
     proposed_notional = price * quantity
 
     assessment = cap_order_notional(

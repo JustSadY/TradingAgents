@@ -66,7 +66,7 @@ backend/
 
 *   **FastAPI:** Modern, asynchronous web framework for Python. Provides interactive API documentation out-of-the-box (Swagger UI at `/docs`).
 *   **SQLAlchemy Async:** Async IO ORM targeting PostgreSQL via `asyncpg`.
-*   **Schema management:** On startup the app calls `Base.metadata.create_all` and then a small **additive, idempotent column migrator** ([core/migrations.py](core/migrations.py)) that issues `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for any newly added model columns. While `alembic` is included in the dependencies for future-proofing and baseline checks, there is **no active Alembic migration workflow** in use — model changes that only *add* columns are picked up automatically; destructive changes (renames/drops/type changes) must be applied manually.
+*   **Schema management:** On startup the app calls `Base.metadata.create_all` and then a small **additive, idempotent column migrator** ([core/migrations.py](core/migrations.py)) that issues `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for any newly added model columns — model changes that only *add* columns are picked up automatically; destructive changes (renames/drops/type changes) must be applied manually. **Alembic is scaffolded as the opt-in successor** (see [alembic/README.md](alembic/README.md)): once a database is stamped with a baseline (`alembic_version` table exists), the startup migrator automatically defers to Alembic for that database.
 *   **APScheduler:** In-process, cron-like job scheduler for background analyses.
 *   **WebSockets:** Dynamic progress updates streaming for long-running agent workflows.
 
@@ -131,6 +131,7 @@ Ensure you have a PostgreSQL database server running and a database named `tradi
     Tables and additive column migrations are applied automatically on startup
     (see [core/migrations.py](core/migrations.py)). No manual migration step is
     required for a fresh database; only destructive schema changes need manual SQL.
+    To manage a database with Alembic instead, follow [alembic/README.md](alembic/README.md).
 5.  **Run Development Server:**
     ```bash
     uvicorn backend.main:app --reload --port 8000

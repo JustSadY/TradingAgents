@@ -125,6 +125,7 @@ async def answer_report_question(
 
     # Determine LLM Provider/Model based on the portfolio_manager agent settings.
     from backend.services.agent_settings_service import build_agent_runtime_context
+
     agent_ctx = await build_agent_runtime_context(db, user.id if user else None)
     pm_settings = agent_ctx.get("portfolio_manager", {}).get("settings", {})
 
@@ -149,7 +150,7 @@ async def answer_report_question(
         llm = client.get_llm()
         response = await llm.ainvoke(payload)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     db.add(AnalysisChat(analysis_id=analysis_id, role="user", content=message))
     assistant_chat = AnalysisChat(analysis_id=analysis_id, role="assistant", content=response.content)

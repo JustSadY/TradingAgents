@@ -92,6 +92,7 @@ async def run_tool_analyst(
     if ctx and "emitter" in ctx:
         emitter = ctx["emitter"]
         from backend.core.catalog import node_progress
+
         prog = node_progress(f"{analyst}_analyst")
         if prog:
             await emitter.emit(prog)

@@ -101,6 +101,7 @@ def _validate_annotations(data: dict) -> dict:
                     "type": str(kl.get("type", "other")),
                 }
             )
+
     def _leverage_or_none(val):
         try:
             v = float(val)

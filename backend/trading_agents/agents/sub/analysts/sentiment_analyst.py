@@ -66,8 +66,7 @@ def create_sentiment_analyst(llm):
                     "system",
                     # The sentiment analyst produces a sentiment report only — it does not
                     # issue BUY/HOLD/SELL calls (that's the trader/PM's job downstream).
-                    "{system_message}\n"
-                    "For your reference, the current date is {current_date}. {instrument_context}",
+                    "{system_message}\nFor your reference, the current date is {current_date}. {instrument_context}",
                 ),
                 MessagesPlaceholder(variable_name="messages"),
             ]

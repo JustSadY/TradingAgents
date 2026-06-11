@@ -42,9 +42,7 @@ DEFAULT_MAINTENANCE_FRACTION = Decimal("0.5")
 _SECONDS_PER_YEAR = Decimal(str(365 * 24 * 60 * 60))
 
 
-def maintenance_rate_for_leverage(
-    leverage: Decimal, fraction: Decimal = DEFAULT_MAINTENANCE_FRACTION
-) -> Decimal:
+def maintenance_rate_for_leverage(leverage: Decimal, fraction: Decimal = DEFAULT_MAINTENANCE_FRACTION) -> Decimal:
     """Maintenance margin rate (as a fraction of notional) for a leverage level.
 
     Derived from the initial margin (1/leverage) so it is always lower than it,

@@ -13,7 +13,7 @@ async def list_alerts(db: AsyncSession, user=None) -> list[PriceAlert]:
 
 
 async def get_enabled_alerts(db: AsyncSession) -> list[PriceAlert]:
-    result = await db.execute(select(PriceAlert).where(PriceAlert.enabled == True, PriceAlert.triggered_at.is_(None)))
+    result = await db.execute(select(PriceAlert).where(PriceAlert.enabled.is_(True), PriceAlert.triggered_at.is_(None)))
     return list(result.scalars().all())
 
 
@@ -25,7 +25,13 @@ async def get_alert_by_id(db: AsyncSession, alert_id: int, user=None) -> PriceAl
 
 
 async def create_alert(
-    db: AsyncSession, user_id: int, ticker: str, condition: str, target_price: float, auto_analyze: bool, alert_type: str = "price"
+    db: AsyncSession,
+    user_id: int,
+    ticker: str,
+    condition: str,
+    target_price: float,
+    auto_analyze: bool,
+    alert_type: str = "price",
 ) -> PriceAlert:
     alert = PriceAlert(
         ticker=ticker.upper(),

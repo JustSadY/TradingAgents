@@ -20,6 +20,8 @@ interface Settings {
   price_tolerance_pct: number
   llm_provider: string
   llm_model: string
+  fallback_llm_provider: string | null
+  fallback_llm_model: string | null
   backend_url: string | null
   openai_reasoning_effort: string | null
   anthropic_effort: string | null
@@ -41,6 +43,7 @@ interface Settings {
   watchlist: string[]
   node_retry_attempts: number
   node_retry_base_delay: number
+  memory_store: string
   pinecone_index: string
   pinecone_cloud: string
   pinecone_region: string
@@ -292,6 +295,38 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed mb-2">
                   Global LLM settings and performance parameters. Per-agent models are configured in the AI Configuration tab.
                 </p>
+
+                <Row label={t('settings.row_fallback_provider')}>
+                  <select
+                    className={Input}
+                    value={s.fallback_llm_provider || ''}
+                    onChange={e => {
+                      const v = e.target.value || null
+                      update('fallback_llm_provider', v)
+                      if (!v) update('fallback_llm_model', null)
+                    }}
+                  >
+                    <option value="">{t('settings.fallback_disabled')}</option>
+                    {Object.entries(meta?.provider_labels ?? {}).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                </Row>
+                {s.fallback_llm_provider && (
+                  <>
+                    <Row label={t('settings.row_fallback_model')}>
+                      <input
+                        className={Input}
+                        value={s.fallback_llm_model || ''}
+                        onChange={e => update('fallback_llm_model', e.target.value || null)}
+                        placeholder={t('settings.fallback_model_placeholder')}
+                      />
+                    </Row>
+                    <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed">
+                      {t('settings.fallback_hint')}
+                    </p>
+                  </>
+                )}
 
                 <Row label="Reasoning Effort">
                   <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>
@@ -581,39 +616,63 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           )}
 
           {activeTab === 'memory' && (
-            <Section title="Vector Memory (Pinecone)">
+            <Section title="Vector Memory">
+              <Row label={t('settings.row_memory_store')}>
+                <select className={Input} value={s.memory_store} onChange={e => update('memory_store', e.target.value)}>
+                  <option value="pinecone">{t('settings.memory_store_pinecone')}</option>
+                  <option value="pgvector">{t('settings.memory_store_pgvector')}</option>
+                </select>
+              </Row>
               <Row label="Status">
                 {memoryStatus?.enabled ? (
                   <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">ENABLED</span>
                 ) : (
-                  <span className="px-2 py-0.5 rounded-lg bg-slate-700/40 text-slate-400 text-[10px] font-bold border border-white/[0.06]">DISABLED — add a Pinecone API key</span>
+                  <span className="px-2 py-0.5 rounded-lg bg-slate-700/40 text-slate-400 text-[10px] font-bold border border-white/[0.06]">
+                    {s.memory_store === 'pgvector' ? t('settings.memory_disabled_pgvector') : t('settings.memory_disabled_pinecone')}
+                  </span>
                 )}
               </Row>
-              <Row label="Pinecone API Key">
-                {memoryStatus?.enabled ? (
-                  <button onClick={deletePineconeKey} className="flex items-center gap-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300">
-                    <Trash2 size={13} /> Remove key
-                  </button>
-                ) : (
-                  <div className="flex gap-2 items-center">
-                    <input type="password" className={Input} value={pineconeKey} onChange={e => setPineconeKey(e.target.value)} placeholder="pcsk_..." />
-                    <button onClick={savePineconeKey} disabled={pineconeSaving || !pineconeKey.trim()} className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-violet-600 hover:bg-violet-500 disabled:opacity-40">Save</button>
-                  </div>
-                )}
-              </Row>
-              <Row label="Index Name"><input className={Input} value={s.pinecone_index} onChange={e => update('pinecone_index', e.target.value)} /></Row>
-              <Row label="Cloud"><input className={Input} value={s.pinecone_cloud} onChange={e => update('pinecone_cloud', e.target.value)} placeholder="aws" /></Row>
-              <Row label="Region"><input className={Input} value={s.pinecone_region} onChange={e => update('pinecone_region', e.target.value)} placeholder="us-east-1" /></Row>
-              <Row label="Embedder">
-                <select className={Input} value={s.memory_embedder} onChange={e => update('memory_embedder', e.target.value)}>
-                  <option value="pinecone">Pinecone hosted (no extra key)</option>
-                  <option value="openai">OpenAI (uses your OpenAI key)</option>
-                </select>
-              </Row>
-              {s.memory_embedder === 'openai' ? (
-                <Row label="OpenAI Embed Model"><input className={Input} value={s.memory_openai_embed_model} onChange={e => update('memory_openai_embed_model', e.target.value)} /></Row>
+              {s.memory_store === 'pgvector' ? (
+                <>
+                  <Row label="OpenAI Embed Model"><input className={Input} value={s.memory_openai_embed_model} onChange={e => update('memory_openai_embed_model', e.target.value)} /></Row>
+                  <Row label="">
+                    <p className="text-[10px] text-slate-600 leading-relaxed">{t('settings.pgvector_hint')}</p>
+                  </Row>
+                </>
               ) : (
-                <Row label="Embed Model"><input className={Input} value={s.pinecone_embed_model} onChange={e => update('pinecone_embed_model', e.target.value)} /></Row>
+                <>
+                  <Row label="Pinecone API Key">
+                    {memoryStatus?.enabled ? (
+                      <button onClick={deletePineconeKey} className="flex items-center gap-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300">
+                        <Trash2 size={13} /> Remove key
+                      </button>
+                    ) : (
+                      <div className="flex gap-2 items-center">
+                        <input type="password" className={Input} value={pineconeKey} onChange={e => setPineconeKey(e.target.value)} placeholder="pcsk_..." />
+                        <button onClick={savePineconeKey} disabled={pineconeSaving || !pineconeKey.trim()} className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-violet-600 hover:bg-violet-500 disabled:opacity-40">Save</button>
+                      </div>
+                    )}
+                  </Row>
+                  <Row label="Index Name"><input className={Input} value={s.pinecone_index} onChange={e => update('pinecone_index', e.target.value)} /></Row>
+                  <Row label="Cloud"><input className={Input} value={s.pinecone_cloud} onChange={e => update('pinecone_cloud', e.target.value)} placeholder="aws" /></Row>
+                  <Row label="Region"><input className={Input} value={s.pinecone_region} onChange={e => update('pinecone_region', e.target.value)} placeholder="us-east-1" /></Row>
+                  <Row label="Embedder">
+                    <select className={Input} value={s.memory_embedder} onChange={e => update('memory_embedder', e.target.value)}>
+                      <option value="pinecone">Pinecone hosted (no extra key)</option>
+                      <option value="openai">OpenAI (uses your OpenAI key)</option>
+                    </select>
+                  </Row>
+                  {s.memory_embedder === 'openai' ? (
+                    <Row label="OpenAI Embed Model"><input className={Input} value={s.memory_openai_embed_model} onChange={e => update('memory_openai_embed_model', e.target.value)} /></Row>
+                  ) : (
+                    <Row label="Embed Model"><input className={Input} value={s.pinecone_embed_model} onChange={e => update('pinecone_embed_model', e.target.value)} /></Row>
+                  )}
+                  <Row label="">
+                    <p className="text-[10px] text-slate-600 leading-relaxed">
+                      Use the Save button above to persist the index/embedder settings. Memory stays off until a Pinecone API key is added, and each user's memory is isolated. The OpenAI embedder reuses your OpenAI API key from Profile.
+                    </p>
+                  </Row>
+                </>
               )}
               {memoryStatus?.needs_openai_key && (
                 <Row label=""><span className="text-[11px] text-amber-400">Add your OpenAI API key in Profile to use the OpenAI embedder.</span></Row>
@@ -623,11 +682,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded" checked={s.agent_qa_enabled} onChange={e => update('agent_qa_enabled', e.target.checked)} />
                   <span className="text-xs font-semibold">Analysts question each other after their reports</span>
                 </label>
-              </Row>
-              <Row label="">
-                <p className="text-[10px] text-slate-600 leading-relaxed">
-                  Use the Save button above to persist the index/embedder settings. Memory stays off until a Pinecone API key is added, and each user's memory is isolated. The OpenAI embedder reuses your OpenAI API key from Profile.
-                </p>
               </Row>
             </Section>
           )}

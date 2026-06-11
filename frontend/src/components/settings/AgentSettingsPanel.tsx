@@ -563,7 +563,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
     } catch (err: any) {
       const msg = err.response?.data?.detail || 'Failed to save agent settings.'
       setSaveError(msg)
-      throw new Error(msg)
+      throw new Error(msg, { cause: err })
     }
   }
 

@@ -68,12 +68,28 @@ def test_handler_accumulates_across_calls():
     r1 = SimpleNamespace(
         llm_output=None,
         usage_metadata=None,
-        generations=[[SimpleNamespace(message=SimpleNamespace(usage_metadata={"input_tokens": 100, "output_tokens": 20}, response_metadata={}))]],
+        generations=[
+            [
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        usage_metadata={"input_tokens": 100, "output_tokens": 20}, response_metadata={}
+                    )
+                )
+            ]
+        ],
     )
     r2 = SimpleNamespace(
         llm_output=None,
         usage_metadata=None,
-        generations=[[SimpleNamespace(message=SimpleNamespace(usage_metadata={"input_tokens": 50, "output_tokens": 5}, response_metadata={}))]],
+        generations=[
+            [
+                SimpleNamespace(
+                    message=SimpleNamespace(
+                        usage_metadata={"input_tokens": 50, "output_tokens": 5}, response_metadata={}
+                    )
+                )
+            ]
+        ],
     )
     handler.on_llm_end(r1)
     handler.on_llm_end(r2)

@@ -163,7 +163,7 @@ def create_market_intelligence_node(ctx: AgentRunContext) -> NodeFn:
         TEAMS = {
             "technical": ["market", "quant"],
             "fundamental": ["fundamentals", "earnings", "insider", "ownership"],
-            "macro_sentiment": ["macro", "social", "news", "review"]
+            "macro_sentiment": ["macro", "social", "news", "review"],
         }
 
         active_teams = {}

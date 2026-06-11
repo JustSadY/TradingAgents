@@ -25,6 +25,8 @@ class Settings(BaseSettings):
     DATABASE_URL: str = "postgresql+asyncpg://tradingagents:tradingagents@localhost:5432/tradingagents"
     ENCRYPTION_KEY: str = ""
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
+    # Bearer token for GET /metrics (Prometheus). Endpoint returns 404 while unset.
+    METRICS_TOKEN: str = ""
 
     @model_validator(mode="after")
     def _reject_insecure_production_defaults(self) -> "Settings":

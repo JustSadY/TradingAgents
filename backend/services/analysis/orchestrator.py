@@ -7,6 +7,7 @@ import time
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.catalog import node_progress
+from backend.core.metrics import ANALYSIS_DURATION, ANALYSIS_RUNS
 from backend.repositories.analysis import get_system_settings
 from backend.services.stats_handler import StatsCallbackHandler
 from backend.trading_agents.agents.schemas import PropagateResult
@@ -124,14 +125,17 @@ async def run_individual_analysis(
 
         # Inject emitter into active_run_context for mental model updates
         from backend.trading_agents.agents.data.chart_tools import active_run_context
-        active_run_context.set({
-            "graph": ta,
-            "emitter": emitter,
-            "custom_indicators": [],
-            "visual_annotations": [],
-            "support_levels": [],
-            "resistance_levels": [],
-        })
+
+        active_run_context.set(
+            {
+                "graph": ta,
+                "emitter": emitter,
+                "custom_indicators": [],
+                "visual_annotations": [],
+                "support_levels": [],
+                "resistance_levels": [],
+            }
+        )
 
         prev_state = {}
         prev_inv_count = 0
@@ -164,7 +168,7 @@ async def run_individual_analysis(
 
                     if is_new:
                         history = d_state.get("history", "")
-                        lines = [l.strip() for l in history.split("\n") if l.strip()]
+                        lines = [line.strip() for line in history.split("\n") if line.strip()]
                         if lines:
                             await emitter.emit_debate_bubble(d_type, lines[-1])
 
@@ -259,7 +263,10 @@ async def run_individual_analysis(
             "llm_model": ta.llm_model,
             "preset_name": (
                 settings.active_preset_name
-                if (settings.active_preset_name and settings.active_preset_name.lower() not in ("unknown", "unknown:unknown", "unknown/unknown"))
+                if (
+                    settings.active_preset_name
+                    and settings.active_preset_name.lower() not in ("unknown", "unknown:unknown", "unknown/unknown")
+                )
                 else f"{(ta.llm_provider or 'Custom').strip() if ta.llm_provider and ta.llm_provider.lower() not in ('unknown', 'none') else 'Custom'}:{(ta.llm_model or 'Model').strip() if ta.llm_model and ta.llm_model.lower() not in ('unknown', 'none') else 'Model'}"
             ),
         }
@@ -296,6 +303,8 @@ async def run_individual_analysis(
         await await_analysis_background_tasks(emitter.task_id)
         await emitter.emit_decision(signal, result.final_decision)
         await emitter.emit_complete(row.id, signal, duration, stats.get("llm_calls", 0))
+        ANALYSIS_RUNS.labels(status="completed").inc()
+        ANALYSIS_DURATION.observe(duration)
 
         _logger.info(
             "Analysis complete task=%s ticker=%s signal=%s user=%s duration=%.2fs",
@@ -309,11 +318,13 @@ async def run_individual_analysis(
 
     except asyncio.CancelledError:
         _logger.info("Analysis cancelled task=%s user=%s", emitter.task_id, username)
+        ANALYSIS_RUNS.labels(status="cancelled").inc()
         await mark_as_cancelled(db, row.id)
         await emitter.emit_error("Analysis cancelled.")
         raise
     except Exception as exc:
         _logger.error("Analysis failed task=%s user=%s: %s", emitter.task_id, username, exc, exc_info=True)
+        ANALYSIS_RUNS.labels(status="failed").inc()
         await mark_as_failed(db, row.id)
 
         exc_str = str(exc)

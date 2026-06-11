@@ -13,7 +13,7 @@ from __future__ import annotations
 
 import logging
 
-from backend.core.memory import MemoryRecord, MemoryStore, build_pinecone_store
+from backend.core.memory import MemoryRecord, MemoryStore, build_pgvector_store, build_pinecone_store
 
 _logger = logging.getLogger(__name__)
 
@@ -25,11 +25,13 @@ _store_cache: dict[tuple, MemoryStore | None] = {}
 
 async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
     """Build the calling user's own memory store from their settings + encrypted
-    keys. Returns None (memory off) when the user hasn't configured Pinecone.
+    keys. Returns None (memory off) when the user hasn't configured a store.
 
-    Everything is per-user: the Pinecone API key (provider "pinecone"), the
-    index/region/embedder choice (AppSettings), and the OpenAI key (provider
-    "openai") when the OpenAI embedder is selected.
+    Everything is per-user. With the default ``memory_store='pinecone'`` the
+    Pinecone API key (provider "pinecone") gates memory, plus the OpenAI key
+    (provider "openai") when the OpenAI embedder is selected. With
+    ``memory_store='pgvector'`` episodes live in the app's own PostgreSQL and
+    only the OpenAI key (client-side embedding) is required.
     """
     if not user_id:
         return None
@@ -47,25 +49,52 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
             user = await db.get(User, user_id)
             if not user:
                 return None
-            pinecone_key = get_user_api_key(user, "pinecone", fernet)
-            if not pinecone_key:
-                return None  # this user hasn't enabled memory
 
             row = (await db.execute(select(AppSettings).where(AppSettings.user_id == user_id))).scalar_one_or_none()
+            store_kind = getattr(row, "memory_store", None) or "pinecone"
             index = getattr(row, "pinecone_index", None) or "tradingagents-memory"
             cloud = getattr(row, "pinecone_cloud", None) or "aws"
             region = getattr(row, "pinecone_region", None) or "us-east-1"
             embedder_kind = getattr(row, "memory_embedder", None) or "pinecone"
             embed_model = getattr(row, "pinecone_embed_model", None) or "llama-text-embed-v2"
             openai_embed_model = getattr(row, "memory_openai_embed_model", None) or "text-embedding-3-small"
-            openai_key = get_user_api_key(user, "openai", fernet) if embedder_kind == "openai" else None
-            if embedder_kind == "openai" and not openai_key:
-                return None
+
+            if store_kind == "pgvector":
+                openai_key = get_user_api_key(user, "openai", fernet)
+                if not openai_key:
+                    return None  # pgvector embeds client-side; needs the user's OpenAI key
+                pinecone_key = None
+            else:
+                pinecone_key = get_user_api_key(user, "pinecone", fernet)
+                if not pinecone_key:
+                    return None  # this user hasn't enabled memory
+                openai_key = get_user_api_key(user, "openai", fernet) if embedder_kind == "openai" else None
+                if embedder_kind == "openai" and not openai_key:
+                    return None
     except Exception as exc:  # noqa: BLE001 — memory must never break the pipeline
         _logger.warning("Could not resolve memory store for user_id=%s: %s", user_id, exc)
         return None
 
-    cache_key = (index, cloud, region, embedder_kind, embed_model, openai_embed_model, pinecone_key, openai_key)
+    if store_kind == "pgvector":
+        cache_key = ("pgvector", openai_embed_model, openai_key)
+        if cache_key not in _store_cache:
+            _store_cache[cache_key] = build_pgvector_store(
+                openai_api_key=openai_key,
+                openai_embed_model=openai_embed_model,
+            )
+        return _store_cache[cache_key]
+
+    cache_key = (
+        "pinecone",
+        index,
+        cloud,
+        region,
+        embedder_kind,
+        embed_model,
+        openai_embed_model,
+        pinecone_key,
+        openai_key,
+    )
     if cache_key not in _store_cache:
         _store_cache[cache_key] = build_pinecone_store(
             api_key=pinecone_key,
@@ -78,6 +107,7 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
             openai_embed_model=openai_embed_model,
         )
     return _store_cache[cache_key]
+
 
 # Episodes are isolated per owner so one user's trading history never leaks into
 # another's recall.

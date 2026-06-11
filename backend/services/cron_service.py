@@ -97,6 +97,7 @@ class CronService:
 
     async def _run_user_watchlist_scan(self, user_id: int):
         from backend.core.log_handler import current_user_id
+
         current_user_id.set(user_id)
         today = date.today().strftime("%Y-%m-%d")
         async with AsyncSessionLocal() as db:

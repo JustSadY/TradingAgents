@@ -78,6 +78,7 @@ class StatsCallbackHandler(BaseCallbackHandler):
         if isinstance(usage, dict) or hasattr(usage, "get"):
             getter = usage.get
         else:
+
             def getter(key, default=None):
                 return getattr(usage, key, default)
 
@@ -151,4 +152,3 @@ class StatsCallbackHandler(BaseCallbackHandler):
             "tokens_in": self.tokens_in,
             "tokens_out": self.tokens_out,
         }
-

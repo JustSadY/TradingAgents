@@ -7,21 +7,22 @@ SCENARIOS = [
         "id": "rate_hike",
         "title": "Fed Interest Rate Hike (+0.25%)",
         "description": "The Federal Reserve unexpectedly raises interest rates by 25 basis points to combat stubborn inflation.",
-        "impact_hint": "Tech/Growth stocks usually suffer due to higher discount rates. Financials might see improved margins."
+        "impact_hint": "Tech/Growth stocks usually suffer due to higher discount rates. Financials might see improved margins.",
     },
     {
         "id": "btc_crash",
         "title": "Bitcoin Flash Crash (-10%)",
         "description": "Bitcoin suddenly drops 10% in a single day due to a regulatory crackdown on a major exchange.",
-        "impact_hint": "Risk-off sentiment might spread to high-beta stocks. Crypto-linked companies (COIN, MARA) will be hit hard."
+        "impact_hint": "Risk-off sentiment might spread to high-beta stocks. Crypto-linked companies (COIN, MARA) will be hit hard.",
     },
     {
         "id": "oil_spike",
         "title": "Oil Price Spike (+5%)",
         "description": "Geopolitical tensions in the Middle East cause a sudden 5% increase in crude oil prices.",
-        "impact_hint": "Energy stocks usually benefit. Transportation and consumer discretionary might face higher costs."
-    }
+        "impact_hint": "Energy stocks usually benefit. Transportation and consumer discretionary might face higher costs.",
+    },
 ]
+
 
 def get_active_scenarios() -> str:
     """Return a Markdown summary of current 'What-If' scenarios for agent analysis."""

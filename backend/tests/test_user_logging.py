@@ -14,7 +14,6 @@ from backend.core.log_handler import DatabaseLogHandler, current_user_id
 from backend.core.migrations import apply_column_migrations, apply_type_migrations
 from backend.models.log import SystemLog
 from backend.models.user import User
-from backend.schemas.log import LogRead
 
 
 @pytest_asyncio.fixture
@@ -43,7 +42,7 @@ async def test_migrations_applied_user_id_column(db):
 async def test_log_handler_captures_user_id_from_contextvar(db, monkeypatch):
     # Setup a dedicated log handler to avoid global side-effects
     handler = DatabaseLogHandler()
-    
+
     # Mock AsyncSessionLocal used by the worker to use our test db fixture
     fake_sessionmaker = MagicMock()
     fake_sessionmaker.return_value.__aenter__.return_value = db
@@ -51,11 +50,11 @@ async def test_log_handler_captures_user_id_from_contextvar(db, monkeypatch):
     monkeypatch.setattr("backend.core.database.AsyncSessionLocal", fake_sessionmaker)
 
     await handler.start()
-    
+
     try:
         # Set user context
         token = current_user_id.set(42)
-        
+
         # Emit log
         record = logging.LogRecord(
             name="test_source",
@@ -64,10 +63,10 @@ async def test_log_handler_captures_user_id_from_contextvar(db, monkeypatch):
             lineno=10,
             msg="test user log message",
             args=(),
-            exc_info=None
+            exc_info=None,
         )
         handler.emit(record)
-        
+
         # Wait a short moment and trigger a flush by stopping the handler worker
         current_user_id.reset(token)
     finally:
@@ -89,14 +88,14 @@ async def test_log_handler_captures_user_id_from_contextvar(db, monkeypatch):
 @pytest.mark.asyncio
 async def test_log_handler_captures_user_id_from_extra(db, monkeypatch):
     handler = DatabaseLogHandler()
-    
+
     fake_sessionmaker = MagicMock()
     fake_sessionmaker.return_value.__aenter__.return_value = db
     fake_sessionmaker.return_value.__aexit__.return_value = None
     monkeypatch.setattr("backend.core.database.AsyncSessionLocal", fake_sessionmaker)
 
     await handler.start()
-    
+
     try:
         # Emit log with user_id in extra
         record = logging.LogRecord(
@@ -106,7 +105,7 @@ async def test_log_handler_captures_user_id_from_extra(db, monkeypatch):
             lineno=10,
             msg="test extra log message",
             args=(),
-            exc_info=None
+            exc_info=None,
         )
         record.user_id = 99  # Set via extra
         handler.emit(record)

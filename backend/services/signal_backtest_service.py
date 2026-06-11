@@ -54,10 +54,7 @@ def render_signal_replay(ticker: str, rows: list) -> str:
     for signal, s in sorted(stats.items(), key=lambda kv: -kv[1]["count"]):
         avg = s["total_return"] / s["count"]
         win_rate = s["wins"] / s["count"] * 100.0
-        md += (
-            f"- {signal}: {s['count']} signal(s), avg realized return {avg:+.2f}%, "
-            f"win rate {win_rate:.0f}%\n"
-        )
+        md += f"- {signal}: {s['count']} signal(s), avg realized return {avg:+.2f}%, win rate {win_rate:.0f}%\n"
 
     recent = [r for r in rows if r.raw_return is not None][:_RECENT_SHOWN]
     if recent:

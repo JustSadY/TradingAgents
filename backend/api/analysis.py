@@ -41,7 +41,7 @@ async def run_analysis(
     try:
         safe_ticker_component(body.ticker)
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e))
+        raise HTTPException(status_code=422, detail=str(e)) from e
     settings = await get_or_create_settings(db, current_user)
     task_id = str(uuid.uuid4())
     from backend.services.analysis_service import register_task_owner, run_analysis_task
@@ -150,7 +150,7 @@ async def run_portfolio_run(
         try:
             safe_ticker_component(ticker)
         except ValueError as e:
-            raise HTTPException(status_code=422, detail=f"Invalid ticker {ticker}: {e}")
+            raise HTTPException(status_code=422, detail=f"Invalid ticker {ticker}: {e}") from e
     settings = await get_or_create_settings(db, current_user)
     task_id = str(uuid.uuid4())
     from backend.services.analysis_service import register_task_owner, run_portfolio_task
@@ -309,6 +309,6 @@ async def time_travel_resume(
             db=db,
         )
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
 
     return {"task_id": task_id, "ticker": analysis.ticker, "trade_date": analysis.trade_date}

@@ -34,6 +34,11 @@ ENCRYPTION_KEY=your-fernet-key-here
 # CORS Authorized Origins (Required)
 # Must be a JSON array of domains allowed to call the FastAPI backend.
 CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
+
+# Prometheus Metrics Endpoint (Optional)
+# Bearer token protecting GET /metrics. Leave empty to disable the endpoint (404).
+# Generate one using: python -c "import secrets; print(secrets.token_hex(32))"
+METRICS_TOKEN=
 ```
 
 ---

@@ -136,13 +136,14 @@ export default function Profile() {
   const [profileSaved, setProfileSaved] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
 
+  const providerLabels = meta?.provider_labels
   const providers = useMemo(() => {
-    if (!meta?.provider_labels) return []
-    return Object.entries(meta.provider_labels).map(([key, label]) => ({
+    if (!providerLabels) return []
+    return Object.entries(providerLabels).map(([key, label]) => ({
       key,
       label: label as string,
     }))
-  }, [meta?.provider_labels])
+  }, [providerLabels])
 
   const load = async () => {
     const [p, k] = await Promise.all([

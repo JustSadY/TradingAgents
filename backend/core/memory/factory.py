@@ -51,3 +51,25 @@ def build_pinecone_store(
     except Exception as exc:  # noqa: BLE001 — never let memory init break a run
         _logger.warning("Failed to build memory store: %s", exc)
         return None
+
+
+def build_pgvector_store(
+    *,
+    openai_api_key: str | None,
+    openai_embed_model: str = "text-embedding-3-small",
+) -> MemoryStore | None:
+    """Self-hosted store in the app's own PostgreSQL (pgvector extension).
+    Embedding is client-side, so the user's OpenAI key is required."""
+    if not openai_api_key:
+        return None
+    try:
+        from .embedders import OpenAIEmbedder
+        from .pgvector_store import PgVectorMemoryStore
+
+        return PgVectorMemoryStore(OpenAIEmbedder(openai_api_key, openai_embed_model))
+    except ImportError:
+        _logger.warning("openai package not installed; pgvector memory disabled (pip install openai)")
+        return None
+    except Exception as exc:  # noqa: BLE001 — never let memory init break a run
+        _logger.warning("Failed to build pgvector memory store: %s", exc)
+        return None

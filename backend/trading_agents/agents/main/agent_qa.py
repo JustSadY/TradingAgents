@@ -68,7 +68,9 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
             return {}  # nothing to cross-examine
 
         def _normalize(name: str) -> str:
-            return "".join(c for c in name.lower() if c.isalnum()).replace("analyst", "").replace("researcher", "").strip()
+            return (
+                "".join(c for c in name.lower() if c.isalnum()).replace("analyst", "").replace("researcher", "").strip()
+            )
 
         by_normalized = {_normalize(label): (key, label, report) for key, label, report in available}
         moderator = ctx.llm_for(MAIN_KEY)

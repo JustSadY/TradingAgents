@@ -17,7 +17,7 @@ async def list_allowed_page_keys(db: AsyncSession, user_id: int) -> set[str]:
     res = await db.execute(
         select(UserPagePermission)
         .where(UserPagePermission.user_id == user_id)
-        .where(UserPagePermission.allowed == True)
+        .where(UserPagePermission.allowed.is_(True))
     )
     return {r.page_key for r in res.scalars().all()}
 
@@ -35,7 +35,7 @@ async def list_allowed_setting_sections(db: AsyncSession, user_id: int) -> set[s
     res = await db.execute(
         select(UserSettingPermission)
         .where(UserSettingPermission.user_id == user_id)
-        .where(UserSettingPermission.allowed == True)
+        .where(UserSettingPermission.allowed.is_(True))
     )
     return {r.setting_key for r in res.scalars().all()}
 

@@ -36,10 +36,13 @@ async def get_memory_status(
     fernet = _cfg().get_fernet()
     providers = list_user_api_key_providers(current_user, fernet)
     settings = await get_or_create_settings(db, current_user)
-    using_openai = settings.memory_embedder == "openai"
+    store_kind = getattr(settings, "memory_store", None) or "pinecone"
+    # pgvector has no hosted inference, so it always embeds with the user's OpenAI key.
+    using_openai = store_kind == "pgvector" or settings.memory_embedder == "openai"
     return {
-        "enabled": "pinecone" in providers,
-        "embedder": settings.memory_embedder,
+        "enabled": "openai" in providers if store_kind == "pgvector" else "pinecone" in providers,
+        "store": store_kind,
+        "embedder": "openai" if store_kind == "pgvector" else settings.memory_embedder,
         "index": settings.pinecone_index,
         "embed_model": settings.memory_openai_embed_model if using_openai else settings.pinecone_embed_model,
         "needs_openai_key": using_openai and "openai" not in providers,
@@ -115,7 +118,7 @@ def _validate_webhook_url(url: str) -> None:
     try:
         infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
     except socket.gaierror:
-        raise HTTPException(status_code=400, detail="Webhook host could not be resolved")
+        raise HTTPException(status_code=400, detail="Webhook host could not be resolved") from None
 
     for info in infos:
         ip = ipaddress.ip_address(info[4][0])
@@ -143,7 +146,7 @@ async def test_webhook(body: WebhookTestRequest, _: User = Depends(get_current_u
             if r.status_code >= 400:
                 raise HTTPException(status_code=400, detail=f"Webhook yanıtı: {r.status_code}")
     except httpx.RequestError as e:
-        raise HTTPException(status_code=400, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e)) from e
     return {"ok": True}
 
 

@@ -48,4 +48,3 @@ async def list_logs(
         q = q.where(SystemLog.user_id == user_id)
     result = await db.execute(q)
     return result.scalars().all()
-

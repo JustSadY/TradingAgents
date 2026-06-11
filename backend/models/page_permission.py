@@ -16,6 +16,8 @@ SECTION_FIELDS = {
     "llm": [
         "llm_provider",
         "llm_model",
+        "fallback_llm_provider",
+        "fallback_llm_model",
         "openai_reasoning_effort",
         "anthropic_effort",
         "google_thinking_level",

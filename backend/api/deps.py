@@ -26,7 +26,7 @@ async def get_current_user(
     try:
         payload = decode_token_payload(token, expected_type="access")
     except ValueError:
-        raise credentials_exc
+        raise credentials_exc from None
     user = await get_user_by_username(db, payload["sub"])
     if user is None or not user.is_active:
         raise credentials_exc
@@ -35,6 +35,7 @@ async def get_current_user(
     if payload.get("ver", 0) != getattr(user, "token_version", 0):
         raise credentials_exc
     from backend.core.log_handler import current_user_id
+
     current_user_id.set(user.id)
     return user
 

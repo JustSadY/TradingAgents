@@ -70,7 +70,7 @@ def validate_tool_settings(tool: BaseAgentTool, incoming: dict[str, Any]) -> dic
         return normalized
     except Exception as e:
         # Re-wrap Pydantic errors for consistency
-        raise ValueError(str(e))
+        raise ValueError(str(e)) from e
 
 
 async def _check_tool_availability(db: AsyncSession, user_id: int, tool: BaseAgentTool) -> bool:
