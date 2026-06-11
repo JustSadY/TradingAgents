@@ -133,8 +133,12 @@ export default function Orders() {
                     </td>
                     <td className="px-5 py-3 text-slate-400 font-medium truncate max-w-xs">{o.ai_signal || '—'}</td>
                     <td className="px-5 py-3 text-center">
-                      <span className="inline-flex items-center gap-1 text-[9px] font-bold text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20 uppercase tracking-wide">
-                        {o.mode}
+                      <span className={`inline-flex items-center gap-1 text-[9px] font-bold px-2 py-0.5 rounded-full border uppercase tracking-wide ${
+                        o.mode === 'live'
+                          ? 'text-amber-400 bg-amber-500/10 border-amber-500/20'
+                          : 'text-violet-400 bg-violet-500/10 border-violet-500/20'
+                      }`}>
+                        {o.mode === 'simulation' ? t('orders.filter_simulation') : o.mode === 'live' ? t('orders.filter_live') : o.mode}
                       </span>
                     </td>
                     <td className="px-5 py-3 text-right text-slate-500 font-mono text-[10px]">

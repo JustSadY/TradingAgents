@@ -418,8 +418,8 @@ async def execute_order(
 
     order = Order(
         portfolio_id=portfolio.id,
-        mode="simulation",
-        broker="paper",
+        mode=portfolio.mode,
+        broker=portfolio.broker,
         ticker=ticker,
         action=action,
         side=pos_side,
