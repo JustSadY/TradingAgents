@@ -115,4 +115,3 @@ async def test_roundtrip_against_postgres():
         except Exception:
             pass
         await engine.dispose()
-
