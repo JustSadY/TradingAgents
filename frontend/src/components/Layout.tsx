@@ -9,7 +9,7 @@ import {
   AlertCircle, AlertTriangle, CheckCircle, Info, X,
   BarChart2, Bell, Menu, GitCompare, Shield, UserCircle, History,
 } from 'lucide-react'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
 import axios from 'axios'
 import type { Notification } from '../utils/notify'
 import UpdateBanner from './UpdateBanner'
@@ -339,7 +339,13 @@ export default function Layout() {
       <main className="flex-1 overflow-y-auto min-h-screen pt-14 md:pt-0 flex flex-col bg-[#030712] relative z-0">
         <UpdateBanner />
         <div className="flex-1">
-          <Outlet />
+          <Suspense fallback={
+            <div className="flex items-center justify-center h-[60vh] text-slate-600">
+              <Loader2 size={20} className="animate-spin text-violet-400" />
+            </div>
+          }>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
 
