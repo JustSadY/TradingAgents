@@ -69,12 +69,13 @@ export default function ChartPage() {
         api.get('/api/market/sentiment-history', { params: { ticker } }),
       ])
       if (reqId !== loadReqId.current) return
-      setCandles(ohlcvRes.data.candles)
-      setAnalyses(histRes.data)
-      setSentimentHistory(sentRes.data.history)
-    } catch (e: any) {
+      // Backend can return partial/empty payloads on thin data; guard each field.
+      setCandles(ohlcvRes.data?.candles ?? [])
+      setAnalyses(Array.isArray(histRes.data) ? histRes.data : [])
+      setSentimentHistory(sentRes.data?.history ?? [])
+    } catch (e) {
       if (reqId !== loadReqId.current) return
-      setError(e.response?.data?.detail ?? t('chart.error_load'))
+      setError(((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail) ?? t('chart.error_load'))
     } finally {
       if (reqId === loadReqId.current) setLoading(false)
     }
@@ -98,9 +99,11 @@ export default function ChartPage() {
     setLoading(true); setError(null)
     try {
       const res = await api.get('/api/market/custom-indicator', { params: { ticker: activeTicker, period, formula: userFormula.trim() } })
-      setUserIndicatorData(res.data.series); setUserIndicatorLabel(userFormula.trim())
-    } catch (err: any) {
+      setUserIndicatorData(res.data?.series ?? []); setUserIndicatorLabel(userFormula.trim())
+    } catch (err) {
+      // Surface the failure (e.g. invalid formula) instead of silently clearing.
       setUserIndicatorData([]); setUserIndicatorLabel('')
+      setError(((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail) ?? t('chart.error_load'))
     } finally { setLoading(false) }
   }
 

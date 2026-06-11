@@ -143,7 +143,8 @@ export default function MockTrading() {
     try {
       await axios.post('/api/trading/reset', { initial_capital: 100000 })
       await fetchPortfolio()
-    } catch {
+    } catch (e) {
+      console.error('Portfolio reset failed:', e)
     } finally {
       setResetting(false)
     }

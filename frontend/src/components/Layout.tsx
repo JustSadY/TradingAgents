@@ -1,5 +1,6 @@
 import { NavLink, useNavigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { usePermissions } from '../contexts/PermissionsContext'
 import { useTranslation } from '../contexts/LanguageContext'
 import {
   LayoutDashboard, Search, BookMarked, Briefcase,
@@ -8,7 +9,7 @@ import {
   AlertCircle, AlertTriangle, CheckCircle, Info, X,
   BarChart2, Bell, Menu, GitCompare, Shield, UserCircle, History,
 } from 'lucide-react'
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, Suspense } from 'react'
 import axios from 'axios'
 import type { Notification } from '../utils/notify'
 import UpdateBanner from './UpdateBanner'
@@ -69,7 +70,7 @@ const NAV_SECTIONS: NavSection[] = [
 
 export default function Layout() {
   const { user, isAdmin, logout } = useAuth()
-  const [allowedPages, setAllowedPages] = useState<string[]>([])
+  const { canAccess } = usePermissions()
   const navigate = useNavigate()
   const { language, setLanguage, t } = useTranslation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -77,12 +78,6 @@ export default function Layout() {
   const [runningTask, setRunningTask] = useState<RunningTask | null>(() => {
     try { return JSON.parse(localStorage.getItem('ta_task_running') || 'null') } catch { return null }
   })
-
-  useEffect(() => {
-    axios.get('/api/users/me/permissions')
-      .then(r => setAllowedPages(r.data.allowed_pages ?? []))
-      .catch(() => setAllowedPages(['settings']))
-  }, [])
 
   useEffect(() => {
     const fetch = () => axios.get('/api/cron/status').then(r => setCronStatus(r.data)).catch(() => {})
@@ -117,7 +112,7 @@ export default function Layout() {
           const nextJson = JSON.stringify(val)
           return prevJson === nextJson ? prev : val
         })
-      } catch {  }
+      } catch { /* malformed task json — ignore */ }
     }, 1000)
     return () => { window.removeEventListener('storage', onStorage); clearInterval(id) }
   }, [])
@@ -217,7 +212,7 @@ export default function Layout() {
             const visibleItems = section.items.filter(item => {
               if (item.adminOnly) return isAdmin
               if (item.isProfile) return true
-              return isAdmin || allowedPages.includes(item.page)
+              return canAccess(item.page)
             })
 
             if (visibleItems.length === 0) return null
@@ -344,7 +339,13 @@ export default function Layout() {
       <main className="flex-1 overflow-y-auto min-h-screen pt-14 md:pt-0 flex flex-col bg-[#030712] relative z-0">
         <UpdateBanner />
         <div className="flex-1">
-          <Outlet />
+          <Suspense fallback={
+            <div className="flex items-center justify-center h-[60vh] text-slate-600">
+              <Loader2 size={20} className="animate-spin text-violet-400" />
+            </div>
+          }>
+            <Outlet />
+          </Suspense>
         </div>
       </main>
 

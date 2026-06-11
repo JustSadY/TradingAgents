@@ -77,6 +77,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const logout = useCallback(() => {
+    // Revoke server-side first (bumps token_version, invalidating every
+    // outstanding access/refresh token), then clear local state. Fire-and-forget:
+    // local logout must succeed even if the server is unreachable.
+    const token = localStorage.getItem(TOKEN_KEY)
+    if (token) {
+      axios.post('/auth/logout').catch(() => {})
+    }
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(REFRESH_KEY)
     setUser(null)
@@ -113,7 +120,7 @@ axios.interceptors.request.use(cfg => {
 })
 
 let _refreshing = false
-let _queue: Array<(token: string) => void> = []
+let _queue: Array<{ resolve: (token: string) => void; reject: (err: unknown) => void }> = []
 
 axios.interceptors.response.use(
   res => res,
@@ -130,16 +137,24 @@ axios.interceptors.response.use(
       notify('error', detail, `HTTP ${status}`)
     }
 
-    if (status !== 401 || original._retried) {
+    // Never try to refresh the auth endpoints themselves (a 401 from /auth/refresh
+    // must not re-enter this branch and queue forever).
+    const isAuthEndpoint = typeof original?.url === 'string' && original.url.startsWith('/auth/')
+    if (status !== 401 || original._retried || isAuthEndpoint) {
       return Promise.reject(err)
     }
     original._retried = true
 
     if (_refreshing) {
-      return new Promise(resolve => {
-        _queue.push((token: string) => {
-          original.headers.Authorization = `Bearer ${token}`
-          resolve(axios(original))
+      // Queue behind the in-flight refresh; reject if it ultimately fails so
+      // callers don't hang on a promise that never settles.
+      return new Promise((resolve, reject) => {
+        _queue.push({
+          resolve: (token: string) => {
+            original.headers.Authorization = `Bearer ${token}`
+            resolve(axios(original))
+          },
+          reject,
         })
       })
     }
@@ -151,11 +166,17 @@ axios.interceptors.response.use(
       const res = await axios.post('/auth/refresh', { refresh_token: refreshToken })
       const newToken: string = res.data.access_token
       localStorage.setItem(TOKEN_KEY, newToken)
-      _queue.forEach(cb => cb(newToken))
+      // The backend rotates the refresh token on every refresh; keep the newest
+      // one or the next refresh will use a stale token.
+      if (res.data.refresh_token) {
+        localStorage.setItem(REFRESH_KEY, res.data.refresh_token)
+      }
+      _queue.forEach(({ resolve }) => resolve(newToken))
       _queue = []
       original.headers.Authorization = `Bearer ${newToken}`
       return axios(original)
-    } catch {
+    } catch (refreshErr) {
+      _queue.forEach(({ reject }) => reject(refreshErr))
       _queue = []
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem(REFRESH_KEY)

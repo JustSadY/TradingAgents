@@ -33,6 +33,9 @@ export function sendBrowserNotification(title: string, body: string, icon = '/fa
     notification.onclick = () => {
       window.focus()
     }
-  } catch {  }
+  } catch (e) {
+    // Notification API can throw on unsupported/denied environments — non-fatal.
+    console.debug('Browser notification failed:', e)
+  }
 }
 

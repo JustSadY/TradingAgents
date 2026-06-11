@@ -149,11 +149,11 @@ export function usePriceChart(
     }
 
     // Cleanup previous overlays
-    priceLineRefs.current.forEach(pl => { try { candleSeriesRef.current?.removePriceLine(pl) } catch {} })
+    priceLineRefs.current.forEach(pl => { try { candleSeriesRef.current?.removePriceLine(pl) } catch { /* overlay already gone */ } })
     priceLineRefs.current = []
-    trendlineSeriesRefs.current.forEach(ts => { try { chartRef.current?.removeSeries(ts) } catch {} })
+    trendlineSeriesRefs.current.forEach(ts => { try { chartRef.current?.removeSeries(ts) } catch { /* overlay already gone */ } })
     trendlineSeriesRefs.current = []
-    overlaySeriesRefs.current.forEach(os => { try { chartRef.current?.removeSeries(os) } catch {} })
+    overlaySeriesRefs.current.forEach(os => { try { chartRef.current?.removeSeries(os) } catch { /* overlay already gone */ } })
     overlaySeriesRefs.current = []
 
     const tradeDatesInRange = new Set(candles.map(c => c.time))

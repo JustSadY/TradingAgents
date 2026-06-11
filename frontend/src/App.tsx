@@ -1,24 +1,28 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import React from 'react'
+import React, { lazy } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
+import { PermissionsProvider } from './contexts/PermissionsContext'
+import RequirePage from './components/RequirePage'
 import Layout from './components/Layout'
 
+// Login eagerly (it's the entry point); every protected page is code-split so
+// the initial bundle stays small and each page loads on demand.
 import Login from './pages/Login'
-import Dashboard from './pages/Dashboard'
-import Analysis from './pages/Analysis'
-import Watchlist from './pages/Watchlist'
-import Orders from './pages/Orders'
-import Settings from './pages/Settings'
-import Logs from './pages/Logs'
-import MockTrading from './pages/MockTrading'
-import Portfolio from './pages/Portfolio'
-import Chart from './pages/Chart'
-import Backtest from './pages/Backtest'
-import Performance from './pages/Performance'
-import Alerts from './pages/Alerts'
-import ABTesting from './pages/ABTesting'
-import Profile from './pages/Profile'
-import Admin from './pages/Admin'
+const Dashboard = lazy(() => import('./pages/Dashboard'))
+const Analysis = lazy(() => import('./pages/Analysis'))
+const Watchlist = lazy(() => import('./pages/Watchlist'))
+const Orders = lazy(() => import('./pages/Orders'))
+const Settings = lazy(() => import('./pages/Settings'))
+const Logs = lazy(() => import('./pages/Logs'))
+const MockTrading = lazy(() => import('./pages/MockTrading'))
+const Portfolio = lazy(() => import('./pages/Portfolio'))
+const Chart = lazy(() => import('./pages/Chart'))
+const Backtest = lazy(() => import('./pages/Backtest'))
+const Performance = lazy(() => import('./pages/Performance'))
+const Alerts = lazy(() => import('./pages/Alerts'))
+const ABTesting = lazy(() => import('./pages/ABTesting'))
+const Profile = lazy(() => import('./pages/Profile'))
+const Admin = lazy(() => import('./pages/Admin'))
 
 import { LanguageProvider } from './contexts/LanguageContext'
 
@@ -70,22 +74,22 @@ function AppRoutes() {
         {/* Redirect base path to dashboard */}
         <Route index element={<Navigate to="/dashboard" replace />} />
         
-        {/* All Main Pages */}
-        <Route path="dashboard" element={<Dashboard />} />
-        <Route path="analysis" element={<Analysis />} />
-        <Route path="chart" element={<Chart />} />
-        <Route path="watchlist" element={<Watchlist />} />
-        <Route path="orders" element={<Orders />} />
-        <Route path="trading" element={<MockTrading />} />
-        <Route path="portfolio" element={<Portfolio />} />
-        <Route path="settings" element={<Settings />} />
-        <Route path="preferences" element={<Settings />} />
-        <Route path="performance" element={<Performance />} />
-        <Route path="backtest" element={<Backtest />} />
-        <Route path="alerts" element={<Alerts />} />
-        <Route path="ab-testing" element={<ABTesting />} />
-        <Route path="logs" element={<Logs />} />
-        <Route path="profile" element={<Profile />} />
+        {/* All Main Pages — guarded by per-page permission */}
+        <Route path="dashboard" element={<RequirePage page="dashboard"><Dashboard /></RequirePage>} />
+        <Route path="analysis" element={<RequirePage page="analysis"><Analysis /></RequirePage>} />
+        <Route path="chart" element={<RequirePage page="chart"><Chart /></RequirePage>} />
+        <Route path="watchlist" element={<RequirePage page="watchlist"><Watchlist /></RequirePage>} />
+        <Route path="orders" element={<RequirePage page="orders"><Orders /></RequirePage>} />
+        <Route path="trading" element={<RequirePage page="trading"><MockTrading /></RequirePage>} />
+        <Route path="portfolio" element={<RequirePage page="portfolio"><Portfolio /></RequirePage>} />
+        <Route path="settings" element={<RequirePage page="settings"><Settings /></RequirePage>} />
+        <Route path="preferences" element={<RequirePage page="settings"><Settings /></RequirePage>} />
+        <Route path="performance" element={<RequirePage page="performance"><Performance /></RequirePage>} />
+        <Route path="backtest" element={<RequirePage page="backtest"><Backtest /></RequirePage>} />
+        <Route path="alerts" element={<RequirePage page="alerts"><Alerts /></RequirePage>} />
+        <Route path="ab-testing" element={<RequirePage page="ab-testing"><ABTesting /></RequirePage>} />
+        <Route path="logs" element={<RequirePage page="logs"><Logs /></RequirePage>} />
+        <Route path="profile" element={<RequirePage page="profile"><Profile /></RequirePage>} />
         
         {/* Admin Route with explicit check */}
         <Route 
@@ -107,11 +111,13 @@ export default function App() {
   return (
     <ErrorBoundary>
       <AuthProvider>
-        <LanguageProvider>
-          <BrowserRouter>
-            <AppRoutes />
-          </BrowserRouter>
-        </LanguageProvider>
+        <PermissionsProvider>
+          <LanguageProvider>
+            <BrowserRouter>
+              <AppRoutes />
+            </BrowserRouter>
+          </LanguageProvider>
+        </PermissionsProvider>
       </AuthProvider>
     </ErrorBoundary>
   )
