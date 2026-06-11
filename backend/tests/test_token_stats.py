@@ -80,3 +80,66 @@ def test_handler_accumulates_across_calls():
     stats = handler.get_stats()
     assert stats["tokens_in"] == 150
     assert stats["tokens_out"] == 25
+
+
+def _chunk(text, usage=None):
+    from langchain_core.messages import AIMessageChunk
+    from langchain_core.outputs import ChatGenerationChunk
+
+    return ChatGenerationChunk(message=AIMessageChunk(content=text, usage_metadata=usage))
+
+
+def _merge(chunks):
+    merged = None
+    for c in chunks:
+        merged = c if merged is None else merged + c
+    return merged
+
+
+def _filter_keep_last_usage(chunks):
+    """Mirror NormalizedChatOpenAI's stream filtering for unit testing."""
+    from backend.trading_agents.llm_clients.openai_client import _final_usage_chunk, _strip_chunk_usage
+
+    last = None
+    out = []
+    for c in chunks:
+        usage = _strip_chunk_usage(c)
+        if usage is not None:
+            last = usage
+        out.append(c)
+    if last is not None:
+        out.append(_final_usage_chunk(last))
+    return out
+
+
+def test_cumulative_per_chunk_usage_not_inflated():
+    # Provider emits CUMULATIVE usage on every chunk (DeepSeek/Qwen style):
+    # without filtering, merging sums to 15k input; with filtering, the last
+    # snapshot (the true total) survives alone.
+    usage = lambda i, o: {"input_tokens": i, "output_tokens": o, "total_tokens": i + o}  # noqa: E731
+    chunks = [_chunk("a", usage(5000, 1)), _chunk("b", usage(5000, 2)), _chunk("c", usage(5000, 3))]
+
+    inflated = _merge([_chunk(c.message.content, dict(c.message.usage_metadata)) for c in chunks])
+    assert inflated.message.usage_metadata["input_tokens"] == 15000  # the bug
+
+    merged = _merge(_filter_keep_last_usage(chunks))
+    assert merged.message.usage_metadata["input_tokens"] == 5000
+    assert merged.message.usage_metadata["output_tokens"] == 3
+    assert merged.message.content == "abc"
+
+
+def test_final_only_usage_unchanged():
+    # Real OpenAI behaviour: usage arrives once on the final (empty) chunk.
+    chunks = [
+        _chunk("a"),
+        _chunk("b"),
+        _chunk("", {"input_tokens": 800, "output_tokens": 40, "total_tokens": 840}),
+    ]
+    merged = _merge(_filter_keep_last_usage(chunks))
+    assert merged.message.usage_metadata["input_tokens"] == 800
+    assert merged.message.usage_metadata["output_tokens"] == 40
+
+
+def test_no_usage_stream_stays_usageless():
+    merged = _merge(_filter_keep_last_usage([_chunk("a"), _chunk("b")]))
+    assert merged.message.usage_metadata is None
