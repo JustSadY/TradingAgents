@@ -159,3 +159,38 @@ def test_final_only_usage_unchanged():
 def test_no_usage_stream_stays_usageless():
     merged = _merge(_filter_keep_last_usage([_chunk("a"), _chunk("b")]))
     assert merged.message.usage_metadata is None
+
+
+def test_cumulative_response_metadata_and_generation_info_stripped():
+    from langchain_core.messages import AIMessageChunk
+    from langchain_core.outputs import ChatGenerationChunk
+
+    usage = lambda i, o: {"input_tokens": i, "output_tokens": o, "total_tokens": i + o}
+
+    # Simulate chunks where provider embeds cumulative usage in response_metadata and generation_info
+    chunks = [
+        ChatGenerationChunk(
+            message=AIMessageChunk(content="a", response_metadata={"token_usage": usage(1000, 1)}),
+            generation_info={"token_usage": usage(1000, 1)}
+        ),
+        ChatGenerationChunk(
+            message=AIMessageChunk(content="b", response_metadata={"token_usage": usage(1000, 2)}),
+            generation_info={"token_usage": usage(1000, 2)}
+        ),
+        ChatGenerationChunk(
+            message=AIMessageChunk(content="c", response_metadata={"token_usage": usage(1000, 3)}),
+            generation_info={"token_usage": usage(1000, 3)}
+        ),
+    ]
+
+    filtered = _filter_keep_last_usage(chunks)
+    merged = _merge(filtered)
+
+    # The final merged chunk should have the correct un-accumulated totals in usage_metadata
+    assert merged.message.usage_metadata["input_tokens"] == 1000
+    assert merged.message.usage_metadata["output_tokens"] == 3
+
+    # response_metadata and generation_info should have been stripped and thus not summed up
+    assert "token_usage" not in (merged.message.response_metadata or {})
+    assert "token_usage" not in (merged.generation_info or {})
+

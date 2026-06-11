@@ -101,6 +101,7 @@ TRADING_MODES: list[dict] = [
 ]
 BROKERS: list[dict] = [
     {"value": "simulation", "label": "Simulation"},
+    {"value": "alpaca", "label": "Alpaca (Paper/Live)"},
 ]
 from backend.trading_agents.llm_clients.registry import llm_registry
 

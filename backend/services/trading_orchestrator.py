@@ -266,6 +266,11 @@ async def place_signal_order(
     sys_mode = sys_settings.trading_mode if sys_settings else "simulation"
     sys_broker = sys_settings.active_broker if sys_settings else "simulation"
 
+    if sys_broker == "alpaca":
+        if not user or not getattr(user, "is_owner", False):
+            _logger.warning("Alpaca broker can only be used by the owner user; skipping order execution")
+            return None
+
     portfolio = await get_or_create_sim_portfolio(db, user=user)
     trader = get_trader(
         mode=sys_mode,

@@ -15,6 +15,23 @@ def _strip_chunk_usage(chunk) -> Any | None:
     usage = getattr(message, "usage_metadata", None) if message is not None else None
     if usage:
         message.usage_metadata = None
+
+    response_metadata = getattr(message, "response_metadata", None) if message is not None else None
+    if isinstance(response_metadata, dict):
+        for key in ("token_usage", "usage"):
+            if key in response_metadata:
+                if usage is None:
+                    usage = response_metadata[key]
+                del response_metadata[key]
+
+    generation_info = getattr(chunk, "generation_info", None)
+    if isinstance(generation_info, dict):
+        for key in ("token_usage", "usage"):
+            if key in generation_info:
+                if usage is None:
+                    usage = generation_info[key]
+                del generation_info[key]
+
     return usage or None
 
 

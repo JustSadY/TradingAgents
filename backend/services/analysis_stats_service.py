@@ -77,6 +77,8 @@ async def get_ab_comparison(db: AsyncSession) -> list[dict]:
             preset = f"{prov}:{mod}"
         groups.setdefault(preset, []).append(row)
 
+    from datetime import datetime
+
     comparison = []
     for preset, runs in groups.items():
         total = len(runs)
@@ -88,6 +90,16 @@ async def get_ab_comparison(db: AsyncSession) -> list[dict]:
         ]
         graded = [r for r in runs if r.raw_return is not None and r.signal in (_BUY_SIGNALS | _SELL_SIGNALS)]
         wins = sum(1 for r in graded if _is_correct(r.signal, r.raw_return))
+
+        # Realized performance metrics over the last 50 analyses for this preset
+        runs_sorted = sorted(runs, key=lambda r: r.created_at or datetime.min, reverse=True)
+        last_50 = runs_sorted[:50]
+        graded_last_50 = [r for r in last_50 if r.raw_return is not None and r.signal in (_BUY_SIGNALS | _SELL_SIGNALS)]
+        wins_last_50 = sum(1 for r in graded_last_50 if _is_correct(r.signal, r.raw_return))
+        
+        alphas_last_50 = [r.alpha_return for r in last_50 if r.alpha_return is not None]
+        raws_last_50 = [r.raw_return for r in last_50 if r.raw_return is not None]
+
         comparison.append(
             {
                 "preset_name": preset,
@@ -97,6 +109,11 @@ async def get_ab_comparison(db: AsyncSession) -> list[dict]:
                 "avg_cost_usd": round(sum(costs) / total, 4) if costs else 0.0,
                 "win_rate": round(wins / len(graded) * 100, 1) if graded else None,
                 "total_graded": len(graded),
+                # Realized performance stats (last 50 runs)
+                "win_rate_last_50": round(wins_last_50 / len(graded_last_50) * 100, 1) if graded_last_50 else None,
+                "avg_alpha_last_50": round(sum(alphas_last_50) / len(alphas_last_50) * 100, 2) if alphas_last_50 else 0.0,
+                "avg_raw_return_last_50": round(sum(raws_last_50) / len(raws_last_50) * 100, 2) if raws_last_50 else 0.0,
+                "total_graded_last_50": len(graded_last_50),
             }
         )
     return comparison

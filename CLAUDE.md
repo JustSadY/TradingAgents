@@ -460,6 +460,8 @@ APScheduler runs in-process:
 
 Systemd service runs **one** uvicorn process. APScheduler, WebSockets, and in-memory task tracking rely on this. Adding `--workers` breaks everything.
 
+- **Architectural Target (Future Decoupling)**: As concurrent LLM-heavy runs scale, the system should evolve to offload analysis runs (`analysis_service.py`) to an out-of-process queue worker (e.g., Celery or arq backed by Redis) and utilize Redis Pub/Sub for WebSockets. Keep `analysis_service` state-agnostic and process-exportable.
+
 ### Migrations: Additive at Startup, Alembic Opt-In
 
 `core/migrations.py` applies `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` at startup — this is the default mechanism for every deployment.

@@ -1,8 +1,10 @@
 from .base import BaseTraderInterface
 from .simulation import SimulationTrader
+from .alpaca import AlpacaTrader
 
 _REGISTRY: dict[str, type[BaseTraderInterface]] = {
     "simulation": SimulationTrader,
+    "alpaca": AlpacaTrader,
 }
 
 
@@ -13,10 +15,12 @@ def get_trader(
     initial_capital: float = 100_000.0,
     db=None,
 ) -> BaseTraderInterface:
-    key = "simulation" if mode == "simulation" else broker
+    key = "alpaca" if broker == "alpaca" else ("simulation" if mode == "simulation" else broker)
     cls = _REGISTRY.get(key)
     if cls is None:
         raise ValueError(
             f"No trader implementation for mode={mode!r} broker={broker!r}. Available: {list(_REGISTRY.keys())}"
         )
+    if cls == AlpacaTrader:
+        return cls(portfolio_id=portfolio_id, initial_capital=initial_capital, db=db, mode=mode)
     return cls(portfolio_id=portfolio_id, initial_capital=initial_capital, db=db)

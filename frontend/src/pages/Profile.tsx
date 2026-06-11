@@ -295,6 +295,31 @@ export default function Profile() {
           )}
         </div>
       </Section>
+
+      {/* Owner Broker credentials */}
+      {profile.role === 'owner' && (
+        <Section title="Broker Integration (Owner Only)">
+          <p className="text-[10px] text-slate-500 font-semibold pb-1.5 border-b border-white/[0.04] mb-3">
+            Configure live trading credentials. These keys are stored encrypted and are only used for owner executions.
+          </p>
+          <div className="space-y-3 bg-slate-900/40 border border-white/[0.04] p-4 rounded-2xl">
+            <ApiKeyRow
+              providerKey="alpaca_key"
+              label="Alpaca API Key ID"
+              hasKey={keyProviders.includes('alpaca_key')}
+              onSave={saveApiKey}
+              onDelete={deleteApiKey}
+            />
+            <ApiKeyRow
+              providerKey="alpaca_secret"
+              label="Alpaca API Secret Key"
+              hasKey={keyProviders.includes('alpaca_secret')}
+              onSave={saveApiKey}
+              onDelete={deleteApiKey}
+            />
+          </div>
+        </Section>
+      )}
     </div>
   )
 }
