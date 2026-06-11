@@ -67,6 +67,8 @@ const SECTION_LABELS: Record<string, string> = {
   news_report: 'News', fundamentals_report: 'Fundamentals',
   macro_report: 'Macro', options_report: 'Options',
   quant_report: 'Quant', earnings_report: 'Earnings',
+  insider_report: 'Insider Activity', ownership_report: 'Institutional Ownership',
+  catalyst_report: 'Upcoming Catalysts',
   review_report: 'Review', agent_qa_report: 'Cross-Examination',
   investment_plan: 'Investment Plan',
   trader_investment_plan: 'Trader Plan', final_trade_decision: 'PM Decision',

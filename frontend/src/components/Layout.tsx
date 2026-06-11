@@ -1,5 +1,6 @@
 import { NavLink, useNavigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
+import { usePermissions } from '../contexts/PermissionsContext'
 import { useTranslation } from '../contexts/LanguageContext'
 import {
   LayoutDashboard, Search, BookMarked, Briefcase,
@@ -69,7 +70,7 @@ const NAV_SECTIONS: NavSection[] = [
 
 export default function Layout() {
   const { user, isAdmin, logout } = useAuth()
-  const [allowedPages, setAllowedPages] = useState<string[]>([])
+  const { canAccess } = usePermissions()
   const navigate = useNavigate()
   const { language, setLanguage, t } = useTranslation()
   const [sidebarOpen, setSidebarOpen] = useState(false)
@@ -77,12 +78,6 @@ export default function Layout() {
   const [runningTask, setRunningTask] = useState<RunningTask | null>(() => {
     try { return JSON.parse(localStorage.getItem('ta_task_running') || 'null') } catch { return null }
   })
-
-  useEffect(() => {
-    axios.get('/api/users/me/permissions')
-      .then(r => setAllowedPages(r.data.allowed_pages ?? []))
-      .catch(() => setAllowedPages(['settings']))
-  }, [])
 
   useEffect(() => {
     const fetch = () => axios.get('/api/cron/status').then(r => setCronStatus(r.data)).catch(() => {})
@@ -217,7 +212,7 @@ export default function Layout() {
             const visibleItems = section.items.filter(item => {
               if (item.adminOnly) return isAdmin
               if (item.isProfile) return true
-              return isAdmin || allowedPages.includes(item.page)
+              return canAccess(item.page)
             })
 
             if (visibleItems.length === 0) return null
