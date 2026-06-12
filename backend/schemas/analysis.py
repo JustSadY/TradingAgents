@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 
 class AnalysisRunRequest(BaseModel):
@@ -59,8 +59,7 @@ class AnalysisResultRead(BaseModel):
     alpha_return: float | None = None
     holding_days: int | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AnalysisListItem(BaseModel):
@@ -77,8 +76,7 @@ class AnalysisListItem(BaseModel):
     llm_model: str | None = None
     preset_name: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ChatMessageRead(BaseModel):
@@ -87,8 +85,7 @@ class ChatMessageRead(BaseModel):
     content: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class ChatMessageCreate(BaseModel):
