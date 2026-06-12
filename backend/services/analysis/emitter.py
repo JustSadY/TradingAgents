@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 from typing import Any
 
-from backend.core.websocket import ws_manager
+from backend.core.event_bus import publish_close, publish_event
 
 
 class AnalysisEmitter:
@@ -14,8 +14,8 @@ class AnalysisEmitter:
         self.loop = loop or asyncio.get_running_loop()
 
     async def emit(self, event: dict[str, Any]) -> None:
-        """Send an event to the task's WebSocket connections."""
-        await ws_manager.send(self.task_id, event)
+        """Send an event to the task's WebSocket subscribers (direct or via Redis)."""
+        await publish_event(self.task_id, event)
 
     def emit_threadsafe(self, event: dict[str, Any]) -> None:
         """Send an event safely from outside the main async loop."""
@@ -57,4 +57,4 @@ class AnalysisEmitter:
         await self.emit({"type": "error", "message": message})
 
     async def close(self) -> None:
-        await ws_manager.close_task(self.task_id)
+        await publish_close(self.task_id)

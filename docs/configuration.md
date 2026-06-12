@@ -43,6 +43,14 @@ METRICS_TOKEN=
 # Maximum HTTP request body size in bytes (Optional)
 # Oversized requests are rejected with 413. Set 0 to disable. Default: 2000000 (2 MB).
 MAX_REQUEST_BODY_BYTES=2000000
+
+# Horizontal scaling via Redis (Optional)
+# When set, analysis WebSocket events fan out over Redis pub/sub and the task
+# registry becomes cross-process. Leave empty for single-process deployments.
+REDIS_URL=
+# "inline" (default) runs analyses in the web process; "worker" enqueues them
+# onto arq (requires REDIS_URL and: arq backend.worker.WorkerSettings)
+ANALYSIS_QUEUE_MODE=inline
 ```
 
 ---

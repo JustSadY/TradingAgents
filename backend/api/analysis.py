@@ -44,17 +44,18 @@ async def run_analysis(
         raise HTTPException(status_code=422, detail=str(e)) from e
     settings = await get_or_create_settings(db, current_user)
     task_id = str(uuid.uuid4())
-    from backend.services.analysis_service import register_task_owner, run_analysis_task
+    from backend.services.analysis_queue import dispatch_analysis
+    from backend.services.analysis_service import register_task_owner
 
-    register_task_owner(task_id, current_user.id)
-    background_tasks.add_task(
-        run_analysis_task,
-        body.ticker,
-        body.trade_date,
-        body.asset_type,
-        settings,
-        task_id,
-        current_user,
+    await register_task_owner(task_id, current_user.id)
+    await dispatch_analysis(
+        background_tasks,
+        ticker=body.ticker,
+        trade_date=body.trade_date,
+        asset_type=body.asset_type,
+        settings=settings,
+        task_id=task_id,
+        user=current_user,
     )
     return AnalysisRunResponse(task_id=task_id, ticker=body.ticker, trade_date=body.trade_date)
 
@@ -65,7 +66,7 @@ async def get_active_tasks(
 ):
     from backend.services.analysis_service import get_active_tasks_for_user
 
-    return get_active_tasks_for_user(current_user.id)
+    return await get_active_tasks_for_user(current_user.id)
 
 
 @router.get("/history", response_model=list[AnalysisListItem])
@@ -89,7 +90,7 @@ async def cancel_analysis(
     from backend.services.analysis_service import cancel_analysis as _cancel
     from backend.services.analysis_service import is_task_owner
 
-    if not is_task_owner(task_id, current_user.id, getattr(current_user, "is_admin", False)):
+    if not await is_task_owner(task_id, current_user.id, getattr(current_user, "is_admin", False)):
         raise HTTPException(status_code=404, detail="Task not found")
     cancelled = await _cancel(task_id)
     return {"cancelled": cancelled, "task_id": task_id}
@@ -153,17 +154,18 @@ async def run_portfolio_run(
             raise HTTPException(status_code=422, detail=f"Invalid ticker {ticker}: {e}") from e
     settings = await get_or_create_settings(db, current_user)
     task_id = str(uuid.uuid4())
-    from backend.services.analysis_service import register_task_owner, run_portfolio_task
+    from backend.services.analysis_queue import dispatch_portfolio_analysis
+    from backend.services.analysis_service import register_task_owner
 
-    register_task_owner(task_id, current_user.id)
-    background_tasks.add_task(
-        run_portfolio_task,
-        tickers,
-        body.trade_date,
-        body.asset_type,
-        settings,
-        current_user,
-        task_id,
+    await register_task_owner(task_id, current_user.id)
+    await dispatch_portfolio_analysis(
+        background_tasks,
+        tickers=tickers,
+        trade_date=body.trade_date,
+        asset_type=body.asset_type,
+        settings=settings,
+        task_id=task_id,
+        user=current_user,
     )
     return MultiTickerRunResponse(task_id=task_id, tickers=tickers, trade_date=body.trade_date)
 
