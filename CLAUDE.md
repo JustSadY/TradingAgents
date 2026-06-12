@@ -20,7 +20,7 @@ A comprehensive, production-ready multi-agent AI investment platform. FastAPI ba
 ```
 START
   ↓
-Market Intelligence (orchestrates 9 analyst plugins)
+Market Intelligence (orchestrates 12 analyst plugins)
   ↓
 Agent Q&A (inter-analyst cross-examination & conflict resolution)
   ↓
@@ -328,7 +328,7 @@ Admins can restrict which parts of Settings a user can modify:
 
 **Storage:**
 - `users.api_keys_enc` — Fernet-encrypted JSON blob
-- Supported providers: openai, anthropic, google, xai, deepseek, qwen, glm, minimax, ollama, nvidia, litellm, azure
+- The store accepts any provider name (also used for `pinecone`); LLM-selectable providers come from `llm_clients/registry.py` (currently openai, anthropic, google, nvidia)
 
 **Injection Flow:**
 1. User triggers analysis
@@ -506,9 +506,11 @@ backend/
 │   ├── settings.py
 │   ├── users.py
 │   └── ...
+├── worker.py                  # arq analysis worker (ANALYSIS_QUEUE_MODE=worker)
 ├── services/                  # Orchestration & business logic
 │   ├── analysis_service.py
 │   ├── analysis/              # Sub-modules (emitter, orchestrator, persistence)
+│   ├── analysis_queue.py      # Dispatch runs inline (BackgroundTasks) or to arq
 │   ├── memory_service.py      # Pinecone episodic memory interface
 │   ├── tool_access_service.py # Agent/tool permission resolution
 │   ├── trading_orchestrator.py # Paper trading order logic
@@ -522,6 +524,9 @@ backend/
 │   ├── migrations.py          # Additive-only migrations
 │   ├── security.py            # JWT, bcrypt, Fernet
 │   ├── websocket.py
+│   ├── redis_bus.py           # Opt-in Redis client (REDIS_URL)
+│   ├── event_bus.py           # Analysis events: direct WS or Redis pub/sub
+│   ├── task_store.py          # Cross-process task registry + cancel channel
 │   ├── memory/                # Vector store abstractions
 │   │   ├── base.py
 │   │   ├── pinecone_store.py
@@ -529,16 +534,18 @@ backend/
 │   └── ...
 ├── schemas/                   # Pydantic DTOs
 └── trading_agents/            # Core AI engine (LangGraph)
+    ├── agent_catalog.py       # Agent metadata & hierarchy tree (AGENTS list)
+    ├── personas.py            # Investor persona catalog (single source)
     ├── agents/
     │   ├── main/              # Tier-1: 6 main nodes
     │   │   ├── market_intelligence.py
     │   │   ├── agent_qa.py    # Inter-agent cross-examination
     │   │   ├── research.py
-    │   │   ├── trader.py
+    │   │   ├── trade_execution.py
     │   │   ├── risk.py
     │   │   └── portfolio.py
     │   ├── sub/               # Tier-2: analysts, researchers, managers
-    │   │   ├── analysts/      # 9 analyst plugins
+    │   │   ├── analysts/      # 12 analyst plugins
     │   │   ├── managers/
     │   │   ├── researchers/
     │   │   ├── risk_mgmt/
@@ -549,14 +556,13 @@ backend/
     │   │   ├── bootstrap.py   # Register tools on startup
     │   │   └── builtin/
     │   ├── data/              # yFinance, Alpha Vantage, Reddit, SEC, etc.
-    │   ├── runtime/           # Execution framework (resilience, structured, memory, factory)
+    │   ├── runtime/           # Execution framework (resilience, memory, factory,
+    │   │                      #   analyst_execution.py)
     │   ├── hierarchy.py       # Agent hierarchy + kill-switches (single source of truth!)
-    │   ├── agent_catalog.py   # Agent metadata & hierarchy tree
     │   └── base.py            # Shared contracts
     ├── graph/                 # LangGraph state machine
     │   ├── setup.py           # Assembles 6 main nodes
     │   ├── trading_graph.py   # Entry point (TradingAgentsGraph class)
-    │   ├── analyst_execution.py
     │   ├── signal_processing.py
     │   ├── checkpointer.py
     │   └── ...
@@ -567,7 +573,8 @@ backend/
     │   └── ...
     └── llm_clients/           # Unified LLM API clients
         ├── registry.py        # Provider registry
-        └── client.py          # OpenAI, Claude, Gemini, DeepSeek, etc.
+        ├── model_catalog.py   # Per-provider model lists (served via /api/settings/llm-catalog)
+        └── *_client.py        # OpenAI, Anthropic, Google clients + base/fallback
 
 frontend/
 ├── src/
@@ -638,7 +645,7 @@ Register in `agents/tools/builtin/`, import in `agents/tools/bootstrap.py`, add 
 
 ### Custom Personas
 
-Edit `PERSONA_PROMPTS` in `agents/sub/managers/portfolio_manager.py`, add to `agent_catalog.py` settings.
+Register an `InvestorPersona(...)` in `trading_agents/personas.py` (key, label, description, PM instruction block). The Portfolio Manager prompt and the `/api/meta.investor_personas` dropdown pick it up automatically.
 
 ### WebSocket Streaming
 
@@ -706,4 +713,4 @@ See `docs/developer_guide.md` sections 5A–5I for:
 
 ## ✅ Maintenance Note
 
-Last validated against the codebase on 2026-06-11 (READMEs, architecture docs, and direct code exploration). If behaviour described here diverges from the code, trust the code — and update this file in the same change.
+Last validated against the codebase on 2026-06-12 (READMEs, architecture docs, and direct code exploration; analyst count, agent_catalog/personas single-sources, Redis scaling layer, and file paths cross-checked against the tree). If behaviour described here diverges from the code, trust the code — and update this file in the same change.

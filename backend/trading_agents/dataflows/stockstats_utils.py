@@ -5,8 +5,9 @@ import pandas as pd
 import yfinance as yf
 from yfinance.exceptions import YFRateLimitError
 
+from backend.core.utils import safe_ticker_component
+
 from .cache import APICache
-from .utils import safe_ticker_component
 
 logger = logging.getLogger(__name__)
 

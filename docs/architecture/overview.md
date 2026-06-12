@@ -89,7 +89,7 @@ The source code is organized into three major system boundaries:
 This is a cohesive AI subsystem that lives inside the backend and is imported as the `backend.trading_agents` sub-package:
 *   `agents/`: Outlines the prompt templates, system instructions, and schema formats for analysts (technical indicators, news, fundamentals, sentiment, options, macro, quantitative, review, earnings) and managers (research manager, portfolio manager, trader, and debate risk managers). Organized into sub-agents under `sub/` (analysts, managers, researchers, risk_mgmt, trader), execution runtime helpers under `runtime/`, tool data handlers under `data/`, and general utilities under `utils/`. *Features specialized modules for Investor Personas, Patent & Research evaluation, Short Squeeze analysis, and Supply Chain risk mappings.*
 *   `graph/`: Houses the state machine architecture (`trading_graph.py`), graph conditional logic (`conditional_logic.py`), propagation configurations, and SQLite checkpoint database connectors. *Streams intermediate debate dialogs directly to the WebSocket and incorporates dynamic performance weightings for each analyst.*
-*   `llm_clients/`: Handles the connections, token usage callback handlers, and specific provider thinking levels (reasoning effort metrics for OpenAI o1/o3, Gemini thinking, and Claude effort configurations). Supported Gemini models include 1.5 Pro/Flash and 2.0 Flash.
+*   `llm_clients/`: Handles the connections, token usage callback handlers, and specific provider thinking levels (OpenAI reasoning effort, Gemini thinking budget, and Claude effort configurations). Per-provider model lists live in `llm_clients/model_catalog.py` and are served via `/api/settings/llm-catalog`.
 
 ### C. The Frontend Dashboard UI (`frontend/`)
 *   A responsive dashboard built with React, TypeScript, and Vite.
@@ -107,6 +107,7 @@ To solve this, TradingAgents utilizes a fully asynchronous architecture:
 2.  **Async/Sync Bridging (where needed):** While most components are now native async, any remaining heavy synchronous calculations (like pandas-based backtests or yfinance fetches) are offloaded to threads using `asyncio.to_thread` from within their respective async tools or nodes.
 3.  **Real-time WebSocket Streaming:** The graph uses `astream` to push live state updates (like which agent node is executing) and partial reports directly to the main event loop, which multicasts them over WebSockets to the frontend.
 4.  **Background Database Workers:** Long-running database updates, such as parsing chart annotations and sending notifications via webhooks, are offloaded to background asyncio tasks (`asyncio.create_task`) to minimize initial response times.
+5.  **Optional Out-of-Process Analysis Worker:** With `REDIS_URL` set and `ANALYSIS_QUEUE_MODE=worker`, analysis runs are enqueued onto **arq** and executed by a separate `backend.worker` process; WebSocket events flow back to web clients over Redis pub/sub, and the task registry/cancel requests are shared across processes (`core/event_bus.py`, `core/task_store.py`).
 
 ---
 

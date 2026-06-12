@@ -8,10 +8,10 @@ from typing import Any
 logger = logging.getLogger(__name__)
 from langgraph.prebuilt import ToolNode
 
+from backend.core.utils import safe_ticker_component
 from backend.trading_agents.agents.data.chart_tools import active_run_context
 from backend.trading_agents.agents.hierarchy import AgentHierarchy
 from backend.trading_agents.dataflows.config import set_config
-from backend.trading_agents.dataflows.utils import safe_ticker_component
 from backend.trading_agents.default_config import DEFAULT_CONFIG
 from backend.trading_agents.llm_clients import create_llm_client
 

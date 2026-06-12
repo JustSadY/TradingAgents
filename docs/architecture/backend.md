@@ -47,7 +47,10 @@ api (routers)  →  services (business logic)  →  repositories (DB access)  �
 | `core/migrations.py` | Additive, idempotent schema migrations (no Alembic — see §5). |
 | `core/security.py` | bcrypt hashing, JWT encode/decode, Fernet `encrypt_secret`/`decrypt_secret`. |
 | `core/websocket.py` | `ws_manager` for real-time progress feeds. |
+| `core/redis_bus.py`, `event_bus.py`, `task_store.py` | **Opt-in Redis scaling layer** (enabled via `REDIS_URL`): shared Redis client, analysis-event pub/sub fan-out, cross-process task registry/ownership + cancel control channel. No-ops when Redis is unset. |
+| `core/body_limit.py`, `core/limiter.py` | Request body size limit middleware (413) + slowapi rate limiter. |
 | `core/log_handler.py`, `log_redaction.py` | Async DB log handler + secret redaction. |
+| `worker.py` | arq worker entrypoint (`arq backend.worker.WorkerSettings`) for `ANALYSIS_QUEUE_MODE=worker`. |
 | `models/*.py` | SQLAlchemy ORM (`User`, `Portfolio`/`Holding`, `Order`, `AnalysisResult`, `AppSettings`, `PriceAlert`, …). |
 | `schemas/*.py` | Pydantic request/response DTOs. |
 | `trading_agents/` | LangGraph engine (agents, graph, dataflows, llm_clients, mock_trading). |
@@ -58,7 +61,8 @@ api (routers)  →  services (business logic)  →  repositories (DB access)  �
 
 | Service | Owns |
 | --- | --- |
-| `analysis_service` | Multi-agent run orchestration. **`run_analysis_task` / `run_portfolio_task`** are the background entrypoints the routes schedule (own their session, persist, place order, emit WS errors). `run_analysis` does the actual graph run. |
+| `analysis_service` | Multi-agent run orchestration. **`run_analysis_task` / `run_portfolio_task`** are the background entrypoints (own their session, persist, place order, emit WS errors). `run_analysis` does the actual graph run. Task ownership/registry APIs are async and Redis-aware. |
+| `analysis_queue` | `dispatch_analysis` / `dispatch_portfolio_analysis`: routes a run to FastAPI `BackgroundTasks` (`ANALYSIS_QUEUE_MODE=inline`, default) or enqueues it onto arq (`worker`). Jobs carry only primitive ids; the worker re-loads user/settings from the DB. |
 | `settings_service` | `get_or_create_settings`, `settings_to_read` (AppSettings→DTO, single source of truth), `apply_settings_update`. **Use this everywhere** for AppSettings — do not re-add a helper in a router. |
 | `trading_orchestrator` | `place_signal_order` — maps a signal to a sized paper order against the portfolio's available cash. Shared by the analysis flow and cron. |
 | `market_service` | OHLCV + indicators, custom-formula series, sentiment history. Validates tickers; runs blocking yfinance/pandas in `asyncio.to_thread`. Raises `MarketDataError(status_code)`. |
@@ -98,7 +102,7 @@ databases get it on startup. For money/price/quantity use the `MONEY` type from
 `trading_agents/agents/sub/analysts/<name>.py` (reuse `run_tool_analyst` from
 `agents/runtime/analyst_node_factory.py` for the standard tool-using scaffold),
 import the module in `graph/setup.py`, and add the selection metadata
-(label/description/default) to `trading_agents/analyst_catalog.py`. The frontend
+(label/description/default) to `trading_agents/agent_catalog.py`. The frontend
 picks it up via `/api/meta` — no frontend edit. (See `docs/developer_guide.md`.)
 
 **Add an investor persona:** add one `InvestorPersona(...)` to
@@ -121,10 +125,12 @@ import engine modules lazily inside functions (they pull heavy deps).
   `/{id}` paths**. FastAPI matches in registration order; a `GET /{id:int}`
   placed first will shadow `GET /literal` and return 422. (This bit us once.)
 - **Auth router prefix is `/auth`** (login/refresh), everything else is `/api/*`.
-- **`.env` holds infra secrets only** (`SECRET_KEY`, `ADMIN_*`, `DATABASE_URL`,
-  `ENCRYPTION_KEY`, `CORS_ORIGINS`). LLM provider keys, data-vendor keys and
-  SearXNG are configured at runtime in the Web UI and stored (encrypted) in the
-  DB — never read from the environment by `core/config.py`.
+- **`.env` holds infra settings only** (`SECRET_KEY`, `ADMIN_*`, `DATABASE_URL`,
+  `ENCRYPTION_KEY`, `CORS_ORIGINS`, plus optional `METRICS_TOKEN`,
+  `MAX_REQUEST_BODY_BYTES`, `REDIS_URL`, `ANALYSIS_QUEUE_MODE`). LLM provider
+  keys, data-vendor keys and SearXNG are configured at runtime in the Web UI and
+  stored (encrypted) in the DB — never read from the environment by
+  `core/config.py`.
 - **Passwords** are hashed with `bcrypt` directly (not passlib).
 - **`get_db` auto-commits** on a clean return and rolls back on exception, so a
   route doesn't strictly need an explicit commit — but background-task sessions
@@ -142,26 +148,27 @@ import engine modules lazily inside functions (they pull heavy deps).
   absolute `backend.trading_agents...` imports; if you add a module, follow the
   same prefix.
 - Structure: `graph/` (LangGraph wiring — `trading_graph.py`, `setup.py`,
-  `conditional_logic.py`, checkpointer), `agents/` (the sub-agents under `sub/`
-  [analysts, managers, researchers, risk_mgmt, trader], execution runtime helpers
-  in `runtime/`, tool data helpers in `data/`, shared utilities in `utils/` +
-  `analyst_registry.py` + `schemas.py`), `dataflows/` (vendor-routed data via
-  `interface.py`), `llm_clients/` (provider factory), `mock_trading/`.
+  `conditional_logic.py`, checkpointer), `agents/` (Tier-1 main nodes under
+  `main/`, the sub-agents under `sub/` [analysts, managers, researchers,
+  risk_mgmt, trader], execution runtime helpers in `runtime/`, the modular tool
+  registry in `tools/`, tool data helpers in `data/`, shared utilities in
+  `utils/` + `analyst_registry.py` + `schemas.py`), `dataflows/` (vendor-routed
+  data via `interface.py`), `llm_clients/` (provider factory).
 - **Engine-root single-source modules** (dependency-free, importable by the
   backend without the heavy `agents` chain): `personas.py` (investor personas),
-  `analyst_catalog.py` (analyst selection metadata). `agents/runtime/` holds shared
-  scaffolds: `analyst_node_factory.run_tool_analyst` (the common tool-using
-  analyst turn) and `report_aggregator.build_resources`.
+  `agent_catalog.py` (agent hierarchy + selection metadata — the `AGENTS` list).
+  `agents/runtime/` holds shared scaffolds: `analyst_node_factory.run_tool_analyst`
+  (the common tool-using analyst turn), `analyst_execution.py` (analyst run
+  coordination) and `report_aggregator.build_resources`.
 - **High-risk zone:** graph compilation depends on the analyst registry's dynamic
   `ConditionalLogic` method injection and on agent state field names. Do **not**
   rewire the graph, rename registry methods, or change state field names without
   tests — these break graph compilation silently. Prefer additive, isolated
   changes (e.g. shared helpers like `agents/runtime/report_aggregator.py`).
-- **Env note:** the engine targets `langchain-core` 0.3.x. On newer 1.x the
-  `@tool` decorator rejects functions without docstrings, so the `agents`
-  subpackage may fail to import in a mismatched environment — that's a
-  dependency-version issue, not a code bug. Verify engine edits with
-  `python -m py_compile`.
+- **Env note:** the LLM stack is capped below its next major in
+  `requirements.txt` (`langchain-core`/`langgraph` `<2.0`); the test suite and
+  app import cleanly on the current 1.x line. When bumping the caps, re-run the
+  full test suite — graph compilation issues surface as import errors.
 
 ---
 
@@ -188,7 +195,7 @@ them. The backend already exposes everything the UI needs:
 
 | Key | Contents | Backed by |
 | --- | --- | --- |
-| `analysts` | `{key, label, description, default}[]` | `trading_agents/analyst_catalog.py` |
+| `analysts` | `{key, label, description, default}[]` | `trading_agents/agent_catalog.py` |
 | `investor_personas` | `{value, label, description}[]` | `trading_agents/personas.py` |
 | `signals` | `{value, label, tone}[]` (Buy/Overweight/Hold/Underweight/Sell) | catalog |
 | `section_labels` | report-column → label map | catalog |
@@ -237,4 +244,3 @@ Each tool is a `BaseAgentTool` (or a `FunctionToolAdapter` wrapping an existing
   at runtime, and is read in the engine via `get_config()`. Do **not** re-add these
   as `SystemSettings`/`system_settings` columns — the old orphaned columns were
   removed from `core/migrations.py`.
-.

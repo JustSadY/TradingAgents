@@ -56,16 +56,11 @@ sudo APP_PORT=80 ADMIN_USERNAME=patron bash deploy/install.sh
 
 ## After Installation: Set Up LLM API Keys
 
-At least one LLM provider key is required to run agent analyses:
+At least one LLM provider key is required to run agent analyses. Keys are **not** stored in `.env` — they are managed in the web dashboard and stored encrypted in the database:
 
-1.  Edit the environment configuration:
-    ```bash
-    sudo nano .env
-    ```
-2.  Restart the service daemon to apply changes:
-    ```bash
-    sudo systemctl restart tradingagents
-    ```
+1.  Log in at `http://SERVER_IP:8000` with the admin credentials printed by the installer.
+2.  Open **Settings → Account & API Keys** (per-user keys) or **Admin Panel → Global Settings** (server-wide defaults).
+3.  Enter the provider key(s); they take effect immediately — no service restart required.
 
 ---
 
@@ -117,6 +112,6 @@ To remove the application:
 
 ## Important Operational Notes
 
-*   **Single-Process Execution is Required:** The systemd service runs a single process of `uvicorn`. The application utilizes in-memory WebSocket connections and in-process `APScheduler` cron jobs; running multiple workers will duplicate schedulers and break WebSocket routing. **Do not add `--workers`** to the service definition.
+*   **Single-Process Execution (default):** The systemd service runs a single `uvicorn` process. With the default configuration the application uses in-memory WebSocket connections and an in-process `APScheduler`; running multiple workers would duplicate schedulers and break WebSocket routing. **Do not add `--workers`** to the service definition. To offload LLM-heavy analysis runs to a separate process, set `REDIS_URL` and `ANALYSIS_QUEUE_MODE=worker` in `.env` and run an additional `arq backend.worker.WorkerSettings` service — see `docs/configuration.md`.
 *   **Permissions:** If running the service under a custom user account (`SERVICE_USER`), make sure the project directory is not placed in `/root`. Store it in directories like `/opt` or `/srv`.
 *   **SPA Serving:** The frontend files are served by the backend from `frontend/dist` — no separate web server (such as nginx) is required. If SSL/TLS or domain mapping is needed, configure Caddy or nginx as a reverse proxy in front of port `8000`.

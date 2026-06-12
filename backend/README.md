@@ -51,7 +51,12 @@ backend/
 │   ├── migrations.py     # Additive, idempotent column migrations (see note below)
 │   ├── security.py       # bcrypt hashing, JWT, Fernet secret encryption
 │   ├── log_handler.py    # Async DB log handler
-│   └── websocket.py      # WS connection manager for real-time progress feeds
+│   ├── websocket.py      # WS connection manager for real-time progress feeds
+│   ├── redis_bus.py      # Opt-in Redis client (REDIS_URL) for horizontal scaling
+│   ├── event_bus.py      # Analysis events: direct WS or Redis pub/sub fan-out
+│   ├── task_store.py     # Cross-process task registry/ownership + cancel channel
+│   └── body_limit.py     # Request body size limit middleware (413)
+├── worker.py             # arq analysis worker entrypoint (ANALYSIS_QUEUE_MODE=worker)
 ├── schemas/              # Pydantic request/response DTOs
 ├── models/               # SQLAlchemy async ORM models (User, Portfolio, Order, Analysis, …)
 └── trading_agents/       # Core multi-agent LangGraph engine (imported as backend.trading_agents)
@@ -80,7 +85,7 @@ To aid system diagnostics, all application warnings, info logs, and agent runs a
 *   **Scoping:** Logs can be associated with a specific user account (scoped logs) via the `current_user_id` context variable. Standard users only see logs related to their own actions.
 
 ### 2. WebSocket Stream Multiplexing
-Long-running AI debates can take up to 2-3 minutes. Instead of blocking HTTP connections, the API accepts a request and runs the graph on an asynchronous worker. The React frontend connects via [websocket.py](core/websocket.py) to `/ws/analysis/{task_id}` to watch real-time node outputs, LLM token streams, and process states.
+Long-running AI debates can take up to 2-3 minutes. Instead of blocking HTTP connections, the API accepts a request and runs the graph as an async background task (or on a separate **arq worker** process when `ANALYSIS_QUEUE_MODE=worker`). The React frontend connects via [websocket.py](core/websocket.py) to `/ws/analysis/{task_id}` to watch real-time node outputs, LLM token streams, and process states. With `REDIS_URL` configured, events fan out across processes over Redis pub/sub ([event_bus.py](core/event_bus.py)) so streams work no matter which process executes the run.
 
 ### 3. Automatic System Updater
 The server integrates with a systemd-managed update wrapper. [update_service.py](services/update_service.py) regularly polls the GitHub remote repository. If an administrator clicks "Update" in the settings panel, it kicks off a one-shot systemd service to run safe git pulls, dependency updates, front-end compilation, and restarts the parent application daemon.

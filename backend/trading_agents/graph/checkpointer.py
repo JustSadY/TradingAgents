@@ -10,7 +10,7 @@ from pathlib import Path
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
-from backend.trading_agents.dataflows.utils import safe_ticker_component
+from backend.core.utils import safe_ticker_component
 
 _logger = logging.getLogger(__name__)
 
