@@ -15,7 +15,7 @@ graph TD
     Start([Start Run]) --> InitState[Initialize State]
     InitState --> AnalystExecution[Analyst Execution Node]
     
-    subgraph Analysts [9 Specialized Analyst Plugins]
+    subgraph Analysts [12 Specialized Analyst Plugins]
         AnalystExecution --> A1[Technical / Market]
         AnalystExecution --> A2[Social Sentiment]
         AnalystExecution --> A3[Global News]
@@ -25,9 +25,12 @@ graph TD
         AnalystExecution --> A7[Quantitative Factor]
         AnalystExecution --> A8[Earnings Call Transcript]
         AnalystExecution --> A9[Performance Review]
+        AnalystExecution --> A10[Catalyst Watch]
+        AnalystExecution --> A11[Insider Activity]
+        AnalystExecution --> A12[Institutional Ownership]
     end
     
-    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 --> SynthesisManager{Synthesis Manager}
+    A1 & A2 & A3 & A4 & A5 & A6 & A7 & A8 & A9 & A10 & A11 & A12 --> SynthesisManager{Synthesis Manager}
     
     subgraph Debate [The Thesis Debate Loop]
         SynthesisManager --> Bull[Bull Researcher]
@@ -56,30 +59,36 @@ graph TD
 
 ```text
 trading_agents/
+├── agent_catalog.py         # Single source: agent hierarchy tree + selection metadata (AGENTS)
+├── personas.py              # Single source: investor persona catalog
 ├── agents/                  # Prompt engineering, agent behaviors, and schemas
-│   ├── analyst_registry.py   # Registry manager to load and execute analyst plugins
+│   ├── analyst_registry.py  # Registry manager to load and execute analyst plugins
 │   ├── schemas.py           # Structured output schemas (Pydantic models)
-│   ├── base.py              # Base analyst agent class
-│   ├── hierarchy.py         # Multi-agent registry & routing logic
-│   ├── sub/                 # The 9 analyst plugins and debate/manager nodes
-│   │   ├── analysts/        # Implementation of the 9 analyst plugins
+│   ├── base.py              # Shared agent contracts
+│   ├── hierarchy.py         # AgentHierarchy: cascading kill-switches + LLM fallback resolution
+│   ├── main/                # Tier-1 main graph nodes (market intelligence, agent Q&A,
+│   │                        #   research, trade execution, risk, portfolio)
+│   ├── sub/                 # Tier-2 sub-agents
+│   │   ├── analysts/        # The 12 analyst plugins
 │   │   ├── researchers/     # Bull & Bear thesis builders
 │   │   ├── managers/        # Research, Synthesis, Auditor, and Portfolio managers
 │   │   ├── risk_mgmt/       # Risk analyst personalities (Aggressive, Conservative, Neutral)
 │   │   └── trader/          # Trader node logic
-│   ├── runtime/             # Engine execution runtime helpers (resilience, memory, etc.)
+│   ├── runtime/             # Execution runtime helpers (resilience, memory,
+│   │                        #   analyst_execution, analyst_node_factory)
+│   ├── tools/               # Tier-3 modular tool registry (base, registry, bootstrap, builtin/)
 │   ├── data/                # Data and tool execution helpers
 │   └── utils/               # Shared utilities
 ├── graph/                   # State machine structure (LangGraph engine)
 │   ├── setup.py             # Instantiates, compiles, and chains StateGraph nodes
 │   ├── checkpointer.py      # Persists conversation states and node states
-│   ├── analyst_execution.py  # Coordinates parallel mapping execution of active analysts
 │   ├── conditional_logic.py # Defines dynamic routing criteria between nodes
+│   ├── propagation.py       # Initial state construction
+│   ├── signal_processing.py # Signal extraction from final decisions
 │   ├── reflection.py        # Logic to review outputs for hallucination or errors
 │   └── trading_graph.py     # Graph entry runner with stream event hooks
-├── llm_clients/             # Unified API clients for LLMs
-│   └── client.py            # Adapts OpenAI, Claude, Gemini, DeepSeek, Grok, and Ollama
-└── mock_trading/            # Internal mock accounts database / orders sandbox
+├── dataflows/               # Vendor-routed data access (yFinance, Alpha Vantage, Reddit, …)
+└── llm_clients/             # Unified API clients & model catalog for all LLM providers
 ```
 
 ---
@@ -89,7 +98,7 @@ trading_agents/
 ### 1. Dynamic Analyst Registry
 All analyst plugins inherit from a base analyst class and register dynamically via [analyst_registry.py](agents/analyst_registry.py). Each analyst is given access to tools (e.g. `yfinance`, web search via SearXNG, social media APIs) to compile an isolated PDF/text report and extract key quantitative signal metrics.
 
-The 9 analysts are:
+The 12 analysts are:
 1.  **Market Analyst:** Pulls historical stock prices, calculates MACD, RSI, Moving Averages, and visualizes trends.
 2.  **Social Sentiment Analyst:** Mines Reddit (e.g., r/wallstreetbets) and StockTwits for bullish/bearish mentions and volumes.
 3.  **News Analyst:** Fetches global news feeds and ranks general news sentiment.
@@ -99,6 +108,9 @@ The 9 analysts are:
 7.  **Quantitative Factor Analyst:** Executes statistical models, factor loadings, and returns anomalies.
 8.  **Earnings Call Analyst:** Summarizes corporate earnings calls, management tone, and guidance changes.
 9.  **Performance Review Analyst:** Compares historical agent suggestions against simulated returns to optimize weights.
+10. **Catalyst Calendar Analyst:** Maps upcoming earnings, dividends, and event risk windows that could move the asset.
+11. **Insider Activity Analyst:** Tracks executive insider buys and sells (SEC Form 4).
+12. **Institutional Ownership Analyst:** Monitors 13F institutional and fund ownership changes.
 
 ### 2. The Thesis Debate & Synthesis
 To avoid LLM bias, analyst reports are synthesized by the **Synthesis Manager** to identify key conflicts. These are then debated by the **Bull Researcher** and **Bear Researcher**.
@@ -192,13 +204,15 @@ To implement and register a new tool in the modular system, follow these steps:
 
 ## 🔌 LLM Provider Integration
 
-The system uses [llm_clients/](llm_clients) to abstract away API differences. It supports:
-- **OpenAI:** `gpt-4o`, `o1`, `o3-mini`, etc. (Supports structured Pydantic output parsing).
-- **Anthropic Claude:** `claude-3-5-sonnet-latest`.
-- **Google Gemini:** `gemini-1.5-pro`, `gemini-2.0-flash` via native google SDK.
-- **DeepSeek:** Native API support (`deepseek-chat`, `deepseek-reasoner`).
-- **xAI Grok:** Grok API endpoint.
-- **Ollama:** Enables running local models (like `llama3`, `mistral`, or `qwen`) for local development without API costs.
+The system uses [llm_clients/](llm_clients) to abstract away API differences.
+Registered providers: **OpenAI**, **Anthropic Claude**, **Google Gemini**, and
+**NVIDIA NIM** (OpenAI-compatible). The provider and per-provider model lists
+are maintained in a single registry —
+[llm_clients/registry.py](llm_clients/registry.py), served to the UI via
+`GET /api/settings/llm-catalog` — so adding a provider or model is a one-place
+change. Provider-specific reasoning controls (OpenAI reasoning effort, Gemini
+thinking level, Claude effort) are mapped dynamically from the run
+configuration.
 
 ---
 

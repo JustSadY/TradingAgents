@@ -53,7 +53,7 @@ Manages tool enablement status and field settings at both **user** and **server*
 *   `settings_json`: Serialized JSON text containing parameter key-value overrides (e.g., `{"limit": 10}`).
 
 ### 2. `user_agent_access`
-Restricts which of the 9 analyst nodes a specific user is authorized to trigger during portfolio/stock runs.
+Restricts which of the 12 analyst nodes a specific user is authorized to trigger during portfolio/stock runs.
 *   `user_id`: Link to the user.
 *   `agent_key`: The analyst string key (e.g. `"market"`, `"sentiment"`).
 *   `can_run`: Boolean access flag.

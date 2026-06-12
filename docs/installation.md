@@ -51,11 +51,12 @@ Ensure you have Docker and Docker Compose installed.
     ```bash
     cp .env.example .env
     ```
-2.  Edit the `.env` file to insert your LLM API keys and search parameters.
+2.  Edit the `.env` file to set the infrastructure secrets (`SECRET_KEY`, `ENCRYPTION_KEY`, `ADMIN_PASSWORD_HASH`). LLM and data-provider keys are **not** environment variables — add them later in the Web UI (Settings → Account & API Keys).
 3.  Build and launch the container ecosystem:
     ```bash
     docker-compose up -d --build
     ```
+    The compose file starts PostgreSQL, Redis, the backend, a dedicated **arq analysis worker** (`ANALYSIS_QUEUE_MODE=worker`), and the frontend.
 4.  Once running, you can connect to:
     *   **Frontend Client:** `http://localhost:5173`
     *   **FastAPI Backend Swagger Docs:** `http://localhost:8000/docs`

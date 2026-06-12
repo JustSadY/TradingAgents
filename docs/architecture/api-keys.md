@@ -33,7 +33,7 @@ Decrypted JSON structure:
 ## Injection Flow
 
 1. Analysis is triggered by a user (`POST /api/analysis/run`)
-2. `_build_config(settings, user)` in `analysis_service.py` checks the user's key
+2. `build_analysis_config(settings, user, ...)` in `services/analysis/config_builder.py` checks the user's key
 3. If found: `config["api_key"] = user_key`
 4. If not found and user is not admin: raises `ValueError` → HTTP 400
 5. If not found and user is admin: falls back to `os.environ` (`.env` key)
@@ -42,8 +42,11 @@ Decrypted JSON structure:
 
 ## Supported Providers
 
-`openai`, `anthropic`, `google`, `xai`, `deepseek`, `qwen`, `qwen-cn`, `glm`,
-`glm-cn`, `minimax`, `minimax-cn`, `ollama`, `nvidia`, `litellm`, `azure`
+The encrypted store accepts **any** provider name string (it is also used for
+`pinecone` in the memory settings). For LLM execution, the providers a user can
+actually select are the ones registered in
+`backend/trading_agents/llm_clients/registry.py` — currently `openai`,
+`anthropic`, `google`, `nvidia` — exposed via `GET /api/settings/llm-catalog`.
 
 ## Security
 

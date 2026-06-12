@@ -75,18 +75,21 @@ DATABASE_URL=postgresql+asyncpg://tradingagents:tradingagents@localhost:5432/tra
 > infrastructure secrets in sections 1–2 above. The variable names below are
 > kept for reference of which providers are supported.
 
-Supported providers (set their keys in the Web UI):
+Registered providers (set their keys in the Web UI; the authoritative list and
+per-provider model options live in
+`backend/trading_agents/llm_clients/registry.py` and are served via
+`GET /api/settings/llm-catalog`):
 
 ```text
-OPENAI      — GPT models (gpt-4o, o1, o3-mini)
-ANTHROPIC   — Claude models (claude-sonnet / opus)
-GOOGLE      — Gemini models (gemini-1.5/2.0-flash, pro)
-XAI         — Grok models
-DEEPSEEK    — DeepSeek V3 / R1 models
-OPENROUTER  — Alternative multi-provider routing gateway
-LITELLM     — LiteLLM Proxy endpoint
-AZURE       — Enterprise Azure OpenAI endpoints
+openai      — OpenAI GPT / o-series models
+anthropic   — Anthropic Claude models
+google      — Google Gemini models
+nvidia      — NVIDIA NIM (OpenAI-compatible; Llama/Nemotron models)
 ```
+
+The key store itself accepts arbitrary provider names — e.g. `pinecone` is
+stored the same way for vector memory — but only providers registered in the
+LLM registry can be selected for analysis runs.
 
 ### Provider-Specific Reasoning Configurations
 Some reasoning models accept configuration parameters that are mapped dynamically from the application's configuration dictionary:

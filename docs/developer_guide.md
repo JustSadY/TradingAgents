@@ -46,17 +46,25 @@ import backend.trading_agents.agents.sub.analysts.custom_sentiment_analyst  # no
 ```
 
 ### Step C: Declare the UI/selection metadata (single source)
-Add your analyst's **selection metadata** — label, description and whether it is
-on by default — to the engine analyst catalog
-[backend/trading_agents/analyst_catalog.py](../backend/trading_agents/analyst_catalog.py).
-This is the single source the backend exposes through `/api/meta`, so the
-frontend picks it up automatically (no frontend edit needed):
+Add your analyst's **selection metadata** — label, description, parent node and
+whether it is on by default — to the agent catalog
+[backend/trading_agents/agent_catalog.py](../backend/trading_agents/agent_catalog.py)
+(`AGENTS` list, category `"analyst"`). This is the single source the backend
+exposes through `/api/meta`, so the frontend picks it up automatically (no
+frontend edit needed). It also wires the analyst into the `AgentHierarchy`
+kill-switch and LLM-fallback chain:
 
 ```python
-ANALYSTS: list[AnalystInfo] = [
+AGENTS: list[AgentInfo] = [
     # ...
-    AnalystInfo("custom_sentiment", "Özel Duygu",
-                "Özel alternatif veri kaynakları ve duygu endeksleri", False),
+    AgentInfo(
+        "custom_sentiment",
+        "Custom Sentiment",
+        "Alternative sentiment data sources and indices",
+        category="analyst",
+        parent="market_intelligence",
+        default_enabled=False,
+    ),
 ]
 ```
 
@@ -161,118 +169,89 @@ To register new translation properties:
 
 This section provides technical guidance and code blueprints for developers implementing or extending the 16 advanced AI, visualization, and automated trading features.
 
-### A. Setting Up Interactive Q&A Handler (Feature 1)
-To handle interactive questions on completed reports, create a new router under [backend/api/analysis.py](../backend/api/analysis.py):
+### A. Interactive Q&A on Reports (Feature 1) — implemented
+Report-grounded Q&A lives in
+[backend/services/report_chat_service.py](../backend/services/report_chat_service.py)
+(`answer_report_question`) and is exposed via `GET/POST /api/analysis/{id}/chat`
+in [backend/api/analysis.py](../backend/api/analysis.py). The flow:
 
-```python
-from fastapi import APIRouter, Depends
-from backend.services.analysis_service import get_analysis_by_id
-from backend.trading_agents.llm_clients.factory import get_llm_client
+1.  Verify the analysis belongs to the caller (`scope_to_user`).
+2.  Build a system prompt grounded **only** in the completed report sections
+    (plus the user's output-language preference).
+3.  Resolve the user's encrypted provider key, call the configured LLM through
+    `backend.trading_agents.llm_clients` (`create_llm_client`), and persist both
+    messages as `AnalysisChat` rows.
 
-router = APIRouter()
-
-@router.post("/{analysis_id}/chat")
-async def chat_with_report(analysis_id: int, user_message: str, db=Depends(get_db)):
-    # 1. Fetch historical analysis report
-    analysis = await get_analysis_by_id(analysis_id, db)
-    report_content = analysis.markdown_report
-    
-    # 2. Construct LLM client and system instructions loaded with the report
-    llm = get_llm_client(provider="openai", model="gpt-4o-mini")
-    system_prompt = (
-        f"You are the Portfolio Manager agent of TradingAgents. The user wants to discuss the "
-        f"following analysis report they generated.\n\nReport Content:\n{report_content}\n\n"
-        f"Answer their questions concisely, matching your analysis findings."
-    )
-    
-    # 3. Request LLM response
-    response = await llm.generate(
-        system_instruction=system_prompt,
-        messages=[{"role": "user", "content": user_message}]
-    )
-    return {"reply": response}
-```
+To extend it (e.g. adding new context sections), modify the prompt builder in
+`report_chat_service.py` — keep the router handler thin.
 
 ### B. Streaming Live Bull & Bear Debate Exchanges (Feature 2)
-To push live debate bubble flows over WebSockets, hook into the node loop in [backend/trading_agents/graph/trading_graph.py](../backend/trading_agents/graph/trading_graph.py):
+Debate bubbles are emitted through the `AnalysisEmitter`
+([backend/services/analysis/emitter.py](../backend/services/analysis/emitter.py)),
+which routes events to local WebSockets — or across processes via Redis pub/sub
+when `REDIS_URL` is configured:
 
 ```python
-# During the debate node processing, send intermediate outputs to the WebSocket manager
-async def debate_step_callback(agent_name: str, message: str, task_id: str):
-    from backend.core.websocket import manager
-    await manager.send_to_task(
-        task_id,
-        {
-            "type": "debate_bubble",
-            "agent": agent_name,  # "BullResearcher" or "BearResearcher"
-            "message": message,
-            "timestamp": datetime.utcnow().isoformat()
-        }
-    )
+# Inside a graph callback that has access to the run's emitter:
+await emitter.emit_debate_bubble(
+    debate_type="investment",  # or "risk"
+    message=f"BullResearcher: {message}",
+)
 ```
+
+The frontend receives `{"type": "debate_bubble", ...}` events on
+`/ws/analysis/{task_id}` and renders them as live chat bubbles.
 
 ### C. Registering a New Investor Persona (Feature 4)
-Personas govern LLM advisory behaviors. Add options to [backend/trading_agents/config.py](../backend/trading_agents/config.py) and map them inside [backend/trading_agents/agents/sub/managers/portfolio_manager.py](../backend/trading_agents/agents/sub/managers/portfolio_manager.py):
+Personas are a **single-source catalog** in
+[backend/trading_agents/personas.py](../backend/trading_agents/personas.py).
+Register one `InvestorPersona(...)` (key, label, description and the Portfolio
+Manager instruction block) — the Portfolio Manager prompt and the
+`/api/meta.investor_personas` dropdown pick it up automatically, no other edits:
 
 ```python
-# 1. In backend/trading_agents/config.py
-investor_persona: str = "conservative"  # Choices: conservative, risk_loving, esg_focused
-
-# 2. In backend/trading_agents/agents/sub/managers/portfolio_manager.py
-PERSONA_PROMPTS = {
-    "conservative": "Prioritize high-yield dividend stocks, cash conservation, and blue-chips. Avoid leverage.",
-    "risk_loving": "Seek high beta, cryptocurrency assets, and swing options setups. Prioritize growth.",
-    "esg_focused": "Filter allocations to prioritize high ESG scores and sustainable companies."
-}
-
-def get_portfolio_manager_prompt(persona: str) -> str:
-    persona_instruction = PERSONA_PROMPTS.get(persona, PERSONA_PROMPTS["conservative"])
-    return f"You are the Portfolio Manager. Persona instructions: {persona_instruction}"
+# backend/trading_agents/personas.py
+register_persona(
+    InvestorPersona(
+        key="esg_focused",
+        label="ESG Focused",
+        description="Prioritizes sustainable, high ESG-score companies",
+        instructions=(
+            "Filter allocations to prioritize high ESG scores and sustainable "
+            "companies. Avoid fossil-fuel-heavy and controversy-flagged names."
+        ),
+    )
+)
 ```
 
-### D. Implementing the Analyst Success Scorecard (Feature 3)
-Track the performance of individual analysts by comparing their signals against actual prices. Define the SQL model in [backend/models/portfolio_analysis.py](../backend/models/portfolio_analysis.py):
+### D. Analyst Success Scorecard (Feature 3) — implemented
+Per-analyst predictive performance is tracked by comparing past signals against
+realized returns:
 
-```python
-from sqlalchemy import Column, String, Float, Integer
-from backend.core.database import Base
+*   [backend/services/performance_service.py](../backend/services/performance_service.py)
+    backfills realized returns/alpha for graded analyses and computes
+    **analyst attribution stats** (`get_analyst_attribution_stats`), exposed at
+    `GET /api/analysis/performance-attribution`.
+*   [backend/services/analyst_prefilter_service.py](../backend/services/analyst_prefilter_service.py)
+    uses those win rates to optionally **skip chronically underperforming
+    analysts** before a run (configurable via the
+    `analyst_prefilter_*` settings).
 
-class AnalystScorecard(Base):
-    __tablename__ = "analyst_scorecards"
-    
-    id = Column(Integer, primary_key=True)
-    analyst_key = Column(String, unique=True, index=True)  # e.g., "market", "news"
-    total_predictions = Column(Integer, default=0)
-    correct_predictions = Column(Integer, default=0)
-    success_rate = Column(Float, default=1.0)  # Total correct / Total predictions
-```
+To change how performance feeds back into runs, extend the prefilter service —
+not the Portfolio Manager prompt — so the behaviour stays configurable per user.
 
-A daily task runs in `backend/services/stats_handler.py` to update these values using yFinance actual closing prices after 7 days and 30 days. In `portfolio_manager.py`, apply these as node weights:
-```python
-def weigh_analysts(signals: dict, scorecards: dict[str, float]) -> dict:
-    weighted_signals = {}
-    for analyst, signal in signals.items():
-        weight = scorecards.get(analyst, 1.0)
-        weighted_signals[analyst] = signal * weight
-    return weighted_signals
-```
+### E. Fractional Share Orders (Feature 16) — implemented convention
+Fractional quantities are already supported: all money/quantity columns use the
+exact-decimal `MONEY = Numeric(20, 8, asdecimal=True)` type from
+`backend/core/database.py` (see `backend/models/order.py` —
+`quantity_requested` / `quantity_filled` are `Decimal`). When extending order
+logic:
 
-### E. Enabling Fractional Share Orders (Feature 16)
-To support small account sizes, upgrade the order managers to support floating-point quantities. 
-
-1.  **Modify Table Models:** Change quantities in `backend/models/order.py` from `Integer` to `Float`:
-    ```python
-    quantity = Column(Float, nullable=False)  # Supports fractional values (e.g. 0.05)
-    ```
-2.  **Adjust Simulation Routing:** Update `backend/services/execution/simulation.py` to perform operations on float quantities:
-    ```python
-    def execute_simulated_buy(portfolio, ticker, quantity, price):
-        cost = quantity * price
-        if portfolio.cash >= cost:
-            portfolio.cash -= cost
-            # Add or update asset holding with fractional float addition
-            portfolio.holdings[ticker] = portfolio.holdings.get(ticker, 0.0) + quantity
-    ```
+*   **Never use `Float`** for prices, quantities, balances, or margins — use the
+    `MONEY` column type and Python's `Decimal` end-to-end to avoid accumulative
+    rounding errors.
+*   The paper-trading engine (`backend/services/mock_trading_service.py`)
+    performs all arithmetic in `Decimal`; follow the same pattern in new code.
 
 ### F. Safe Dynamic Indicator Engine & Evaluation Blueprint
 Allows both analysts and users to write dynamic mathematical expressions (e.g. `(Close - SMA(20)) / STD(20)`) evaluated safely in the backend.

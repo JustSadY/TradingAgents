@@ -37,8 +37,8 @@ stateDiagram-v2
     Phase2_Debate --> Phase3_Plan : Send Thesis Consensus
     
     state Phase3_Plan {
-        [*] --> Trader_Ajan : Draft Execution Details
-        Trader_Ajan --> Formulate_Mock_Trade : Define Stop & Target
+        [*] --> Trader_Agent : Draft Execution Details
+        Trader_Agent --> Formulate_Mock_Trade : Define Stop & Target
     }
     
     Phase3_Plan --> Phase4_Risk : Send Proposed Trade Plan
