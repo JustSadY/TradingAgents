@@ -10,7 +10,7 @@ async def get_options_data(
     symbol: Annotated[str, "ticker symbol of the company"],
 ) -> str:
     """Retrieve options chain data, including Put/Call ratios and Implied Volatility (IV) metrics."""
-    from datetime import datetime, timedelta
+    from datetime import UTC, datetime, timedelta
 
     try:
         from backend.trading_agents.agents.data.chart_tools import active_run_context
@@ -24,9 +24,9 @@ async def get_options_data(
         try:
             end_dt = datetime.strptime(trade_date_str, "%Y-%m-%d")
         except ValueError:
-            end_dt = datetime.utcnow()
+            end_dt = datetime.now(UTC)
     else:
-        end_dt = datetime.utcnow()
+        end_dt = datetime.now(UTC)
 
     start_dt = end_dt - timedelta(days=90)
     start_date = start_dt.strftime("%Y-%m-%d")

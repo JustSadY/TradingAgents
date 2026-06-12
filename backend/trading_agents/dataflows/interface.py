@@ -2,6 +2,8 @@ import asyncio
 import inspect
 import logging
 
+from backend.core.utils import safe_ticker_component
+
 from .alpha_vantage import (
     get_balance_sheet as get_alpha_vantage_balance_sheet,
 )
@@ -34,7 +36,6 @@ from .cache import APICache, get_category_for_method
 from .config import get_config
 from .reddit import fetch_reddit_posts
 from .stocktwits import fetch_stocktwits_messages
-from .utils import safe_ticker_component
 from .y_finance import (
     get_balance_sheet as get_yfinance_balance_sheet,
 )

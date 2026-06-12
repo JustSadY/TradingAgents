@@ -66,4 +66,3 @@ async def logout(
 ):
     """Revoke every token issued to the caller by bumping their token version."""
     current_user.token_version = (getattr(current_user, "token_version", 0) or 0) + 1
-    await db.commit()

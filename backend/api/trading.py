@@ -77,7 +77,6 @@ async def create_order(
         leverage=req.leverage,
         allow_short=req.allow_short,
     )
-    await db.commit()
     return result
 
 
@@ -96,7 +95,6 @@ async def reset_portfolio(
     _=Depends(get_current_user),
 ):
     result = await svc.reset_portfolio(db, initial_capital=req.initial_capital, user=_)
-    await db.commit()
     return result
 
 
