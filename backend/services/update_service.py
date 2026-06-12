@@ -47,8 +47,8 @@ def _bg_fetch():
     global _last_fetch, _fetching
     try:
         _git("fetch", "--quiet", timeout=15)
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.debug("Background git fetch failed: %s", exc)
     finally:
         _last_fetch = time.time()
         with _fetch_lock:
@@ -58,15 +58,18 @@ def _bg_fetch():
 def _read_status() -> dict | None:
     try:
         return json.loads(STATUS_FILE.read_text(encoding="utf-8"))
-    except Exception:
+    except FileNotFoundError:
+        return None
+    except Exception as exc:
+        _logger.warning("Could not read update status file %s: %s", STATUS_FILE, exc)
         return None
 
 
 def _write_status(data: dict) -> None:
     try:
         STATUS_FILE.write_text(json.dumps(data), encoding="utf-8")
-    except Exception:
-        pass
+    except Exception as exc:
+        _logger.warning("Could not write update status file %s: %s", STATUS_FILE, exc)
 
 
 def get_status(do_fetch: bool = True) -> dict:

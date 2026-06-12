@@ -127,5 +127,6 @@ async def notify_alert_triggered(
 def _parse_events(raw: str) -> list[str]:
     try:
         return json.loads(raw) if raw else []
-    except Exception:
+    except Exception as exc:
+        _logger.warning("Malformed webhook_events setting, no webhooks will fire: %s", exc)
         return []

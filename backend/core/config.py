@@ -27,6 +27,8 @@ class Settings(BaseSettings):
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
     # Bearer token for GET /metrics (Prometheus). Endpoint returns 404 while unset.
     METRICS_TOKEN: str = ""
+    # Maximum accepted HTTP request body size in bytes (0 disables the check).
+    MAX_REQUEST_BODY_BYTES: int = 2_000_000
 
     @model_validator(mode="after")
     def _reject_insecure_production_defaults(self) -> "Settings":
