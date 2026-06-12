@@ -25,6 +25,10 @@ python-dotenv>=1.0.1
 # Scheduling
 apscheduler>=3.10.0
 
+# Optional horizontal scaling (enabled via REDIS_URL / ANALYSIS_QUEUE_MODE)
+redis>=5.0,<7.0
+arq>=0.26,<0.27
+
 # LangChain & LLM Integration (from CLI)
 # The LLM stack breaks across majors; cap at the next major above what the
 # test suite currently passes with (langchain-core/langgraph 1.x) so a

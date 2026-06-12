@@ -78,12 +78,31 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         _logger.warning("Failed to recover lost alerts: %s", e)
 
+    # With Redis enabled, forward pub/sub analysis events to local WebSockets
+    # and listen for cross-process cancel requests (arq worker mode).
+    redis_tasks: list = []
+    from backend.core.redis_bus import redis_enabled
+
+    if redis_enabled():
+        import asyncio as _asyncio
+
+        from backend.core.event_bus import event_forwarder
+        from backend.core.task_store import control_listener
+        from backend.services.analysis_service import cancel_local_task
+
+        redis_tasks.append(_asyncio.create_task(event_forwarder()))
+        redis_tasks.append(_asyncio.create_task(control_listener(cancel_local_task)))
+        _logger.info("Redis event bus active (queue mode: %s).", settings.ANALYSIS_QUEUE_MODE)
+
     cron = init_cron_service()
     await _load_cron_settings(cron)
     cron.start()
     _logger.info("Application ready.")
     yield
     cron.stop()
+
+    for task in redis_tasks:
+        task.cancel()
 
     # Gracefully await any running analyses or alert tasks on shutdown
     import asyncio
@@ -98,6 +117,12 @@ async def lifespan(app: FastAPI):
             await asyncio.wait_for(asyncio.gather(*pending, return_exceptions=True), timeout=15.0)
         except TimeoutError:
             _logger.warning("Timeout waiting for background tasks to complete during shutdown.")
+
+    from backend.core.redis_bus import close_redis
+    from backend.services.analysis_queue import close_arq_pool
+
+    await close_arq_pool()
+    await close_redis()
 
     _logger.info("Application stopped.")
     db_log_handler.stop()
@@ -210,7 +235,7 @@ async def websocket_analysis(
         return
     # Only the user who started the run (or an admin) may stream its events;
     # otherwise any authenticated user could read another user's analysis.
-    if not is_task_owner(task_id, user.id, user.is_admin):
+    if not await is_task_owner(task_id, user.id, user.is_admin):
         await websocket.close(code=4003, reason="Forbidden")
         return
 

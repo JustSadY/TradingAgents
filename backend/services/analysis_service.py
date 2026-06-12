@@ -23,6 +23,7 @@ import logging
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core import task_store
 from backend.core.database import AsyncSessionLocal
 from backend.models.settings import AppSettings
 from backend.services.trading_orchestrator import place_signal_order
@@ -35,26 +36,30 @@ from .analysis.portfolio_orchestrator import run_portfolio_analysis
 
 _logger = logging.getLogger(__name__)
 
-# Maintain local references for backward compatibility with existing imports
+# In-process task tracking — the source of truth for runs executing in THIS
+# process. With REDIS_URL set, ``task_store`` mirrors ownership and metadata to
+# Redis so other processes (web vs. arq worker) can see and cancel them too.
 _RUNNING_TASKS: dict[str, asyncio.Task] = {}
 _TASK_REGISTRY: dict[str, dict] = {}  # Re-used by get_active_tasks_for_user
 
 # Maps an analysis task_id to the id of the user who started it. Populated
-# synchronously by the API handlers before the task_id is returned to the
-# client, so the WebSocket endpoint can verify ownership before streaming a
-# run's reports/decisions to a connecting socket.
+# by the API handlers before the task_id is returned to the client, so the
+# WebSocket endpoint can verify ownership before streaming a run's
+# reports/decisions to a connecting socket.
 _TASK_OWNERS: dict[str, int | None] = {}
 
 
-def register_task_owner(task_id: str, user_id: int | None) -> None:
+async def register_task_owner(task_id: str, user_id: int | None) -> None:
     _TASK_OWNERS[task_id] = user_id
+    await task_store.set_owner(task_id, user_id)
 
 
-def clear_task_owner(task_id: str) -> None:
+async def clear_task_owner(task_id: str) -> None:
     _TASK_OWNERS.pop(task_id, None)
+    await task_store.clear_owner(task_id)
 
 
-def is_task_owner(task_id: str, user_id: int | None, is_admin: bool = False) -> bool:
+async def is_task_owner(task_id: str, user_id: int | None, is_admin: bool = False) -> bool:
     """Return True if *user* may subscribe to *task_id*'s event stream.
 
     Admins may observe any task. Otherwise the task must have a known owner that
@@ -64,22 +69,45 @@ def is_task_owner(task_id: str, user_id: int | None, is_admin: bool = False) -> 
     if is_admin:
         return True
     owner = _TASK_OWNERS.get(task_id)
+    if owner is None:
+        # The run may have been registered by another process (arq worker mode).
+        owner = await task_store.get_owner(task_id)
     return owner is not None and owner == user_id
 
 
-async def cancel_analysis(task_id: str) -> bool:
+async def cancel_local_task(task_id: str) -> bool:
+    """Cancel ``task_id`` if it is running in THIS process."""
     task = _RUNNING_TASKS.pop(task_id, None)
-    _TASK_REGISTRY.pop(task_id, None)
+    meta = _TASK_REGISTRY.pop(task_id, None)
     _TASK_OWNERS.pop(task_id, None)
+    await task_store.clear_meta(task_id, (meta or {}).get("user_id"))
+    await task_store.clear_owner(task_id)
     if task and not task.done():
         task.cancel()
         return True
     return False
 
 
-def get_active_tasks_for_user(user_id: int | None) -> list[dict]:
-    """Returns a list of active tasks for the given user."""
-    return [{"task_id": tid, **meta} for tid, meta in _TASK_REGISTRY.items() if meta.get("user_id") == user_id]
+async def cancel_analysis(task_id: str) -> bool:
+    """Cancel a run wherever it is executing.
+
+    Cancels locally when the task lives in this process; otherwise broadcasts a
+    cancel request on the control channel for the owning process to act on.
+    """
+    ran_here = task_id in _RUNNING_TASKS
+    cancelled = await cancel_local_task(task_id)
+    if not ran_here:
+        await task_store.publish_cancel(task_id)
+    return cancelled
+
+
+async def get_active_tasks_for_user(user_id: int | None) -> list[dict]:
+    """Returns a list of active tasks for the given user (all processes)."""
+    tasks = [{"task_id": tid, **meta} for tid, meta in _TASK_REGISTRY.items() if meta.get("user_id") == user_id]
+    if user_id is not None:
+        seen = {t["task_id"] for t in tasks}
+        tasks.extend(t for t in await task_store.list_tasks_for_user(user_id) if t["task_id"] not in seen)
+    return tasks
 
 
 async def run_analysis(
@@ -99,20 +127,23 @@ async def run_analysis(
     if task_id is None:
         task_id = str(uuid.uuid4())
 
+    user_id = user.id if user else None
     current = asyncio.current_task()
     if current:
-        _RUNNING_TASKS[task_id] = current
-        _TASK_REGISTRY[task_id] = {
+        meta = {
             "ticker": ticker,
             "trade_date": trade_date,
             "asset_type": asset_type,
-            "user_id": user.id if user else None,
+            "user_id": user_id,
             "started_at": time.time(),
             "status": "running",
         }
+        _RUNNING_TASKS[task_id] = current
+        _TASK_REGISTRY[task_id] = meta
+        await task_store.set_meta(task_id, meta)
         # Record ownership for runs that don't pass through the API handler
         # (alert-/cron-triggered), so their owner can still reconnect via WS.
-        register_task_owner(task_id, user.id if user else None)
+        await register_task_owner(task_id, user_id)
 
     emitter = AnalysisEmitter(task_id)
     try:
@@ -121,6 +152,8 @@ async def run_analysis(
         _RUNNING_TASKS.pop(task_id, None)
         _TASK_REGISTRY.pop(task_id, None)
         _TASK_OWNERS.pop(task_id, None)
+        await task_store.clear_meta(task_id, user_id)
+        await task_store.clear_owner(task_id)
         await emitter.close()
 
 
@@ -200,7 +233,7 @@ async def run_portfolio_task(
                 await emitter.close()
         finally:
             if task_id:
-                clear_task_owner(task_id)
+                await clear_task_owner(task_id)
 
 
 async def rollback_and_resume_analysis(
@@ -260,7 +293,7 @@ async def rollback_and_resume_analysis(
     await db.commit()
 
     # 6. Register task owner and spawn background task to resume graph execution
-    register_task_owner(task_id, current_user.id if current_user else None)
+    await register_task_owner(task_id, current_user.id if current_user else None)
 
     async def run_resume():
         if current_user:
@@ -313,7 +346,7 @@ async def rollback_and_resume_analysis(
                 finally:
                     _RUNNING_TASKS.pop(task_id, None)
                     _TASK_REGISTRY.pop(task_id, None)
-                    clear_task_owner(task_id)
+                    await clear_task_owner(task_id)
                     await emitter.close()
             except Exception as exc:
                 _logger.error("Time-travel resume task failed: %s", exc, exc_info=True)

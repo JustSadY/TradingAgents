@@ -456,11 +456,16 @@ APScheduler runs in-process:
 
 `agents/main/*.py` must NOT import from `graph/` at module level. Analyst execution structures have been relocated to `agents/runtime/analyst_execution.py` to prevent circular dependency cycles between `agents` and `graph` compilation.
 
-### Single Uvicorn Worker
+### Single Uvicorn Worker (default) / Redis Scaling (opt-in)
 
-Systemd service runs **one** uvicorn process. APScheduler, WebSockets, and in-memory task tracking rely on this. Adding `--workers` breaks everything.
+By default the systemd service runs **one** uvicorn process. APScheduler, WebSockets, and in-memory task tracking rely on this. Do not add `--workers` without enabling the Redis layer below.
 
-- **Architectural Target (Future Decoupling)**: As concurrent LLM-heavy runs scale, the system should evolve to offload analysis runs (`analysis_service.py`) to an out-of-process queue worker (e.g., Celery or arq backed by Redis) and utilize Redis Pub/Sub for WebSockets. Keep `analysis_service` state-agnostic and process-exportable.
+**Opt-in Redis scaling** (`REDIS_URL` in `.env`):
+- Analysis WebSocket events fan out over Redis Pub/Sub (`core/event_bus.py`); each web process runs a forwarder that feeds its local `ws_manager`.
+- Task ownership/registry mirrors to Redis (`core/task_store.py`) so `/api/analysis/active`, WS auth, and cancel work across processes. Cancel requests broadcast on a control channel.
+- `ANALYSIS_QUEUE_MODE=worker` additionally enqueues analysis runs onto **arq**; run the worker with `arq backend.worker.WorkerSettings`. Jobs carry only primitive ids (user_id, task_id) — the worker re-loads user/settings from the DB. `docker-compose.yml` ships this topology (redis + backend + worker).
+- With `REDIS_URL` unset everything falls back to the original in-process behaviour; Redis is never required for a simple deployment.
+- APScheduler (cron) still runs in the web process only — keep a single web process unless cron is also externalized.
 
 ### Migrations: Additive at Startup, Alembic Opt-In
 

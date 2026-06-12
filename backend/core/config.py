@@ -29,6 +29,22 @@ class Settings(BaseSettings):
     METRICS_TOKEN: str = ""
     # Maximum accepted HTTP request body size in bytes (0 disables the check).
     MAX_REQUEST_BODY_BYTES: int = 2_000_000
+    # Optional Redis (e.g. redis://localhost:6379/0). When set, analysis
+    # WebSocket events fan out over pub/sub and the task registry becomes
+    # cross-process. Empty = original single-process in-memory behaviour.
+    REDIS_URL: str = ""
+    # "inline" runs analyses in the web process (default). "worker" enqueues
+    # them onto arq (requires REDIS_URL and a running `arq backend.worker.WorkerSettings`).
+    ANALYSIS_QUEUE_MODE: str = "inline"
+
+    @model_validator(mode="after")
+    def _validate_queue_mode(self) -> "Settings":
+        mode = self.ANALYSIS_QUEUE_MODE.strip().lower()
+        if mode not in ("inline", "worker"):
+            raise ValueError("ANALYSIS_QUEUE_MODE must be 'inline' or 'worker'")
+        if mode == "worker" and not self.REDIS_URL:
+            raise ValueError("ANALYSIS_QUEUE_MODE=worker requires REDIS_URL to be set")
+        return self
 
     @model_validator(mode="after")
     def _reject_insecure_production_defaults(self) -> "Settings":
