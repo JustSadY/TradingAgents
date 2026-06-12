@@ -299,8 +299,8 @@ async def place_signal_order(
             if isinstance(ann, dict):
                 stop_loss = ann.get("stop_loss")
                 take_profit = ann.get("target_price")
-        except Exception:
-            pass
+        except Exception as exc:
+            _logger.warning("Could not parse chart annotations for SL/TP on analysis %s: %s", row.id, exc)
 
     max_position_size_pct = getattr(settings, "max_position_size_pct", 10.0)
     confidence_score = _extract_confidence_score(row)

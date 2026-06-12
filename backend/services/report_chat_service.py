@@ -100,7 +100,8 @@ def _resolve_user_api_key(user, provider: str) -> str | None:
         from backend.core.config import get_settings
 
         return get_user_api_key(user, provider, get_settings().get_fernet())
-    except Exception:
+    except Exception as exc:
+        _logger.warning("Could not resolve %s API key for user %s: %s", provider, getattr(user, "id", "?"), exc)
         return None
 
 

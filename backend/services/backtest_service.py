@@ -203,7 +203,8 @@ async def run_backtest_simulation(
                         if isinstance(ann, str):
                             try:
                                 ann = json.loads(ann)
-                            except Exception:
+                            except Exception as exc:
+                                _logger.debug("Skipping malformed chart annotations in backtest: %s", exc)
                                 ann = {}
                         if isinstance(ann, dict):
                             rec_stop_loss = ann.get("stop_loss")

@@ -9,6 +9,7 @@ depend on this service instead.
 from __future__ import annotations
 
 import json
+import logging
 from datetime import UTC, datetime
 
 from sqlalchemy import select
@@ -16,6 +17,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.settings import AppSettings
 from backend.schemas.settings import SettingsRead, SettingsUpdate
+
+_logger = logging.getLogger(__name__)
 
 
 async def get_or_create_settings(
@@ -99,7 +102,8 @@ async def get_user_language(db: AsyncSession, user=None) -> str:
     try:
         settings = await get_or_create_settings(db, user)
         return settings.output_language or "English"
-    except Exception:
+    except Exception as exc:
+        _logger.warning("Could not load language preference for user %s: %s", getattr(user, "id", "?"), exc)
         return "English"
 
 

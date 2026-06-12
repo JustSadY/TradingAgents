@@ -233,7 +233,8 @@ async def get_benchmark_return(benchmark: str = "SPY", period: str = "1y") -> fl
                     if not math.isnan(ret):
                         return ret
             return None
-        except Exception:
+        except Exception as exc:
+            _logger.warning("Benchmark return fetch failed for %s (period=%s): %s", benchmark, period, exc)
             return None
 
     return await asyncio.to_thread(_fetch)

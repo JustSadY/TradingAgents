@@ -37,7 +37,7 @@ jobs:
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
-        pip install ruff pytest pytest-asyncio
+        pip install ruff pytest pytest-asyncio pytest-cov
         pip install -r backend/requirements.txt
 
     - name: Run Ruff Lint check
@@ -56,7 +56,35 @@ jobs:
         ADMIN_USERNAME: admin
       run: |
         cd backend
-        pytest
+        pytest --cov=. --cov-report=term
+
+  security-audit:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    # Informational for now: surfaces known CVEs in dependencies without
+    # blocking merges. Tighten by removing continue-on-error once clean.
+    - name: Audit backend dependencies (pip-audit)
+      continue-on-error: true
+      run: |
+        python -m pip install --upgrade pip pip-audit
+        pip-audit -r backend/requirements.txt --disable-pip
+
+    - name: Set up Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: '22'
+
+    - name: Audit frontend dependencies (npm audit)
+      continue-on-error: true
+      working-directory: frontend
+      run: npm audit --audit-level=high
 
   frontend:
     runs-on: ubuntu-latest

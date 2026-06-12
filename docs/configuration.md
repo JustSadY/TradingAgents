@@ -39,6 +39,10 @@ CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
 # Bearer token protecting GET /metrics. Leave empty to disable the endpoint (404).
 # Generate one using: python -c "import secrets; print(secrets.token_hex(32))"
 METRICS_TOKEN=
+
+# Maximum HTTP request body size in bytes (Optional)
+# Oversized requests are rejected with 413. Set 0 to disable. Default: 2000000 (2 MB).
+MAX_REQUEST_BODY_BYTES=2000000
 ```
 
 ---
