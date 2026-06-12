@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../utils/api'
-import { RefreshCw, BarChart2, AlertCircle } from 'lucide-react'
+import { RefreshCw, BarChart2, AlertCircle, Sparkles } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { usePriceChart } from '../hooks/usePriceChart'
 import { ErrorBoundary } from '../components/ErrorBoundary'
@@ -49,6 +49,8 @@ export default function ChartPage() {
   const [userFormula, setUserFormula] = useState('')
   const [userIndicatorData, setUserIndicatorData] = useState<{ time: string; value: number | null }[]>([])
   const [userIndicatorLabel, setUserIndicatorLabel] = useState('')
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
 
   const chartContainerRef = useRef<HTMLDivElement>(null)
   usePriceChart(chartContainerRef as React.RefObject<HTMLDivElement>, candles, analyses, showSMA, showEMA)
@@ -94,17 +96,34 @@ export default function ChartPage() {
     if (activeTicker) load(activeTicker, p)
   }
 
-  const handleCalculateUserIndicator = async () => {
-    if (!userFormula.trim() || !activeTicker) return
+  const calculateIndicator = async (formula: string) => {
+    if (!formula.trim() || !activeTicker) return
     setLoading(true); setError(null)
     try {
-      const res = await api.get('/api/market/custom-indicator', { params: { ticker: activeTicker, period, formula: userFormula.trim() } })
-      setUserIndicatorData(res.data?.series ?? []); setUserIndicatorLabel(userFormula.trim())
+      const res = await api.get('/api/market/custom-indicator', { params: { ticker: activeTicker, period, formula: formula.trim() } })
+      setUserIndicatorData(res.data?.series ?? []); setUserIndicatorLabel(formula.trim())
     } catch (err) {
       // Surface the failure (e.g. invalid formula) instead of silently clearing.
       setUserIndicatorData([]); setUserIndicatorLabel('')
       setError(((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail) ?? t('chart.error_load'))
     } finally { setLoading(false) }
+  }
+
+  const handleCalculateUserIndicator = () => calculateIndicator(userFormula)
+
+  // Describe the indicator in plain language; the backend LLM writes a
+  // validated formula, which we drop into the formula box and plot directly.
+  const handleAiFormula = async () => {
+    if (!aiPrompt.trim() || aiLoading) return
+    setAiLoading(true); setError(null)
+    try {
+      const res = await api.post('/api/market/formula-assist', { prompt: aiPrompt.trim() })
+      const formula: string = res.data?.formula ?? ''
+      setUserFormula(formula)
+      await calculateIndicator(formula)
+    } catch (err) {
+      setError(((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail) ?? t('chart.error_load'))
+    } finally { setAiLoading(false) }
   }
 
   const sentimentChartData = useMemo(() => {
@@ -168,6 +187,26 @@ export default function ChartPage() {
               </ErrorBoundary>
 
               <div className="flex items-center gap-3 pt-2">
+                <div className="flex-1 relative group">
+                  <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={14} />
+                  <input
+                    className="glass-input pl-10 pr-4 py-2.5 w-full rounded-xl text-xs placeholder-slate-600 outline-none transition-all"
+                    placeholder={t('chart.ai_formula_placeholder')}
+                    value={aiPrompt}
+                    onChange={e => setAiPrompt(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAiFormula()}
+                  />
+                </div>
+                <button
+                  onClick={handleAiFormula}
+                  disabled={aiLoading}
+                  className="bg-violet-600/20 hover:bg-violet-600/30 disabled:opacity-50 text-violet-300 px-5 py-2.5 rounded-xl text-xs font-bold transition-all border border-violet-500/20 cursor-pointer flex items-center gap-2"
+                >
+                  <Sparkles size={12} /> {aiLoading ? t('chart.ai_generating') : t('chart.ai_generate')}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3">
                 <div className="flex-1 relative group">
                   <BarChart2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={14} />
                   <input

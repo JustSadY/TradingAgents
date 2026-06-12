@@ -28,6 +28,9 @@ const chart = {
     'chart.custom_formula': 'Custom Formula',
     'chart.calculate': 'Calculate',
     'chart.user_custom_indicator': 'User Custom Indicator',
+    'chart.ai_formula_placeholder': "Describe an indicator in plain language (e.g. 'distance from the 50 day average')",
+    'chart.ai_generate': 'AI Formula',
+    'chart.ai_generating': 'Generating…',
   },
   tr: {
     'chart.title': 'Trading Grafik',
@@ -58,6 +61,9 @@ const chart = {
     'chart.custom_formula': 'Özel Formül',
     'chart.calculate': 'Hesapla',
     'chart.user_custom_indicator': 'Kullanıcı Özel İndikatörü',
+    'chart.ai_formula_placeholder': "İstediğiniz göstergeyi yazın (örn. '50 günlük ortalamadan uzaklık')",
+    'chart.ai_generate': 'AI Formül',
+    'chart.ai_generating': 'Üretiliyor…',
   },
 }
 
