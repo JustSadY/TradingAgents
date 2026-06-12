@@ -10,6 +10,14 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 import backend.bootstrap  # noqa: F401  (import side-effect: see backend/bootstrap.py)
+
+# Console logging must be configured BEFORE the router imports below: they
+# transitively import the backend.trading_agents engine, whose logging setup
+# only preserves console output that already exists (see
+# agents/runtime/logging_config.py). Configuring it later leaves the app
+# without console/journalctl logs.
+logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+
 from backend.api.alerts import router as alerts_router
 from backend.api.analysis import router as analysis_router
 from backend.api.auth import router as auth_router
@@ -34,7 +42,6 @@ from backend.core.security import decode_token
 from backend.core.websocket import ws_manager
 from backend.services.cron_service import init_cron_service
 
-logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 _logger = logging.getLogger(__name__)
 settings = get_settings()
 from backend.core.log_handler import db_log_handler
