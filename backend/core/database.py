@@ -52,4 +52,3 @@ async def create_all_tables():
 
         await apply_column_migrations(conn)
         await apply_type_migrations(conn)
-

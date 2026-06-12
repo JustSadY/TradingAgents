@@ -111,8 +111,12 @@ async def get_ab_comparison(db: AsyncSession) -> list[dict]:
                 "total_graded": len(graded),
                 # Realized performance stats (last 50 runs)
                 "win_rate_last_50": round(wins_last_50 / len(graded_last_50) * 100, 1) if graded_last_50 else None,
-                "avg_alpha_last_50": round(sum(alphas_last_50) / len(alphas_last_50) * 100, 2) if alphas_last_50 else 0.0,
-                "avg_raw_return_last_50": round(sum(raws_last_50) / len(raws_last_50) * 100, 2) if raws_last_50 else 0.0,
+                "avg_alpha_last_50": round(sum(alphas_last_50) / len(alphas_last_50) * 100, 2)
+                if alphas_last_50
+                else 0.0,
+                "avg_raw_return_last_50": round(sum(raws_last_50) / len(raws_last_50) * 100, 2)
+                if raws_last_50
+                else 0.0,
                 "total_graded_last_50": len(graded_last_50),
             }
         )
