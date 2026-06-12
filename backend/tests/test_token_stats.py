@@ -172,15 +172,15 @@ def test_cumulative_response_metadata_and_generation_info_stripped():
     chunks = [
         ChatGenerationChunk(
             message=AIMessageChunk(content="a", response_metadata={"token_usage": usage(1000, 1)}),
-            generation_info={"token_usage": usage(1000, 1)}
+            generation_info={"token_usage": usage(1000, 1)},
         ),
         ChatGenerationChunk(
             message=AIMessageChunk(content="b", response_metadata={"token_usage": usage(1000, 2)}),
-            generation_info={"token_usage": usage(1000, 2)}
+            generation_info={"token_usage": usage(1000, 2)},
         ),
         ChatGenerationChunk(
             message=AIMessageChunk(content="c", response_metadata={"token_usage": usage(1000, 3)}),
-            generation_info={"token_usage": usage(1000, 3)}
+            generation_info={"token_usage": usage(1000, 3)},
         ),
     ]
 
@@ -194,4 +194,3 @@ def test_cumulative_response_metadata_and_generation_info_stripped():
     # response_metadata and generation_info should have been stripped and thus not summed up
     assert "token_usage" not in (merged.message.response_metadata or {})
     assert "token_usage" not in (merged.generation_info or {})
-

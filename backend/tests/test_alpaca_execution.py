@@ -33,9 +33,10 @@ async def test_alpaca_trader_get_credentials():
 
     trader = AlpacaTrader(db=db_mock)
 
-    with patch("backend.services.user_service.get_user_api_key") as mock_get_key, \
-         patch("backend.core.config.get_settings") as mock_get_settings:
-
+    with (
+        patch("backend.services.user_service.get_user_api_key") as mock_get_key,
+        patch("backend.core.config.get_settings") as mock_get_settings,
+    ):
         mock_get_settings.return_value.get_fernet.return_value = "fake_fernet"
         mock_get_key.side_effect = lambda user, provider, fernet: f"decrypted_{provider}"
 
@@ -61,7 +62,7 @@ async def test_alpaca_trader_place_order_success(mock_post, mock_get):
         "id": "ord_999",
         "status": "filled",
         "filled_avg_price": "180.50",
-        "filled_qty": "10.0"
+        "filled_qty": "10.0",
     }
     mock_post.return_value = mock_resp
 
@@ -72,17 +73,12 @@ async def test_alpaca_trader_place_order_success(mock_post, mock_get):
         "id": "ord_999",
         "status": "filled",
         "filled_avg_price": "180.50",
-        "filled_qty": "10.0"
+        "filled_qty": "10.0",
     }
     mock_get.return_value = mock_get_resp
 
     req = OrderRequest(
-        ticker="AAPL",
-        action="BUY",
-        quantity=10.0,
-        reference_price=180.0,
-        stop_loss=170.0,
-        take_profit=200.0
+        ticker="AAPL", action="BUY", quantity=10.0, reference_price=180.0, stop_loss=170.0, take_profit=200.0
     )
 
     res = await trader.place_order(req)
