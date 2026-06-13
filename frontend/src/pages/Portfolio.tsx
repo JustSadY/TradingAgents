@@ -1,7 +1,8 @@
 import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, Loader2, AlertCircle, RefreshCw, PieChart } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, Loader2, AlertCircle, RefreshCw, PieChart, Sparkles, X, CheckCircle2, ShieldAlert } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
+import { notify } from '../utils/notify'
 
 interface Holding {
   id: number
@@ -23,12 +24,57 @@ interface PortfolioRow {
   status: string
 }
 
+interface RebalanceSuggestion {
+  action: 'BUY' | 'SELL'
+  ticker: string
+  quantity: number
+  rationale: string
+  urgency: 'low' | 'medium' | 'high'
+}
+
+interface RebalanceResult {
+  summary: string
+  score: number
+  issues: string[]
+  suggestions: RebalanceSuggestion[]
+}
+
+function HealthBadge({ score }: { score: number }) {
+  const { bg, text, border, label } =
+    score >= 80
+      ? { bg: 'bg-emerald-500/10', text: 'text-emerald-400', border: 'border-emerald-500/20', label: 'Healthy' }
+      : score >= 60
+        ? { bg: 'bg-amber-500/10', text: 'text-amber-400', border: 'border-amber-500/20', label: 'Fair' }
+        : { bg: 'bg-rose-500/10', text: 'text-rose-400', border: 'border-rose-500/20', label: 'Critical' }
+  return (
+    <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full border ${bg} ${text} ${border}`}>
+      {score}/100 · {label}
+    </span>
+  )
+}
+
+function UrgencyBadge({ urgency }: { urgency: 'low' | 'medium' | 'high' }) {
+  const styles = {
+    high: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
+    medium: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
+    low: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
+  }
+  return (
+    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border capitalize ${styles[urgency]}`}>
+      {urgency}
+    </span>
+  )
+}
+
 export default function Portfolio() {
   const { t, language } = useTranslation()
   const [holdings, setHoldings] = useState<Holding[]>([])
   const [portfolios, setPortfolios] = useState<PortfolioRow[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
+  const [rebalancing, setRebalancing] = useState(false)
+  const [rebalanceResult, setRebalanceResult] = useState<RebalanceResult | null>(null)
+  const [applyingIdx, setApplyingIdx] = useState<number | null>(null)
 
   const fetchPortfolioData = useCallback((quiet = false) => {
     if (!quiet) setLoading(true)
@@ -52,6 +98,35 @@ export default function Portfolio() {
       fetchPortfolioData(true)
     }, 15000)
     return () => clearInterval(interval)
+  }, [fetchPortfolioData])
+
+  const runRebalance = useCallback(async () => {
+    setRebalancing(true)
+    try {
+      const { data } = await axios.post<RebalanceResult>('/api/trading/rebalance')
+      setRebalanceResult(data)
+    } catch (err: any) {
+      notify('error', err.response?.data?.detail || 'Rebalance failed', 'AI Rebalance')
+    } finally {
+      setRebalancing(false)
+    }
+  }, [])
+
+  const applySuggestion = useCallback(async (s: RebalanceSuggestion, idx: number) => {
+    setApplyingIdx(idx)
+    try {
+      await axios.post('/api/trading/order', {
+        ticker: s.ticker,
+        action: s.action,
+        quantity: s.quantity,
+      })
+      notify('success', `${s.action} ${s.quantity} ${s.ticker} order placed`, 'Trade Executed')
+      fetchPortfolioData(false)
+    } catch (err: any) {
+      notify('error', err.response?.data?.detail || 'Order failed', 'Trade Error')
+    } finally {
+      setApplyingIdx(null)
+    }
   }, [fetchPortfolioData])
 
   if (loading && portfolios.length === 0) {
@@ -94,15 +169,119 @@ export default function Portfolio() {
           </h2>
           <p className="text-xs text-slate-500 mt-1">Review active assets allocations, average cost basis, and real-time ledger returns</p>
         </div>
-        <button
-          onClick={() => fetchPortfolioData(false)}
-          disabled={loading}
-          className="flex items-center justify-center p-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white transition-all cursor-pointer"
-          title="Refresh"
-        >
-          <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={runRebalance}
+            disabled={rebalancing || holdings.length === 0}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 text-violet-400 hover:text-violet-300 text-xs font-bold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {rebalancing
+              ? <Loader2 size={13} className="animate-spin" />
+              : <Sparkles size={13} />}
+            {rebalancing ? 'Analysing…' : 'AI Rebalance'}
+          </button>
+          <button
+            onClick={() => fetchPortfolioData(false)}
+            disabled={loading}
+            className="flex items-center justify-center p-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white transition-all cursor-pointer"
+            title="Refresh"
+          >
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
+          </button>
+        </div>
       </div>
+
+      {/* ── AI Rebalance Panel ─────────────────────────────────────────── */}
+      {rebalanceResult && (
+        <div className="glass-panel rounded-2xl overflow-hidden border border-violet-500/15">
+          {/* Panel header */}
+          <div className="px-5 py-3.5 border-b border-white/[0.04] flex items-center justify-between bg-violet-500/5">
+            <div className="flex items-center gap-2.5">
+              <Sparkles size={15} className="text-violet-400" />
+              <span className="text-sm font-bold text-white">AI Portfolio Analysis</span>
+              <HealthBadge score={rebalanceResult.score} />
+            </div>
+            <button
+              onClick={() => setRebalanceResult(null)}
+              className="p-1.5 text-slate-500 hover:text-white rounded-lg hover:bg-white/5 transition cursor-pointer"
+            >
+              <X size={14} />
+            </button>
+          </div>
+
+          <div className="p-5 space-y-5">
+            {/* Summary */}
+            <p className="text-xs text-slate-300 leading-relaxed">{rebalanceResult.summary}</p>
+
+            {/* Issues */}
+            {rebalanceResult.issues.length > 0 && (
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Issues Detected</p>
+                <div className="space-y-1.5">
+                  {rebalanceResult.issues.map((issue, i) => (
+                    <div key={i} className="flex items-start gap-2 text-xs text-amber-300">
+                      <ShieldAlert size={12} className="shrink-0 mt-0.5 text-amber-400" />
+                      {issue}
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Suggestions */}
+            {rebalanceResult.suggestions.length > 0 ? (
+              <div className="space-y-2">
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Suggested Actions</p>
+                <div className="space-y-2">
+                  {rebalanceResult.suggestions.map((s, i) => (
+                    <div key={i} className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04] hover:border-white/[0.07] transition">
+                      <div className="shrink-0 mt-0.5">
+                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded-md ${
+                          s.action === 'SELL'
+                            ? 'bg-rose-500/15 text-rose-400 border border-rose-500/20'
+                            : 'bg-emerald-500/15 text-emerald-400 border border-emerald-500/20'
+                        }`}>{s.action}</span>
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1">
+                          <span className="text-sm font-mono font-bold text-white">{s.ticker}</span>
+                          <span className="text-xs text-slate-400">{s.quantity} shares</span>
+                          <UrgencyBadge urgency={s.urgency} />
+                        </div>
+                        <p className="text-[11px] text-slate-400 leading-relaxed">{s.rationale}</p>
+                      </div>
+                      <button
+                        onClick={() => applySuggestion(s, i)}
+                        disabled={applyingIdx !== null}
+                        className="shrink-0 flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-violet-600/80 hover:bg-violet-600 text-white text-[10px] font-bold transition disabled:opacity-40 cursor-pointer"
+                      >
+                        {applyingIdx === i
+                          ? <Loader2 size={10} className="animate-spin" />
+                          : <CheckCircle2 size={10} />}
+                        Apply
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <p className="text-xs text-emerald-400 flex items-center gap-2">
+                <CheckCircle2 size={14} /> Portfolio looks well-balanced. No immediate actions needed.
+              </p>
+            )}
+
+            <div className="pt-1 border-t border-white/[0.04] flex justify-end">
+              <button
+                onClick={runRebalance}
+                disabled={rebalancing}
+                className="text-[10px] text-slate-500 hover:text-violet-400 transition cursor-pointer font-semibold"
+              >
+                {rebalancing ? 'Analysing…' : 'Re-analyse'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Account Performance Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
