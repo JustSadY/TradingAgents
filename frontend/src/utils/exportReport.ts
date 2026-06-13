@@ -92,7 +92,7 @@ export function exportMarkdown(analysis: AnalysisForExport, language: Lang = 'en
   ]
 
   for (const key of SECTION_ORDER) {
-    const content = (analysis as Record<string, unknown>)[key]
+    const content = (analysis as unknown as Record<string, unknown>)[key]
     if (typeof content === 'string' && content.trim()) {
       lines.push(`## ${labels[key] ?? key}`, '', content.trim(), '', '---', '')
     }
@@ -117,7 +117,7 @@ export function exportPDF(analysis: AnalysisForExport, language: Lang = 'en'): v
 
   let sectionsHtml = ''
   for (const key of SECTION_ORDER) {
-    const content = (analysis as Record<string, unknown>)[key]
+    const content = (analysis as unknown as Record<string, unknown>)[key]
     if (typeof content === 'string' && content.trim()) {
       sectionsHtml += `
         <div class="section">

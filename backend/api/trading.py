@@ -181,4 +181,3 @@ async def generate_trade_debrief(
     _: User = Depends(get_current_user),
 ):
     return await trade_journal_service.generate_debrief(db, _, order_id)
-

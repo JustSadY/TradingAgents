@@ -51,6 +51,7 @@ async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
 
 # ── Sector lookup ─────────────────────────────────────────────────────────────
 
+
 async def _fetch_sectors(tickers: list[str]) -> dict[str, str]:
     async def _one(ticker: str) -> tuple[str, str]:
         try:
@@ -66,6 +67,7 @@ async def _fetch_sectors(tickers: list[str]) -> dict[str, str]:
 
 
 # ── Recent signals ────────────────────────────────────────────────────────────
+
 
 async def _get_recent_signals(db: AsyncSession, user: User, tickers: list[str]) -> list:
     from sqlalchemy import select
@@ -86,6 +88,7 @@ async def _get_recent_signals(db: AsyncSession, user: User, tickers: list[str]) 
 
 
 # ── Prompt builder ────────────────────────────────────────────────────────────
+
 
 def _build_prompt(portfolio: dict, sectors: dict[str, str], signals: list) -> str:
     total: float = portfolio.get("total_value") or 1.0
@@ -145,6 +148,7 @@ Rules:
 
 
 # ── LLM call ─────────────────────────────────────────────────────────────────
+
 
 async def _call_llm(db: AsyncSession, user: User, prompt: str) -> dict:
     from langchain_core.messages import HumanMessage

@@ -14,6 +14,10 @@ class SharedReport(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
     analysis_id: Mapped[int] = mapped_column(Integer, ForeignKey("analysis_results.id"), nullable=False, index=True)
-    token: Mapped[str] = mapped_column(String(64), unique=True, nullable=False, index=True, default=lambda: uuid.uuid4().hex)
-    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC) + timedelta(hours=48))
+    token: Mapped[str] = mapped_column(
+        String(64), unique=True, nullable=False, index=True, default=lambda: uuid.uuid4().hex
+    )
+    expires_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(UTC) + timedelta(hours=48)
+    )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))

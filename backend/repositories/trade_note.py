@@ -8,9 +8,7 @@ from backend.models.trade_note import TradeNote
 
 async def get_note(db: AsyncSession, order_id: int, user_id: int) -> TradeNote | None:
     result = await db.execute(
-        select(TradeNote)
-        .where(TradeNote.order_id == order_id)
-        .where(TradeNote.user_id == user_id)
+        select(TradeNote).where(TradeNote.order_id == order_id).where(TradeNote.user_id == user_id)
     )
     return result.scalar_one_or_none()
 
@@ -51,9 +49,7 @@ async def get_notes_for_orders(db: AsyncSession, order_ids: list[int], user_id: 
     if not order_ids:
         return {}
     result = await db.execute(
-        select(TradeNote)
-        .where(TradeNote.order_id.in_(order_ids))
-        .where(TradeNote.user_id == user_id)
+        select(TradeNote).where(TradeNote.order_id.in_(order_ids)).where(TradeNote.user_id == user_id)
     )
     notes = result.scalars().all()
     return {note.order_id: note for note in notes}

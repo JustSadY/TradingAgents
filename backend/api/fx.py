@@ -33,9 +33,7 @@ async def _fetch_rates() -> dict[str, float]:
         try:
             import yfinance as yf
 
-            hist = await asyncio.to_thread(
-                lambda s=symbol: yf.Ticker(s).history(period="2d")["Close"]
-            )
+            hist = await asyncio.to_thread(lambda s=symbol: yf.Ticker(s).history(period="2d")["Close"])
             if hist.empty:
                 return symbol, None
             return symbol, float(hist.iloc[-1])

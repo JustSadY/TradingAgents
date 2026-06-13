@@ -190,8 +190,7 @@ async def get_risk_dashboard(db: AsyncSession, user: User) -> dict:
         sector_values[s] = sector_values.get(s, 0.0) + mv
 
     sector_weights = [
-        {"sector": s, "weight_pct": round(mv / total_equity * 100.0, 4)}
-        for s, mv in sector_values.items()
+        {"sector": s, "weight_pct": round(mv / total_equity * 100.0, 4)} for s, mv in sector_values.items()
     ]
     sector_weights.sort(key=lambda x: x["weight_pct"], reverse=True)
 

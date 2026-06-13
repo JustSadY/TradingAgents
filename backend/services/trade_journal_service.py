@@ -42,10 +42,7 @@ async def get_note(db: AsyncSession, user: User, order_id: int) -> dict | None:
 async def generate_debrief(db: AsyncSession, user: User, order_id: int) -> dict:
     """Generate AI debrief for a trade and persist it."""
     # 1. Fetch the order (scoped to user via portfolio)
-    result = await db.execute(
-        select(Order)
-        .where(Order.id == order_id)
-    )
+    result = await db.execute(select(Order).where(Order.id == order_id))
     order = result.scalar_one_or_none()
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found.")
@@ -74,9 +71,9 @@ Action: {order.action}
 Quantity: {qty}
 Price: ${price}
 Realized P&L: ${pnl} ({pnl_pct:.1f}%)
-AI Signal: {order.ai_signal or 'N/A'}
+AI Signal: {order.ai_signal or "N/A"}
 AI Reasoning: {reasoning[:500]}
-Trader's Note: {note_text or 'None provided'}
+Trader's Note: {note_text or "None provided"}
 
 Give a direct, honest assessment."""
 
