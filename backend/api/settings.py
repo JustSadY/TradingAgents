@@ -150,6 +150,36 @@ async def test_webhook(body: WebhookTestRequest, _: User = Depends(get_current_u
     return {"ok": True}
 
 
+@router.get("/webhook-deliveries")
+async def get_webhook_deliveries(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from sqlalchemy import select
+
+    from backend.models.webhook_delivery import WebhookDelivery
+
+    q = (
+        select(WebhookDelivery)
+        .where(WebhookDelivery.user_id == current_user.id)
+        .order_by(WebhookDelivery.created_at.desc())
+        .limit(20)
+    )
+    rows = (await db.execute(q)).scalars().all()
+    return [
+        {
+            "id": r.id,
+            "event": r.event,
+            "url": r.url,
+            "success": r.success,
+            "status_code": r.status_code,
+            "error": r.error,
+            "created_at": r.created_at.isoformat(),
+        }
+        for r in rows
+    ]
+
+
 async def _require_target_user(db: AsyncSession, user_id: int) -> User:
     target_user = await get_user_by_id(db, user_id)
     if not target_user:

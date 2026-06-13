@@ -14,6 +14,7 @@ from .system_settings import SystemSettings
 from .tool_settings import AgentToolSetting, UserAgentAccess, UserToolAccess, UserToolFieldAccess
 from .trade_note import TradeNote
 from .user import User
+from .webhook_delivery import WebhookDelivery
 
 __all__ = [
     "AssistantMessage",
@@ -37,4 +38,5 @@ __all__ = [
     "MultiTickerAnalysis",
     "NewsCache",
     "TradeNote",
+    "WebhookDelivery",
 ]
