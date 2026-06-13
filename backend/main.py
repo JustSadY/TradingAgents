@@ -23,6 +23,7 @@ from backend.api.analysis import router as analysis_router
 from backend.api.assistant import router as assistant_router
 from backend.api.auth import router as auth_router
 from backend.api.cron import router as cron_router
+from backend.api.fx import router as fx_router
 from backend.api.logs import router as logs_router
 from backend.api.market import router as market_router
 from backend.api.meta import router as meta_router
@@ -32,6 +33,7 @@ from backend.api.portfolio import router as portfolio_router
 from backend.api.preset import router as preset_router
 from backend.api.screener import router as screener_router
 from backend.api.settings import router as settings_router
+from backend.api.share import router as share_router
 from backend.api.system_settings import router as system_settings_router
 from backend.api.trading import router as trading_router
 from backend.api.update import router as update_router
@@ -212,12 +214,14 @@ app.include_router(meta_router)
 app.include_router(metrics_router)
 app.include_router(update_router)
 app.include_router(market_router)
+app.include_router(fx_router)
 app.include_router(preset_router)
 app.include_router(alerts_router)
 app.include_router(news_router)
 app.include_router(users_router)
 app.include_router(system_settings_router)
 app.include_router(screener_router)
+app.include_router(share_router)
 app.include_router(assistant_router)
 
 
