@@ -292,8 +292,8 @@ def _make_tools(db: AsyncSession, user: User, allowed_pages: set[str]) -> list:
     async def get_watchlist() -> str:
         """Get the user's current watchlist tickers with live prices."""
         try:
-            from backend.services.settings_service import get_or_create_settings as _get_settings
             from backend.services.market_data_service import get_live_prices_batch
+            from backend.services.settings_service import get_or_create_settings as _get_settings
 
             s = await _get_settings(db, user)
             tickers = s.watchlist if isinstance(s.watchlist, list) else []
