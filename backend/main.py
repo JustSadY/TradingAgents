@@ -20,6 +20,7 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname
 
 from backend.api.alerts import router as alerts_router
 from backend.api.analysis import router as analysis_router
+from backend.api.assistant import router as assistant_router
 from backend.api.auth import router as auth_router
 from backend.api.cron import router as cron_router
 from backend.api.logs import router as logs_router
@@ -217,6 +218,7 @@ app.include_router(news_router)
 app.include_router(users_router)
 app.include_router(system_settings_router)
 app.include_router(screener_router)
+app.include_router(assistant_router)
 
 
 @app.websocket("/ws/analysis/{task_id}")
