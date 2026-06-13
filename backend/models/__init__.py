@@ -1,6 +1,7 @@
 from .agent_settings import AgentSetting
 from .alert import PriceAlert
 from .analysis import AnalysisChat, AnalysisResult
+from .assistant import AssistantMessage
 from .log import SystemLog
 from .news_cache import NewsCache
 from .order import Order
@@ -14,6 +15,7 @@ from .tool_settings import AgentToolSetting, UserAgentAccess, UserToolAccess, Us
 from .user import User
 
 __all__ = [
+    "AssistantMessage",
     "User",
     "AppSettings",
     "Portfolio",
