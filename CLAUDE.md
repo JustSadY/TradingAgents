@@ -211,6 +211,9 @@ In FastAPI routers, always declare **static paths before dynamic/parameterized p
 | `/api/analysis/history` | GET | Yes | Past analyses (scoped to user) |
 | `/api/analysis/{id}/chat` | GET/POST | Yes | Q&A over completed analysis |
 | `/api/market/ohlcv` | GET | Yes | OHLCV + indicators for charting |
+| `/api/market/custom-indicator` | GET | Yes | Evaluate custom indicator formula |
+| `/api/market/formula-assist` | POST | Yes | AI-generate formula from natural language |
+| `/api/market/sentiment-history` | GET | Yes | Sentiment time series for chart overlay |
 | `/api/trading/portfolio` | GET | Yes | Paper portfolio with P&L |
 | `/api/trading/order` | POST | Yes | Place buy/sell paper order |
 | `/api/settings` | GET/PUT | Yes | User LLM settings, memory config, effort |
@@ -221,6 +224,9 @@ In FastAPI routers, always declare **static paths before dynamic/parameterized p
 | `/api/users/{id}/permissions` | GET/PUT | Admin | Which pages user can access |
 | `/api/logs` | GET | Admin | List all system logs (level, source, user_id filters) |
 | `/api/logs/me` | GET | Yes | Scoped system logs for the authenticated user |
+| `/api/assistant/history` | GET | Yes | Fetch portfolio assistant conversation history |
+| `/api/assistant/chat` | POST | Yes | Send message to portfolio assistant (tool-calling LLM) |
+| `/api/assistant/history` | DELETE | Yes | Clear assistant conversation history |
 | `/metrics` | GET | Bearer token | Prometheus metrics (enabled via `METRICS_TOKEN` in `.env`; 404 when unset) |
 | `/ws/analysis/{task_id}` | WS | Token | Stream live LangGraph progress + reports |
 
@@ -264,6 +270,61 @@ class MyTool(BaseAgentTool):
 - User-scoped overrides: `/api/settings/tools` (user)
 - `UserToolAccess`: can_view, can_use, can_edit, can_enable per tool
 - `UserToolFieldAccess`: field-level visibility overrides
+
+### Interactive Charting & AI Formula Assistant
+
+**Chart Page** (`/chart`) — interactive OHLCV chart with:
+- Recharts + lightweight-charts powered candlestick / line charts
+- Built-in indicators: SMA(20), EMA(20), RSI(14), MACD(12,26,9)
+- Custom indicator pane: RSI, MACD, Sentiment overlaid
+- **Custom Formula Engine** (`GET /api/market/custom-indicator`) — evaluate user-defined formulas against OHLCV data using a safe DSL
+  - Supported functions: `SMA(n)`, `EMA(n)`, `RSI(n)`, `MACD(f,s,sg)`, `ATR(n)`, `ADX(n)`, `VWAP`, `VOLSMA(n)`, `MAX(n)`, `MIN(n)`, `SHIFT(col,n)`
+  - Example: `(Close - SMA(20)) / STD(20)` — Z-score distance from 20-day MA
+- **AI Formula Assistant** (`POST /api/market/formula-assist`) — converts natural language to formulas
+  - Powered by `services/formula_assist_service.py`
+  - Validates generated formula against synthetic OHLCV before returning
+  - Example: "distance from 20-day average in standard deviations" → `(Close - SMA(20)) / STD(20)`
+- Analysis overlay: annotates chart with trade signal, target price, stop-loss, support/resistance from past analyses
+- Sentiment history chart (`GET /api/market/sentiment-history`)
+
+**Frontend Components:**
+- `frontend/src/components/chart/ChartSearch.tsx` — ticker search
+- `frontend/src/components/chart/TechnicalControls.tsx` — indicator toggles
+- `frontend/src/components/chart/CustomIndicatorPane.tsx` — RSI/MACD/Sentiment sub-panes
+- `frontend/src/components/chart/AnalysisDetailSidebar.tsx` — trade level annotations
+
+### Portfolio Assistant (AI Chat Widget)
+
+A floating AI chat widget available on **every page** (bottom-right corner). Uses the same LLM as the user's Portfolio Manager with full tool-calling.
+
+**Capabilities:**
+- Read-only: portfolio summary, past analysis history, analysis reports, watchlist, alerts, live prices
+- Actions (with page-permission checks): create price alerts, trigger new analyses, place paper orders
+
+**Tool List (9 tools):**
+| Tool | Permission Required |
+|------|---------------------|
+| `get_portfolio_summary` | none |
+| `get_analysis_history(ticker?, limit?)` | none |
+| `get_analysis_report(analysis_id)` | none |
+| `get_live_price(ticker)` | none |
+| `get_watchlist` | none |
+| `get_alerts` | none |
+| `create_price_alert(ticker, condition, target_price)` | `alerts` page |
+| `run_stock_analysis(ticker)` | `analysis` page |
+| `place_paper_order(ticker, action, quantity)` | `trading` page |
+
+**Architecture:**
+- `backend/models/assistant.py` — `AssistantMessage` (persistent chat history, user-scoped)
+- `backend/repositories/assistant.py` — CRUD for messages
+- `backend/services/portfolio_assistant_service.py` — LangChain tool-calling loop (max 5 iterations)
+- `backend/api/assistant.py` — `GET/POST /api/assistant/chat`, `GET/DELETE /api/assistant/history`
+- `frontend/src/components/assistant/PortfolioAssistant.tsx` — floating widget component
+- Uses `AsyncSessionLocal` in action tools to avoid session conflicts with the chat transaction
+
+**Permission Checks at Service Level:**
+- Action tools check `allowed_pages` set (from `list_allowed_page_keys()` for users, all pages for admins)
+- Returns a "Permission denied" string (not an exception) so the LLM can report it gracefully
 
 ### Episodic Memory (Vector Store)
 
@@ -313,7 +374,7 @@ class MyTool(BaseAgentTool):
 **Page Permissions:**
 - Regular users start with **no page access** (admin grants per page)
 - Admin/Owner implicitly access all pages
-- Pages: dashboard, analysis, chart, trading, portfolio, watchlist, orders, performance, alerts, ab-testing, logs
+- Pages: dashboard, analysis, chart, trading, portfolio, watchlist, orders, performance, backtest, alerts, ab-testing, logs, settings, profile
 
 **Settings Permissions (granular):**
 Admins can restrict which parts of Settings a user can modify:
@@ -511,7 +572,9 @@ backend/
 │   ├── analysis_service.py
 │   ├── analysis/              # Sub-modules (emitter, orchestrator, persistence)
 │   ├── analysis_queue.py      # Dispatch runs inline (BackgroundTasks) or to arq
+│   ├── formula_assist_service.py # AI formula generation from natural language
 │   ├── memory_service.py      # Pinecone episodic memory interface
+│   ├── portfolio_assistant_service.py # Portfolio assistant LLM + tool-calling
 │   ├── tool_access_service.py # Agent/tool permission resolution
 │   ├── trading_orchestrator.py # Paper trading order logic
 │   ├── cron_service.py
@@ -578,8 +641,15 @@ backend/
 
 frontend/
 ├── src/
-│   ├── pages/                 # Dashboard, Analysis, Chart, Trading, etc.
-│   ├── components/            # Layout, WebSocket hooks
+│   ├── pages/                 # 16 pages: Dashboard, Analysis, Chart, MockTrading, Portfolio,
+│   │                          #   Watchlist, Orders, Performance, Backtest, Alerts, ABTesting,
+│   │                          #   Logs, Settings, Profile, Admin, Login
+│   ├── components/
+│   │   ├── Layout.tsx         # App shell with sidebar nav + Portfolio Assistant widget
+│   │   ├── assistant/
+│   │   │   └── PortfolioAssistant.tsx  # Floating AI chat widget (bottom-right, all pages)
+│   │   ├── analysis/          # AnalysisChatWidget, report viewers
+│   │   └── chart/             # ChartSearch, TechnicalControls, CustomIndicatorPane, AnalysisDetailSidebar
 │   ├── contexts/              # Auth, Theme, Language
 │   ├── hooks/                 # API queries, local storage
 │   ├── i18n/                  # Translation dicts (en, tr)
@@ -674,7 +744,10 @@ See `docs/developer_guide.md` sections 5A–5I for:
 - `backend/trading_agents/agent_catalog.py` — Agent metadata, hierarchy tree
 - `backend/services/analysis_service.py` — Analysis orchestration
 - `backend/services/memory_service.py` — Pinecone episodic memory interface
+- `backend/services/portfolio_assistant_service.py` — Portfolio assistant LLM + tools
+- `backend/services/formula_assist_service.py` — AI chart formula generation
 - `backend/core/memory/` — Vector store abstractions
+- `frontend/src/components/assistant/PortfolioAssistant.tsx` — Floating AI chat widget
 
 **Documentation:**
 - [docs/introduction.md](docs/introduction.md) — Feature overview
@@ -713,4 +786,4 @@ See `docs/developer_guide.md` sections 5A–5I for:
 
 ## ✅ Maintenance Note
 
-Last validated against the codebase on 2026-06-12 (READMEs, architecture docs, and direct code exploration; analyst count, agent_catalog/personas single-sources, Redis scaling layer, and file paths cross-checked against the tree). If behaviour described here diverges from the code, trust the code — and update this file in the same change.
+Last validated against the codebase on 2026-06-13 (READMEs, architecture docs, and direct code exploration; analyst count, agent_catalog/personas single-sources, Redis scaling layer, and file paths cross-checked against the tree). Added: chart page + AI formula assistant, Portfolio Assistant widget. If behaviour described here diverges from the code, trust the code — and update this file in the same change.

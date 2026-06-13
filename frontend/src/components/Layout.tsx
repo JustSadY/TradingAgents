@@ -13,6 +13,7 @@ import { useEffect, useState, useCallback, Suspense } from 'react'
 import axios from 'axios'
 import type { Notification } from '../utils/notify'
 import UpdateBanner from './UpdateBanner'
+import { PortfolioAssistant } from './assistant/PortfolioAssistant'
 
 interface RunningTask { ticker: string; taskId: string; startedAt: string }
 
@@ -348,6 +349,9 @@ export default function Layout() {
           </Suspense>
         </div>
       </main>
+
+      {/* Portfolio Assistant floating widget */}
+      <PortfolioAssistant />
 
       {/* Notification Toast Stream */}
       {toasts.length > 0 && (
