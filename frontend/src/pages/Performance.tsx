@@ -1,8 +1,21 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
-import { BarChart2, TrendingUp, TrendingDown, Target, Search } from 'lucide-react'
+import { BarChart2, TrendingUp, TrendingDown, Target, Search, Activity, Trophy, Skull, ShieldAlert } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 import { useTranslation } from '../contexts/LanguageContext'
+
+interface TradingStats {
+  total_trades: number
+  winning_trades: number
+  win_rate: number
+  avg_return_pct: number | null
+  best_trade: { ticker: string; pnl_pct: number; date: string } | null
+  worst_trade: { ticker: string; pnl_pct: number; date: string } | null
+  total_realized_pnl: number
+  sharpe_ratio: number | null
+  max_drawdown_pct: number | null
+  by_ticker: { ticker: string; trades: number; wins: number; win_rate: number; total_pnl: number }[]
+}
 
 interface PerfData {
   total: number
@@ -38,6 +51,7 @@ export default function Performance() {
   const [perf, setPerf] = useState<PerfData | null>(null)
   const [history, setHistory] = useState<HistoryItem[]>([])
   const [attribution, setAttribution] = useState<AttributionItem[]>([])
+  const [tradingStats, setTradingStats] = useState<TradingStats | null>(null)
   const [ticker, setTicker] = useState('')
   const [filterTicker, setFilterTicker] = useState('')
   const [loading, setLoading] = useState(true)
@@ -45,14 +59,16 @@ export default function Performance() {
   const load = async (ti?: string) => {
     setLoading(true)
     try {
-      const [p, h, attr] = await Promise.all([
+      const [p, h, attr, ts] = await Promise.all([
         axios.get('/api/analysis/performance', { params: ti ? { ticker: ti } : {} }).then(r => r.data),
         axios.get('/api/analysis/history', { params: { limit: 100, ...(ti ? { ticker: ti } : {}) } }).then(r => r.data),
         axios.get('/api/analysis/performance-attribution').then(r => r.data).catch(() => ({ attribution: [] })),
+        axios.get('/api/trading/portfolio-stats').then(r => r.data).catch(() => null),
       ])
       setPerf(p)
       setHistory(h.filter((x: HistoryItem) => x.raw_return !== null))
       setAttribution(attr.attribution || [])
+      setTradingStats(ts)
     } finally { setLoading(false) }
   }
 
@@ -89,6 +105,115 @@ export default function Performance() {
         </div>
       ) : perf && perf.total > 0 ? (
         <>
+          {/* ── Paper Trading Stats ──────────────────────────────────────── */}
+          {tradingStats && tradingStats.total_trades > 0 && (
+            <div className="glass-panel rounded-2xl overflow-hidden border border-white/[0.04]">
+              <div className="px-5 py-3.5 border-b border-white/[0.04] flex items-center gap-2">
+                <Activity size={14} className="text-violet-400" />
+                <span className="text-sm font-bold text-white">Paper Trading Performance</span>
+                <span className="text-[10px] text-slate-500 ml-1">— closed positions</span>
+              </div>
+              <div className="p-5 space-y-5">
+                {/* KPI row */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Trades Closed', value: String(tradingStats.total_trades), icon: <Activity size={13} />, color: 'text-white' },
+                    {
+                      label: 'Trade Win Rate',
+                      value: `${tradingStats.win_rate.toFixed(1)}%`,
+                      icon: <Target size={13} />,
+                      color: tradingStats.win_rate >= 50 ? 'text-emerald-400' : 'text-rose-400',
+                    },
+                    {
+                      label: 'Sharpe Ratio',
+                      value: tradingStats.sharpe_ratio !== null ? tradingStats.sharpe_ratio.toFixed(2) : '—',
+                      icon: <TrendingUp size={13} />,
+                      color: tradingStats.sharpe_ratio !== null && tradingStats.sharpe_ratio >= 1 ? 'text-emerald-400' : tradingStats.sharpe_ratio !== null && tradingStats.sharpe_ratio < 0 ? 'text-rose-400' : 'text-amber-400',
+                    },
+                    {
+                      label: 'Max Drawdown',
+                      value: tradingStats.max_drawdown_pct !== null ? `${tradingStats.max_drawdown_pct.toFixed(1)}%` : '—',
+                      icon: <ShieldAlert size={13} />,
+                      color: tradingStats.max_drawdown_pct !== null && tradingStats.max_drawdown_pct < -20 ? 'text-rose-400' : 'text-amber-400',
+                    },
+                  ].map(k => (
+                    <div key={k.label} className="bg-white/[0.02] border border-white/[0.04] rounded-xl p-3 flex items-center gap-2.5">
+                      <div className="text-violet-400 shrink-0">{k.icon}</div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider truncate">{k.label}</p>
+                        <p className={`text-base font-display font-bold leading-tight ${k.color}`}>{k.value}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Best / Worst trade */}
+                {(tradingStats.best_trade || tradingStats.worst_trade) && (
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                    {tradingStats.best_trade && (
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
+                        <Trophy size={14} className="text-emerald-400 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">Best Trade</p>
+                          <p className="text-xs font-mono font-bold text-white">{tradingStats.best_trade.ticker}
+                            <span className="text-emerald-400 ml-2">{tradingStats.best_trade.pnl_pct >= 0 ? '+' : ''}{tradingStats.best_trade.pnl_pct.toFixed(1)}%</span>
+                          </p>
+                          <p className="text-[9px] text-slate-500">{tradingStats.best_trade.date}</p>
+                        </div>
+                      </div>
+                    )}
+                    {tradingStats.worst_trade && (
+                      <div className="flex items-center gap-3 p-3 rounded-xl bg-rose-500/5 border border-rose-500/10">
+                        <Skull size={14} className="text-rose-400 shrink-0" />
+                        <div className="min-w-0">
+                          <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">Worst Trade</p>
+                          <p className="text-xs font-mono font-bold text-white">{tradingStats.worst_trade.ticker}
+                            <span className="text-rose-400 ml-2">{tradingStats.worst_trade.pnl_pct.toFixed(1)}%</span>
+                          </p>
+                          <p className="text-[9px] text-slate-500">{tradingStats.worst_trade.date}</p>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* By-ticker table */}
+                {tradingStats.by_ticker.length > 0 && (
+                  <div className="overflow-x-auto rounded-xl border border-white/[0.04]">
+                    <table className="w-full text-xs min-w-[380px]">
+                      <thead>
+                        <tr className="text-[9px] uppercase tracking-wider text-slate-500 bg-white/[0.01]">
+                          <th className="px-4 py-2.5 text-left font-bold">Ticker</th>
+                          <th className="px-4 py-2.5 text-center font-bold">Trades</th>
+                          <th className="px-4 py-2.5 text-center font-bold">Win Rate</th>
+                          <th className="px-4 py-2.5 text-right font-bold">Total P&L</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-white/[0.02]">
+                        {tradingStats.by_ticker.map(r => (
+                          <tr key={r.ticker} className="hover:bg-white/[0.01] transition-colors">
+                            <td className="px-4 py-2.5 font-mono font-bold text-white">{r.ticker}</td>
+                            <td className="px-4 py-2.5 text-center text-slate-400">{r.trades}</td>
+                            <td className="px-4 py-2.5 text-center">
+                              <span className={`font-mono font-semibold ${r.win_rate >= 50 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                                {r.win_rate.toFixed(0)}%
+                              </span>
+                            </td>
+                            <td className="px-4 py-2.5 text-right font-mono font-semibold">
+                              <span className={r.total_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}>
+                                {r.total_pnl >= 0 ? '+' : ''}${r.total_pnl.toFixed(2)}
+                              </span>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
           {/* Stats Grid */}
           <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
             <StatCard icon={<BarChart2 size={16} />} label={t('performance.stat_total')} value={String(perf.total)} accent="from-violet-500/10" />
