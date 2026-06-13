@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_db
 from backend.core.utils import safe_ticker_component
+from backend.models.user import User
 from backend.services import mock_trading_service as svc
 from backend.services.backtest_service import run_backtest_simulation
 
@@ -116,3 +117,14 @@ async def run_backtest(
     if "error" in res:
         raise HTTPException(status_code=400, detail=res["error"])
     return res
+
+
+@router.post("/rebalance")
+async def rebalance_portfolio(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from backend.services.portfolio_rebalance_service import get_rebalance_suggestions
+
+    return await get_rebalance_suggestions(db, _)
+
