@@ -5,9 +5,10 @@ import {
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
+  LineStyle,
   createSeriesMarkers,
 } from 'lightweight-charts'
-import type { IChartApi, ISeriesApi } from 'lightweight-charts'
+import type { IChartApi, IPriceLine, ISeriesApi, SeriesMarker, Time } from 'lightweight-charts'
 
 const SIGNAL_COLOR: Record<string, string> = {
   Buy: '#10b981',
@@ -18,22 +19,67 @@ const SIGNAL_COLOR: Record<string, string> = {
   Underweight: '#ef4444',
 }
 
+export interface ChartCandle {
+  time: string
+  open: number
+  high: number
+  low: number
+  close: number
+  volume: number
+  sma?: number | null
+  ema?: number | null
+}
+
+interface VisualAnnotation {
+  type?: string
+  time?: string
+  price?: number
+  time2?: string
+  price2?: number
+  text?: string
+}
+
+interface OverlayIndicator {
+  overlay?: boolean
+  values?: Record<string, number>
+  label?: string
+  name?: string
+}
+
+interface ChartAnnotations {
+  support_levels?: number[]
+  resistance_levels?: number[]
+  target_price?: number
+  stop_loss?: number
+  liquidation_price?: number
+  leverage?: number
+  annotations?: VisualAnnotation[]
+  custom_indicators?: OverlayIndicator[]
+}
+
+export interface ChartAnalysis {
+  id: number
+  trade_date: string
+  signal: string | null
+  chart_annotations: string | ChartAnnotations | null
+}
+
 export function usePriceChart(
   containerRef: React.RefObject<HTMLDivElement>,
-  candles: any[],
-  analyses: any[],
+  candles: ChartCandle[],
+  analyses: ChartAnalysis[],
   showSMA: boolean,
   showEMA: boolean
 ) {
   const chartRef = useRef<IChartApi | null>(null)
-  const candleSeriesRef = useRef<ISeriesApi<'Candlestick', any> | null>(null)
-  const volSeriesRef = useRef<ISeriesApi<'Histogram', any> | null>(null)
-  const smaSeriesRef = useRef<ISeriesApi<'Line', any> | null>(null)
-  const emaSeriesRef = useRef<ISeriesApi<'Line', any> | null>(null)
-  const markersApiRef = useRef<any>(null)
-  const priceLineRefs = useRef<any[]>([])
-  const trendlineSeriesRefs = useRef<any[]>([])
-  const overlaySeriesRefs = useRef<any[]>([])
+  const candleSeriesRef = useRef<ISeriesApi<'Candlestick'> | null>(null)
+  const volSeriesRef = useRef<ISeriesApi<'Histogram'> | null>(null)
+  const smaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const emaSeriesRef = useRef<ISeriesApi<'Line'> | null>(null)
+  const markersApiRef = useRef<ReturnType<typeof createSeriesMarkers<Time>> | null>(null)
+  const priceLineRefs = useRef<IPriceLine[]>([])
+  const trendlineSeriesRefs = useRef<ISeriesApi<'Line'>[]>([])
+  const overlaySeriesRefs = useRef<ISeriesApi<'Line'>[]>([])
 
   // 1. Initialize Chart (Run once when container is available)
   useEffect(() => {
@@ -112,7 +158,8 @@ export function usePriceChart(
       emaSeriesRef.current = null
       markersApiRef.current = null
     }
-  }, []) // Initialize only once
+    // containerRef is a stable ref object; the chartRef guard prevents re-init.
+  }, [containerRef])
 
   // Update Data and Overlays
   useEffect(() => {
@@ -127,7 +174,7 @@ export function usePriceChart(
     if (sortedCandles.length === 0) return
 
     candleSeriesRef.current.setData(sortedCandles.map(c => ({
-      time: c.time as any,
+      time: c.time as Time,
       open: c.open,
       high: c.high,
       low: c.low,
@@ -135,17 +182,17 @@ export function usePriceChart(
     })))
 
     volSeriesRef.current.setData(sortedCandles.map(c => ({
-      time: c.time as any,
+      time: c.time as Time,
       value: c.volume,
       color: c.close >= c.open ? '#10b98125' : '#ef444425',
     })))
 
     // SMA / EMA
     if (smaSeriesRef.current) {
-        smaSeriesRef.current.setData(showSMA ? sortedCandles.filter(c => c.sma != null).map(c => ({ time: c.time as any, value: c.sma })) : [])
+        smaSeriesRef.current.setData(showSMA ? sortedCandles.filter(c => c.sma != null).map(c => ({ time: c.time as Time, value: c.sma! })) : [])
     }
     if (emaSeriesRef.current) {
-        emaSeriesRef.current.setData(showEMA ? sortedCandles.filter(c => c.ema != null).map(c => ({ time: c.time as any, value: c.ema })) : [])
+        emaSeriesRef.current.setData(showEMA ? sortedCandles.filter(c => c.ema != null).map(c => ({ time: c.time as Time, value: c.ema! })) : [])
     }
 
     // Cleanup previous overlays
@@ -159,11 +206,11 @@ export function usePriceChart(
     const tradeDatesInRange = new Set(candles.map(c => c.time))
 
     // Helper for safe JSON parsing (backend might return string or object)
-    const getAnn = (a: any) => {
+    const getAnn = (a: ChartAnalysis): ChartAnnotations => {
         if (!a.chart_annotations) return {}
         if (typeof a.chart_annotations === 'object') return a.chart_annotations
         try {
-            return JSON.parse(a.chart_annotations)
+            return JSON.parse(a.chart_annotations) as ChartAnnotations
         } catch (e) {
             console.error("Failed to parse annotations for analysis", a.id, e)
             return {}
@@ -174,84 +221,81 @@ export function usePriceChart(
     analyses.forEach(a => {
         if (!tradeDatesInRange.has(a.trade_date)) return
         const ann = getAnn(a)
-        
-        ;(ann.support_levels ?? []).forEach((price: number) => {
-            const pl = candleSeriesRef.current!.createPriceLine({ price, color: 'rgba(239, 68, 68, 0.4)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' })
+
+        ;(ann.support_levels ?? []).forEach(price => {
+            const pl = candleSeriesRef.current!.createPriceLine({ price, color: 'rgba(239, 68, 68, 0.4)', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' })
             priceLineRefs.current.push(pl)
         })
-        ;(ann.resistance_levels ?? []).forEach((price: number) => {
-            const pl = candleSeriesRef.current!.createPriceLine({ price, color: 'rgba(59, 130, 246, 0.4)', lineWidth: 1, lineStyle: 2, axisLabelVisible: false, title: '' })
+        ;(ann.resistance_levels ?? []).forEach(price => {
+            const pl = candleSeriesRef.current!.createPriceLine({ price, color: 'rgba(59, 130, 246, 0.4)', lineWidth: 1, lineStyle: LineStyle.Dashed, axisLabelVisible: false, title: '' })
             priceLineRefs.current.push(pl)
         })
         if (ann.target_price) {
-            const pl = candleSeriesRef.current!.createPriceLine({ price: ann.target_price, color: 'rgba(16, 185, 129, 0.7)', lineWidth: 2, lineStyle: 3, axisLabelVisible: true, title: 'Target' })
+            const pl = candleSeriesRef.current!.createPriceLine({ price: ann.target_price, color: 'rgba(16, 185, 129, 0.7)', lineWidth: 2, lineStyle: LineStyle.LargeDashed, axisLabelVisible: true, title: 'Target' })
             priceLineRefs.current.push(pl)
         }
         if (ann.stop_loss) {
-            const pl = candleSeriesRef.current!.createPriceLine({ price: ann.stop_loss, color: 'rgba(239, 68, 68, 0.7)', lineWidth: 2, lineStyle: 3, axisLabelVisible: true, title: 'Stop Loss' })
+            const pl = candleSeriesRef.current!.createPriceLine({ price: ann.stop_loss, color: 'rgba(239, 68, 68, 0.7)', lineWidth: 2, lineStyle: LineStyle.LargeDashed, axisLabelVisible: true, title: 'Stop Loss' })
             priceLineRefs.current.push(pl)
         }
         if (ann.liquidation_price) {
             const levTitle = ann.leverage && ann.leverage > 1 ? `Liq. ${ann.leverage}x` : 'Liquidation'
-            const pl = candleSeriesRef.current!.createPriceLine({ price: ann.liquidation_price, color: 'rgba(245, 158, 11, 0.9)', lineWidth: 2, lineStyle: 0, axisLabelVisible: true, title: levTitle })
+            const pl = candleSeriesRef.current!.createPriceLine({ price: ann.liquidation_price, color: 'rgba(245, 158, 11, 0.9)', lineWidth: 2, lineStyle: LineStyle.Solid, axisLabelVisible: true, title: levTitle })
             priceLineRefs.current.push(pl)
         }
 
-        if (ann.annotations && Array.isArray(ann.annotations)) {
-            ann.annotations.forEach((va: any) => {
-                if (va.type === 'trendline' && va.time && va.price && va.time2 && va.price2) {
-                    const tl = chartRef.current!.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 2, lineStyle: 2, title: va.text || 'Trendline' })
-                    tl.setData([{ time: va.time, value: va.price }, { time: va.time2, value: va.price2 }])
-                    trendlineSeriesRefs.current.push(tl)
-                }
-            })
-        }
+        ;(ann.annotations ?? []).forEach(va => {
+            if (va.type === 'trendline' && va.time && va.price && va.time2 && va.price2) {
+                const tl = chartRef.current!.addSeries(LineSeries, { color: '#f59e0b', lineWidth: 2, lineStyle: LineStyle.Dashed, title: va.text || 'Trendline' })
+                tl.setData([{ time: va.time as Time, value: va.price }, { time: va.time2 as Time, value: va.price2 }])
+                trendlineSeriesRefs.current.push(tl)
+            }
+        })
 
-        if (ann.custom_indicators && Array.isArray(ann.custom_indicators)) {
-            ann.custom_indicators.forEach((ci: any) => {
-                if (ci.overlay && ci.values) {
-                    const ol = chartRef.current!.addSeries(LineSeries, { color: '#06b6d4', lineWidth: 2, title: ci.label || ci.name })
-                    const dataPoints = Object.entries(ci.values).map(([t, v]) => ({ time: t as any, value: v as number })).sort((a, b) => a.time.localeCompare(b.time))
-                    ol.setData(dataPoints)
-                    overlaySeriesRefs.current.push(ol)
-                }
-            })
-        }
+        ;(ann.custom_indicators ?? []).forEach(ci => {
+            if (ci.overlay && ci.values) {
+                const ol = chartRef.current!.addSeries(LineSeries, { color: '#06b6d4', lineWidth: 2, title: ci.label || ci.name })
+                const dataPoints = Object.entries(ci.values)
+                  .map(([t, v]) => ({ time: t, value: v }))
+                  .sort((a, b) => a.time.localeCompare(b.time))
+                  .map(p => ({ time: p.time as Time, value: p.value }))
+                ol.setData(dataPoints)
+                overlaySeriesRefs.current.push(ol)
+            }
+        })
     })
 
     // Markers
-    const markerData = analyses
+    const markerData: SeriesMarker<Time>[] = analyses
       .filter(a => a.signal && tradeDatesInRange.has(a.trade_date))
       .map(a => ({
-        time: a.trade_date as any,
-        position: (['Buy', 'Overweight'].includes(a.signal!) ? 'belowBar' : 'aboveBar') as any,
+        time: a.trade_date as Time,
+        position: ['Buy', 'Overweight'].includes(a.signal!) ? 'belowBar' : 'aboveBar',
         color: SIGNAL_COLOR[a.signal!] ?? '#6b7280',
-        shape: (['Buy', 'Overweight'].includes(a.signal!) ? 'arrowUp' : ['Sell', 'Underweight'].includes(a.signal!) ? 'arrowDown' : 'circle') as any,
+        shape: ['Buy', 'Overweight'].includes(a.signal!) ? 'arrowUp' : ['Sell', 'Underweight'].includes(a.signal!) ? 'arrowDown' : 'circle',
         text: a.signal!,
         size: 1.2,
       }))
 
-    const visualMarkers: any[] = []
+    const visualMarkers: SeriesMarker<Time>[] = []
     analyses.forEach(a => {
       if (!tradeDatesInRange.has(a.trade_date)) return
       const ann = getAnn(a)
-      if (ann.annotations && Array.isArray(ann.annotations)) {
-        ann.annotations.forEach((va: any) => {
-          if (va.type === 'arrowUp' || va.type === 'arrowDown' || va.type === 'circle') {
-            visualMarkers.push({
-              time: va.time,
-              position: va.type === 'arrowUp' ? 'belowBar' : 'aboveBar',
-              color: va.type === 'arrowUp' ? '#10b981' : va.type === 'arrowDown' ? '#ef4444' : '#f59e0b',
-              shape: va.type,
-              text: va.text || '',
-              size: 1.5,
-            })
-          }
-        })
-      }
+      ;(ann.annotations ?? []).forEach(va => {
+        if ((va.type === 'arrowUp' || va.type === 'arrowDown' || va.type === 'circle') && va.time) {
+          visualMarkers.push({
+            time: va.time as Time,
+            position: va.type === 'arrowUp' ? 'belowBar' : 'aboveBar',
+            color: va.type === 'arrowUp' ? '#10b981' : va.type === 'arrowDown' ? '#ef4444' : '#f59e0b',
+            shape: va.type,
+            text: va.text || '',
+            size: 1.5,
+          })
+        }
+      })
     })
 
-    const combinedMarkers = [...markerData, ...visualMarkers].sort((a, b) => 
+    const combinedMarkers = [...markerData, ...visualMarkers].sort((a, b) =>
         (a.time as string).localeCompare(b.time as string)
     )
 

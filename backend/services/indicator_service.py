@@ -105,6 +105,42 @@ def calculate_fibonacci_levels(df: pd.DataFrame, period: int = 100) -> dict[str,
     }
 
 
+def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
+    """Compute Average True Range."""
+    high = df["High"]
+    low = df["Low"]
+    close = df["Close"]
+    tr = pd.concat([high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()], axis=1).max(axis=1)
+    return tr.rolling(window=period).mean()
+
+
+def calculate_vwap(df: pd.DataFrame, period: int = 20) -> pd.Series:
+    """Compute rolling Volume-Weighted Average Price over *period* bars."""
+    typical_price = (df["High"] + df["Low"] + df["Close"]) / 3
+    price_volume = (typical_price * df["Volume"]).rolling(window=period).sum()
+    return price_volume / df["Volume"].rolling(window=period).sum()
+
+
+# Functions available inside custom chart formulas: NAME(n) — the single
+# source consumed by evaluate_formula_safely and taught to the AI formula
+# assistant (formula_assist_service). Longer names must not contain shorter
+# ones as a suffix unless protected by the \b in the matcher (e.g. the SMA in
+# VOLSMA never matches because there is no word boundary before it).
+_FORMULA_FUNCS: dict = {
+    "VOLSMA": lambda df, n: df["Volume"].rolling(window=n).mean(),
+    "VWAP": lambda df, n: calculate_vwap(df, n),
+    "SHIFT": lambda df, n: df["Close"].shift(n),
+    "SMA": lambda df, n: df["Close"].rolling(window=n).mean(),
+    "EMA": lambda df, n: calculate_ema(df["Close"], n),
+    "STD": lambda df, n: df["Close"].rolling(window=n).std(),
+    "RSI": lambda df, n: calculate_rsi(df["Close"], n),
+    "ADX": lambda df, n: calculate_adx(df, n),
+    "ATR": lambda df, n: calculate_atr(df, n),
+    "MAX": lambda df, n: df["High"].rolling(window=n).max(),
+    "MIN": lambda df, n: df["Low"].rolling(window=n).min(),
+}
+
+
 def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
     """Evaluates a mathematical formula containing technical indicators."""
     processed_formula = formula
@@ -116,21 +152,14 @@ def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
         "Volume": df["Volume"],
     }
 
-    # SMA/EMA/STD/RSI/ADX extraction (case-insensitive)
-    patterns = {
-        r"SMA\s*\(\s*(\d+)\s*\)": lambda n: df["Close"].rolling(window=n).mean(),
-        r"EMA\s*\(\s*(\d+)\s*\)": lambda n: calculate_ema(df["Close"], n),
-        r"STD\s*\(\s*(\d+)\s*\)": lambda n: df["Close"].rolling(window=n).std(),
-        r"RSI\s*\(\s*(\d+)\s*\)": lambda n: calculate_rsi(df["Close"], n),
-        r"ADX\s*\(\s*(\d+)\s*\)": lambda n: calculate_adx(df, n),
-    }
-
-    for pattern, func in patterns.items():
+    # Replace NAME(n) calls with precomputed series columns (case-insensitive).
+    for name, func in _FORMULA_FUNCS.items():
+        pattern = rf"\b{name}\s*\(\s*(\d+)\s*\)"
         for m in re.finditer(pattern, formula, re.IGNORECASE):
             n = int(m.group(1))
-            col_name = f"{pattern[:3]}_{n}"
+            col_name = f"{name}_{n}"
             if col_name not in local_dict:
-                local_dict[col_name] = func(n)
+                local_dict[col_name] = func(df, n)
             processed_formula = re.sub(re.escape(m.group(0)), col_name, processed_formula, flags=re.IGNORECASE)
 
     try:

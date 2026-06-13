@@ -31,18 +31,25 @@ no code fences, no quotes.
 
 DSL rules:
 - Price/volume series: Open, High, Low, Close, Volume
-- Functions (integer argument only): SMA(n), EMA(n), STD(n), RSI(n), ADX(n)
-  (all computed on Close; ADX uses High/Low/Close)
+- Functions (single integer argument only):
+  SMA(n), EMA(n), STD(n), RSI(n)   — computed on Close
+  ATR(n), ADX(n)                   — computed on High/Low/Close
+  MAX(n)  highest High of last n bars, MIN(n) lowest Low of last n bars
+  VWAP(n) rolling volume-weighted average price
+  VOLSMA(n) average Volume of last n bars
+  SHIFT(n) the Close from n bars ago
 - Arithmetic only: + - * / and parentheses. Numeric constants allowed.
-- NOT available: historical offsets (close[1]), crossovers, if/else, ta.*,
-  min/max/abs functions, comparison operators.
+- NOT available: if/else, comparisons, crossover detection, abs/min/max of
+  two expressions, nested function-of-function calls like EMA(RSI(14)).
 
 Examples:
 - "distance from the 20 day average in std devs" -> (Close - SMA(20)) / STD(20)
 - "MACD line" -> EMA(12) - EMA(26)
 - "Bollinger %B with 20/2" -> (Close - SMA(20) + 2*STD(20)) / (4*STD(20))
-- "average volume of the last 20 days" -> UNSUPPORTED
-  (SMA/EMA/STD only operate on Close, not Volume)
+- "stochastic %K 14" -> (Close - MIN(14)) / (MAX(14) - MIN(14)) * 100
+- "10 day rate of change in percent" -> (Close / SHIFT(10) - 1) * 100
+- "volume vs its 20 day average" -> Volume / VOLSMA(20)
+- "alert me when MACD crosses the signal line" -> UNSUPPORTED
 If the request cannot be expressed in this DSL, reply with exactly: UNSUPPORTED
 """
 

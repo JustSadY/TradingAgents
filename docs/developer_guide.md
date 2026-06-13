@@ -256,7 +256,7 @@ logic:
 ### F. Safe Dynamic Indicator Engine & Evaluation Blueprint
 Allows both analysts and users to write dynamic mathematical expressions (e.g. `(Close - SMA(20)) / STD(20)`) evaluated safely in the backend.
 
-1. **Backend Evaluation Core:** Located in [indicator_service.py](../backend/services/indicator_service.py), it parses formula syntax, replaces calls like `SMA(N)`, `EMA(N)`, `STD(N)`, and `RSI(N)` with computed pandas series, and runs a sandboxed `pandas.eval`:
+1. **Backend Evaluation Core:** Located in [indicator_service.py](../backend/services/indicator_service.py), it parses formula syntax, replaces `NAME(n)` calls with computed pandas series, and runs a sandboxed `pandas.eval`. The available functions live in the **`_FORMULA_FUNCS` dict (single source)** — currently `SMA`, `EMA`, `STD`, `RSI`, `ATR`, `ADX`, `MAX` (highest High), `MIN` (lowest Low), `VWAP` (rolling), `VOLSMA` (Volume average), and `SHIFT` (Close n bars ago). To add a function, add one entry there; the formula box and the AI assistant pick it up (update the assistant's `_SYSTEM_PROMPT` so the LLM knows about it):
    ```python
    def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
        # Parsed tokens like SMA(10) get pre-calculated and mapped to SMA_10 in local_dict
@@ -266,6 +266,7 @@ Allows both analysts and users to write dynamic mathematical expressions (e.g. `
    ```
 2. **API Router:** Exposes `/api/market/custom-indicator` to resolve queries by fetching the historical ticker data, calculating the formula series, and returning the time-series array.
 3. **Frontend Custom Formula Input:** Integrated in [Chart.tsx](../frontend/src/pages/Chart.tsx) for dynamic user computations and plots them as line charts at the bottom of the candlestick panel.
+4. **AI Formula Assistant:** `POST /api/market/formula-assist` ([formula_assist_service.py](../backend/services/formula_assist_service.py)) turns a plain-language description into a DSL formula via the user's configured LLM, validates it against synthetic OHLCV data, and the Chart page plots it directly.
 
 ### G. Drawing Agent-to-UI Annotations & Trendlines
 Enables trading agents to interactively draw visual markers and trendlines on the user's chart.
