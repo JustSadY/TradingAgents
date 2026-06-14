@@ -3,7 +3,7 @@ import axios from 'axios'
 import {
   Save, BookmarkPlus, Trash2, Play, Bell,
   Settings as SettingsIcon, Brain, ShieldAlert, Clock, Wrench, Database,
-  CheckCircle2, XCircle, RefreshCw
+  CheckCircle2, XCircle, RefreshCw, UserCircle, Plus, Pencil
 } from 'lucide-react'
 
 /** Parse webhook_events — accepts JSON array or legacy comma-separated */
@@ -126,7 +126,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
       .catch(() => {})
       .finally(() => setLoadingDeliveries(false))
   }, [])
-  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'agents' | 'risk' | 'webhooks' | 'presets' | 'advanced' | 'cron' | 'tools' | 'memory'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'agents' | 'risk' | 'webhooks' | 'presets' | 'advanced' | 'cron' | 'tools' | 'memory' | 'personas'>('general')
   const [memoryStatus, setMemoryStatus] = useState<any>(null)
   const [pineconeKey, setPineconeKey] = useState('')
   const [pineconeSaving, setPineconeSaving] = useState(false)
@@ -258,6 +258,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={14} /> },
     ...(userId ? [] : [{ key: 'memory',   label: 'Memory',                          icon: <Database size={14} /> }]),
     ...(userId ? [] : [{ key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={14} /> }]),
+    ...(userId ? [] : [{ key: 'personas', label: 'Personas',                        icon: <UserCircle size={14} /> }]),
   ].filter(tab => isAdmin || tab.key === 'tools' || tab.key === 'agents' || tab.key === 'memory' || allowedSettings.includes(tab.key))
 
   return (
@@ -768,8 +769,137 @@ export default function Settings({ userId }: { userId?: number } = {}) {
             <AgentSettingsPanel ref={agentPanelRef} userId={userId} />
           )}
 
+          {activeTab === 'personas' && <PersonaEditor />}
+
         </div>
       </div>
+    </div>
+  )
+}
+
+interface PersonaItem {
+  key: string
+  label: string
+  description: string
+  instructions: string
+  is_builtin: boolean
+}
+
+function PersonaEditor() {
+  const [personas, setPersonas] = useState<PersonaItem[]>([])
+  const [loading, setLoading] = useState(true)
+  const [showForm, setShowForm] = useState(false)
+  const [editKey, setEditKey] = useState<string | null>(null)
+  const [form, setForm] = useState({ key: '', label: '', description: '', instructions: '' })
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try { const r = await axios.get('/api/personas'); setPersonas(r.data) } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load() }, [load])
+
+  const openCreate = () => { setForm({ key: '', label: '', description: '', instructions: '' }); setEditKey(null); setShowForm(true); setError(null) }
+  const openEdit = (p: PersonaItem) => { setForm({ key: p.key, label: p.label, description: p.description, instructions: p.instructions }); setEditKey(p.key); setShowForm(true); setError(null) }
+
+  const save = async () => {
+    if (!form.label.trim()) { setError('Label is required'); return }
+    setSaving(true); setError(null)
+    try {
+      if (editKey) {
+        await axios.put(`/api/personas/${editKey}`, { label: form.label, description: form.description, instructions: form.instructions })
+      } else {
+        if (!form.key.trim()) { setError('Key is required'); setSaving(false); return }
+        await axios.post('/api/personas', form)
+      }
+      setShowForm(false); await load()
+    } catch (e: unknown) {
+      const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setError(msg || 'Failed to save persona')
+    } finally { setSaving(false) }
+  }
+
+  const del = async (key: string) => {
+    try { await axios.delete(`/api/personas/${key}`); await load() } catch { /* ignore */ }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div>
+          <p className="text-xs font-bold text-white">Investor Personas</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">Create custom investor personas that guide the Portfolio Manager's decision style</p>
+        </div>
+        {!showForm && (
+          <button onClick={openCreate} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/20 text-violet-300 text-[10px] font-bold transition cursor-pointer">
+            <Plus size={11} /> New Persona
+          </button>
+        )}
+      </div>
+
+      {showForm && (
+        <div className="glass-panel rounded-2xl p-4 space-y-3 border border-violet-500/20">
+          <p className="text-xs font-bold text-violet-300">{editKey ? 'Edit Persona' : 'New Persona'}</p>
+          {!editKey && (
+            <div>
+              <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Key (a-z, 0-9, _)</label>
+              <input className="w-full glass-input rounded-xl px-3 py-2 text-xs outline-none mt-1 font-mono" placeholder="my_persona" value={form.key} onChange={e => setForm(f => ({ ...f, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))} />
+            </div>
+          )}
+          <div>
+            <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Display Label</label>
+            <input className="w-full glass-input rounded-xl px-3 py-2 text-xs outline-none mt-1" placeholder="Momentum Trader" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Description (short)</label>
+            <input className="w-full glass-input rounded-xl px-3 py-2 text-xs outline-none mt-1" placeholder="Focuses on momentum and technical breakouts" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+          </div>
+          <div>
+            <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Instructions (injected into Portfolio Manager)</label>
+            <textarea rows={5} className="w-full glass-input rounded-xl px-3 py-2 text-xs outline-none mt-1 resize-y font-mono" placeholder={'Focus on:\n- High momentum stocks with strong relative strength\n- Technical breakouts above key resistance\n- Tight stop-losses at 5-8%'} value={form.instructions} onChange={e => setForm(f => ({ ...f, instructions: e.target.value }))} />
+          </div>
+          {error && <p className="text-rose-400 text-[10px] font-semibold">{error}</p>}
+          <div className="flex gap-2">
+            <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition cursor-pointer disabled:opacity-40">
+              {saving ? 'Saving…' : 'Save'}
+            </button>
+            <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-xs font-semibold transition cursor-pointer">
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="text-center py-8 opacity-40 text-[10px] text-slate-500">Loading personas…</div>
+      ) : (
+        <div className="space-y-2">
+          {personas.map(p => (
+            <div key={p.key} className="flex items-start justify-between gap-3 p-3.5 rounded-xl bg-white/[0.02] border border-white/[0.04] hover:border-white/[0.08] transition-all">
+              <div className="min-w-0 flex-1">
+                <div className="flex items-center gap-2 mb-0.5">
+                  <span className="text-xs font-bold text-white truncate">{p.label}</span>
+                  {p.is_builtin && <span className="text-[8px] font-bold uppercase tracking-wider text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded-full border border-violet-500/20">Built-in</span>}
+                  <span className="text-[9px] font-mono text-slate-600">{p.key}</span>
+                </div>
+                <p className="text-[10px] text-slate-500 truncate">{p.description || '—'}</p>
+              </div>
+              {!p.is_builtin && (
+                <div className="flex items-center gap-1.5 shrink-0">
+                  <button onClick={() => openEdit(p)} className="p-1.5 rounded-lg text-slate-500 hover:text-violet-400 hover:bg-violet-500/10 transition cursor-pointer" title="Edit">
+                    <Pencil size={12} />
+                  </button>
+                  <button onClick={() => del(p.key)} className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer" title="Delete">
+                    <XCircle size={12} />
+                  </button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   )
 }

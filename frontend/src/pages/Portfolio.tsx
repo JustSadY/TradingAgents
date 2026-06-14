@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, Loader2, AlertCircle, RefreshCw, PieChart, Sparkles, X, CheckCircle2, ShieldAlert, Activity, ChevronDown, ChevronUp, Download } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, Loader2, AlertCircle, RefreshCw, PieChart, Sparkles, X, CheckCircle2, ShieldAlert, Activity, ChevronDown, ChevronUp, Download, Grid3x3 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
 import { exportPortfolioCSV } from '../utils/csvExport'
@@ -595,8 +595,141 @@ export default function Portfolio() {
           </div>
         )}
       </div>
+
+      {/* ── Correlation Heatmap ─────────────────────────────────────────── */}
+      <CorrelationHeatmap />
     </div>
   )
 }
 
+interface CorrData {
+  tickers: string[]
+  matrix: number[][]
+  avg_correlation: number | null
+  warning: string | null
+}
+
+function corrColor(v: number, isDiag: boolean): string {
+  if (isDiag) return 'bg-slate-800/60 text-slate-500'
+  if (v < 0) return 'bg-sky-500/20 text-sky-300'
+  if (v < 0.3) return 'bg-emerald-500/20 text-emerald-300'
+  if (v < 0.7) return 'bg-amber-500/20 text-amber-300'
+  return 'bg-rose-500/20 text-rose-300'
+}
+
+function CorrelationHeatmap() {
+  const [data, setData] = useState<CorrData | null>(null)
+  const [loading, setLoading] = useState(true)
+  const [period, setPeriod] = useState('90d')
+
+  const load = useCallback(async (p: string) => {
+    setLoading(true)
+    try {
+      const r = await axios.get(`/api/trading/correlation?period=${p}`)
+      setData(r.data)
+    } catch { /* ignore */ } finally { setLoading(false) }
+  }, [])
+
+  useEffect(() => { load(period) }, [load, period])
+
+  const diversificationLabel = (avg: number | null) => {
+    if (avg === null) return ''
+    if (avg < 0.3) return '✓ Excellent diversification'
+    if (avg < 0.5) return '✓ Good diversification'
+    if (avg < 0.7) return '⚠ Moderate — consider diversifying'
+    return '⚠ High correlation — low diversification'
+  }
+
+  return (
+    <div className="glass-panel rounded-2xl overflow-hidden border border-white/[0.04]">
+      <div className="px-5 py-3.5 border-b border-white/[0.04] flex items-center justify-between">
+        <div className="flex items-center gap-2">
+          <Grid3x3 size={14} className="text-violet-400" />
+          <span className="text-sm font-bold text-white">Correlation Heatmap</span>
+          <span className="text-[10px] text-slate-500 ml-1">— pairwise return correlations</span>
+        </div>
+        <select
+          value={period}
+          onChange={e => { setPeriod(e.target.value); load(e.target.value) }}
+          className="bg-slate-900 border border-white/[0.08] text-slate-300 text-[10px] font-semibold rounded-lg px-2 py-1 outline-none cursor-pointer"
+        >
+          {['30d','90d','180d','1y'].map(p => <option key={p} value={p}>{p}</option>)}
+        </select>
+      </div>
+
+      <div className="p-5">
+        {loading && (
+          <div className="flex items-center gap-2 text-[11px] text-slate-500 py-6 justify-center">
+            <Loader2 size={14} className="animate-spin text-violet-400" /> Computing correlations…
+          </div>
+        )}
+
+        {!loading && data?.warning && (
+          <div className="text-center py-6 opacity-50">
+            <Grid3x3 size={24} className="mx-auto text-slate-600 mb-2" />
+            <p className="text-[11px] text-slate-500">{data.warning}</p>
+          </div>
+        )}
+
+        {!loading && data && !data.warning && data.tickers.length >= 2 && (
+          <div className="space-y-4">
+            {data.avg_correlation !== null && (
+              <div className="flex items-center gap-3">
+                <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Avg correlation</div>
+                <div className={`font-mono font-bold text-sm ${data.avg_correlation >= 0.7 ? 'text-rose-400' : data.avg_correlation >= 0.5 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  {data.avg_correlation.toFixed(3)}
+                </div>
+                <div className={`text-[10px] font-semibold ${data.avg_correlation >= 0.7 ? 'text-rose-400' : data.avg_correlation >= 0.5 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                  {diversificationLabel(data.avg_correlation)}
+                </div>
+              </div>
+            )}
+
+            <div className="overflow-x-auto">
+              <table className="text-[10px] font-mono border-separate border-spacing-0.5">
+                <thead>
+                  <tr>
+                    <th className="w-16" />
+                    {data.tickers.map(t => (
+                      <th key={t} className="text-slate-400 font-bold px-1 text-center w-14">{t}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {data.tickers.map((rowTicker, i) => (
+                    <tr key={rowTicker}>
+                      <td className="text-slate-400 font-bold pr-2 text-right">{rowTicker}</td>
+                      {data.tickers.map((_, j) => {
+                        const v = data.matrix[i][j]
+                        return (
+                          <td key={j} className={`text-center rounded px-1 py-1.5 ${corrColor(v, i === j)}`}>
+                            {i === j ? '—' : v.toFixed(2)}
+                          </td>
+                        )
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 pt-1 border-t border-white/[0.04]">
+              {[
+                { label: '< 0 (Neg)', cls: 'bg-sky-500/20 text-sky-300' },
+                { label: '0–0.3 (Low)', cls: 'bg-emerald-500/20 text-emerald-300' },
+                { label: '0.3–0.7 (Moderate)', cls: 'bg-amber-500/20 text-amber-300' },
+                { label: '> 0.7 (High)', cls: 'bg-rose-500/20 text-rose-300' },
+              ].map(l => (
+                <div key={l.label} className="flex items-center gap-1">
+                  <div className={`w-3 h-3 rounded text-[8px] flex items-center justify-center font-bold ${l.cls}`} />
+                  <span className="text-[9px] text-slate-500">{l.label}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  )
+}
 

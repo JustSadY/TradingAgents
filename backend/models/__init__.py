@@ -7,6 +7,7 @@ from .market_summary import MarketDailySummary
 from .news_cache import NewsCache
 from .order import Order
 from .page_permission import UserSettingPermission
+from .persona import UserPersona
 from .portfolio import Holding, Portfolio
 from .portfolio_analysis import MultiTickerAnalysis
 from .preset import ConfigPreset
@@ -43,4 +44,5 @@ __all__ = [
     "TradeNote",
     "WebhookDelivery",
     "MarketDailySummary",
+    "UserPersona",
 ]

@@ -22,6 +22,7 @@ from backend.api.alerts import router as alerts_router
 from backend.api.analysis import router as analysis_router
 from backend.api.assistant import router as assistant_router
 from backend.api.auth import router as auth_router
+from backend.api.correlation import router as correlation_router
 from backend.api.cron import router as cron_router
 from backend.api.daily_summary import router as daily_summary_router
 from backend.api.earnings import router as earnings_router
@@ -32,6 +33,7 @@ from backend.api.meta import router as meta_router
 from backend.api.metrics import router as metrics_router
 from backend.api.news import router as news_router
 from backend.api.patterns import router as patterns_router
+from backend.api.personas_api import router as personas_api_router
 from backend.api.portfolio import router as portfolio_router
 from backend.api.preset import router as preset_router
 from backend.api.screener import router as screener_router
@@ -233,6 +235,8 @@ app.include_router(assistant_router)
 app.include_router(daily_summary_router)
 app.include_router(token_analytics_router)
 app.include_router(earnings_router)
+app.include_router(correlation_router)
+app.include_router(personas_api_router)
 
 
 @app.websocket("/ws/analysis/{task_id}")
