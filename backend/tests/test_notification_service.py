@@ -21,7 +21,7 @@ def _settings(**kwargs):
 def sent(monkeypatch):
     calls = []
 
-    async def fake_send(url, event, data, retries=2):
+    async def fake_send(url, event, data, retries=2, user_id=None):
         calls.append((url, event, data))
         return True
 
