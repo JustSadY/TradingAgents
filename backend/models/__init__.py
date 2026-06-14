@@ -3,6 +3,7 @@ from .alert import PriceAlert
 from .analysis import AnalysisChat, AnalysisResult
 from .assistant import AssistantMessage
 from .log import SystemLog
+from .market_summary import MarketDailySummary
 from .news_cache import NewsCache
 from .order import Order
 from .page_permission import UserSettingPermission
@@ -41,4 +42,5 @@ __all__ = [
     "NewsCache",
     "TradeNote",
     "WebhookDelivery",
+    "MarketDailySummary",
 ]

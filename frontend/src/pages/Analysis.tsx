@@ -6,6 +6,7 @@ import { useMeta } from '../hooks/useMeta'
 import { useActiveTasks } from '../hooks/useActiveTasks'
 import { notify } from '../utils/notify'
 import { exportMarkdown, exportPDF } from '../utils/exportReport'
+import { exportAnalysesCSV } from '../utils/csvExport'
 import { sendBrowserNotification } from '../utils/browserNotify'
 import { useTranslation } from '../contexts/LanguageContext'
 import {
@@ -804,6 +805,14 @@ function HistoryTab({
           <p className="p-6 text-slate-600 text-xs text-center">{t('analysis.history.empty')}</p>
         ) : (
           <div className="overflow-x-auto">
+            <div className="flex justify-end px-4 py-2 border-b border-white/[0.04]">
+              <button
+                onClick={() => exportAnalysesCSV(items)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-500 hover:text-violet-300 hover:bg-violet-500/10 border border-white/[0.04] hover:border-violet-500/20 transition cursor-pointer"
+              >
+                <Download size={11} /> Export CSV
+              </button>
+            </div>
             <table className="w-full text-xs min-w-[500px]">
               <thead>
                 <tr className="text-slate-500 text-[10px] uppercase tracking-wider border-b border-white/[0.04] bg-slate-900/10">

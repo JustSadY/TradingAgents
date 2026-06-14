@@ -23,6 +23,7 @@ from backend.api.analysis import router as analysis_router
 from backend.api.assistant import router as assistant_router
 from backend.api.auth import router as auth_router
 from backend.api.cron import router as cron_router
+from backend.api.daily_summary import router as daily_summary_router
 from backend.api.fx import router as fx_router
 from backend.api.logs import router as logs_router
 from backend.api.market import router as market_router
@@ -227,6 +228,7 @@ app.include_router(sector_rotation_router)
 app.include_router(patterns_router)
 app.include_router(share_router)
 app.include_router(assistant_router)
+app.include_router(daily_summary_router)
 
 
 @app.websocket("/ws/analysis/{task_id}")
