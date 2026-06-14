@@ -24,6 +24,7 @@ const ABTesting = lazy(() => import('./pages/ABTesting'))
 const Profile = lazy(() => import('./pages/Profile'))
 const Admin = lazy(() => import('./pages/Admin'))
 const Screener = lazy(() => import('./pages/Screener'))
+const SectorRotation = lazy(() => import('./pages/SectorRotation'))
 const SharedReport = lazy(() => import('./pages/SharedReport'))
 
 import { LanguageProvider } from './contexts/LanguageContext'
@@ -101,6 +102,7 @@ function AppRoutes() {
         />
 
         <Route path="screener" element={<RequirePage page="analysis"><Screener /></RequirePage>} />
+        <Route path="sector-rotation" element={<RequirePage page="analysis"><SectorRotation /></RequirePage>} />
 
         {/* Catch-all within the layout */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

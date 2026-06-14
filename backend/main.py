@@ -29,9 +29,11 @@ from backend.api.market import router as market_router
 from backend.api.meta import router as meta_router
 from backend.api.metrics import router as metrics_router
 from backend.api.news import router as news_router
+from backend.api.patterns import router as patterns_router
 from backend.api.portfolio import router as portfolio_router
 from backend.api.preset import router as preset_router
 from backend.api.screener import router as screener_router
+from backend.api.sector_rotation import router as sector_rotation_router
 from backend.api.settings import router as settings_router
 from backend.api.share import router as share_router
 from backend.api.system_settings import router as system_settings_router
@@ -221,6 +223,8 @@ app.include_router(news_router)
 app.include_router(users_router)
 app.include_router(system_settings_router)
 app.include_router(screener_router)
+app.include_router(sector_rotation_router)
+app.include_router(patterns_router)
 app.include_router(share_router)
 app.include_router(assistant_router)
 

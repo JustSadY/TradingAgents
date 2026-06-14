@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
 import { useSearchParams } from 'react-router-dom'
 import api from '../utils/api'
-import { RefreshCw, BarChart2, AlertCircle, Sparkles } from 'lucide-react'
+import { RefreshCw, BarChart2, AlertCircle, Sparkles, ScanSearch, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { usePriceChart } from '../hooks/usePriceChart'
 import { ErrorBoundary } from '../components/ErrorBoundary'
@@ -19,6 +19,16 @@ interface Candle {
 }
 interface AnalysisItem {
   id: number; ticker: string; trade_date: string; signal: string | null; chart_annotations: string; final_decision?: string; created_at: string
+}
+interface PatternKeyPoint { date: string; price: number; label: string }
+interface Pattern {
+  type: string
+  label: string
+  direction: 'bullish' | 'bearish'
+  start_date: string
+  end_date: string
+  key_points: PatternKeyPoint[]
+  confidence: number
 }
 
 const PERIODS = [
@@ -51,6 +61,9 @@ export default function ChartPage() {
   const [userIndicatorLabel, setUserIndicatorLabel] = useState('')
   const [aiPrompt, setAiPrompt] = useState('')
   const [aiLoading, setAiLoading] = useState(false)
+  const [showPatterns, setShowPatterns] = useState(false)
+  const [patterns, setPatterns] = useState<Pattern[]>([])
+  const [patternsLoading, setPatternsLoading] = useState(false)
 
   const chartContainerRef = useRef<HTMLDivElement>(null)
   usePriceChart(chartContainerRef as React.RefObject<HTMLDivElement>, candles, analyses, showSMA, showEMA)
@@ -113,6 +126,23 @@ export default function ChartPage() {
 
   // Describe the indicator in plain language; the backend LLM writes a
   // validated formula, which we drop into the formula box and plot directly.
+  const fetchPatterns = useCallback(async (ticker: string, p: string) => {
+    setPatternsLoading(true)
+    try {
+      const r = await api.get(`/api/market/patterns/${ticker}`, { params: { period: p } })
+      setPatterns(r.data.patterns || [])
+    } catch {
+      setPatterns([])
+    } finally {
+      setPatternsLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (showPatterns && activeTicker) fetchPatterns(activeTicker, period)
+    else setPatterns([])
+  }, [showPatterns, activeTicker, period, fetchPatterns])
+
   const handleAiFormula = async () => {
     if (!aiPrompt.trim() || aiLoading) return
     setAiLoading(true); setError(null)
@@ -172,14 +202,27 @@ export default function ChartPage() {
                           </span>
                       )}
                   </div>
-                  <TechnicalControls 
-                      showSMA={showSMA} setShowSMA={setShowSMA}
-                      showEMA={showEMA} setShowEMA={setShowEMA}
-                      showRSI={showRSI} setShowRSI={setShowRSI}
-                      showMACD={showMACD} setShowMACD={setShowMACD}
-                      showSentiment={showSentiment} setShowSentiment={setShowSentiment}
-                      t={t}
-                  />
+                  <div className="flex items-center gap-2">
+                    <TechnicalControls
+                        showSMA={showSMA} setShowSMA={setShowSMA}
+                        showEMA={showEMA} setShowEMA={setShowEMA}
+                        showRSI={showRSI} setShowRSI={setShowRSI}
+                        showMACD={showMACD} setShowMACD={setShowMACD}
+                        showSentiment={showSentiment} setShowSentiment={setShowSentiment}
+                        t={t}
+                    />
+                    <button
+                      onClick={() => setShowPatterns(v => !v)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                        showPatterns
+                          ? 'bg-violet-600/20 border-violet-500/40 text-violet-300'
+                          : 'bg-white/[0.03] border-white/[0.06] text-slate-500 hover:text-slate-300'
+                      }`}
+                    >
+                      <ScanSearch size={11} />
+                      Patterns
+                    </button>
+                  </div>
               </div>
 
               <ErrorBoundary name="Price Chart">
@@ -224,6 +267,78 @@ export default function ChartPage() {
                   Calculate
                 </button>
               </div>
+
+              {/* Pattern Detection Panel */}
+              {showPatterns && (
+                <div className="rounded-2xl bg-white/[0.02] border border-white/[0.05] p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <ScanSearch size={13} className="text-violet-400" />
+                    <span className="text-xs font-bold text-white">Detected Patterns</span>
+                    {patternsLoading && <Loader2 size={11} className="animate-spin text-violet-400 ml-1" />}
+                    {!patternsLoading && <span className="text-[10px] text-slate-600">· {patterns.length} found in {period} history</span>}
+                  </div>
+
+                  {!patternsLoading && patterns.length === 0 && (
+                    <p className="text-[10px] text-slate-600 italic">No significant patterns detected for this period.</p>
+                  )}
+
+                  {patterns.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {patterns.map((p, i) => (
+                        <div
+                          key={i}
+                          className={`rounded-xl border p-3 space-y-2 ${
+                            p.direction === 'bullish'
+                              ? 'bg-emerald-500/5 border-emerald-500/20'
+                              : 'bg-rose-500/5 border-rose-500/20'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              {p.direction === 'bullish'
+                                ? <TrendingUp size={11} className="text-emerald-400" />
+                                : <TrendingDown size={11} className="text-rose-400" />
+                              }
+                              <span className="text-[10px] font-bold text-white">{p.label}</span>
+                            </div>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+                              p.direction === 'bullish'
+                                ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                                : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                            }`}>
+                              {p.direction === 'bullish' ? 'Bullish' : 'Bearish'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 text-[9px] text-slate-500 font-mono">
+                            <span>{p.start_date}</span>
+                            <span>→</span>
+                            <span>{p.end_date}</span>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1">
+                            {p.key_points.map((kp, j) => (
+                              <span key={j} className="text-[8px] font-mono bg-white/[0.04] border border-white/[0.06] rounded px-1.5 py-0.5 text-slate-400">
+                                {kp.label}: ${kp.price.toFixed(2)}
+                              </span>
+                            ))}
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <div className="flex-1 h-0.5 rounded-full bg-white/[0.04]">
+                              <div
+                                className={`h-full rounded-full ${p.direction === 'bullish' ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                                style={{ width: `${p.confidence * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-[9px] font-mono text-slate-600">{(p.confidence * 100).toFixed(0)}%</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
           </div>
 
