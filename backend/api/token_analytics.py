@@ -45,6 +45,7 @@ _MODEL_COSTS: dict[str, dict[str, tuple[float, float]]] = {
         "llama-3.1-405b": (2.00, 2.00),
         "llama-3.3-70b": (0.35, 0.35),
     },
+    "ollama": {},  # local inference — $0 cost
 }
 
 _DEFAULT_COST = (2.0, 8.0)
@@ -52,6 +53,8 @@ _DEFAULT_COST = (2.0, 8.0)
 
 def _estimate_cost(provider: str | None, model: str | None, tokens_in: int, tokens_out: int) -> float:
     prov = (provider or "").lower()
+    if prov == "ollama":
+        return 0.0
     mod = (model or "").lower()
     rates = _MODEL_COSTS.get(prov, {})
     rate_in, rate_out = _DEFAULT_COST

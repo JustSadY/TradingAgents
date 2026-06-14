@@ -52,6 +52,7 @@ class AppSettings(Base):
     memory_embedder: Mapped[str] = mapped_column(String(20), default="pinecone")
     pinecone_embed_model: Mapped[str] = mapped_column(String(60), default="llama-text-embed-v2")
     memory_openai_embed_model: Mapped[str] = mapped_column(String(60), default="text-embedding-3-small")
+    memory_ollama_embed_model: Mapped[str] = mapped_column(String(60), default="nomic-embed-text")
     agent_qa_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
     # Token-budget controls (see TradingAgentsConfig for semantics).
     anthropic_prompt_caching: Mapped[bool] = mapped_column(Boolean, default=True)

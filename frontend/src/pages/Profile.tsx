@@ -94,6 +94,11 @@ function ApiKeyRow({ providerKey, label, hasKey, onSave, onDelete }: {
           </button>
         </div>
       </div>
+      {providerKey === 'ollama' && (
+        <p className="text-[10px] text-slate-500 italic leading-relaxed">
+          No API key needed — leave empty for localhost. To use a remote Ollama server, enter its base URL (e.g. <span className="font-mono text-slate-400">http://192.168.1.5:11434</span>).
+        </p>
+      )}
       {editing && (
         <div className="flex gap-2 mt-1 animate-in slide-in-from-top-1 duration-150">
           <div className="relative flex-1">

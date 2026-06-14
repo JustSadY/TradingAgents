@@ -40,6 +40,7 @@ class SettingsBase(BaseModel):
     memory_embedder: str = "pinecone"
     pinecone_embed_model: str = "llama-text-embed-v2"
     memory_openai_embed_model: str = "text-embedding-3-small"
+    memory_ollama_embed_model: str = "nomic-embed-text"
     agent_qa_enabled: bool = True
     # Token-budget controls.
     anthropic_prompt_caching: bool = True
@@ -93,6 +94,7 @@ class SettingsUpdate(BaseModel):
     memory_embedder: str | None = None
     pinecone_embed_model: str | None = None
     memory_openai_embed_model: str | None = None
+    memory_ollama_embed_model: str | None = None
     agent_qa_enabled: bool | None = None
     anthropic_prompt_caching: bool | None = None
     max_report_chars_in_prompts: int | None = Field(default=None, ge=500, le=50000)

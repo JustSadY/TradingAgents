@@ -28,7 +28,7 @@ class LLMProviderRegistry:
 
     def list_providers(self) -> list[LLMProvider]:
         # Return in a specific order for the UI
-        order = ["openai", "anthropic", "google", "nvidia"]
+        order = ["openai", "anthropic", "google", "nvidia", "ollama"]
         return [self._providers[k] for k in order if k in self._providers]
 
     def get_provider_labels(self) -> dict[str, str]:
@@ -116,6 +116,28 @@ llm_registry.register(
             ("Llama-3.1 70B Instruct", "meta/llama-3.1-70b-instruct"),
             ("Llama-3.1 8B Instruct", "meta/llama-3.1-8b-instruct"),
             ("Llama-3.2 3B Instruct", "meta/llama-3.2-3b-instruct"),
+        ],
+    )
+)
+
+llm_registry.register(
+    LLMProvider(
+        key="ollama",
+        label="Ollama (Local)",
+        is_openai_compatible=True,
+        models=[
+            ("Llama 3.3 70B - Meta's latest 70B instruction model", "llama3.3"),
+            ("Llama 3.2 3B - Fast and lightweight", "llama3.2"),
+            ("Llama 3.1 8B - Balanced speed and quality", "llama3.1"),
+            ("Llama 3.1 70B - High-quality 70B model", "llama3.1:70b"),
+            ("Gemma 3 27B - Google's open model", "gemma3:27b"),
+            ("Gemma 3 12B - Compact Google model", "gemma3:12b"),
+            ("Qwen 2.5 72B - Alibaba's flagship open model", "qwen2.5:72b"),
+            ("Qwen 2.5 14B - Mid-size Qwen model", "qwen2.5:14b"),
+            ("DeepSeek R1 32B - Reasoning model", "deepseek-r1:32b"),
+            ("DeepSeek R1 14B - Compact reasoning model", "deepseek-r1:14b"),
+            ("Mistral 7B - Fast general-purpose model", "mistral"),
+            ("Phi-4 14B - Microsoft's small capable model", "phi4"),
         ],
     )
 )
