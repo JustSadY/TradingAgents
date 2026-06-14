@@ -274,7 +274,10 @@ def _make_tools(db: AsyncSession, user: User, allowed_pages: set[str]) -> list:
                 if text:
                     sections.append(f"### {label}\n{text[:2000]}")
 
-            return f"Analysis for {analysis.ticker} ({analysis.trade_date}) — Signal: {analysis.signal or 'N/A'}\n\n" + "\n\n".join(sections)
+            return (
+                f"Analysis for {analysis.ticker} ({analysis.trade_date}) — Signal: {analysis.signal or 'N/A'}\n\n"
+                + "\n\n".join(sections)
+            )
         except Exception as e:
             return f"Could not fetch report: {e}"
 
@@ -321,9 +324,7 @@ def _make_tools(db: AsyncSession, user: User, allowed_pages: set[str]) -> list:
             lines = []
             for a in alerts:
                 status = "triggered" if a.triggered_at else ("active" if a.enabled else "disabled")
-                lines.append(
-                    f"  [{a.id}] {a.ticker} — {a.condition} ${float(a.target_price):,.2f} | {status}"
-                )
+                lines.append(f"  [{a.id}] {a.ticker} — {a.condition} ${float(a.target_price):,.2f} | {status}")
             return "Price alerts:\n" + "\n".join(lines)
         except Exception as e:
             return f"Could not fetch alerts: {e}"

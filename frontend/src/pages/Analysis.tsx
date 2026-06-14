@@ -11,7 +11,7 @@ import { useTranslation } from '../contexts/LanguageContext'
 import {
   Loader2, CheckCircle, AlertCircle, History,
   X, BarChart2, FileText, Zap,
-  Download, FileDown, AlertTriangle, Scale
+  Download, FileDown, AlertTriangle, Scale, Share2, Copy
 } from 'lucide-react'
 
 // Components
@@ -758,6 +758,24 @@ function HistoryTab({
   const [detail, setDetail] = useState<AnalysisDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [activeDetailTab, setActiveDetailTab] = useState<'reports' | 'debate' | 'chat' | 'timetravel'>('reports')
+  const [shareLink, setShareLink] = useState<string | null>(null)
+  const [sharing, setSharing] = useState(false)
+
+  const shareReport = useCallback(async (id: number) => {
+    setSharing(true)
+    setShareLink(null)
+    try {
+      const { data } = await axios.post<{ token: string; expires_at: string }>(`/api/analysis/${id}/share`)
+      const link = `${window.location.origin}/share/${data.token}`
+      setShareLink(link)
+      await navigator.clipboard.writeText(link).catch(() => {})
+      notify('success', 'Share link copied to clipboard', 'Share')
+    } catch (e: any) {
+      notify('error', e.response?.data?.detail || 'Share failed', 'Share')
+    } finally {
+      setSharing(false)
+    }
+  }, [])
   const meta = useMeta()
   const sectionLabels = meta?.section_labels ?? SECTION_LABELS
 
@@ -837,7 +855,24 @@ function HistoryTab({
                     <button onClick={() => exportPDF(detail, language as 'en' | 'tr')} className="flex items-center gap-1 bg-white/5 hover:bg-white/10 text-[10px] font-bold text-slate-300 px-2.5 py-1.5 rounded-lg transition cursor-pointer" title={t('analysis.history.btn_download_pdf')}>
                       <FileDown size={12} /> PDF
                     </button>
-                    <button onClick={() => setDetail(null)} className="text-slate-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/5 cursor-pointer"><X size={16} /></button>
+                    <button
+                      onClick={() => shareReport(detail.id)}
+                      disabled={sharing}
+                      className="flex items-center gap-1 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 text-[10px] font-bold text-violet-400 px-2.5 py-1.5 rounded-lg transition cursor-pointer disabled:opacity-40"
+                      title="Share report link (48h)"
+                    >
+                      {sharing ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />} Share
+                    </button>
+                    {shareLink && (
+                      <button
+                        onClick={() => navigator.clipboard.writeText(shareLink)}
+                        className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-bold text-emerald-400 px-2 py-1.5 rounded-lg transition cursor-pointer"
+                        title={shareLink}
+                      >
+                        <Copy size={11} /> Copied!
+                      </button>
+                    )}
+                    <button onClick={() => { setDetail(null); setShareLink(null) }} className="text-slate-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/5 cursor-pointer"><X size={16} /></button>
                   </div>
                 </div>
 

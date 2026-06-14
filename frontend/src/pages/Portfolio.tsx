@@ -1,6 +1,6 @@
 import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, Loader2, AlertCircle, RefreshCw, PieChart, Sparkles, X, CheckCircle2, ShieldAlert } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, Loader2, AlertCircle, RefreshCw, PieChart, Sparkles, X, CheckCircle2, ShieldAlert, Activity, ChevronDown, ChevronUp } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
 
@@ -22,6 +22,23 @@ interface PortfolioRow {
   current_balance: number
   cash_available: number
   status: string
+}
+
+interface HoldingRisk {
+  ticker: string
+  weight_pct: number
+  volatility_annual: number | null
+  beta: number | null
+  sector: string
+}
+
+interface RiskData {
+  portfolio_beta: number | null
+  portfolio_volatility: number | null
+  sector_weights: { sector: string; weight_pct: number }[]
+  correlation: { ticker_a: string; ticker_b: string; correlation: number }[]
+  holdings_risk: HoldingRisk[]
+  message?: string
 }
 
 interface RebalanceSuggestion {
@@ -75,6 +92,9 @@ export default function Portfolio() {
   const [rebalancing, setRebalancing] = useState(false)
   const [rebalanceResult, setRebalanceResult] = useState<RebalanceResult | null>(null)
   const [applyingIdx, setApplyingIdx] = useState<number | null>(null)
+  const [riskData, setRiskData] = useState<RiskData | null>(null)
+  const [loadingRisk, setLoadingRisk] = useState(false)
+  const [showRisk, setShowRisk] = useState(false)
 
   const fetchPortfolioData = useCallback((quiet = false) => {
     if (!quiet) setLoading(true)
@@ -109,6 +129,19 @@ export default function Portfolio() {
       notify('error', err.response?.data?.detail || 'Rebalance failed', 'AI Rebalance')
     } finally {
       setRebalancing(false)
+    }
+  }, [])
+
+  const loadRiskDashboard = useCallback(async () => {
+    setLoadingRisk(true)
+    try {
+      const { data } = await axios.get<RiskData>('/api/trading/risk-dashboard')
+      setRiskData(data)
+      setShowRisk(true)
+    } catch (err: any) {
+      notify('error', err.response?.data?.detail || 'Risk dashboard failed', 'Risk')
+    } finally {
+      setLoadingRisk(false)
     }
   }, [])
 
@@ -170,6 +203,14 @@ export default function Portfolio() {
           <p className="text-xs text-slate-500 mt-1">Review active assets allocations, average cost basis, and real-time ledger returns</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={loadRiskDashboard}
+            disabled={loadingRisk || holdings.length === 0}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-slate-500/10 hover:bg-slate-500/20 border border-slate-500/20 text-slate-400 hover:text-slate-300 text-xs font-bold transition-all cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {loadingRisk ? <Loader2 size={13} className="animate-spin" /> : <Activity size={13} />}
+            {loadingRisk ? 'Loading…' : 'Risk Dashboard'}
+          </button>
           <button
             onClick={runRebalance}
             disabled={rebalancing || holdings.length === 0}
@@ -280,6 +321,134 @@ export default function Portfolio() {
               </button>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* ── Risk Dashboard Panel ────────────────────────────────────────── */}
+      {riskData && (
+        <div className="glass-panel rounded-2xl overflow-hidden border border-slate-500/15">
+          <button
+            className="w-full px-5 py-3.5 border-b border-white/[0.04] flex items-center justify-between bg-slate-500/5 hover:bg-slate-500/10 transition cursor-pointer"
+            onClick={() => setShowRisk(v => !v)}
+          >
+            <div className="flex items-center gap-2.5">
+              <Activity size={15} className="text-slate-400" />
+              <span className="text-sm font-bold text-white">Risk Dashboard</span>
+              {riskData.portfolio_beta !== null && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-slate-500/10 text-slate-400 border-slate-500/20">
+                  β {riskData.portfolio_beta.toFixed(2)} · σ {riskData.portfolio_volatility !== null ? `${(riskData.portfolio_volatility * 100).toFixed(1)}%` : '—'}
+                </span>
+              )}
+            </div>
+            {showRisk ? <ChevronUp size={14} className="text-slate-500" /> : <ChevronDown size={14} className="text-slate-500" />}
+          </button>
+
+          {showRisk && (
+            <div className="p-5 space-y-5">
+              {riskData.message ? (
+                <p className="text-xs text-slate-400">{riskData.message}</p>
+              ) : (
+                <>
+                  {/* Portfolio-level KPIs */}
+                  <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
+                    {[
+                      { label: 'Portfolio Beta', value: riskData.portfolio_beta !== null ? riskData.portfolio_beta.toFixed(2) : '—', hint: 'vs SPY', color: riskData.portfolio_beta !== null && riskData.portfolio_beta > 1.5 ? 'text-rose-400' : 'text-white' },
+                      { label: 'Annualized Vol', value: riskData.portfolio_volatility !== null ? `${(riskData.portfolio_volatility * 100).toFixed(1)}%` : '—', hint: 'weighted avg', color: riskData.portfolio_volatility !== null && riskData.portfolio_volatility > 0.4 ? 'text-rose-400' : 'text-amber-400' },
+                      { label: 'Sectors', value: String(riskData.sector_weights.length), hint: 'diversification', color: 'text-white' },
+                    ].map(k => (
+                      <div key={k.label} className="bg-white/[0.02] border border-white/[0.04] rounded-xl p-3">
+                        <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">{k.label}</p>
+                        <p className={`text-xl font-display font-bold leading-tight mt-0.5 ${k.color}`}>{k.value}</p>
+                        <p className="text-[9px] text-slate-600 mt-0.5">{k.hint}</p>
+                      </div>
+                    ))}
+                  </div>
+
+                  {/* Sector concentration */}
+                  {riskData.sector_weights.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Sector Concentration</p>
+                      <div className="space-y-2">
+                        {riskData.sector_weights.map(s => (
+                          <div key={s.sector} className="space-y-1">
+                            <div className="flex items-center justify-between text-[10px]">
+                              <span className="text-slate-300 font-semibold">{s.sector}</span>
+                              <span className={`font-mono font-bold ${s.weight_pct > 40 ? 'text-rose-400' : s.weight_pct > 25 ? 'text-amber-400' : 'text-slate-400'}`}>
+                                {s.weight_pct.toFixed(1)}%
+                              </span>
+                            </div>
+                            <div className="h-1.5 rounded-full bg-white/[0.04] overflow-hidden">
+                              <div
+                                className={`h-full rounded-full transition-all ${s.weight_pct > 40 ? 'bg-rose-500' : s.weight_pct > 25 ? 'bg-amber-500' : 'bg-violet-500'}`}
+                                style={{ width: `${Math.min(s.weight_pct, 100)}%` }}
+                              />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Holdings risk table */}
+                  {riskData.holdings_risk.length > 0 && (
+                    <div className="overflow-x-auto rounded-xl border border-white/[0.04]">
+                      <table className="w-full text-xs min-w-[440px]">
+                        <thead>
+                          <tr className="text-[9px] uppercase tracking-wider text-slate-500 bg-white/[0.01]">
+                            <th className="px-4 py-2.5 text-left font-bold">Ticker</th>
+                            <th className="px-4 py-2.5 text-left font-bold">Sector</th>
+                            <th className="px-4 py-2.5 text-right font-bold">Weight</th>
+                            <th className="px-4 py-2.5 text-right font-bold">Beta</th>
+                            <th className="px-4 py-2.5 text-right font-bold">Vol (ann.)</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/[0.02]">
+                          {riskData.holdings_risk.map(h => (
+                            <tr key={h.ticker} className="hover:bg-white/[0.01] transition-colors">
+                              <td className="px-4 py-2.5 font-mono font-bold text-white">{h.ticker}</td>
+                              <td className="px-4 py-2.5 text-slate-400 text-[10px]">{h.sector}</td>
+                              <td className="px-4 py-2.5 text-right font-mono text-slate-300">{h.weight_pct.toFixed(1)}%</td>
+                              <td className="px-4 py-2.5 text-right font-mono">
+                                {h.beta !== null
+                                  ? <span className={h.beta > 1.5 ? 'text-rose-400' : h.beta < 0 ? 'text-amber-400' : 'text-slate-300'}>{h.beta.toFixed(2)}</span>
+                                  : <span className="text-slate-600">—</span>}
+                              </td>
+                              <td className="px-4 py-2.5 text-right font-mono">
+                                {h.volatility_annual !== null
+                                  ? <span className={h.volatility_annual > 0.5 ? 'text-rose-400' : 'text-slate-300'}>{(h.volatility_annual * 100).toFixed(1)}%</span>
+                                  : <span className="text-slate-600">—</span>}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+
+                  {/* Top correlations */}
+                  {riskData.correlation.length > 0 && (
+                    <div className="space-y-2">
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">High Correlations</p>
+                      <div className="flex flex-wrap gap-2">
+                        {riskData.correlation
+                          .filter(c => c.ticker_a < c.ticker_b && Math.abs(c.correlation) >= 0.6)
+                          .sort((a, b) => Math.abs(b.correlation) - Math.abs(a.correlation))
+                          .slice(0, 8)
+                          .map(c => (
+                            <span key={`${c.ticker_a}-${c.ticker_b}`} className={`text-[10px] font-mono font-semibold px-2.5 py-1 rounded-lg border ${Math.abs(c.correlation) >= 0.85 ? 'bg-rose-500/10 text-rose-400 border-rose-500/20' : 'bg-amber-500/10 text-amber-400 border-amber-500/20'}`}>
+                              {c.ticker_a}↔{c.ticker_b} {c.correlation > 0 ? '+' : ''}{c.correlation.toFixed(2)}
+                            </span>
+                          ))}
+                        {riskData.correlation.filter(c => c.ticker_a < c.ticker_b && Math.abs(c.correlation) >= 0.6).length === 0 && (
+                          <p className="text-[11px] text-slate-500 italic">No high correlations detected — good diversification.</p>
+                        )}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+          )}
         </div>
       )}
 

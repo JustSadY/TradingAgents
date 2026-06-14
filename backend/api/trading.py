@@ -8,6 +8,7 @@ from backend.api.deps import get_current_user, get_db
 from backend.core.utils import safe_ticker_component
 from backend.models.user import User
 from backend.services import mock_trading_service as svc
+from backend.services import trade_journal_service
 from backend.services.backtest_service import run_backtest_simulation
 
 router = APIRouter(prefix="/api/trading", tags=["trading"])
@@ -119,6 +120,26 @@ async def run_backtest(
     return res
 
 
+@router.get("/portfolio-stats")
+async def get_portfolio_stats(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from backend.services.portfolio_stats_service import get_portfolio_stats
+
+    return await get_portfolio_stats(db, _)
+
+
+@router.get("/risk-dashboard")
+async def get_risk_dashboard(
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    from backend.services.risk_dashboard_service import get_risk_dashboard
+
+    return await get_risk_dashboard(db, _)
+
+
 @router.post("/rebalance")
 async def rebalance_portfolio(
     db: AsyncSession = Depends(get_db),
@@ -128,3 +149,35 @@ async def rebalance_portfolio(
 
     return await get_rebalance_suggestions(db, _)
 
+
+class JournalNoteRequest(BaseModel):
+    note: str = Field(..., max_length=2000)
+
+
+@router.post("/journal/{order_id}/note", status_code=200)
+async def save_trade_note(
+    order_id: int,
+    req: JournalNoteRequest,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    return await trade_journal_service.save_note(db, _, order_id, req.note)
+
+
+@router.get("/journal/{order_id}")
+async def get_trade_note(
+    order_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    result = await trade_journal_service.get_note(db, _, order_id)
+    return result or {"order_id": order_id, "note": "", "ai_debrief": None, "has_debrief": False}
+
+
+@router.post("/journal/{order_id}/debrief")
+async def generate_trade_debrief(
+    order_id: int,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(get_current_user),
+):
+    return await trade_journal_service.generate_debrief(db, _, order_id)

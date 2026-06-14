@@ -2,12 +2,13 @@ import { NavLink, useNavigate, Outlet } from 'react-router-dom'
 import { useAuth } from '../contexts/AuthContext'
 import { usePermissions } from '../contexts/PermissionsContext'
 import { useTranslation } from '../contexts/LanguageContext'
+import { useCurrency, CURRENCIES, type Currency } from '../contexts/CurrencyContext'
 import {
   LayoutDashboard, Search, BookMarked, Briefcase,
   Settings, ScrollText, TrendingUp, LogOut, Clock,
   FlaskConical, PieChart, Loader2, ChevronRight,
   AlertCircle, AlertTriangle, CheckCircle, Info, X,
-  BarChart2, Bell, Menu, GitCompare, Shield, UserCircle, History,
+  BarChart2, Bell, Menu, GitCompare, Shield, UserCircle, History, Filter, Globe2,
 } from 'lucide-react'
 import { useEffect, useState, useCallback, Suspense } from 'react'
 import axios from 'axios'
@@ -54,8 +55,10 @@ const NAV_SECTIONS: NavSection[] = [
   {
     sectionKey: 'nav.section.market_tools',
     items: [
-      { to: '/watchlist',   key: 'nav.watchlist',    page: 'watchlist',   icon: BookMarked },
-      { to: '/alerts',      key: 'nav.alerts',       page: 'alerts',      icon: Bell },
+      { to: '/watchlist',        key: 'nav.watchlist',        page: 'watchlist', icon: BookMarked },
+      { to: '/screener',         key: 'nav.screener',         page: 'analysis',  icon: Filter },
+      { to: '/sector-rotation',  key: 'nav.sector_rotation',  page: 'analysis',  icon: Globe2 },
+      { to: '/alerts',           key: 'nav.alerts',           page: 'alerts',    icon: Bell },
     ]
   },
   {
@@ -74,6 +77,7 @@ export default function Layout() {
   const { canAccess } = usePermissions()
   const navigate = useNavigate()
   const { language, setLanguage, t } = useTranslation()
+  const { currency, setCurrency } = useCurrency()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [cronStatus, setCronStatus] = useState<{ next_run_time: string | null }>({ next_run_time: null })
   const [runningTask, setRunningTask] = useState<RunningTask | null>(() => {
@@ -293,7 +297,7 @@ export default function Layout() {
           </div>
         )}
 
-        {/* Language Selection & User Menu */}
+        {/* Language / Currency Selection & User Menu */}
         <div className="px-3 py-3 border-t border-white/[0.04] space-y-3 bg-gray-950/40">
           <div className="flex items-center justify-between px-3 text-[10px] text-slate-500 font-medium">
             <span>{t('settings.language')}</span>
@@ -315,6 +319,16 @@ export default function Layout() {
                 TR
               </button>
             </div>
+          </div>
+          <div className="flex items-center justify-between px-3 text-[10px] text-slate-500 font-medium">
+            <span>Currency</span>
+            <select
+              value={currency}
+              onChange={e => setCurrency(e.target.value as Currency)}
+              className="bg-white/[0.04] border border-white/[0.06] text-slate-300 text-[9px] font-bold rounded-lg px-2 py-0.5 outline-none cursor-pointer"
+            >
+              {CURRENCIES.map(c => <option key={c} value={c}>{c}</option>)}
+            </select>
           </div>
 
           <div className="flex items-center gap-3 px-3 py-2 rounded-xl hover:bg-white/[0.02] transition-colors group">

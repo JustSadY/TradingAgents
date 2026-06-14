@@ -5,6 +5,35 @@ import logging
 _logger = logging.getLogger(__name__)
 
 
+async def _log_delivery(
+    user_id: int,
+    event: str,
+    url: str,
+    success: bool,
+    status_code: int | None,
+    error: str | None,
+) -> None:
+    """Write a delivery record. Opens its own session to avoid conflicts."""
+    try:
+        from backend.core.database import AsyncSessionLocal
+        from backend.models.webhook_delivery import WebhookDelivery
+
+        async with AsyncSessionLocal() as db:
+            db.add(
+                WebhookDelivery(
+                    user_id=user_id,
+                    event=event,
+                    url=url[:500],
+                    success=success,
+                    status_code=status_code,
+                    error=(error or "")[:300] or None,
+                )
+            )
+            await db.commit()
+    except Exception:
+        pass  # never crash the caller
+
+
 def _build_payload(url: str, event: str, data: dict) -> dict:
     text = _format_text(event, data)
     if "hooks.slack.com" in url:
@@ -51,9 +80,18 @@ def _format_text(event: str, data: dict) -> str:
     return json.dumps(data)[:500]
 
 
-async def send_webhook(url: str, event: str, data: dict, retries: int = 2) -> bool:
+async def send_webhook(
+    url: str,
+    event: str,
+    data: dict,
+    retries: int = 2,
+    user_id: int | None = None,
+) -> bool:
     if not url:
         return False
+    result = False
+    last_status_code: int | None = None
+    last_error: str | None = None
     try:
         import httpx
 
@@ -62,17 +100,24 @@ async def send_webhook(url: str, event: str, data: dict, retries: int = 2) -> bo
             for attempt in range(retries + 1):
                 try:
                     r = await client.post(url, json=payload)
+                    last_status_code = r.status_code
                     if r.status_code < 300:
-                        return True
+                        result = True
+                        break
                     if attempt < retries:
                         await asyncio.sleep(2**attempt)
-                except httpx.RequestError:
+                except httpx.RequestError as exc:
+                    last_error = str(exc)
                     if attempt < retries:
                         await asyncio.sleep(2**attempt)
-        return False
     except Exception as exc:
         _logger.debug("Webhook failed: %s", exc)
-        return False
+        last_error = str(exc)
+
+    if user_id is not None:
+        asyncio.create_task(_log_delivery(user_id, event, url, result, last_status_code, last_error))
+
+    return result
 
 
 async def notify_analysis_complete(
@@ -84,6 +129,7 @@ async def notify_analysis_complete(
     events = _parse_events(getattr(settings, "webhook_events", "[]"))
     if "analysis_complete" not in events or not url:
         return
+    user_id = getattr(settings, "user_id", None)
     await send_webhook(
         url,
         "analysis_complete",
@@ -93,6 +139,7 @@ async def notify_analysis_complete(
             "trade_date": trade_date,
             "summary": (final_decision or "")[:300],
         },
+        user_id=user_id,
     )
 
 
@@ -103,8 +150,12 @@ async def notify_trade_executed(ticker: str, action: str, quantity: float, price
     events = _parse_events(getattr(settings, "webhook_events", "[]"))
     if "trade_executed" not in events or not url:
         return
+    user_id = getattr(settings, "user_id", None)
     await send_webhook(
-        url, "trade_executed", {"ticker": ticker, "action": action, "quantity": quantity, "price": price}
+        url,
+        "trade_executed",
+        {"ticker": ticker, "action": action, "quantity": quantity, "price": price},
+        user_id=user_id,
     )
 
 
@@ -117,16 +168,30 @@ async def notify_alert_triggered(
     events = _parse_events(getattr(settings, "webhook_events", "[]"))
     if "alert_triggered" not in events or not url:
         return
+    user_id = getattr(settings, "user_id", None)
     await send_webhook(
         url,
         "alert_triggered",
         {"ticker": ticker, "condition": condition, "target_price": target_price, "alert_type": alert_type},
+        user_id=user_id,
     )
 
 
 def _parse_events(raw: str) -> list[str]:
-    try:
-        return json.loads(raw) if raw else []
-    except Exception as exc:
-        _logger.warning("Malformed webhook_events setting, no webhooks will fire: %s", exc)
+    """Parse webhook_events — accepts both JSON array and legacy comma-separated formats."""
+    if not raw:
         return []
+    stripped = raw.strip()
+    # JSON array: '["a","b"]'
+    if stripped.startswith("["):
+        try:
+            result = json.loads(stripped)
+            return result if isinstance(result, list) else []
+        except Exception:
+            pass
+    # Anything that looks like a JSON object (starts with '{') is malformed — fail closed.
+    if stripped.startswith("{"):
+        _logger.warning("Malformed webhook_events value, no webhooks will fire: %.50s", stripped)
+        return []
+    # Legacy comma-separated: "analysis_complete,trade_executed"
+    return [p.strip() for p in stripped.split(",") if p.strip()]

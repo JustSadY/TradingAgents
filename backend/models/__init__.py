@@ -10,9 +10,12 @@ from .portfolio import Holding, Portfolio
 from .portfolio_analysis import MultiTickerAnalysis
 from .preset import ConfigPreset
 from .settings import AppSettings
+from .shared_report import SharedReport
 from .system_settings import SystemSettings
 from .tool_settings import AgentToolSetting, UserAgentAccess, UserToolAccess, UserToolFieldAccess
+from .trade_note import TradeNote
 from .user import User
+from .webhook_delivery import WebhookDelivery
 
 __all__ = [
     "AssistantMessage",
@@ -31,8 +34,11 @@ __all__ = [
     "AgentSetting",
     "ConfigPreset",
     "PriceAlert",
+    "SharedReport",
     "SystemSettings",
     "UserSettingPermission",
     "MultiTickerAnalysis",
     "NewsCache",
+    "TradeNote",
+    "WebhookDelivery",
 ]

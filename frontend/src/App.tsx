@@ -1,5 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import React, { lazy } from 'react'
+import React, { lazy, Suspense } from 'react'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PermissionsProvider } from './contexts/PermissionsContext'
 import RequirePage from './components/RequirePage'
@@ -23,8 +23,12 @@ const Alerts = lazy(() => import('./pages/Alerts'))
 const ABTesting = lazy(() => import('./pages/ABTesting'))
 const Profile = lazy(() => import('./pages/Profile'))
 const Admin = lazy(() => import('./pages/Admin'))
+const Screener = lazy(() => import('./pages/Screener'))
+const SectorRotation = lazy(() => import('./pages/SectorRotation'))
+const SharedReport = lazy(() => import('./pages/SharedReport'))
 
 import { LanguageProvider } from './contexts/LanguageContext'
+import { CurrencyProvider } from './contexts/CurrencyContext'
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -97,9 +101,15 @@ function AppRoutes() {
           element={isAdmin ? <Admin /> : <Navigate to="/dashboard" replace />} 
         />
 
+        <Route path="screener" element={<RequirePage page="analysis"><Screener /></RequirePage>} />
+        <Route path="sector-rotation" element={<RequirePage page="analysis"><SectorRotation /></RequirePage>} />
+
         {/* Catch-all within the layout */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
+
+      {/* Public shared report — no auth */}
+      <Route path="/share/:token" element={<Suspense fallback={null}><SharedReport /></Suspense>} />
 
       {/* 3. Global Fallback */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
@@ -113,9 +123,11 @@ export default function App() {
       <AuthProvider>
         <PermissionsProvider>
           <LanguageProvider>
-            <BrowserRouter>
-              <AppRoutes />
-            </BrowserRouter>
+            <CurrencyProvider>
+              <BrowserRouter>
+                <AppRoutes />
+              </BrowserRouter>
+            </CurrencyProvider>
           </LanguageProvider>
         </PermissionsProvider>
       </AuthProvider>

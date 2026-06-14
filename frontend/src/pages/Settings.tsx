@@ -1,9 +1,30 @@
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useState, useRef, useCallback } from 'react'
 import axios from 'axios'
 import {
   Save, BookmarkPlus, Trash2, Play, Bell,
-  Settings as SettingsIcon, Brain, ShieldAlert, Clock, Wrench, Database
+  Settings as SettingsIcon, Brain, ShieldAlert, Clock, Wrench, Database,
+  CheckCircle2, XCircle, RefreshCw
 } from 'lucide-react'
+
+/** Parse webhook_events — accepts JSON array or legacy comma-separated */
+function parseWebhookEvents(raw: string): string[] {
+  if (!raw) return []
+  const s = raw.trim()
+  if (s.startsWith('[')) {
+    try { const r = JSON.parse(s); return Array.isArray(r) ? r : [] } catch { /* fall through */ }
+  }
+  return s.split(',').map(x => x.trim()).filter(Boolean)
+}
+
+interface DeliveryRecord {
+  id: number
+  event: string
+  url: string
+  success: boolean
+  status_code: number | null
+  error: string | null
+  created_at: string
+}
 import { useMeta, triggerMetaRefetch } from '../hooks/useMeta'
 import { useAuth } from '../contexts/AuthContext'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
@@ -95,6 +116,15 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const [browserNotify, setBrowserNotify] = useState(isBrowserNotifyEnabled())
   const [webhookTesting, setWebhookTesting] = useState(false)
   const [webhookTestResult, setWebhookTestResult] = useState<string | null>(null)
+  const [deliveries, setDeliveries] = useState<DeliveryRecord[]>([])
+  const [loadingDeliveries, setLoadingDeliveries] = useState(false)
+  const loadDeliveries = useCallback(() => {
+    setLoadingDeliveries(true)
+    axios.get<DeliveryRecord[]>('/api/settings/webhook-deliveries')
+      .then(r => setDeliveries(r.data))
+      .catch(() => {})
+      .finally(() => setLoadingDeliveries(false))
+  }, [])
   const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'agents' | 'risk' | 'webhooks' | 'presets' | 'advanced' | 'cron' | 'tools' | 'memory'>('general')
   const [memoryStatus, setMemoryStatus] = useState<any>(null)
   const [pineconeKey, setPineconeKey] = useState('')
@@ -253,7 +283,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
             return (
               <button
                 key={tb.key}
-                onClick={() => setActiveTab(tb.key as any)}
+                onClick={() => { setActiveTab(tb.key as any); if (tb.key === 'webhooks') loadDeliveries() }}
                 className={`flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-bold transition-all whitespace-nowrap text-left w-full border border-transparent cursor-pointer ${
                   isActive
                     ? 'bg-violet-500/10 text-violet-300 border-violet-500/20 active-nav-glow'
@@ -494,11 +524,11 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       <input
                         type="checkbox"
                         className="accent-violet-600 rounded w-4 h-4 cursor-pointer"
-                        checked={s.webhook_events.includes(key)}
+                        checked={parseWebhookEvents(s.webhook_events).includes(key)}
                         onChange={e => {
-                          const events = s.webhook_events ? s.webhook_events.split(',').filter(Boolean) : []
+                          const events = parseWebhookEvents(s.webhook_events)
                           const next = e.target.checked ? [...events, key] : events.filter(x => x !== key)
-                          update('webhook_events', next.join(','))
+                          update('webhook_events', JSON.stringify(next))
                         }}
                       />
                       {label}
@@ -520,6 +550,42 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   </div>
                 </Row>
               )}
+
+              {/* Delivery History */}
+              <div className="mt-2 pt-4 border-t border-white/[0.04] space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Recent Deliveries</span>
+                  <button
+                    onClick={loadDeliveries}
+                    disabled={loadingDeliveries}
+                    className="p-1 rounded text-slate-600 hover:text-violet-400 transition cursor-pointer"
+                    title="Refresh delivery log"
+                  >
+                    <RefreshCw size={12} className={loadingDeliveries ? 'animate-spin' : ''} />
+                  </button>
+                </div>
+                {deliveries.length === 0 ? (
+                  <p className="text-[10px] text-slate-600 italic">No deliveries logged yet. Webhook events will appear here after they fire.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {deliveries.map(d => (
+                      <div key={d.id} className={`flex items-start gap-2.5 p-2.5 rounded-xl border text-[10px] ${d.success ? 'bg-emerald-500/5 border-emerald-500/10' : 'bg-rose-500/5 border-rose-500/10'}`}>
+                        {d.success
+                          ? <CheckCircle2 size={12} className="text-emerald-400 shrink-0 mt-0.5" />
+                          : <XCircle size={12} className="text-rose-400 shrink-0 mt-0.5" />}
+                        <div className="min-w-0 flex-1">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-white">{d.event.replace(/_/g, ' ')}</span>
+                            {d.status_code && <span className="text-slate-500">HTTP {d.status_code}</span>}
+                            <span className="text-slate-600 ml-auto">{new Date(d.created_at).toLocaleTimeString()}</span>
+                          </div>
+                          {d.error && <p className="text-rose-400 mt-0.5 truncate">{d.error}</p>}
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </Section>
           )}
 
