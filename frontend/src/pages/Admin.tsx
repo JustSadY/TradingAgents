@@ -1,11 +1,12 @@
 import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
-import { Save, Trash2, Plus, UserCog, ShieldCheck, Globe, CheckCircle2, Key, Sliders } from 'lucide-react'
+import { Save, Trash2, Plus, UserCog, ShieldCheck, Globe, CheckCircle2, Key, Sliders, BarChart3, RefreshCw, Zap, AlertTriangle, Clock, Wifi } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { useAuth } from '../contexts/AuthContext'
 import Settings from './Settings'
 import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
 import { useMeta } from '../hooks/useMeta'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
 
 interface UserRecord {
   id: number
@@ -40,7 +41,18 @@ function Section({ title, children }: { title: string; children: React.ReactNode
   )
 }
 
-type Tab = 'users' | 'permissions' | 'system' | 'api-keys' | 'user-settings'
+type Tab = 'users' | 'permissions' | 'system' | 'api-keys' | 'user-settings' | 'metrics'
+
+interface SystemMetrics {
+  total_runs: number
+  error_rate_pct: number
+  analysis_runs: Record<string, number>
+  analysis_duration: { count: number; sum_seconds: number; avg_seconds: number }
+  node_errors: Record<string, number>
+  node_fallbacks: Record<string, number>
+  node_retries: number
+  websocket_connections: number
+}
 
 export default function Admin() {
   const { t } = useTranslation()
@@ -63,6 +75,8 @@ export default function Admin() {
   const [keyError, setKeyError] = useState<string | null>(null)
   const [systemSettings, setSystemSettings] = useState<any>(null)
   const [sysSaved, setSysSaved] = useState(false)
+  const [sysMetrics, setSysMetrics] = useState<SystemMetrics | null>(null)
+  const [metricsLoading, setMetricsLoading] = useState(false)
 
   const loadUsers = useCallback(async () => {
     const r = await axios.get('/api/users')
@@ -76,6 +90,14 @@ export default function Admin() {
     } catch (err) {
       console.error('Failed to load system settings:', err)
     }
+  }, [])
+
+  const loadMetrics = useCallback(async () => {
+    setMetricsLoading(true)
+    try {
+      const r = await axios.get('/api/admin/system-metrics')
+      setSysMetrics(r.data)
+    } catch { /* admin-only */ } finally { setMetricsLoading(false) }
   }, [])
 
   useEffect(() => {
@@ -201,6 +223,7 @@ export default function Admin() {
     { key: 'user-settings', label: t('admin.tab_user_settings') || 'User Preferences', icon: <Sliders size={14} /> },
     { key: 'system',      label: t('admin.tab_system') || 'Global Settings',       icon: <Globe size={14} /> },
     { key: 'api-keys',    label: t('admin.tab_apikeys') || 'User API Keys',        icon: <Key size={14} /> },
+    { key: 'metrics',     label: 'System Metrics',                                  icon: <BarChart3 size={14} /> },
   ]
 
   return (
@@ -731,6 +754,114 @@ export default function Admin() {
             {selectedUserId && (
               <div className="border-t border-white/[0.04] pt-4 mt-4">
                 <Settings userId={selectedUserId} />
+              </div>
+            )}
+          </Section>
+        )}
+
+        {tab === 'metrics' && (
+          <Section title="System Metrics">
+            <div className="flex items-center justify-between">
+              <p className="text-[10px] text-slate-500">Live Prometheus counters — metrics reset on server restart</p>
+              <button
+                onClick={loadMetrics}
+                disabled={metricsLoading}
+                className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-amber-600/20 hover:bg-amber-600/30 border border-amber-500/20 text-amber-300 text-[10px] font-bold transition cursor-pointer disabled:opacity-40"
+              >
+                <RefreshCw size={10} className={metricsLoading ? 'animate-spin' : ''} /> Refresh
+              </button>
+            </div>
+
+            {!sysMetrics && !metricsLoading && (
+              <div className="text-center py-10 opacity-50">
+                <BarChart3 size={28} className="mx-auto text-slate-600 mb-2" />
+                <p className="text-[10px] text-slate-500 font-semibold">Click Refresh to load current metrics</p>
+              </div>
+            )}
+
+            {metricsLoading && (
+              <div className="text-center py-10 opacity-50">
+                <RefreshCw size={20} className="mx-auto animate-spin text-amber-400 mb-2" />
+                <p className="text-[10px] text-slate-500">Loading…</p>
+              </div>
+            )}
+
+            {sysMetrics && !metricsLoading && (
+              <div className="space-y-5">
+                {/* KPI row */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  {[
+                    { label: 'Total Runs', value: sysMetrics.total_runs, icon: <Zap size={13} />, color: 'text-violet-400' },
+                    { label: 'Avg Duration', value: `${sysMetrics.analysis_duration.avg_seconds}s`, icon: <Clock size={13} />, color: 'text-sky-400' },
+                    { label: 'Error Rate', value: `${sysMetrics.error_rate_pct}%`, icon: <AlertTriangle size={13} />, color: sysMetrics.error_rate_pct > 5 ? 'text-rose-400' : 'text-emerald-400' },
+                    { label: 'Active WS', value: String(sysMetrics.websocket_connections), icon: <Wifi size={13} />, color: 'text-amber-400' },
+                  ].map(k => (
+                    <div key={k.label} className="bg-white/[0.02] border border-white/[0.04] rounded-xl p-3 flex items-center gap-2.5">
+                      <div className="text-amber-400 shrink-0">{k.icon}</div>
+                      <div className="min-w-0">
+                        <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider truncate">{k.label}</p>
+                        <p className={`text-base font-display font-bold leading-tight ${k.color}`}>{k.value}</p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Analysis runs by status */}
+                {Object.keys(sysMetrics.analysis_runs).length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Analysis Runs by Status</p>
+                    <div className="h-36">
+                      <ResponsiveContainer width="100%" height="100%">
+                        <BarChart data={Object.entries(sysMetrics.analysis_runs).map(([k, v]) => ({ status: k, count: v }))} barCategoryGap="40%">
+                          <XAxis dataKey="status" tick={{ fontSize: 10, fill: '#94a3b8' }} tickLine={false} axisLine={false} />
+                          <YAxis tick={{ fontSize: 10, fill: '#64748b' }} tickLine={false} axisLine={false} />
+                          <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '10px', fontSize: '10px' }} />
+                          <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                            {Object.entries(sysMetrics.analysis_runs).map(([k], i) => (
+                              <Cell key={i} fill={k === 'completed' ? '#10b981' : k === 'failed' ? '#f43f5e' : '#8b5cf6'} />
+                            ))}
+                          </Bar>
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </div>
+                  </div>
+                )}
+
+                {/* Node-level errors */}
+                {Object.keys(sysMetrics.node_errors).length > 0 && (
+                  <div>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Node Errors & Fallbacks</p>
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-xs text-slate-300 min-w-[380px]">
+                        <thead>
+                          <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
+                            <th className="px-4 py-2.5 text-left font-bold">Node</th>
+                            <th className="px-4 py-2.5 text-right font-bold">Errors</th>
+                            <th className="px-4 py-2.5 text-right font-bold">Fallbacks</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-white/[0.02]">
+                          {Object.entries(sysMetrics.node_errors).map(([node, errs]) => (
+                            <tr key={node} className="hover:bg-white/[0.01] transition-colors">
+                              <td className="px-4 py-3 text-slate-300 font-mono text-[10px]">{node}</td>
+                              <td className="px-4 py-3 text-right text-rose-400 font-mono font-bold">{errs}</td>
+                              <td className="px-4 py-3 text-right text-amber-400 font-mono">{sysMetrics.node_fallbacks[node] ?? 0}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center gap-4 pt-2 border-t border-white/[0.04]">
+                  <div className="text-[10px] text-slate-500">
+                    Total retries: <span className="text-slate-300 font-mono font-bold">{sysMetrics.node_retries}</span>
+                  </div>
+                  <div className="text-[10px] text-slate-500">
+                    Completed analyses used in duration avg: <span className="text-slate-300 font-mono font-bold">{sysMetrics.analysis_duration.count}</span>
+                  </div>
+                </div>
               </div>
             )}
           </Section>

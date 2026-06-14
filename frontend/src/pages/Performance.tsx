@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
-import { BarChart2, TrendingUp, TrendingDown, Target, Search, Activity, Trophy, Skull, ShieldAlert } from 'lucide-react'
-import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell } from 'recharts'
+import { BarChart2, TrendingUp, TrendingDown, Target, Search, Activity, Trophy, Skull, ShieldAlert, Zap, DollarSign } from 'lucide-react'
+import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts'
 import { useTranslation } from '../contexts/LanguageContext'
 
 interface TradingStats {
@@ -40,6 +40,24 @@ interface AttributionItem {
   weight: number
 }
 
+interface TokenBreakdown {
+  provider: string
+  model: string
+  tokens_in: number
+  tokens_out: number
+  analyses: number
+  estimated_cost_usd: number
+}
+
+interface TokenUsage {
+  total_tokens_in: number
+  total_tokens_out: number
+  total_tokens: number
+  total_cost_usd: number
+  breakdown: TokenBreakdown[]
+  daily: { day: string; tokens_in: number; tokens_out: number; analyses: number }[]
+}
+
 function ReturnCell({ value }: { value: number | null }) {
   if (value === null) return <span className="text-slate-600 font-semibold">—</span>
   const pct = (value * 100).toFixed(2)
@@ -55,6 +73,7 @@ export default function Performance() {
   const [ticker, setTicker] = useState('')
   const [filterTicker, setFilterTicker] = useState('')
   const [loading, setLoading] = useState(true)
+  const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null)
 
   const load = async (ti?: string) => {
     setLoading(true)
@@ -72,7 +91,10 @@ export default function Performance() {
     } finally { setLoading(false) }
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => {
+    load()
+    axios.get('/api/analytics/token-usage').then(r => setTokenUsage(r.data)).catch(() => {})
+  }, [])
 
   const handleFilter = () => { setFilterTicker(ticker); load(ticker || undefined) }
 
@@ -355,6 +377,122 @@ export default function Performance() {
           <BarChart2 size={36} className="mx-auto text-slate-600 mb-3 opacity-30" />
           <p className="text-slate-400 text-xs font-semibold">{t('performance.empty_title')}</p>
           <p className="text-[10px] text-slate-500 mt-1">{t('performance.empty_subtitle')}</p>
+        </div>
+      )}
+
+      {/* ── LLM Token & Cost Usage ──────────────────────────────────────── */}
+      {tokenUsage && tokenUsage.total_tokens > 0 && (
+        <div className="glass-panel rounded-2xl overflow-hidden border border-white/[0.04]">
+          <div className="px-5 py-3.5 border-b border-white/[0.04] flex items-center gap-2">
+            <Zap size={14} className="text-amber-400" />
+            <span className="text-sm font-bold text-white">LLM Token & Cost Usage</span>
+            <span className="text-[10px] text-slate-500 ml-1">— estimated based on public pricing</span>
+          </div>
+          <div className="p-5 space-y-5">
+            {/* KPI row */}
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              {[
+                { label: 'Total Tokens', value: tokenUsage.total_tokens.toLocaleString(), icon: <Zap size={13} />, color: 'text-amber-400' },
+                { label: 'Input Tokens', value: tokenUsage.total_tokens_in.toLocaleString(), icon: <TrendingUp size={13} />, color: 'text-sky-400' },
+                { label: 'Output Tokens', value: tokenUsage.total_tokens_out.toLocaleString(), icon: <TrendingDown size={13} />, color: 'text-violet-400' },
+                { label: 'Est. Cost (USD)', value: `$${tokenUsage.total_cost_usd.toFixed(4)}`, icon: <DollarSign size={13} />, color: 'text-emerald-400' },
+              ].map(k => (
+                <div key={k.label} className="bg-white/[0.02] border border-white/[0.04] rounded-xl p-3 flex items-center gap-2.5">
+                  <div className="text-amber-400 shrink-0">{k.icon}</div>
+                  <div className="min-w-0">
+                    <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider truncate">{k.label}</p>
+                    <p className={`text-base font-display font-bold leading-tight ${k.color}`}>{k.value}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
+              {/* Provider cost pie */}
+              {tokenUsage.breakdown.length > 1 && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Cost by Provider</p>
+                  <div className="h-44">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <PieChart>
+                        <Pie
+                          data={tokenUsage.breakdown.map(b => ({ name: b.provider, value: b.estimated_cost_usd }))}
+                          innerRadius={40}
+                          outerRadius={65}
+                          paddingAngle={4}
+                          dataKey="value"
+                          stroke="none"
+                        >
+                          {tokenUsage.breakdown.map((_, i) => (
+                            <Cell key={i} fill={['#8b5cf6', '#10b981', '#f59e0b', '#3b82f6', '#ec4899'][i % 5]} />
+                          ))}
+                        </Pie>
+                        <Tooltip
+                          formatter={((v: unknown) => [`$${Number(v ?? 0).toFixed(4)}`, 'Est. Cost']) as unknown as undefined}
+                          contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '10px', fontSize: '10px' }}
+                        />
+                        <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+
+              {/* Daily token trend */}
+              {tokenUsage.daily.length > 1 && (
+                <div>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Daily Token Usage (last 30 days)</p>
+                  <div className="h-44">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <BarChart data={tokenUsage.daily} barCategoryGap="30%">
+                        <XAxis dataKey="day" tick={{ fontSize: 8, fill: '#64748b' }} tickLine={false} axisLine={false}
+                          tickFormatter={d => d.slice(5)} interval="preserveStartEnd" />
+                        <YAxis tick={{ fontSize: 8, fill: '#64748b' }} tickLine={false} axisLine={false}
+                          tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
+                        <Tooltip
+                          contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '10px', fontSize: '10px' }}
+                          formatter={((v: unknown, name: unknown) => [Number(v ?? 0).toLocaleString(), name === 'tokens_in' ? 'Input' : 'Output']) as unknown as undefined}
+                        />
+                        <Bar dataKey="tokens_in" fill="#38bdf8" stackId="a" radius={[0, 0, 0, 0]} />
+                        <Bar dataKey="tokens_out" fill="#8b5cf6" stackId="a" radius={[3, 3, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Provider / model breakdown table */}
+            <div>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Model Breakdown</p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs text-slate-300 min-w-[480px]">
+                  <thead>
+                    <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
+                      <th className="px-4 py-2.5 text-left font-bold">Provider</th>
+                      <th className="px-4 py-2.5 text-left font-bold">Model</th>
+                      <th className="px-4 py-2.5 text-right font-bold">Analyses</th>
+                      <th className="px-4 py-2.5 text-right font-bold">Input Tokens</th>
+                      <th className="px-4 py-2.5 text-right font-bold">Output Tokens</th>
+                      <th className="px-4 py-2.5 text-right font-bold">Est. Cost</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-white/[0.02]">
+                    {tokenUsage.breakdown.map((b, i) => (
+                      <tr key={i} className="hover:bg-white/[0.01] transition-colors">
+                        <td className="px-4 py-3 text-slate-300 font-semibold capitalize">{b.provider}</td>
+                        <td className="px-4 py-3 text-slate-400 font-mono text-[10px]">{b.model}</td>
+                        <td className="px-4 py-3 text-right text-slate-400">{b.analyses}</td>
+                        <td className="px-4 py-3 text-right text-sky-400 font-mono">{b.tokens_in.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right text-violet-400 font-mono">{b.tokens_out.toLocaleString()}</td>
+                        <td className="px-4 py-3 text-right text-emerald-400 font-mono font-bold">${b.estimated_cost_usd.toFixed(4)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
         </div>
       )}
     </div>

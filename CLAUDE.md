@@ -227,6 +227,17 @@ In FastAPI routers, always declare **static paths before dynamic/parameterized p
 | `/api/assistant/history` | GET | Yes | Fetch portfolio assistant conversation history |
 | `/api/assistant/chat` | POST | Yes | Send message to portfolio assistant (tool-calling LLM) |
 | `/api/assistant/history` | DELETE | Yes | Clear assistant conversation history |
+| `/api/screener/scan` | POST | Yes | Score tickers by momentum/trend/volume/RSI |
+| `/api/screener/scan-watchlist` | POST | Yes | Run screener on user's watchlist |
+| `/api/market/sector-rotation` | GET | Yes | SPDR sector ETF momentum data (30-min cache) |
+| `/api/market/patterns/{ticker}` | GET | Yes | Detect technical chart patterns (numpy) |
+| `/api/market/fx-rates` | GET | Yes | FX rates for 8 currencies (1-hour cache) |
+| `/api/market/daily-summary` | GET | Yes | Latest AI morning market brief |
+| `/api/market/daily-summary/generate` | POST | Yes | Generate AI morning brief (LLM + yfinance) |
+| `/api/analysis/{id}/share` | POST | Yes | Create 48-hour shareable report token |
+| `/api/share/{token}` | GET | — | Public shared report (no auth) |
+| `/api/settings/webhook-deliveries` | GET | Yes | Webhook delivery log (success/fail history) |
+| `/api/trading/portfolio-stats` | GET | Yes | Paper trading performance stats (Sharpe, drawdown, win rate) |
 | `/metrics` | GET | Bearer token | Prometheus metrics (enabled via `METRICS_TOKEN` in `.env`; 404 when unset) |
 | `/ws/analysis/{task_id}` | WS | Token | Stream live LangGraph progress + reports |
 
@@ -270,6 +281,87 @@ class MyTool(BaseAgentTool):
 - User-scoped overrides: `/api/settings/tools` (user)
 - `UserToolAccess`: can_view, can_use, can_edit, can_enable per tool
 - `UserToolFieldAccess`: field-level visibility overrides
+
+### Stock Screener (`/screener`)
+
+Scores and ranks tickers by composite momentum:
+- **Modes:** Default universe (S&P 100 subset), Custom tickers, My Watchlist
+- **Signals:** Momentum, Trend (SMA), Volume Surge, RSI position — each 0–100 bar
+- **Actions:** One-click "Analyse" to launch AI analysis; chart link per result
+- **Backend:** `backend/api/screener.py` → `GET/POST /api/screener/scan`
+
+### Sector Rotation Map (`/sector-rotation`)
+
+Tracks all 11 SPDR sector ETFs (XLK, XLF, XLE, XLV, XLY, XLP, XLI, XLB, XLU, XLRE, XLC):
+- **Metrics per sector:** 1W/1M/3M return, RSI(14), SMA20 position, volume ratio, composite momentum score
+- **UI:** Color-coded heat map cards (emerald → rose), leader/laggard summary, sortable by any timeframe
+- **Cache:** 30-minute server-side cache; `GET /api/market/sector-rotation`
+- **Backend:** `backend/services/sector_rotation_service.py`, `backend/api/sector_rotation.py`
+
+### Technical Pattern Detection (Chart page → "Patterns" toggle)
+
+Pure-numpy pattern recognition running on downloaded OHLCV history:
+- **Patterns:** Double Top/Bottom, Head & Shoulders, Inverse H&S, Bull/Bear Flag
+- **Output per pattern:** direction (bullish/bearish), date range, key price points, confidence score
+- **Breakout detection:** Confirms pattern if price breaks neckline/support after formation
+- **Backend:** `backend/services/pattern_detection_service.py`, `GET /api/market/patterns/{ticker}?period=1y`
+- **Frontend:** Toggle button in Chart page TechnicalControls; expandable panel with pattern cards
+
+### Shareable Analysis Reports
+
+- `POST /api/analysis/{id}/share` — creates a 48-hour public token; stores in `SharedReport` model
+- `GET /api/share/{token}` — public, no-auth endpoint returns safe analysis subset
+- **Frontend:** Share button in Analysis detail panel; copies link to clipboard
+- **Page:** `frontend/src/pages/SharedReport.tsx` (standalone, no layout wrapper)
+
+### Webhook / Notification System
+
+- Configurable webhook URL + event filter in Settings → Webhooks tab
+- Events: `analysis_complete`, `alert_triggered`, `order_filled`, `risk_breach`
+- **Delivery log:** Each webhook call logged to `WebhookDelivery` model; visible in Settings
+- Dual-format `_parse_events`: handles both JSON array `["a","b"]` and legacy comma-separated `"a,b"`
+- **Backend:** `backend/services/notification_service.py`, `backend/models/webhook_delivery.py`
+
+### Daily AI Market Brief (Dashboard widget)
+
+- `POST /api/market/daily-summary/generate` — fetches watchlist prices (yfinance) + sector data, calls user's configured LLM, stores result
+- `GET /api/market/daily-summary` — returns latest stored summary
+- **Frontend:** "AI Morning Brief" card on Dashboard with Generate/Regenerate button
+- **Model:** `MarketDailySummary` (user-scoped, date-indexed)
+- **Backend:** `backend/services/daily_summary_service.py`, `backend/api/daily_summary.py`
+
+### CSV Export
+
+Client-side CSV download (no library; BOM for Excel compatibility):
+- **Portfolio page:** Holdings with ticker, qty, avg price, market value, unrealized P&L
+- **Orders page:** Full trade ledger with action, price, total, realized P&L, signal
+- **Analysis history:** Ticker, date, signal, duration, LLM provider/model
+- **Utility:** `frontend/src/utils/csvExport.ts` — `downloadCSV`, `exportPortfolioCSV`, `exportOrdersCSV`, `exportAnalysesCSV`
+
+### Trade Journal (Orders page)
+
+- Per-order note editor accessible via notebook icon on each order row
+- AI debrief available for closed (SELL) positions
+- **Model:** `TradeNote` (order_id FK, note text, ai_debrief)
+- **Backend:** `backend/repositories/trade_note.py`, integrated into Orders API
+
+### Risk Dashboard (Portfolio page)
+
+- Inline panel in Portfolio: beta, annualized volatility, sector concentration, holdings risk table
+- **Backend:** `backend/services/risk_dashboard_service.py`, `GET /api/trading/risk-dashboard`
+
+### Multi-Currency Support
+
+- `CurrencyContext` fetches live FX rates from `GET /api/market/fx-rates` (1-hour cache, yfinance)
+- Supported: USD, EUR, GBP, TRY, JPY, CAD, AUD, CHF
+- Currency selector in sidebar footer; preference persisted in `localStorage` (`ta_currency`)
+- **Backend:** `backend/api/fx.py`
+
+### PWA (Progressive Web App)
+
+- `frontend/public/manifest.json` — standalone display, theme colour `#0f172a`, finance category
+- Apple mobile meta tags in `index.html`
+- Enables "Add to Home Screen" on iOS/Android
 
 ### Interactive Charting & AI Formula Assistant
 
@@ -577,6 +669,13 @@ backend/
 │   ├── portfolio_assistant_service.py # Portfolio assistant LLM + tool-calling
 │   ├── tool_access_service.py # Agent/tool permission resolution
 │   ├── trading_orchestrator.py # Paper trading order logic
+│   ├── notification_service.py # Webhook delivery + event filtering
+│   ├── sector_rotation_service.py # SPDR sector ETF data (30-min cache)
+│   ├── pattern_detection_service.py # Numpy chart pattern algorithms
+│   ├── daily_summary_service.py # AI morning brief generation
+│   ├── risk_dashboard_service.py # Portfolio beta/volatility/concentration
+│   ├── trade_journal_service.py # Per-order notes + AI debriefs
+│   ├── portfolio_rebalance_service.py # AI portfolio rebalance suggestions
 │   ├── cron_service.py
 │   └── ...
 ├── repositories/              # Data access (apply scope_to_user!)
@@ -641,16 +740,20 @@ backend/
 
 frontend/
 ├── src/
-│   ├── pages/                 # 16 pages: Dashboard, Analysis, Chart, MockTrading, Portfolio,
+│   ├── pages/                 # 19 pages: Dashboard, Analysis, Chart, MockTrading, Portfolio,
 │   │                          #   Watchlist, Orders, Performance, Backtest, Alerts, ABTesting,
-│   │                          #   Logs, Settings, Profile, Admin, Login
+│   │                          #   Logs, Settings, Profile, Admin, Login,
+│   │                          #   Screener, SectorRotation, SharedReport (public)
 │   ├── components/
 │   │   ├── Layout.tsx         # App shell with sidebar nav + Portfolio Assistant widget
 │   │   ├── assistant/
 │   │   │   └── PortfolioAssistant.tsx  # Floating AI chat widget (bottom-right, all pages)
 │   │   ├── analysis/          # AnalysisChatWidget, report viewers
 │   │   └── chart/             # ChartSearch, TechnicalControls, CustomIndicatorPane, AnalysisDetailSidebar
-│   ├── contexts/              # Auth, Theme, Language
+│   ├── contexts/              # Auth, Theme, Language, CurrencyContext (8-currency FX)
+│   ├── utils/
+│   │   ├── exportReport.ts    # Markdown + PDF export for analysis reports
+│   │   └── csvExport.ts       # CSV download utility (portfolio, orders, analyses)
 │   ├── hooks/                 # API queries, local storage
 │   ├── i18n/                  # Translation dicts (en, tr)
 │   ├── App.tsx
@@ -786,4 +889,19 @@ See `docs/developer_guide.md` sections 5A–5I for:
 
 ## ✅ Maintenance Note
 
-Last validated against the codebase on 2026-06-13 (READMEs, architecture docs, and direct code exploration; analyst count, agent_catalog/personas single-sources, Redis scaling layer, and file paths cross-checked against the tree). Added: chart page + AI formula assistant, Portfolio Assistant widget. If behaviour described here diverges from the code, trust the code — and update this file in the same change.
+Last validated against the codebase on 2026-06-14 (READMEs, architecture docs, and direct code exploration; all new routes, models, services, and frontend pages cross-checked against the tree).
+
+**Features added since the initial release:**
+- Stock Screener page (`/screener`) — momentum/trend/volume/RSI scoring
+- Sector Rotation Map (`/sector-rotation`) — 11 SPDR ETFs, heat map, 30-min cache
+- Technical Pattern Detection — Double Top/Bottom, H&S, Flags (numpy, Chart page toggle)
+- Shareable Analysis Reports — 48-hour public token, `/share/:token` public page
+- Webhook / Notification System — configurable events, delivery log in Settings
+- Daily AI Market Brief — LLM morning summary on Dashboard (watchlist + sectors)
+- CSV Export — Portfolio positions, order ledger, analysis history (BOM for Excel)
+- Trade Journal — per-order notes + AI debrief (Orders page)
+- Risk Dashboard — beta, volatility, sector concentration (Portfolio page)
+- Multi-Currency — 8 currencies, live FX rates, sidebar selector, localStorage persistence
+- PWA — manifest.json + apple meta tags for mobile install
+
+If behaviour described here diverges from the code, trust the code — and update this file in the same change.

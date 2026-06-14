@@ -1,8 +1,9 @@
 import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
-import { TrendingUp, TrendingDown, DollarSign, Briefcase, Loader2, AlertCircle, RefreshCw, PieChart, Sparkles, X, CheckCircle2, ShieldAlert, Activity, ChevronDown, ChevronUp } from 'lucide-react'
+import { TrendingUp, TrendingDown, DollarSign, Briefcase, Loader2, AlertCircle, RefreshCw, PieChart, Sparkles, X, CheckCircle2, ShieldAlert, Activity, ChevronDown, ChevronUp, Download } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
+import { exportPortfolioCSV } from '../utils/csvExport'
 
 interface Holding {
   id: number
@@ -203,6 +204,17 @@ export default function Portfolio() {
           <p className="text-xs text-slate-500 mt-1">Review active assets allocations, average cost basis, and real-time ledger returns</p>
         </div>
         <div className="flex items-center gap-2">
+          <button
+            onClick={() => exportPortfolioCSV(
+              holdings.map(h => ({ ...h, current_price: h.current_price ?? 0, unrealized_pnl: h.unrealized_pnl ?? 0 })),
+              portfolios[0]?.cash_available ?? 0
+            )}
+            disabled={holdings.length === 0}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-40"
+            title="Export CSV"
+          >
+            <Download size={13} /> CSV
+          </button>
           <button
             onClick={loadRiskDashboard}
             disabled={loadingRisk || holdings.length === 0}

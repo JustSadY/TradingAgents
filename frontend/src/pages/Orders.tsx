@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import axios from 'axios'
-import { Briefcase, RefreshCw, NotebookPen, X, Save, Sparkles, Loader2, Bot } from 'lucide-react'
+import { Briefcase, RefreshCw, NotebookPen, X, Save, Sparkles, Loader2, Bot, Download } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
+import { exportOrdersCSV } from '../utils/csvExport'
 
 interface Order {
   id: number
@@ -219,6 +220,14 @@ export default function Orders() {
           <p className="text-xs text-slate-500 mt-1">Review ledger transactions executed by either simulated models or live accounts</p>
         </div>
         <div className="flex items-center gap-2 self-end sm:self-auto">
+          <button
+            onClick={() => exportOrdersCSV(orders)}
+            disabled={orders.length === 0}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-40"
+            title="Export CSV"
+          >
+            <Download size={13} /> CSV
+          </button>
           <button
             onClick={loadOrders}
             disabled={loading}
