@@ -52,10 +52,25 @@ async def get_sector_rotation() -> list[dict[str, Any]]:
             period="6mo",
             progress=False,
             auto_adjust=True,
+            threads=False,
         )
 
     loop = asyncio.get_event_loop()
-    raw = await loop.run_in_executor(None, _fetch)
+    max_retries = 3
+    delay = 1.0
+    raw = None
+    for attempt in range(max_retries):
+        try:
+            raw = await loop.run_in_executor(None, _fetch)
+            if raw is not None and not getattr(raw, "empty", False):
+                break
+        except Exception as exc:
+            if attempt < max_retries - 1:
+                await asyncio.sleep(delay)
+                delay *= 2
+            else:
+                raise
+
 
     results: list[dict[str, Any]] = []
     for ticker, name in SECTORS.items():

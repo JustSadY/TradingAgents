@@ -2,7 +2,7 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from backend.core.security import get_current_user
+from backend.api.deps import get_current_user
 from backend.models.user import User
 from backend.services.pattern_detection_service import detect_patterns
 
