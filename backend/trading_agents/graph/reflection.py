@@ -25,8 +25,13 @@ class Reflector:
         alpha_return: float,
         benchmark_name: str = "SPY",
     ) -> str:
+        from backend.trading_agents.dataflows.config import get_config
+
+        lang = get_config().get("output_language", "English")
+        lang_inst = "" if lang.strip().lower() == "english" else f"\nWrite your entire response in {lang}."
+
         messages = [
-            ("system", self.log_reflection_prompt),
+            ("system", self.log_reflection_prompt + lang_inst),
             (
                 "human",
                 (

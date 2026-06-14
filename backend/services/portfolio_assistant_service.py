@@ -84,7 +84,10 @@ async def chat(db: AsyncSession, user: User, message: str) -> dict:
 
     history = await assistant_repo.get_messages(db, user.id, limit=_HISTORY_LIMIT)
 
-    system_content = _SYSTEM_PROMPT.format(date=datetime.now(UTC).strftime("%Y-%m-%d"))
+    lang = (settings.output_language or "English").strip()
+    lang_inst = "" if lang.lower() == "english" else f" Write your entire response in {lang}."
+
+    system_content = _SYSTEM_PROMPT.format(date=datetime.now(UTC).strftime("%Y-%m-%d")) + lang_inst
     lc_messages = [SystemMessage(content=system_content)]
     for msg in history:
         lc_messages.append(HumanMessage(content=msg.content) if msg.role == "user" else AIMessage(content=msg.content))
