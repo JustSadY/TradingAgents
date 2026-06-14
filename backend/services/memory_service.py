@@ -58,12 +58,25 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
             embedder_kind = getattr(row, "memory_embedder", None) or "pinecone"
             embed_model = getattr(row, "pinecone_embed_model", None) or "llama-text-embed-v2"
             openai_embed_model = getattr(row, "memory_openai_embed_model", None) or "text-embedding-3-small"
+            ollama_embed_model = getattr(row, "memory_ollama_embed_model", None) or "nomic-embed-text"
+
+            # Resolve Ollama base URL: stored in the "ollama" api_key slot.
+            # If the value starts with "http" it's a custom host; otherwise use localhost.
+            raw_ollama_key = get_user_api_key(user, "ollama", fernet) if embedder_kind == "ollama" else None
+            if raw_ollama_key and raw_ollama_key.startswith("http"):
+                ollama_base_url = raw_ollama_key.rstrip("/")
+            else:
+                ollama_base_url = "http://localhost:11434"
 
             if store_kind == "pgvector":
-                openai_key = get_user_api_key(user, "openai", fernet)
-                if not openai_key:
-                    return None  # pgvector embeds client-side; needs the user's OpenAI key
-                pinecone_key = None
+                if embedder_kind == "ollama":
+                    openai_key = None
+                    pinecone_key = None
+                else:
+                    openai_key = get_user_api_key(user, "openai", fernet)
+                    if not openai_key:
+                        return None  # pgvector needs OpenAI key when not using Ollama
+                    pinecone_key = None
             else:
                 pinecone_key = get_user_api_key(user, "pinecone", fernet)
                 if not pinecone_key:
@@ -76,12 +89,20 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
         return None
 
     if store_kind == "pgvector":
-        cache_key = ("pgvector", openai_embed_model, openai_key)
-        if cache_key not in _store_cache:
-            _store_cache[cache_key] = build_pgvector_store(
-                openai_api_key=openai_key,
-                openai_embed_model=openai_embed_model,
-            )
+        if embedder_kind == "ollama":
+            cache_key = ("pgvector", "ollama", ollama_base_url, ollama_embed_model)
+            if cache_key not in _store_cache:
+                _store_cache[cache_key] = build_pgvector_store(
+                    ollama_base_url=ollama_base_url,
+                    ollama_embed_model=ollama_embed_model,
+                )
+        else:
+            cache_key = ("pgvector", openai_embed_model, openai_key)
+            if cache_key not in _store_cache:
+                _store_cache[cache_key] = build_pgvector_store(
+                    openai_api_key=openai_key,
+                    openai_embed_model=openai_embed_model,
+                )
         return _store_cache[cache_key]
 
     cache_key = (
@@ -92,6 +113,7 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
         embedder_kind,
         embed_model,
         openai_embed_model,
+        ollama_embed_model,
         pinecone_key,
         openai_key,
     )
@@ -105,6 +127,8 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
             embed_model=embed_model,
             openai_api_key=openai_key,
             openai_embed_model=openai_embed_model,
+            ollama_base_url=ollama_base_url,
+            ollama_embed_model=ollama_embed_model,
         )
     return _store_cache[cache_key]
 

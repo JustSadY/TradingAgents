@@ -71,6 +71,7 @@ interface Settings {
   memory_embedder: string
   pinecone_embed_model: string
   memory_openai_embed_model: string
+  memory_ollama_embed_model: string
   agent_qa_enabled: boolean
   anthropic_prompt_caching: boolean
   max_report_chars_in_prompts: number
@@ -726,16 +727,23 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     <select className={Input} value={s.memory_embedder} onChange={e => update('memory_embedder', e.target.value)}>
                       <option value="pinecone">Pinecone hosted (no extra key)</option>
                       <option value="openai">OpenAI (uses your OpenAI key)</option>
+                      <option value="ollama">Ollama (local, free)</option>
                     </select>
                   </Row>
-                  {s.memory_embedder === 'openai' ? (
+                  {s.memory_embedder === 'openai' && (
                     <Row label="OpenAI Embed Model"><input className={Input} value={s.memory_openai_embed_model} onChange={e => update('memory_openai_embed_model', e.target.value)} /></Row>
-                  ) : (
+                  )}
+                  {s.memory_embedder === 'ollama' && (
+                    <Row label="Ollama Embed Model">
+                      <input className={Input} value={s.memory_ollama_embed_model} onChange={e => update('memory_ollama_embed_model', e.target.value)} placeholder="nomic-embed-text" />
+                    </Row>
+                  )}
+                  {s.memory_embedder === 'pinecone' && (
                     <Row label="Embed Model"><input className={Input} value={s.pinecone_embed_model} onChange={e => update('pinecone_embed_model', e.target.value)} /></Row>
                   )}
                   <Row label="">
                     <p className="text-[10px] text-slate-600 leading-relaxed">
-                      Use the Save button above to persist the index/embedder settings. Memory stays off until a Pinecone API key is added, and each user's memory is isolated. The OpenAI embedder reuses your OpenAI API key from Profile.
+                      Use the Save button above to persist the index/embedder settings. Memory stays off until a Pinecone API key is added, and each user's memory is isolated. The OpenAI embedder reuses your OpenAI key from Profile. The Ollama embedder uses your local Ollama instance (configure host in Profile → Ollama).
                     </p>
                   </Row>
                 </>
