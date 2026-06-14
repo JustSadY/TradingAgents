@@ -38,6 +38,7 @@ from backend.api.sector_rotation import router as sector_rotation_router
 from backend.api.settings import router as settings_router
 from backend.api.share import router as share_router
 from backend.api.system_settings import router as system_settings_router
+from backend.api.token_analytics import router as token_analytics_router
 from backend.api.trading import router as trading_router
 from backend.api.update import router as update_router
 from backend.api.users import router as users_router
@@ -229,6 +230,7 @@ app.include_router(patterns_router)
 app.include_router(share_router)
 app.include_router(assistant_router)
 app.include_router(daily_summary_router)
+app.include_router(token_analytics_router)
 
 
 @app.websocket("/ws/analysis/{task_id}")
