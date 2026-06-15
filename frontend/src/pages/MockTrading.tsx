@@ -394,8 +394,8 @@ export default function MockTrading() {
                         </span>
                       </td>
                        <td className="px-3 py-3 text-right font-mono text-slate-400">{(h.quantity ?? 0).toFixed(4)}</td>
-                      <td className="px-3 py-3 text-right font-mono text-slate-400">${h.avg_buy_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className="px-3 py-3 text-right font-mono text-slate-400">${h.current_price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-3 text-right font-mono text-slate-400">${(h.avg_buy_price ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className="px-3 py-3 text-right font-mono text-slate-400">${(h.current_price ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
                       <td className={`px-3 py-3 text-right font-mono font-semibold ${(h.leverage ?? 1) > 1 ? 'text-amber-400' : 'text-slate-500'}`}>
                         {(h.leverage ?? 1).toFixed(1)}x
                       </td>
@@ -414,9 +414,9 @@ export default function MockTrading() {
                           ? `$${(h.take_profit ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
                           : '—'}
                       </td>
-                      <td className="px-3 py-3 text-right font-mono text-slate-400">${h.market_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
-                      <td className={`px-3 py-3 text-right font-mono font-semibold ${h.unrealized_pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {h.unrealized_pnl >= 0 ? '+' : ''}${h.unrealized_pnl.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
+                      <td className="px-3 py-3 text-right font-mono text-slate-400">${(h.market_value ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</td>
+                      <td className={`px-3 py-3 text-right font-mono font-semibold ${(h.unrealized_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {(h.unrealized_pnl ?? 0) >= 0 ? '+' : ''}${(h.unrealized_pnl ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
                       <td className={`px-3 py-3 text-right font-mono font-semibold ${h.pnl_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {h.pnl_pct >= 0 ? '+' : ''}{(h.pnl_pct ?? 0).toFixed(2)}%

@@ -94,14 +94,14 @@ async def generate_formula(db: AsyncSession, prompt: str, user) -> str:
 
     from langchain_core.messages import HumanMessage, SystemMessage
 
-    from backend.services.report_chat_service import _resolve_user_api_key
+    from backend.services.user_service import resolve_user_api_key
     from backend.trading_agents.llm_clients.factory import create_llm_client
 
     settings = await get_or_create_settings(db, user)
     provider = settings.llm_provider
     model = settings.llm_model
 
-    api_key = _resolve_user_api_key(user, provider)
+    api_key = resolve_user_api_key(user, provider)
     if not api_key and not getattr(user, "is_admin", False):
         raise ValueError(f"No API key set for provider '{provider}'. Please add your API key in Settings.")
 

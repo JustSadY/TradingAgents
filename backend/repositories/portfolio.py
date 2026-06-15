@@ -50,6 +50,21 @@ async def list_holdings(db: AsyncSession, user=None, mode: str | None = None) ->
     return list(result.scalars().all())
 
 
+async def get_order_by_id(db: AsyncSession, order_id: int, user=None) -> Order | None:
+    """Fetch an order by id, scoped to the requesting user's portfolios.
+
+    Orders carry no ``user_id`` of their own — ownership is via
+    ``Portfolio.user_id`` — so callers must go through here (not a bare
+    ``Order.id`` lookup) to avoid cross-user access (IDOR).
+    """
+    q = select(Order).where(Order.id == order_id)
+    if user and not getattr(user, "is_admin", False):
+        q = q.join(Portfolio)
+    q = scope_to_user(q, Portfolio, user)
+    result = await db.execute(q)
+    return result.scalar_one_or_none()
+
+
 async def list_orders(
     db: AsyncSession,
     user=None,

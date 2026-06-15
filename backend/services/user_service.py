@@ -29,6 +29,22 @@ def get_user_api_key(user: User, provider: str, fernet: Fernet) -> str | None:
         return None
 
 
+def resolve_user_api_key(user: User, provider: str) -> str | None:
+    """Decrypt the user's stored key for ``provider`` using the app Fernet.
+
+    Convenience wrapper over :func:`get_user_api_key` that sources the Fernet
+    from config and never raises — the single home for the per-service
+    "look up this user's provider key" helper that was copied across the
+    daily-summary, report-chat and portfolio-assistant services.
+    """
+    from backend.core.config import get_settings
+
+    try:
+        return get_user_api_key(user, provider, get_settings().get_fernet())
+    except Exception:
+        return None
+
+
 def set_user_api_key(user: User, provider: str, api_key: str, fernet: Fernet) -> None:
     existing: dict[str, str] = {}
     if user.api_keys_enc:

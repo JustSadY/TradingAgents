@@ -9,15 +9,7 @@ import {
   createSeriesMarkers,
 } from 'lightweight-charts'
 import type { IChartApi, IPriceLine, ISeriesApi, SeriesMarker, Time } from 'lightweight-charts'
-
-const SIGNAL_COLOR: Record<string, string> = {
-  Buy: '#10b981',
-  Overweight: '#10b981',
-  Hold: '#f59e0b',
-  Neutral: '#f59e0b',
-  Sell: '#ef4444',
-  Underweight: '#ef4444',
-}
+import { SIGNAL_TONE, TONE_HEX } from '../utils/signalTone'
 
 export interface ChartCandle {
   time: string
@@ -271,7 +263,7 @@ export function usePriceChart(
       .map(a => ({
         time: a.trade_date as Time,
         position: ['Buy', 'Overweight'].includes(a.signal!) ? 'belowBar' : 'aboveBar',
-        color: SIGNAL_COLOR[a.signal!] ?? '#6b7280',
+        color: a.signal && SIGNAL_TONE[a.signal] ? TONE_HEX[SIGNAL_TONE[a.signal]] : '#6b7280',
         shape: ['Buy', 'Overweight'].includes(a.signal!) ? 'arrowUp' : ['Sell', 'Underweight'].includes(a.signal!) ? 'arrowDown' : 'circle',
         text: a.signal!,
         size: 1.2,

@@ -137,7 +137,10 @@ async def run_backtest_simulation(
                             - (entry_price * position_size * commission_rate)
                         )
 
-                    cash += notional + pnl if position_side == "long" else (entry_price * position_size) + pnl
+                    # Long: proceeds (notional) + P&L return to cash. Short: cash
+                    # kept the full capital while open, so only the realized P&L
+                    # settles (adding the notional back would double-count it).
+                    cash += (notional + pnl) if position_side == "long" else pnl
                     return_pct = pnl / (entry_price * position_size)
 
                     trades.append(
@@ -221,7 +224,8 @@ async def run_backtest_simulation(
                             - commission
                             - (entry_price * position_size * commission_rate)
                         )
-                        cash += (entry_price * position_size) + pnl
+                        # Short kept full capital while open; only realized P&L settles.
+                        cash += pnl
                         trades.append(
                             {
                                 "entry_date": entry_date,
@@ -292,9 +296,11 @@ async def run_backtest_simulation(
             if position_side == "long":
                 holdings_value = position_size * close_price
             elif position_side == "short":
-                # Short equity = initial short value + short pnl = (entry_price * size) + (entry_price - close_price) * size
-                pnl = (entry_price - close_price) * position_size
-                holdings_value = (entry_price * position_size) + pnl
+                # Cash already holds the full capital (the short proceeds were
+                # never credited to it), so the position contributes only its
+                # unrealized P&L — not entry notional + P&L, which would
+                # double-count the notional and massively overstate equity.
+                holdings_value = (entry_price - close_price) * position_size
 
             total_value = cash + holdings_value
             daily_values.append(total_value)

@@ -19,7 +19,7 @@ from backend.models.user import User
 from backend.repositories import assistant as assistant_repo
 from backend.repositories.permissions import list_allowed_page_keys
 from backend.services.settings_service import get_or_create_settings
-from backend.services.user_service import get_user_api_key
+from backend.services.user_service import resolve_user_api_key
 
 _logger = logging.getLogger(__name__)
 
@@ -98,7 +98,7 @@ async def chat(db: AsyncSession, user: User, message: str) -> dict:
     active_provider = pm_settings.get("llm_provider") or settings.llm_provider
     active_model = pm_settings.get("llm_model") or settings.llm_model
 
-    user_key = _resolve_api_key(user, active_provider)
+    user_key = resolve_user_api_key(user, active_provider)
     if not user_key and not user.is_admin:
         raise HTTPException(
             status_code=400,
@@ -153,15 +153,6 @@ async def chat(db: AsyncSession, user: User, message: str) -> dict:
         "content": final_content,
         "created_at": assistant_msg.created_at.isoformat(),
     }
-
-
-def _resolve_api_key(user: User, provider: str) -> str | None:
-    try:
-        from backend.core.config import get_settings
-
-        return get_user_api_key(user, provider, get_settings().get_fernet())
-    except Exception:
-        return None
 
 
 def _make_tools(db: AsyncSession, user: User, allowed_pages: set[str]) -> list:

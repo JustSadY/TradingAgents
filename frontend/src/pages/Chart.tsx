@@ -4,6 +4,7 @@ import api from '../utils/api'
 import { RefreshCw, BarChart2, AlertCircle, Sparkles, ScanSearch, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { usePriceChart } from '../hooks/usePriceChart'
+import { signalTone, TONE_DOT_CLASS } from '../utils/signalTone'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 
 // Components
@@ -365,7 +366,7 @@ export default function ChartPage() {
                     <div key={a.id} onClick={() => setSelected(a)} className="p-4 rounded-2xl bg-slate-900/40 border border-white/[0.04] hover:border-violet-500/30 cursor-pointer transition-all hover:bg-slate-900/60 group">
                         <div className="flex items-center justify-between mb-3">
                             <span className="text-[10px] font-mono font-bold text-slate-500 group-hover:text-slate-300 transition-colors">{a.trade_date}</span>
-                            {a.signal && <span className={`w-2 h-2 rounded-full ${['Buy', 'Overweight'].includes(a.signal) ? 'bg-emerald-500' : 'bg-rose-500'}`} />}
+                            {a.signal && <span className={`w-2 h-2 rounded-full ${TONE_DOT_CLASS[signalTone(a.signal)]}`} />}
                         </div>
                         <p className="text-xs font-bold text-white truncate mb-1">{a.signal || 'Neutral'}</p>
                         <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed italic">{a.final_decision}</p>
