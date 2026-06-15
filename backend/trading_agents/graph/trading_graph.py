@@ -215,7 +215,7 @@ class TradingAgentsGraph:
             kwargs["api_key"] = self.config["api_key"]
         return kwargs
 
-    def _filter_tools_for_analyst(self, analyst_key: str, raw_tools: list) -> list:
+    def _filter_tools_for_analyst(self, _analyst_key: str, raw_tools: list) -> list:
         runtime_ctx = self.config.get("runtime_tool_context")
         if not runtime_ctx:
             return raw_tools
@@ -232,7 +232,7 @@ class TradingAgentsGraph:
 
         return filtered
 
-    def _should_include_tool(self, tool_key: str | None, tool_func: Any, runtime_ctx: dict) -> bool:
+    def _should_include_tool(self, tool_key: str | None, _tool_func: Any, runtime_ctx: dict) -> bool:
         """Helper to determine if a tool should be included for an analyst."""
         if tool_key is None:
             return True
@@ -327,9 +327,7 @@ class TradingAgentsGraph:
         if self.debug:
             trace = []
             for chunk in self.graph.stream(state_input, **args):
-                if len(chunk["messages"]) == 0:
-                    pass
-                else:
+                if len(chunk["messages"]) > 0:
                     chunk["messages"][-1].pretty_print()
                     trace.append(chunk)
             final_state = {}

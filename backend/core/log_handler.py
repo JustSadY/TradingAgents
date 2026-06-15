@@ -35,7 +35,7 @@ class DatabaseLogHandler(logging.Handler):
         self._task: asyncio.Task | None = None
         self._started = False
 
-    async def start(self):
+    async def start(self):  # NOSONAR
         if self._started:
             return
         self._queue = asyncio.Queue(maxsize=_QUEUE_MAXSIZE)

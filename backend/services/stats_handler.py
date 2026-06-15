@@ -32,12 +32,7 @@ class StatsCallbackHandler(BaseCallbackHandler):
             self.llm_calls += 1
 
     def on_llm_start(self, *args: Any, **kwargs: Any) -> None:
-        run_id = kwargs.get("run_id")
-        if run_id and run_id not in self._seen_runs:
-            self._seen_runs.add(run_id)
-            self.llm_calls += 1
-        elif not run_id:
-            self.llm_calls += 1
+        self.on_chat_model_start(*args, **kwargs)
 
     def on_llm_end(self, response: Any, **kwargs: Any) -> None:
         usage = self._extract_usage(response)

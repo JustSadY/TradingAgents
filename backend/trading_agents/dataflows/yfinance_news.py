@@ -110,9 +110,8 @@ async def get_news_yfinance(
             if item_ticker and item_ticker != ticker.upper():
                 continue
             pub_date = _to_utc(_parse_news_datetime(item.get("published_at")))
-            if pub_date:
-                if not (start_boundary <= pub_date < end_boundary):
-                    continue
+            if pub_date and not (start_boundary <= pub_date < end_boundary):
+                continue
             title = item.get("title") or _NO_TITLE
             summary = item.get("summary") or ""
             publisher = item.get("source") or "Unknown"

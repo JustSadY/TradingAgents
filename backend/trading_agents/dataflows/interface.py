@@ -62,7 +62,7 @@ from .y_finance import (
 )
 from .y_finance import (
     get_stock_stats_indicators_window,
-    get_YFin_data_online,
+    get_yfin_data_online,
 )
 from .yfinance_news import get_global_news_yfinance, get_news_yfinance
 
@@ -94,7 +94,7 @@ VENDOR_LIST = [
 VENDOR_METHODS = {
     "get_stock_data": {
         "alpha_vantage": get_alpha_vantage_stock,
-        "yfinance": get_YFin_data_online,
+        "yfinance": get_yfin_data_online,
     },
     "get_indicators": {
         "alpha_vantage": get_alpha_vantage_indicator,

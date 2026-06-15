@@ -5,11 +5,11 @@ import { notify } from '../utils/notify'
 
 interface ScreenResult {
   ticker: string
-  score: number
-  momentum: number
-  trend: number
-  volume_surge: number
-  rsi_position: number
+  score: number | null
+  momentum: number | null
+  trend: number | null
+  volume_surge: number | null
+  rsi_position: number | null
   rsi: number | null
   price: number | null
   change_pct: number | null
@@ -195,20 +195,23 @@ export default function Screener() {
                     </td>
                     <td className="px-5 py-3 text-center">
                       <div className="flex flex-col items-center gap-1">
-                        <span className={`font-mono font-bold text-sm ${scoreColor(r.score)}`}>{(r.score * 100).toFixed(0)}</span>
+                        <span className={`font-mono font-bold text-sm ${scoreColor(r.score ?? 0)}`}>{typeof r.score === 'number' ? (r.score * 100).toFixed(0) : '—'}</span>
                         <div className="w-16 h-1 rounded-full bg-white/[0.04]">
-                          <div className={`h-full rounded-full ${r.score >= 0.6 ? 'bg-emerald-500' : r.score >= 0.4 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${scoreBar(r.score)}%` }} />
+                          <div className={`h-full rounded-full ${(r.score ?? 0) >= 0.6 ? 'bg-emerald-500' : (r.score ?? 0) >= 0.4 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${scoreBar(r.score ?? 0)}%` }} />
                         </div>
                       </div>
                     </td>
-                    {[r.momentum, r.trend, r.volume_surge].map((v, j) => (
-                      <td key={j} className="px-5 py-3 text-center">
-                        <div className="w-12 h-1 rounded-full bg-white/[0.04] mx-auto">
-                          <div className={`h-full rounded-full ${v >= 0.6 ? 'bg-emerald-500' : v >= 0.4 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${scoreBar(v)}%` }} />
-                        </div>
-                        <span className={`text-[9px] font-mono ${scoreColor(v)}`}>{(v * 100).toFixed(0)}</span>
-                      </td>
-                    ))}
+                    {[r.momentum, r.trend, r.volume_surge].map((v, j) => {
+                      const val = v ?? 0;
+                      return (
+                        <td key={j} className="px-5 py-3 text-center">
+                          <div className="w-12 h-1 rounded-full bg-white/[0.04] mx-auto">
+                            <div className={`h-full rounded-full ${val >= 0.6 ? 'bg-emerald-500' : val >= 0.4 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${scoreBar(val)}%` }} />
+                          </div>
+                          <span className={`text-[9px] font-mono ${scoreColor(val)}`}>{typeof v === 'number' ? (v * 100).toFixed(0) : '—'}</span>
+                        </td>
+                      );
+                    })}
                     <td className="px-5 py-3 text-right font-mono text-slate-300">
                       {typeof r.rsi === 'number' ? (
                         <span className={r.rsi < 30 ? 'text-emerald-400 font-bold' : r.rsi > 70 ? 'text-rose-400 font-bold' : 'text-slate-300'}>

@@ -33,8 +33,8 @@ export default function Alerts() {
 
   const handleCreate = async () => {
     const sym = ticker.trim().toUpperCase()
-    const price = parseFloat(targetPrice)
-    if (!sym || isNaN(price) || price <= 0) { setError(t('alerts.error_invalid')); return }
+    const price = Number.parseFloat(targetPrice)
+    if (!sym || Number.isNaN(price) || price <= 0) { setError(t('alerts.error_invalid')); return }
     setSaving(true); setError(null)
     try {
       await axios.post('/api/alerts', { ticker: sym, condition, target_price: price, auto_analyze: autoAnalyze })

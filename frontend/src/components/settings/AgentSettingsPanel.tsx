@@ -146,7 +146,7 @@ function AgentSettingsFields({
                   className={`${InputCls} w-20`}
                   value={val ?? ''}
                   disabled={disabled}
-                  onChange={e => onFieldChange(field.key, parseFloat(e.target.value))}
+                  onChange={e => onFieldChange(field.key, Number.parseFloat(e.target.value))}
                 />
                 {field.min !== undefined && field.max !== undefined && (
                   <input
@@ -157,7 +157,7 @@ function AgentSettingsFields({
                     className="flex-1 accent-violet-500 h-1.5 rounded-lg bg-white/[0.04] cursor-pointer disabled:opacity-40 disabled:cursor-not-allowed"
                     value={val ?? field.default ?? field.min}
                     disabled={disabled}
-                    onChange={e => onFieldChange(field.key, parseFloat(e.target.value))}
+                    onChange={e => onFieldChange(field.key, Number.parseFloat(e.target.value))}
                   />
                 )}
               </div>

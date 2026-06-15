@@ -57,7 +57,7 @@ export default function Backtest() {
 
   const handleRun = async () => {
     const sym = ticker.trim().toUpperCase()
-    const cap = parseFloat(initialCapital)
+    const cap = Number.parseFloat(initialCapital)
     if (!sym) {
       setError(t('common.error') + ': Please specify a symbol')
       return
@@ -66,7 +66,7 @@ export default function Backtest() {
       setError(t('backtest.error_dates'))
       return
     }
-    if (isNaN(cap) || cap <= 0) {
+    if (Number.isNaN(cap) || cap <= 0) {
       setError(t('common.error') + ': Initial capital must be positive')
       return
     }

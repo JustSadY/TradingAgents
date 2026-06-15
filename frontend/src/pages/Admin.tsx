@@ -412,8 +412,8 @@ export default function Admin() {
                   className={`${Input} sm:max-w-xs`}
                   value={selectedUserId ?? ''}
                   onChange={e => {
-                    const id = parseInt(e.target.value)
-                    if (!isNaN(id)) loadUserPermissions(id)
+                    const id = Number.parseInt(e.target.value)
+                    if (!Number.isNaN(id)) loadUserPermissions(id)
                   }}
                 >
                   <option value="">{t('admin.select_user')}</option>
@@ -680,8 +680,8 @@ export default function Admin() {
                 className={`${Input} sm:max-w-xs`}
                 value={selectedUserId ?? ''}
                 onChange={e => {
-                  const id = parseInt(e.target.value)
-                  if (!isNaN(id)) loadUserApiKeys(id)
+                  const id = Number.parseInt(e.target.value)
+                  if (!Number.isNaN(id)) loadUserApiKeys(id)
                   else setSelectedUserId(null)
                 }}
               >
@@ -739,8 +739,8 @@ export default function Admin() {
                 className={`${Input} sm:max-w-xs`}
                 value={selectedUserId ?? ''}
                 onChange={e => {
-                  const id = parseInt(e.target.value)
-                  if (!isNaN(id)) setSelectedUserId(id)
+                  const id = Number.parseInt(e.target.value)
+                  if (!Number.isNaN(id)) setSelectedUserId(id)
                   else setSelectedUserId(null)
                 }}
               >

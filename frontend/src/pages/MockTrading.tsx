@@ -107,14 +107,14 @@ export default function MockTrading() {
 
   const handleOrder = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!ticker.trim() || !quantity || parseFloat(quantity) <= 0) return
+    if (!ticker.trim() || !quantity || Number.parseFloat(quantity) <= 0) return
     setSubmitting(true)
     setOrderResult(null)
     try {
       const { data } = await axios.post<OrderResult>('/api/trading/order', {
         ticker: ticker.toUpperCase(),
         action,
-        quantity: parseFloat(quantity),
+        quantity: Number.parseFloat(quantity),
         leverage,
         // A SELL with no existing long opens a short; closing a long ignores this.
         allow_short: action === 'SELL',
@@ -314,7 +314,7 @@ export default function MockTrading() {
                     max={10}
                     step={1}
                     value={leverage}
-                    onChange={e => setLeverage(parseInt(e.target.value, 10))}
+                    onChange={e => setLeverage(Number.parseInt(e.target.value, 10))}
                     className="w-full accent-amber-500 cursor-pointer"
                   />
                   {leverage > 1 && (

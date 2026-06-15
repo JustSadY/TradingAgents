@@ -57,10 +57,10 @@ function parseRunEvent(message: string): RunEventPayload | null {
         kind: kindMatch ? kindMatch[1] : undefined,
         label: labelMatch ? labelMatch[1] : undefined,
         error: errorMatch ? errorMatch[1] : undefined,
-        attempt: attemptMatch ? parseInt(attemptMatch[1]) : undefined,
-        attempts: attemptsMatch ? parseInt(attemptsMatch[1]) : undefined,
-        ms: msMatch ? parseInt(msMatch[1]) : undefined,
-        delay: delayMatch ? parseFloat(delayMatch[1]) : undefined,
+        attempt: attemptMatch ? Number.parseInt(attemptMatch[1]) : undefined,
+        attempts: attemptsMatch ? Number.parseInt(attemptsMatch[1]) : undefined,
+        ms: msMatch ? Number.parseInt(msMatch[1]) : undefined,
+        delay: delayMatch ? Number.parseFloat(delayMatch[1]) : undefined,
       }
     }
   }

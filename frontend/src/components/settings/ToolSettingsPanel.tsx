@@ -262,7 +262,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
                                       step={field.step || 1}
                                       className={`${InputClass} w-24`}
                                       value={val ?? ''}
-                                      onChange={e => updateSettingField(tool.key, field.key, parseFloat(e.target.value))}
+                                      onChange={e => updateSettingField(tool.key, field.key, Number.parseFloat(e.target.value))}
                                     />
                                     {field.min !== undefined && field.max !== undefined && (
                                       <input
@@ -272,7 +272,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
                                         step={field.step || 1}
                                         className="flex-1 accent-violet-500 h-1.5 rounded-lg bg-white/[0.04] cursor-pointer"
                                         value={val ?? field.default ?? field.min}
-                                        onChange={e => updateSettingField(tool.key, field.key, parseFloat(e.target.value))}
+                                        onChange={e => updateSettingField(tool.key, field.key, Number.parseFloat(e.target.value))}
                                       />
                                     )}
                                   </div>

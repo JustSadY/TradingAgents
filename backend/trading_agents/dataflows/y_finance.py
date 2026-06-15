@@ -12,7 +12,7 @@ from .stockstats_utils import filter_financials_by_date, load_ohlcv, yf_retry
 _logger = logging.getLogger(__name__)
 
 
-def get_YFin_data_online(
+def get_yfin_data_online(
     symbol: Annotated[str, "ticker symbol of the company"],
     start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
     end_date: Annotated[str, "End date in yyyy-mm-dd format"],

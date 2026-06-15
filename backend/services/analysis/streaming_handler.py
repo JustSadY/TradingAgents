@@ -70,10 +70,7 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
-        if run_id not in self._seen_runs:
-            self._seen_runs.add(run_id)
-            self.llm_calls += 1
-            await self._emit_stats()
+        await self.on_chat_model_start({}, [], run_id=run_id)
 
     async def on_llm_end(
         self,
