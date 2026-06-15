@@ -102,6 +102,15 @@ def list_analysts() -> list[str]:
     return sorted(_REGISTRY)
 
 
+def all_report_keys() -> tuple[str, ...]:
+    """Every registered analyst's report key, in registration order.
+
+    Single source of truth for "which analyst report fields exist", so callers
+    never have to hardcode (and drift out of sync with) the analyst roster.
+    """
+    return tuple(reg.report_key for reg in _REGISTRY.values())
+
+
 def get_report_fields() -> dict[str, str]:
     """Return a mapping of report_key to the analyst's human-readable label."""
     from backend.trading_agents.agent_catalog import label_for

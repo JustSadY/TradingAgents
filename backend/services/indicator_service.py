@@ -12,11 +12,18 @@ def calculate_ema(prices: pd.Series, span: int = 20) -> pd.Series:
 
 
 def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
-    """Compute RSI using Wilder's smoothed-average method."""
+    """Compute RSI using Wilder's smoothed-average method.
+
+    Uses an exponential (Wilder) average with ``alpha = 1/period`` — the
+    standard RSI — rather than a plain rolling mean, and guards against a
+    zero average loss so a flat/rising window yields RSI≈100 instead of NaN.
+    """
     delta = prices.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
+    avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    rs = avg_gain / avg_loss.replace(0, 1e-9)
     return 100 - (100 / (1 + rs))
 
 

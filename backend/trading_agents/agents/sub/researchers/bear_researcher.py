@@ -1,27 +1,15 @@
-from backend.trading_agents.agents.runtime.report_aggregator import (
-    build_report_fields,
-    build_resources,
-    tail_history,
-)
-from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
+from backend.trading_agents.agents.sub.researchers.base import make_researcher
 
 
-def create_bear_researcher(llm):
-    async def bear_node(state) -> dict:
-        investment_debate_state = state["investment_debate_state"]
-        history = investment_debate_state.get("history", "")
-        bear_history = investment_debate_state.get("bear_history", "")
-        current_response = investment_debate_state.get("current_response", "")
-        asset_type = state.get("asset_type", "stock")
-        target_label = "stock" if asset_type == "stock" else "asset"
-        fundamentals_label = "Company fundamentals report" if asset_type == "stock" else "Asset fundamentals report"
-        report_fields = build_report_fields("Latest World Affairs News", fundamentals_label)
-        synthesis_report = state.get("synthesis_report", "No synthesis report available.")
-        qa = state.get("agent_qa_report") or ""
-        qa_block = f"\n### Analyst Cross-Examination (peer Q&A that probed these conflicts):\n{qa}\n" if qa else ""
-        resources_text = build_resources(state, report_fields)
-
-        prompt = f"""You are a High-Conviction Bear Analyst making the case against investing in the {target_label}. Your goal is to present a rigorous, evidence-based argument emphasizing risks, structural challenges, and negative catalysts.
+def _build_prompt(
+    target_label: str,
+    resources_text: str,
+    synthesis_report: str,
+    qa_block: str,
+    recent_history: str,
+    last_opposing_argument: str,
+) -> str:
+    return f"""You are a High-Conviction Bear Analyst making the case against investing in the {target_label}. Your goal is to present a rigorous, evidence-based argument emphasizing risks, structural challenges, and negative catalysts.
 
 ### Objective:
 - **Evidence-Based Case:** You MUST cite specific analyst reports and metrics (e.g., "The Fundamentals report shows a high debt-to-equity...") for every claim you make.
@@ -35,8 +23,8 @@ def create_bear_researcher(llm):
 {synthesis_report}
 {qa_block}
 ### Debate Context:
-- **Conversation History:** {tail_history(history)}
-- **Last Bull Argument:** {current_response}
+- **Conversation History:** {recent_history}
+- **Last Bull Argument:** {last_opposing_argument}
 
 ### Guidelines:
 - **Risks and Challenges:** Highlight market saturation, financial instability, or macroeconomic threats.
@@ -45,16 +33,7 @@ def create_bear_researcher(llm):
 - **Tone:** Skeptical, analytical, and professional.
 
 Deliver a compelling bear argument that dismantling the bull case using specific citations.
-""" + get_general_settings_block()
-        response = await llm.ainvoke(prompt)
-        argument = f"Bear Analyst: {response.content}"
-        new_investment_debate_state = {
-            "history": history + "\n" + argument,
-            "bear_history": bear_history + "\n" + argument,
-            "bull_history": investment_debate_state.get("bull_history", ""),
-            "current_response": argument,
-            "count": investment_debate_state["count"] + 1,
-        }
-        return {"investment_debate_state": new_investment_debate_state}
+"""
 
-    return bear_node
+
+create_bear_researcher = make_researcher("bear", "Bear", _build_prompt)

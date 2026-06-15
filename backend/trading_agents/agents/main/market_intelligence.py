@@ -2,7 +2,8 @@
 Main Agent: Market Intelligence.
 
 Owns the analyst sub-agents (market, social, news, fundamentals, macro,
-options, quant, earnings, review). Each analyst is a tool-using Tier-2
+options, quant, earnings, insider, ownership, catalyst, review). Each analyst
+is a tool-using Tier-2
 sub-agent. To reuse the proven analyst+ToolNode mechanics unchanged, this main
 node builds a small analyst *subgraph* (exactly the analyst chain the old flat
 graph used) and invokes it; the only thing layered on top is the kill-switch
@@ -22,7 +23,7 @@ import logging
 
 from langgraph.graph import END, START, StateGraph
 
-from backend.trading_agents.agents.analyst_registry import get_factory, sync_registry_to_graph
+from backend.trading_agents.agents.analyst_registry import all_report_keys, get_factory, sync_registry_to_graph
 from backend.trading_agents.agents.base import AgentRunContext, NodeFn
 from backend.trading_agents.agents.runtime.agent_states import AgentState
 from backend.trading_agents.agents.runtime.analyst_execution import build_analyst_execution_plan
@@ -33,17 +34,24 @@ logger = logging.getLogger(__name__)
 
 MAIN_KEY = "market_intelligence"
 
-REPORT_KEYS = (
-    "market_report",
-    "sentiment_report",
-    "news_report",
-    "fundamentals_report",
-    "macro_report",
-    "options_report",
-    "quant_report",
-    "earnings_report",
-    "review_report",
-)
+# Parallel-mode team partition. Every selectable analyst must appear in some
+# team or it would never be scheduled; a runtime safety net (see below) also
+# catches any analyst missing from this map so none is silently dropped.
+ANALYST_TEAMS: dict[str, list[str]] = {
+    "technical": ["market", "quant"],
+    "fundamental": ["fundamentals", "earnings", "insider", "ownership"],
+    "macro_sentiment": ["macro", "social", "news", "review"],
+    "catalyst_options": ["options", "catalyst"],
+}
+
+
+def _report_keys() -> tuple[str, ...]:
+    """Analyst report keys, derived from the live registry at call time.
+
+    Computed lazily (not at import) so every registered analyst — including
+    insider/ownership/catalyst — is covered, instead of a stale hardcoded list.
+    """
+    return all_report_keys()
 
 
 def _fb_analyst(report_key: str):
@@ -152,25 +160,30 @@ def create_market_intelligence_node(ctx: AgentRunContext) -> NodeFn:
         recur = ctx.config.get("max_recur_limit", 100)
         concurrency = ctx.config.get("analyst_concurrency_limit", 1)
 
+        report_keys = _report_keys()
+
         if concurrency <= 1 or len(enabled) <= 1:
             # Sequential: one shared-state subgraph, analysts run back-to-back.
             subgraph = _build_analyst_subgraph(enabled, ctx)
             result = await subgraph.ainvoke(state, config={"recursion_limit": recur})
-            return {rk: result.get(rk, "") for rk in REPORT_KEYS if rk in result}
+            return {rk: result.get(rk, "") for rk in report_keys if rk in result}
 
-        # Parallel: group enabled analysts into 3 logical teams and run them in
-        # parallel team subgraphs to prevent message clears from racing while optimizing execution.
-        TEAMS = {
-            "technical": ["market", "quant"],
-            "fundamental": ["fundamentals", "earnings", "insider", "ownership"],
-            "macro_sentiment": ["macro", "social", "news", "review"],
-        }
-
-        active_teams = {}
-        for team_name, team_keys in TEAMS.items():
+        # Parallel: group enabled analysts into logical teams and run the teams
+        # in parallel subgraphs to prevent message clears from racing while
+        # optimizing execution.
+        active_teams: dict[str, list[str]] = {}
+        assigned: set[str] = set()
+        for team_name, team_keys in ANALYST_TEAMS.items():
             team_enabled = [k for k in enabled if k in team_keys]
             if team_enabled:
                 active_teams[team_name] = team_enabled
+                assigned.update(team_enabled)
+
+        # Safety net: any enabled analyst not covered by the static team map gets
+        # its own team so it is never silently skipped (e.g. a newly added one).
+        leftover = [k for k in enabled if k not in assigned]
+        if leftover:
+            active_teams["extra"] = leftover
 
         semaphore = asyncio.Semaphore(concurrency)
 
@@ -180,7 +193,7 @@ def create_market_intelligence_node(ctx: AgentRunContext) -> NodeFn:
                 sub = _build_analyst_subgraph(team_keys, ctx)
                 analyst_state = {**state, "messages": list(state.get("messages", []))}
                 res = await sub.ainvoke(analyst_state, config={"recursion_limit": recur})
-                return {rk: res.get(rk, "") for rk in REPORT_KEYS if rk in res}
+                return {rk: res.get(rk, "") for rk in report_keys if rk in res}
 
         results = await asyncio.gather(*[_run_team(keys) for keys in active_teams.values()])
         merged: dict = {}
