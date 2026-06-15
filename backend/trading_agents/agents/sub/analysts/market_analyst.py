@@ -9,7 +9,6 @@ from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_indicators,
-    get_language_instruction,
     get_stock_data,
 )
 
@@ -84,7 +83,7 @@ Your final report MUST follow this structure:
 1. **Executive Summary:** A 3-bullet point summary of the most critical findings.
 2. **Detailed Analysis:** Nuanced interpretation of trends, momentum, and volatility with supporting evidence.
 3. **Actionable Insights:** Specific technical levels or triggers to watch.
-4. **Data Table:** A Markdown table summarizing all calculated indicators and their current values.""" + get_language_instruction()
+4. **Data Table:** A Markdown table summarizing all calculated indicators and their current values."""
 
         return await run_tool_analyst(
             llm,

@@ -3,7 +3,7 @@ from backend.trading_agents.agents.runtime.report_aggregator import (
     build_resources,
     tail_history,
 )
-from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
+from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
 
 
 def create_conservative_debator(llm):
@@ -25,7 +25,7 @@ def create_conservative_debator(llm):
 Your goal is to offer a rigorous critique of the proposed decision from a standpoint of extreme prudence. Question the aggressive and neutral viewpoints by showing how a more conservative stance better protects the portfolio. Use insights from these sources:
 {resources_text}
 Here is the current conversation history: {tail_history(history)} Here are the last arguments from the aggressive analyst: {current_aggressive_response} Here are the last arguments from the neutral analyst: {current_neutral_response}. If there are no responses from the other analysts yet, begin with your own analysis.
-Maintain a focus on questioning assumptions, identifying threats, and persuading the team toward a lower-risk path. Avoid merely presenting data—be critical and defensive in your approach. Output conversationally as if you are speaking without any special formatting.""" + get_language_instruction()
+Maintain a focus on questioning assumptions, identifying threats, and persuading the team toward a lower-risk path. Avoid merely presenting data—be critical and defensive in your approach. Output conversationally as if you are speaking without any special formatting.""" + get_general_settings_block()
 
         response = await llm.ainvoke(prompt)
         argument = f"Conservative Analyst: {response.content}"

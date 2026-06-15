@@ -7,7 +7,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_fundamentals,
     get_income_statement,
     get_insider_transactions_deep,
-    get_language_instruction,
     get_sec_filings,
 )
 
@@ -56,7 +55,7 @@ Your final report MUST follow this structure:
 2. **Detailed Analysis:** In-depth review of financial statements and corporate history.
 3. **SEC & Insider Sentiment:** Specific breakdown of recent filings and insider trading activity.
 4. **Actionable Insights:** Specific strengths, weaknesses, or value-driven triggers.
-5. **Financial Data Table:** A Markdown table summarizing key fundamental metrics and current values.""" + get_language_instruction()
+5. **Financial Data Table:** A Markdown table summarizing key fundamental metrics and current values."""
 
         return await run_tool_analyst(
             llm,

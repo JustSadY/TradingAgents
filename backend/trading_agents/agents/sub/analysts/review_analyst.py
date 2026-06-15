@@ -5,7 +5,6 @@ from backend.trading_agents.agents.data.review_tools import get_past_performance
 from backend.trading_agents.agents.runtime.agent_states import AgentState
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
-    get_language_instruction,
 )
 
 # Single source of truth shared by the ToolNode registration and the LLM binding.
@@ -46,7 +45,7 @@ def create_review_analyst(llm):
             "2. **Hindsight Analysis:** Detailed comparison of past thesis vs. actual outcome, citing specific returns.\n"
             "3. **Lessons Learned:** Specific, actionable advice for the current day's analysts and managers.\n"
             "4. **Performance Audit Table:** A Markdown table summarizing the past decision, actual return, and audit status (Correct/Incorrect/Partial).\n"
-            f"{context_str}\n" + get_language_instruction()
+            f"{context_str}\n"
         )
 
         messages = [

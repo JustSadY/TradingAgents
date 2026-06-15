@@ -176,6 +176,10 @@ async def _call_llm(db: AsyncSession, user: User, prompt: str) -> dict:
             detail=f"No API key set for provider '{provider}'. Please add it in Settings.",
         )
 
+    lang = (settings.output_language or "English").strip()
+    if lang.lower() != "english":
+        prompt += f"\n- All natural language text fields (summary, issues, rationale) MUST be written in {lang}."
+
     try:
         client = create_llm_client(provider=provider, model=model, api_key=user_key)
         llm = client.get_llm()

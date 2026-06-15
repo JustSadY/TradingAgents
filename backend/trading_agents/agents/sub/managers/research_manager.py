@@ -8,7 +8,7 @@ from backend.trading_agents.agents.runtime.structured import (
 from backend.trading_agents.agents.schemas import ResearchPlan, render_research_plan
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
-    get_language_instruction,
+    get_general_settings_block,
 )
 
 
@@ -55,7 +55,7 @@ def create_research_manager(llm):
 Commit to a clear stance whenever the debate's strongest arguments warrant one; reserve Hold for situations where the evidence on both sides is genuinely balanced.
 ---
 **Debate History:**
-{history}""" + get_language_instruction()
+{history}""" + get_general_settings_block()
 
         result = await ainvoke_structured_or_freetext(
             structured_llm,

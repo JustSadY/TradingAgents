@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends
 
-from backend.core.security import get_current_user
+from backend.api.deps import get_current_user
 from backend.models.user import User
 from backend.services.sector_rotation_service import get_sector_rotation
 

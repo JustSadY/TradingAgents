@@ -25,8 +25,9 @@ services:
 
   backend:
     build:
-      context: ..
-      dockerfile: tradingagents_web/Dockerfile.backend
+      context: .
+      dockerfile: Dockerfile.backend
+      network: host
     restart: unless-stopped
     depends_on:
       postgres:
@@ -46,9 +47,12 @@ services:
 
   worker:
     build:
-      context: ..
-      dockerfile: tradingagents_web/Dockerfile.backend
+      context: .
+      dockerfile: Dockerfile.backend
+      network: host
     restart: unless-stopped
+    healthcheck:
+      disable: true
     command: ["arq", "backend.worker.WorkerSettings"]
     depends_on:
       postgres:
@@ -67,6 +71,7 @@ services:
     build:
       context: frontend
       dockerfile: Dockerfile.frontend
+      network: host
     restart: unless-stopped
     ports:
       - "5173:80"

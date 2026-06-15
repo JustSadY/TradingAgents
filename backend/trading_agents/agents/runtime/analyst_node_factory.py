@@ -14,6 +14,8 @@ from __future__ import annotations
 
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
+from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
+
 # Shared scaffold wrapped around every tool-using analyst's own system_message.
 # Rewording this changes every tool-using analyst's prompt (intentional).
 _COLLAB_SYSTEM = (
@@ -67,7 +69,7 @@ async def run_tool_analyst(
             MessagesPlaceholder(variable_name="messages"),
         ]
     )
-    prompt = prompt.partial(system_message=system_message)
+    prompt = prompt.partial(system_message=system_message + get_general_settings_block())
     prompt = prompt.partial(tool_names=", ".join(tool.name for tool in tools))
     prompt = prompt.partial(current_date=state["trade_date"])
     prompt = prompt.partial(instrument_context=instrument_context)

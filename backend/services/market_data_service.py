@@ -149,25 +149,36 @@ async def get_live_prices_batch(tickers: list[str]) -> dict[str, float]:
 
 async def get_historical_data(ticker: str, start_date: str, end_date: str):
     """Fetch historical OHLCV data for a ticker."""
+    max_retries = 3
+    delay = 1.0
+    for attempt in range(max_retries):
+        try:
+            def _fetch():
+                data = yf.Ticker(ticker).history(start=start_date, end=end_date)
+                if data.empty:
+                    return data
 
-    def _fetch():
-        data = yf.Ticker(ticker).history(start=start_date, end=end_date)
-        if data.empty:
-            return data
+                # Handle MultiIndex columns (common in newer yfinance versions)
+                if isinstance(data.columns, pd.MultiIndex):
+                    data.columns = data.columns.get_level_values(0)
 
-        # Handle MultiIndex columns (common in newer yfinance versions)
-        if isinstance(data.columns, pd.MultiIndex):
-            data.columns = data.columns.get_level_values(0)
+                if data.index.tz is not None:
+                    data.index = data.index.tz_localize(None)
 
-        if data.index.tz is not None:
-            data.index = data.index.tz_localize(None)
+                # Ensure data is sorted by date and remove any duplicates
+                data = data[~data.index.duplicated(keep="last")]
+                data = data.sort_index()
+                return data
 
-        # Ensure data is sorted by date and remove any duplicates
-        data = data[~data.index.duplicated(keep="last")]
-        data = data.sort_index()
-        return data
-
-    return await asyncio.to_thread(_fetch)
+            return await asyncio.to_thread(_fetch)
+        except Exception as exc:
+            if attempt < max_retries - 1:
+                _logger.warning("Historical data fetch for %s failed on attempt %d: %s. Retrying in %.1fs...", ticker, attempt + 1, exc, delay)
+                await asyncio.sleep(delay)
+                delay *= 2
+            else:
+                _logger.error("Historical data fetch for %s failed after %d attempts: %s", ticker, max_retries, exc)
+                raise
 
 
 async def calculate_returns(

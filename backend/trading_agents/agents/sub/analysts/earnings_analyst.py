@@ -3,7 +3,6 @@ from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_catalyst_calendar,
-    get_language_instruction,
     search_web,
 )
 
@@ -51,7 +50,7 @@ Your final report MUST follow this structure:
 2. **Management Tone Scorecard:** A short table scoring confidence, guidance direction, Q&A directness, and surprise history (each rated Positive/Neutral/Negative with one-line evidence).
 3. **Detailed Analysis:** Nuanced review of management tone, revenue/EPS projections, and strategic guidance.
 4. **Actionable Insights:** Specific guidance-driven catalysts or risks for traders to monitor.
-5. **Earnings & Guidance Table:** A Markdown table summarizing key metrics, guidance changes, and management tone.""" + get_language_instruction()
+5. **Earnings & Guidance Table:** A Markdown table summarizing key metrics, guidance changes, and management tone."""
 
         return await run_tool_analyst(
             llm,

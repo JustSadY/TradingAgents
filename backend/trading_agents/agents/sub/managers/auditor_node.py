@@ -1,6 +1,6 @@
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
-    get_language_instruction,
+    get_general_settings_block,
 )
 
 
@@ -45,7 +45,7 @@ Your audit report MUST follow this structure:
 3. **Verified Evidence:** Confirm the most critical pieces of evidence that WERE correctly cited.
 4. **Final Auditor Note:** A directive to the Research Manager on which arguments to ignore or prioritize.
 
-{get_language_instruction()}
+{get_general_settings_block()}
 """
         response = await llm.ainvoke(prompt)
         return {"audit_report": response.content}

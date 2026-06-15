@@ -203,6 +203,16 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   const setLanguage = (lang: Language) => {
     localStorage.setItem('ta_language', lang)
     setLanguageState(lang)
+    // Sync agent output language with UI language selection
+    const langMap: Record<Language, string> = { en: 'English', tr: 'Turkish' }
+    const token = localStorage.getItem('ta_access')
+    if (token) {
+      fetch('/api/settings', {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ output_language: langMap[lang] }),
+      }).catch(() => {})
+    }
   }
 
   const t = (key: string): string => {

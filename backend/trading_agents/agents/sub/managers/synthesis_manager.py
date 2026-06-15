@@ -2,7 +2,7 @@ import asyncio
 
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
-    get_language_instruction,
+    get_general_settings_block,
     run_strategy_backtest,
 )
 
@@ -59,7 +59,7 @@ Your synthesis MUST follow this structure:
 3. **Critical Conflicts:** Explicitly identify contradictions. This serves as the primary agenda for the Bull vs. Bear debate.
 4. **Data Synthesis Table:** A Markdown table summarizing each analyst's bias and top 1-2 evidence points.
 
-{get_language_instruction()}
+{get_general_settings_block()}
 """
         response = await llm.ainvoke(prompt)
         return {"synthesis_report": response.content}

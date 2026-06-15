@@ -11,7 +11,7 @@ from backend.trading_agents.agents.runtime.structured import (
 from backend.trading_agents.agents.schemas import PortfolioDecision, TraderProposal, render_pm_decision
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
-    get_language_instruction,
+    get_general_settings_block,
 )
 
 
@@ -110,7 +110,7 @@ def create_portfolio_manager(llm):
 **Risk Analysts Debate History:**
 {history}
 {conviction_instructions}---
-Be decisive and ground every conclusion in specific evidence from the analysts.{get_language_instruction()}"""
+Be decisive and ground every conclusion in specific evidence from the analysts.{get_general_settings_block()}"""
 
         result = await ainvoke_structured_or_freetext(
             structured_llm,
