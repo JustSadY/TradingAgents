@@ -2,7 +2,6 @@ from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
-    get_language_instruction,
     get_options_data,
 )
 
@@ -43,7 +42,7 @@ Your final report MUST follow this structure:
 1. **Executive Summary:** A 3-bullet point summary of the most critical options-derived sentiment and volatility signals.
 2. **Detailed Analysis:** Nuanced interpretation of Put/Call ratios, IV skew, and Open Interest trends.
 3. **Actionable Insights:** Specific expected move ranges or sentiment-driven triggers for traders.
-4. **Options Data Table:** A Markdown table summarizing key options metrics and current values.""" + get_language_instruction()
+4. **Options Data Table:** A Markdown table summarizing key options metrics and current values."""
 
         return await run_tool_analyst(
             llm,

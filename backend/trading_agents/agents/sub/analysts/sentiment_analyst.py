@@ -5,7 +5,6 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
-    get_language_instruction,
 )
 from backend.trading_agents.dataflows.interface import fetch_reddit_posts, fetch_stocktwits_messages, route_to_vendor
 
@@ -131,4 +130,4 @@ Your final report MUST follow this structure:
 2. **Detailed Analysis:** Nuanced breakdown of each source, cross-source alignments/divergences, and key narratives.
 3. **Catalysts and Risks:** Specific upcoming events or sentiment-driven risks identified.
 4. **Sentiment Data Table:** A Markdown table summarizing key signals, their direction, source, and evidence.
-{get_language_instruction()}"""
+"""

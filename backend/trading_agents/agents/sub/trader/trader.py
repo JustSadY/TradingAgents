@@ -12,7 +12,7 @@ from backend.trading_agents.agents.runtime.structured import (
 from backend.trading_agents.agents.schemas import TraderProposal, render_trader_proposal
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
-    get_language_instruction,
+    get_general_settings_block,
 )
 
 
@@ -59,7 +59,7 @@ def create_trader(llm):
                     "If the user already holds this ticker (see their portfolio), account for the existing position when proposing an action. "
                     "Consider the 'GLOBAL MARKET PULSE' for overall market conditions. "
                     "Anchor your reasoning in the analysts' reports and the quantitative backtest results provided."
-                    + get_language_instruction()
+                    + get_general_settings_block()
                 ),
             },
             {

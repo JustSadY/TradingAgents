@@ -3,7 +3,7 @@ from backend.trading_agents.agents.runtime.report_aggregator import (
     build_resources,
     tail_history,
 )
-from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
+from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
 
 
 def create_aggressive_debator(llm):
@@ -25,7 +25,7 @@ def create_aggressive_debator(llm):
 Your task is to create a compelling case for the trader's decision by questioning and critiquing the conservative and neutral stances to demonstrate why your high-reward perspective offers the best path forward. Incorporate insights from the following sources into your arguments:
 {resources_text}
 Here is the current conversation history: {tail_history(history)} Here are the last arguments from the conservative analyst: {current_conservative_response} Here are the last arguments from the neutral analyst: {current_neutral_response}. If there are no responses from the other viewpoints yet, present your own argument based on the available data.
-Engage actively by addressing any specific concerns raised, refuting the weaknesses in their logic, and asserting the benefits of risk-taking to outpace market norms. Maintain a focus on debating and persuading, not just presenting data. Challenge each counterpoint to underscore why a high-risk approach is optimal. Output conversationally as if you are speaking without any special formatting.""" + get_language_instruction()
+Engage actively by addressing any specific concerns raised, refuting the weaknesses in their logic, and asserting the benefits of risk-taking to outpace market norms. Maintain a focus on debating and persuading, not just presenting data. Challenge each counterpoint to underscore why a high-risk approach is optimal. Output conversationally as if you are speaking without any special formatting.""" + get_general_settings_block()
 
         response = await llm.ainvoke(prompt)
         argument = f"Aggressive Analyst: {response.content}"

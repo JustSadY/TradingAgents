@@ -42,12 +42,13 @@ __all__ = [
     "get_quant_data",
     "run_strategy_backtest",
     "get_language_instruction",
+    "get_general_settings_block",
     "build_instrument_context",
     "create_msg_delete",
 ]
 
 
-def get_language_instruction() -> str:
+def _get_language_instruction() -> str:
     from backend.trading_agents.dataflows.config import get_config
 
     lang = get_config().get("output_language", "English")
@@ -59,6 +60,24 @@ def get_language_instruction() -> str:
         f"Even if source data, tool outputs, or retrieved content are in a different language, "
         f"all of your analysis, commentary, headings, and narrative text MUST be written in {lang}."
     )
+
+
+def get_general_settings_block() -> str:
+    """Return all general settings that should be appended to every agent system prompt.
+
+    Add new global settings here — they will automatically apply to all agents
+    that go through run_tool_analyst, and to any agent that calls this function.
+    """
+    parts = []
+    lang = _get_language_instruction()
+    if lang:
+        parts.append(lang)
+    return "".join(parts)
+
+
+# Keep backward-compatible alias so existing imports don't break during migration
+def get_language_instruction() -> str:
+    return get_general_settings_block()
 
 
 def build_instrument_context(ticker: str, asset_type: str = "stock") -> str:

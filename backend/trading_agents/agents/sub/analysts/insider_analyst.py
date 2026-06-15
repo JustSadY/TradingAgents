@@ -3,7 +3,6 @@ from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_insider_transactions,
-    get_language_instruction,
 )
 
 # Single source of truth shared by the ToolNode registration and the LLM binding.
@@ -43,7 +42,7 @@ Your final report MUST follow this structure:
 1. **Executive Summary:** A 3-bullet summary of the net insider signal (accumulation, distribution, or neutral).
 2. **Detailed Analysis:** Buy/sell breakdown, who traded, size, and whether sells look routine vs. meaningful.
 3. **Actionable Insights:** What the insider pattern implies for the trade thesis.
-4. **Insider Transactions Table:** A Markdown table of the most relevant recent transactions.""" + get_language_instruction()
+4. **Insider Transactions Table:** A Markdown table of the most relevant recent transactions."""
 
         return await run_tool_analyst(
             llm,
