@@ -16,7 +16,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models import AnalysisChat
 from backend.models.analysis import AnalysisResult
 from backend.services.settings_service import get_or_create_settings
-from backend.services.user_service import get_user_api_key
+from backend.services.user_service import resolve_user_api_key
 
 _logger = logging.getLogger(__name__)
 
@@ -93,18 +93,6 @@ def _build_system_prompt(analysis: AnalysisResult, output_language: str | None) 
     )
 
 
-def _resolve_user_api_key(user, provider: str) -> str | None:
-    if user is None:
-        return None
-    try:
-        from backend.core.config import get_settings
-
-        return get_user_api_key(user, provider, get_settings().get_fernet())
-    except Exception as exc:
-        _logger.warning("Could not resolve %s API key for user %s: %s", provider, getattr(user, "id", "?"), exc)
-        return None
-
-
 async def answer_report_question(
     db: AsyncSession,
     analysis_id: int,
@@ -134,7 +122,7 @@ async def answer_report_question(
     active_provider = pm_settings.get("llm_provider") or settings.llm_provider
     active_model = pm_settings.get("llm_model") or settings.llm_model
 
-    user_key = _resolve_user_api_key(user, active_provider)
+    user_key = resolve_user_api_key(user, active_provider)
     if not user_key and not getattr(user, "is_admin", False):
         raise HTTPException(
             status_code=400,

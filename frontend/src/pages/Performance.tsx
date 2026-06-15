@@ -3,6 +3,7 @@ import axios from 'axios'
 import { BarChart2, TrendingUp, TrendingDown, Target, Search, Activity, Trophy, Skull, ShieldAlert, Zap, DollarSign } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts'
 import { useTranslation } from '../contexts/LanguageContext'
+import { signalTone, TONE_TEXT_CLASS } from '../utils/signalTone'
 
 interface TradingStats {
   total_trades: number
@@ -356,10 +357,7 @@ export default function Performance() {
                         <td className="px-5 py-3.5 font-mono font-bold text-white text-sm">{item.ticker}</td>
                         <td className="px-5 py-3.5 text-slate-400 font-semibold">{item.trade_date}</td>
                         <td className="px-5 py-3.5">
-                          <span className={`text-[11px] font-bold ${
-                            ['Buy','Overweight'].includes(item.signal||'') ? 'text-emerald-400' :
-                            ['Sell','Underweight'].includes(item.signal||'') ? 'text-rose-400' : 'text-amber-400'
-                          }`}>{item.signal ?? '—'}</span>
+                          <span className={`text-[11px] font-bold ${TONE_TEXT_CLASS[signalTone(item.signal)]}`}>{item.signal ?? '—'}</span>
                         </td>
                         <td className="px-5 py-3.5 text-right font-medium"><ReturnCell value={item.raw_return} /></td>
                         <td className="px-5 py-3.5 text-right hidden sm:table-cell font-medium"><ReturnCell value={item.alpha_return} /></td>

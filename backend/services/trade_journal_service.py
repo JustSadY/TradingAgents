@@ -5,11 +5,10 @@ from __future__ import annotations
 import logging
 
 from fastapi import HTTPException
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.order import Order
 from backend.models.user import User
+from backend.repositories import portfolio as portfolio_repo
 from backend.repositories import trade_note as repo
 
 _logger = logging.getLogger(__name__)
@@ -17,6 +16,9 @@ _logger = logging.getLogger(__name__)
 
 async def save_note(db: AsyncSession, user: User, order_id: int, note: str) -> dict:
     """Upsert a user note for an order. Returns {"order_id", "note", "has_debrief"}."""
+    # Only allow notes on the user's own orders (orders have no user_id).
+    if await portfolio_repo.get_order_by_id(db, order_id, user=user) is None:
+        raise HTTPException(status_code=404, detail="Order not found.")
     trade_note = await repo.upsert_note(db, order_id=order_id, user_id=user.id, note=note)
     await db.commit()
     return {
@@ -41,9 +43,9 @@ async def get_note(db: AsyncSession, user: User, order_id: int) -> dict | None:
 
 async def generate_debrief(db: AsyncSession, user: User, order_id: int) -> dict:
     """Generate AI debrief for a trade and persist it."""
-    # 1. Fetch the order (scoped to user via portfolio)
-    result = await db.execute(select(Order).where(Order.id == order_id))
-    order = result.scalar_one_or_none()
+    # 1. Fetch the order, scoped to the user's own portfolios (prevents reading
+    #    another user's trade via a guessed order_id — orders have no user_id).
+    order = await portfolio_repo.get_order_by_id(db, order_id, user=user)
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found.")
 

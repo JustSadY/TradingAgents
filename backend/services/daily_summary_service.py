@@ -12,15 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.market_summary import MarketDailySummary
 from backend.models.user import User
 from backend.services.settings_service import get_or_create_settings
+from backend.services.user_service import resolve_user_api_key
 
 _logger = logging.getLogger(__name__)
-
-
-def _resolve_api_key(user: User, provider: str) -> str | None:
-    from backend.core.config import get_settings
-    from backend.services.user_service import get_user_api_key
-
-    return get_user_api_key(user, provider, get_settings().get_fernet())
 
 
 async def get_latest_summary(db: AsyncSession, user_id: int) -> dict | None:
@@ -118,7 +112,7 @@ async def generate_daily_summary(db: AsyncSession, user: User) -> dict:
     provider = pm.get("llm_provider") or settings.llm_provider
     model = pm.get("llm_model") or settings.llm_model
 
-    user_key = _resolve_api_key(user, provider)
+    user_key = resolve_user_api_key(user, provider)
     if not user_key and not user.is_admin:
         raise ValueError(f"No API key configured for provider '{provider}'. Add it in Settings.")
 
