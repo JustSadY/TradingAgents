@@ -155,7 +155,15 @@ function RunTab() {
   const { activeTasks } = useActiveTasks()
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ticker, date, assetType, runStatus, signal, reports, log, activeSection, analysisId }))
+    try {
+      // Don't persist reports while running — they're large and will be re-streamed via WS on reconnect
+      const payload = runStatus === 'running'
+        ? { ticker, date, assetType, runStatus, signal, reports: {}, log: [], activeSection, analysisId }
+        : { ticker, date, assetType, runStatus, signal, reports, log, activeSection, analysisId }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+    } catch {
+      // QuotaExceededError — ignore, state lives in memory
+    }
   }, [ticker, date, assetType, runStatus, signal, reports, log, activeSection, analysisId])
 
   useEffect(() => {
@@ -502,7 +510,7 @@ function RunTab() {
         <MentalModelTicker agent={mentalModel.agent} thought={mentalModel.thought} />
       )}
 
-      {(log.length > 0 || reportEntries.length > 0 || !!detail) && (
+      {(running || log.length > 0 || reportEntries.length > 0 || !!detail) && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <AnalysisLog leftTab={leftTab} setLeftTab={setLeftTab} log={log} liveDebate={liveDebate} currentStep={currentStep} stats={stats} t={t} />
 
