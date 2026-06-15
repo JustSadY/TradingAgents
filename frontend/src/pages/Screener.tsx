@@ -5,11 +5,11 @@ import { notify } from '../utils/notify'
 
 interface ScreenResult {
   ticker: string
-  score: number
-  momentum: number
-  trend: number
-  volume_surge: number
-  rsi_position: number
+  score: number | null
+  momentum: number | null
+  trend: number | null
+  volume_surge: number | null
+  rsi_position: number | null
   rsi: number | null
   price: number | null
   change_pct: number | null
@@ -69,10 +69,12 @@ export default function Screener() {
     }
   }, [])
 
-  const scoreColor = (score: number) =>
-    score >= 0.6 ? 'text-emerald-400' : score >= 0.4 ? 'text-amber-400' : 'text-rose-400'
+  const scoreColor = (score: number | null | undefined) => {
+    const s = score ?? 0
+    return s >= 0.6 ? 'text-emerald-400' : s >= 0.4 ? 'text-amber-400' : 'text-rose-400'
+  }
 
-  const scoreBar = (val: number) => Math.max(0, Math.min(100, val * 100))
+  const scoreBar = (val: number | null | undefined) => Math.max(0, Math.min(100, (val ?? 0) * 100))
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
@@ -186,7 +188,7 @@ export default function Screener() {
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold text-white text-sm">{r.ticker}</span>
                         {r.price && <span className="text-slate-500 font-mono text-[10px]">${r.price.toFixed(2)}</span>}
-                        {r.change_pct !== null && (
+                        {r.change_pct != null && (
                           <span className={`text-[9px] font-bold ${r.change_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {r.change_pct >= 0 ? '+' : ''}{r.change_pct.toFixed(1)}%
                           </span>
@@ -195,22 +197,25 @@ export default function Screener() {
                     </td>
                     <td className="px-5 py-3 text-center">
                       <div className="flex flex-col items-center gap-1">
-                        <span className={`font-mono font-bold text-sm ${scoreColor(r.score)}`}>{(r.score * 100).toFixed(0)}</span>
+                        <span className={`font-mono font-bold text-sm ${scoreColor(r.score)}`}>{((r.score ?? 0) * 100).toFixed(0)}</span>
                         <div className="w-16 h-1 rounded-full bg-white/[0.04]">
-                          <div className={`h-full rounded-full ${r.score >= 0.6 ? 'bg-emerald-500' : r.score >= 0.4 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${scoreBar(r.score)}%` }} />
+                          <div className={`h-full rounded-full ${(r.score ?? 0) >= 0.6 ? 'bg-emerald-500' : (r.score ?? 0) >= 0.4 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${scoreBar(r.score)}%` }} />
                         </div>
                       </div>
                     </td>
-                    {[r.momentum, r.trend, r.volume_surge].map((v, j) => (
-                      <td key={j} className="px-5 py-3 text-center">
-                        <div className="w-12 h-1 rounded-full bg-white/[0.04] mx-auto">
-                          <div className={`h-full rounded-full ${v >= 0.6 ? 'bg-emerald-500' : v >= 0.4 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${scoreBar(v)}%` }} />
-                        </div>
-                        <span className={`text-[9px] font-mono ${scoreColor(v)}`}>{(v * 100).toFixed(0)}</span>
-                      </td>
-                    ))}
+                    {[r.momentum, r.trend, r.volume_surge].map((v, j) => {
+                      const val = v ?? 0
+                      return (
+                        <td key={j} className="px-5 py-3 text-center">
+                          <div className="w-12 h-1 rounded-full bg-white/[0.04] mx-auto">
+                            <div className={`h-full rounded-full ${val >= 0.6 ? 'bg-emerald-500' : val >= 0.4 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${scoreBar(val)}%` }} />
+                          </div>
+                          <span className={`text-[9px] font-mono ${scoreColor(val)}`}>{(val * 100).toFixed(0)}</span>
+                        </td>
+                      )
+                    })}
                     <td className="px-5 py-3 text-right font-mono text-slate-300">
-                      {r.rsi !== null ? (
+                      {r.rsi != null ? (
                         <span className={r.rsi < 30 ? 'text-emerald-400 font-bold' : r.rsi > 70 ? 'text-rose-400 font-bold' : 'text-slate-300'}>
                           {r.rsi.toFixed(0)}
                         </span>
