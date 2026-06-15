@@ -148,14 +148,22 @@ function RunTab() {
   const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Stock' }, { value: 'crypto', label: 'Crypto' }]
   const [currentStep, setCurrentStep] = useState<{ label: string; stage: string } | null>(null)
 
-  const [costEstimate, setCostEstimate] = useState<{ min_usd: number; max_usd: number } | null>(null)
+  const [costEstimate, setCostEstimate] = useState<{ estimated_cost_usd: number; estimated_tokens: number; estimated_duration_min: number; analyst_count: number } | null>(null)
   const [existingId, setExistingId] = useState<number | null>(null)
   const [showRerunModal, setShowRerunModal] = useState(false)
 
   const { activeTasks } = useActiveTasks()
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ticker, date, assetType, runStatus, signal, reports, log, activeSection, analysisId }))
+    try {
+      // Don't persist reports while running — they're large and will be re-streamed via WS on reconnect
+      const payload = runStatus === 'running'
+        ? { ticker, date, assetType, runStatus, signal, reports: {}, log: [], activeSection, analysisId }
+        : { ticker, date, assetType, runStatus, signal, reports, log, activeSection, analysisId }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+    } catch {
+      // QuotaExceededError — ignore, state lives in memory
+    }
   }, [ticker, date, assetType, runStatus, signal, reports, log, activeSection, analysisId])
 
   useEffect(() => {
@@ -356,7 +364,7 @@ function RunTab() {
     if (!ticker.trim() || running) return
     const tid = setTimeout(async () => {
       try {
-        const { data } = await axios.get('/api/analysis/cost-estimate', { params: { ticker: ticker.toUpperCase(), trade_date: date } })
+        const { data } = await axios.get('/api/analysis/cost-estimate')
         setCostEstimate(data)
       } catch { setCostEstimate(null) }
     }, 600)
@@ -502,18 +510,18 @@ function RunTab() {
         <MentalModelTicker agent={mentalModel.agent} thought={mentalModel.thought} />
       )}
 
-      {(log.length > 0 || reportEntries.length > 0 || !!detail) && (
+      {(running || log.length > 0 || reportEntries.length > 0 || !!detail) && (
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <AnalysisLog leftTab={leftTab} setLeftTab={setLeftTab} log={log} liveDebate={liveDebate} currentStep={currentStep} stats={stats} t={t} />
 
-          <div className="lg:col-span-2 glass-panel rounded-2xl overflow-hidden flex flex-col h-[55vh] lg:h-[65vh]">
+          <div className="lg:col-span-2 glass-panel rounded-2xl overflow-hidden flex flex-col h-[40vh] sm:h-[50vh] lg:h-[65vh]">
             {detail ? (
               <>
                 <div className="flex items-center gap-1 p-1 bg-slate-900/40 border-b border-white/[0.04]">
-                  <button onClick={() => setActiveDetailTab('reports')} className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'reports' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.reports')}</button>
-                  <button onClick={() => setActiveDetailTab('debate')} className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.debate')}</button>
-                  <button onClick={() => setActiveDetailTab('chat')} className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'chat' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.qa')}</button>
-                  <button onClick={() => setActiveDetailTab('timetravel')} className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'timetravel' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.timetravel')}</button>
+                  <button onClick={() => setActiveDetailTab('reports')} className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'reports' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.reports')}</button>
+                  <button onClick={() => setActiveDetailTab('debate')} className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.debate')}</button>
+                  <button onClick={() => setActiveDetailTab('chat')} className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'chat' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.qa')}</button>
+                  <button onClick={() => setActiveDetailTab('timetravel')} className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'timetravel' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.timetravel')}</button>
                 </div>
                 <div className="flex-1 p-4 overflow-y-auto min-h-0">
                   {activeDetailTab === 'reports' && (
@@ -888,7 +896,7 @@ function HistoryTab({
                 <div className="flex items-center gap-1 p-1 bg-slate-950/60 border border-white/[0.04] rounded-xl shrink-0">
                   <button
                     onClick={() => setActiveDetailTab('reports')}
-                    className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
+                    className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
                       activeDetailTab === 'reports' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
                     }`}
                   >
@@ -896,7 +904,7 @@ function HistoryTab({
                   </button>
                   <button
                     onClick={() => setActiveDetailTab('debate')}
-                    className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
+                    className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
                       activeDetailTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
                     }`}
                   >
@@ -904,7 +912,7 @@ function HistoryTab({
                   </button>
                   <button
                     onClick={() => setActiveDetailTab('chat')}
-                    className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
+                    className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
                       activeDetailTab === 'chat' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
                     }`}
                   >
@@ -912,7 +920,7 @@ function HistoryTab({
                   </button>
                   <button
                     onClick={() => setActiveDetailTab('timetravel')}
-                    className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
+                    className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
                       activeDetailTab === 'timetravel' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
                     }`}
                   >

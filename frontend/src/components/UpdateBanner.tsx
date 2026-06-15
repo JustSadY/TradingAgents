@@ -16,10 +16,9 @@ interface UpdateStatus {
   last_update?: { state?: string; error?: string }
 }
 
-const POLL_MS = 60 * 60 * 1000
-
-
-
+const POLL_IDLE_MS = 60 * 60 * 1000   // 1 saat — boşta
+const POLL_BUSY_MS = 4_000              // 4 saniye — güncelleme sırasında
+const UPDATE_TIMEOUT_MS = 12 * 60 * 1000 // 12 dakika — bu kadar sürer takılı sayılır
 
 export default function UpdateBanner() {
   const { isOwner } = useAuth()
@@ -29,52 +28,72 @@ export default function UpdateBanner() {
   const seenRef = useRef(false)
   const sawDownRef = useRef(false)
   const busyRef = useRef(false)
+  const busyStartRef = useRef<number | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => { busyRef.current = busy }, [busy])
 
   const poll = useCallback(async () => {
+    // Timeout kontrolü: güncelleme 12 dakikadan uzun sürüyorsa hata göster
+    if (busyRef.current && busyStartRef.current && Date.now() - busyStartRef.current > UPDATE_TIMEOUT_MS) {
+      setBusy(false)
+      busyStartRef.current = null
+      sawDownRef.current = false
+      notify('error', 'Güncelleme çok uzun sürdü — sunucu logu kontrol edin.', 'Güncelleme', 'owner')
+      return
+    }
+
     try {
       const { data } = await axios.get<UpdateStatus>('/api/update/status')
       setSt(data)
 
       if (data.update_available && !data.updating && !seenRef.current) {
         seenRef.current = true
-
         notify('info', `Yeni güncelleme mevcut (${data.behind} commit).`, 'Güncelleme', 'owner')
       }
       if (!data.update_available) seenRef.current = false
 
-
       if (busyRef.current && !data.updating) {
+        setBusy(false)
+        busyStartRef.current = null
+        sawDownRef.current = false
         if (data.last_update?.state === 'failed') {
-          setBusy(false); sawDownRef.current = false
           notify('error', data.last_update?.error || 'Güncelleme başarısız oldu.', 'Güncelleme', 'owner')
-        } else if (sawDownRef.current && !data.update_available) {
-
+        } else {
+          // Güncelleme başarılı, sayfa yenile
           window.location.reload()
         }
       }
     } catch {
-
+      // Sunucu yeniden başlıyor — bir sonraki başarılı yanıtta reload yapılacak
       if (busyRef.current) sawDownRef.current = true
     }
   }, [])
 
+  // busy değiştiğinde polling hızını ayarla
+  useEffect(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current)
+    const ms = busy ? POLL_BUSY_MS : POLL_IDLE_MS
+    intervalRef.current = setInterval(poll, ms)
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [busy, poll])
+
   useEffect(() => {
     poll()
-    const id = setInterval(poll, POLL_MS)
-    return () => clearInterval(id)
   }, [poll])
 
   const doUpdate = async () => {
     if (!window.confirm('Uygulama en son sürüme güncellenip yeniden başlatılacak (~1-2 dk). Devam edilsin mi?')) return
-    setBusy(true); busyRef.current = true; sawDownRef.current = false
+    setBusy(true); busyRef.current = true; busyStartRef.current = Date.now(); sawDownRef.current = false
     try {
       await axios.post('/api/update/apply')
       notify('info', 'Güncelleme başlatıldı — lütfen bekleyin, sayfa otomatik yenilenecek.', 'Güncelleme', 'owner')
       poll()
     } catch (e: any) {
       setBusy(false)
+      busyStartRef.current = null
       notify('error', e?.response?.data?.detail || 'Güncelleme başlatılamadı.', 'Güncelleme', 'owner')
     }
   }
