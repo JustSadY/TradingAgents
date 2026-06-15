@@ -98,13 +98,17 @@ async def cancel_analysis(
 
 @router.get("/cost-estimate")
 async def cost_estimate(
-    analysts: str = Query(default="market,news,fundamentals,social"),
-    debate_rounds: int = Query(default=1, ge=1, le=10),
-    model: str = Query(default="gpt-4o"),
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
+    """Return token/cost/duration estimate using the user's actual settings."""
+    from backend.repositories.settings import get_settings
     from backend.services.analysis_stats_service import estimate_cost as _est
 
+    settings = await get_settings(db, user.id)
+    analysts = settings.selected_analysts or "market,news,fundamentals,social"
+    debate_rounds = settings.debate_rounds or 1
+    model = settings.llm_model or "gpt-4o"
     return _est(analysts, debate_rounds, model)
 
 

@@ -16,7 +16,7 @@ interface AnalysisControlsProps {
   handleStop: () => void
   handleClear: () => void
   signal: string | null
-  costEstimate: any
+  costEstimate: { estimated_cost_usd: number; estimated_tokens: number; estimated_duration_min: number; analyst_count: number } | null
   existingId: number | null
   t: any
 }
@@ -95,7 +95,7 @@ export const AnalysisControls: React.FC<AnalysisControlsProps> = ({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 border-t border-white/[0.03] pt-2.5">
           {costEstimate && (
             <span className="text-[10px] text-slate-500 font-semibold">
-              Cost Estimate: ${(costEstimate.min_usd ?? 0).toFixed(3)} – ${(costEstimate.max_usd ?? 0).toFixed(3)}
+              ~${(costEstimate.estimated_cost_usd ?? 0).toFixed(3)} · {(costEstimate.estimated_tokens ?? 0).toLocaleString()} tokens · {costEstimate.estimated_duration_min}dk
             </span>
           )}
           {existingId && (

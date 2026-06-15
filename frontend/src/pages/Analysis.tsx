@@ -148,7 +148,7 @@ function RunTab() {
   const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Stock' }, { value: 'crypto', label: 'Crypto' }]
   const [currentStep, setCurrentStep] = useState<{ label: string; stage: string } | null>(null)
 
-  const [costEstimate, setCostEstimate] = useState<{ min_usd: number; max_usd: number } | null>(null)
+  const [costEstimate, setCostEstimate] = useState<{ estimated_cost_usd: number; estimated_tokens: number; estimated_duration_min: number; analyst_count: number } | null>(null)
   const [existingId, setExistingId] = useState<number | null>(null)
   const [showRerunModal, setShowRerunModal] = useState(false)
 
@@ -356,7 +356,7 @@ function RunTab() {
     if (!ticker.trim() || running) return
     const tid = setTimeout(async () => {
       try {
-        const { data } = await axios.get('/api/analysis/cost-estimate', { params: { ticker: ticker.toUpperCase(), trade_date: date } })
+        const { data } = await axios.get('/api/analysis/cost-estimate')
         setCostEstimate(data)
       } catch { setCostEstimate(null) }
     }, 600)
