@@ -10,6 +10,7 @@ import yfinance as yf
 from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 
+from backend.services.indicator_service import calculate_ema, calculate_macd, calculate_rsi
 from backend.trading_agents.dataflows.interface import route_to_vendor
 
 _logger = logging.getLogger(__name__)
@@ -182,30 +183,6 @@ async def get_vision_chart_analysis(
         return f"Error performing vision chart analysis: {err_msg}"
 
 
-def _local_calculate_rsi(series: pd.Series, period: int = 14) -> pd.Series:
-    delta = series.diff()
-    gain = delta.where(delta > 0, 0.0)
-    loss = -delta.where(delta < 0, 0.0)
-
-    avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
-
-    rs = avg_gain / avg_loss.replace(0, 1e-9)
-    rsi = 100 - (100 / (1 + rs))
-    return rsi
-
-
-def _local_calculate_macd(
-    series: pd.Series, fast: int = 12, slow: int = 26, signal: int = 9
-) -> tuple[pd.Series, pd.Series, pd.Series]:
-    ema_fast = series.ewm(span=fast, adjust=False).mean()
-    ema_slow = series.ewm(span=slow, adjust=False).mean()
-    macd_line = ema_fast - ema_slow
-    signal_line = macd_line.ewm(span=signal, adjust=False).mean()
-    macd_hist = macd_line - signal_line
-    return macd_line, signal_line, macd_hist
-
-
 def _local_find_support_resistance(
     df: pd.DataFrame, current_price: float, window: int = 5
 ) -> tuple[list[float], list[float]]:
@@ -288,13 +265,13 @@ async def get_mtf_trend(
 
         df_mtf = df_mtf.dropna(subset=["Close", "High", "Low"])
 
-        # Calculate Indicators
-        df_mtf["EMA_20"] = df_mtf["Close"].ewm(span=20, adjust=False).mean()
-        df_mtf["RSI_14"] = _local_calculate_rsi(df_mtf["Close"], 14)
-        macd_line, signal_line, macd_hist = _local_calculate_macd(df_mtf["Close"], 12, 26, 9)
+        # Calculate Indicators (shared implementations in indicator_service).
+        df_mtf["EMA_20"] = calculate_ema(df_mtf["Close"], 20)
+        df_mtf["RSI_14"] = calculate_rsi(df_mtf["Close"], 14)
+        macd_line, signal_line = calculate_macd(df_mtf["Close"], 12, 26, 9)
         df_mtf["MACD_Line"] = macd_line
         df_mtf["MACD_Signal"] = signal_line
-        df_mtf["MACD_Hist"] = macd_hist
+        df_mtf["MACD_Hist"] = macd_line - signal_line
 
         latest_close = float(df_mtf["Close"].iloc[-1])
         latest_ema = float(df_mtf["EMA_20"].iloc[-1])

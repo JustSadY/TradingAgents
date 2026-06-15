@@ -9,7 +9,12 @@ from backend.trading_agents.dataflows.interface import route_to_vendor
 async def get_options_data(
     symbol: Annotated[str, "ticker symbol of the company"],
 ) -> str:
-    """Retrieve options chain data, including Put/Call ratios and Implied Volatility (IV) metrics."""
+    """Retrieve recent company news used as a proxy for options-flow context.
+
+    Note: no dedicated options-chain vendor is wired up, so this returns recent
+    news for the symbol rather than live Put/Call ratios or Implied Volatility.
+    Do not fabricate specific IV or Put/Call figures from this text.
+    """
     from datetime import UTC, datetime, timedelta
 
     try:

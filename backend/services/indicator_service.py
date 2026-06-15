@@ -12,11 +12,18 @@ def calculate_ema(prices: pd.Series, span: int = 20) -> pd.Series:
 
 
 def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
-    """Compute RSI using Wilder's smoothed-average method."""
+    """Compute RSI using Wilder's smoothed-average method.
+
+    Uses an exponential (Wilder) average with ``alpha = 1/period`` — the
+    standard RSI — rather than a plain rolling mean, and guards against a
+    zero average loss so a flat/rising window yields RSI≈100 instead of NaN.
+    """
     delta = prices.diff()
-    gain = (delta.where(delta > 0, 0)).rolling(window=period).mean()
-    loss = (-delta.where(delta < 0, 0)).rolling(window=period).mean()
-    rs = gain / loss
+    gain = delta.where(delta > 0, 0.0)
+    loss = -delta.where(delta < 0, 0.0)
+    avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
+    rs = avg_gain / avg_loss.replace(0, 1e-9)
     return 100 - (100 / (1 + rs))
 
 
@@ -38,20 +45,19 @@ def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """Compute Average Directional Index (ADX)."""
     high = df["High"]
     low = df["Low"]
-    close = df["Close"]
 
-    plus_dm = high.diff()
-    minus_dm = low.diff()
+    # Wilder directional movement. The down move is *previous low − current low*
+    # (positive when the low fell), so it must use ``low.shift(1) - low`` rather
+    # than ``low.diff()`` (which has the opposite sign). Each side keeps its move
+    # only when it is positive and strictly dominates the *original* other side —
+    # so the two masks must be derived from the raw moves, not from each other.
+    up_move = high.diff()
+    down_move = low.shift(1) - low
 
-    # DM calculation logic
-    plus_dm = plus_dm.where((plus_dm > 0) & (plus_dm > minus_dm.abs()), 0)
-    minus_dm = minus_dm.where((minus_dm > 0) & (minus_dm > plus_dm.abs()), 0)
+    plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)
+    minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
 
-    tr1 = high - low
-    tr2 = (high - close.shift(1)).abs()
-    tr3 = (low - close.shift(1)).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    atr = tr.rolling(window=period).mean()
+    atr = calculate_atr(df, period)
 
     plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
     minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
