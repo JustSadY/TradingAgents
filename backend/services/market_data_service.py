@@ -10,16 +10,16 @@ _logger = logging.getLogger(__name__)
 
 _BATCH_PRICE_TIMEOUT_SEC = 10.0
 _SINGLE_PRICE_TIMEOUT_SEC = 6.0
+_YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
 
 async def get_live_price(ticker: str) -> float | None:
     """Fetch live price for a single ticker. Falls back to history if Yahoo REST query fails."""
     # 1. Try direct REST query (fast, free, API key-less)
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     url = f"https://query2.finance.yahoo.com/v7/finance/quote?symbols={ticker.upper()}"
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.get(url, headers=headers, timeout=5.0)
+            resp = await client.get(url, headers=_YAHOO_HEADERS, timeout=5.0)
             if resp.status_code == 200:
                 data = resp.json()
                 results = data.get("quoteResponse", {}).get("result", [])
@@ -43,10 +43,8 @@ async def get_live_price(ticker: str) -> float | None:
             hist = t.history(period="1d")
             if not hist.empty:
                 price = float(hist["Close"].iloc[-1])
-                if price is not None:
-                    val = float(price)
-                    if math.isfinite(val) and val > 0:
-                        return val
+                if math.isfinite(price) and price > 0:
+                    return price
         except Exception as e:
             _logger.warning("History fallback failed for %s: %s", ticker, e)
         return None
@@ -64,86 +62,107 @@ async def get_live_prices_batch(tickers: list[str]) -> dict[str, float]:
         return {}
 
     unique = list(dict.fromkeys([t.upper() for t in tickers]))
-    prices: dict[str, float] = {}
+    prices = await _fetch_yahoo_quotes_rest(unique)
 
-    # 1. Try direct REST batch query (fast, single HTTP call for all tickers)
-    symbols_str = ",".join(unique)
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
+    # 2. If any tickers are missing, download via yfinance or use get_live_price fallback
+    missing = [symbol for symbol in unique if symbol not in prices]
+    if missing:
+        fallback_res = await _fetch_yfinance_download_fallback(missing)
+        prices.update(fallback_res)
+
+        # 3. Final individual fallback for any remaining missing tickers
+        still_missing = [symbol for symbol in unique if symbol not in prices]
+        if still_missing:
+            prices.update(await _fetch_individual_fallbacks(still_missing))
+
+    return prices
+
+
+async def _fetch_yahoo_quotes_rest(unique_tickers: list[str]) -> dict[str, float]:
+    """Fetch multiple quotes from Yahoo REST API."""
+    prices: dict[str, float] = {}
+    symbols_str = ",".join(unique_tickers)
     url = f"https://query2.finance.yahoo.com/v7/finance/quote?symbols={symbols_str}"
 
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.get(url, headers=headers, timeout=8.0)
+            resp = await client.get(url, headers=_YAHOO_HEADERS, timeout=8.0)
             if resp.status_code == 200:
                 data = resp.json()
                 results = data.get("quoteResponse", {}).get("result", [])
                 for item in results:
                     symbol = item.get("symbol", "").upper()
                     price = item.get("regularMarketPrice") or item.get("preMarketPrice") or item.get("postMarketPrice")
-                    if price is not None and symbol in unique:
+                    if price is not None and symbol in unique_tickers:
                         val = float(price)
                         if math.isfinite(val) and val > 0:
                             prices[symbol] = val
     except Exception as exc:
-        _logger.debug("Direct batch query failed for %s: %s", unique, exc)
+        _logger.debug("Direct batch query failed for %s: %s", unique_tickers, exc)
+    return prices
 
-    # 2. If any tickers are missing, download via yfinance or use get_live_price fallback
-    missing = [symbol for symbol in unique if symbol not in prices]
-    if missing:
-        # Fallback batch yfinance download
-        def _batch_fallback():
-            fallback_prices = {}
-            try:
-                data = yf.download(
-                    missing if len(missing) > 1 else missing[0],
-                    period="2d",
-                    progress=False,
-                    auto_adjust=True,
-                    threads=False,
-                )
-                if data is not None and not getattr(data, "empty", False):
-                    close = data["Close"] if "Close" in data.columns else data
-                    if not getattr(close, "empty", False):
-                        if hasattr(close, "columns"):
-                            rows = close.ffill()
-                            if not rows.empty:
-                                last_row = rows.iloc[-1]
-                                for symbol in missing:
-                                    try:
-                                        raw = last_row[symbol]
-                                        val = float(raw)
-                                        if math.isfinite(val) and val > 0:
-                                            fallback_prices[symbol] = val
-                                    except (KeyError, TypeError, ValueError):
-                                        continue
-                        else:
-                            rows = close.ffill()
-                            if not rows.empty:
-                                val = float(rows.iloc[-1])
-                                if math.isfinite(val) and val > 0:
-                                    fallback_prices[missing[0]] = val
-            except Exception as exc:
-                _logger.debug("Batch fallback download failed (%s): %s", missing, exc)
-            return fallback_prices
 
+async def _fetch_yfinance_download_fallback(missing: list[str]) -> dict[str, float]:
+    """Fallback batch yfinance download."""
+
+    def _batch_fallback():
+        fallback_prices = {}
         try:
-            fallback_res = await asyncio.wait_for(asyncio.to_thread(_batch_fallback), timeout=_BATCH_PRICE_TIMEOUT_SEC)
-            prices.update(fallback_res)
-        except TimeoutError:
-            _logger.warning("Batch fallback download timed out for %s", missing)
-
-        # 3. Final individual fallback for any remaining missing tickers
-        still_missing = [symbol for symbol in unique if symbol not in prices]
-        if still_missing:
-            fallbacks = await asyncio.gather(
-                *[get_live_price(symbol) for symbol in still_missing], return_exceptions=True
+            data = yf.download(
+                missing if len(missing) > 1 else missing[0],
+                period="2d",
+                progress=False,
+                auto_adjust=True,
+                threads=False,
             )
-            for symbol, fetched in zip(still_missing, fallbacks, strict=True):
-                if isinstance(fetched, BaseException) or fetched is None:
-                    continue
-                val = float(fetched)
+            if data is not None and not getattr(data, "empty", False):
+                close = data["Close"] if "Close" in data.columns else data
+                if not getattr(close, "empty", False):
+                    fallback_prices.update(_parse_yfinance_batch_data(close, missing))
+        except Exception as exc:
+            _logger.debug("Batch fallback download failed (%s): %s", missing, exc)
+        return fallback_prices
+
+    try:
+        return await asyncio.wait_for(asyncio.to_thread(_batch_fallback), timeout=_BATCH_PRICE_TIMEOUT_SEC)
+    except TimeoutError:
+        _logger.warning("Batch fallback download timed out for %s", missing)
+        return {}
+
+
+def _parse_yfinance_batch_data(close_data, missing_symbols: list[str]) -> dict[str, float]:
+    """Parse pandas data from yf.download."""
+    parsed = {}
+    rows = close_data.ffill()
+    if rows.empty:
+        return parsed
+
+    if hasattr(close_data, "columns"):
+        last_row = rows.iloc[-1]
+        for symbol in missing_symbols:
+            try:
+                val = float(last_row[symbol])
                 if math.isfinite(val) and val > 0:
-                    prices[symbol] = val
+                    parsed[symbol] = val
+            except (KeyError, TypeError, ValueError):
+                continue
+    else:
+        val = float(rows.iloc[-1])
+        if math.isfinite(val) and val > 0:
+            parsed[missing_symbols[0]] = val
+    return parsed
+
+
+async def _fetch_individual_fallbacks(still_missing: list[str]) -> dict[str, float]:
+    """Final individual fallback for any remaining missing tickers."""
+    prices = {}
+    fallbacks = await asyncio.gather(*[get_live_price(symbol) for symbol in still_missing], return_exceptions=True)
+    for symbol, fetched in zip(still_missing, fallbacks, strict=True):
+        if isinstance(fetched, BaseException) or fetched is None:
+            continue
+        val = float(fetched)
+        if math.isfinite(val) and val > 0:
+            prices[symbol] = val
     return prices
 
 
@@ -153,6 +172,7 @@ async def get_historical_data(ticker: str, start_date: str, end_date: str):
     delay = 1.0
     for attempt in range(max_retries):
         try:
+
             def _fetch():
                 data = yf.Ticker(ticker).history(start=start_date, end=end_date)
                 if data.empty:
@@ -173,11 +193,17 @@ async def get_historical_data(ticker: str, start_date: str, end_date: str):
             return await asyncio.to_thread(_fetch)
         except Exception as exc:
             if attempt < max_retries - 1:
-                _logger.warning("Historical data fetch for %s failed on attempt %d: %s. Retrying in %.1fs...", ticker, attempt + 1, exc, delay)
+                _logger.warning(
+                    "Historical data fetch for %s failed on attempt %d: %s. Retrying in %.1fs...",
+                    ticker,
+                    attempt + 1,
+                    exc,
+                    delay,
+                )
                 await asyncio.sleep(delay)
                 delay *= 2
             else:
-                _logger.error("Historical data fetch for %s failed after %d attempts: %s", ticker, max_retries, exc)
+                _logger.exception("Historical data fetch for %s failed after %d attempts", ticker, max_retries)
                 raise
 
 
@@ -260,12 +286,11 @@ async def get_live_prices_details_batch(tickers: list[str]) -> dict[str, dict[st
     details: dict[str, dict[str, float]] = {}
 
     symbols_str = ",".join(unique)
-    headers = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
     url = f"https://query2.finance.yahoo.com/v7/finance/quote?symbols={symbols_str}"
 
     try:
         async with httpx.AsyncClient() as client:
-            resp = await client.get(url, headers=headers, timeout=8.0)
+            resp = await client.get(url, headers=_YAHOO_HEADERS, timeout=8.0)
             if resp.status_code == 200:
                 data = resp.json()
                 results = data.get("quoteResponse", {}).get("result", [])

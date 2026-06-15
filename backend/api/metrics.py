@@ -8,7 +8,7 @@ from backend.core.metrics import render_latest
 router = APIRouter(tags=["metrics"])
 
 
-@router.get("/metrics", include_in_schema=False)
+@router.get("/metrics", include_in_schema=False, responses={401: {"description": "Invalid metrics token"}, 404: {"description": "Metrics disabled"}})
 async def metrics(request: Request):
     token = get_settings().METRICS_TOKEN
     if not token:

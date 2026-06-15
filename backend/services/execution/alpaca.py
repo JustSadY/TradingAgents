@@ -76,7 +76,7 @@ class AlpacaTrader(BaseTraderInterface):
         try:
             headers = await self._get_headers()
         except ValueError as exc:
-            _logger.error("Alpaca place_order failed: %s", exc)
+            _logger.exception("Alpaca place_order failed")
             return OrderResult(
                 order_id="",
                 status="REJECTED",

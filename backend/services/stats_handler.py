@@ -32,12 +32,7 @@ class StatsCallbackHandler(BaseCallbackHandler):
             self.llm_calls += 1
 
     def on_llm_start(self, *args: Any, **kwargs: Any) -> None:
-        run_id = kwargs.get("run_id")
-        if run_id and run_id not in self._seen_runs:
-            self._seen_runs.add(run_id)
-            self.llm_calls += 1
-        elif not run_id:
-            self.llm_calls += 1
+        self.on_chat_model_start(*args, **kwargs)
 
     def on_llm_end(self, response: Any, **kwargs: Any) -> None:
         usage = self._extract_usage(response)
@@ -117,31 +112,36 @@ class StatsCallbackHandler(BaseCallbackHandler):
         if direct_usage is not None:
             return direct_usage
 
+        # Check generations list for message-level usage
         for gen_list in getattr(response, "generations", []) or []:
             for gen in gen_list:
-                message = getattr(gen, "message", None)
-                usage = cls._parse_usage_dict(getattr(message, "usage_metadata", None))
-                if usage is not None:
-                    return usage
-                response_metadata = getattr(message, "response_metadata", None)
-                usage = cls._parse_usage_dict(
-                    (response_metadata or {}).get("token_usage") if isinstance(response_metadata, dict) else None
-                )
-                if usage is not None:
-                    return usage
-                usage = cls._parse_usage_dict(
-                    (response_metadata or {}).get("usage") if isinstance(response_metadata, dict) else None
-                )
-                if usage is not None:
+                usage = cls._extract_from_generation(gen)
+                if usage:
                     return usage
 
+        # Fallback to top-level llm_output
         llm_output = getattr(response, "llm_output", None)
-        usage = cls._parse_usage_dict((llm_output or {}).get("token_usage") if isinstance(llm_output, dict) else None)
-        if usage is not None:
+        if isinstance(llm_output, dict):
+            return cls._parse_usage_dict(llm_output.get("token_usage")) or cls._parse_usage_dict(llm_output.get("usage"))
+
+        return None
+
+    @classmethod
+    def _extract_from_generation(cls, gen: Any) -> dict[str, int] | None:
+        """Helper to extract usage from a single generation message."""
+        message = getattr(gen, "message", None)
+        if not message:
+            return None
+
+        # Check standard usage_metadata on the message
+        usage = cls._parse_usage_dict(getattr(message, "usage_metadata", None))
+        if usage:
             return usage
-        usage = cls._parse_usage_dict((llm_output or {}).get("usage") if isinstance(llm_output, dict) else None)
-        if usage is not None:
-            return usage
+
+        # Check response_metadata dict
+        meta = getattr(message, "response_metadata", None)
+        if isinstance(meta, dict):
+            return cls._parse_usage_dict(meta.get("token_usage")) or cls._parse_usage_dict(meta.get("usage"))
 
         return None
 

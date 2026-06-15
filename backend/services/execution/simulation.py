@@ -55,7 +55,7 @@ class SimulationTrader(BaseTraderInterface):
                 message="Simulation order filled",
             )
         except Exception as e:
-            _logger.error("Simulation order failed for %s: %s", request.ticker, e, exc_info=True)
+            _logger.exception("Simulation order failed for %s", request.ticker)
             return OrderResult(
                 order_id="",
                 status="REJECTED",

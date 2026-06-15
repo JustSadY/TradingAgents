@@ -75,6 +75,45 @@ class TradingAgentsGraph:
         runtime_agent_ctx = self.config.get("runtime_agent_context") or {}
         self.hierarchy = AgentHierarchy(runtime_agent_ctx)
 
+        self._init_llms(runtime_agent_ctx)
+
+        # ------------------------------------------------------------------
+        # Filter selected analysts using hierarchy enable state.
+        # is_enabled() cascades through market_intelligence → portfolio_manager,
+        # so disabling either branch transparently drops every analyst.
+        # ------------------------------------------------------------------
+        _effective_analysts = [k for k in selected_analysts if self.hierarchy.is_enabled(k)]
+        skipped = set(selected_analysts) - set(_effective_analysts)
+        if skipped:
+            logger.info(
+                "The following analysts are disabled by hierarchy and will be skipped: %s",
+                sorted(skipped),
+            )
+
+        self.tool_nodes = self._create_tool_nodes()
+        self.conditional_logic = ConditionalLogic(
+            max_debate_rounds=self.config["max_debate_rounds"],
+            max_risk_discuss_rounds=self.config["max_risk_discuss_rounds"],
+        )
+        self.graph_setup = GraphSetup(
+            self.thinking_llm,
+            self.tool_nodes,
+            self.conditional_logic,
+            analyst_concurrency_limit=self.config.get("analyst_concurrency_limit", 1),
+            agent_llms=self.agent_llms,
+            agent_hierarchy=self.hierarchy,
+            config=self.config,
+        )
+        self.propagator = Propagator(max_recur_limit=self.config.get("max_recur_limit", 100))
+        self.signal_processor = SignalProcessor(self.thinking_llm)
+        self.curr_state = None
+        self.ticker = None
+        self.log_states_dict = {}
+        self.workflow = self.graph_setup.setup_graph(_effective_analysts)
+        self.graph = self.workflow.compile()
+        self._checkpointer_ctx = None
+
+    def _init_llms(self, runtime_agent_ctx: dict):
         # Resolve the Master (Portfolio Manager) LLM to use as thinking_llm
         pm_state = runtime_agent_ctx.get("portfolio_manager") or {}
         pm_settings = pm_state.get("settings") or {}
@@ -128,42 +167,6 @@ class TradingAgentsGraph:
                 logger.warning("LLM resolution failed for agent '%s': %s – using global LLM.", key, e)
                 self.agent_llms[key] = self.thinking_llm.with_config(tags=[key], metadata={"agent": key})
 
-        # ------------------------------------------------------------------
-        # Filter selected analysts using hierarchy enable state.
-        # is_enabled() cascades through market_intelligence → portfolio_manager,
-        # so disabling either branch transparently drops every analyst.
-        # ------------------------------------------------------------------
-        _effective_analysts = [k for k in selected_analysts if self.hierarchy.is_enabled(k)]
-        skipped = set(selected_analysts) - set(_effective_analysts)
-        if skipped:
-            logger.info(
-                "The following analysts are disabled by hierarchy and will be skipped: %s",
-                sorted(skipped),
-            )
-
-        self.tool_nodes = self._create_tool_nodes()
-        self.conditional_logic = ConditionalLogic(
-            max_debate_rounds=self.config["max_debate_rounds"],
-            max_risk_discuss_rounds=self.config["max_risk_discuss_rounds"],
-        )
-        self.graph_setup = GraphSetup(
-            self.thinking_llm,
-            self.tool_nodes,
-            self.conditional_logic,
-            analyst_concurrency_limit=self.config.get("analyst_concurrency_limit", 1),
-            agent_llms=self.agent_llms,
-            agent_hierarchy=self.hierarchy,
-            config=self.config,
-        )
-        self.propagator = Propagator(max_recur_limit=self.config.get("max_recur_limit", 100))
-        self.signal_processor = SignalProcessor(self.thinking_llm)
-        self.curr_state = None
-        self.ticker = None
-        self.log_states_dict = {}
-        self.workflow = self.graph_setup.setup_graph(_effective_analysts)
-        self.graph = self.workflow.compile()
-        self._checkpointer_ctx = None
-
     def _with_fallback(self, llm, provider: str, model: str, temperature=None):
         """Wrap *llm* with the user's opt-in fallback provider/model, when one is
         configured and differs from the primary. Failure to build the fallback
@@ -212,7 +215,7 @@ class TradingAgentsGraph:
             kwargs["api_key"] = self.config["api_key"]
         return kwargs
 
-    def _filter_tools_for_analyst(self, analyst_key: str, raw_tools: list) -> list:
+    def _filter_tools_for_analyst(self, _analyst_key: str, raw_tools: list) -> list:
         runtime_ctx = self.config.get("runtime_tool_context")
         if not runtime_ctx:
             return raw_tools
@@ -224,42 +227,44 @@ class TradingAgentsGraph:
             tool_name = tool_func.name if hasattr(tool_func, "name") else tool_func.__name__
             agent_tool_key = registry.get_agent_tool_key_for_langchain_tool(tool_name)
 
-            if agent_tool_key is None:
+            if self._should_include_tool(agent_tool_key, tool_func, runtime_ctx):
                 filtered.append(tool_func)
-                continue
-
-            agent_tool = registry.get(agent_tool_key)
-            if not agent_tool:
-                filtered.append(tool_func)
-                continue
-
-            # Hierarchy gate: if every agent permitted to use this tool sits on a
-            # disabled branch, the tool is unreachable and is stripped entirely.
-            if self.hierarchy is not None and not self.hierarchy.tool_is_reachable(agent_tool_key):
-                continue
-
-            tool_access = runtime_ctx.get("access", {}).get("tool_access", {}).get(agent_tool_key, {})
-            can_use = tool_access.get("can_use", True)
-            if not can_use:
-                continue
-
-            user_state = runtime_ctx.get("user_settings", {}).get(agent_tool_key, {})
-            server_state = runtime_ctx.get("server_settings", {}).get(agent_tool_key, {})
-
-            enabled = None
-            if user_state and user_state.get("enabled") is not None:
-                enabled = user_state["enabled"]
-            elif server_state and server_state.get("enabled") is not None:
-                enabled = server_state["enabled"]
-            else:
-                enabled = agent_tool.default_enabled
-
-            if not enabled:
-                continue
-
-            filtered.append(tool_func)
 
         return filtered
+
+    def _should_include_tool(self, tool_key: str | None, _tool_func: Any, runtime_ctx: dict) -> bool:
+        """Helper to determine if a tool should be included for an analyst."""
+        if tool_key is None:
+            return True
+
+        from backend.trading_agents.agents.tools.registry import registry
+
+        agent_tool = registry.get(tool_key)
+        if not agent_tool:
+            return True
+
+        # Hierarchy gate: if every agent permitted to use this tool sits on a
+        # disabled branch, the tool is unreachable and is stripped entirely.
+        if self.hierarchy is not None and not self.hierarchy.tool_is_reachable(tool_key):
+            return False
+
+        tool_access = runtime_ctx.get("access", {}).get("tool_access", {}).get(tool_key, {})
+        if not tool_access.get("can_use", True):
+            return False
+
+        return self._is_tool_enabled(tool_key, agent_tool, runtime_ctx)
+
+    def _is_tool_enabled(self, tool_key: str, agent_tool: Any, runtime_ctx: dict) -> bool:
+        """Check user/server/default enablement for a tool."""
+        user_state = runtime_ctx.get("user_settings", {}).get(tool_key, {})
+        server_state = runtime_ctx.get("server_settings", {}).get(tool_key, {})
+
+        if user_state and user_state.get("enabled") is not None:
+            return bool(user_state["enabled"])
+        if server_state and server_state.get("enabled") is not None:
+            return bool(server_state["enabled"])
+
+        return bool(agent_tool.default_enabled)
 
     def _create_tool_nodes(self) -> dict[str, Any]:
         from backend.trading_agents.agents.analyst_registry import get_tools, list_analysts
@@ -322,9 +327,7 @@ class TradingAgentsGraph:
         if self.debug:
             trace = []
             for chunk in self.graph.stream(state_input, **args):
-                if len(chunk["messages"]) == 0:
-                    pass
-                else:
+                if len(chunk["messages"]) > 0:
                     chunk["messages"][-1].pretty_print()
                     trace.append(chunk)
             final_state = {}

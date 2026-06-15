@@ -14,7 +14,7 @@ from backend.models.user import User
 router = APIRouter(tags=["share"])
 
 
-@router.post("/api/analysis/{analysis_id}/share")
+@router.post("/api/analysis/{analysis_id}/share", responses={404: {"description": "Analysis not found"}})
 async def create_share(
     analysis_id: int,
     db: AsyncSession = Depends(get_db),
@@ -49,7 +49,7 @@ async def create_share(
     return {"token": share.token, "expires_at": share.expires_at.isoformat()}
 
 
-@router.get("/api/share/{token}")
+@router.get("/api/share/{token}", responses={404: {"description": "Report or analysis data not found"}, 410: {"description": "Shared report has expired"}})
 async def get_shared_report(token: str, db: AsyncSession = Depends(get_db)):
     # Public endpoint — no auth
     result = await db.execute(select(SharedReport).where(SharedReport.token == token))

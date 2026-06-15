@@ -68,7 +68,7 @@ async def list_all_personas(
     return builtins + custom
 
 
-@router.post("", status_code=201)
+@router.post("", status_code=201, responses={400: {"description": "Key conflict or duplicate key"}})
 async def create_persona(
     body: PersonaCreate,
     db: AsyncSession = Depends(get_db),
@@ -105,7 +105,7 @@ async def create_persona(
     }
 
 
-@router.put("/{key}")
+@router.put("/{key}", responses={400: {"description": "Cannot edit built-in persona"}, 404: {"description": "Persona not found"}})
 async def update_persona(
     key: str,
     body: PersonaUpdate,
@@ -138,7 +138,7 @@ async def update_persona(
     }
 
 
-@router.delete("/{key}", status_code=204)
+@router.delete("/{key}", status_code=204, responses={400: {"description": "Cannot delete built-in persona"}, 404: {"description": "Persona not found"}})
 async def delete_persona(
     key: str,
     db: AsyncSession = Depends(get_db),

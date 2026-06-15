@@ -53,8 +53,6 @@ def create_sentiment_analyst(llm):
 
         system_message = _build_system_message(
             ticker=ticker,
-            start_date=start_date,
-            end_date=end_date,
             news_block=news_block,
             stocktwits_block=stocktwits_block,
             reddit_block=reddit_block,
@@ -86,8 +84,6 @@ def create_sentiment_analyst(llm):
 def _build_system_message(
     *,
     ticker: str,
-    start_date: str,
-    end_date: str,
     news_block: str,
     stocktwits_block: str,
     reddit_block: str,

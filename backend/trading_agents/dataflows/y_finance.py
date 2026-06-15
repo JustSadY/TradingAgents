@@ -12,7 +12,7 @@ from .stockstats_utils import filter_financials_by_date, load_ohlcv, yf_retry
 _logger = logging.getLogger(__name__)
 
 
-def get_YFin_data_online(
+def get_yfin_data_online(
     symbol: Annotated[str, "ticker symbol of the company"],
     start_date: Annotated[str, "Start date in yyyy-mm-dd format"],
     end_date: Annotated[str, "End date in yyyy-mm-dd format"],
@@ -101,6 +101,7 @@ def get_fundamentals(
     ticker: Annotated[str, "ticker symbol of the company"],
     curr_date: Annotated[str, "current date (not used for yfinance)"] = None,
 ):
+    _ = curr_date
     try:
         ticker_obj = yf.Ticker(ticker.upper())
         info = yf_retry(lambda: ticker_obj.info)

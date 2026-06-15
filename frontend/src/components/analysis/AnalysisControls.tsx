@@ -16,7 +16,7 @@ interface AnalysisControlsProps {
   handleStop: () => void
   handleClear: () => void
   signal: string | null
-  costEstimate: any
+  costEstimate: { estimated_cost_usd: number; estimated_tokens: number; estimated_duration_min: number; analyst_count: number } | null
   existingId: number | null
   t: any
 }
@@ -66,14 +66,14 @@ export const AnalysisControls: React.FC<AnalysisControlsProps> = ({
             <button
               onClick={handleRun}
               disabled={!ticker.trim()}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-xs md:text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-violet-500/20 transition-all cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs md:text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-violet-500/20 transition-all cursor-pointer"
             >
               <Zap size={14} /> {t('analysis.btn.start')}
             </button>
           ) : (
             <button
               onClick={handleStop}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-xs md:text-sm font-semibold text-white bg-rose-600/90 hover:bg-rose-600 shadow-md shadow-rose-500/20 transition-all cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs md:text-sm font-semibold text-white bg-rose-600/90 hover:bg-rose-600 shadow-md shadow-rose-500/20 transition-all cursor-pointer"
             >
               <Square size={12} fill="currentColor" /> {t('analysis.btn.stop')}
             </button>
@@ -95,7 +95,7 @@ export const AnalysisControls: React.FC<AnalysisControlsProps> = ({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 border-t border-white/[0.03] pt-2.5">
           {costEstimate && (
             <span className="text-[10px] text-slate-500 font-semibold">
-              Cost Estimate: ${(costEstimate.min_usd ?? 0).toFixed(3)} – ${(costEstimate.max_usd ?? 0).toFixed(3)}
+              ~${(costEstimate.estimated_cost_usd ?? 0).toFixed(3)} · {(costEstimate.estimated_tokens ?? 0).toLocaleString()} tokens · {costEstimate.estimated_duration_min}dk
             </span>
           )}
           {existingId && (

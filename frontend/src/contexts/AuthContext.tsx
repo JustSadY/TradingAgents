@@ -141,7 +141,7 @@ axios.interceptors.response.use(
     // must not re-enter this branch and queue forever).
     const isAuthEndpoint = typeof original?.url === 'string' && original.url.startsWith('/auth/')
     if (status !== 401 || original._retried || isAuthEndpoint) {
-      return Promise.reject(err)
+      throw err
     }
     original._retried = true
 
@@ -181,7 +181,7 @@ axios.interceptors.response.use(
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem(REFRESH_KEY)
       window.location.href = '/login'
-      return Promise.reject(err)
+      throw err
     } finally {
       _refreshing = false
     }

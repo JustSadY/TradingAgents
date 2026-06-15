@@ -86,6 +86,7 @@ async def update_user_profile(
         user.display_name = display_name
     if hashed_password is not None:
         user.hashed_password = hashed_password
+    await db.flush()
     return user
 
 
@@ -106,4 +107,5 @@ async def update_user_admin(
         user.email = email
     if display_name is not None:
         user.display_name = display_name
+    await db.flush()
     return user

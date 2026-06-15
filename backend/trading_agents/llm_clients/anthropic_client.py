@@ -40,7 +40,8 @@ def _apply_cache_control(input_value: Any) -> Any:
                     msg.content = [{"type": "text", "text": msg.content, "cache_control": {"type": "ephemeral"}}]
                 break  # one breakpoint on the system prefix is enough
         return messages
-    except Exception as exc:  # noqa: BLE001 — caching is an optimisation, never break the call
+    # caching is an optimisation, never break the call
+    except Exception as exc:  # noqa: BLE001
         _logger.debug("prompt caching skipped: %s", exc)
         return input_value
 
@@ -70,15 +71,15 @@ class NormalizedChatAnthropic(ChatAnthropic):
     # Set by the client factory; when True the system prompt is cache-tagged.
     prompt_caching: bool = False
 
-    def invoke(self, input, config=None, **kwargs):
+    def invoke(self, input_value, config=None, **kwargs):
         if self.prompt_caching:
-            input = _apply_cache_control(input)
-        return normalize_content(super().invoke(input, config, **kwargs))
+            input_value = _apply_cache_control(input_value)
+        return normalize_content(super().invoke(input_value, config, **kwargs))
 
-    async def ainvoke(self, input, config=None, **kwargs):
+    async def ainvoke(self, input_value, config=None, **kwargs):
         if self.prompt_caching:
-            input = _apply_cache_control(input)
-        result = await super().ainvoke(input, config, **kwargs)
+            input_value = _apply_cache_control(input_value)
+        result = await super().ainvoke(input_value, config, **kwargs)
         return normalize_content(result)
 
 

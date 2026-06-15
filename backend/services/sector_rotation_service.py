@@ -71,7 +71,6 @@ async def get_sector_rotation() -> list[dict[str, Any]]:
             else:
                 raise
 
-
     results: list[dict[str, Any]] = []
     for ticker, name in SECTORS.items():
         try:

@@ -395,7 +395,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     max="5000"
                     className={Input}
                     value={s.max_recur_limit}
-                    onChange={e => update('max_recur_limit', parseInt(e.target.value) || 1000)}
+                    onChange={e => update('max_recur_limit', Number.parseInt(e.target.value) || 1000)}
                   />
                 </Row>
               </Section>
@@ -406,31 +406,31 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           {activeTab === 'risk' && (
             <Section title={t('settings.section_risk') || 'Risk Management'}>
               <Row label={t('settings.row_risk_per_trade')}>
-                <input type="number" step="0.1" min="0.1" max="50" className={Input} value={s.max_risk_per_trade_pct} onChange={e => update('max_risk_per_trade_pct', parseFloat(e.target.value))} />
+                <input type="number" step="0.1" min="0.1" max="50" className={Input} value={s.max_risk_per_trade_pct} onChange={e => update('max_risk_per_trade_pct', Number.parseFloat(e.target.value))} />
               </Row>
               <Row label={t('settings.row_max_position_size')}>
-                <input type="number" step="1" min="1" max="100" className={Input} value={s.max_position_size_pct} onChange={e => update('max_position_size_pct', parseFloat(e.target.value))} />
+                <input type="number" step="1" min="1" max="100" className={Input} value={s.max_position_size_pct} onChange={e => update('max_position_size_pct', Number.parseFloat(e.target.value))} />
               </Row>
               <Row label={t('settings.row_debate_rounds')}>
-                <input type="number" min="1" max="10" className={Input} value={s.max_debate_rounds} onChange={e => update('max_debate_rounds', parseInt(e.target.value))} />
+                <input type="number" min="1" max="10" className={Input} value={s.max_debate_rounds} onChange={e => update('max_debate_rounds', Number.parseInt(e.target.value))} />
               </Row>
               <Row label={t('settings.row_risk_rounds')}>
-                <input type="number" min="1" max="10" className={Input} value={s.max_risk_rounds} onChange={e => update('max_risk_rounds', parseInt(e.target.value))} />
+                <input type="number" min="1" max="10" className={Input} value={s.max_risk_rounds} onChange={e => update('max_risk_rounds', Number.parseInt(e.target.value))} />
               </Row>
               <Row label={t('settings.row_price_tolerance')}>
-                <input type="number" step="0.1" min="0" max="10" className={Input} value={s.price_tolerance_pct} onChange={e => update('price_tolerance_pct', parseFloat(e.target.value))} />
+                <input type="number" step="0.1" min="0" max="10" className={Input} value={s.price_tolerance_pct} onChange={e => update('price_tolerance_pct', Number.parseFloat(e.target.value))} />
               </Row>
               <Row label={t('settings.row_parallel_analysts')}>
-                <input type="number" min="1" max="16" className={Input} value={s.analyst_concurrency_limit} onChange={e => update('analyst_concurrency_limit', parseInt(e.target.value))} />
+                <input type="number" min="1" max="16" className={Input} value={s.analyst_concurrency_limit} onChange={e => update('analyst_concurrency_limit', Number.parseInt(e.target.value))} />
               </Row>
 
               <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
                 <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Agent Run Resilience</h4>
                 <Row label={t('settings.row_node_retry_attempts') || 'Node Retry Attempts'}>
-                  <input type="number" min="1" max="10" className={Input} value={s.node_retry_attempts ?? 2} onChange={e => update('node_retry_attempts', parseInt(e.target.value))} />
+                  <input type="number" min="1" max="10" className={Input} value={s.node_retry_attempts ?? 2} onChange={e => update('node_retry_attempts', Number.parseInt(e.target.value))} />
                 </Row>
                 <Row label={t('settings.row_node_retry_base_delay') || 'Retry Base Delay (s)'}>
-                  <input type="number" step="0.1" min="0.1" max="10" className={Input} value={s.node_retry_base_delay ?? 1.0} onChange={e => update('node_retry_base_delay', parseFloat(e.target.value))} />
+                  <input type="number" step="0.1" min="0.1" max="10" className={Input} value={s.node_retry_base_delay ?? 1.0} onChange={e => update('node_retry_base_delay', Number.parseFloat(e.target.value))} />
                 </Row>
               </div>
 
@@ -443,13 +443,13 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.anthropic_prompt_caching ?? true} onChange={e => update('anthropic_prompt_caching', e.target.checked)} />
                 </label>
                 <Row label={t('settings.row_max_report_chars') || 'Max Report Chars / Prompt'}>
-                  <input type="number" min="500" max="50000" step="500" className={Input} value={s.max_report_chars_in_prompts ?? 6000} onChange={e => update('max_report_chars_in_prompts', parseInt(e.target.value) || 6000)} />
+                  <input type="number" min="500" max="50000" step="500" className={Input} value={s.max_report_chars_in_prompts ?? 6000} onChange={e => update('max_report_chars_in_prompts', Number.parseInt(e.target.value) || 6000)} />
                 </Row>
                 <Row label={t('settings.row_max_debate_history') || 'Max Debate History Chars'}>
-                  <input type="number" min="1000" max="100000" step="1000" className={Input} value={s.max_debate_history_chars ?? 8000} onChange={e => update('max_debate_history_chars', parseInt(e.target.value) || 8000)} />
+                  <input type="number" min="1000" max="100000" step="1000" className={Input} value={s.max_debate_history_chars ?? 8000} onChange={e => update('max_debate_history_chars', Number.parseInt(e.target.value) || 8000)} />
                 </Row>
                 <Row label={t('settings.row_max_tool_output') || 'Max Tool Output Chars'}>
-                  <input type="number" min="1000" max="100000" step="1000" className={Input} value={s.max_tool_output_chars ?? 12000} onChange={e => update('max_tool_output_chars', parseInt(e.target.value) || 12000)} />
+                  <input type="number" min="1000" max="100000" step="1000" className={Input} value={s.max_tool_output_chars ?? 12000} onChange={e => update('max_tool_output_chars', Number.parseInt(e.target.value) || 12000)} />
                 </Row>
 
                 <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group mt-1">
@@ -460,10 +460,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 {s.analyst_prefilter_enabled && (
                   <>
                     <Row label={t('settings.row_prefilter_min_samples') || 'Min. Graded Calls'}>
-                      <input type="number" min="1" max="100" className={Input} value={s.analyst_prefilter_min_samples ?? 5} onChange={e => update('analyst_prefilter_min_samples', parseInt(e.target.value) || 5)} />
+                      <input type="number" min="1" max="100" className={Input} value={s.analyst_prefilter_min_samples ?? 5} onChange={e => update('analyst_prefilter_min_samples', Number.parseInt(e.target.value) || 5)} />
                     </Row>
                     <Row label={t('settings.row_prefilter_max_win_rate') || 'Drop Below Win Rate (%)'}>
-                      <input type="number" min="0" max="100" step="1" className={Input} value={s.analyst_prefilter_max_win_rate ?? 40} onChange={e => update('analyst_prefilter_max_win_rate', parseFloat(e.target.value) || 40)} />
+                      <input type="number" min="0" max="100" step="1" className={Input} value={s.analyst_prefilter_max_win_rate ?? 40} onChange={e => update('analyst_prefilter_max_win_rate', Number.parseFloat(e.target.value) || 40)} />
                     </Row>
                   </>
                 )}

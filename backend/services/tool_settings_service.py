@@ -161,13 +161,7 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
         if not tool:
             raise ValueError(f"Unknown tool key '{tool_key}'.")
 
-        # Check if any associated agent is active in the hierarchy
-        if tool.allowed_analysts:
-            is_any_agent_enabled = any(agent_ctx.get(a, {}).get("enabled", True) for a in tool.allowed_analysts)
-            if not is_any_agent_enabled:
-                raise ValueError(
-                    f"Tool '{tool_key}' is not available because none of its associated agents are enabled."
-                )
+        _validate_tool_availability(tool, tool_key, agent_ctx)
 
         row = user_rows.get(tool_key)
         if not row:
@@ -176,25 +170,38 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
             )
             db.add(row)
 
-        if update.reset_enabled:
-            row.enabled = tool.default_enabled
-        elif update.enabled is not None:
-            row.enabled = update.enabled
-
-        current_settings = row.settings.copy()
-        if update.reset_settings:
-            default_settings = tool.default_settings(scope="user")
-            for k in update.reset_settings:
-                if k in current_settings:
-                    current_settings[k] = default_settings.get(k)
-        elif update.settings is not None:
-            validated = validate_tool_settings(tool, update.settings)
-            current_settings.update(validated)
-
-        row.settings = current_settings
+        _apply_tool_setting_row_update(row, update, tool, scope="user")
 
     await db.flush()
     return await get_user_tool_settings(db, user)
+
+
+def _validate_tool_availability(tool: BaseAgentTool, tool_key: str, agent_ctx: dict):
+    """Raise ValueError if tool is not available due to disabled agents."""
+    if tool.allowed_analysts:
+        is_any_agent_enabled = any(agent_ctx.get(a, {}).get("enabled", True) for a in tool.allowed_analysts)
+        if not is_any_agent_enabled:
+            raise ValueError(f"Tool '{tool_key}' is not available because none of its associated agents are enabled.")
+
+
+def _apply_tool_setting_row_update(row: AgentToolSetting, update: Any, tool: BaseAgentTool, scope: str):
+    """Apply enablement and settings updates to an AgentToolSetting row."""
+    if update.reset_enabled:
+        row.enabled = tool.default_enabled
+    elif update.enabled is not None:
+        row.enabled = update.enabled
+
+    current_settings = row.settings.copy()
+    if update.reset_settings:
+        default_settings = tool.default_settings(scope=scope)
+        for k in update.reset_settings:
+            if k in current_settings:
+                current_settings[k] = default_settings.get(k)
+    elif update.settings is not None:
+        validated = validate_tool_settings(tool, update.settings)
+        current_settings.update(validated)
+
+    row.settings = current_settings
 
 
 async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettingsUpdate) -> ToolSettingsRead:
@@ -215,22 +222,7 @@ async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettings
             )
             db.add(row)
 
-        if update.reset_enabled:
-            row.enabled = tool.default_enabled
-        elif update.enabled is not None:
-            row.enabled = update.enabled
-
-        current_settings = row.settings.copy()
-        if update.reset_settings:
-            default_settings = tool.default_settings(scope="server")
-            for k in update.reset_settings:
-                if k in current_settings:
-                    current_settings[k] = default_settings.get(k)
-        elif update.settings is not None:
-            validated = validate_tool_settings(tool, update.settings)
-            current_settings.update(validated)
-
-        row.settings = current_settings
+        _apply_tool_setting_row_update(row, update, tool, scope="server")
 
     await db.flush()
     return await get_server_tool_settings(db)

@@ -339,7 +339,7 @@ async def run_individual_analysis(
         await emitter.emit_error("Analysis cancelled.")
         raise
     except Exception as exc:
-        _logger.error("Analysis failed task=%s user=%s: %s", emitter.task_id, username, exc, exc_info=True)
+        _logger.exception("Analysis failed task=%s user=%s", emitter.task_id, username)
         ANALYSIS_RUNS.labels(status="failed").inc()
         await mark_as_failed(db, row.id)
 

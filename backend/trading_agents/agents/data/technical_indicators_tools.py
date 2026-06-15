@@ -26,6 +26,6 @@ async def get_indicators(
             val = await route_to_vendor("get_indicators", symbol, ind, curr_date, look_back_days)
             results.append(val)
         except Exception as e:
-            _logger.error("Indicator %s failed for %s: %s", ind, symbol, e)
+            _logger.exception("Indicator %s failed for %s", ind, symbol)
             results.append(f"Error calculating {ind}: {e}")
     return "\n\n".join(results)

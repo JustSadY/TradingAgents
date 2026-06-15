@@ -71,7 +71,7 @@ async def get_portfolio_stats(db: AsyncSession, user: User) -> dict:
         pnl = float(o.realized_pnl or Decimal("0"))
         tv = float(o.total_value or Decimal("0"))
         cost_basis = tv - pnl
-        if cost_basis != 0.0:
+        if abs(cost_basis) > 1e-9:
             ret_pct = pnl / cost_basis * 100.0
             returns_pct.append(ret_pct)
             trade_data.append(
@@ -100,7 +100,7 @@ async def get_portfolio_stats(db: AsyncSession, user: User) -> dict:
     if len(returns_pct) >= 2:
         mean_r = statistics.mean(returns_pct)
         std_r = statistics.stdev(returns_pct)  # ddof=1 by default
-        if std_r != 0.0:
+        if abs(std_r) > 1e-9:
             sharpe_ratio = round(mean_r / std_r, 3)
         else:
             sharpe_ratio = None
@@ -120,7 +120,7 @@ async def get_portfolio_stats(db: AsyncSession, user: User) -> dict:
         for val in cumulative[1:]:
             if val > peak:
                 peak = val
-            elif peak != 0.0:
+            elif abs(peak) > 1e-9:
                 dd = (peak - val) / abs(peak) * 100.0
                 if dd > max_dd:
                     max_dd = dd

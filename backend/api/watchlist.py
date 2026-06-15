@@ -35,7 +35,7 @@ async def get_watchlist_prices(
     return await get_live_prices_details_batch(settings.watchlist)
 
 
-@router.post("/{ticker}", response_model=list[str])
+@router.post("/{ticker}", response_model=list[str], responses={422: {"description": "Invalid ticker format"}})
 async def add_to_watchlist(
     ticker: str,
     db: AsyncSession = Depends(get_db),

@@ -11,6 +11,9 @@ from pathlib import Path
 
 _logger = logging.getLogger(__name__)
 
+_ISO_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATUS_FILE = PROJECT_ROOT / ".update.json"
 UPDATE_UNIT = os.environ.get("TRADINGAGENTS_UPDATE_UNIT", "")
@@ -127,6 +130,26 @@ def get_status(do_fetch: bool = True) -> dict:
             if lg.returncode == 0:
                 commits = [line for line in lg.stdout.splitlines() if line.strip()]
     status = _read_status() or {}
+
+    # Eğer "running" durumu çok uzun sürüyorsa otomatik olarak "failed" yap
+    if status.get("state") == "running":
+        at_str = status.get("at", "")
+        if at_str:
+            try:
+                import datetime
+
+                started = datetime.datetime.fromisoformat(at_str.replace("Z", "+00:00"))
+                elapsed = (datetime.datetime.now(datetime.UTC) - started).total_seconds()
+                if elapsed > _UPDATE_STUCK_TIMEOUT:
+                    status = {
+                        "state": "failed",
+                        "at": time.strftime(_ISO_FORMAT, time.gmtime()),
+                        "error": f"Update timed out after {int(elapsed // 60)} minutes.",
+                    }
+                    _write_status(status)
+            except Exception:
+                pass
+
     return {
         "git": True,
         "update_supported": UPDATE_SUPPORTED,
@@ -150,7 +173,7 @@ def request_update() -> dict:
     status = _read_status()
     if status and status.get("state") == "running":
         raise RuntimeError("Update is already in progress.")
-    _write_status({"state": "running", "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+    _write_status({"state": "running", "at": time.strftime(_ISO_FORMAT, time.gmtime())})
     try:
         subprocess.run(
             ["sudo", "-n", SYSTEMCTL, "start", "--no-block", UPDATE_UNIT],
@@ -166,15 +189,36 @@ def request_update() -> dict:
     return {"started": True}
 
 
+_UPDATE_STUCK_TIMEOUT = 15 * 60  # 15 dakika
+
+
 def reset_stuck_update() -> None:
-    """Reset the update state to failed if it was left in running state on server startup/restart."""
+    """Reset the update state if it was left in 'running' state on server startup or timed out."""
     status = _read_status()
-    if status and status.get("state") == "running":
-        _logger.info("Resetting stuck update state to 'failed' (interrupted by server restart).")
-        _write_status(
-            {
-                "state": "failed",
-                "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-                "error": "Server restarted during update.",
-            }
-        )
+    if not status or status.get("state") != "running":
+        return
+
+    # Zaman damgasına bakarak gerçekten takılıp takılmadığını kontrol et
+    stuck_reason = "Server restarted during update."
+    at_str = status.get("at", "")
+    if at_str:
+        try:
+            import datetime
+
+            started = datetime.datetime.fromisoformat(at_str.replace("Z", "+00:00"))
+            elapsed = (datetime.datetime.now(datetime.UTC) - started).total_seconds()
+            if elapsed < _UPDATE_STUCK_TIMEOUT:
+                # Henüz çok yeni, belki hâlâ devam ediyor — dokunma
+                return
+            stuck_reason = f"Update timed out after {int(elapsed // 60)} minutes."
+        except Exception:
+            pass
+
+    _logger.info("Resetting stuck update state to 'failed': %s", stuck_reason)
+    _write_status(
+        {
+            "state": "failed",
+            "at": time.strftime(_ISO_FORMAT, time.gmtime()),
+            "error": stuck_reason,
+        }
+    )

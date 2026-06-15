@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,17 +13,17 @@ router = APIRouter(prefix="/api/market", tags=["daily-summary"])
 
 @router.get("/daily-summary")
 async def fetch_daily_summary(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     summary = await get_latest_summary(db, current_user.id)
     return summary or {}
 
 
-@router.post("/daily-summary/generate")
+@router.post("/daily-summary/generate", responses={400: {"description": "Invalid parameter or request value"}, 500: {"description": "Summary generation failed"}})
 async def trigger_daily_summary(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     try:
         result = await generate_daily_summary(db, current_user)

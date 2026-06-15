@@ -29,7 +29,7 @@ _DEFAULT = ModelCapabilities(
 )
 
 
-def get_capabilities(model_name: str) -> ModelCapabilities:
+def get_capabilities(_model_name: str) -> ModelCapabilities:
     # All currently supported core models (OpenAI, Anthropic, Google, NVIDIA)
     # follow standard tool-calling and structured output patterns.
     return _DEFAULT

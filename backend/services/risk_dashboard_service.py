@@ -40,7 +40,7 @@ async def get_risk_dashboard(db: AsyncSession, user: User) -> dict:
             h["_market_value"] = float(market_value)
 
     total_equity = sum(h["_market_value"] for h in holdings)
-    if total_equity == 0.0:
+    if abs(total_equity) < 1e-9:
         total_equity = 1.0  # prevent division by zero
 
     tickers: list[str] = [h["ticker"] for h in holdings]
@@ -153,7 +153,7 @@ async def get_risk_dashboard(db: AsyncSession, user: User) -> dict:
                             spy_aligned = spy_returns.loc[common_idx]
                             cov = float(stock_aligned.cov(spy_aligned))
                             var_spy = float(spy_aligned.var())
-                            if var_spy != 0.0:
+                            if abs(var_spy) > 1e-9:
                                 beta = round(cov / var_spy, 4)
             except Exception:
                 pass

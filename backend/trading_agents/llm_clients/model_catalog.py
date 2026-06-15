@@ -5,7 +5,7 @@ from .registry import llm_registry
 ModelOption = tuple[str, str]
 
 
-def get_model_options(provider: str, mode: str = "default") -> list[ModelOption]:
+def get_model_options(provider: str, _mode: str = "default") -> list[ModelOption]:
     return llm_registry.get_model_options(provider)
 
 

@@ -139,5 +139,5 @@ async def _generate_super_report(db, user, config, ticker_reports) -> str:
         )
         return state_out.get("super_portfolio_report", "")
     except Exception as e:
-        _logger.error("SuperPortfolioManager failed for user=%s: %s", username, e, exc_info=True)
+        _logger.exception("SuperPortfolioManager failed for user=%s", username)
         return f"Portfolio synthesis failed: {e}"

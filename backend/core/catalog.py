@@ -3,6 +3,9 @@ from __future__ import annotations
 from backend.trading_agents.agent_catalog import label_for
 from backend.trading_agents.agent_catalog import list_analysts as _engine_analysts
 
+_RISK_DEBATE = "Risk Debate"
+
+
 
 def _node_specs() -> dict:
     try:
@@ -67,7 +70,7 @@ SECTION_LABELS: dict[str, str] = {
     "bull_history": "Bull Arguments",
     "bear_history": "Bear Arguments",
     "investment_debate_history": "Debate",
-    "risk_debate_history": "Risk Debate",
+    "risk_debate_history": _RISK_DEBATE,
     "judge_decision": "Judge Decision",
 }
 SIGNALS: list[dict] = [
@@ -197,7 +200,7 @@ _STATIC_NODE_LABELS: dict[str, tuple[str, str]] = {
     "Bear Researcher": ("Bear Researcher", "research"),
     "Research Manager": ("Research Manager — investment plan", "research"),
     "Trader": ("Trader — execution plan", "trade"),
-    "Risk Debate": ("Risk Debate", "risk"),
+    _RISK_DEBATE: (_RISK_DEBATE, "risk"),
     "Aggressive Analyst": ("Aggressive Risk Analyst", "risk"),
     "Conservative Analyst": ("Conservative Risk Analyst", "risk"),
     "Neutral Analyst": ("Neutral Risk Analyst", "risk"),

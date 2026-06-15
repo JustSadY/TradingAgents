@@ -66,61 +66,90 @@ async def get_ab_comparison(db: AsyncSession) -> list[dict]:
 
     groups: dict[str, list] = {}
     for row in rows:
-        preset = row.preset_name
-        if not preset or preset.lower() in ("unknown", "unknown:unknown", "unknown/unknown"):
-            prov = (row.llm_provider or "Custom").strip()
-            mod = (row.llm_model or "Model").strip()
-            if not prov or prov.lower() in ("unknown", "none"):
-                prov = "Custom"
-            if not mod or mod.lower() in ("unknown", "none"):
-                mod = "Model"
-            preset = f"{prov}:{mod}"
+        preset = _resolve_preset_name(row)
         groups.setdefault(preset, []).append(row)
-
-    from datetime import datetime
 
     comparison = []
     for preset, runs in groups.items():
-        total = len(runs)
-        durations = [r.duration_seconds for r in runs if (r.duration_seconds or 0.0) > 0]
-        tokens = [((r.tokens_in or 0) + (r.tokens_out or 0)) for r in runs]
-        costs = [
-            ((r.tokens_in or 0) + (r.tokens_out or 0)) / 1000 * _rate_for_model(r.llm_model or "gpt-4o", 0.002)
-            for r in runs
-        ]
-        graded = [r for r in runs if r.raw_return is not None and r.signal in (_BUY_SIGNALS | _SELL_SIGNALS)]
-        wins = sum(1 for r in graded if _is_correct(r.signal, r.raw_return))
-
-        # Realized performance metrics over the last 50 analyses for this preset
-        runs_sorted = sorted(runs, key=lambda r: r.created_at or datetime.min, reverse=True)
-        last_50 = runs_sorted[:50]
-        graded_last_50 = [r for r in last_50 if r.raw_return is not None and r.signal in (_BUY_SIGNALS | _SELL_SIGNALS)]
-        wins_last_50 = sum(1 for r in graded_last_50 if _is_correct(r.signal, r.raw_return))
-
-        alphas_last_50 = [r.alpha_return for r in last_50 if r.alpha_return is not None]
-        raws_last_50 = [r.raw_return for r in last_50 if r.raw_return is not None]
-
-        comparison.append(
-            {
-                "preset_name": preset,
-                "total_runs": total,
-                "avg_duration": round(sum(durations) / len(durations), 1) if durations else 0.0,
-                "avg_tokens": int(sum(tokens) / total) if tokens else 0,
-                "avg_cost_usd": round(sum(costs) / total, 4) if costs else 0.0,
-                "win_rate": round(wins / len(graded) * 100, 1) if graded else None,
-                "total_graded": len(graded),
-                # Realized performance stats (last 50 runs)
-                "win_rate_last_50": round(wins_last_50 / len(graded_last_50) * 100, 1) if graded_last_50 else None,
-                "avg_alpha_last_50": round(sum(alphas_last_50) / len(alphas_last_50) * 100, 2)
-                if alphas_last_50
-                else 0.0,
-                "avg_raw_return_last_50": round(sum(raws_last_50) / len(raws_last_50) * 100, 2)
-                if raws_last_50
-                else 0.0,
-                "total_graded_last_50": len(graded_last_50),
-            }
-        )
+        metrics = _calculate_preset_metrics(preset, runs)
+        comparison.append(metrics)
     return comparison
+
+
+def _resolve_preset_name(row: AnalysisResult) -> str:
+    """Resolve a display name for the preset/model combo."""
+    preset = row.preset_name
+    if not preset or preset.lower() in ("unknown", "unknown:unknown", "unknown/unknown"):
+        prov = (row.llm_provider or "Custom").strip()
+        mod = (row.llm_model or "Model").strip()
+        if not prov or prov.lower() in ("unknown", "none"):
+            prov = "Custom"
+        if not mod or mod.lower() in ("unknown", "none"):
+            mod = "Model"
+        preset = f"{prov}:{mod}"
+    return preset
+
+
+def _calculate_preset_metrics(preset: str, runs: list[AnalysisResult]) -> dict:
+    """Calculate performance metrics for a group of runs."""
+    from datetime import datetime
+
+    base_metrics = _calc_base(runs)
+
+    runs_sorted = sorted(runs, key=lambda r: r.created_at or datetime.min, reverse=True)
+    realized_metrics = _calc_realized(runs_sorted[:50])
+
+    return {
+        "preset_name": preset,
+        "total_runs": base_metrics["total"],
+        "avg_duration": base_metrics["avg_duration"],
+        "avg_tokens": base_metrics["avg_tokens"],
+        "avg_cost_usd": base_metrics["avg_cost_usd"],
+        "win_rate": base_metrics["win_rate"],
+        "total_graded": base_metrics["total_graded"],
+        "win_rate_last_50": realized_metrics["win_rate_last_50"],
+        "avg_alpha_last_50": realized_metrics["avg_alpha_last_50"],
+        "avg_raw_return_last_50": realized_metrics["avg_raw_return_last_50"],
+        "total_graded_last_50": realized_metrics["total_graded_last_50"],
+    }
+
+
+def _calc_base(runs: list[AnalysisResult]) -> dict:
+    total = len(runs)
+    if not total:
+        return {"total": 0, "avg_duration": 0.0, "avg_tokens": 0, "avg_cost_usd": 0.0, "win_rate": None, "total_graded": 0}
+
+    durations = [r.duration_seconds for r in runs if (r.duration_seconds or 0.0) > 0]
+    tokens = [((r.tokens_in or 0) + (r.tokens_out or 0)) for r in runs]
+    costs = [
+        ((r.tokens_in or 0) + (r.tokens_out or 0)) / 1000 * _rate_for_model(r.llm_model or "gpt-4o", 0.002)
+        for r in runs
+    ]
+    graded = [r for r in runs if r.raw_return is not None and r.signal in (_BUY_SIGNALS | _SELL_SIGNALS)]
+    wins = sum(1 for r in graded if _is_correct(r.signal, r.raw_return))
+
+    return {
+        "total": total,
+        "avg_duration": round(sum(durations) / len(durations), 1) if durations else 0.0,
+        "avg_tokens": int(sum(tokens) / total) if tokens else 0,
+        "avg_cost_usd": round(sum(costs) / total, 4) if costs else 0.0,
+        "win_rate": round(wins / len(graded) * 100, 1) if graded else None,
+        "total_graded": len(graded),
+    }
+
+
+def _calc_realized(runs: list[AnalysisResult]) -> dict:
+    graded = [r for r in runs if r.raw_return is not None and r.signal in (_BUY_SIGNALS | _SELL_SIGNALS)]
+    wins = sum(1 for r in graded if _is_correct(r.signal, r.raw_return))
+    alphas = [r.alpha_return for r in runs if r.alpha_return is not None]
+    raws = [r.raw_return for r in runs if r.raw_return is not None]
+
+    return {
+        "win_rate_last_50": round(wins / len(graded) * 100, 1) if graded else None,
+        "avg_alpha_last_50": round(sum(alphas) / len(alphas) * 100, 2) if alphas else 0.0,
+        "avg_raw_return_last_50": round(sum(raws) / len(raws) * 100, 2) if raws else 0.0,
+        "total_graded_last_50": len(graded),
+    }
 
 
 async def get_signal_performance(db: AsyncSession, ticker: str | None = None) -> dict:

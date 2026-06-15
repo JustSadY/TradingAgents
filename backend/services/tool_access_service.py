@@ -69,35 +69,37 @@ async def get_user_tool_access(db: AsyncSession, user_id: int) -> dict[str, dict
 
 async def update_user_tool_access(db: AsyncSession, user_id: int, updates: dict[str, dict]) -> dict[str, dict]:
     for tool_key, perms in updates.items():
-        tool = registry.get(tool_key)
-        if not tool:
+        if not registry.get(tool_key):
             continue
         result = await db.execute(
             select(UserToolAccess).where(UserToolAccess.user_id == user_id).where(UserToolAccess.tool_key == tool_key)
         )
         row = result.scalar_one_or_none()
         if row is None:
-            row = UserToolAccess(
-                user_id=user_id,
-                tool_key=tool_key,
-                can_view=perms.get("can_view", True),
-                can_use=perms.get("can_use", True),
-                can_edit=perms.get("can_edit", False),
-                can_enable=perms.get("can_enable", False),
-            )
-            db.add(row)
+            _add_user_tool_access(db, user_id, tool_key, perms)
         else:
-            if "can_view" in perms:
-                row.can_view = perms["can_view"]
-            if "can_use" in perms:
-                row.can_use = perms["can_use"]
-            if "can_edit" in perms:
-                row.can_edit = perms["can_edit"]
-            if "can_enable" in perms:
-                row.can_enable = perms["can_enable"]
+            _apply_tool_access_perms(row, perms)
 
     await db.flush()
     return await get_user_tool_access(db, user_id)
+
+
+def _add_user_tool_access(db: AsyncSession, user_id: int, tool_key: str, perms: dict):
+    row = UserToolAccess(
+        user_id=user_id,
+        tool_key=tool_key,
+        can_view=perms.get("can_view", True),
+        can_use=perms.get("can_use", True),
+        can_edit=perms.get("can_edit", False),
+        can_enable=perms.get("can_enable", False),
+    )
+    db.add(row)
+
+
+def _apply_tool_access_perms(row: UserToolAccess, perms: dict):
+    for key in ("can_view", "can_use", "can_edit", "can_enable"):
+        if key in perms:
+            setattr(row, key, perms[key])
 
 
 async def get_user_tool_field_access(db: AsyncSession, user_id: int) -> dict[str, dict[str, dict]]:
@@ -143,19 +145,27 @@ async def update_user_tool_field_access(
             )
             row = result.scalar_one_or_none()
             if row is None:
-                row = UserToolFieldAccess(
-                    user_id=user_id,
-                    tool_key=tool_key,
-                    field_key=field_key,
-                    can_view=perms.get("can_view", True),
-                    can_edit=perms.get("can_edit", True),
-                )
-                db.add(row)
+                _add_user_tool_field_access(db, user_id, tool_key, field_key, perms)
             else:
-                if "can_view" in perms:
-                    row.can_view = perms["can_view"]
-                if "can_edit" in perms:
-                    row.can_edit = perms["can_edit"]
+                _apply_field_access_perms(row, perms)
 
     await db.flush()
     return await get_user_tool_field_access(db, user_id)
+
+
+def _add_user_tool_field_access(db: AsyncSession, user_id: int, tool_key: str, field_key: str, perms: dict):
+    row = UserToolFieldAccess(
+        user_id=user_id,
+        tool_key=tool_key,
+        field_key=field_key,
+        can_view=perms.get("can_view", True),
+        can_edit=perms.get("can_edit", True),
+    )
+    db.add(row)
+
+
+def _apply_field_access_perms(row: UserToolFieldAccess, perms: dict):
+    if "can_view" in perms:
+        row.can_view = perms["can_view"]
+    if "can_edit" in perms:
+        row.can_edit = perms["can_edit"]

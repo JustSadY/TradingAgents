@@ -49,5 +49,5 @@ def emit(event_type: str, **kwargs: Any):
                 task.add_done_callback(_on_task_done)
             else:
                 handler(**kwargs)
-        except Exception as e:
-            _logger.error("Error in event handler for %s: %s", event_type, e)
+        except Exception:
+            _logger.exception("Error in event handler for %s", event_type)

@@ -41,6 +41,14 @@ from .conditional_logic import ConditionalLogic
 
 logger = logging.getLogger(__name__)
 
+_MARKET_INTELLIGENCE = "Market Intelligence"
+_AGENT_QA = "Agent Q&A"
+_RESEARCH_MANAGER = "Research Manager"
+_TRADER = "Trader"
+_RISK_DEBATE = "Risk Debate"
+_PORTFOLIO_MANAGER = "Portfolio Manager"
+
+
 
 class GraphSetup:
     def __init__(
@@ -61,7 +69,10 @@ class GraphSetup:
         self.agent_hierarchy = agent_hierarchy
         self.config = config or {}
 
-    def setup_graph(self, selected_analysts=None):
+    def setup_graph(
+        self,
+        selected_analysts: list[str] | set[str] = None,
+    ) -> StateGraph:
         if selected_analysts is None:
             selected_analysts = ["market", "social", "news", "fundamentals"]
 
@@ -83,7 +94,7 @@ class GraphSetup:
         # ---- Main Agent nodes (guard-wrapped for resilience) ----
         market_intelligence = guard_node(
             create_market_intelligence_node(ctx),
-            name="Market Intelligence",
+            name=_MARKET_INTELLIGENCE,
             kind="main",
             fallback=lambda state, exc: {},
         )
@@ -91,13 +102,13 @@ class GraphSetup:
         # contributes nothing and the run proceeds to synthesis unchanged.
         agent_qa = guard_node(
             create_agent_qa_node(ctx),
-            name="Agent Q&A",
+            name=_AGENT_QA,
             kind="main",
             fallback=lambda state, exc: {},
         )
         research_manager = guard_node(
             create_research_manager_node(ctx),
-            name="Research Manager",
+            name=_RESEARCH_MANAGER,
             kind="main",
             fallback=lambda state, exc: {
                 "investment_debate_state": neutral_invest_debate_state("Research branch error; degraded."),
@@ -106,7 +117,7 @@ class GraphSetup:
         )
         trader = guard_node(
             create_trader_node(ctx),
-            name="Trader",
+            name=_TRADER,
             kind="main",
             fallback=lambda state, exc: {
                 "trader_investment_plan": "Trader agent unavailable; deferring to risk debate.",
@@ -115,7 +126,7 @@ class GraphSetup:
         )
         risk_debate = guard_node(
             create_risk_debate_node(ctx),
-            name="Risk Debate",
+            name=_RISK_DEBATE,
             kind="main",
             fallback=lambda state, exc: {
                 "risk_debate_state": neutral_risk_debate_state("Risk debate error; degraded."),
@@ -123,7 +134,7 @@ class GraphSetup:
         )
         portfolio_manager = guard_node(
             create_portfolio_manager_node(ctx),
-            name="Portfolio Manager",
+            name=_PORTFOLIO_MANAGER,
             kind="decision",
             fallback=lambda state, exc: {
                 "final_trade_decision": "Hold — automated fallback: Portfolio Manager unavailable.",
@@ -132,19 +143,19 @@ class GraphSetup:
 
         # ---- Wire the five main nodes linearly ----
         workflow = StateGraph(AgentState)
-        workflow.add_node("Market Intelligence", market_intelligence)
-        workflow.add_node("Agent Q&A", agent_qa)
-        workflow.add_node("Research Manager", research_manager)
-        workflow.add_node("Trader", trader)
-        workflow.add_node("Risk Debate", risk_debate)
-        workflow.add_node("Portfolio Manager", portfolio_manager)
+        workflow.add_node(_MARKET_INTELLIGENCE, market_intelligence)
+        workflow.add_node(_AGENT_QA, agent_qa)
+        workflow.add_node(_RESEARCH_MANAGER, research_manager)
+        workflow.add_node(_TRADER, trader)
+        workflow.add_node(_RISK_DEBATE, risk_debate)
+        workflow.add_node(_PORTFOLIO_MANAGER, portfolio_manager)
 
-        workflow.add_edge(START, "Market Intelligence")
-        workflow.add_edge("Market Intelligence", "Agent Q&A")
-        workflow.add_edge("Agent Q&A", "Research Manager")
-        workflow.add_edge("Research Manager", "Trader")
-        workflow.add_edge("Trader", "Risk Debate")
-        workflow.add_edge("Risk Debate", "Portfolio Manager")
-        workflow.add_edge("Portfolio Manager", END)
+        workflow.add_edge(START, _MARKET_INTELLIGENCE)
+        workflow.add_edge(_MARKET_INTELLIGENCE, _AGENT_QA)
+        workflow.add_edge(_AGENT_QA, _RESEARCH_MANAGER)
+        workflow.add_edge(_RESEARCH_MANAGER, _TRADER)
+        workflow.add_edge(_TRADER, _RISK_DEBATE)
+        workflow.add_edge(_RISK_DEBATE, _PORTFOLIO_MANAGER)
+        workflow.add_edge(_PORTFOLIO_MANAGER, END)
 
         return workflow

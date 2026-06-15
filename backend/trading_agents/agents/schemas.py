@@ -124,7 +124,7 @@ def render_trader_proposal(proposal: TraderProposal) -> str:
         parts.extend(["", f"**Take Profit**: {proposal.take_profit_price}"])
     if proposal.position_sizing:
         parts.extend(["", f"**Position Sizing**: {proposal.position_sizing}"])
-    if proposal.recommended_leverage and proposal.recommended_leverage != 1.0:
+    if proposal.recommended_leverage and abs(proposal.recommended_leverage - 1.0) > 1e-9:
         parts.extend(["", f"**Recommended Leverage**: {proposal.recommended_leverage:.1f}x"])
     parts.extend(
         [
@@ -192,7 +192,7 @@ def render_pm_decision(decision: PortfolioDecision) -> str:
     ]
     if decision.price_target is not None:
         parts.extend(["", f"**Price Target**: {decision.price_target}"])
-    if decision.recommended_leverage and decision.recommended_leverage != 1.0:
+    if decision.recommended_leverage and abs(decision.recommended_leverage - 1.0) > 1e-9:
         parts.extend(["", f"**Recommended Leverage**: {decision.recommended_leverage:.1f}x"])
     if decision.liquidation_price is not None:
         parts.extend(["", f"**Liquidation Price**: {decision.liquidation_price}"])

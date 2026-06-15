@@ -132,8 +132,7 @@ async def _generate_questions(moderator, available: list[tuple[str, str, str]]) 
         f"and write up to {_MAX_QUESTIONS} focused questions that one analyst should put to another. "
         f"Each question's 'to' must be exactly one of: {labels}. "
         "Prefer questions that force an analyst to defend a claim another analyst contradicts.\n\n"
-        f"{reports_block}"
-        + get_general_settings_block()
+        f"{reports_block}" + get_general_settings_block()
     )
     structured = bind_structured(moderator, _Questions, "Q&A Moderator")
     result = await ainvoke_structured_or_freetext(structured, moderator, prompt, "Q&A Moderator", schema=_Questions)

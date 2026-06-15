@@ -48,7 +48,7 @@ async def run_portfolio_job(
     await run_portfolio_task(tickers, trade_date, asset_type, settings, user, task_id)
 
 
-async def startup(ctx):
+async def startup(ctx):  # NOSONAR
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
     # Register tools so analyst plugins resolve, same as the web process.

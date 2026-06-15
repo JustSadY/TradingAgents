@@ -4,6 +4,8 @@ import logging
 
 _logger = logging.getLogger(__name__)
 
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
 
 async def _log_delivery(
     user_id: int,
@@ -115,7 +117,9 @@ async def send_webhook(
         last_error = str(exc)
 
     if user_id is not None:
-        asyncio.create_task(_log_delivery(user_id, event, url, result, last_status_code, last_error))
+        task = asyncio.create_task(_log_delivery(user_id, event, url, result, last_status_code, last_error))
+        _BACKGROUND_TASKS.add(task)
+        task.add_done_callback(_BACKGROUND_TASKS.discard)
 
     return result
 

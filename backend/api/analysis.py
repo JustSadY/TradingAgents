@@ -28,8 +28,11 @@ from backend.services.settings_service import get_or_create_settings
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 _logger = logging.getLogger(__name__)
 
+_ANALYSIS_NOT_FOUND = "Analysis not found"
 
-@router.post("/run", response_model=AnalysisRunResponse)
+
+
+@router.post("/run", response_model=AnalysisRunResponse, responses={422: {"description": "Invalid ticker format"}})
 @limiter.limit("5/minute")
 async def run_analysis(
     request: Request,
@@ -82,7 +85,7 @@ async def list_analysis(
     return await _repo_list(db, user=current_user, ticker=ticker, limit=limit, offset=offset)
 
 
-@router.post("/{task_id}/cancel")
+@router.post("/{task_id}/cancel", responses={404: {"description": "Task not found"}})
 async def cancel_analysis(
     task_id: str,
     current_user: User = Depends(get_current_user),
@@ -98,13 +101,17 @@ async def cancel_analysis(
 
 @router.get("/cost-estimate")
 async def cost_estimate(
-    analysts: str = Query(default="market,news,fundamentals,social"),
-    debate_rounds: int = Query(default=1, ge=1, le=10),
-    model: str = Query(default="gpt-4o"),
-    _: User = Depends(get_current_user),
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ):
+    """Return token/cost/duration estimate using the user's actual settings."""
+    from backend.repositories.settings import get_settings
     from backend.services.analysis_stats_service import estimate_cost as _est
 
+    settings = await get_settings(db, user.id)
+    analysts = settings.selected_analysts or "market,news,fundamentals,social"
+    debate_rounds = settings.debate_rounds or 1
+    model = settings.llm_model or "gpt-4o"
     return _est(analysts, debate_rounds, model)
 
 
@@ -139,7 +146,7 @@ async def get_performance_attribution(
     return await _attr(db)
 
 
-@router.post("/run-portfolio", response_model=MultiTickerRunResponse)
+@router.post("/run-portfolio", response_model=MultiTickerRunResponse, responses={422: {"description": "Invalid ticker format"}})
 async def run_portfolio_run(
     body: MultiTickerRunRequest,
     background_tasks: BackgroundTasks,
@@ -193,7 +200,7 @@ async def list_portfolio_analyses(
     ]
 
 
-@router.get("/portfolio/{portfolio_id}", response_model=MultiTickerResultRead)
+@router.get("/portfolio/{portfolio_id}", response_model=MultiTickerResultRead, responses={404: {"description": "Portfolio analysis not found"}})
 async def get_portfolio_analysis(
     portfolio_id: int,
     db: AsyncSession = Depends(get_db),
@@ -216,7 +223,7 @@ async def get_portfolio_analysis(
     )
 
 
-@router.get("/{analysis_id}", response_model=AnalysisResultRead)
+@router.get("/{analysis_id}", response_model=AnalysisResultRead, responses={404: {"description": _ANALYSIS_NOT_FOUND}})
 async def get_analysis(
     analysis_id: int,
     db: AsyncSession = Depends(get_db),
@@ -226,7 +233,7 @@ async def get_analysis(
 
     row = await _repo_get(db, analysis_id, user=current_user)
     if row is None:
-        raise HTTPException(status_code=404, detail="Analysis not found")
+        raise HTTPException(status_code=404, detail=_ANALYSIS_NOT_FOUND)
     return row
 
 
@@ -261,7 +268,7 @@ class TimeTravelRequest(BaseModel):
     update_state: dict
 
 
-@router.get("/{analysis_id}/checkpoints")
+@router.get("/{analysis_id}/checkpoints", responses={404: {"description": _ANALYSIS_NOT_FOUND}})
 async def list_checkpoints(
     analysis_id: int,
     db: AsyncSession = Depends(get_db),
@@ -274,7 +281,7 @@ async def list_checkpoints(
 
     analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
     if not analysis:
-        raise HTTPException(status_code=404, detail="Analysis not found")
+        raise HTTPException(status_code=404, detail=_ANALYSIS_NOT_FOUND)
 
     settings = await get_or_create_settings(db, current_user)
     sys_settings = await get_system_settings(db)
@@ -284,7 +291,7 @@ async def list_checkpoints(
     return checkpoints
 
 
-@router.post("/{analysis_id}/time-travel")
+@router.post("/{analysis_id}/time-travel", responses={400: {"description": "Invalid checkpoint or state"}, 404: {"description": _ANALYSIS_NOT_FOUND}})
 async def time_travel_resume(
     analysis_id: int,
     body: TimeTravelRequest,
@@ -298,7 +305,7 @@ async def time_travel_resume(
 
     analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
     if not analysis:
-        raise HTTPException(status_code=404, detail="Analysis not found")
+        raise HTTPException(status_code=404, detail=_ANALYSIS_NOT_FOUND)
 
     task_id = str(uuid.uuid4())
     try:

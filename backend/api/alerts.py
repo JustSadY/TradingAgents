@@ -40,7 +40,7 @@ async def create_alert_run(
     )
 
 
-@router.patch("/{alert_id}", response_model=AlertRead)
+@router.patch("/{alert_id}", response_model=AlertRead, responses={404: {"description": "Alert not found"}})
 async def update_alert(
     alert_id: int,
     body: AlertUpdate,
@@ -57,7 +57,7 @@ async def update_alert(
     return alert
 
 
-@router.delete("/{alert_id}")
+@router.delete("/{alert_id}", responses={404: {"description": "Alert not found"}})
 async def delete_alert(
     alert_id: int,
     db: AsyncSession = Depends(get_db),

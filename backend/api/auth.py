@@ -1,3 +1,5 @@
+from typing import Annotated
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -24,7 +26,7 @@ _DUMMY_PASSWORD_HASH = hash_password("dummy-password-for-timing-equalization")
 
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("10/minute")
-async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(request: Request, body: LoginRequest, db: Annotated[AsyncSession, Depends(get_db)]):
     user = await get_user_by_username(db, body.username)
     password_ok = verify_password(body.password, user.hashed_password if user else _DUMMY_PASSWORD_HASH)
     if not user or not password_ok or not user.is_active:
@@ -38,7 +40,7 @@ async def login(request: Request, body: LoginRequest, db: AsyncSession = Depends
 
 @router.post("/refresh", response_model=TokenResponse)
 @limiter.limit("30/minute")
-async def refresh(request: Request, body: RefreshRequest, db: AsyncSession = Depends(get_db)):
+async def refresh(request: Request, body: RefreshRequest, db: Annotated[AsyncSession, Depends(get_db)]):
     try:
         payload = decode_token_payload(body.refresh_token, expected_type="refresh")
     except ValueError:
@@ -61,8 +63,8 @@ async def refresh(request: Request, body: RefreshRequest, db: AsyncSession = Dep
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     """Revoke every token issued to the caller by bumping their token version."""
     current_user.token_version = (getattr(current_user, "token_version", 0) or 0) + 1
