@@ -38,20 +38,19 @@ def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """Compute Average Directional Index (ADX)."""
     high = df["High"]
     low = df["Low"]
-    close = df["Close"]
 
-    plus_dm = high.diff()
-    minus_dm = low.diff()
+    # Wilder directional movement. The down move is *previous low − current low*
+    # (positive when the low fell), so it must use ``low.shift(1) - low`` rather
+    # than ``low.diff()`` (which has the opposite sign). Each side keeps its move
+    # only when it is positive and strictly dominates the *original* other side —
+    # so the two masks must be derived from the raw moves, not from each other.
+    up_move = high.diff()
+    down_move = low.shift(1) - low
 
-    # DM calculation logic
-    plus_dm = plus_dm.where((plus_dm > 0) & (plus_dm > minus_dm.abs()), 0)
-    minus_dm = minus_dm.where((minus_dm > 0) & (minus_dm > plus_dm.abs()), 0)
+    plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)
+    minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
 
-    tr1 = high - low
-    tr2 = (high - close.shift(1)).abs()
-    tr3 = (low - close.shift(1)).abs()
-    tr = pd.concat([tr1, tr2, tr3], axis=1).max(axis=1)
-    atr = tr.rolling(window=period).mean()
+    atr = calculate_atr(df, period)
 
     plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
     minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
