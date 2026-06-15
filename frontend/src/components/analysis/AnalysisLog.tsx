@@ -28,11 +28,11 @@ export const AnalysisLog: React.FC<AnalysisLogProps> = ({
   }, [log, liveDebate, leftTab, currentStep])
 
   return (
-    <div className="glass-panel rounded-2xl overflow-hidden flex flex-col h-[55vh] lg:h-[65vh]">
+    <div className="glass-panel rounded-2xl overflow-hidden flex flex-col h-[40vh] sm:h-[50vh] lg:h-[65vh]">
       <div className="flex items-center gap-1 p-1 bg-slate-900/40 border-b border-white/[0.04]">
         <button
           onClick={() => setLeftTab('log')}
-          className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
+          className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
             leftTab === 'log' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
           }`}
         >
@@ -40,7 +40,7 @@ export const AnalysisLog: React.FC<AnalysisLogProps> = ({
         </button>
         <button
           onClick={() => setLeftTab('debate')}
-          className={`flex-1 text-center py-1.5 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
+          className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${
             leftTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
           }`}
         >

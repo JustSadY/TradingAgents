@@ -174,7 +174,7 @@ export default function Portfolio() {
 
   if (error) {
     return (
-      <div className="p-6 flex flex-col items-center justify-center min-h-[300px] gap-4 text-center max-w-sm mx-auto">
+      <div className="p-4 md:p-6 flex flex-col items-center justify-center min-h-[300px] gap-4 text-center max-w-sm mx-auto">
         <div className="w-12 h-12 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center text-rose-400">
           <AlertCircle size={24} />
         </div>

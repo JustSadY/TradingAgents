@@ -66,14 +66,14 @@ export const AnalysisControls: React.FC<AnalysisControlsProps> = ({
             <button
               onClick={handleRun}
               disabled={!ticker.trim()}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-xs md:text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-violet-500/20 transition-all cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs md:text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed shadow-md shadow-violet-500/20 transition-all cursor-pointer"
             >
               <Zap size={14} /> {t('analysis.btn.start')}
             </button>
           ) : (
             <button
               onClick={handleStop}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl text-xs md:text-sm font-semibold text-white bg-rose-600/90 hover:bg-rose-600 shadow-md shadow-rose-500/20 transition-all cursor-pointer"
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs md:text-sm font-semibold text-white bg-rose-600/90 hover:bg-rose-600 shadow-md shadow-rose-500/20 transition-all cursor-pointer"
             >
               <Square size={12} fill="currentColor" /> {t('analysis.btn.stop')}
             </button>
