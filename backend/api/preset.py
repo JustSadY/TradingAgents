@@ -31,7 +31,7 @@ async def _check_presets_permission(user: User, db: AsyncSession):
         raise HTTPException(status_code=403, detail="You do not have permission to manage preset templates.")
 
 
-@router.post("", response_model=PresetRead)
+@router.post("", response_model=PresetRead, responses={403: {"description": "Permission denied"}, 409: {"description": "Conflict"}})
 async def create_preset_run(
     body: PresetCreate,
     db: AsyncSession = Depends(get_db),
@@ -50,7 +50,7 @@ async def create_preset_run(
     )
 
 
-@router.delete("/{preset_id}")
+@router.delete("/{preset_id}", responses={403: {"description": "Permission denied"}, 404: {"description": "Template not found"}})
 async def delete_preset(
     preset_id: int,
     db: AsyncSession = Depends(get_db),
@@ -66,7 +66,7 @@ async def delete_preset(
     return {"deleted": True}
 
 
-@router.post("/{preset_id}/apply")
+@router.post("/{preset_id}/apply", responses={403: {"description": "Permission denied"}, 404: {"description": "Template not found"}, 422: {"description": "Validation error"}})
 async def apply_preset(
     preset_id: int,
     db: AsyncSession = Depends(get_db),

@@ -9,6 +9,8 @@ from fastapi import WebSocket
 from backend.core.metrics import WS_CONNECTIONS
 
 _logger = logging.getLogger(__name__)
+
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
 _BUFFER_SIZE = 64
 _BUFFER_TTL = 30
 
@@ -96,7 +98,9 @@ class WebSocketManager:
             _logger.debug("Closing %d lingering WS connections for task=%s during buffer cleanup", len(conns), task_id)
             for ws in conns:
                 try:
-                    asyncio.create_task(ws.close())
+                    task = asyncio.create_task(ws.close())
+                    _BACKGROUND_TASKS.add(task)
+                    task.add_done_callback(_BACKGROUND_TASKS.discard)
                 except Exception:
                     pass
         _logger.debug("Buffer cleaned up for task=%s", task_id)

@@ -33,6 +33,7 @@ def _filter_reports_by_date(result, curr_date: str):
 
 
 def get_fundamentals(ticker: str, curr_date: str = None) -> str:
+    _ = curr_date
     params = {
         "symbol": ticker,
     }
@@ -40,15 +41,18 @@ def get_fundamentals(ticker: str, curr_date: str = None) -> str:
 
 
 def get_balance_sheet(ticker: str, freq: str = "quarterly", curr_date: str = None):
+    _ = freq
     result = _make_api_request("BALANCE_SHEET", {"symbol": ticker})
     return _filter_reports_by_date(result, curr_date)
 
 
 def get_cashflow(ticker: str, freq: str = "quarterly", curr_date: str = None):
+    _ = freq
     result = _make_api_request("CASH_FLOW", {"symbol": ticker})
     return _filter_reports_by_date(result, curr_date)
 
 
 def get_income_statement(ticker: str, freq: str = "quarterly", curr_date: str = None):
+    _ = freq
     result = _make_api_request("INCOME_STATEMENT", {"symbol": ticker})
     return _filter_reports_by_date(result, curr_date)

@@ -149,7 +149,8 @@ async def run_screen(universe: list[str] | None = None, top_n: int = 10) -> list
             scored = _score_ticker(ticker, df)
             if scored is not None:
                 results.append(scored)
-        except Exception as exc:  # noqa: BLE001 — skip bad tickers, keep the sweep going
+        # skip bad tickers, keep the sweep going
+        except Exception as exc:  # noqa: BLE001
             _logger.debug("Screener skipped %s: %s", ticker, exc)
 
     results.sort(key=lambda r: r.score, reverse=True)

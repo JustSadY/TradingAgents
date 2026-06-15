@@ -185,8 +185,8 @@ export default function Screener() {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold text-white text-sm">{r.ticker}</span>
-                        {r.price && <span className="text-slate-500 font-mono text-[10px]">${r.price.toFixed(2)}</span>}
-                        {r.change_pct !== null && (
+                        {typeof r.price === 'number' && <span className="text-slate-500 font-mono text-[10px]">${r.price.toFixed(2)}</span>}
+                        {typeof r.change_pct === 'number' && (
                           <span className={`text-[9px] font-bold ${r.change_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                             {r.change_pct >= 0 ? '+' : ''}{r.change_pct.toFixed(1)}%
                           </span>
@@ -210,7 +210,7 @@ export default function Screener() {
                       </td>
                     ))}
                     <td className="px-5 py-3 text-right font-mono text-slate-300">
-                      {r.rsi !== null ? (
+                      {typeof r.rsi === 'number' ? (
                         <span className={r.rsi < 30 ? 'text-emerald-400 font-bold' : r.rsi > 70 ? 'text-rose-400 font-bold' : 'text-slate-300'}>
                           {r.rsi.toFixed(0)}
                         </span>

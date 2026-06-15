@@ -186,28 +186,10 @@ async def get_vision_chart_analysis(
 def _local_find_support_resistance(
     df: pd.DataFrame, current_price: float, window: int = 5
 ) -> tuple[list[float], list[float]]:
-    supports = []
-    resistances = []
-
     if len(df) <= window * 2:
         return [round(float(df["Low"].min()), 2)], [round(float(df["High"].max()), 2)]
 
-    for i in range(window, len(df) - window):
-        low_val = df["Low"].iloc[i]
-        high_val = df["High"].iloc[i]
-
-        is_support = True
-        is_resistance = True
-        for j in range(i - window, i + window + 1):
-            if df["Low"].iloc[j] < low_val:
-                is_support = False
-            if df["High"].iloc[j] > high_val:
-                is_resistance = False
-
-        if is_support:
-            supports.append(round(float(low_val), 2))
-        if is_resistance:
-            resistances.append(round(float(high_val), 2))
+    supports, resistances = _scan_levels(df, window)
 
     unique_supports = sorted(set(supports))
     unique_resistances = sorted(set(resistances))
@@ -221,6 +203,21 @@ def _local_find_support_resistance(
         valid_resistances = [round(float(df["High"].max()), 2)]
 
     return valid_supports[-3:], valid_resistances[:3]
+
+def _scan_levels(df: pd.DataFrame, window: int) -> tuple[list[float], list[float]]:
+    supports = []
+    resistances = []
+    for i in range(window, len(df) - window):
+        low_val = df["Low"].iloc[i]
+        high_val = df["High"].iloc[i]
+        window_lows = df["Low"].iloc[i - window : i + window + 1]
+        window_highs = df["High"].iloc[i - window : i + window + 1]
+
+        if low_val <= window_lows.min():
+            supports.append(round(float(low_val), 2))
+        if high_val >= window_highs.max():
+            resistances.append(round(float(high_val), 2))
+    return supports, resistances
 
 
 @tool
@@ -239,92 +236,19 @@ async def get_mtf_trend(
         return "Error: Active run context not found. Cannot register trend overlay."
 
     try:
-        # Load daily data to get index mapping
-        df_daily = await _load_ohlcv_via_interface_async(symbol, curr_date)
+        df_daily, start_date = await _prep_daily_data(symbol, curr_date)
         if df_daily.empty:
             return "Error: No daily data found."
 
-        df_daily["Date"] = pd.to_datetime(df_daily["Date"])
-        if df_daily["Date"].dt.tz is not None:
-            df_daily["Date"] = df_daily["Date"].dt.tz_localize(None)
-        df_daily["Date"] = df_daily["Date"].astype("datetime64[ns]")
-        df_daily.sort_values("Date", inplace=True)
-
-        # Download timeframe specific data
-        ticker = yf.Ticker(symbol.upper())
-        # We need historical data. Determine start based on lookback
-        start_date = (df_daily["Date"].min() - pd.DateOffset(days=90)).strftime("%Y-%m-%d")
-
-        # yfinance download is sync
-        df_mtf = await asyncio.to_thread(ticker.history, start=start_date, end=curr_date, interval=timeframe)
+        df_mtf = await _download_mtf_data(symbol, start_date, curr_date, timeframe)
         if df_mtf.empty:
             return f"Error: No data found for timeframe '{timeframe}'."
 
-        if df_mtf.index.tz is not None:
-            df_mtf.index = df_mtf.index.tz_localize(None)
+        latest_metrics = _calc_mtf_indicators(df_mtf)
+        _register_mtf_overlay(ctx, df_daily, df_mtf, timeframe)
 
-        df_mtf = df_mtf.dropna(subset=["Close", "High", "Low"])
+        valid_supports, valid_resistances = _local_find_support_resistance(df_mtf, latest_metrics["close"], window=5)
 
-        # Calculate Indicators (shared implementations in indicator_service).
-        df_mtf["EMA_20"] = calculate_ema(df_mtf["Close"], 20)
-        df_mtf["RSI_14"] = calculate_rsi(df_mtf["Close"], 14)
-        macd_line, signal_line = calculate_macd(df_mtf["Close"], 12, 26, 9)
-        df_mtf["MACD_Line"] = macd_line
-        df_mtf["MACD_Signal"] = signal_line
-        df_mtf["MACD_Hist"] = macd_line - signal_line
-
-        latest_close = float(df_mtf["Close"].iloc[-1])
-        latest_ema = float(df_mtf["EMA_20"].iloc[-1])
-        latest_rsi = float(df_mtf["RSI_14"].iloc[-1]) if not pd.isna(df_mtf["RSI_14"].iloc[-1]) else 50.0
-        latest_macd = float(df_mtf["MACD_Line"].iloc[-1])
-        latest_macd_sig = float(df_mtf["MACD_Signal"].iloc[-1])
-        latest_macd_hist = float(df_mtf["MACD_Hist"].iloc[-1])
-
-        # Map MTF EMA to Daily dates (forward-fill)
-        df_mtf_reset = df_mtf.reset_index()
-        df_mtf_reset.rename(columns={"Date": "MTF_Date"}, inplace=True)
-        df_mtf_reset["MTF_Date"] = pd.to_datetime(df_mtf_reset["MTF_Date"])
-        if df_mtf_reset["MTF_Date"].dt.tz is not None:
-            df_mtf_reset["MTF_Date"] = df_mtf_reset["MTF_Date"].dt.tz_localize(None)
-        df_mtf_reset["MTF_Date"] = df_mtf_reset["MTF_Date"].astype("datetime64[ns]")
-
-        # Merge on daily index
-        merged = pd.merge_asof(
-            df_daily, df_mtf_reset[["MTF_Date", "EMA_20"]], left_on="Date", right_on="MTF_Date", direction="backward"
-        )
-
-        # Register EMA series as a custom indicator, labeled for overlay
-        col_name = f"EMA20_{timeframe}"
-        overlay_name = f"{timeframe.upper()} EMA(20) Trend"
-
-        # We will store this calculated series in custom indicators with overlay option
-        ctx["custom_indicators"].append(
-            {
-                "name": col_name,
-                "formula": f"Close * 0 + {col_name}",  # dummy formula
-                "label": overlay_name,
-                "overlay": True,
-                "values": {
-                    row["Date"].strftime("%Y-%m-%d"): round(float(row["EMA_20"]), 2)
-                    for _, row in merged.iterrows()
-                    if not pd.isna(row["EMA_20"])
-                },
-            }
-        )
-
-        # Determine trend conditions
-        ema_trend = "BULLISH" if latest_close > latest_ema else "BEARISH"
-        rsi_condition = "OVERBOUGHT" if latest_rsi >= 70 else ("OVERSOLD" if latest_rsi <= 30 else "NEUTRAL")
-        macd_trend = (
-            "BULLISH (MACD Line is above Signal Line)"
-            if latest_macd > latest_macd_sig
-            else "BEARISH (MACD Line is below Signal Line)"
-        )
-
-        # Calculate support/resistance
-        valid_supports, valid_resistances = _local_find_support_resistance(df_mtf, latest_close, window=5)
-
-        # Add support/resistance to ctx if available
         if "support_levels" in ctx:
             ctx["support_levels"].extend(valid_supports)
         if "resistance_levels" in ctx:
@@ -332,19 +256,99 @@ async def get_mtf_trend(
 
         latest_date = df_mtf.index[-1].strftime("%Y-%m-%d")
 
-        summary = (
-            f"--- Multi-Timeframe Trend Analysis ({timeframe.upper()}) for {symbol.upper()} ---\n"
-            f"Current Reference Date: {curr_date}\n"
-            f"Latest Ticker Close Price: ${latest_close:.2f} (on {latest_date})\n"
-            f"1. EMA (20): ${latest_ema:.2f} ({ema_trend} - Price is {'above' if ema_trend == 'BULLISH' else 'below'} 20 EMA)\n"
-            f"2. RSI (14): {latest_rsi:.1f} ({rsi_condition})\n"
-            f"3. MACD (12, 26, 9): Line = {latest_macd:.4f}, Signal = {latest_macd_sig:.4f}, Hist = {latest_macd_hist:.4f} ({macd_trend})\n"
-            f"4. Major Support Levels (Below Price): {', '.join([f'${s:.2f}' for s in valid_supports])}\n"
-            f"5. Major Resistance Levels (Above Price): {', '.join([f'${r:.2f}' for r in valid_resistances])}\n"
-            f"--------------------------------------------------------------------------------"
+        return _format_mtf_summary(
+            symbol, timeframe, curr_date, latest_date, latest_metrics, valid_supports, valid_resistances
         )
-        return summary
 
     except Exception as e:
         _logger.exception("MTF Trend calculation failed: %s", e)
         return f"Error calculating MTF trend: {str(e)}"
+
+async def _prep_daily_data(symbol: str, curr_date: str) -> tuple[pd.DataFrame, str]:
+    df_daily = await _load_ohlcv_via_interface_async(symbol, curr_date)
+    if df_daily.empty:
+        return df_daily, ""
+    df_daily["Date"] = pd.to_datetime(df_daily["Date"])
+    if df_daily["Date"].dt.tz is not None:
+        df_daily["Date"] = df_daily["Date"].dt.tz_localize(None)
+    df_daily["Date"] = df_daily["Date"].astype("datetime64[ns]")
+    df_daily.sort_values("Date", inplace=True)
+    start_date = (df_daily["Date"].min() - pd.DateOffset(days=90)).strftime("%Y-%m-%d")
+    return df_daily, start_date
+
+async def _download_mtf_data(symbol: str, start_date: str, curr_date: str, timeframe: str) -> pd.DataFrame:
+    ticker = yf.Ticker(symbol.upper())
+    df_mtf = await asyncio.to_thread(ticker.history, start=start_date, end=curr_date, interval=timeframe)
+    if df_mtf.empty:
+        return df_mtf
+    if df_mtf.index.tz is not None:
+        df_mtf.index = df_mtf.index.tz_localize(None)
+    return df_mtf.dropna(subset=["Close", "High", "Low"])
+
+def _calc_mtf_indicators(df_mtf: pd.DataFrame) -> dict:
+    import pandas as pd
+    df_mtf["EMA_20"] = calculate_ema(df_mtf["Close"], 20)
+    df_mtf["RSI_14"] = calculate_rsi(df_mtf["Close"], 14)
+    macd_line, signal_line = calculate_macd(df_mtf["Close"], 12, 26, 9)
+    df_mtf["MACD_Line"] = macd_line
+    df_mtf["MACD_Signal"] = signal_line
+    df_mtf["MACD_Hist"] = macd_line - signal_line
+
+    return {
+        "close": float(df_mtf["Close"].iloc[-1]),
+        "ema": float(df_mtf["EMA_20"].iloc[-1]),
+        "rsi": float(df_mtf["RSI_14"].iloc[-1]) if not pd.isna(df_mtf["RSI_14"].iloc[-1]) else 50.0,
+        "macd": float(df_mtf["MACD_Line"].iloc[-1]),
+        "macd_sig": float(df_mtf["MACD_Signal"].iloc[-1]),
+        "macd_hist": float(df_mtf["MACD_Hist"].iloc[-1]),
+    }
+
+def _register_mtf_overlay(ctx: dict, df_daily: pd.DataFrame, df_mtf: pd.DataFrame, timeframe: str) -> None:
+    import pandas as pd
+    df_mtf_reset = df_mtf.reset_index()
+    df_mtf_reset.rename(columns={"Date": "MTF_Date"}, inplace=True)
+    df_mtf_reset["MTF_Date"] = pd.to_datetime(df_mtf_reset["MTF_Date"])
+    if df_mtf_reset["MTF_Date"].dt.tz is not None:
+        df_mtf_reset["MTF_Date"] = df_mtf_reset["MTF_Date"].dt.tz_localize(None)
+    df_mtf_reset["MTF_Date"] = df_mtf_reset["MTF_Date"].astype("datetime64[ns]")
+
+    merged = pd.merge_asof(
+        df_daily, df_mtf_reset[["MTF_Date", "EMA_20"]], left_on="Date", right_on="MTF_Date", direction="backward"
+    )
+
+    col_name = f"EMA20_{timeframe}"
+    overlay_name = f"{timeframe.upper()} EMA(20) Trend"
+
+    ctx["custom_indicators"].append(
+        {
+            "name": col_name,
+            "formula": f"Close * 0 + {col_name}",
+            "label": overlay_name,
+            "overlay": True,
+            "values": {
+                row["Date"].strftime("%Y-%m-%d"): round(float(row["EMA_20"]), 2)
+                for _, row in merged.iterrows()
+                if not pd.isna(row["EMA_20"])
+            },
+        }
+    )
+
+def _format_mtf_summary(
+    symbol: str, timeframe: str, curr_date: str, latest_date: str, metrics: dict,
+    supports: list[float], resistances: list[float]
+) -> str:
+    ema_trend = "BULLISH" if metrics["close"] > metrics["ema"] else "BEARISH"
+    rsi_condition = "OVERBOUGHT" if metrics["rsi"] >= 70 else ("OVERSOLD" if metrics["rsi"] <= 30 else "NEUTRAL")
+    macd_trend = "BULLISH (MACD Line is above Signal Line)" if metrics["macd"] > metrics["macd_sig"] else "BEARISH (MACD Line is below Signal Line)"
+
+    return (
+        f"--- Multi-Timeframe Trend Analysis ({timeframe.upper()}) for {symbol.upper()} ---\n"
+        f"Current Reference Date: {curr_date}\n"
+        f"Latest Ticker Close Price: ${metrics['close']:.2f} (on {latest_date})\n"
+        f"1. EMA (20): ${metrics['ema']:.2f} ({ema_trend} - Price is {'above' if ema_trend == 'BULLISH' else 'below'} 20 EMA)\n"
+        f"2. RSI (14): {metrics['rsi']:.1f} ({rsi_condition})\n"
+        f"3. MACD (12, 26, 9): Line = {metrics['macd']:.4f}, Signal = {metrics['macd_sig']:.4f}, Hist = {metrics['macd_hist']:.4f} ({macd_trend})\n"
+        f"4. Major Support Levels (Below Price): {', '.join([f'${s:.2f}' for s in supports])}\n"
+        f"5. Major Resistance Levels (Above Price): {', '.join([f'${r:.2f}' for r in resistances])}\n"
+        f"--------------------------------------------------------------------------------"
+    )

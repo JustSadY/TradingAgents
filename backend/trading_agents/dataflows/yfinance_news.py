@@ -9,6 +9,9 @@ from .stockstats_utils import yf_retry
 
 _logger = logging.getLogger(__name__)
 
+_NO_TITLE = "No title"
+
+
 
 def _parse_news_datetime(raw_value):
     if raw_value is None:
@@ -56,7 +59,7 @@ def _to_utc(dt: datetime | None) -> datetime | None:
 def _extract_article_data(article: dict) -> dict:
     if "content" in article:
         content = article["content"]
-        title = content.get("title", "No title")
+        title = content.get("title", _NO_TITLE)
         summary = content.get("summary", "")
         provider = content.get("provider", {})
         publisher = provider.get("displayName", "Unknown")
@@ -74,7 +77,7 @@ def _extract_article_data(article: dict) -> dict:
         }
     else:
         return {
-            "title": article.get("title", "No title"),
+            "title": article.get("title", _NO_TITLE),
             "summary": article.get("summary", ""),
             "publisher": article.get("publisher", "Unknown"),
             "link": article.get("link", ""),
@@ -110,7 +113,7 @@ async def get_news_yfinance(
             if pub_date:
                 if not (start_boundary <= pub_date < end_boundary):
                     continue
-            title = item.get("title") or "No title"
+            title = item.get("title") or _NO_TITLE
             summary = item.get("summary") or ""
             publisher = item.get("source") or "Unknown"
             link = item.get("url") or ""
@@ -126,7 +129,7 @@ async def get_news_yfinance(
             return f"No news found for {ticker} between {start_date} and {end_date}"
         return f"## {ticker} News, from {start_date} to {end_date}:\n\n{news_str}"
     except Exception as e:
-        _logger.error("Unexpected error fetching news for %s: %s", ticker, e, exc_info=True)
+        _logger.exception("Unexpected error fetching news for %s", ticker)
         return f"Error fetching news for {ticker}: {str(e)}"
 
 
@@ -186,7 +189,7 @@ def get_global_news_yfinance(
                 link = data["link"]
                 summary = data["summary"]
             else:
-                title = article.get("title", "No title")
+                title = article.get("title", _NO_TITLE)
                 publisher = article.get("publisher", "Unknown")
                 link = article.get("link", "")
                 summary = ""
@@ -198,5 +201,5 @@ def get_global_news_yfinance(
             news_str += "\n"
         return f"## Global Market News, from {start_date} to {curr_date}:\n\n{news_str}"
     except Exception as e:
-        _logger.error("Unexpected error fetching global news: %s", e, exc_info=True)
+        _logger.exception("Unexpected error fetching global news")
         return f"Error fetching global news: {str(e)}"

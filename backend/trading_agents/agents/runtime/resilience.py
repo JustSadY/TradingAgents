@@ -79,6 +79,17 @@ def is_transient(exc: BaseException) -> bool:
     return any(hint in str(exc).lower() for hint in _TRANSIENT_HINTS)
 
 
+async def _execute_fn(fn: Callable[[], Any], run_in_thread: bool) -> Any:
+    import asyncio
+    import inspect
+    if run_in_thread:
+        return await asyncio.to_thread(fn)
+    res = fn()
+    if inspect.iscoroutine(res):
+        return await res
+    return res
+
+
 async def retry_call(
     fn: Callable[[], Any],
     *,
@@ -100,64 +111,68 @@ async def retry_call(
     attempts = max(1, attempts)
     last: BaseException | None = None
     import asyncio
-    import inspect
 
     for i in range(attempts):
         try:
-            if run_in_thread:
-                return await asyncio.to_thread(fn)
-            else:
-                res = fn()
-                if inspect.iscoroutine(res):
-                    return await res
-                return res
+            return await _execute_fn(fn, run_in_thread)
         except Exception as exc:  # noqa: BLE001 — deliberately broad for resilience
             last = exc
-            is_last = i + 1 >= attempts
-            if is_last or (not retry_all and not is_transient(exc)):
+            if i + 1 >= attempts or (not retry_all and not is_transient(exc)):
                 break
+
             delay = base_delay * (2**i)
-            log_event(
-                "retry",
-                level=logging.WARNING,
-                label=label,
-                attempt=i + 1,
-                attempts=attempts,
-                delay=round(delay, 1),
-                error=str(exc)[:200],
-            )
-            m = _metrics()
-            if m:
-                m.NODE_RETRIES.labels(label=label).inc()
-            from backend.trading_agents.agents.data.chart_tools import active_run_context
-
-            ctx = active_run_context.get(None)
-            if ctx and "emitter" in ctx:
-                try:
-                    emitter = ctx["emitter"]
-                    clean_label = label.replace("analyst:", "").replace("main:", "").title()
-                    err_msg = str(exc)
-                    if "429" in err_msg or "rate_limit" in err_msg.lower() or "rate limit" in err_msg.lower():
-                        err_msg = "Rate limit (429) detected"
-                    elif "503" in err_msg or "service unavailable" in err_msg.lower():
-                        err_msg = "Service unavailable (503)"
-                    else:
-                        err_msg = err_msg[:60]
-
-                    warning_msg = f"Warning: Retrying {clean_label} (Attempt {i + 1}/{attempts}) due to: {err_msg}"
-                    await emitter.emit(
-                        {
-                            "type": "progress",
-                            "node": label,
-                            "label": warning_msg,
-                            "stage": "warning",
-                        }
-                    )
-                except Exception:
-                    pass
+            _log_retry_metrics(label, i, attempts, delay, exc)
+            await _emit_retry_progress(label, i, attempts, exc)
             await asyncio.sleep(delay)
+
     assert last is not None
     raise last
+
+
+def _log_retry_metrics(label: str, i: int, attempts: int, delay: float, exc: Exception):
+    log_event(
+        "retry",
+        level=logging.WARNING,
+        label=label,
+        attempt=i + 1,
+        attempts=attempts,
+        delay=round(delay, 1),
+        error=str(exc)[:200],
+    )
+    m = _metrics()
+    if m:
+        m.NODE_RETRIES.labels(label=label).inc()
+
+
+async def _emit_retry_progress(label: str, i: int, attempts: int, exc: Exception):
+    from backend.trading_agents.agents.data.chart_tools import active_run_context
+
+    ctx = active_run_context.get(None)
+    if not ctx or "emitter" not in ctx:
+        return
+
+    try:
+        emitter = ctx["emitter"]
+        clean_label = label.replace("analyst:", "").replace("main:", "").title()
+        err_msg = str(exc)
+        if "429" in err_msg or "rate_limit" in err_msg.lower() or "rate limit" in err_msg.lower():
+            err_msg = "Rate limit (429) detected"
+        elif "503" in err_msg or "service unavailable" in err_msg.lower():
+            err_msg = "Service unavailable (503)"
+        else:
+            err_msg = err_msg[:60]
+
+        warning_msg = f"Warning: Retrying {clean_label} (Attempt {i + 1}/{attempts}) due to: {err_msg}"
+        await emitter.emit(
+            {
+                "type": "progress",
+                "node": label,
+                "label": warning_msg,
+                "stage": "warning",
+            }
+        )
+    except Exception:
+        pass
 
 
 def tool_error_handler(exc: Exception) -> str:
@@ -185,11 +200,6 @@ def guard_node(
 
     async def wrapped(state, *args, **kwargs):
         start = time.time()
-        # NOTE: the enable/disable kill-switch is owned by the AgentHierarchy and
-        # enforced inside each Main Agent node (and by Market Intelligence when it
-        # selects analyst sub-agents). guard_node intentionally does NOT re-check
-        # enablement here — that would short-circuit before the cascade-aware
-        # hierarchy logic runs and emit a different, less complete stub.
         log_event("node_start", node=name, kind=kind)
         try:
             is_async = inspect.iscoroutinefunction(fn)
@@ -205,37 +215,54 @@ def guard_node(
                     label=f"{kind}:{name}",
                     run_in_thread=True,
                 )
-            log_event("node_end", node=name, kind=kind, ms=int((time.time() - start) * 1000))
-            m = _metrics()
-            if m:
-                m.NODE_DURATION.labels(node=name, kind=kind).observe(time.time() - start)
+            _log_node_success(name, kind, start)
             return result
         except Exception as exc:  # noqa: BLE001
-            log_event(
-                "node_error",
-                level=logging.ERROR,
-                node=name,
-                kind=kind,
-                error=str(exc)[:300],
-                traceback=traceback.format_exc()[-700:],
-            )
-            m = _metrics()
-            if m:
-                m.NODE_ERRORS.labels(node=name, kind=kind).inc()
+            _log_node_error(name, kind, exc)
             if fallback is None:
                 raise
-            try:
-                if inspect.iscoroutinefunction(fallback):
-                    update = await fallback(state, exc)
-                else:
-                    update = fallback(state, exc)
-            except Exception as fb_exc:  # noqa: BLE001 — never let the fallback abort
-                log_event("fallback_error", level=logging.ERROR, node=name, error=str(fb_exc)[:200])
-                raise exc from fb_exc
-            log_event("node_skipped", level=logging.WARNING, node=name, kind=kind)
-            if m:
-                m.NODE_FALLBACKS.labels(node=name, kind=kind).inc()
-            return update
+            return await _handle_node_fallback(name, kind, fallback, state, exc)
 
     wrapped.__name__ = getattr(fn, "__name__", name)
     return wrapped
+
+
+def _log_node_success(name: str, kind: str, start_time: float):
+    ms = int((time.time() - start_time) * 1000)
+    log_event("node_end", node=name, kind=kind, ms=ms)
+    m = _metrics()
+    if m:
+        m.NODE_DURATION.labels(node=name, kind=kind).observe(time.time() - start_time)
+
+
+def _log_node_error(name: str, kind: str, exc: Exception):
+    log_event(
+        "node_error",
+        level=logging.ERROR,
+        node=name,
+        kind=kind,
+        error=str(exc)[:300],
+        traceback=traceback.format_exc()[-700:],
+    )
+    m = _metrics()
+    if m:
+        m.NODE_ERRORS.labels(node=name, kind=kind).inc()
+
+
+async def _handle_node_fallback(name: str, kind: str, fallback: Callable, state: dict, exc: Exception) -> dict:
+    import inspect
+
+    try:
+        if inspect.iscoroutinefunction(fallback):
+            update = await fallback(state, exc)
+        else:
+            update = fallback(state, exc)
+    except Exception as fb_exc:  # noqa: BLE001 — never let the fallback abort
+        log_event("fallback_error", level=logging.ERROR, node=name, error=str(fb_exc)[:200])
+        raise exc from fb_exc
+
+    log_event("node_skipped", level=logging.WARNING, node=name, kind=kind)
+    m = _metrics()
+    if m:
+        m.NODE_FALLBACKS.labels(node=name, kind=kind).inc()
+    return update

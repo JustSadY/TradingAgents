@@ -16,7 +16,7 @@ _RATING_LABEL_RE = re.compile(
 _RATING_TOKEN_RE = re.compile(r"\b(buy|overweight|hold|underweight|sell)\b", re.IGNORECASE)
 
 
-def parse_rating(text: str, default: str = "Hold") -> str:
+def parse_rating(text: str, default: str | None = "Hold") -> str | None:
     lines = text.splitlines()
     for line in lines:
         m = _RATING_LABEL_RE.search(line)
@@ -27,7 +27,7 @@ def parse_rating(text: str, default: str = "Hold") -> str:
         stripped = line.strip().lower()
         if not stripped:
             continue
-        if stripped.startswith("final") or stripped.startswith("decision") or stripped.startswith("signal"):
+        if stripped.startswith(("final", "decision", "signal")):
             structured_candidates.extend(m.group(1).lower() for m in _RATING_TOKEN_RE.finditer(line))
     unique_structured = []
     for c in structured_candidates:

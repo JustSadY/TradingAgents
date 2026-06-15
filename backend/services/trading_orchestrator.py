@@ -199,7 +199,7 @@ async def _existing_long_quantity(db, portfolio_id: int, ticker: str) -> float:
     return float(holding.quantity)
 
 
-async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, leverage, quantity, settings) -> float:
+async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, settings) -> float:
     """Shrink ``quantity`` so the resulting position respects the portfolio's
     single-name concentration and gross-exposure limits. Returns the (possibly
     reduced) quantity; 0 means the order should be skipped."""
@@ -345,7 +345,7 @@ async def place_signal_order(
     # name and no overall gross exposure exceeds the configured limits.
     if opening_exposure:
         quantity = await _apply_portfolio_risk_caps(
-            db, portfolio=portfolio, ticker=ticker, price=price, leverage=leverage, quantity=quantity, settings=settings
+            db, portfolio=portfolio, ticker=ticker, price=price, quantity=quantity, settings=settings
         )
         if quantity <= 0:
             _logger.info("Portfolio risk caps left no room for %s; skipping order", ticker)

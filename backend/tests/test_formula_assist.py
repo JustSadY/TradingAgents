@@ -39,10 +39,10 @@ def env(monkeypatch):
 
     monkeypatch.setattr(svc, "get_or_create_settings", fake_settings)
 
-    import backend.services.report_chat_service as chat_svc
+    import backend.services.user_service as user_svc
     import backend.trading_agents.llm_clients.factory as factory
 
-    monkeypatch.setattr(chat_svc, "_resolve_user_api_key", fake_resolve_key)
+    monkeypatch.setattr(user_svc, "resolve_user_api_key", fake_resolve_key)
     monkeypatch.setattr(factory, "create_llm_client", fake_create_client)
     return state
 

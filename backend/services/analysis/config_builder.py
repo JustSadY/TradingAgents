@@ -104,8 +104,8 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
                 cfg["user_api_keys"] = decrypt_api_keys(user.api_keys_enc, fernet)
             else:
                 cfg["user_api_keys"] = {}
-        except Exception as e:
-            _logger.error("Failed to decrypt user API keys in build_analysis_config: %s", e)
+        except Exception:
+            _logger.exception("Failed to decrypt user API keys in build_analysis_config")
             user_key = None
             cfg["user_api_keys"] = {}
         if user_key:

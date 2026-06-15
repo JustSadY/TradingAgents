@@ -11,6 +11,9 @@ from pathlib import Path
 
 _logger = logging.getLogger(__name__)
 
+_ISO_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
+
+
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATUS_FILE = PROJECT_ROOT / ".update.json"
 UPDATE_UNIT = os.environ.get("TRADINGAGENTS_UPDATE_UNIT", "")
@@ -140,7 +143,7 @@ def get_status(do_fetch: bool = True) -> dict:
                 if elapsed > _UPDATE_STUCK_TIMEOUT:
                     status = {
                         "state": "failed",
-                        "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                        "at": time.strftime(_ISO_FORMAT, time.gmtime()),
                         "error": f"Update timed out after {int(elapsed // 60)} minutes.",
                     }
                     _write_status(status)
@@ -170,7 +173,7 @@ def request_update() -> dict:
     status = _read_status()
     if status and status.get("state") == "running":
         raise RuntimeError("Update is already in progress.")
-    _write_status({"state": "running", "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())})
+    _write_status({"state": "running", "at": time.strftime(_ISO_FORMAT, time.gmtime())})
     try:
         subprocess.run(
             ["sudo", "-n", SYSTEMCTL, "start", "--no-block", UPDATE_UNIT],
@@ -215,7 +218,7 @@ def reset_stuck_update() -> None:
     _write_status(
         {
             "state": "failed",
-            "at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+            "at": time.strftime(_ISO_FORMAT, time.gmtime()),
             "error": stuck_reason,
         }
     )

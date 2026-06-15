@@ -92,8 +92,8 @@ class CronService:
                     misfire_grace_time=300,
                 )
                 _logger.info("User cron job configured for user=%s: %s", username, cron_schedule)
-            except Exception as e:
-                _logger.error("Failed to configure user cron job for user=%s: %s", username, e)
+            except Exception:
+                _logger.exception("Failed to configure user cron job for user=%s", username)
 
     async def _run_user_watchlist_scan(self, user_id: int):
         from backend.core.log_handler import current_user_id
@@ -128,9 +128,9 @@ class CronService:
                     if row.signal in ("Buy", "Overweight", "Sell", "Underweight"):
                         # place_signal_order resolves the active broker/mode itself.
                         await place_signal_order(db, ticker=ticker, row=row, settings=app_settings, user=user)
-                except Exception as e:
-                    _logger.error(
-                        "User cron scan failed for user=%s, ticker=%s: %s", user.username, ticker, e, exc_info=True
+                except Exception:
+                    _logger.exception(
+                        "User cron scan failed for user=%s, ticker=%s", user.username, ticker
                     )
                     await db.rollback()
             _logger.info("User cron watchlist scan completed for user=%s (id=%d)", user.username, user_id)
@@ -150,16 +150,16 @@ class CronService:
 async def _run_alert_checker():
     try:
         await check_price_alerts()
-    except Exception as exc:
-        _logger.error("Alert checker error: %s", exc)
+    except Exception:
+        _logger.exception("Alert checker error")
 
 
 async def _run_performance_backfill():
     try:
         async with AsyncSessionLocal() as db:
             await backfill_returns(db)
-    except Exception as exc:
-        _logger.error("Performance backfill error: %s", exc)
+    except Exception:
+        _logger.exception("Performance backfill error")
 
 
 async def _run_position_monitor():
@@ -172,8 +172,8 @@ async def _run_position_monitor():
             await db.commit()
             if closed:
                 _logger.info("Position monitor auto-closed %d position(s): %s", len(closed), closed)
-    except Exception as exc:
-        _logger.error("Position monitor error: %s", exc)
+    except Exception:
+        _logger.exception("Position monitor error")
 
 
 def init_cron_service() -> CronService:
@@ -186,7 +186,7 @@ def init_cron_service() -> CronService:
     subscribe("settings_updated", _cron_service.apply_user_settings)
 
     # Register user deletion listener
-    async def _on_user_deleted(user_id: int):
+    def _on_user_deleted(user_id: int):
         job_id = f"watchlist_scan_user_{user_id}"
         try:
             _cron_service.scheduler.remove_job(job_id)

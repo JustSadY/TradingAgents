@@ -87,6 +87,7 @@ async def get_signal_replay_context(db: AsyncSession, ticker: str, user_id: int 
             q = q.where(AnalysisResult.user_id == user_id)
         rows = list((await db.execute(q)).scalars().all())
         return render_signal_replay(ticker, rows)
-    except Exception as exc:  # noqa: BLE001 — context is best-effort, never block a run
+    # context is best-effort, never block a run
+    except Exception as exc:  # noqa: BLE001
         _logger.warning("Signal replay context failed for %s: %s", ticker, exc)
         return ""

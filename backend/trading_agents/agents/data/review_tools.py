@@ -61,5 +61,5 @@ async def get_past_performance_data(ticker: str, curr_date: str | None = None) -
         )
         return result
     except Exception as e:
-        _logger.error(f"Error fetching past performance data: {e}")
+        _logger.exception("Error fetching past performance data")
         return f"Error retrieving performance data: {e}"

@@ -100,7 +100,7 @@ async def reset_portfolio(
     return result
 
 
-@router.post("/backtest")
+@router.post("/backtest", responses={400: {"description": "Backtest simulation failed"}})
 async def run_backtest(
     req: BacktestRequest,
     db: AsyncSession = Depends(get_db),

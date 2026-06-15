@@ -22,7 +22,7 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD_HASH: str = ""
-    DATABASE_URL: str = "postgresql+asyncpg://tradingagents:tradingagents@localhost:5432/tradingagents"
+    DATABASE_URL: str = "postgresql+asyncpg://tradingagents:tradingagents@localhost:5432/tradingagents"  # NOSONAR
     ENCRYPTION_KEY: str = ""
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
     # Bearer token for GET /metrics (Prometheus). Endpoint returns 404 while unset.
@@ -55,17 +55,16 @@ class Settings(BaseSettings):
         JWTs are forgeable, the owner account password defaults to 'changeme',
         and encrypted API keys are silently lost on restart.
         """
-        if self.ENVIRONMENT.strip().lower() != "production":
-            return self
-        problems = []
-        if not self.SECRET_KEY or self.SECRET_KEY == _DEFAULT_SECRET_KEY:
-            problems.append("SECRET_KEY must be set to a long random value")
-        if not self.ENCRYPTION_KEY:
-            problems.append("ENCRYPTION_KEY must be set (encrypted data is lost on restart otherwise)")
-        if not self.ADMIN_PASSWORD_HASH:
-            problems.append("ADMIN_PASSWORD_HASH must be set (the admin password defaults to 'changeme' otherwise)")
-        if problems:
-            raise ValueError("Insecure configuration for ENVIRONMENT=production: " + "; ".join(problems))
+        if self.ENVIRONMENT.strip().lower() == "production":
+            problems = []
+            if not self.SECRET_KEY or self.SECRET_KEY == _DEFAULT_SECRET_KEY:
+                problems.append("SECRET_KEY must be set to a long random value")
+            if not self.ENCRYPTION_KEY:
+                problems.append("ENCRYPTION_KEY must be set (encrypted data is lost on restart otherwise)")
+            if not self.ADMIN_PASSWORD_HASH:
+                problems.append("ADMIN_PASSWORD_HASH must be set (the admin password defaults to 'changeme' otherwise)")
+            if problems:
+                raise ValueError("Insecure configuration for ENVIRONMENT=production: " + "; ".join(problems))
         return self
 
     def get_fernet(self) -> Fernet:

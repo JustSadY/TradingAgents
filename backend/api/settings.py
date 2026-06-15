@@ -23,6 +23,9 @@ from backend.services.settings_service import (
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
+_USER_NOT_FOUND = "User not found"
+
+
 
 @router.get("/memory")
 async def get_memory_status(
@@ -82,7 +85,7 @@ async def _check_section_permissions(db: AsyncSession, user: User, body: Setting
         )
 
 
-@router.put("", response_model=SettingsRead)
+@router.put("", response_model=SettingsRead, responses={403: {"description": "Permission denied"}})
 async def update_settings(
     body: SettingsUpdate,
     db: AsyncSession = Depends(get_db),
@@ -133,7 +136,7 @@ def _validate_webhook_url(url: str) -> None:
             raise HTTPException(status_code=400, detail="Webhook URL resolves to a disallowed internal address")
 
 
-@router.post("/test-webhook")
+@router.post("/test-webhook", responses={400: {"description": "Invalid webhook URL or delivery failed"}})
 async def test_webhook(body: WebhookTestRequest, _: User = Depends(get_current_user)):
     _validate_webhook_url(body.url)
     payload = {
@@ -183,11 +186,11 @@ async def get_webhook_deliveries(
 async def _require_target_user(db: AsyncSession, user_id: int) -> User:
     target_user = await get_user_by_id(db, user_id)
     if not target_user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     return target_user
 
 
-@router.get("/users/{user_id}", response_model=SettingsRead)
+@router.get("/users/{user_id}", response_model=SettingsRead, responses={404: {"description": _USER_NOT_FOUND}})
 async def get_user_settings_by_id(
     user_id: int,
     db: AsyncSession = Depends(get_db),
@@ -198,7 +201,8 @@ async def get_user_settings_by_id(
     return settings_to_read(settings)
 
 
-@router.put("/users/{user_id}", response_model=SettingsRead)
+
+@router.put("/users/{user_id}", response_model=SettingsRead, responses={404: {"description": _USER_NOT_FOUND}})
 async def update_user_settings_by_id(
     user_id: int,
     body: SettingsUpdate,
@@ -211,7 +215,7 @@ async def update_user_settings_by_id(
     return settings_to_read(settings)
 
 
-@router.get("/users/{user_id}/tools", response_model=ToolSettingsRead)
+@router.get("/users/{user_id}/tools", response_model=ToolSettingsRead, responses={404: {"description": _USER_NOT_FOUND}})
 async def get_other_user_tools(
     user_id: int,
     db: AsyncSession = Depends(get_db),
@@ -223,7 +227,7 @@ async def get_other_user_tools(
     return await get_user_tool_settings(db, target_user)
 
 
-@router.put("/users/{user_id}/tools", response_model=ToolSettingsRead)
+@router.put("/users/{user_id}/tools", response_model=ToolSettingsRead, responses={404: {"description": _USER_NOT_FOUND}})
 async def update_other_user_tools(
     user_id: int,
     body: ToolSettingsUpdate,
@@ -279,7 +283,7 @@ async def update_user_agents(
     return await apply_agent_settings_update(db, current_user, body)
 
 
-@router.get("/users/{user_id}/agents", response_model=AgentSettingsRead)
+@router.get("/users/{user_id}/agents", response_model=AgentSettingsRead, responses={404: {"description": _USER_NOT_FOUND}})
 async def get_other_user_agents(
     user_id: int,
     db: AsyncSession = Depends(get_db),
@@ -291,7 +295,7 @@ async def get_other_user_agents(
     return await get_user_agent_settings(db, target_user)
 
 
-@router.put("/users/{user_id}/agents", response_model=AgentSettingsRead)
+@router.put("/users/{user_id}/agents", response_model=AgentSettingsRead, responses={404: {"description": _USER_NOT_FOUND}})
 async def update_other_user_agents(
     user_id: int,
     body: AgentSettingsUpdate,

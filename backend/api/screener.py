@@ -37,7 +37,7 @@ async def scan(
     return {"results": await run_screen(universe=body.tickers, top_n=body.top_n)}
 
 
-@router.post("/scan-watchlist")
+@router.post("/scan-watchlist", responses={400: {"description": "Watchlist is empty"}})
 @limiter.limit("10/minute")
 async def scan_watchlist(
     request: Request,

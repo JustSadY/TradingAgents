@@ -189,8 +189,8 @@ async def run_analysis_task(
             except Exception as exc:
                 _logger.warning("Order execution skipped for %s: %s", ticker, exc)
                 await db.rollback()
-        except Exception as exc:
-            _logger.error("Background analysis failed: %s", exc, exc_info=True)
+        except Exception:
+            _logger.exception("Background analysis failed")
             await db.rollback()
 
 
@@ -220,8 +220,8 @@ async def run_portfolio_task(
                 task_id=task_id,
             )
             await db.commit()
-        except Exception as exc:
-            _logger.error("Portfolio analysis failed: %s", exc, exc_info=True)
+        except Exception:
+            _logger.exception("Portfolio analysis failed")
             await db.rollback()
             if task_id:
                 # Surface the failure on the WebSocket channel so a subscribed
@@ -348,7 +348,9 @@ async def rollback_and_resume_analysis(
                     _TASK_REGISTRY.pop(task_id, None)
                     await clear_task_owner(task_id)
                     await emitter.close()
-            except Exception as exc:
-                _logger.error("Time-travel resume task failed: %s", exc, exc_info=True)
+            except Exception:
+                _logger.exception("Time-travel resume task failed")
 
-    asyncio.create_task(run_resume())
+    task = asyncio.create_task(run_resume())
+    _RUNNING_TASKS[task_id] = task
+

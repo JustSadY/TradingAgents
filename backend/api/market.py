@@ -15,6 +15,8 @@ from backend.services.market_service import (
 
 router = APIRouter(prefix="/api/market", tags=["market"])
 
+_TICKER_DESCRIPTION = "Ticker symbol, e.g. AAPL"
+
 
 class FormulaAssistRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=500, description="Plain-language indicator description")
@@ -22,7 +24,7 @@ class FormulaAssistRequest(BaseModel):
 
 @router.get("/ohlcv")
 async def ohlcv(
-    ticker: str = Query(..., description="Ticker symbol, e.g. AAPL"),
+    ticker: str = Query(..., description=_TICKER_DESCRIPTION),
     start_date: str = Query(None, description="YYYY-MM-DD"),
     end_date: str = Query(None, description="YYYY-MM-DD"),
     period: str = Query("1y", description="1m|3m|6m|1y|2y|5y — ignored when start_date provided"),
@@ -36,7 +38,7 @@ async def ohlcv(
 
 @router.get("/custom-indicator")
 async def custom_indicator(
-    ticker: str = Query(..., description="Ticker symbol, e.g. AAPL"),
+    ticker: str = Query(..., description=_TICKER_DESCRIPTION),
     formula: str = Query(..., description="Mathematical formula, e.g. (Close - SMA(20)) / STD(20)"),
     period: str = Query("1y", description="1m|3m|6m|1y|2y|5y"),
     start_date: str = Query(None, description="YYYY-MM-DD"),
@@ -70,7 +72,7 @@ async def formula_assist(
 
 @router.get("/sentiment-history")
 async def sentiment_history(
-    ticker: str = Query(..., description="Ticker symbol, e.g. AAPL"),
+    ticker: str = Query(..., description=_TICKER_DESCRIPTION),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -78,3 +80,4 @@ async def sentiment_history(
         return await get_sentiment_history(db, ticker, user=current_user)
     except MarketDataError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+

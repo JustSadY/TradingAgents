@@ -96,8 +96,8 @@ async def _auto_analyze(ticker: str, trade_date: str, user_id: int) -> None:
                 ticker, trade_date, "stock", settings, new_db, triggered_by="alert", task_id=task_id, user=user
             )
             await new_db.commit()
-    except Exception as exc:
-        _logger.error("Auto-analyze from alert failed %s: %s", ticker, exc)
+    except Exception:
+        _logger.exception("Auto-analyze from alert failed %s", ticker)
 
 
 async def check_and_recover_lost_alerts() -> None:

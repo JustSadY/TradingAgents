@@ -1,4 +1,5 @@
 import logging
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -28,17 +29,20 @@ from backend.services.user_service import (
 router = APIRouter(prefix="/api/users", tags=["users"])
 _logger = logging.getLogger(__name__)
 
+_USER_NOT_FOUND = "User not found"
+
+
 
 @router.get("/me", response_model=UserRead)
-async def get_me(current_user: User = Depends(get_current_user)):
+async def get_me(current_user: Annotated[User, Depends(get_current_user)]):
     return current_user
 
 
-@router.put("/me", response_model=UserRead)
+@router.put("/me", response_model=UserRead, responses={400: {"description": "Email already in use"}})
 async def update_me(
     body: ProfileUpdate,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     if body.email is not None:
         if await email_exists(db, body.email, exclude_user_id=current_user.id):
@@ -60,7 +64,7 @@ async def update_me(
 
 
 @router.get("/me/api-keys")
-async def list_my_api_keys(current_user: User = Depends(get_current_user)):
+async def list_my_api_keys(current_user: Annotated[User, Depends(get_current_user)]):
     fernet = _get_settings().get_fernet()
     providers = list_user_api_key_providers(current_user, fernet)
     return {"providers": providers}
@@ -69,19 +73,19 @@ async def list_my_api_keys(current_user: User = Depends(get_current_user)):
 @router.put("/me/api-keys")
 async def set_my_api_key(
     body: ApiKeySet,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     fernet = _get_settings().get_fernet()
     set_user_api_key(current_user, body.provider, body.api_key, fernet)
     return {"detail": f"API key for '{body.provider}' saved"}
 
 
-@router.delete("/me/api-keys/{provider}")
+@router.delete("/me/api-keys/{provider}", responses={404: {"description": "No key found for provider"}})
 async def delete_my_api_key(
     provider: str,
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     fernet = _get_settings().get_fernet()
     deleted = delete_user_api_key(current_user, provider, fernet)
@@ -92,8 +96,8 @@ async def delete_my_api_key(
 
 @router.get("/me/permissions", response_model=PagePermissionsRead)
 async def get_my_permissions(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from backend.core.constants import PAGE_KEYS
 
@@ -107,19 +111,19 @@ async def get_my_permissions(
 
 @router.get("", response_model=list[UserRead])
 async def list_users_run(
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from backend.repositories.users import list_users as _repo_list
 
     return await _repo_list(db)
 
 
-@router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=UserRead, status_code=status.HTTP_201_CREATED, responses={400: {"description": "Username or email taken"}, 403: {"description": "Permission denied"}})
 async def create_user(
     body: UserCreate,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     if await username_exists(db, body.username):
         raise HTTPException(status_code=400, detail="Username already taken")
@@ -148,16 +152,16 @@ async def create_user(
     )
 
 
-@router.put("/{user_id}", response_model=UserRead)
+@router.put("/{user_id}", response_model=UserRead, responses={403: {"description": "Permission denied"}, 404: {"description": _USER_NOT_FOUND}})
 async def update_user(
     user_id: int,
     body: UserAdminUpdate,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     user = await get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
 
     if user.role == "owner":
         if body.role is not None and body.role != "owner":
@@ -178,17 +182,17 @@ async def update_user(
     )
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, responses={400: {"description": "Cannot delete yourself"}, 403: {"description": "Permission denied"}, 404: {"description": _USER_NOT_FOUND}})
 async def delete_user(
     user_id: int,
-    admin: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    admin: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     if user_id == admin.id:
         raise HTTPException(status_code=400, detail="Cannot delete yourself")
     user = await get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     if user.role == "owner":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
@@ -207,8 +211,8 @@ async def delete_user(
 @router.get("/{user_id}/permissions")
 async def get_user_permissions(
     user_id: int,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from backend.models.page_permission import ALL_PAGE_KEYS
     from backend.repositories.permissions import get_user_page_permissions_map
@@ -218,16 +222,16 @@ async def get_user_permissions(
     return {"user_id": user_id, "permissions": full}
 
 
-@router.put("/{user_id}/permissions")
+@router.put("/{user_id}/permissions", responses={404: {"description": _USER_NOT_FOUND}})
 async def set_user_permissions(
     user_id: int,
     body: PagePermissionsUpdate,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     user = await get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
 
     from backend.models.page_permission import ALL_PAGE_KEYS
     from backend.repositories.permissions import set_user_page_permission
@@ -241,46 +245,46 @@ async def set_user_permissions(
     return {"detail": "Permissions updated"}
 
 
-@router.get("/{user_id}/api-keys")
+@router.get("/{user_id}/api-keys", responses={404: {"description": _USER_NOT_FOUND}})
 async def list_user_api_keys(
     user_id: int,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     user = await get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     fernet = _get_settings().get_fernet()
     providers = list_user_api_key_providers(user, fernet)
     return {"providers": providers}
 
 
-@router.put("/{user_id}/api-keys")
+@router.put("/{user_id}/api-keys", responses={404: {"description": _USER_NOT_FOUND}})
 async def set_user_api_key_endpoint(
     user_id: int,
     body: ApiKeySet,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     user = await get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     fernet = _get_settings().get_fernet()
     set_user_api_key(user, body.provider, body.api_key, fernet)
     await db.flush()
     return {"detail": f"API key for '{body.provider}' saved for user {user.username}"}
 
 
-@router.delete("/{user_id}/api-keys/{provider}")
+@router.delete("/{user_id}/api-keys/{provider}", responses={404: {"description": "User or key not found"}})
 async def delete_user_api_key_endpoint(
     user_id: int,
     provider: str,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     user = await get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     fernet = _get_settings().get_fernet()
     deleted = delete_user_api_key(user, provider, fernet)
     if not deleted:
@@ -291,8 +295,8 @@ async def delete_user_api_key_endpoint(
 
 @router.get("/me/setting-permissions")
 async def get_my_setting_permissions(
-    current_user: User = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from backend.core.constants import SETTING_KEYS
 
@@ -302,15 +306,15 @@ async def get_my_setting_permissions(
     return {"allowed_settings": allowed}
 
 
-@router.get("/{user_id}/setting-permissions")
+@router.get("/{user_id}/setting-permissions", responses={404: {"description": _USER_NOT_FOUND}})
 async def get_user_setting_permissions(
     user_id: int,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     user = await get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     from backend.core.constants import SETTING_KEYS
     from backend.repositories.permissions import get_user_setting_permissions_map
 
@@ -323,16 +327,16 @@ class SettingPermissionsUpdate(BaseModel):
     permissions: dict[str, bool]
 
 
-@router.put("/{user_id}/setting-permissions")
+@router.put("/{user_id}/setting-permissions", responses={404: {"description": _USER_NOT_FOUND}})
 async def set_user_setting_permissions(
     user_id: int,
     body: SettingPermissionsUpdate,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     user = await get_user_by_id(db, user_id)
     if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
 
     from backend.core.constants import SETTING_KEYS
     from backend.repositories.permissions import set_user_setting_permission
@@ -349,8 +353,8 @@ async def set_user_setting_permissions(
 @router.get("/{user_id}/agent-access")
 async def get_agent_access(
     user_id: int,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from backend.services.tool_access_service import get_user_agent_access
 
@@ -365,8 +369,8 @@ class AgentAccessUpdate(BaseModel):
 async def set_agent_access(
     user_id: int,
     body: AgentAccessUpdate,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from backend.services.tool_access_service import update_user_agent_access
 
@@ -377,8 +381,8 @@ async def set_agent_access(
 @router.get("/{user_id}/tool-access")
 async def get_tool_access(
     user_id: int,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from backend.services.tool_access_service import get_user_tool_access
 
@@ -393,8 +397,8 @@ class ToolAccessUpdate(BaseModel):
 async def set_tool_access(
     user_id: int,
     body: ToolAccessUpdate,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from backend.services.tool_access_service import update_user_tool_access
 
@@ -405,8 +409,8 @@ async def set_tool_access(
 @router.get("/{user_id}/tool-field-access")
 async def get_tool_field_access(
     user_id: int,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from backend.services.tool_access_service import get_user_tool_field_access
 
@@ -421,8 +425,8 @@ class ToolFieldAccessUpdate(BaseModel):
 async def set_tool_field_access(
     user_id: int,
     body: ToolFieldAccessUpdate,
-    _: User = Depends(require_admin),
-    db: AsyncSession = Depends(get_db),
+    _: Annotated[User, Depends(require_admin)],
+    db: Annotated[AsyncSession, Depends(get_db)],
 ):
     from backend.services.tool_access_service import update_user_tool_field_access
 

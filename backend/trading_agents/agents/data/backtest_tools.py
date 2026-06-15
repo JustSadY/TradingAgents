@@ -63,5 +63,5 @@ def run_strategy_backtest(ticker: str, strategy_type: str, curr_date: str | None
             f"- Max Drawdown: {max_dd:.2%}"
         )
     except Exception as e:
-        _logger.error("Backtest failed for %s using %s: %s", ticker, strategy_type, e, exc_info=True)
+        _logger.exception("Backtest failed for %s using %s", ticker, strategy_type)
         return f"Error running backtest for {ticker}: {str(e)}"

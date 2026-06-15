@@ -26,10 +26,10 @@ _PATTERNS = [
     re.compile(r"xai-[A-Za-z0-9_\-]{12,}"),
     re.compile(r"nvapi-[A-Za-z0-9_\-]{12,}"),
     re.compile(r"AIza[0-9A-Za-z_\-]{20,}"),
-    re.compile(r"(?i)bearer\s+[A-Za-z0-9._\-]{12,}"),
+    re.compile(r"(?i)bearer\s+[a-z0-9._\-]{12,}"),
     re.compile(
         r"(?i)(api[_-]?key|api[_-]?secret|secret|token|password)"
-        r"(\"?\s*[:=]\s*\"?)([A-Za-z0-9._\-]{6,})"
+        r"(\"?\s*[:=]\s*\"?)([a-z0-9._\-]{6,})"
     ),
 ]
 

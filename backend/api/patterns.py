@@ -12,7 +12,7 @@ _TICKER_RE = re.compile(r"^[A-Z]{1,5}$")
 _VALID_PERIODS = {"3m", "6m", "1y", "2y"}
 
 
-@router.get("/patterns/{ticker}")
+@router.get("/patterns/{ticker}", responses={422: {"description": "Invalid ticker"}})
 async def get_patterns(
     ticker: str,
     period: str = Query("1y"),
