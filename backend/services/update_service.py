@@ -134,8 +134,9 @@ def get_status(do_fetch: bool = True) -> dict:
         if at_str:
             try:
                 import datetime
+
                 started = datetime.datetime.fromisoformat(at_str.replace("Z", "+00:00"))
-                elapsed = (datetime.datetime.now(datetime.timezone.utc) - started).total_seconds()
+                elapsed = (datetime.datetime.now(datetime.UTC) - started).total_seconds()
                 if elapsed > _UPDATE_STUCK_TIMEOUT:
                     status = {
                         "state": "failed",
@@ -200,8 +201,9 @@ def reset_stuck_update() -> None:
     if at_str:
         try:
             import datetime
+
             started = datetime.datetime.fromisoformat(at_str.replace("Z", "+00:00"))
-            elapsed = (datetime.datetime.now(datetime.timezone.utc) - started).total_seconds()
+            elapsed = (datetime.datetime.now(datetime.UTC) - started).total_seconds()
             if elapsed < _UPDATE_STUCK_TIMEOUT:
                 # Henüz çok yeni, belki hâlâ devam ediyor — dokunma
                 return

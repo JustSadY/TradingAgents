@@ -153,6 +153,7 @@ async def get_historical_data(ticker: str, start_date: str, end_date: str):
     delay = 1.0
     for attempt in range(max_retries):
         try:
+
             def _fetch():
                 data = yf.Ticker(ticker).history(start=start_date, end=end_date)
                 if data.empty:
@@ -173,7 +174,13 @@ async def get_historical_data(ticker: str, start_date: str, end_date: str):
             return await asyncio.to_thread(_fetch)
         except Exception as exc:
             if attempt < max_retries - 1:
-                _logger.warning("Historical data fetch for %s failed on attempt %d: %s. Retrying in %.1fs...", ticker, attempt + 1, exc, delay)
+                _logger.warning(
+                    "Historical data fetch for %s failed on attempt %d: %s. Retrying in %.1fs...",
+                    ticker,
+                    attempt + 1,
+                    exc,
+                    delay,
+                )
                 await asyncio.sleep(delay)
                 delay *= 2
             else:
