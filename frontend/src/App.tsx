@@ -26,6 +26,7 @@ const Admin = lazy(() => import('./pages/Admin'))
 const Screener = lazy(() => import('./pages/Screener'))
 const SectorRotation = lazy(() => import('./pages/SectorRotation'))
 const SharedReport = lazy(() => import('./pages/SharedReport'))
+const EarningsCalendar = lazy(() => import('./pages/EarningsCalendar'))
 
 import { LanguageProvider } from './contexts/LanguageContext'
 import { CurrencyProvider } from './contexts/CurrencyContext'
@@ -103,6 +104,7 @@ function AppRoutes() {
 
         <Route path="screener" element={<RequirePage page="analysis"><Screener /></RequirePage>} />
         <Route path="sector-rotation" element={<RequirePage page="analysis"><SectorRotation /></RequirePage>} />
+        <Route path="earnings" element={<RequirePage page="analysis"><EarningsCalendar /></RequirePage>} />
 
         {/* Catch-all within the layout */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

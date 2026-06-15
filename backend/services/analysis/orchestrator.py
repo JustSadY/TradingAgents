@@ -75,6 +75,22 @@ async def run_individual_analysis(
         await emitter.emit_status("Preparing engine...")
         config = build_analysis_config(settings, user=user, sys_settings=sys_settings)
 
+        # Resolve custom persona instructions if the selected persona is not built-in
+        persona_key = config.get("investor_persona")
+        if persona_key and user_id:
+            from backend.trading_agents.personas import get_persona as _get_builtin_persona
+
+            if not _get_builtin_persona(persona_key):
+                from sqlalchemy import select as _sel
+
+                from backend.models.persona import UserPersona as _UP
+
+                _custom = (
+                    await db.execute(_sel(_UP).where(_UP.user_id == user_id, _UP.key == persona_key))
+                ).scalar_one_or_none()
+                if _custom and _custom.instructions:
+                    config["investor_persona_instructions"] = _custom.instructions
+
         # 3. Context & Intelligence gathering
         from backend.services.analysis.market_pulse_service import get_market_pulse
         from backend.services.analysis.scenario_service import get_active_scenarios

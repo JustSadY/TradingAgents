@@ -8,7 +8,7 @@ import {
   Settings, ScrollText, TrendingUp, LogOut, Clock,
   FlaskConical, PieChart, Loader2, ChevronRight,
   AlertCircle, AlertTriangle, CheckCircle, Info, X,
-  BarChart2, Bell, Menu, GitCompare, Shield, UserCircle, History, Filter, Globe2,
+  BarChart2, Bell, Menu, GitCompare, Shield, UserCircle, History, Filter, Globe2, CalendarDays,
 } from 'lucide-react'
 import { useEffect, useState, useCallback, Suspense } from 'react'
 import axios from 'axios'
@@ -55,10 +55,11 @@ const NAV_SECTIONS: NavSection[] = [
   {
     sectionKey: 'nav.section.market_tools',
     items: [
-      { to: '/watchlist',        key: 'nav.watchlist',        page: 'watchlist', icon: BookMarked },
-      { to: '/screener',         key: 'nav.screener',         page: 'analysis',  icon: Filter },
-      { to: '/sector-rotation',  key: 'nav.sector_rotation',  page: 'analysis',  icon: Globe2 },
-      { to: '/alerts',           key: 'nav.alerts',           page: 'alerts',    icon: Bell },
+      { to: '/watchlist',        key: 'nav.watchlist',         page: 'watchlist', icon: BookMarked },
+      { to: '/screener',         key: 'nav.screener',          page: 'analysis',  icon: Filter },
+      { to: '/sector-rotation',  key: 'nav.sector_rotation',   page: 'analysis',  icon: Globe2 },
+      { to: '/earnings',         key: 'nav.earnings_calendar', page: 'analysis',  icon: CalendarDays },
+      { to: '/alerts',           key: 'nav.alerts',            page: 'alerts',    icon: Bell },
     ]
   },
   {

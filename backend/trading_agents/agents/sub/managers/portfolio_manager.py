@@ -86,7 +86,8 @@ def create_portfolio_manager(llm):
         from backend.trading_agents.personas import DEFAULT_PERSONA, get_persona_instructions
 
         persona = get_config().get("investor_persona", DEFAULT_PERSONA)
-        persona_instructions = get_persona_instructions(persona)
+        # Custom personas inject their instructions directly into config
+        persona_instructions = get_config().get("investor_persona_instructions") or get_persona_instructions(persona)
 
         prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
 {persona_instructions}
