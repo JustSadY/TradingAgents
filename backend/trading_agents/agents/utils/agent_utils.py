@@ -53,7 +53,12 @@ def get_language_instruction() -> str:
     lang = get_config().get("output_language", "English")
     if lang.strip().lower() == "english":
         return ""
-    return f" Write your entire response in {lang}."
+    return (
+        f"\n\n**CRITICAL LANGUAGE REQUIREMENT:** You MUST write your ENTIRE response in {lang}. "
+        f"This is a strict, non-negotiable requirement. Do NOT use any other language under any circumstances. "
+        f"Even if source data, tool outputs, or retrieved content are in a different language, "
+        f"all of your analysis, commentary, headings, and narrative text MUST be written in {lang}."
+    )
 
 
 def build_instrument_context(ticker: str, asset_type: str = "stock") -> str:
