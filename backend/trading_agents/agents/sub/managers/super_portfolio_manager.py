@@ -1,7 +1,7 @@
 from langchain_core.prompts import ChatPromptTemplate
 
 from backend.trading_agents.agents.runtime.report_aggregator import middle_truncate
-from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
+from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
 
 # Per-section cap: with many tickers the combined plans/decisions dominate the
 # prompt, and the allocation needs each ticker's conclusion, not every detail.
@@ -29,7 +29,7 @@ def create_super_portfolio_manager(llm):
                 "super_portfolio_manager_prompt",
                 "You are a Super Portfolio Manager for a hedge fund. Allocate the portfolio across these assets based on their reports.",
             )
-            + get_language_instruction()
+            + get_general_settings_block()
         )
         portfolio_block = f"{portfolio_context}\n\n" if portfolio_context else ""
         prompt = ChatPromptTemplate.from_messages(

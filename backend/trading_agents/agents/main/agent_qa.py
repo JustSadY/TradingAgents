@@ -122,7 +122,7 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
 
 async def _generate_questions(moderator, available: list[tuple[str, str, str]]) -> list[_Question]:
     """Ask the moderator for up to a few sharp cross-agent questions."""
-    from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
+    from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
 
     reports_block = "\n\n".join(f"### {label}\n{report.strip()[:2000]}" for _key, label, report in available)
     labels = ", ".join(label for _k, label, _r in available)
@@ -133,7 +133,7 @@ async def _generate_questions(moderator, available: list[tuple[str, str, str]]) 
         f"Each question's 'to' must be exactly one of: {labels}. "
         "Prefer questions that force an analyst to defend a claim another analyst contradicts.\n\n"
         f"{reports_block}"
-        + get_language_instruction()
+        + get_general_settings_block()
     )
     structured = bind_structured(moderator, _Questions, "Q&A Moderator")
     result = await ainvoke_structured_or_freetext(structured, moderator, prompt, "Q&A Moderator", schema=_Questions)
@@ -145,7 +145,7 @@ async def _generate_questions(moderator, available: list[tuple[str, str, str]]) 
 async def _answer_as_analyst(ctx: AgentRunContext, analyst_key: str, label: str, report: str, question: str) -> str:
     """Answer a peer's question in the target analyst's voice, using its own LLM
     and its own report."""
-    from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
+    from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
 
     llm = ctx.llm_for(analyst_key)
     messages = [
@@ -153,7 +153,7 @@ async def _answer_as_analyst(ctx: AgentRunContext, analyst_key: str, label: str,
             "system",
             f"You are the {label}. Answer a peer analyst's question using ONLY your own report and analysis. "
             "Be concise (2-4 sentences), concede points your report cannot support, and do not invent new data."
-            + get_language_instruction(),
+            + get_general_settings_block(),
         ),
         ("human", f"Your report:\n{report.strip()[:4000]}\n\nPeer's question: {question}"),
     ]

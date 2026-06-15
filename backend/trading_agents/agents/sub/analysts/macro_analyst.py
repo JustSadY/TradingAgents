@@ -2,7 +2,6 @@ from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
-    get_language_instruction,
     get_macro_data,
 )
 
@@ -43,7 +42,7 @@ Your final report MUST follow this structure:
 1. **Executive Summary:** A 3-bullet point summary of the dominant macro regime and its bias.
 2. **Detailed Analysis:** Nuanced breakdown of key indicators and their specific influence on the market.
 3. **Actionable Insights:** Potential macro-driven triggers or headwinds for the trader to consider.
-4. **Macro Data Table:** A Markdown table summarizing all fetched macro indicators and their current levels.""" + get_language_instruction()
+4. **Macro Data Table:** A Markdown table summarizing all fetched macro indicators and their current levels."""
 
         return await run_tool_analyst(
             llm,

@@ -3,7 +3,6 @@ from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_catalyst_calendar,
-    get_language_instruction,
 )
 
 # Single source of truth shared by the ToolNode registration and the LLM binding.
@@ -43,7 +42,7 @@ Your final report MUST follow this structure:
 1. **Executive Summary:** A 3-bullet summary: nearest catalyst, its distance from the trade date, and the implied risk window (HIGH/MODERATE/CLEAR).
 2. **Detailed Analysis:** Event-by-event review with dates, estimates, and the asymmetry of each.
 3. **Actionable Insights:** Concrete sizing/leverage/stop adjustments for trading through (or around) the events.
-4. **Catalyst Table:** A Markdown table of upcoming events with dates and risk ratings.""" + get_language_instruction()
+4. **Catalyst Table:** A Markdown table of upcoming events with dates and risk ratings."""
 
         return await run_tool_analyst(
             llm,

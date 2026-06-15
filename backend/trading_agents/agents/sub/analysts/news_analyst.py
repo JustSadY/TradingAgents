@@ -5,7 +5,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_global_news,
     get_insider_transactions,
-    get_language_instruction,
     get_news,
 )
 
@@ -51,7 +50,7 @@ Your final report MUST follow this structure:
 1. **Executive Summary:** A 3-bullet point summary of the most critical news catalysts.
 2. **Detailed Analysis:** Comprehensive review of {asset_label}-specific and global macroeconomic developments.
 3. **Actionable Insights:** Specific upcoming catalysts or risks for traders to monitor.
-4. **News Event Table:** A Markdown table summarizing key events, their dates, impact (High/Med/Low), and a brief description.""" + get_language_instruction()
+4. **News Event Table:** A Markdown table summarizing key events, their dates, impact (High/Med/Low), and a brief description."""
 
         return await run_tool_analyst(
             llm,

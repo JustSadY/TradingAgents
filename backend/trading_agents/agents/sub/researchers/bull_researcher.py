@@ -3,7 +3,7 @@ from backend.trading_agents.agents.runtime.report_aggregator import (
     build_resources,
     tail_history,
 )
-from backend.trading_agents.agents.utils.agent_utils import get_language_instruction
+from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
 
 
 def create_bull_researcher(llm):
@@ -45,7 +45,7 @@ def create_bull_researcher(llm):
 - **Tone:** Professional, analytical, and persuasive.
 
 Deliver a compelling bull argument that refutes the bear's concerns using specific citations.
-""" + get_language_instruction()
+""" + get_general_settings_block()
         response = await llm.ainvoke(prompt)
         argument = f"Bull Analyst: {response.content}"
         new_investment_debate_state = {

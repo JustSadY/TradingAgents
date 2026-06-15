@@ -3,7 +3,6 @@ from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_institutional_holdings,
-    get_language_instruction,
 )
 
 # Single source of truth shared by the ToolNode registration and the LLM binding.
@@ -43,7 +42,7 @@ Your final report MUST follow this structure:
 1. **Executive Summary:** A 3-bullet summary of the institutional ownership picture and its signal.
 2. **Detailed Analysis:** Ownership concentration, notable holders, and crowding/liquidity considerations.
 3. **Actionable Insights:** What institutional positioning implies for the trade thesis and risk.
-4. **Ownership Table:** A Markdown table of the major and institutional holders.""" + get_language_instruction()
+4. **Ownership Table:** A Markdown table of the major and institutional holders."""
 
         return await run_tool_analyst(
             llm,

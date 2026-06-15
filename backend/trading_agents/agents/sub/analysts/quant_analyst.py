@@ -8,7 +8,6 @@ from backend.trading_agents.agents.data.chart_tools import (
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
-    get_language_instruction,
     get_quant_data,
 )
 
@@ -57,7 +56,7 @@ Your final report MUST follow this structure:
 1. **Executive Summary:** A 3-bullet point summary of the most critical quantitative risk and return signals.
 2. **Detailed Analysis:** Nuanced interpretation of statistical metrics, market correlation, and risk efficiency.
 3. **Actionable Insights:** Specific risk-adjusted triggers or portfolio fit considerations for traders.
-4. **Quantitative Data Table:** A Markdown table summarizing all calculated quant metrics and their current values.""" + get_language_instruction()
+4. **Quantitative Data Table:** A Markdown table summarizing all calculated quant metrics and their current values."""
 
         return await run_tool_analyst(
             llm,
