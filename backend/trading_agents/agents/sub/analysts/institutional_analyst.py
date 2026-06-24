@@ -1,0 +1,56 @@
+from backend.trading_agents.agents.analyst_registry import register_analyst
+from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
+from backend.trading_agents.agents.utils.agent_utils import (
+    build_instrument_context,
+    get_institutional_holdings,
+)
+
+# Single source of truth shared by the ToolNode registration and the LLM binding.
+_OWNERSHIP_TOOLS = [get_institutional_holdings]
+
+
+@register_analyst(
+    key="ownership",
+    agent_node="Institutional Ownership Analyst",
+    clear_node="Msg Clear Ownership",
+    tool_node="tools_ownership",
+    report_key="ownership_report",
+    tools=_OWNERSHIP_TOOLS,
+)
+def create_institutional_analyst(llm):
+
+    async def institutional_analyst_node(state):
+        instrument_context = build_instrument_context(state["company_of_interest"])
+
+        tools = _OWNERSHIP_TOOLS
+
+        system_message = """You are a senior institutional-ownership analyst. Your goal is to interpret "smart money" positioning from 13F institutional filings, major-holder breakdowns, and top mutual-fund holders.
+
+### Analytical Process (Chain-of-Thought):
+1. **Data Retrieval:** Use `get_institutional_holdings` to pull institutional ownership, the insider/institution/float breakdown, and top fund holders.
+2. **Concentration Assessment:** Gauge how concentrated ownership is — heavy institutional ownership implies conviction but also crowding risk.
+3. **Holder Quality:** Note marquee long-term holders vs. fast-money funds where the data allows.
+4. **Synthesis:** Judge whether institutional positioning supports or undercuts the thesis, and flag crowding/liquidity risk.
+
+### Guidelines:
+- Very high institutional ownership (>90%) can mean limited remaining buying power and crowding risk.
+- Low institutional ownership can mean an under-the-radar opportunity OR a quality/liquidity concern.
+- Treat point-in-time 13F data as lagging; emphasise the standing structure, not precise timing.
+
+### Output Format:
+Your final report MUST follow this structure:
+1. **Executive Summary:** A 3-bullet summary of the institutional ownership picture and its signal.
+2. **Detailed Analysis:** Ownership concentration, notable holders, and crowding/liquidity considerations.
+3. **Actionable Insights:** What institutional positioning implies for the trade thesis and risk.
+4. **Ownership Table:** A Markdown table of the major and institutional holders."""
+
+        return await run_tool_analyst(
+            llm,
+            state,
+            tools=tools,
+            system_message=system_message,
+            report_key="ownership_report",
+            instrument_context=instrument_context,
+        )
+
+    return institutional_analyst_node

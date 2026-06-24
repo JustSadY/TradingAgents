@@ -49,8 +49,8 @@ print(p.username or "", (p.path or "/").lstrip("/"))
 PY
         ) || true
         if command -v psql >/dev/null && [ -n "${DB_NAME:-}" ]; then
-            runuser -u postgres -- dropdb --if-exists "$DB_NAME" 2>/dev/null || true
-            runuser -u postgres -- psql -c "DROP ROLE IF EXISTS \"$DB_USER\";" 2>/dev/null || true
+            runuser -u postgres -- dropdb --maintenance-db=template1 --if-exists "$DB_NAME" 2>/dev/null || true
+            runuser -u postgres -- psql -d template1 -c "DROP ROLE IF EXISTS \"$DB_USER\";" 2>/dev/null || true
             ok "PostgreSQL db/rol silindi."
         fi
     fi

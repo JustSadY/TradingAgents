@@ -1,10 +1,11 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class MultiTickerRunRequest(BaseModel):
     tickers: list[str] = Field(..., min_length=2, max_length=10)
-    trade_date: str  # YYYY-MM-DD
+    trade_date: str
     asset_type: str = "stock"
 
 
@@ -23,8 +24,7 @@ class MultiTickerListItem(BaseModel):
     triggered_by: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class MultiTickerResultRead(BaseModel):
@@ -37,5 +37,4 @@ class MultiTickerResultRead(BaseModel):
     triggered_by: str
     created_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

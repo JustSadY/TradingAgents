@@ -1,53 +1,74 @@
-"""Price alert CRUD — trigger notifications when price thresholds are hit."""
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
 
-from backend.core.database import get_db
 from backend.api.deps import get_current_user
-from backend.models.alert import PriceAlert
-from backend.schemas.alert import AlertCreate, AlertUpdate, AlertRead
+from backend.core.database import get_db
+from backend.models.user import User
+from backend.schemas.alert import AlertCreate, AlertRead, AlertUpdate
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 _logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=list[AlertRead])
-async def list_alerts(db: AsyncSession = Depends(get_db), _=Depends(get_current_user)):
-    result = await db.execute(select(PriceAlert).order_by(PriceAlert.created_at.desc()))
-    return result.scalars().all()
+async def list_alerts_run(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from backend.repositories.alerts import list_alerts as _repo_list
+
+    return await _repo_list(db, user=current_user)
 
 
 @router.post("", response_model=AlertRead)
-async def create_alert(body: AlertCreate, db: AsyncSession = Depends(get_db), _=Depends(get_current_user)):
-    alert = PriceAlert(
-        ticker=body.ticker.upper(),
+async def create_alert_run(
+    body: AlertCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from backend.repositories.alerts import create_alert as _repo_create
+
+    return await _repo_create(
+        db,
+        user_id=current_user.id,
+        ticker=body.ticker,
         condition=body.condition,
         target_price=body.target_price,
         auto_analyze=body.auto_analyze,
     )
-    db.add(alert)
-    await db.flush()
-    return alert
 
 
-@router.patch("/{alert_id}", response_model=AlertRead)
-async def update_alert(alert_id: int, body: AlertUpdate, db: AsyncSession = Depends(get_db), _=Depends(get_current_user)):
-    result = await db.execute(select(PriceAlert).where(PriceAlert.id == alert_id))
-    alert = result.scalar_one_or_none()
+@router.patch("/{alert_id}", response_model=AlertRead, responses={404: {"description": "Alert not found"}})
+async def update_alert(
+    alert_id: int,
+    body: AlertUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from backend.repositories.alerts import get_alert_by_id as _repo_get
+
+    alert = await _repo_get(db, alert_id, user=current_user)
     if not alert:
-        raise HTTPException(status_code=404, detail="Alarm bulunamadı")
+        raise HTTPException(status_code=404, detail="Alert not found")
     for field, value in body.model_dump(exclude_none=True).items():
         setattr(alert, field, value)
+        if field == "enabled" and value is True:
+            alert.triggered_at = None
     return alert
 
 
-@router.delete("/{alert_id}")
-async def delete_alert(alert_id: int, db: AsyncSession = Depends(get_db), _=Depends(get_current_user)):
-    result = await db.execute(select(PriceAlert).where(PriceAlert.id == alert_id))
-    alert = result.scalar_one_or_none()
+@router.delete("/{alert_id}", responses={404: {"description": "Alert not found"}})
+async def delete_alert(
+    alert_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from backend.repositories.alerts import get_alert_by_id as _repo_get
+
+    alert = await _repo_get(db, alert_id, user=current_user)
     if not alert:
-        raise HTTPException(status_code=404, detail="Alarm bulunamadı")
+        raise HTTPException(status_code=404, detail="Alert not found")
     await db.delete(alert)
     return {"deleted": True}

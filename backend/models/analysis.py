@@ -1,20 +1,19 @@
-from datetime import datetime, timezone
-from sqlalchemy import DateTime, Float, Integer, String, Text
-from sqlalchemy.orm import Mapped, mapped_column
+from datetime import UTC, datetime
+
+from sqlalchemy import JSON, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
 
 
 class AnalysisResult(Base):
     __tablename__ = "analysis_results"
-
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     trade_date: Mapped[str] = mapped_column(String(20), nullable=False)
     asset_type: Mapped[str] = mapped_column(String(20), default="stock")
-    signal: Mapped[str | None] = mapped_column(String(50), nullable=True)  # Buy/Overweight/Hold/Underweight/Sell
-
-    # Analyst reports
+    signal: Mapped[str | None] = mapped_column(String(50), nullable=True)
     market_report: Mapped[str] = mapped_column(Text, default="")
     sentiment_report: Mapped[str] = mapped_column(Text, default="")
     news_report: Mapped[str] = mapped_column(Text, default="")
@@ -23,34 +22,52 @@ class AnalysisResult(Base):
     options_report: Mapped[str] = mapped_column(Text, default="")
     quant_report: Mapped[str] = mapped_column(Text, default="")
     earnings_report: Mapped[str] = mapped_column(Text, default="")
+    insider_report: Mapped[str] = mapped_column(Text, default="")
+    ownership_report: Mapped[str] = mapped_column(Text, default="")
+    catalyst_report: Mapped[str] = mapped_column(Text, default="")
     review_report: Mapped[str] = mapped_column(Text, default="")
-
-    # Decision chain
+    synthesis_report: Mapped[str] = mapped_column(Text, default="")
+    audit_report: Mapped[str] = mapped_column(Text, default="")
+    agent_qa_report: Mapped[str] = mapped_column(Text, default="")
     investment_plan: Mapped[str] = mapped_column(Text, default="")
     trader_plan: Mapped[str] = mapped_column(Text, default="")
     final_decision: Mapped[str] = mapped_column(Text, default="")
-
-    # Debate history (stored as JSON strings of message lists)
-    bull_history: Mapped[str] = mapped_column(Text, default="")
-    bear_history: Mapped[str] = mapped_column(Text, default="")
-    investment_debate_history: Mapped[str] = mapped_column(Text, default="")
-    risk_debate_history: Mapped[str] = mapped_column(Text, default="")
+    reflection: Mapped[str] = mapped_column(Text, default="")
+    bull_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
+    bear_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
+    investment_debate_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
+    risk_debate_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
     judge_decision: Mapped[str] = mapped_column(Text, default="")
-    chart_annotations: Mapped[str] = mapped_column(Text, default="")
-
-    # Metrics
+    trader_proposal_json: Mapped[str] = mapped_column(Text, default="{}")
+    chart_annotations: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    risk_metrics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     llm_calls: Mapped[int] = mapped_column(Integer, default=0)
     tool_calls: Mapped[int] = mapped_column(Integer, default=0)
     tokens_in: Mapped[int] = mapped_column(Integer, default=0)
     tokens_out: Mapped[int] = mapped_column(Integer, default=0)
     duration_seconds: Mapped[float] = mapped_column(Float, default=0.0)
-
-    triggered_by: Mapped[str] = mapped_column(String(20), default="manual")  # manual | cron
-
-    # Post-analysis return tracking (filled async after holding_days have passed)
+    llm_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
+    llm_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    preset_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    triggered_by: Mapped[str] = mapped_column(String(20), default="manual")
+    task_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True, unique=True)
+    status: Mapped[str] = mapped_column(String(20), default="completed", index=True)
     raw_return: Mapped[float | None] = mapped_column(Float, nullable=True)
     alpha_return: Mapped[float | None] = mapped_column(Float, nullable=True)
     holding_days: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True)
+    chats: Mapped[list["AnalysisChat"]] = relationship(
+        "AnalysisChat", back_populates="analysis", cascade="all, delete-orphan"
     )
+
+
+class AnalysisChat(Base):
+    __tablename__ = "analysis_chats"
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    analysis_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("analysis_results.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    role: Mapped[str] = mapped_column(String(20), nullable=False)
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True)
+    analysis: Mapped[AnalysisResult] = relationship("AnalysisResult", back_populates="chats")

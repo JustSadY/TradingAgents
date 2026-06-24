@@ -1,88 +1,45 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import { useNavigate, useSearchParams } from 'react-router-dom'
-import axios from 'axios'
-import {
-  createChart,
-  ColorType,
-  CandlestickSeries,
-  HistogramSeries,
-  createSeriesMarkers,
-} from 'lightweight-charts'
-import type { IChartApi, ISeriesApi } from 'lightweight-charts'
-import { Search, TrendingUp, TrendingDown, Minus, RefreshCw, ExternalLink } from 'lucide-react'
+import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { useSearchParams } from 'react-router-dom'
+import api from '../utils/api'
+import { RefreshCw, BarChart2, AlertCircle, Sparkles, ScanSearch, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
+import { useTranslation } from '../contexts/LanguageContext'
+import { usePriceChart } from '../hooks/usePriceChart'
+import { signalTone, TONE_DOT_CLASS } from '../utils/signalTone'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 
-// ── Types ──────────────────────────────────────────────────────────────────────
+// Components
+import { ChartSearch } from '../components/chart/ChartSearch'
+import { TechnicalControls } from '../components/chart/TechnicalControls'
+import { CustomIndicatorPane } from '../components/chart/CustomIndicatorPane'
+import { AnalysisDetailSidebar } from '../components/chart/AnalysisDetailSidebar'
 
 interface Candle {
-  time: string
-  open: number
-  high: number
-  low: number
-  close: number
-  volume: number
+  time: string; open: number; high: number; low: number; close: number; volume: number
+  sma?: number | null; ema?: number | null; rsi?: number | null
+  macd_line?: number | null; macd_signal?: number | null; macd_hist?: number | null
 }
-
-interface KeyLevel { price: number; label: string; type: string }
-
-interface ChartAnnotations {
-  support_levels?: number[]
-  resistance_levels?: number[]
-  target_price?: number | null
-  stop_loss?: number | null
-  key_levels?: KeyLevel[]
-}
-
 interface AnalysisItem {
-  id: number
-  ticker: string
-  trade_date: string
-  signal: string | null
-  chart_annotations: string
-  created_at: string
+  id: number; ticker: string; trade_date: string; signal: string | null; chart_annotations: string; final_decision?: string; created_at: string
 }
-
-// ── Helpers ───────────────────────────────────────────────────────────────────
-
-function parseAnnotations(raw: string): ChartAnnotations {
-  try { return raw ? JSON.parse(raw) : {} } catch { return {} }
-}
-
-const SIGNAL_COLOR: Record<string, string> = {
-  Buy: '#10b981',
-  Overweight: '#10b981',
-  Hold: '#f59e0b',
-  Neutral: '#f59e0b',
-  Sell: '#ef4444',
-  Underweight: '#ef4444',
-}
-
-function SignalBadge({ signal }: { signal: string | null }) {
-  if (!signal) return <span className="text-gray-500 text-xs">—</span>
-  const color = SIGNAL_COLOR[signal] ?? '#6b7280'
-  const Icon = ['Buy', 'Overweight'].includes(signal) ? TrendingUp
-    : ['Sell', 'Underweight'].includes(signal) ? TrendingDown : Minus
-  return (
-    <span className="inline-flex items-center gap-1 text-xs font-semibold px-2 py-0.5 rounded-full"
-      style={{ backgroundColor: color + '22', color }}>
-      <Icon size={11} />
-      {signal}
-    </span>
-  )
+interface PatternKeyPoint { date: string; price: number; label: string }
+interface Pattern {
+  type: string
+  label: string
+  direction: 'bullish' | 'bearish'
+  start_date: string
+  end_date: string
+  key_points: PatternKeyPoint[]
+  confidence: number
 }
 
 const PERIODS = [
-  { label: '1A', value: '1m' },
-  { label: '3A', value: '3m' },
-  { label: '6A', value: '6m' },
-  { label: '1Y', value: '1y' },
-  { label: '2Y', value: '2y' },
+  { label: '1M', value: '1m' }, { label: '3M', value: '3m' },
+  { label: '6M', value: '6m' }, { label: '1Y', value: '1y' }, { label: '2Y', value: '2y' },
 ]
 
-// ── Component ─────────────────────────────────────────────────────────────────
-
 export default function ChartPage() {
-  const navigate = useNavigate()
   const [searchParams, setSearchParams] = useSearchParams()
+  const { t } = useTranslation()
 
   const [tickerInput, setTickerInput] = useState(searchParams.get('ticker') ?? '')
   const [activeTicker, setActiveTicker] = useState(searchParams.get('ticker') ?? '')
@@ -93,434 +50,331 @@ export default function ChartPage() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const chartContainerRef = useRef<HTMLDivElement>(null)
-  const chartRef = useRef<IChartApi | null>(null)
-  const candleSeriesRef = useRef<ISeriesApi<'Candlestick', any> | null>(null)
-  const volSeriesRef = useRef<ISeriesApi<'Histogram', any> | null>(null)
-  const markersRef = useRef<ReturnType<typeof createSeriesMarkers> | null>(null)
-  const priceLineRefs = useRef<any[]>([])
+  const [showSMA, setShowSMA] = useState(false)
+  const [showEMA, setShowEMA] = useState(false)
+  const [showRSI, setShowRSI] = useState(false)
+  const [showMACD, setShowMACD] = useState(false)
+  const [showSentiment, setShowSentiment] = useState(false)
+  const [sentimentHistory, setSentimentHistory] = useState<{ time: string; value: number }[]>([])
+  const [customIndicators, setCustomIndicators] = useState<any[]>([])
+  const [userFormula, setUserFormula] = useState('')
+  const [userIndicatorData, setUserIndicatorData] = useState<{ time: string; value: number | null }[]>([])
+  const [userIndicatorLabel, setUserIndicatorLabel] = useState('')
+  const [aiPrompt, setAiPrompt] = useState('')
+  const [aiLoading, setAiLoading] = useState(false)
+  const [showPatterns, setShowPatterns] = useState(false)
+  const [patterns, setPatterns] = useState<Pattern[]>([])
+  const [patternsLoading, setPatternsLoading] = useState(false)
 
-  // ── Data fetching ────────────────────────────────────────────────────────────
+  const chartContainerRef = useRef<HTMLDivElement>(null)
+  usePriceChart(chartContainerRef as React.RefObject<HTMLDivElement>, candles, analyses, showSMA, showEMA)
+
+  // Monotonic request id so that if loads overlap (e.g. rapid period switches),
+  // only the most recent one's result is applied — out-of-order responses for a
+  // stale ticker/period are ignored.
+  const loadReqId = useRef(0)
 
   const load = useCallback(async (ticker: string, p: string) => {
     if (!ticker) return
-    setLoading(true)
-    setError(null)
-    setSelected(null)
+    const reqId = ++loadReqId.current
+    setLoading(true); setError(null); setSelected(null); setCustomIndicators([]); setUserIndicatorData([]); setUserIndicatorLabel('')
     try {
-      const [ohlcvRes, histRes] = await Promise.all([
-        axios.get('/api/market/ohlcv', { params: { ticker, period: p } }),
-        axios.get('/api/analysis/history', { params: { ticker, limit: 200 } }),
+      const [ohlcvRes, histRes, sentRes] = await Promise.all([
+        api.get('/api/market/ohlcv', { params: { ticker, period: p } }),
+        api.get('/api/analysis/history', { params: { ticker, limit: 200 } }),
+        api.get('/api/market/sentiment-history', { params: { ticker } }),
       ])
-      setCandles(ohlcvRes.data.candles)
-      setAnalyses(histRes.data)
-    } catch (e: any) {
-      setError(e.response?.data?.detail ?? 'Veri alınamadı.')
+      if (reqId !== loadReqId.current) return
+      // Backend can return partial/empty payloads on thin data; guard each field.
+      setCandles(ohlcvRes.data?.candles ?? [])
+      setAnalyses(Array.isArray(histRes.data) ? histRes.data : [])
+      setSentimentHistory(sentRes.data?.history ?? [])
+    } catch (e) {
+      if (reqId !== loadReqId.current) return
+      setError(((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail) ?? t('chart.error_load'))
     } finally {
-      setLoading(false)
+      if (reqId === loadReqId.current) setLoading(false)
     }
-  }, [])
+  }, [t])
+
+  useEffect(() => { if (activeTicker) load(activeTicker, period) }, [])
 
   const handleSearch = () => {
-    const t = tickerInput.trim().toUpperCase()
-    if (!t) return
-    setActiveTicker(t)
-    setSearchParams({ ticker: t, period })
-    load(t, period)
+    const tk = tickerInput.trim().toUpperCase()
+    if (!tk) return
+    setActiveTicker(tk); setSearchParams({ ticker: tk, period }); load(tk, period)
   }
 
   const handlePeriod = (p: string) => {
-    setPeriod(p)
-    setSearchParams({ ticker: activeTicker, period: p })
+    setPeriod(p); setSearchParams({ ticker: activeTicker, period: p })
     if (activeTicker) load(activeTicker, p)
   }
 
-  useEffect(() => {
-    if (activeTicker) load(activeTicker, period)
-  }, []) // initial load from URL params
+  const calculateIndicator = async (formula: string) => {
+    if (!formula.trim() || !activeTicker) return
+    setLoading(true); setError(null)
+    try {
+      const res = await api.get('/api/market/custom-indicator', { params: { ticker: activeTicker, period, formula: formula.trim() } })
+      setUserIndicatorData(res.data?.series ?? []); setUserIndicatorLabel(formula.trim())
+    } catch (err) {
+      // Surface the failure (e.g. invalid formula) instead of silently clearing.
+      setUserIndicatorData([]); setUserIndicatorLabel('')
+      setError(((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail) ?? t('chart.error_load'))
+    } finally { setLoading(false) }
+  }
 
-  // ── Chart setup ──────────────────────────────────────────────────────────────
+  const handleCalculateUserIndicator = () => calculateIndicator(userFormula)
 
-  useEffect(() => {
-    if (!chartContainerRef.current) return
-
-    const chart = createChart(chartContainerRef.current, {
-      layout: {
-        background: { type: ColorType.Solid, color: '#111827' },
-        textColor: '#9ca3af',
-      },
-      grid: {
-        vertLines: { color: '#1f2937' },
-        horzLines: { color: '#1f2937' },
-      },
-      crosshair: { mode: 1 },
-      rightPriceScale: { borderColor: '#374151' },
-      timeScale: { borderColor: '#374151', timeVisible: true },
-      width: chartContainerRef.current.clientWidth,
-      height: 420,
-    })
-
-    // Candlestick series (top 70%)
-    const candleSeries = chart.addSeries(CandlestickSeries, {
-      upColor: '#10b981',
-      downColor: '#ef4444',
-      borderUpColor: '#10b981',
-      borderDownColor: '#ef4444',
-      wickUpColor: '#10b981',
-      wickDownColor: '#ef4444',
-      priceScaleId: 'right',
-    })
-
-    // Volume histogram (bottom 30%)
-    const volSeries = chart.addSeries(HistogramSeries, {
-      color: '#374151',
-      priceFormat: { type: 'volume' },
-      priceScaleId: 'volume',
-    })
-    chart.priceScale('volume').applyOptions({
-      scaleMargins: { top: 0.8, bottom: 0 },
-    })
-    chart.priceScale('right').applyOptions({
-      scaleMargins: { top: 0, bottom: 0.25 },
-    })
-
-    chartRef.current = chart
-    candleSeriesRef.current = candleSeries
-    volSeriesRef.current = volSeries
-
-    const handleResize = () => {
-      if (chartContainerRef.current) {
-        chart.applyOptions({ width: chartContainerRef.current.clientWidth })
-      }
-    }
-    window.addEventListener('resize', handleResize)
-
-    return () => {
-      window.removeEventListener('resize', handleResize)
-      chart.remove()
-      chartRef.current = null
-      candleSeriesRef.current = null
-      volSeriesRef.current = null
-      markersRef.current = null
+  // Describe the indicator in plain language; the backend LLM writes a
+  // validated formula, which we drop into the formula box and plot directly.
+  const fetchPatterns = useCallback(async (ticker: string, p: string) => {
+    setPatternsLoading(true)
+    try {
+      const r = await api.get(`/api/market/patterns/${ticker}`, { params: { period: p } })
+      setPatterns(r.data.patterns || [])
+    } catch {
+      setPatterns([])
+    } finally {
+      setPatternsLoading(false)
     }
   }, [])
 
-  // ── Update chart data ─────────────────────────────────────────────────────────
-
   useEffect(() => {
-    if (!candleSeriesRef.current || !volSeriesRef.current || candles.length === 0) return
+    if (showPatterns && activeTicker) fetchPatterns(activeTicker, period)
+    else setPatterns([])
+  }, [showPatterns, activeTicker, period, fetchPatterns])
 
-    candleSeriesRef.current.setData(candles.map(c => ({
-      time: c.time as any,
-      open: c.open,
-      high: c.high,
-      low: c.low,
-      close: c.close,
-    })))
-
-    volSeriesRef.current.setData(candles.map(c => ({
-      time: c.time as any,
-      value: c.volume,
-      color: c.close >= c.open ? '#10b98133' : '#ef444433',
-    })))
-
-    // Clear old price lines
-    priceLineRefs.current.forEach(pl => {
-      try { candleSeriesRef.current?.removePriceLine(pl) } catch { /* ignore */ }
-    })
-    priceLineRefs.current = []
-
-    // Add AI price level lines from ALL analyses in current range
-    const tradeDatesInRange = new Set(candles.map(c => c.time))
-
-    analyses.forEach(a => {
-      if (!tradeDatesInRange.has(a.trade_date)) return
-      const ann = parseAnnotations(a.chart_annotations)
-
-      ;(ann.support_levels ?? []).forEach(price => {
-        try {
-          const pl = candleSeriesRef.current!.createPriceLine({
-            price, color: '#ef444466', lineWidth: 1, lineStyle: 2,
-            axisLabelVisible: false, title: '',
-          })
-          priceLineRefs.current.push(pl)
-        } catch { /* ignore */ }
-      })
-      ;(ann.resistance_levels ?? []).forEach(price => {
-        try {
-          const pl = candleSeriesRef.current!.createPriceLine({
-            price, color: '#3b82f666', lineWidth: 1, lineStyle: 2,
-            axisLabelVisible: false, title: '',
-          })
-          priceLineRefs.current.push(pl)
-        } catch { /* ignore */ }
-      })
-      if (ann.target_price) {
-        try {
-          const pl = candleSeriesRef.current!.createPriceLine({
-            price: ann.target_price, color: '#10b98199', lineWidth: 1, lineStyle: 3,
-            axisLabelVisible: true, title: 'Hedef',
-          })
-          priceLineRefs.current.push(pl)
-        } catch { /* ignore */ }
-      }
-      if (ann.stop_loss) {
-        try {
-          const pl = candleSeriesRef.current!.createPriceLine({
-            price: ann.stop_loss, color: '#ef444499', lineWidth: 1, lineStyle: 3,
-            axisLabelVisible: true, title: 'Stop',
-          })
-          priceLineRefs.current.push(pl)
-        } catch { /* ignore */ }
-      }
-    })
-
-    // Add signal markers (v5: createSeriesMarkers plugin)
-    if (markersRef.current) {
-      try { markersRef.current.setMarkers([]) } catch { /* ignore */ }
-    }
-    const markerData = analyses
-      .filter(a => a.signal && tradeDatesInRange.has(a.trade_date))
-      .map(a => ({
-        time: a.trade_date as any,
-        position: (['Buy', 'Overweight'].includes(a.signal!) ? 'belowBar' : 'aboveBar') as any,
-        color: SIGNAL_COLOR[a.signal!] ?? '#6b7280',
-        shape: (['Buy', 'Overweight'].includes(a.signal!) ? 'arrowUp' : ['Sell', 'Underweight'].includes(a.signal!) ? 'arrowDown' : 'circle') as any,
-        text: a.signal!,
-        size: 1,
-      }))
-      .sort((a, b) => (a.time as string).localeCompare(b.time as string))
-
+  const handleAiFormula = async () => {
+    if (!aiPrompt.trim() || aiLoading) return
+    setAiLoading(true); setError(null)
     try {
-      if (!markersRef.current) {
-        markersRef.current = createSeriesMarkers(candleSeriesRef.current as any, markerData)
-      } else {
-        markersRef.current.setMarkers(markerData)
-      }
-    } catch { /* ignore */ }
+      const res = await api.post('/api/market/formula-assist', { prompt: aiPrompt.trim() })
+      const formula: string = res.data?.formula ?? ''
+      setUserFormula(formula)
+      await calculateIndicator(formula)
+    } catch (err) {
+      setError(((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail) ?? t('chart.error_load'))
+    } finally { setAiLoading(false) }
+  }
 
-    chartRef.current?.timeScale().fitContent()
-  }, [candles, analyses])
-
-  // ── Render ───────────────────────────────────────────────────────────────────
-
-  const analysesInRange = activeTicker
-    ? analyses.filter(a => candles.some(c => c.time === a.trade_date))
-    : []
+  const sentimentChartData = useMemo(() => {
+    if (!candles.length) return []
+    const sentMap = new Map(sentimentHistory.map(item => [item.time, item.value]))
+    let lastSent = 0.0
+    return candles.map(c => {
+      const dbSent = sentMap.get(c.time)
+      const sentimentVal = dbSent !== undefined ? dbSent : lastSent
+      if (dbSent !== undefined) lastSent = dbSent
+      return { time: c.time, value: sentimentVal }
+    })
+  }, [candles, sentimentHistory])
 
   return (
-    <div className="p-6 space-y-5 max-w-7xl">
-      <h2 className="text-xl font-bold text-white tracking-tight">Trading Grafik</h2>
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
+      <div className="glass-panel rounded-3xl overflow-hidden border border-white/[0.04] shadow-2xl">
+        <ChartSearch 
+            tickerInput={tickerInput} setTickerInput={setTickerInput} 
+            period={period} handlePeriod={handlePeriod} periods={PERIODS} 
+            loading={loading} handleSearch={handleSearch} t={t} 
+        />
 
-      {/* Search bar */}
-      <div className="flex items-center gap-3">
-        <div className="flex items-center gap-2 bg-gray-900 border border-gray-700 rounded-xl px-3 py-2 flex-1 max-w-xs">
-          <Search size={15} className="text-gray-500" />
-          <input
-            className="bg-transparent text-white text-sm outline-none flex-1 uppercase"
-            placeholder="AAPL, TSLA, NVDA..."
-            value={tickerInput}
-            onChange={e => setTickerInput(e.target.value.toUpperCase())}
-            onKeyDown={e => e.key === 'Enter' && handleSearch()}
-          />
-        </div>
-        <button
-          onClick={handleSearch}
-          className="bg-violet-600 hover:bg-violet-500 text-white text-sm font-semibold px-4 py-2 rounded-xl transition"
-        >
-          Göster
-        </button>
-
-        {/* Period selector */}
-        {activeTicker && (
-          <div className="flex gap-1 ml-2">
-            {PERIODS.map(p => (
-              <button
-                key={p.value}
-                onClick={() => handlePeriod(p.value)}
-                className={`px-3 py-1.5 text-xs font-semibold rounded-lg transition ${
-                  period === p.value
-                    ? 'bg-violet-600 text-white'
-                    : 'bg-gray-800 text-gray-400 hover:text-white'
-                }`}
-              >
-                {p.label}
-              </button>
-            ))}
-          </div>
-        )}
-
-        {loading && <RefreshCw size={16} className="text-violet-400 animate-spin" />}
-      </div>
-
-      {error && (
-        <div className="bg-red-900/30 border border-red-700 text-red-300 text-sm rounded-xl px-4 py-3">
-          {error}
-        </div>
-      )}
-
-      {/* Main layout: chart + side panel */}
-      <div className="flex gap-5">
-        {/* Chart */}
-        <div className="flex-1 min-w-0">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-            {activeTicker && (
-              <div className="px-5 py-3 border-b border-gray-800 flex items-center gap-3">
-                <span className="text-white font-bold">{activeTicker}</span>
-                {candles.length > 0 && (
-                  <span className="text-gray-400 text-sm">
-                    {candles[candles.length - 1].close.toFixed(2)} USD
-                  </span>
-                )}
+        <div className="grid grid-cols-1 lg:grid-cols-4 min-h-[500px]">
+          <div className={`${selected ? 'lg:col-span-3' : 'lg:col-span-4'} p-4 md:p-6 transition-all duration-500`}>
+            {error && (
+              <div className="mb-6 p-4 bg-rose-500/10 border border-rose-500/20 rounded-2xl flex items-center gap-3 text-rose-400 text-sm animate-in fade-in slide-in-from-top-2">
+                <AlertCircle size={18} /> {error}
               </div>
             )}
-            <div ref={chartContainerRef} className="w-full" />
-            {!activeTicker && (
-              <div className="flex flex-col items-center justify-center h-[420px] text-gray-600">
-                <TrendingUp size={40} className="mb-3 opacity-30" />
-                <p className="text-sm">Bir hisse sembolü girin ve "Göster" tuşuna basın</p>
-                <p className="text-xs mt-1 opacity-60">AI sinyalleri grafik üzerinde işaretlenir</p>
+
+            {!activeTicker && !loading && (
+              <div className="h-[420px] flex flex-col items-center justify-center text-slate-600 space-y-4 opacity-40">
+                <BarChart2 size={64} strokeWidth={1} />
+                <p className="text-sm font-medium uppercase tracking-widest">{t('chart.search_prompt')}</p>
               </div>
             )}
-          </div>
 
-          {/* Legend */}
-          {activeTicker && (
-            <div className="flex flex-wrap gap-4 mt-3 px-1 text-xs text-gray-500">
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5 bg-emerald-500 opacity-60" style={{borderTop: '2px dashed #10b981'}} /> Destek</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5" style={{borderTop: '2px dashed #3b82f6'}} /> Direnç</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5" style={{borderTop: '1px solid #10b981'}} /> Hedef</span>
-              <span className="flex items-center gap-1"><span className="inline-block w-4 h-0.5" style={{borderTop: '1px solid #ef4444'}} /> Stop-Loss</span>
-              <span className="flex items-center gap-1 text-emerald-400">▲ Al sinyali</span>
-              <span className="flex items-center gap-1 text-red-400">▼ Sat sinyali</span>
-            </div>
-          )}
-        </div>
-
-        {/* Side panel */}
-        {activeTicker && (
-          <div className="w-72 flex-shrink-0 space-y-4">
-            {/* Analysis list */}
-            <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-              <div className="px-4 py-3 border-b border-gray-800">
-                <h3 className="text-xs font-semibold text-violet-400 uppercase tracking-wider">
-                  AI Analizleri ({analysesInRange.length})
-                </h3>
-              </div>
-              <div className="max-h-80 overflow-y-auto">
-                {analysesInRange.length === 0 && !loading && (
-                  <p className="text-gray-600 text-xs p-4">Bu aralıkta analiz yok</p>
-                )}
-                {analysesInRange
-                  .sort((a, b) => b.trade_date.localeCompare(a.trade_date))
-                  .map(a => (
+            <div className={activeTicker ? 'space-y-4' : 'hidden'}>
+              <div className="flex items-center justify-between px-1">
+                  <div className="flex items-center gap-4">
+                      <h2 className="text-2xl font-display font-bold text-white tracking-tight font-mono">{activeTicker}</h2>
+                      {candles.length > 0 && (
+                          <span className={`text-sm font-mono font-bold ${candles[candles.length-1].close >= candles[candles.length-1].open ? 'text-emerald-400' : 'text-rose-400'}`}>
+                              ${candles[candles.length-1].close.toFixed(2)}
+                          </span>
+                      )}
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <TechnicalControls
+                        showSMA={showSMA} setShowSMA={setShowSMA}
+                        showEMA={showEMA} setShowEMA={setShowEMA}
+                        showRSI={showRSI} setShowRSI={setShowRSI}
+                        showMACD={showMACD} setShowMACD={setShowMACD}
+                        showSentiment={showSentiment} setShowSentiment={setShowSentiment}
+                        t={t}
+                    />
                     <button
-                      key={a.id}
-                      onClick={() => setSelected(selected?.id === a.id ? null : a)}
-                      className={`w-full text-left px-4 py-2.5 border-b border-gray-800 last:border-0 hover:bg-gray-800 transition ${
-                        selected?.id === a.id ? 'bg-gray-800' : ''
+                      onClick={() => setShowPatterns(v => !v)}
+                      className={`flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold border transition cursor-pointer ${
+                        showPatterns
+                          ? 'bg-violet-600/20 border-violet-500/40 text-violet-300'
+                          : 'bg-white/[0.03] border-white/[0.06] text-slate-500 hover:text-slate-300'
                       }`}
                     >
-                      <div className="flex items-center justify-between">
-                        <span className="text-sm text-white font-mono">{a.trade_date}</span>
-                        <SignalBadge signal={a.signal} />
-                      </div>
+                      <ScanSearch size={11} />
+                      Patterns
                     </button>
-                  ))}
+                  </div>
               </div>
-            </div>
 
-            {/* Selected analysis detail */}
-            {selected && (
-              <AnalysisDetail
-                analysis={selected}
-                onReanalyze={() => navigate(`/analysis?ticker=${activeTicker}&date=${selected.trade_date}`)}
-                onViewFull={() => navigate(`/analysis?id=${selected.id}`)}
-              />
-            )}
+              <ErrorBoundary name="Price Chart">
+                  <div ref={chartContainerRef} className="w-full h-[420px] rounded-2xl overflow-hidden border border-white/[0.04] bg-[#090d16]" />
+              </ErrorBoundary>
+
+              <div className="flex items-center gap-3 pt-2">
+                <div className="flex-1 relative group">
+                  <Sparkles className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={14} />
+                  <input
+                    className="glass-input pl-10 pr-4 py-2.5 w-full rounded-xl text-xs placeholder-slate-600 outline-none transition-all"
+                    placeholder={t('chart.ai_formula_placeholder')}
+                    value={aiPrompt}
+                    onChange={e => setAiPrompt(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleAiFormula()}
+                  />
+                </div>
+                <button
+                  onClick={handleAiFormula}
+                  disabled={aiLoading}
+                  className="bg-violet-600/20 hover:bg-violet-600/30 disabled:opacity-50 text-violet-300 px-5 py-2.5 rounded-xl text-xs font-bold transition-all border border-violet-500/20 cursor-pointer flex items-center gap-2"
+                >
+                  <Sparkles size={12} /> {aiLoading ? t('chart.ai_generating') : t('chart.ai_generate')}
+                </button>
+              </div>
+
+              <div className="flex items-center gap-3">
+                <div className="flex-1 relative group">
+                  <BarChart2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={14} />
+                  <input
+                    className="glass-input pl-10 pr-4 py-2.5 w-full rounded-xl text-xs font-mono placeholder-slate-600 outline-none transition-all"
+                    placeholder="Custom Formula (e.g. SMA(20) / Close)"
+                    value={userFormula}
+                    onChange={e => setUserFormula(e.target.value)}
+                    onKeyDown={e => e.key === 'Enter' && handleCalculateUserIndicator()}
+                  />
+                </div>
+                <button
+                  onClick={handleCalculateUserIndicator}
+                  className="bg-white/5 hover:bg-white/10 text-slate-300 px-5 py-2.5 rounded-xl text-xs font-bold transition-all border border-white/[0.04] cursor-pointer"
+                >
+                  Calculate
+                </button>
+              </div>
+
+              {/* Pattern Detection Panel */}
+              {showPatterns && (
+                <div className="rounded-2xl bg-white/[0.02] border border-white/[0.05] p-4 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <ScanSearch size={13} className="text-violet-400" />
+                    <span className="text-xs font-bold text-white">Detected Patterns</span>
+                    {patternsLoading && <Loader2 size={11} className="animate-spin text-violet-400 ml-1" />}
+                    {!patternsLoading && <span className="text-[10px] text-slate-600">· {patterns.length} found in {period} history</span>}
+                  </div>
+
+                  {!patternsLoading && patterns.length === 0 && (
+                    <p className="text-[10px] text-slate-600 italic">No significant patterns detected for this period.</p>
+                  )}
+
+                  {patterns.length > 0 && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      {patterns.map((p, i) => (
+                        <div
+                          key={i}
+                          className={`rounded-xl border p-3 space-y-2 ${
+                            p.direction === 'bullish'
+                              ? 'bg-emerald-500/5 border-emerald-500/20'
+                              : 'bg-rose-500/5 border-rose-500/20'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <div className="flex items-center gap-1.5">
+                              {p.direction === 'bullish'
+                                ? <TrendingUp size={11} className="text-emerald-400" />
+                                : <TrendingDown size={11} className="text-rose-400" />
+                              }
+                              <span className="text-[10px] font-bold text-white">{p.label}</span>
+                            </div>
+                            <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full border ${
+                              p.direction === 'bullish'
+                                ? 'text-emerald-400 bg-emerald-500/10 border-emerald-500/20'
+                                : 'text-rose-400 bg-rose-500/10 border-rose-500/20'
+                            }`}>
+                              {p.direction === 'bullish' ? 'Bullish' : 'Bearish'}
+                            </span>
+                          </div>
+
+                          <div className="flex items-center gap-2 text-[9px] text-slate-500 font-mono">
+                            <span>{p.start_date}</span>
+                            <span>→</span>
+                            <span>{p.end_date}</span>
+                          </div>
+
+                          <div className="flex flex-wrap gap-1">
+                            {p.key_points.map((kp, j) => (
+                              <span key={j} className="text-[8px] font-mono bg-white/[0.04] border border-white/[0.06] rounded px-1.5 py-0.5 text-slate-400">
+                                {kp.label}: ${kp.price.toFixed(2)}
+                              </span>
+                            ))}
+                          </div>
+
+                          <div className="flex items-center gap-1.5">
+                            <div className="flex-1 h-0.5 rounded-full bg-white/[0.04]">
+                              <div
+                                className={`h-full rounded-full ${p.direction === 'bullish' ? 'bg-emerald-500' : 'bg-rose-500'}`}
+                                style={{ width: `${p.confidence * 100}%` }}
+                              />
+                            </div>
+                            <span className="text-[9px] font-mono text-slate-600">{(p.confidence * 100).toFixed(0)}%</span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           </div>
-        )}
-      </div>
-    </div>
-  )
-}
 
-// ── Analysis detail panel ─────────────────────────────────────────────────────
-
-function AnalysisDetail({
-  analysis,
-  onReanalyze,
-  onViewFull,
-}: {
-  analysis: AnalysisItem
-  onReanalyze: () => void
-  onViewFull: () => void
-}) {
-  const ann = parseAnnotations(analysis.chart_annotations)
-  const hasAnnotations = (
-    (ann.support_levels?.length ?? 0) > 0 ||
-    (ann.resistance_levels?.length ?? 0) > 0 ||
-    ann.target_price ||
-    ann.stop_loss
-  )
-
-  return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 space-y-3">
-      <div className="flex items-center justify-between">
-        <span className="text-xs text-gray-400">{analysis.trade_date}</span>
-        <SignalBadge signal={analysis.signal} />
+          <AnalysisDetailSidebar selected={selected} setSelected={setSelected} t={t} />
+        </div>
       </div>
 
-      {hasAnnotations && (
-        <div className="space-y-1.5">
-          <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider">AI Fiyat Seviyeleri</p>
-          {(ann.support_levels ?? []).map((p, i) => (
-            <div key={i} className="flex justify-between text-xs">
-              <span className="text-red-400">Destek {i + 1}</span>
-              <span className="text-white font-mono">${p.toFixed(2)}</span>
+      <ErrorBoundary name="Custom Indicators">
+        <CustomIndicatorPane 
+            showRSI={showRSI} showMACD={showMACD} showSentiment={showSentiment}
+            candles={candles} sentimentChartData={sentimentChartData}
+            customIndicators={customIndicators}
+            userIndicatorData={userIndicatorData} userIndicatorLabel={userIndicatorLabel}
+        />
+      </ErrorBoundary>
+      
+      {analyses.length > 0 && !selected && (
+        <div className="glass-panel rounded-3xl p-6">
+            <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-6 flex items-center gap-2">
+                <RefreshCw size={14} className="text-violet-400" /> Recent AI Analyses for {activeTicker}
+            </h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {analyses.slice(0, 8).map(a => (
+                    <div key={a.id} onClick={() => setSelected(a)} className="p-4 rounded-2xl bg-slate-900/40 border border-white/[0.04] hover:border-violet-500/30 cursor-pointer transition-all hover:bg-slate-900/60 group">
+                        <div className="flex items-center justify-between mb-3">
+                            <span className="text-[10px] font-mono font-bold text-slate-500 group-hover:text-slate-300 transition-colors">{a.trade_date}</span>
+                            {a.signal && <span className={`w-2 h-2 rounded-full ${TONE_DOT_CLASS[signalTone(a.signal)]}`} />}
+                        </div>
+                        <p className="text-xs font-bold text-white truncate mb-1">{a.signal || 'Neutral'}</p>
+                        <p className="text-[10px] text-slate-500 line-clamp-2 leading-relaxed italic">{a.final_decision}</p>
+                    </div>
+                ))}
             </div>
-          ))}
-          {(ann.resistance_levels ?? []).map((p, i) => (
-            <div key={i} className="flex justify-between text-xs">
-              <span className="text-blue-400">Direnç {i + 1}</span>
-              <span className="text-white font-mono">${p.toFixed(2)}</span>
-            </div>
-          ))}
-          {ann.target_price && (
-            <div className="flex justify-between text-xs">
-              <span className="text-emerald-400">Hedef</span>
-              <span className="text-white font-mono">${ann.target_price.toFixed(2)}</span>
-            </div>
-          )}
-          {ann.stop_loss && (
-            <div className="flex justify-between text-xs">
-              <span className="text-red-400">Stop-Loss</span>
-              <span className="text-white font-mono">${ann.stop_loss.toFixed(2)}</span>
-            </div>
-          )}
-          {(ann.key_levels ?? []).map((kl, i) => (
-            <div key={i} className="flex justify-between text-xs">
-              <span className="text-gray-400 truncate pr-2">{kl.label}</span>
-              <span className="text-white font-mono">${kl.price.toFixed(2)}</span>
-            </div>
-          ))}
         </div>
       )}
-
-      <div className="flex flex-col gap-2 pt-1">
-        <button
-          onClick={onViewFull}
-          className="flex items-center justify-center gap-1.5 text-xs text-violet-400 hover:text-violet-300 border border-violet-800 hover:border-violet-600 rounded-lg py-1.5 transition"
-        >
-          <ExternalLink size={11} /> Tam Raporu Gör
-        </button>
-        <button
-          onClick={onReanalyze}
-          className="flex items-center justify-center gap-1.5 text-xs bg-violet-600 hover:bg-violet-500 text-white rounded-lg py-1.5 transition"
-        >
-          <RefreshCw size={11} /> Bu Tarihe Yeniden Analiz
-        </button>
-      </div>
     </div>
   )
 }

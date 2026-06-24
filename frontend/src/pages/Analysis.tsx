@@ -1,22 +1,37 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import axios from 'axios'
-import { getAccessToken } from '../hooks/useAuth'
+import { getAccessToken } from '../contexts/AuthContext'
 import { useMeta } from '../hooks/useMeta'
+import { useActiveTasks } from '../hooks/useActiveTasks'
 import { notify } from '../utils/notify'
 import { exportMarkdown, exportPDF } from '../utils/exportReport'
+import { exportAnalysesCSV } from '../utils/csvExport'
 import { sendBrowserNotification } from '../utils/browserNotify'
+import { useTranslation } from '../contexts/LanguageContext'
 import {
   Loader2, CheckCircle, AlertCircle, History,
-  X, BarChart2, Terminal, FileText, Zap, Square,
-  Download, FileDown,
+  X, BarChart2, FileText, Zap,
+  Download, FileDown, AlertTriangle, Scale, Share2, Copy
 } from 'lucide-react'
 
-// ── Types ─────────────────────────────────────────────────────────────────────
+// Components
+import { SignalBadge } from '../components/analysis/SignalBadge'
+import { ReportCard } from '../components/analysis/ReportCard'
+import { AnalysisControls } from '../components/analysis/AnalysisControls'
+import { AnalysisLog } from '../components/analysis/AnalysisLog'
+import { DebateHistoryWidget, parseDebateMessage } from '../components/analysis/DebateHistoryWidget'
+import { AnalysisChatWidget } from '../components/analysis/AnalysisChatWidget'
+import { RiskMetricsCard } from '../components/analysis/RiskMetricsCard'
+import { MentalModelTicker } from '../components/analysis/MentalModelTicker'
+import { KellyPositioningCard } from '../components/analysis/KellyPositioningCard'
+
 interface WsEvent {
   type: string; section?: string; content?: string; signal?: string
   final_decision?: string; message?: string; duration_seconds?: number
   llm_calls?: number; status?: string; agent?: string; analysis_id?: number
-  label?: string; stage?: string; node?: string  // type === 'progress'
+  label?: string; stage?: string; node?: string
+  thought?: string; metrics?: any; token?: string; tokens_in?: number; tokens_out?: number
 }
 interface HistoryItem {
   id: number; ticker: string; trade_date: string; asset_type: string
@@ -27,10 +42,16 @@ interface AnalysisDetail {
   market_report: string; sentiment_report: string; news_report: string
   fundamentals_report: string; macro_report: string; options_report: string
   quant_report: string; earnings_report: string; review_report: string
+  insider_report?: string; ownership_report?: string; catalyst_report?: string
+  agent_qa_report: string
   investment_plan: string; trader_plan: string; final_decision: string
   bull_history: string; bear_history: string; investment_debate_history: string
   risk_debate_history: string; judge_decision: string
+  trader_proposal_json?: string
   llm_calls: number; tokens_in: number; tokens_out: number; duration_seconds: number
+  llm_provider?: string | null; llm_model?: string | null
+  risk_metrics?: any
+  chart_annotations?: any
 }
 interface PortfolioHistoryItem {
   id: number; tickers: string[]; trade_date: string; asset_type: string
@@ -41,73 +62,30 @@ interface PortfolioDetail {
   super_portfolio_report: string; analysis_ids: number[]; created_at: string
 }
 
-// ── Constants ─────────────────────────────────────────────────────────────────
 const STORAGE_KEY = 'ta_last_run'
 const TASK_KEY = 'ta_task_running'
 
 const SECTION_LABELS: Record<string, string> = {
-  market_report: 'Piyasa Analizi', sentiment_report: 'Duygu Analizi',
-  news_report: 'Haber Analizi', fundamentals_report: 'Temel Analiz',
-  macro_report: 'Makro Analiz', options_report: 'Opsiyon Analizi',
-  quant_report: 'Kantitatif Analiz', earnings_report: 'Kazanç Analizi',
-  review_report: 'Performans İnceleme', investment_plan: 'Yatırım Planı',
-  trader_investment_plan: 'Trader Planı', final_trade_decision: 'PM Kararı',
-  bull_history: 'Boğa Argümanları', bear_history: 'Ayı Argümanları',
-  investment_debate_history: 'Tartışma', risk_debate_history: 'Risk Tartışması',
-  judge_decision: 'Hakem Kararı',
+  market_report: 'Market', sentiment_report: 'Sentiment',
+  news_report: 'News', fundamentals_report: 'Fundamentals',
+  macro_report: 'Macro', options_report: 'Options',
+  quant_report: 'Quant', earnings_report: 'Earnings',
+  insider_report: 'Insider Activity', ownership_report: 'Institutional Ownership',
+  catalyst_report: 'Upcoming Catalysts',
+  review_report: 'Review', agent_qa_report: 'Cross-Examination',
+  investment_plan: 'Investment Plan',
+  trader_investment_plan: 'Trader Plan', final_trade_decision: 'PM Decision',
+  bull_history: 'Bull', bear_history: 'Bear',
+  investment_debate_history: 'Debate', risk_debate_history: 'Risk Debate',
+  judge_decision: 'Judge',
 }
 
-// Signal styling lives in the frontend (presentation), but the semantic tone
-// + Turkish label come from the backend (/api/meta). tone → Tailwind classes:
-const TONE_CLASSES: Record<string, { bg: string; text: string; border: string }> = {
-  positive: { bg: 'bg-emerald-500/15', text: 'text-emerald-300', border: 'border-emerald-500/30' },
-  neutral:  { bg: 'bg-yellow-500/15',  text: 'text-yellow-300',  border: 'border-yellow-500/30' },
-  negative: { bg: 'bg-red-500/15',     text: 'text-red-300',     border: 'border-red-500/30' },
-}
-// Fallback value→tone used only until /api/meta has loaded.
-const FALLBACK_TONE: Record<string, string> = {
-  Buy: 'positive', Overweight: 'positive', Hold: 'neutral', Underweight: 'negative', Sell: 'negative',
-}
-
-// ── Shared UI helpers ─────────────────────────────────────────────────────────
-function SignalBadge({ signal, large }: { signal: string | null; large?: boolean }) {
-  const meta = useMeta()
-  if (!signal) return null
-  const sig = meta?.signals.find(s => s.value === signal)
-  const tone = sig?.tone ?? FALLBACK_TONE[signal]
-  const m = tone ? TONE_CLASSES[tone] : undefined
-  const label = sig?.label ?? signal
-  if (!m) return <span className="text-gray-400">{label}</span>
-  return (
-    <span className={`inline-flex items-center font-bold border rounded-xl ${m.bg} ${m.text} ${m.border} ${large ? 'px-4 py-1.5 text-base' : 'px-2.5 py-0.5 text-xs'}`}>
-      {label}
-    </span>
-  )
-}
-
-function ReportCard({ label, content, defaultOpen }: { label: string; content: string; defaultOpen?: boolean }) {
-  if (!content) return null
-  return (
-    <details open={defaultOpen} className="group">
-      <summary className="flex items-center gap-2 cursor-pointer select-none px-4 py-3 rounded-xl bg-gray-800/60 hover:bg-gray-800 transition-colors border border-gray-700/50 list-none">
-        <FileText size={13} className="text-violet-400 shrink-0" />
-        <span className="text-sm font-medium text-gray-200 flex-1">{label}</span>
-        <span className="text-xs text-gray-500 group-open:hidden">Göster</span>
-        <span className="text-xs text-gray-500 hidden group-open:inline">Gizle</span>
-      </summary>
-      <pre className="text-xs text-gray-300 whitespace-pre-wrap bg-gray-900/80 rounded-xl p-4 mt-1.5 max-h-72 overflow-y-auto border border-gray-700/30 font-mono leading-relaxed">
-        {content}
-      </pre>
-    </details>
-  )
-}
-
-// ── Tab: Single-ticker run ────────────────────────────────────────────────────
 const EMPTY_RUN = {
   ticker: '', date: new Date().toISOString().slice(0, 10), assetType: 'stock',
   runStatus: 'idle' as 'idle' | 'running' | 'done' | 'error',
   signal: null as string | null, reports: {} as Record<string, string>,
   log: [] as string[], activeSection: null as string | null,
+  analysisId: null as number | null,
 }
 
 function loadRunState() {
@@ -124,7 +102,19 @@ function loadRunState() {
   } catch { return EMPTY_RUN }
 }
 
+// Safely render the Kelly card from a (possibly malformed/partial) JSON string.
+// trader_proposal_json is streamed over the WebSocket, so an unguarded JSON.parse
+// in the render path could throw and take down the whole tab.
+function KellyPositioningFromJson({ json }: { json?: string | null }) {
+  if (!json || json === '{}') return null
+  let parsed: any
+  try { parsed = JSON.parse(json) } catch { return null }
+  if (!parsed || typeof parsed !== 'object') return null
+  return <KellyPositioningCard kellySize={parsed.kelly_size} suggestedCapital={parsed.suggested_capital} />
+}
+
 function RunTab() {
+  const { t } = useTranslation()
   const saved = loadRunState()
   const [ticker, setTicker] = useState(saved.ticker)
   const [date, setDate] = useState(saved.date)
@@ -135,25 +125,52 @@ function RunTab() {
   const [reports, setReports] = useState<Record<string, string>>(saved.reports)
   const [log, setLog] = useState<string[]>(saved.log)
   const [activeSection, setActiveSection] = useState<string | null>(saved.activeSection)
+  const [analysisId, setAnalysisId] = useState<number | null>(saved.analysisId || null)
+  const [detail, setDetail] = useState<AnalysisDetail | null>(null)
+  const [activeDetailTab, setActiveDetailTab] = useState<'reports' | 'debate' | 'chat' | 'timetravel'>('reports')
+  const [leftTab, setLeftTab] = useState<'log' | 'debate'>('log')
+  const [liveDebate, setLiveDebate] = useState<{ sender: string; content: string }[]>([])
+  const [riskMetrics, setRiskMetrics] = useState<any>(null)
+  const [mentalModel, setMentalModel] = useState<{ agent: string; thought: string } | null>(null)
+  const [stats, setStats] = useState<{ llmCalls: number; tokensIn: number; tokensOut: number } | null>(null)
+
   const wsRef = useRef<WebSocket | null>(null)
   const taskIdRef = useRef<string | null>(null)
   const preRefreshLogRef = useRef<string[] | null>(null)
+  // Always-current ticker for use inside the WS handler, so attachWs doesn't
+  // need `ticker` in its deps (which recreated the socket on every keystroke)
+  // and the completion toast never shows a stale/empty symbol.
+  const tickerRef = useRef(ticker)
+  useEffect(() => { tickerRef.current = ticker }, [ticker])
 
   const meta = useMeta()
   const sectionLabels = meta?.section_labels ?? SECTION_LABELS
-  const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Hisse' }, { value: 'crypto', label: 'Kripto' }]
+  const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Stock' }, { value: 'crypto', label: 'Crypto' }]
   const [currentStep, setCurrentStep] = useState<{ label: string; stage: string } | null>(null)
 
-  // Cost estimate (MOD8)
-  const [costEstimate, setCostEstimate] = useState<{ min_usd: number; max_usd: number } | null>(null)
-  // Re-analysis warning (MOD8)
+  const [costEstimate, setCostEstimate] = useState<{ estimated_cost_usd: number; estimated_tokens: number; estimated_duration_min: number; analyst_count: number } | null>(null)
   const [existingId, setExistingId] = useState<number | null>(null)
   const [showRerunModal, setShowRerunModal] = useState(false)
 
-  // Persist state to localStorage on every change
+  const { activeTasks } = useActiveTasks()
+
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify({ ticker, date, assetType, runStatus, signal, reports, log, activeSection }))
-  }, [ticker, date, assetType, runStatus, signal, reports, log, activeSection])
+    try {
+      // Don't persist reports while running — they're large and will be re-streamed via WS on reconnect
+      const payload = runStatus === 'running'
+        ? { ticker, date, assetType, runStatus, signal, reports: {}, log: [], activeSection, analysisId }
+        : { ticker, date, assetType, runStatus, signal, reports, log, activeSection, analysisId }
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+    } catch {
+      // QuotaExceededError — ignore, state lives in memory
+    }
+  }, [ticker, date, assetType, runStatus, signal, reports, log, activeSection, analysisId])
+
+  useEffect(() => {
+    if (analysisId && runStatus === 'done' && !detail) {
+      axios.get(`/api/analysis/${analysisId}`).then(r => setDetail(r.data)).catch(() => {})
+    }
+  }, [analysisId, runStatus, detail])
 
   const setRunning_ = (v: boolean) => {
     setRunning(v)
@@ -163,8 +180,17 @@ function RunTab() {
     }
   }
 
-  // ── Shared WS attachment (used by handleRun AND auto-reconnect) ─────────────
   const attachWs = useCallback((taskId: string, isReconnect = false) => {
+    if (wsRef.current) {
+      try {
+        wsRef.current.onmessage = null
+        wsRef.current.onerror = null
+        wsRef.current.onclose = null
+        wsRef.current.close()
+      } catch (e) {
+        console.error("Error closing existing ws:", e)
+      }
+    }
     taskIdRef.current = taskId
     const token = getAccessToken()
     const ws = new WebSocket(`/ws/analysis/${taskId}?token=${token}`)
@@ -178,25 +204,55 @@ function RunTab() {
           preRefreshLogRef.current.shift()
           return
         } else {
-          // Clear deduplication if mismatch or sequence completed/diverged
           preRefreshLogRef.current = []
         }
       }
-      setLog(l => [...l, line])
+      setLog(l => {
+        if (l.length > 0 && l[l.length - 1] === line) {
+          return l
+        }
+        return [...l, line]
+      })
     }
 
     ws.onmessage = (e) => {
-      const ev: WsEvent = JSON.parse(e.data)
+      let ev: WsEvent
+      try { ev = JSON.parse(e.data) } catch { return }
       if (ev.type === 'status') {
         appendLog(`${ev.agent}`)
       } else if (ev.type === 'progress') {
-        // Live "which agent is running now" feedback.
         setCurrentStep({ label: ev.label || '', stage: ev.stage || '' })
-        appendLog(`▸ ${ev.label}`)
+        appendLog(`Progress: ${ev.label}`)
+      } else if (ev.type === 'token' && ev.agent && ev.token) {
+        let reportKey = ev.agent
+        if (ev.agent === 'portfolio_manager') {
+          reportKey = 'final_decision'
+        } else if (ev.agent === 'trader') {
+          reportKey = 'trader_plan'
+        } else if (ev.agent === 'research_manager') {
+          reportKey = 'investment_plan'
+        } else if (!ev.agent.endsWith('_report')) {
+          reportKey = `${ev.agent}_report`
+        }
+
+        setReports(r => {
+          const prevContent = r[reportKey] || ''
+          return { ...r, [reportKey]: prevContent + ev.token }
+        })
+        setActiveSection(reportKey)
+      } else if (ev.type === 'stats') {
+        setStats({ llmCalls: ev.llm_calls || 0, tokensIn: ev.tokens_in || 0, tokensOut: ev.tokens_out || 0 })
       } else if (ev.type === 'report' && ev.section && ev.content) {
         setReports(r => ({ ...r, [ev.section!]: ev.content! }))
         setActiveSection(ev.section)
-        appendLog(`✓ ${SECTION_LABELS[ev.section!] || ev.section}`)
+        appendLog(`Completed: ${SECTION_LABELS[ev.section!] || ev.section}`)
+      } else if (ev.type === 'mental_model' && ev.agent && ev.thought) {
+        setMentalModel({ agent: ev.agent, thought: ev.thought })
+      } else if (ev.type === 'risk_metrics' && ev.metrics) {
+        setRiskMetrics(ev.metrics)
+      } else if (ev.type === 'debate_bubble' && ev.message) {
+        const parsed = parseDebateMessage(ev.message)
+        setLiveDebate(prev => [...prev, parsed])
       } else if (ev.type === 'decision') {
         setSignal(ev.signal || null)
       } else if (ev.type === 'complete') {
@@ -204,70 +260,117 @@ function RunTab() {
         setRunStatus('done')
         setRunning_(false)
         setCurrentStep(null)
-        appendLog(`— Tamamlandı ${ev.duration_seconds}s / ${ev.llm_calls} LLM çağrısı`)
-        sendBrowserNotification(`${ticker.toUpperCase()} analizi tamamlandı`, `Sinyal: ${ev.signal ?? 'N/A'} • ${ev.duration_seconds?.toFixed(0)}s`)
+        setMentalModel(null)
+        setStats(prev => prev ? { ...prev, llmCalls: ev.llm_calls || prev.llmCalls } : null)
+        appendLog(`Completed in ${ev.duration_seconds}s / ${ev.llm_calls} LLM calls`)
+        sendBrowserNotification(
+          `${tickerRef.current.toUpperCase()} Analysis Completed`,
+          `Signal: ${ev.signal ?? 'N/A'} • Duration: ${ev.duration_seconds?.toFixed(0)}s`
+        )
+        if (ev.analysis_id) {
+          setAnalysisId(ev.analysis_id)
+          axios.get(`/api/analysis/${ev.analysis_id}`).then(r => setDetail(r.data)).catch(() => {})
+        }
       } else if (ev.type === 'error') {
         finished = true
-        setRunStatus('error')
-        setRunning_(false)
-        setCurrentStep(null)
-        appendLog(`✗ HATA: ${ev.message}`)
-        notify('error', ev.message ?? 'Analiz başarısız.', 'Analiz Hatası')
+        if (ev.message === "Analysis cancelled.") {
+          setRunStatus('idle')
+          setRunning_(false)
+          setCurrentStep(null)
+          setMentalModel(null)
+          appendLog(t('analysis.ws.stopped'))
+        } else {
+          setRunStatus('error')
+          setRunning_(false)
+          setCurrentStep(null)
+          appendLog(`Error: ${ev.message}`)
+          notify('error', ev.message ?? t('analysis.ws.analysis_failed'), t('analysis.ws.analysis_error_title'))
+        }
       }
     }
     ws.onerror = () => {
       if (!finished) {
         setRunStatus('error'); setRunning_(false)
-        setLog(l => [...l, '✗ Bağlantı hatası.'])
-        notify('error', 'WebSocket bağlantısı kesildi.', 'Analiz Hatası')
+        setLog(l => [...l, t('analysis.ws.conn_error')])
+        notify('error', t('analysis.ws.conn_error'), t('analysis.ws.analysis_error_title'))
       }
     }
     ws.onclose = () => {
       if (!finished) {
         if (isReconnect) {
-          // Task likely completed while page was refreshed
           setRunStatus('idle')
           setRunning_(false)
-          setLog(l => [...l, '— Analiz tamamlanmış veya bağlantı kesildi. Geçmiş sekmesini kontrol et.'])
+          setLog(l => [...l, t('analysis.ws.conn_closed_reconnect')])
         } else {
           setRunStatus('error')
           setRunning_(false)
-          const msg = 'Bağlantı kapandı — backend hatası veya LLM API anahtarı eksik olabilir.'
-          setLog(l => [...l, `✗ ${msg}`])
-          notify('error', msg, 'Analiz Kesildi')
+          setLog(l => [...l, t('analysis.ws.conn_closed')])
+          notify('error', t('analysis.ws.conn_closed'), t('analysis.ws.analysis_interrupted'))
         }
       }
     }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+    // ticker is intentionally read via tickerRef (not a dep) so the socket
+    // isn't torn down and recreated on every ticker keystroke.
+  }, [t])
 
-  // ── Auto-reconnect on page refresh if task was running ──────────────────────
+  // Effect to sync with active tasks from the server (Cross-device fix)
+  useEffect(() => {
+    if (activeTasks.length > 0 && !running) {
+        // If there's an active task on the server but we are 'idle' here, sync it.
+        const task = activeTasks[0]
+        setTicker(task.ticker)
+        setDate(task.trade_date)
+        setAssetType(task.asset_type)
+        setRunning(true)
+        setRunStatus('running')
+        setLog([])
+        setReports({})
+        setSignal(null)
+        setAnalysisId(null)
+        setDetail(null)
+        localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: task.ticker, taskId: task.task_id, startedAt: new Date(task.started_at * 1000).toISOString() }))
+        attachWs(task.task_id, true)
+    }
+  }, [activeTasks, running, attachWs])
+
   useEffect(() => {
     const raw = localStorage.getItem(TASK_KEY)
     if (!raw) return
     try {
       const { taskId, ticker: runTicker } = JSON.parse(raw)
       if (!taskId) return
-      preRefreshLogRef.current = [...log]
+      preRefreshLogRef.current = [...saved.log]
       setRunning(true)
       setRunStatus('running')
       if (runTicker) setTicker(runTicker)
       attachWs(taskId, true)
     } catch { localStorage.removeItem(TASK_KEY) }
-  }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [attachWs])
 
-  // ── Cost estimate (debounced) ────────────────────────────────────────────────
+  useEffect(() => {
+    return () => {
+      if (wsRef.current) {
+        try {
+          wsRef.current.onmessage = null
+          wsRef.current.onerror = null
+          wsRef.current.onclose = null
+          wsRef.current.close()
+        } catch { /* ws already closed */ }
+      }
+    }
+  }, [])
+
   useEffect(() => {
     if (!ticker.trim() || running) return
     const tid = setTimeout(async () => {
       try {
-        const { data } = await axios.get('/api/analysis/cost-estimate', { params: { ticker: ticker.toUpperCase(), trade_date: date } })
+        const { data } = await axios.get('/api/analysis/cost-estimate')
         setCostEstimate(data)
       } catch { setCostEstimate(null) }
     }, 600)
     return () => clearTimeout(tid)
   }, [ticker, date, running])
 
-  // ── Re-analysis check ───────────────────────────────────────────────────────
   useEffect(() => {
     if (!ticker.trim()) { setExistingId(null); return }
     const tid = setTimeout(async () => {
@@ -280,16 +383,20 @@ function RunTab() {
     return () => clearTimeout(tid)
   }, [ticker, date])
 
-  // Stop: close WS + cancel backend task
   const handleStop = async () => {
     const tid = taskIdRef.current
-    wsRef.current?.close()
-    wsRef.current = null
+    if (wsRef.current) {
+      wsRef.current.onmessage = null
+      wsRef.current.onerror = null
+      wsRef.current.onclose = null
+      wsRef.current.close()
+      wsRef.current = null
+    }
     setRunStatus('idle')
     setRunning_(false)
-    setLog(l => [...l, '— Analiz durduruldu.'])
+    setLog(l => [...l, t('analysis.ws.stopped')])
     if (tid) {
-      try { await axios.post(`/api/analysis/${tid}/cancel`) } catch { /* ignore */ }
+      try { await axios.post(`/api/analysis/${tid}/cancel`) } catch { /* best-effort cancel */ }
     }
   }
 
@@ -300,8 +407,12 @@ function RunTab() {
     setSignal(null)
     setReports({})
     setLog([])
+    setLiveDebate([])
+    setAnalysisId(null)
+    setDetail(null)
     setActiveSection(null)
     setCurrentStep(null)
+    setStats(null)
     preRefreshLogRef.current = null
 
     try {
@@ -314,7 +425,7 @@ function RunTab() {
     } catch (err: any) {
       setRunStatus('error')
       setRunning_(false)
-      setLog(l => [...l, `✗ ${err.response?.data?.detail || 'Başlatılamadı'}`])
+      setLog(l => [...l, `Error: ${err.response?.data?.detail || t('analysis.ws.failed_to_start')}`])
     }
   }
 
@@ -326,159 +437,156 @@ function RunTab() {
 
   const handleClear = () => {
     setRunStatus('idle'); setSignal(null); setReports({}); setLog([]); setActiveSection(null); setCurrentStep(null)
+    setAnalysisId(null); setDetail(null); setLiveDebate([]); setStats(null)
+  }
+
+  const handleRollbackStart = (taskId: string) => {
+    setRunning(true)
+    setRunStatus('running')
+    setSignal(null)
+    setReports({})
+    setLog([])
+    setLiveDebate([])
+    setAnalysisId(null)
+    setDetail(null)
+    setActiveSection(null)
+    setCurrentStep(null)
+    setStats(null)
+    preRefreshLogRef.current = null
+
+    localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: ticker.toUpperCase(), taskId, startedAt: new Date().toISOString() }))
+    attachWs(taskId, false)
   }
 
   const reportEntries = Object.entries(reports)
 
   return (
-    <div className="space-y-4">
-      {/* Form card */}
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-5">
-        <div className="flex flex-wrap gap-3 items-end">
-          <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">Sembol</label>
-            <input
-              className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 w-28 uppercase font-mono text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
-              value={ticker}
-              onChange={e => setTicker(e.target.value.toUpperCase())}
-              placeholder="AAPL"
-              disabled={running}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">Tarih</label>
-            <input
-              type="date"
-              className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
-              value={date}
-              onChange={e => setDate(e.target.value)}
-              disabled={running}
-            />
-          </div>
-          <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">Tür</label>
-            <select
-              className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm focus:ring-2 focus:ring-violet-500 focus:border-transparent outline-none transition"
-              value={assetType}
-              onChange={e => setAssetType(e.target.value)}
-              disabled={running}
-            >
-              {assetTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-            </select>
-          </div>
+    <div className="space-y-6">
+      <AnalysisControls
+        ticker={ticker} setTicker={setTicker}
+        date={date} setDate={setDate}
+        assetType={assetType} setAssetType={setAssetType}
+        assetTypes={assetTypes}
+        running={running} runStatus={runStatus}
+        handleRun={handleRun} handleStop={handleStop} handleClear={handleClear}
+        signal={signal} costEstimate={costEstimate} existingId={existingId}
+        t={t}
+      />
 
-          {!running ? (
-            <button
-              onClick={handleRun}
-              disabled={!ticker.trim()}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 disabled:cursor-not-allowed shadow-lg shadow-violet-500/20 transition-all"
-            >
-              <Zap size={15} /> Analiz Başlat
-            </button>
-          ) : (
-            <button
-              onClick={handleStop}
-              className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white bg-red-600/80 hover:bg-red-600 border border-red-500/40 shadow-lg shadow-red-500/20 transition-all"
-            >
-              <Square size={13} fill="currentColor" /> Durdur
-            </button>
-          )}
-
-          {runStatus !== 'idle' && !running && (
-            <button onClick={handleClear} className="text-gray-600 hover:text-gray-400 transition-colors p-2 rounded-lg hover:bg-gray-800">
-              <X size={14} />
-            </button>
-          )}
-
-          {runStatus === 'done' && <CheckCircle size={18} className="text-emerald-400" />}
-          {runStatus === 'error' && <AlertCircle size={18} className="text-red-400" />}
-          {signal && <SignalBadge signal={signal} large />}
-        </div>
-        {/* Cost estimate + existing analysis hint */}
-        {!running && (
-          <div className="flex items-center gap-4 mt-2">
-            {costEstimate && (
-              <span className="text-xs text-gray-600">
-                Tahmini maliyet: ~${costEstimate.min_usd.toFixed(3)}–${costEstimate.max_usd.toFixed(3)}
-              </span>
-            )}
-            {existingId && (
-              <span className="text-xs text-yellow-500">⚠ Bu tarih için kayıtlı analiz var — yeniden çalıştıracaksınız</span>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Re-run warning modal */}
       {showRerunModal && (
-        <div className="fixed inset-0 bg-black/70 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 max-w-sm w-full space-y-4">
-            <h3 className="text-white font-semibold">Mevcut Analiz Var</h3>
-            <p className="text-gray-400 text-sm">{ticker.toUpperCase()} için {date} tarihli bir analiz zaten mevcut. Yeni analiz daha fazla API kredisi harcayacak.</p>
+        <div className="fixed inset-0 bg-black/75 z-[60] flex items-center justify-center p-5 backdrop-blur-md">
+          <div className="bg-slate-900 border border-white/[0.06] rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
+            <div className="space-y-2">
+              <h3 className="text-white text-lg font-display font-bold flex items-center gap-2"><AlertTriangle className="text-amber-500" size={18} /> {t('analysis.rerun.title')}</h3>
+              <p className="text-slate-400 text-xs leading-relaxed">
+                {t('analysis.rerun.body').replace('{ticker}', ticker.toUpperCase()).replace('{date}', date)}
+              </p>
+            </div>
             <div className="flex gap-3">
-              <button onClick={doRun} className="flex-1 bg-violet-600 hover:bg-violet-500 text-white text-sm py-2 rounded-xl transition">Yeniden Çalıştır</button>
-              <button onClick={() => setShowRerunModal(false)} className="flex-1 bg-gray-800 hover:bg-gray-700 text-gray-300 text-sm py-2 rounded-xl transition">İptal</button>
+              <button onClick={doRun} className="flex-1 bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold py-2.5 rounded-xl transition shadow shadow-violet-600/20 cursor-pointer">{t('analysis.btn.rerun')}</button>
+              <button onClick={() => setShowRerunModal(false)} className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold py-2.5 rounded-xl transition cursor-pointer">{t('analysis.btn.cancel')}</button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Running status banner */}
       {running && (
-        <div className="flex items-center gap-3 px-5 py-3 bg-violet-500/10 border border-violet-500/20 rounded-2xl">
-          <span className="relative flex h-2.5 w-2.5 shrink-0">
+        <div className="flex items-center gap-3 px-4 py-3 bg-violet-500/5 border border-violet-500/15 rounded-2xl">
+          <span className="relative flex h-2 w-2 shrink-0">
             <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75" />
-            <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-violet-500" />
+            <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500" />
           </span>
-          <Loader2 size={14} className="text-violet-400 animate-spin" />
-          <p className="text-violet-300 text-sm font-medium">
-            <span className="font-bold">{ticker}</span> analiz ediliyor
+          <Loader2 size={13} className="text-violet-400 animate-spin shrink-0" />
+          <p className="text-violet-300 text-xs font-medium truncate flex-1">
+            <span className="font-bold">{ticker}</span> {t('analysis.running')}
             {currentStep
               ? <span className="text-white ml-2 font-semibold">→ {currentStep.label}</span>
-              : <span className="text-violet-500 ml-2 font-normal">{log.at(-1)}</span>}
+              : <span className="text-slate-400 ml-2 font-normal">{log.at(-1)}</span>}
           </p>
         </div>
       )}
 
-      {/* Content: log + reports */}
-      {(log.length > 0 || reportEntries.length > 0) && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
-          {/* Terminal log */}
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800 bg-gray-800/40">
-              <Terminal size={13} className="text-gray-500" />
-              <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Canlı Log</span>
-              <span className="ml-auto text-xs text-gray-600">{log.length} satır</span>
-            </div>
-            <div className="px-4 py-3 space-y-1 max-h-48 md:max-h-80 overflow-y-auto">
-              {log.map((line, i) => (
-                <p key={i} className={`text-xs font-mono leading-relaxed ${
-                  line.startsWith('✗') ? 'text-red-400' :
-                  line.startsWith('✓') ? 'text-emerald-400' :
-                  line.startsWith('—') ? 'text-violet-400 font-semibold' : 'text-gray-500'
-                }`}>
-                  {line}
-                </p>
-              ))}
-              {running && <p className="text-xs text-gray-600 animate-pulse font-mono">▋</p>}
-            </div>
-          </div>
+      {running && mentalModel && (
+        <MentalModelTicker agent={mentalModel.agent} thought={mentalModel.thought} />
+      )}
 
-          {/* Reports */}
-          <div className="lg:col-span-2 bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
-            <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800 bg-gray-800/40">
-              <FileText size={13} className="text-gray-500" />
-              <span className="text-xs font-medium text-gray-400 uppercase tracking-wider">Raporlar</span>
-              <span className="ml-auto text-xs text-gray-600">{reportEntries.length} bölüm</span>
-            </div>
-            <div className="p-4 space-y-1.5 max-h-64 md:max-h-80 overflow-y-auto">
-              {reportEntries.length === 0 && (
-                <p className="text-gray-600 text-sm text-center py-8">Raporlar analiz sırasında burada görünecek.</p>
-              )}
-              {reportEntries.map(([section, content]) => (
-                <ReportCard key={section} label={sectionLabels[section] || section} content={content} defaultOpen={section === activeSection} />
-              ))}
-            </div>
+      {(running || log.length > 0 || reportEntries.length > 0 || !!detail) && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          <AnalysisLog leftTab={leftTab} setLeftTab={setLeftTab} log={log} liveDebate={liveDebate} currentStep={currentStep} stats={stats} t={t} />
+
+          <div className="lg:col-span-2 glass-panel rounded-2xl overflow-hidden flex flex-col h-[40vh] sm:h-[50vh] lg:h-[65vh]">
+            {detail ? (
+              <>
+                <div className="flex items-center gap-1 p-1 bg-slate-900/40 border-b border-white/[0.04]">
+                  <button onClick={() => setActiveDetailTab('reports')} className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'reports' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.reports')}</button>
+                  <button onClick={() => setActiveDetailTab('debate')} className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.debate')}</button>
+                  <button onClick={() => setActiveDetailTab('chat')} className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'chat' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.qa')}</button>
+                  <button onClick={() => setActiveDetailTab('timetravel')} className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'timetravel' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.timetravel')}</button>
+                </div>
+                <div className="flex-1 p-4 overflow-y-auto min-h-0">
+                  {activeDetailTab === 'reports' && (
+                    <div className="space-y-2">
+                      {detail.risk_metrics && <RiskMetricsCard metrics={detail.risk_metrics} />}
+                      <KellyPositioningFromJson json={detail.trader_proposal_json} />
+                      {([
+                        ['market_report', detail.market_report],
+                        ['sentiment_report', detail.sentiment_report],
+                        ['news_report', detail.news_report],
+                        ['fundamentals_report', detail.fundamentals_report],
+                        ['macro_report', detail.macro_report],
+                        ['options_report', detail.options_report],
+                        ['quant_report', detail.quant_report],
+                        ['earnings_report', detail.earnings_report],
+                        ['insider_report', detail.insider_report],
+                        ['ownership_report', detail.ownership_report],
+                        ['catalyst_report', detail.catalyst_report],
+                        ['review_report', detail.review_report],
+                        ['agent_qa_report', detail.agent_qa_report],
+                        ['investment_plan', detail.investment_plan],
+                        ['trader_plan', detail.trader_plan],
+                        ['final_decision', detail.final_decision],
+                        ['bull_history', detail.bull_history],
+                        ['bear_history', detail.bear_history],
+                        ['judge_decision', detail.judge_decision],
+                      ] as [string, string | undefined][]).map(([k, v]) => (
+                        <ReportCard key={k} label={sectionLabels[k] || k} content={v || ''} />
+                      ))}
+                    </div>
+                  )}
+                  {activeDetailTab === 'debate' && <DebateHistoryWidget investmentHistory={detail.investment_debate_history} riskHistory={detail.risk_debate_history} />}
+                  {activeDetailTab === 'chat' && <AnalysisChatWidget analysisId={detail.id} />}
+                  {activeDetailTab === 'timetravel' && <TimeTravelWidget analysisId={detail.id} onRollbackStart={handleRollbackStart} />}
+                </div>
+              </>
+            ) : (
+              <>
+                <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.04] bg-slate-900/20">
+                  <FileText size={14} className="text-slate-400" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('analysis.reports.title')}</span>
+                  <span className="ml-auto text-[10px] text-slate-600 font-semibold">{reportEntries.length} {t('analysis.reports.sections')}</span>
+                </div>
+                <div className="flex-1 p-4 overflow-y-auto min-h-0 space-y-2">
+                  {riskMetrics && <RiskMetricsCard metrics={riskMetrics} />}
+                  <KellyPositioningFromJson json={reports.trader_proposal_json} />
+                  {reportEntries.length === 0 && !riskMetrics && (
+                    <div className="flex flex-col items-center justify-center py-16 text-slate-600">
+                      <FileText size={28} className="opacity-25 mb-2" />
+                      <p className="text-xs">{t('analysis.reports.empty')}</p>
+                    </div>
+                  )}
+                  
+                  {reportEntries.map(([section, content]) => (
+                    <ReportCard
+                      key={section}
+                      label={sectionLabels[section] || section}
+                      content={content}
+                      defaultOpen={section === activeSection}
+                      isStreaming={running && section === activeSection}
+                    />
+                  ))}
+                </div>
+              </>
+            )}
           </div>
         </div>
       )}
@@ -486,8 +594,8 @@ function RunTab() {
   )
 }
 
-// ── Tab: Multi-ticker portfolio run ──────────────────────────────────────────
 function MultiTab() {
+  const { t } = useTranslation()
   const [tickers, setTickers] = useState<string[]>([])
   const [input, setInput] = useState('')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
@@ -495,44 +603,70 @@ function MultiTab() {
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [progress, setProgress] = useState<string>('')
+  const wsRef = useRef<WebSocket | null>(null)
   const meta = useMeta()
-  const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Hisse' }, { value: 'crypto', label: 'Kripto' }]
+  const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Stock' }, { value: 'crypto', label: 'Crypto' }]
+
+  // Close the live-progress socket if the tab unmounts mid-run.
+  useEffect(() => () => { try { wsRef.current?.close() } catch { /* noop */ } }, [])
 
   const addTicker = () => {
-    const t = input.trim().toUpperCase()
-    if (t && !tickers.includes(t) && tickers.length < 10) setTickers(prev => [...prev, t])
+    const tk = input.trim().toUpperCase()
+    if (tk && !tickers.includes(tk) && tickers.length < 10) setTickers(prev => [...prev, tk])
     setInput('')
   }
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTicker() } }
 
   const handleRun = async () => {
     if (tickers.length < 2) return
-    setRunning(true); setDone(false); setError(null)
+    setRunning(true); setDone(false); setError(null); setProgress('')
     try {
-      await axios.post('/api/analysis/run-portfolio', { tickers, trade_date: date, asset_type: assetType })
-      setDone(true)
+      const { data } = await axios.post('/api/analysis/run-portfolio', { tickers, trade_date: date, asset_type: assetType })
+      const taskId = data.task_id
+      if (!taskId) { setDone(true); setRunning(false); return }
+
+      try { wsRef.current?.close() } catch { /* noop */ }
+      const token = getAccessToken()
+      const ws = new WebSocket(`/ws/analysis/${taskId}?token=${token}`)
+      wsRef.current = ws
+      ws.onmessage = (e) => {
+        let ev: any
+        try { ev = JSON.parse(e.data) } catch { return }
+        if (ev.type === 'progress') {
+          setProgress(ev.label || '')
+        } else if (ev.type === 'complete') {
+          setDone(true); setRunning(false)
+          try { ws.close() } catch { /* noop */ }
+        } else if (ev.type === 'error') {
+          setError(ev.message || t('analysis.multi.error_default')); setRunning(false)
+          try { ws.close() } catch { /* noop */ }
+        }
+      }
+      ws.onerror = () => { setRunning(false) }
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Portföy analizi başlatılamadı.')
-    } finally { setRunning(false) }
+      setError(err.response?.data?.detail || t('analysis.multi.error_default'))
+      setRunning(false)
+    }
   }
 
   return (
-    <div className="space-y-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5 space-y-4">
-        <p className="text-gray-500 text-sm">En az 2, en fazla 10 hisse. SuperPortfolioManager tüm hisseleri analiz edip portföy dağılımı önerir.</p>
+    <div className="space-y-6">
+      <div className="glass-panel rounded-2xl p-5 space-y-5">
+        <p className="text-slate-400 text-xs leading-relaxed">{t('analysis.multi.description')}</p>
 
         <div>
-          <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">Semboller</label>
-          <div className="flex flex-wrap gap-2 min-h-11 bg-gray-800 border border-gray-700 rounded-xl px-3 py-2 focus-within:border-violet-500 transition-colors">
-            {tickers.map(t => (
-              <span key={t} className="flex items-center gap-1 bg-violet-500/20 border border-violet-500/30 text-violet-300 text-xs font-mono px-2 py-0.5 rounded-lg">
-                {t}
-                <button onClick={() => setTickers(p => p.filter(x => x !== t))} className="hover:text-red-400 transition-colors"><X size={10} /></button>
+          <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('analysis.multi.label_symbols')}</label>
+          <div className="flex flex-wrap gap-2 min-h-12 bg-slate-900/60 border border-white/[0.08] rounded-xl px-3 py-2 focus-within:border-violet-500/50 transition-colors">
+            {tickers.map(tk => (
+              <span key={tk} className="flex items-center gap-1.5 bg-violet-500/10 border border-violet-500/20 text-violet-300 text-xs font-mono font-bold px-2 py-0.5 rounded-lg">
+                {tk}
+                <button onClick={() => setTickers(p => p.filter(x => x !== tk))} className="text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"><X size={10} /></button>
               </span>
             ))}
             {tickers.length < 10 && (
               <input
-                className="bg-transparent text-white text-sm outline-none flex-1 min-w-16 uppercase font-mono placeholder-gray-600"
+                className="bg-transparent text-white text-xs outline-none flex-1 min-w-[100px] uppercase font-mono placeholder-slate-600"
                 placeholder="AAPL, Enter"
                 value={input}
                 onChange={e => setInput(e.target.value.toUpperCase())}
@@ -543,29 +677,30 @@ function MultiTab() {
           </div>
         </div>
 
-        <div className="flex flex-wrap gap-3 items-end">
+        <div className="flex flex-wrap gap-4 items-end">
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">Tarih</label>
-            <input type="date" className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-500 focus:border-transparent transition" value={date} onChange={e => setDate(e.target.value)} disabled={running} />
+            <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.date')}</label>
+            <input type="date" className="glass-input rounded-xl px-3 py-2 text-xs outline-none" value={date} onChange={e => setDate(e.target.value)} disabled={running} />
           </div>
           <div>
-            <label className="text-xs font-medium text-gray-500 mb-1.5 block uppercase tracking-wider">Tür</label>
-            <select className="bg-gray-800 border border-gray-700 text-white rounded-xl px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-violet-500 transition" value={assetType} onChange={e => setAssetType(e.target.value)} disabled={running}>
+            <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('analysis.label.type')}</label>
+            <select className="glass-input rounded-xl px-3 py-2 text-xs outline-none" value={assetType} onChange={e => setAssetType(e.target.value)} disabled={running}>
               {assetTypes.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
             </select>
           </div>
           <button
             onClick={handleRun}
             disabled={running || tickers.length < 2}
-            className="flex items-center gap-2 px-5 py-2 rounded-xl text-sm font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 shadow-lg shadow-violet-500/20 transition-all"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 disabled:opacity-40 shadow-md shadow-violet-500/20 transition-all cursor-pointer"
           >
-            {running ? <Loader2 size={15} className="animate-spin" /> : <BarChart2 size={15} />}
-            {running ? 'Çalışıyor...' : 'Portföy Analizi Başlat'}
+            {running ? <Loader2 size={13} className="animate-spin" /> : <BarChart2 size={13} />}
+            {running ? t('analysis.multi.running') : t('analysis.multi.btn_start')}
           </button>
         </div>
 
-        {done && <div className="flex items-center gap-2 text-emerald-400 text-sm"><CheckCircle size={15} /> Arka planda başlatıldı — "Portföy Geçmişi" tabından takip edebilirsiniz.</div>}
-        {error && <div className="flex items-center gap-2 text-red-400 text-sm"><AlertCircle size={15} /> {error}</div>}
+        {running && progress && <div className="flex items-center gap-2 text-violet-300 text-xs font-semibold"><Loader2 size={14} className="animate-spin" /> {progress}</div>}
+        {done && <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold"><CheckCircle size={14} /> {t('analysis.multi.started')}</div>}
+        {error && <div className="flex items-center gap-2 text-rose-400 text-xs font-semibold"><AlertCircle size={14} /> {error}</div>}
       </div>
       <PortfolioHistorySection />
     </div>
@@ -573,6 +708,7 @@ function MultiTab() {
 }
 
 function PortfolioHistorySection() {
+  const { t } = useTranslation()
   const [items, setItems] = useState<PortfolioHistoryItem[]>([])
   const [detail, setDetail] = useState<PortfolioDetail | null>(null)
   const [loading, setLoading] = useState(true)
@@ -581,35 +717,35 @@ function PortfolioHistorySection() {
     axios.get('/api/analysis/portfolio-history').then(r => setItems(r.data)).finally(() => setLoading(false))
   }, [])
 
-  if (loading) return <div className="text-gray-500 text-sm px-1">Yükleniyor...</div>
+  if (loading) return <div className="text-slate-500 text-xs px-2">{t('analysis.portfolio_history.loading')}</div>
 
   return (
-    <div className="bg-gray-900 border border-gray-800 rounded-2xl p-5">
-      <h3 className="text-sm font-semibold text-gray-300 mb-3">Portföy Analizi Geçmişi</h3>
-      {items.length === 0 ? <p className="text-gray-600 text-sm">Henüz portföy analizi yok.</p> : (
-        <div className="space-y-1.5">
+    <div className="glass-panel rounded-2xl p-5">
+      <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest mb-3.5">{t('analysis.portfolio_history.title')}</h3>
+      {items.length === 0 ? <p className="text-slate-600 text-xs">{t('analysis.portfolio_history.empty')}</p> : (
+        <div className="space-y-2">
           {items.map(item => (
             <div key={item.id} onClick={() => axios.get(`/api/analysis/portfolio/${item.id}`).then(r => setDetail(r.data))}
-              className="flex items-center justify-between p-3 rounded-xl bg-gray-800/60 hover:bg-gray-800 cursor-pointer transition-colors border border-gray-700/40 hover:border-gray-700">
+              className="flex items-center justify-between p-3 rounded-xl bg-slate-900/20 hover:bg-slate-900/60 cursor-pointer transition-colors border border-white/[0.03] hover:border-white/[0.08]">
               <div className="flex items-center gap-2">
-                <span className="text-white font-mono text-sm font-semibold">{item.tickers.join(', ')}</span>
-                <span className="text-gray-600 text-xs">{item.trade_date}</span>
+                <span className="text-white font-mono text-xs font-bold">{item.tickers.join(', ')}</span>
+                <span className="text-slate-500 text-[10px]">{item.trade_date}</span>
               </div>
-              <span className="text-gray-600 text-xs">{new Date(item.created_at).toLocaleDateString('tr-TR')}</span>
+              <span className="text-slate-500 text-[10px] font-mono">{new Date(item.created_at).toLocaleDateString()}</span>
             </div>
           ))}
         </div>
       )}
       {detail && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-start justify-center p-4 overflow-y-auto backdrop-blur-sm">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-6 w-full max-w-3xl my-8 space-y-4">
+          <div className="bg-slate-900 border border-white/[0.06] rounded-2xl p-6 w-full max-w-3xl my-8 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between">
-              <h3 className="text-lg font-bold text-white">{detail.tickers.join(', ')}</h3>
-              <button onClick={() => setDetail(null)} className="text-gray-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-gray-800"><X size={18} /></button>
+              <h3 className="text-base font-display font-bold text-white">{detail.tickers.join(', ')}</h3>
+              <button onClick={() => setDetail(null)} className="text-slate-500 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5 cursor-pointer"><X size={16} /></button>
             </div>
-            <p className="text-gray-600 text-xs">{detail.trade_date} • {new Date(detail.created_at).toLocaleString('tr-TR')}</p>
-            <pre className="text-sm text-gray-200 whitespace-pre-wrap bg-gray-950 rounded-xl p-5 max-h-96 overflow-y-auto border border-gray-800 font-mono leading-relaxed">
-              {detail.super_portfolio_report || 'Rapor henüz hazır değil.'}
+            <p className="text-slate-500 text-[10px] font-mono">{detail.trade_date} • {new Date(detail.created_at).toLocaleString()}</p>
+            <pre className="text-xs text-slate-300 whitespace-pre-wrap bg-slate-950 rounded-xl p-4 max-h-[50vh] overflow-y-auto border border-white/[0.04] font-mono leading-relaxed select-text">
+              {detail.super_portfolio_report || t('analysis.portfolio_history.report_not_ready')}
             </pre>
           </div>
         </div>
@@ -618,12 +754,37 @@ function PortfolioHistorySection() {
   )
 }
 
-// ── Tab: History ──────────────────────────────────────────────────────────────
-function HistoryTab() {
+function HistoryTab({
+  initialDetailId,
+  onRollbackStart,
+}: {
+  initialDetailId?: number
+  onRollbackStart: (taskId: string, ticker: string) => void
+}) {
+  const { t, language } = useTranslation()
   const [items, setItems] = useState<HistoryItem[]>([])
   const [loading, setLoading] = useState(true)
   const [detail, setDetail] = useState<AnalysisDetail | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
+  const [activeDetailTab, setActiveDetailTab] = useState<'reports' | 'debate' | 'chat' | 'timetravel'>('reports')
+  const [shareLink, setShareLink] = useState<string | null>(null)
+  const [sharing, setSharing] = useState(false)
+
+  const shareReport = useCallback(async (id: number) => {
+    setSharing(true)
+    setShareLink(null)
+    try {
+      const { data } = await axios.post<{ token: string; expires_at: string }>(`/api/analysis/${id}/share`)
+      const link = `${window.location.origin}/share/${data.token}`
+      setShareLink(link)
+      await navigator.clipboard.writeText(link).catch(() => {})
+      notify('success', 'Share link copied to clipboard', 'Share')
+    } catch (e: any) {
+      notify('error', e.response?.data?.detail || 'Share failed', 'Share')
+    } finally {
+      setSharing(false)
+    }
+  }, [])
   const meta = useMeta()
   const sectionLabels = meta?.section_labels ?? SECTION_LABELS
 
@@ -633,40 +794,54 @@ function HistoryTab() {
 
   const openDetail = useCallback(async (id: number) => {
     setDetailLoading(true)
+    setActiveDetailTab('reports')
     try { const { data } = await axios.get(`/api/analysis/${id}`); setDetail(data) }
     finally { setDetailLoading(false) }
   }, [])
 
-  if (loading) return <div className="p-8 text-gray-500 text-sm">Yükleniyor...</div>
+  // Open the detail modal directly when arriving via a /analysis?id=… deep link.
+  useEffect(() => {
+    if (initialDetailId) openDetail(initialDetailId)
+  }, [initialDetailId, openDetail])
+
+  if (loading) return <div className="p-8 text-slate-500 text-xs">{t('analysis.history.loading')}</div>
 
   return (
     <div className="space-y-4">
-      <div className="bg-gray-900 border border-gray-800 rounded-2xl overflow-hidden">
+      <div className="glass-panel rounded-2xl overflow-hidden">
         {items.length === 0 ? (
-          <p className="p-6 text-gray-600 text-sm">Henüz analiz geçmişi yok.</p>
+          <p className="p-6 text-slate-600 text-xs text-center">{t('analysis.history.empty')}</p>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-sm min-w-[480px]">
+            <div className="flex justify-end px-4 py-2 border-b border-white/[0.04]">
+              <button
+                onClick={() => exportAnalysesCSV(items)}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-500 hover:text-violet-300 hover:bg-violet-500/10 border border-white/[0.04] hover:border-violet-500/20 transition cursor-pointer"
+              >
+                <Download size={11} /> Export CSV
+              </button>
+            </div>
+            <table className="w-full text-xs min-w-[500px]">
               <thead>
-                <tr className="text-gray-600 text-xs uppercase tracking-wider border-b border-gray-800 bg-gray-800/30">
-                  <th className="px-4 py-3 text-left">Sembol</th>
-                  <th className="px-4 py-3 text-left">Tarih</th>
-                  <th className="px-4 py-3 text-left">Sinyal</th>
-                  <th className="px-4 py-3 text-left">Süre</th>
-                  <th className="px-4 py-3 text-left hidden sm:table-cell">Kaynak</th>
-                  <th className="px-4 py-3 text-left hidden md:table-cell">Zaman</th>
+                <tr className="text-slate-500 text-[10px] uppercase tracking-wider border-b border-white/[0.04] bg-slate-900/10">
+                  <th className="px-5 py-3 text-left font-bold">{t('analysis.history.col_symbol')}</th>
+                  <th className="px-5 py-3 text-left font-bold">{t('analysis.history.col_date')}</th>
+                  <th className="px-5 py-3 text-left font-bold">{t('analysis.history.col_signal')}</th>
+                  <th className="px-5 py-3 text-left font-bold">{t('analysis.history.col_duration')}</th>
+                  <th className="px-5 py-3 text-left hidden sm:table-cell font-bold">{t('analysis.history.col_source')}</th>
+                  <th className="px-5 py-3 text-left hidden md:table-cell font-bold">{t('analysis.history.col_time')}</th>
                 </tr>
               </thead>
-              <tbody>
+              <tbody className="divide-y divide-white/[0.02] text-slate-300">
                 {items.map(item => (
                   <tr key={item.id} onClick={() => openDetail(item.id)}
-                    className="border-t border-gray-800 hover:bg-gray-800/50 cursor-pointer transition-colors">
-                    <td className="px-4 py-3 font-mono font-bold text-white">{item.ticker}</td>
-                    <td className="px-4 py-3 text-gray-400 text-xs">{item.trade_date}</td>
-                    <td className="px-4 py-3"><SignalBadge signal={item.signal} /></td>
-                    <td className="px-4 py-3 text-gray-500 text-xs">{item.duration_seconds.toFixed(1)}s</td>
-                    <td className="px-4 py-3 text-gray-600 text-xs hidden sm:table-cell">{item.triggered_by}</td>
-                    <td className="px-4 py-3 text-gray-600 text-xs hidden md:table-cell">{new Date(item.created_at).toLocaleString('tr-TR')}</td>
+                    className="hover:bg-white/[0.02] cursor-pointer transition-colors">
+                    <td className="px-5 py-3.5 font-mono font-bold text-white">{item.ticker}</td>
+                    <td className="px-5 py-3.5 text-slate-400 font-semibold">{item.trade_date}</td>
+                    <td className="px-5 py-3.5"><SignalBadge signal={item.signal} /></td>
+                    <td className="px-5 py-3.5 text-slate-500 font-mono">{(item.duration_seconds ?? 0).toFixed(1)}s</td>
+                    <td className="px-5 py-3.5 text-slate-500 hidden sm:table-cell">{item.triggered_by}</td>
+                    <td className="px-5 py-3.5 text-slate-600 hidden md:table-cell font-mono">{new Date(item.created_at).toLocaleString()}</td>
                   </tr>
                 ))}
               </tbody>
@@ -677,40 +852,112 @@ function HistoryTab() {
 
       {(detail || detailLoading) && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-start justify-center p-3 md:p-4 overflow-y-auto backdrop-blur-sm">
-          <div className="bg-gray-900 border border-gray-800 rounded-2xl p-4 md:p-6 w-full max-w-4xl my-4 md:my-8 space-y-4">
+          <div className="bg-slate-900 border border-white/[0.06] rounded-2xl p-4 md:p-6 w-full max-w-4xl my-4 md:my-8 space-y-4 shadow-2xl flex flex-col max-h-[90vh]">
             {detailLoading ? (
-              <div className="flex items-center gap-2 text-gray-400"><Loader2 className="animate-spin" size={16} /> Yükleniyor...</div>
+              <div className="flex items-center gap-2 text-slate-400 py-12 justify-center"><Loader2 className="animate-spin" size={16} /> {t('analysis.history.detail_loading')}</div>
             ) : detail ? (
               <>
-                <div className="flex items-start justify-between">
-                  <div className="space-y-2">
+                <div className="flex items-start justify-between border-b border-white/[0.04] pb-3 shrink-0">
+                  <div className="space-y-1">
                     <div className="flex items-center gap-3">
-                      <h3 className="text-2xl font-bold text-white font-mono">{detail.ticker}</h3>
+                      <h3 className="text-xl font-display font-bold text-white font-mono">{detail.ticker}</h3>
                       <SignalBadge signal={detail.signal} large />
                     </div>
-                    <p className="text-gray-500 text-xs">{detail.trade_date} • {detail.duration_seconds.toFixed(1)}s • {detail.llm_calls} LLM • {(detail.tokens_in + detail.tokens_out).toLocaleString()} token</p>
+                    <p className="text-[10px] text-slate-500 font-semibold">{detail.trade_date} • {(detail.duration_seconds ?? 0).toFixed(1)}s • {detail.llm_calls} LLM • {(detail.tokens_in + detail.tokens_out).toLocaleString()} token</p>
                   </div>
                   <div className="flex items-center gap-2 ml-4">
-                    <button onClick={() => exportMarkdown(detail)} className="flex items-center gap-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg transition" title="Markdown İndir">
+                    <button onClick={() => exportMarkdown(detail, language as 'en' | 'tr')} className="flex items-center gap-1 bg-white/5 hover:bg-white/10 text-[10px] font-bold text-slate-300 px-2.5 py-1.5 rounded-lg transition cursor-pointer" title={t('analysis.history.btn_download_md')}>
                       <Download size={12} /> MD
                     </button>
-                    <button onClick={() => exportPDF(detail)} className="flex items-center gap-1.5 text-xs bg-gray-800 hover:bg-gray-700 text-gray-300 px-2.5 py-1.5 rounded-lg transition" title="PDF İndir">
+                    <button onClick={() => exportPDF(detail, language as 'en' | 'tr')} className="flex items-center gap-1 bg-white/5 hover:bg-white/10 text-[10px] font-bold text-slate-300 px-2.5 py-1.5 rounded-lg transition cursor-pointer" title={t('analysis.history.btn_download_pdf')}>
                       <FileDown size={12} /> PDF
                     </button>
-                    <button onClick={() => setDetail(null)} className="text-gray-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-gray-800"><X size={18} /></button>
+                    <button
+                      onClick={() => shareReport(detail.id)}
+                      disabled={sharing}
+                      className="flex items-center gap-1 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 text-[10px] font-bold text-violet-400 px-2.5 py-1.5 rounded-lg transition cursor-pointer disabled:opacity-40"
+                      title="Share report link (48h)"
+                    >
+                      {sharing ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />} Share
+                    </button>
+                    {shareLink && (
+                      <button
+                        onClick={() => navigator.clipboard.writeText(shareLink)}
+                        className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-bold text-emerald-400 px-2 py-1.5 rounded-lg transition cursor-pointer"
+                        title={shareLink}
+                      >
+                        <Copy size={11} /> Copied!
+                      </button>
+                    )}
+                    <button onClick={() => { setDetail(null); setShareLink(null) }} className="text-slate-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/5 cursor-pointer"><X size={16} /></button>
                   </div>
                 </div>
-                <div className="space-y-1.5 max-h-[60vh] md:max-h-[65vh] overflow-y-auto pr-1">
-                  {([
-                    ['market_report', detail.market_report], ['sentiment_report', detail.sentiment_report],
-                    ['news_report', detail.news_report], ['fundamentals_report', detail.fundamentals_report],
-                    ['macro_report', detail.macro_report], ['options_report', detail.options_report],
-                    ['quant_report', detail.quant_report], ['earnings_report', detail.earnings_report],
-                    ['review_report', detail.review_report], ['investment_plan', detail.investment_plan],
-                    ['trader_plan', detail.trader_plan], ['final_decision', detail.final_decision],
-                    ['bull_history', detail.bull_history], ['bear_history', detail.bear_history],
-                    ['judge_decision', detail.judge_decision],
-                  ] as [string, string][]).map(([k, v]) => <ReportCard key={k} label={sectionLabels[k] || k} content={v} />)}
+
+                <div className="flex items-center gap-1 p-1 bg-slate-950/60 border border-white/[0.04] rounded-xl shrink-0">
+                  <button
+                    onClick={() => setActiveDetailTab('reports')}
+                    className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
+                      activeDetailTab === 'reports' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
+                    }`}
+                  >
+                    {t('analysis.tab.reports')}
+                  </button>
+                  <button
+                    onClick={() => setActiveDetailTab('debate')}
+                    className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
+                      activeDetailTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
+                    }`}
+                  >
+                    {t('analysis.tab.debate')}
+                  </button>
+                  <button
+                    onClick={() => setActiveDetailTab('chat')}
+                    className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
+                      activeDetailTab === 'chat' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
+                    }`}
+                  >
+                    {t('analysis.tab.qa')}
+                  </button>
+                  <button
+                    onClick={() => setActiveDetailTab('timetravel')}
+                    className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition ${
+                      activeDetailTab === 'timetravel' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
+                    }`}
+                  >
+                    {t('analysis.tab.timetravel')}
+                  </button>
+                </div>
+
+                <div className="flex-1 min-h-0 overflow-y-auto">
+                  {activeDetailTab === 'reports' && (
+                    <div className="space-y-2 pr-1">
+                      {detail.risk_metrics && <RiskMetricsCard metrics={detail.risk_metrics} />}
+                      <KellyPositioningFromJson json={detail.trader_proposal_json} />
+                      {([
+                        ['market_report', detail.market_report], ['sentiment_report', detail.sentiment_report],
+                        ['news_report', detail.news_report], ['fundamentals_report', detail.fundamentals_report],
+                        ['macro_report', detail.macro_report], ['options_report', detail.options_report],
+                        ['quant_report', detail.quant_report], ['earnings_report', detail.earnings_report],
+                        ['review_report', detail.review_report], ['agent_qa_report', detail.agent_qa_report],
+                        ['investment_plan', detail.investment_plan],
+                        ['trader_plan', detail.trader_plan], ['final_decision', detail.final_decision],
+                        ['bull_history', detail.bull_history], ['bear_history', detail.bear_history],
+                        ['judge_decision', detail.judge_decision],
+                      ] as [string, string][]).map(([k, v]) => <ReportCard key={k} label={sectionLabels[k] || k} content={v} />)}
+                    </div>
+                  )}
+                  {activeDetailTab === 'debate' && (
+                    <DebateHistoryWidget investmentHistory={detail.investment_debate_history} riskHistory={detail.risk_debate_history} />
+                  )}
+                  {activeDetailTab === 'chat' && (
+                    <AnalysisChatWidget analysisId={detail.id} />
+                  )}
+                  {activeDetailTab === 'timetravel' && (
+                    <TimeTravelWidget
+                      analysisId={detail.id}
+                      onRollbackStart={(taskId) => onRollbackStart(taskId, detail.ticker)}
+                    />
+                  )}
                 </div>
               </>
             ) : null}
@@ -721,40 +968,230 @@ function HistoryTab() {
   )
 }
 
-// ── Main ──────────────────────────────────────────────────────────────────────
 type Tab = 'run' | 'multi' | 'history'
 
 export default function Analysis() {
-  const [tab, setTab] = useState<Tab>('run')
+  const { t } = useTranslation()
+  const [searchParams] = useSearchParams()
+  const deepLinkId = searchParams.get('id')
+  const [tab, setTab] = useState<Tab>(deepLinkId ? 'history' : 'run')
 
   const tabs = [
-    { id: 'run' as Tab,     label: 'Tek Hisse',       icon: <Zap size={13} /> },
-    { id: 'multi' as Tab,   label: 'Çoklu Hisse',     icon: <BarChart2 size={13} /> },
-    { id: 'history' as Tab, label: 'Geçmiş',          icon: <History size={13} /> },
+    { id: 'run' as Tab,     label: t('analysis.tab.single'), icon: <Zap size={13} /> },
+    { id: 'multi' as Tab,   label: t('analysis.tab.multi'),  icon: <BarChart2 size={13} /> },
+    { id: 'history' as Tab, label: t('analysis.tab.history'), icon: <History size={13} /> },
   ]
 
   return (
-    <div className="p-4 md:p-6 space-y-4 md:space-y-5">
+    <div className="p-4 md:p-6 space-y-6 max-w-7xl mx-auto">
       <div className="flex items-center justify-between">
-        <h2 className="text-lg md:text-xl font-bold text-white tracking-tight">Analiz</h2>
+        <div>
+          <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('analysis.title')}</h2>
+          <p className="text-xs text-slate-500 mt-1">Deploy multi-agent consensus networks for specialized asset research</p>
+        </div>
       </div>
 
-      {/* Tab bar */}
-      <div className="flex gap-1 p-1 bg-gray-900 border border-gray-800 rounded-2xl w-fit">
-        {tabs.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
-            className={`flex items-center gap-1.5 px-3 md:px-4 py-2 rounded-xl text-sm font-medium transition-all ${
-              tab === t.id ? 'bg-violet-600 text-white shadow-lg shadow-violet-500/20' : 'text-gray-500 hover:text-white'
+      {/* Tabs */}
+      <div className="flex gap-1 p-1 bg-slate-900/50 border border-white/[0.04] rounded-2xl w-fit">
+        {tabs.map(tb => (
+          <button key={tb.id} onClick={() => setTab(tb.id)}
+            className={`flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-semibold transition-all cursor-pointer ${
+              tab === tb.id ? 'bg-violet-600 text-white shadow shadow-violet-500/20' : 'text-slate-500 hover:text-white'
             }`}
           >
-            {t.icon} <span className="hidden sm:inline">{t.label}</span>
+            {tb.icon} <span className="hidden sm:inline">{tb.label}</span>
           </button>
         ))}
       </div>
 
       {tab === 'run'     && <RunTab />}
       {tab === 'multi'   && <MultiTab />}
-      {tab === 'history' && <HistoryTab />}
+      {tab === 'history' && (
+        <HistoryTab
+          initialDetailId={deepLinkId ? Number(deepLinkId) : undefined}
+          onRollbackStart={(taskId, ticker) => {
+            localStorage.setItem(
+              TASK_KEY,
+              JSON.stringify({
+                ticker: ticker.toUpperCase(),
+                taskId,
+                startedAt: new Date().toISOString(),
+              })
+            )
+            localStorage.setItem(
+              STORAGE_KEY,
+              JSON.stringify({
+                ticker: ticker.toUpperCase(),
+                date: new Date().toISOString().slice(0, 10),
+                assetType: 'stock',
+                runStatus: 'running',
+                signal: null,
+                reports: {},
+                log: [],
+                activeSection: null,
+                analysisId: null,
+              })
+            )
+            setTab('run')
+          }}
+        />
+      )}
+    </div>
+  )
+}
+
+function TimeTravelWidget({
+  analysisId,
+  onRollbackStart,
+}: {
+  analysisId: number
+  onRollbackStart: (taskId: string) => void
+}) {
+  const { t } = useTranslation()
+  const [checkpoints, setCheckpoints] = useState<any[]>([])
+  const [loading, setLoading] = useState(true)
+  const [selectedCp, setSelectedCp] = useState<any>(null)
+  const [updateFields, setUpdateFields] = useState<Record<string, string>>({})
+  const [rollbackLoading, setRollbackLoading] = useState(false)
+
+  useEffect(() => {
+    axios
+      .get(`/api/analysis/${analysisId}/checkpoints`)
+      .then((r) => {
+        setCheckpoints(r.data)
+        setLoading(false)
+      })
+      .catch(() => setLoading(false))
+  }, [analysisId])
+
+  const handleSelectCheckpoint = (cp: any) => {
+    setSelectedCp(cp)
+    const fields: Record<string, string> = {}
+    if (cp.node === 'Research Manager' || cp.node === 'ResearchManager') {
+      fields['investment_plan'] = ''
+    } else if (cp.node === 'Trader') {
+      fields['trader_investment_plan'] = ''
+      fields['trader_proposal_json'] = '{}'
+    } else if (cp.node === 'Agent Q&A' || cp.node === 'agent_qa') {
+      fields['agent_qa_report'] = ''
+    } else {
+      fields['investment_plan'] = ''
+    }
+    setUpdateFields(fields)
+  }
+
+  const handleRollback = async () => {
+    if (!selectedCp) return
+    setRollbackLoading(true)
+    try {
+      const { data } = await axios.post(`/api/analysis/${analysisId}/time-travel`, {
+        checkpoint_id: selectedCp.checkpoint_id,
+        update_state: updateFields,
+      })
+      notify('success', t('language') === 'tr' ? 'Zaman yolculuğu başlatıldı!' : 'Time travel initiated!')
+      onRollbackStart(data.task_id)
+    } catch (err: any) {
+      notify('error', err.response?.data?.detail || 'Rollback failed')
+    } finally {
+      setRollbackLoading(false)
+    }
+  }
+
+  if (loading) {
+    return (
+      <div className="flex items-center gap-2 text-slate-400 py-12 justify-center">
+        <Loader2 className="animate-spin" size={16} /> {t('analysis.timetravel.loading_checkpoints')}
+      </div>
+    )
+  }
+
+  if (checkpoints.length === 0) {
+    return (
+      <div className="text-center py-12 text-slate-500 text-xs">
+        {t('analysis.timetravel.no_checkpoints')}
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-5 p-1">
+      <div className="space-y-2">
+        <h4 className="text-white text-xs font-bold uppercase tracking-wider">
+          {t('analysis.timetravel.title')}
+        </h4>
+        <p className="text-slate-400 text-[11px] leading-relaxed">
+          {t('language') === 'tr'
+            ? 'Mevcut analizi seçtiğiniz bir adıma geri sarıp durum verilerini değiştirerek oradan itibaren yeniden çalıştırabilirsiniz.'
+            : 'Roll back the execution flow to a selected checkpoint step, edit state fields, and resume propagation.'}
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-[10px] font-bold text-slate-500 block uppercase tracking-wider">
+          {t('analysis.timetravel.select_checkpoint')}
+        </label>
+        <div className="grid grid-cols-1 gap-2 max-h-36 overflow-y-auto pr-1">
+          {checkpoints.map((cp) => (
+            <div
+              key={cp.checkpoint_id}
+              onClick={() => handleSelectCheckpoint(cp)}
+              className={`p-3 rounded-xl border text-xs cursor-pointer transition-all flex items-center justify-between ${
+                selectedCp?.checkpoint_id === cp.checkpoint_id
+                  ? 'bg-violet-600/10 border-violet-500 text-white'
+                  : 'bg-slate-900/40 border-white/[0.04] text-slate-300 hover:border-white/[0.1]'
+              }`}
+            >
+              <div className="flex items-center gap-2 font-semibold">
+                <span className="text-[10px] text-slate-500 font-mono">#{cp.step}</span>
+                <span>{cp.label}</span>
+              </div>
+              <span className="text-[9px] text-slate-600 font-mono">
+                {cp.checkpoint_id.slice(0, 8)}
+              </span>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {selectedCp && (
+        <div className="space-y-4 animate-in fade-in duration-300">
+          <div className="space-y-2">
+            <label className="text-[10px] font-bold text-slate-500 block uppercase tracking-wider">
+              {t('analysis.timetravel.edit_fields')}
+            </label>
+            {Object.keys(updateFields).map((field) => (
+              <div key={field} className="space-y-1.5">
+                <span className="text-[10px] font-semibold text-slate-400 font-mono">{field}</span>
+                <textarea
+                  value={updateFields[field]}
+                  onChange={(e) =>
+                    setUpdateFields((prev) => ({ ...prev, [field]: e.target.value }))
+                  }
+                  className="w-full h-24 bg-slate-950 border border-white/[0.08] rounded-xl p-3 text-xs text-white outline-none focus:border-violet-500/50 font-mono leading-relaxed"
+                  placeholder={
+                    field === 'trader_proposal_json'
+                      ? '{"action": "Buy", "entry_price": 150.0}'
+                      : `Enter custom ${field} value...`
+                  }
+                />
+              </div>
+            ))}
+          </div>
+
+          <button
+            onClick={handleRollback}
+            disabled={rollbackLoading}
+            className="w-full flex items-center justify-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 py-2.5 rounded-xl text-xs font-semibold text-white cursor-pointer shadow shadow-violet-600/20 transition disabled:opacity-40"
+          >
+            {rollbackLoading ? (
+              <Loader2 size={13} className="animate-spin" />
+            ) : (
+              <Scale size={13} />
+            )}
+            {t('analysis.timetravel.btn_rollback')}
+          </button>
+        </div>
+      )}
     </div>
   )
 }

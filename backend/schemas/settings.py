@@ -1,84 +1,139 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
-class SettingsRead(BaseModel):
-    trading_mode: str
-    active_broker: str
-    active_data_vendor: str
-    cron_enabled: bool
-    cron_schedule: str
-    price_tolerance_pct: float
-    watchlist: list[str]
-    selected_analysts: list[str]
-    llm_provider: str
-    deep_think_llm: str
-    quick_think_llm: str
-    backend_url: str | None = None
+class SettingsBase(BaseModel):
+    cron_enabled: bool = False
+    cron_schedule: str = "0 9 * * 1-5"
+    price_tolerance_pct: float = 0.5
+    watchlist: list[str] = []
+    output_language: str = "English"
+    llm_provider: str = "openai"
+    llm_model: str = "gpt-4o-mini"
+    fallback_llm_provider: str | None = None
+    fallback_llm_model: str | None = None
+    investor_persona: str = "conservative"
+    analyst_concurrency_limit: int = 1
+    max_recur_limit: int = 1000
+    benchmark_ticker: str | None = None
+    max_debate_rounds: int = 1
+    max_risk_rounds: int = 1
+    max_position_size_pct: float = 10.0
+    max_risk_per_trade_pct: float = 2.0
+    strict_stop_loss_mode: bool = False
     openai_reasoning_effort: str | None = None
     anthropic_effort: str | None = None
     google_thinking_level: str | None = None
-    output_language: str = "English"
-    analyst_concurrency_limit: int = 1
-    checkpoint_enabled: bool = False
-    max_recur_limit: int = 1000
-    news_article_limit: int = 20
-    global_news_article_limit: int = 10
-    global_news_lookback_days: int = 7
-    benchmark_ticker: str | None = None
-    azure_deployment: str | None = None
-    data_vendor_core_stock: str = "yfinance"
-    data_vendor_technicals: str = "yfinance"
-    data_vendor_fundamentals: str = "yfinance"
-    data_vendor_news: str = "yfinance"
-    max_debate_rounds: int
-    max_risk_rounds: int
-    max_position_size_pct: float
-    max_risk_per_trade_pct: float
-    include_historical_analyses: bool = False
+    node_retry_attempts: int = 2
+    node_retry_base_delay: float = 1.0
     webhook_url: str | None = None
     webhook_enabled: bool = False
     webhook_events: str = '["analysis_complete"]'
+    active_preset_name: str | None = None
+    memory_store: str = "pinecone"
+    pinecone_index: str = "tradingagents-memory"
+    pinecone_cloud: str = "aws"
+    pinecone_region: str = "us-east-1"
+    memory_embedder: str = "pinecone"
+    pinecone_embed_model: str = "llama-text-embed-v2"
+    memory_openai_embed_model: str = "text-embedding-3-small"
+    memory_ollama_embed_model: str = "nomic-embed-text"
+    agent_qa_enabled: bool = True
+    anthropic_prompt_caching: bool = True
+    max_report_chars_in_prompts: int = 6000
+    max_debate_history_chars: int = 8000
+    max_tool_output_chars: int = 12000
+    analyst_prefilter_enabled: bool = False
+    analyst_prefilter_min_samples: int = 5
+    analyst_prefilter_max_win_rate: float = 40.0
+    memory_recall_count: int = 5
+    news_article_limit: int = 20
+    global_news_article_limit: int = 10
+    global_news_lookback_days: int = 7
+
+    @field_validator("webhook_url")
+    @classmethod
+    def validate_webhook_url(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return v
+        from urllib.parse import urlparse
+
+        try:
+            parsed = urlparse(v)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                raise ValueError("webhook_url must be a valid http or https URL")
+        except Exception as exc:
+            raise ValueError("webhook_url must be a valid http or https URL") from exc
+        return v
+
+
+class SettingsRead(SettingsBase):
     updated_at: datetime | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class SettingsUpdate(BaseModel):
-    trading_mode: str | None = None
-    active_broker: str | None = None
-    active_data_vendor: str | None = None
     cron_enabled: bool | None = None
     cron_schedule: str | None = None
     price_tolerance_pct: float | None = Field(default=None, ge=0, le=50)
     watchlist: list[str] | None = None
-    selected_analysts: list[str] | None = None
-    llm_provider: str | None = None
-    deep_think_llm: str | None = None
-    quick_think_llm: str | None = None
-    backend_url: str | None = None
-    openai_reasoning_effort: str | None = None
-    anthropic_effort: str | None = None
-    google_thinking_level: str | None = None
     output_language: str | None = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    fallback_llm_provider: str | None = None
+    fallback_llm_model: str | None = None
+    investor_persona: str | None = None
     analyst_concurrency_limit: int | None = Field(default=None, ge=1, le=16)
-    checkpoint_enabled: bool | None = None
     max_recur_limit: int | None = Field(default=None, ge=100, le=5000)
-    news_article_limit: int | None = Field(default=None, ge=1, le=100)
-    global_news_article_limit: int | None = Field(default=None, ge=1, le=50)
-    global_news_lookback_days: int | None = Field(default=None, ge=1, le=30)
     benchmark_ticker: str | None = None
-    azure_deployment: str | None = None
-    data_vendor_core_stock: str | None = None
-    data_vendor_technicals: str | None = None
-    data_vendor_fundamentals: str | None = None
-    data_vendor_news: str | None = None
     max_debate_rounds: int | None = Field(default=None, ge=1, le=10)
     max_risk_rounds: int | None = Field(default=None, ge=1, le=10)
     max_position_size_pct: float | None = Field(default=None, ge=1, le=100)
     max_risk_per_trade_pct: float | None = Field(default=None, ge=0.1, le=50)
-    include_historical_analyses: bool | None = None
+    strict_stop_loss_mode: bool | None = None
+    openai_reasoning_effort: str | None = None
+    anthropic_effort: str | None = None
+    google_thinking_level: str | None = None
+    node_retry_attempts: int | None = Field(default=None, ge=1, le=10)
+    node_retry_base_delay: float | None = Field(default=None, ge=0.1, le=10.0)
     webhook_url: str | None = None
     webhook_enabled: bool | None = None
     webhook_events: str | None = None
+    active_preset_name: str | None = None
+    memory_store: str | None = None
+    pinecone_index: str | None = None
+    pinecone_cloud: str | None = None
+    pinecone_region: str | None = None
+    memory_embedder: str | None = None
+    pinecone_embed_model: str | None = None
+    memory_openai_embed_model: str | None = None
+    memory_ollama_embed_model: str | None = None
+    agent_qa_enabled: bool | None = None
+    anthropic_prompt_caching: bool | None = None
+    max_report_chars_in_prompts: int | None = Field(default=None, ge=500, le=50000)
+    max_debate_history_chars: int | None = Field(default=None, ge=1000, le=100000)
+    max_tool_output_chars: int | None = Field(default=None, ge=1000, le=100000)
+    analyst_prefilter_enabled: bool | None = None
+    analyst_prefilter_min_samples: int | None = Field(default=None, ge=1, le=100)
+    analyst_prefilter_max_win_rate: float | None = Field(default=None, ge=0, le=100)
+    memory_recall_count: int | None = Field(default=None, ge=1, le=50)
+    news_article_limit: int | None = Field(default=None, ge=1, le=100)
+    global_news_article_limit: int | None = Field(default=None, ge=1, le=100)
+    global_news_lookback_days: int | None = Field(default=None, ge=1, le=90)
+
+    @field_validator("webhook_url")
+    @classmethod
+    def validate_webhook_url(cls, v: str | None) -> str | None:
+        if v is None or v == "":
+            return v
+        from urllib.parse import urlparse
+
+        try:
+            parsed = urlparse(v)
+            if parsed.scheme not in ("http", "https") or not parsed.netloc:
+                raise ValueError("webhook_url must be a valid http or https URL")
+        except Exception as exc:
+            raise ValueError("webhook_url must be a valid http or https URL") from exc
+        return v

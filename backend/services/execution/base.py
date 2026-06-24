@@ -1,72 +1,51 @@
-"""BaseTraderInterface — all broker implementations (simulation, live) must implement this."""
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
-from typing import Optional
+from datetime import UTC, datetime
 
 
 @dataclass
 class OrderRequest:
     ticker: str
-    action: str            # "BUY" | "SELL"
+    action: str
     quantity: float
     reference_price: float
     ai_signal: str = ""
     ai_reasoning: str = ""
+    leverage: float = 1.0
+    stop_loss: float | None = None
+    take_profit: float | None = None
+    allow_short: bool = False
 
 
 @dataclass
 class OrderResult:
     order_id: str
-    status: str            # FILLED | PARTIALLY_FILLED | REJECTED
-    filled_price: Optional[float]
-    filled_quantity: Optional[float]
+    status: str
+    filled_price: float | None
+    filled_quantity: float | None
     commission: float = 0.0
     message: str = ""
-    executed_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    executed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 
 
 class BaseTraderInterface(ABC):
-    """
-    Pluggable trader interface.
-
-    To add a new broker, subclass this, implement all abstract methods,
-    and register the class in services/execution/factory.py's _REGISTRY.
-    """
-
     @abstractmethod
-    def get_current_price(self, ticker: str) -> Optional[float]:
-        """Return latest price for ticker, or None if unavailable."""
-        ...
-
+    async def get_current_price(self, ticker: str) -> float | None: ...
     @abstractmethod
-    def place_order(self, request: OrderRequest) -> OrderResult:
-        """Submit an order and return the execution result."""
-        ...
-
+    async def place_order(self, request: OrderRequest) -> OrderResult: ...
     @abstractmethod
-    def cancel_order(self, order_id: str) -> bool:
-        """Cancel a pending order. Returns True if successfully cancelled."""
-        ...
-
+    async def cancel_order(self, order_id: str) -> bool: ...
     @abstractmethod
-    def get_balance(self) -> float:
-        """Return available cash balance."""
-        ...
-
+    async def get_balance(self) -> float: ...
     @abstractmethod
-    def get_positions(self) -> dict[str, dict]:
-        """Return {ticker: {quantity, avg_buy_price, current_price}} for all open positions."""
-        ...
-
+    async def get_positions(self) -> dict[str, dict]: ...
     @property
     @abstractmethod
-    def mode(self) -> str:
-        """'simulation' or 'live'"""
-        ...
-
+    def mode(self) -> str: ...
     @property
     @abstractmethod
-    def broker_name(self) -> str:
-        """Human-readable broker name, e.g. 'simulation', 'binance'"""
-        ...
+    def broker_name(self) -> str: ...
+
+    @abstractmethod
+    async def close(self) -> None:
+        pass

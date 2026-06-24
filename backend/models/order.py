@@ -1,33 +1,38 @@
-from datetime import datetime, timezone
-from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text
+from datetime import UTC, datetime
+from decimal import Decimal
+from typing import TYPE_CHECKING
+
+from sqlalchemy import DateTime, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from backend.core.database import Base
+from backend.core.database import MONEY, Base
+
+if TYPE_CHECKING:
+    from backend.models.portfolio import Portfolio
 
 
 class Order(Base):
     __tablename__ = "orders"
-
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     portfolio_id: Mapped[int] = mapped_column(Integer, ForeignKey("portfolios.id"), nullable=False)
-    mode: Mapped[str] = mapped_column(String(20), nullable=False)       # simulation | live
     broker: Mapped[str] = mapped_column(String(50), nullable=False)
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
-    action: Mapped[str] = mapped_column(String(10), nullable=False)     # BUY | SELL
-    quantity_requested: Mapped[float] = mapped_column(Float, nullable=False)
-    quantity_filled: Mapped[float] = mapped_column(Float, default=0.0)
-    status: Mapped[str] = mapped_column(String(30), default="PENDING")  # PENDING | FILLED | PARTIALLY_FILLED | REJECTED
-    price_per_share: Mapped[float | None] = mapped_column(Float, nullable=True)
-    total_value: Mapped[float | None] = mapped_column(Float, nullable=True)
-    commission: Mapped[float] = mapped_column(Float, default=0.0)
-    analysis_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("analysis_results.id"), nullable=True
-    )
-    ai_signal: Mapped[str] = mapped_column(String(50), default="")     # Buy | Overweight | Hold | ...
+    action: Mapped[str] = mapped_column(String(10), nullable=False)
+    quantity_requested: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
+    quantity_filled: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    status: Mapped[str] = mapped_column(String(30), default="PENDING")
+    price_per_share: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    total_value: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
+    commission: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    # Leverage applied to this order (1.0 = spot/cash). 'side' records the
+    # position direction; 'realized_pnl' is populated when an order closes a
+    # position (SELL/liquidation), otherwise 0.
+    leverage: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("1.0"))
+    side: Mapped[str] = mapped_column(String(5), default="long")
+    realized_pnl: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    analysis_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("analysis_results.id"), nullable=True)
+    ai_signal: Mapped[str] = mapped_column(String(50), default="")
     ai_reasoning: Mapped[str] = mapped_column(Text, default="")
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc), index=True
-    )
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True)
     executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
-
     portfolio: Mapped["Portfolio"] = relationship("Portfolio", back_populates="orders")

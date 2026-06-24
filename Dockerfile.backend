@@ -2,13 +2,9 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-# Install project dependencies
-COPY pyproject.toml requirements.txt* ./
-RUN pip install --no-cache-dir -e . || pip install --no-cache-dir -r requirements.txt || true
-
 # Install web dependencies
-COPY tradingagents_web/requirements-web.txt ./requirements-web.txt
-RUN pip install --no-cache-dir -r requirements-web.txt
+COPY backend/requirements.txt ./backend/requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
 
 # Copy full source
 COPY . .
@@ -28,4 +24,8 @@ ENV PYTHONUNBUFFERED=1
 
 EXPOSE 8000
 
-CMD ["uvicorn", "tradingagents_web.backend.main:app", "--host", "0.0.0.0", "--port", "8000"]
+# Startup runs migrations + tool registration; allow time before failing checks
+HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
+    CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=4)"
+
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000"]

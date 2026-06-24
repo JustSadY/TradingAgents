@@ -1,0 +1,67 @@
+import logging
+
+import pandas as pd
+from langchain_core.tools import tool
+
+from backend.services.indicator_service import calculate_macd, calculate_rsi
+
+_logger = logging.getLogger(__name__)
+
+
+@tool
+def run_strategy_backtest(ticker: str, strategy_type: str, curr_date: str | None = None) -> str:
+    """Run a strategy backtest (e.g. macd_crossover, rsi_oversold) for a stock ticker up to a specific date."""
+    try:
+        from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
+
+        if not curr_date:
+            curr_date = pd.Timestamp.today().strftime("%Y-%m-%d")
+        data = load_ohlcv(ticker, curr_date)
+        if len(data) < 200:
+            return f"Not enough data to backtest {ticker}."
+        close = data["Close"]
+        trades = []
+        in_position = False
+        buy_price = 0
+        if strategy_type == "macd_crossover":
+            macd, signal = calculate_macd(close)
+            for i in range(1, len(close)):
+                if macd.iloc[i] > signal.iloc[i] and macd.iloc[i - 1] <= signal.iloc[i - 1] and not in_position:
+                    buy_price = close.iloc[i]
+                    in_position = True
+                elif macd.iloc[i] < signal.iloc[i] and macd.iloc[i - 1] >= signal.iloc[i - 1] and in_position:
+                    sell_price = close.iloc[i]
+                    trades.append((sell_price - buy_price) / buy_price)
+                    in_position = False
+        elif strategy_type == "rsi_oversold":
+            rsi = calculate_rsi(close)
+            for i in range(14, len(close)):
+                if rsi.iloc[i] < 30 and not in_position:
+                    buy_price = close.iloc[i]
+                    in_position = True
+                elif rsi.iloc[i] > 70 and in_position:
+                    sell_price = close.iloc[i]
+                    trades.append((sell_price - buy_price) / buy_price)
+                    in_position = False
+        else:
+            return "Invalid strategy_type. Choose 'macd_crossover' or 'rsi_oversold'."
+        if in_position:
+            trades.append((close.iloc[-1] - buy_price) / buy_price)
+        if not trades:
+            return f"No trades generated for {strategy_type} on {ticker}."
+        win_rate = sum(1 for t in trades if t > 0) / len(trades)
+        total_return = (pd.Series(trades) + 1).prod() - 1
+        cum_ret = (pd.Series(trades) + 1).cumprod()
+        running_max = cum_ret.cummax()
+        drawdown = (cum_ret - running_max) / running_max
+        max_dd = drawdown.min() if not drawdown.empty else 0
+        return (
+            f"Backtest Results for {ticker} using {strategy_type} (5 Years):\n"
+            f"- Total Trades: {len(trades)}\n"
+            f"- Win Rate: {win_rate:.2%}\n"
+            f"- Strategy Total Return: {total_return:.2%}\n"
+            f"- Max Drawdown: {max_dd:.2%}"
+        )
+    except Exception as e:
+        _logger.exception("Backtest failed for %s using %s", ticker, strategy_type)
+        return f"Error running backtest for {ticker}: {str(e)}"

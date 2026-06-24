@@ -1,5 +1,6 @@
 from datetime import datetime
-from pydantic import BaseModel
+
+from pydantic import BaseModel, ConfigDict
 
 
 class HoldingRead(BaseModel):
@@ -9,10 +10,16 @@ class HoldingRead(BaseModel):
     avg_buy_price: float
     current_price: float
     unrealized_pnl: float
+    side: str = "long"
+    leverage: float = 1.0
+    margin_used: float = 0.0
+    borrowed_amount: float = 0.0
+    liquidation_price: float = 0.0
+    stop_loss: float = 0.0
+    take_profit: float = 0.0
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class PortfolioRead(BaseModel):
@@ -27,14 +34,12 @@ class PortfolioRead(BaseModel):
     created_at: datetime
     updated_at: datetime
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class OrderRead(BaseModel):
     id: int
     portfolio_id: int
-    mode: str
     broker: str
     ticker: str
     action: str
@@ -44,10 +49,12 @@ class OrderRead(BaseModel):
     price_per_share: float | None
     total_value: float | None
     commission: float
+    leverage: float = 1.0
+    side: str = "long"
+    realized_pnl: float = 0.0
     analysis_id: int | None
     ai_signal: str
     created_at: datetime
     executed_at: datetime | None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)

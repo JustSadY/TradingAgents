@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useCallback } from 'react'
 import axios from 'axios'
 import { Download, Loader2, X, RefreshCw } from 'lucide-react'
 import { notify } from '../utils/notify'
+import { useAuth } from '../contexts/AuthContext'
 
 interface UpdateStatus {
   git: boolean
@@ -15,70 +16,96 @@ interface UpdateStatus {
   last_update?: { state?: string; error?: string }
 }
 
-const POLL_MS = 10_000
+const POLL_IDLE_MS = 60 * 60 * 1000   // 1 saat — boşta
+const POLL_BUSY_MS = 4_000              // 4 saniye — güncelleme sırasında
+const UPDATE_TIMEOUT_MS = 12 * 60 * 1000 // 12 dakika — bu kadar sürer takılı sayılır
 
-// Global, always-visible update bar. Polls /api/update/status; when the upstream
-// repo has new commits every logged-in user sees the bar and can click "Güncelle"
-// to update + restart the app in place.
 export default function UpdateBanner() {
+  const { isOwner } = useAuth()
   const [st, setSt] = useState<UpdateStatus | null>(null)
-  const [busy, setBusy] = useState(false)        // this client triggered the update
+  const [busy, setBusy] = useState(false)
   const [dismissed, setDismissed] = useState(false)
-  const seenRef = useRef(false)                   // toast only once per availability
-  const sawDownRef = useRef(false)                // saw the backend go down (= restart)
+  const seenRef = useRef(false)
+  const sawDownRef = useRef(false)
   const busyRef = useRef(false)
+  const busyStartRef = useRef<number | null>(null)
+  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => { busyRef.current = busy }, [busy])
 
   const poll = useCallback(async () => {
+    // Timeout kontrolü: güncelleme 12 dakikadan uzun sürüyorsa hata göster
+    if (busyRef.current && busyStartRef.current && Date.now() - busyStartRef.current > UPDATE_TIMEOUT_MS) {
+      setBusy(false)
+      busyStartRef.current = null
+      sawDownRef.current = false
+      notify('error', 'Güncelleme çok uzun sürdü — sunucu logu kontrol edin.', 'Güncelleme', 'owner')
+      return
+    }
+
     try {
       const { data } = await axios.get<UpdateStatus>('/api/update/status')
       setSt(data)
 
       if (data.update_available && !data.updating && !seenRef.current) {
         seenRef.current = true
-        notify('info', `Yeni güncelleme mevcut (${data.behind} commit).`, 'Güncelleme')
+        notify('info', `Yeni güncelleme mevcut (${data.behind} commit).`, 'Güncelleme', 'owner')
       }
       if (!data.update_available) seenRef.current = false
 
-      // We triggered an update and it is no longer "running".
       if (busyRef.current && !data.updating) {
+        setBusy(false)
+        busyStartRef.current = null
+        sawDownRef.current = false
         if (data.last_update?.state === 'failed') {
-          setBusy(false); sawDownRef.current = false
-          notify('error', data.last_update?.error || 'Güncelleme başarısız oldu.', 'Güncelleme')
-        } else if (sawDownRef.current && !data.update_available) {
-          // The service went down (restart) and is back on the new commit → reload UI.
+          notify('error', data.last_update?.error || 'Güncelleme başarısız oldu.', 'Güncelleme', 'owner')
+        } else {
+          // Güncelleme başarılı, sayfa yenile
           window.location.reload()
         }
       }
     } catch {
-      // Backend unreachable — most likely it is restarting mid-update.
+      // Sunucu yeniden başlıyor — bir sonraki başarılı yanıtta reload yapılacak
       if (busyRef.current) sawDownRef.current = true
     }
   }, [])
 
+  // busy değiştiğinde polling hızını ayarla
+  useEffect(() => {
+    if (intervalRef.current) clearInterval(intervalRef.current)
+    const ms = busy ? POLL_BUSY_MS : POLL_IDLE_MS
+    intervalRef.current = setInterval(poll, ms)
+    return () => {
+      if (intervalRef.current) clearInterval(intervalRef.current)
+    }
+  }, [busy, poll])
+
   useEffect(() => {
     poll()
-    const id = setInterval(poll, POLL_MS)
-    return () => clearInterval(id)
   }, [poll])
 
   const doUpdate = async () => {
     if (!window.confirm('Uygulama en son sürüme güncellenip yeniden başlatılacak (~1-2 dk). Devam edilsin mi?')) return
-    setBusy(true); busyRef.current = true; sawDownRef.current = false
+    setBusy(true); busyRef.current = true; busyStartRef.current = Date.now(); sawDownRef.current = false
     try {
       await axios.post('/api/update/apply')
-      notify('info', 'Güncelleme başlatıldı — lütfen bekleyin, sayfa otomatik yenilenecek.', 'Güncelleme')
+      notify('info', 'Güncelleme başlatıldı — lütfen bekleyin, sayfa otomatik yenilenecek.', 'Güncelleme', 'owner')
       poll()
     } catch (e: any) {
       setBusy(false)
-      notify('error', e?.response?.data?.detail || 'Güncelleme başlatılamadı.', 'Güncelleme')
+      busyStartRef.current = null
+      notify('error', e?.response?.data?.detail || 'Güncelleme başlatılamadı.', 'Güncelleme', 'owner')
     }
   }
 
   if (!st || !st.update_supported) return null
   const updating = busy || st.updating
-  if (!updating && (!st.update_available || dismissed)) return null
+
+
+
+  if (!updating) {
+    if (!isOwner || !st.update_available || dismissed) return null
+  }
 
   return (
     <div
@@ -99,7 +126,7 @@ export default function UpdateBanner() {
           </span>
         )}
       </div>
-      {!updating && (
+      {!updating && isOwner && (
         <>
           <button
             onClick={doUpdate}
@@ -115,3 +142,4 @@ export default function UpdateBanner() {
     </div>
   )
 }
+

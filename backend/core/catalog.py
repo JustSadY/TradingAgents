@@ -1,154 +1,189 @@
-"""Single source of truth for everything the frontend renders as choices.
-
-The web UI is "view only": the lists of analysts, report sections, signals,
-asset types, languages, providers and data vendors all come from here via
-``GET /api/meta`` instead of being hard-coded in React. Adding/relabeling an
-analyst is a one-line change in this file and the UI picks it up automatically.
-
-Display strings are Turkish to match the UI; the trading_agents package itself
-stays language-neutral. ``analyst`` availability is derived from the live
-``ANALYST_NODE_SPECS`` so the catalog can never advertise an analyst the graph
-cannot build.
-"""
 from __future__ import annotations
+
+from backend.trading_agents.agent_catalog import label_for
+from backend.trading_agents.agent_catalog import list_analysts as _engine_analysts
+
+_RISK_DEBATE = "Risk Debate"
 
 
 def _node_specs() -> dict:
-    """Lazily import ANALYST_NODE_SPECS so merely importing this catalog never
-    pulls in the heavy tradingagents.graph package at app startup. Returns {}
-    if the package can't be imported (catalog then degrades gracefully)."""
     try:
-        from tradingagents.graph.analyst_execution import ANALYST_NODE_SPECS
+        from backend.trading_agents.agents.runtime.analyst_execution import ANALYST_NODE_SPECS
+
         return ANALYST_NODE_SPECS
     except Exception:
         return {}
 
 
-# ── Analysts ────────────────────────────────────────────────────────────────────
-# key → (label, description, on-by-default). Order here is the UI order.
-_ANALYST_META: dict[str, tuple[str, str, bool]] = {
-    "market":       ("Piyasa",      "Teknik göstergeler, fiyat trendi ve momentum",      True),
-    "social":       ("Duygu",       "Sosyal medya, StockTwits ve Reddit duygu analizi",  True),
-    "news":         ("Haber",       "Şirkete özel ve sektörel haber akışı",              True),
-    "fundamentals": ("Temel",       "Bilanço, gelir tablosu ve değerleme",               True),
-    "macro":        ("Makro",       "Faiz, enflasyon ve genel ekonomik görünüm",         False),
-    "options":      ("Opsiyon",     "Opsiyon zinciri, implied volatility ve akış",       False),
-    "quant":        ("Kantitatif",  "İstatistiksel faktör ve nicel sinyaller",           False),
-    "earnings":     ("Kazanç",      "Kazanç çağrıları, tahminler ve sürprizler",         False),
-    "review":       ("İnceleme",    "Geçmiş kararların performans incelemesi",           False),
-}
+async def available_analysts(db=None, user=None) -> list[dict]:
+    """Single source: the engine analyst catalog.
 
-
-def available_analysts() -> list[dict]:
-    """Analysts the graph can actually build, in UI order, with display meta.
-
-    Filtered against the live node specs when available; if the package can't
-    be imported we fall back to advertising all known analysts rather than an
-    empty list (the UI is more useful with the full set than with none)."""
+    When the graph is importable we only surface analysts that actually
+    have a wired node spec.
+    """
     specs = _node_specs()
     out: list[dict] = []
-    for key, (label, desc, default) in _ANALYST_META.items():
-        if not specs or key in specs:
-            out.append({"key": key, "label": label, "description": desc, "default": default})
+
+    agent_access_map = {}
+    if db is not None and user is not None and not user.is_admin:
+        from backend.services.tool_access_service import get_user_agent_access
+
+        agent_access_map = await get_user_agent_access(db, user.id)
+
+    for info in _engine_analysts():
+        if not specs or info.key in specs:
+            if user is not None and not user.is_admin:
+                if not agent_access_map.get(info.key, True):
+                    continue
+            out.append(
+                {
+                    "key": info.key,
+                    "label": info.label,
+                    "description": info.description,
+                    "default": info.default_on,
+                }
+            )
     return out
 
 
 def _analyst_label(key: str) -> str:
-    meta = _ANALYST_META.get(key)
-    return meta[0] if meta else key.title()
+    return label_for(key)
 
 
-# ── Report sections ─────────────────────────────────────────────────────────────
-# Flat key → Turkish label. Covers BOTH the live graph-state keys streamed over
-# the WebSocket (e.g. trader_investment_plan, final_trade_decision) AND the
-# persisted AnalysisResult column names (trader_plan, final_decision), so the
-# same map works for the live run view and the saved-detail view.
 SECTION_LABELS: dict[str, str] = {
-    "market_report":             "Piyasa Analizi",
-    "sentiment_report":          "Duygu Analizi",
-    "news_report":               "Haber Analizi",
-    "fundamentals_report":       "Temel Analiz",
-    "macro_report":              "Makro Analiz",
-    "options_report":            "Opsiyon Analizi",
-    "quant_report":              "Kantitatif Analiz",
-    "earnings_report":           "Kazanç Analizi",
-    "review_report":             "Performans İnceleme",
-    "investment_plan":           "Yatırım Planı",
-    "trader_investment_plan":    "Trader Planı",
-    "trader_plan":               "Trader Planı",
-    "final_trade_decision":      "PM Kararı",
-    "final_decision":            "PM Kararı",
-    "bull_history":              "Boğa Argümanları",
-    "bear_history":              "Ayı Argümanları",
-    "investment_debate_history": "Tartışma",
-    "risk_debate_history":       "Risk Tartışması",
-    "judge_decision":            "Hakem Kararı",
+    "market_report": "Market Analysis",
+    "sentiment_report": "Sentiment Analysis",
+    "news_report": "News Analysis",
+    "fundamentals_report": "Fundamental Analysis",
+    "macro_report": "Macro Analysis",
+    "options_report": "Options Analysis",
+    "quant_report": "Quantitative Analysis",
+    "earnings_report": "Earnings Analysis",
+    "insider_report": "Insider Activity",
+    "ownership_report": "Institutional Ownership",
+    "catalyst_report": "Upcoming Catalysts",
+    "review_report": "Performance Review",
+    "agent_qa_report": "Analyst Cross-Examination",
+    "investment_plan": "Investment Plan",
+    "trader_investment_plan": "Trader Plan",
+    "trader_plan": "Trader Plan",
+    "final_trade_decision": "PM Decision",
+    "final_decision": "PM Decision",
+    "bull_history": "Bull Arguments",
+    "bear_history": "Bear Arguments",
+    "investment_debate_history": "Debate",
+    "risk_debate_history": _RISK_DEBATE,
+    "judge_decision": "Judge Decision",
 }
-
-# ── Signals / asset types / languages / vendors / providers ─────────────────────
 SIGNALS: list[dict] = [
-    {"value": "Buy",         "label": "Al",    "tone": "positive"},
-    {"value": "Overweight",  "label": "Artır", "tone": "positive"},
-    {"value": "Hold",        "label": "Tut",   "tone": "neutral"},
-    {"value": "Underweight", "label": "Azalt", "tone": "negative"},
-    {"value": "Sell",        "label": "Sat",   "tone": "negative"},
+    {"value": "Buy", "label": "Buy", "tone": "positive"},
+    {"value": "Overweight", "label": "Overweight", "tone": "positive"},
+    {"value": "Hold", "label": "Hold", "tone": "neutral"},
+    {"value": "Underweight", "label": "Underweight", "tone": "negative"},
+    {"value": "Sell", "label": "Sell", "tone": "negative"},
 ]
-
 ASSET_TYPES: list[dict] = [
-    {"value": "stock",  "label": "Hisse"},
-    {"value": "crypto", "label": "Kripto"},
+    {"value": "stock", "label": "Stock"},
+    {"value": "crypto", "label": "Crypto"},
 ]
-
 LANGUAGES: list[dict] = [
-    {"value": "English",  "label": "English"},
-    {"value": "Turkish",  "label": "Türkçe"},
-    {"value": "German",   "label": "Deutsch"},
-    {"value": "French",   "label": "Français"},
-    {"value": "Spanish",  "label": "Español"},
-    {"value": "Chinese",  "label": "中文"},
+    {"value": "English", "label": "English"},
+    {"value": "Turkish", "label": "Türkçe"},
+    {"value": "German", "label": "Deutsch"},
+    {"value": "French", "label": "Français"},
+    {"value": "Spanish", "label": "Español"},
+    {"value": "Chinese", "label": "中文"},
     {"value": "Japanese", "label": "日本語"},
-    {"value": "Arabic",   "label": "العربية"},
+    {"value": "Arabic", "label": "العربية"},
 ]
-
 DATA_VENDORS: list[dict] = [
-    {"value": "yfinance",      "label": "yFinance"},
+    {"value": "yfinance", "label": "yFinance"},
     {"value": "alpha_vantage", "label": "Alpha Vantage"},
 ]
-
 TRADING_MODES: list[dict] = [
-    {"value": "simulation", "label": "Simülasyon (Paper Trading)"},
-    {"value": "live",       "label": "Canlı (Live)"},
+    {"value": "simulation", "label": "Simulation (Paper Trading)"},
+    {"value": "live", "label": "Live"},
 ]
-
 BROKERS: list[dict] = [
-    {"value": "simulation", "label": "Simülasyon"},
+    {"value": "simulation", "label": "Simulation"},
+    {"value": "alpaca", "label": "Alpaca (Paper/Live)"},
+]
+from backend.trading_agents.llm_clients.registry import llm_registry
+
+PROVIDER_LABELS: dict[str, str] = llm_registry.get_provider_labels()
+
+EFFORT_OPTIONS: dict[str, list[dict]] = llm_registry.get_effort_options()
+
+
+async def investor_personas(db=None, user=None) -> list[dict]:
+    from backend.trading_agents.personas import list_personas
+
+    builtins = [{"value": p.key, "label": p.label, "description": p.description} for p in list_personas()]
+    if db is not None and user is not None:
+        try:
+            from backend.services import persona_service
+
+            rows = await persona_service.get_user_personas(db, user.id)
+            custom = [{"value": r.key, "label": r.label, "description": r.description} for r in rows]
+            return builtins + custom
+        except Exception:
+            pass
+    return builtins
+
+
+ORDER_STATUSES: list[dict] = [
+    {"value": "FILLED", "label": "Filled", "tone": "positive"},
+    {"value": "PARTIALLY_FILLED", "label": "Partial", "tone": "neutral"},
+    {"value": "PENDING", "label": "Pending", "tone": "neutral"},
+    {"value": "REJECTED", "label": "Rejected", "tone": "negative"},
+]
+ORDER_ACTIONS: list[dict] = [
+    {"value": "BUY", "label": "Buy", "tone": "positive"},
+    {"value": "SELL", "label": "Sell", "tone": "negative"},
+]
+CHART_PERIODS: list[dict] = [
+    {"value": "1m", "label": "1M"},
+    {"value": "3m", "label": "3M"},
+    {"value": "6m", "label": "6M"},
+    {"value": "1y", "label": "1Y"},
+    {"value": "2y", "label": "2Y"},
+    {"value": "5y", "label": "5Y"},
 ]
 
-# Human-readable provider names (the model catalog supplies the per-provider
-# model lists separately via /api/settings/llm-catalog).
-PROVIDER_LABELS: dict[str, str] = {
-    "openai": "OpenAI",
-    "anthropic": "Anthropic (Claude)",
-    "google": "Google (Gemini)",
-    "xai": "xAI (Grok)",
-    "deepseek": "DeepSeek",
-    "qwen": "Qwen (Global)",
-    "qwen-cn": "Qwen (China)",
-    "glm": "GLM / Z.AI (Global)",
-    "glm-cn": "GLM / BigModel (China)",
-    "minimax": "MiniMax (Global)",
-    "minimax-cn": "MiniMax (China)",
-    "ollama": "Ollama (Local)",
-    "nvidia": "NVIDIA NIM",
-    "litellm": "LiteLLM Proxy",
-    "azure": "Azure OpenAI",
-}
 
+async def build_meta(db=None, user=None) -> dict:
+    from backend.services.agent_settings_service import build_agent_runtime_context
+    from backend.trading_agents.agent_catalog import list_agents
+    from backend.trading_agents.agents.hierarchy import AgentHierarchy
+    from backend.trading_agents.agents.tools import registry
 
-def build_meta() -> dict:
-    """The full payload served at GET /api/meta."""
+    tools_list = registry.metadata()
+    agents_list = [a.metadata() for a in list_agents()]
+    if db is not None and user is not None:
+        from backend.services.tool_access_service import get_user_tool_access
+
+        agent_ctx = await build_agent_runtime_context(db, user.id)
+        hierarchy = AgentHierarchy(agent_ctx)
+
+        tool_access_map = await get_user_tool_access(db, user.id)
+
+        filtered_tools = []
+        for t in tools_list:
+            if not user.is_admin and not tool_access_map.get(t["key"], {}).get("can_view", True):
+                continue
+
+            allowed = t.get("allowed_analysts", [])
+            if allowed:
+                is_any_agent_enabled = any(hierarchy.is_enabled(a) for a in allowed)
+                if not is_any_agent_enabled:
+                    continue
+
+            filtered_tools.append(t)
+        tools_list = filtered_tools
     return {
-        "analysts": available_analysts(),
+        "analysts": await available_analysts(db, user),
+        "tools": tools_list,
+        "agents": agents_list,
         "section_labels": SECTION_LABELS,
         "signals": SIGNALS,
         "asset_types": ASSET_TYPES,
@@ -157,45 +192,43 @@ def build_meta() -> dict:
         "trading_modes": TRADING_MODES,
         "brokers": BROKERS,
         "provider_labels": PROVIDER_LABELS,
+        "investor_personas": await investor_personas(db, user),
+        "effort_options": EFFORT_OPTIONS,
+        "order_statuses": ORDER_STATUSES,
+        "order_actions": ORDER_ACTIONS,
+        "chart_periods": CHART_PERIODS,
     }
 
 
-# ── Live progress labels (server-side; used by analysis_service streaming) ──────
-# Static labels for non-analyst graph nodes.
 _STATIC_NODE_LABELS: dict[str, tuple[str, str]] = {
-    # node name → (label, stage)
-    "Bull Researcher":     ("Boğa Araştırmacısı", "research"),
-    "Bear Researcher":     ("Ayı Araştırmacısı", "research"),
-    "Research Manager":    ("Araştırma Müdürü — yatırım planı", "research"),
-    "Trader":              ("Trader — işlem planı", "trade"),
-    "Aggressive Analyst":  ("Agresif Risk Analisti", "risk"),
-    "Conservative Analyst": ("Muhafazakâr Risk Analisti", "risk"),
-    "Neutral Analyst":     ("Nötr Risk Analisti", "risk"),
-    "Portfolio Manager":   ("Portföy Yöneticisi — nihai karar", "decision"),
+    "Market Intelligence": ("Market Intelligence", "analyst"),
+    "Agent Q&A": ("Agent Q&A Cross-Examination", "analyst"),
+    "Bull Researcher": ("Bull Researcher", "research"),
+    "Bear Researcher": ("Bear Researcher", "research"),
+    "Research Manager": ("Research Manager — investment plan", "research"),
+    "Trader": ("Trader — execution plan", "trade"),
+    _RISK_DEBATE: (_RISK_DEBATE, "risk"),
+    "Aggressive Analyst": ("Aggressive Risk Analyst", "risk"),
+    "Conservative Analyst": ("Conservative Risk Analyst", "risk"),
+    "Neutral Analyst": ("Neutral Risk Analyst", "risk"),
+    "Portfolio Manager": ("Portfolio Manager — final decision", "decision"),
 }
-
-
 _ANALYST_NODE_LABELS: dict[str, tuple[str, str]] | None = None
 
 
 def _analyst_node_labels() -> dict[str, tuple[str, str]]:
-    """agent_node / tool_node → (label, stage), derived from the live specs so
-    it stays in sync. Built once and cached. Clear nodes are intentionally
-    absent (internal message-cleanup steps the user shouldn't see)."""
     global _ANALYST_NODE_LABELS
     if _ANALYST_NODE_LABELS is None:
         mapping: dict[str, tuple[str, str]] = {}
         for key, spec in _node_specs().items():
             label = _analyst_label(key)
-            mapping[spec.agent_node] = (f"{label} Analisti", "analyst")
-            mapping[spec.tool_node] = (f"{label} — veri çekiliyor", "tool")
+            mapping[spec.agent_node] = (f"{label} Analyst", "analyst")
+            mapping[spec.tool_node] = (f"{label} — fetching data", "tool")
         _ANALYST_NODE_LABELS = mapping
     return _ANALYST_NODE_LABELS
 
 
 def node_progress(node_name: str) -> dict | None:
-    """Map a LangGraph node name to a progress event payload, or None if the
-    node is internal and should not surface in the UI."""
     hit = _analyst_node_labels().get(node_name) or _STATIC_NODE_LABELS.get(node_name)
     if hit is None:
         return None

@@ -1,212 +1,160 @@
-# TradingAgents/graph/setup.py
+"""
+Top-level graph assembly for the 3-tier agent model.
 
-from typing import Any, Dict
+The graph now has exactly five nodes — one per Main Agent — wired linearly:
+
+    START → Market Intelligence → Research Manager → Trader
+          → Risk Debate → Portfolio Manager → END
+
+Each Main Agent node internally checks its kill-switch and orchestrates its own
+Tier-2 sub-agents (which in turn call Tier-3 tools). All of the per-analyst
+ToolNode / message-clear / conditional-edge plumbing now lives *inside* the
+Market Intelligence node's analyst subgraph, so it no longer clutters the
+top-level graph.
+"""
+
+from __future__ import annotations
+
+import logging
+from typing import Any
+
 from langgraph.graph import END, START, StateGraph
-from langgraph.prebuilt import ToolNode
 
-from tradingagents.agents import (
-    AgentState,
-    InvestDebateState,
-    RiskDebateState,
-    create_msg_delete,
-    create_bear_researcher,
-    create_bull_researcher,
-    create_aggressive_debator,
-    create_conservative_debator,
-    create_neutral_debator,
-    create_research_manager,
-    create_portfolio_manager,
-    create_trader,
+from backend.trading_agents.agents import AgentState
+from backend.trading_agents.agents.analyst_registry import sync_registry_to_graph
+from backend.trading_agents.agents.base import (
+    AgentRunContext,
+    neutral_invest_debate_state,
+    neutral_risk_debate_state,
 )
-# Import all analyst modules so their @register_analyst decorators fire and
-# populate the registry before setup_graph() queries it.
-import tradingagents.agents.analysts.market_analyst        # noqa: F401
-import tradingagents.agents.analysts.sentiment_analyst      # noqa: F401
-import tradingagents.agents.analysts.news_analyst           # noqa: F401
-import tradingagents.agents.analysts.fundamentals_analyst   # noqa: F401
-import tradingagents.agents.analysts.macro_analyst          # noqa: F401
-import tradingagents.agents.analysts.options_analyst        # noqa: F401
-import tradingagents.agents.analysts.quant_analyst          # noqa: F401
-import tradingagents.agents.analysts.earnings_analyst       # noqa: F401
-import tradingagents.agents.analysts.review_analyst         # noqa: F401
+from backend.trading_agents.agents.main import (
+    create_agent_qa_node,
+    create_market_intelligence_node,
+    create_portfolio_manager_node,
+    create_research_manager_node,
+    create_risk_debate_node,
+    create_trader_node,
+)
+from backend.trading_agents.agents.runtime.resilience import guard_node
 
-from tradingagents.agents.analyst_registry import get_factory, sync_registry_to_graph
-from .analyst_execution import build_analyst_execution_plan
 from .conditional_logic import ConditionalLogic
+
+logger = logging.getLogger(__name__)
+
+_MARKET_INTELLIGENCE = "Market Intelligence"
+_AGENT_QA = "Agent Q&A"
+_RESEARCH_MANAGER = "Research Manager"
+_TRADER = "Trader"
+_RISK_DEBATE = "Risk Debate"
+_PORTFOLIO_MANAGER = "Portfolio Manager"
 
 
 class GraphSetup:
-    """Handles the setup and configuration of the agent graph."""
-
     def __init__(
         self,
-        quick_thinking_llm: Any,
-        deep_thinking_llm: Any,
-        tool_nodes: Dict[str, ToolNode],
+        llm: Any,
+        tool_nodes: dict[str, Any],
         conditional_logic: ConditionalLogic,
         analyst_concurrency_limit: int = 1,
+        agent_llms: dict[str, Any] = None,
+        agent_hierarchy=None,
+        config: dict[str, Any] = None,
     ):
-        """Initialize with required components."""
-        self.quick_thinking_llm = quick_thinking_llm
-        self.deep_thinking_llm = deep_thinking_llm
+        self.llm = llm
         self.tool_nodes = tool_nodes
         self.conditional_logic = conditional_logic
         self.analyst_concurrency_limit = analyst_concurrency_limit
+        self.agent_llms = agent_llms or {}
+        self.agent_hierarchy = agent_hierarchy
+        self.config = config or {}
 
     def setup_graph(
-        self, selected_analysts=["market", "social", "news", "fundamentals"]
-    ):
-        """Set up and compile the agent workflow graph.
+        self,
+        selected_analysts: list[str] | set[str] = None,
+    ) -> StateGraph:
+        if selected_analysts is None:
+            selected_analysts = ["market", "social", "news", "fundamentals"]
 
-        Args:
-            selected_analysts (list): List of analyst types to include. Options are:
-                - "market": Market analyst
-                - "social": Social media analyst
-                - "news": News analyst
-                - "fundamentals": Fundamentals analyst
-        """
-        # Sync registry side-effects now that all packages are fully initialized.
-        # This adds custom analysts to ANALYST_NODE_SPECS and injects their
-        # should_continue_<key>() methods into ConditionalLogic.
         sync_registry_to_graph()
 
-        plan = build_analyst_execution_plan(
-            selected_analysts,
-            concurrency_limit=self.analyst_concurrency_limit,
+        # Shared, read-only context handed to every main node.
+        run_config = dict(self.config)
+        run_config.setdefault("analyst_concurrency_limit", self.analyst_concurrency_limit)
+        ctx = AgentRunContext(
+            hierarchy=self.agent_hierarchy,
+            llms=self.agent_llms,
+            fallback_llm=self.llm,
+            tool_nodes=self.tool_nodes,
+            conditional_logic=self.conditional_logic,
+            config=run_config,
+            selected_analysts=list(selected_analysts),
         )
 
-        # Build analyst factory lambdas from the plugin registry.
-        # Any custom analyst registered via @register_analyst is automatically
-        # available here without modifying this file.
-        analyst_factories = {
-            spec.key: (
-                lambda k=spec.key: get_factory(k)(self.quick_thinking_llm)
-            )
-            for spec in plan.specs
-        }
+        # ---- Main Agent nodes (guard-wrapped for resilience) ----
+        market_intelligence = guard_node(
+            create_market_intelligence_node(ctx),
+            name=_MARKET_INTELLIGENCE,
+            kind="main",
+            fallback=lambda state, exc: {},
+        )
+        # After analysts finish, they cross-examine each other; on any error this
+        # contributes nothing and the run proceeds to synthesis unchanged.
+        agent_qa = guard_node(
+            create_agent_qa_node(ctx),
+            name=_AGENT_QA,
+            kind="main",
+            fallback=lambda state, exc: {},
+        )
+        research_manager = guard_node(
+            create_research_manager_node(ctx),
+            name=_RESEARCH_MANAGER,
+            kind="main",
+            fallback=lambda state, exc: {
+                "investment_debate_state": neutral_invest_debate_state("Research branch error; degraded."),
+                "investment_plan": "Research manager unavailable; proceeding with available reports.",
+            },
+        )
+        trader = guard_node(
+            create_trader_node(ctx),
+            name=_TRADER,
+            kind="main",
+            fallback=lambda state, exc: {
+                "trader_investment_plan": "Trader agent unavailable; deferring to risk debate.",
+                "trader_proposal_json": "{}",
+            },
+        )
+        risk_debate = guard_node(
+            create_risk_debate_node(ctx),
+            name=_RISK_DEBATE,
+            kind="main",
+            fallback=lambda state, exc: {
+                "risk_debate_state": neutral_risk_debate_state("Risk debate error; degraded."),
+            },
+        )
+        portfolio_manager = guard_node(
+            create_portfolio_manager_node(ctx),
+            name=_PORTFOLIO_MANAGER,
+            kind="decision",
+            fallback=lambda state, exc: {
+                "final_trade_decision": "Hold — automated fallback: Portfolio Manager unavailable.",
+            },
+        )
 
-        # Create researcher and manager nodes
-        bull_researcher_node = create_bull_researcher(self.quick_thinking_llm)
-        bear_researcher_node = create_bear_researcher(self.quick_thinking_llm)
-        research_manager_node = create_research_manager(self.deep_thinking_llm)
-        trader_node = create_trader(self.quick_thinking_llm)
-
-        # Create risk analysis nodes
-        aggressive_analyst = create_aggressive_debator(self.quick_thinking_llm)
-        neutral_analyst = create_neutral_debator(self.quick_thinking_llm)
-        conservative_analyst = create_conservative_debator(self.quick_thinking_llm)
-        portfolio_manager_node = create_portfolio_manager(self.deep_thinking_llm)
-
-        # Create workflow
+        # ---- Wire the five main nodes linearly ----
         workflow = StateGraph(AgentState)
+        workflow.add_node(_MARKET_INTELLIGENCE, market_intelligence)
+        workflow.add_node(_AGENT_QA, agent_qa)
+        workflow.add_node(_RESEARCH_MANAGER, research_manager)
+        workflow.add_node(_TRADER, trader)
+        workflow.add_node(_RISK_DEBATE, risk_debate)
+        workflow.add_node(_PORTFOLIO_MANAGER, portfolio_manager)
 
-        # Add analyst nodes to the graph
-        for spec in plan.specs:
-            workflow.add_node(spec.agent_node, analyst_factories[spec.key]())
-            workflow.add_node(spec.clear_node, create_msg_delete())
-            workflow.add_node(spec.tool_node, self.tool_nodes[spec.key])
-
-        # Add other nodes
-        workflow.add_node("Bull Researcher", bull_researcher_node)
-        workflow.add_node("Bear Researcher", bear_researcher_node)
-        workflow.add_node("Research Manager", research_manager_node)
-        workflow.add_node("Trader", trader_node)
-        workflow.add_node("Aggressive Analyst", aggressive_analyst)
-        workflow.add_node("Neutral Analyst", neutral_analyst)
-        workflow.add_node("Conservative Analyst", conservative_analyst)
-        workflow.add_node("Portfolio Manager", portfolio_manager_node)
-
-        # Define edges based on concurrency limit
-        if self.analyst_concurrency_limit == 1:
-            # Sequential execution: chain analysts one after another
-            for i, spec in enumerate(plan.specs):
-                if i == 0:
-                    workflow.add_edge(START, spec.agent_node)
-                else:
-                    prev_spec = plan.specs[i - 1]
-                    workflow.add_edge(prev_spec.clear_node, spec.agent_node)
-
-                current_analyst = spec.agent_node
-                current_tools = spec.tool_node
-                current_clear = spec.clear_node
-
-                # Add conditional edges for current analyst
-                workflow.add_conditional_edges(
-                    current_analyst,
-                    getattr(self.conditional_logic, f"should_continue_{spec.key}"),
-                    [current_tools, current_clear],
-                )
-                workflow.add_edge(current_tools, current_analyst)
-
-            # Direct the final analyst's clear node to the Bull Researcher fan-in point
-            if plan.specs:
-                workflow.add_edge(plan.specs[-1].clear_node, "Bull Researcher")
-        else:
-            # Parallel execution: start all selected analysts in parallel from START
-            for spec in plan.specs:
-                workflow.add_edge(START, spec.agent_node)
-
-            # Connect each analyst to its tool node, and fan-in to Bull Researcher upon clearing
-            for spec in plan.specs:
-                current_analyst = spec.agent_node
-                current_tools = spec.tool_node
-                current_clear = spec.clear_node
-
-                # Add conditional edges for current analyst
-                workflow.add_conditional_edges(
-                    current_analyst,
-                    getattr(self.conditional_logic, f"should_continue_{spec.key}"),
-                    [current_tools, current_clear],
-                )
-                workflow.add_edge(current_tools, current_analyst)
-
-                # Direct to Bull Researcher fan-in point
-                workflow.add_edge(current_clear, "Bull Researcher")
-
-        # Add remaining edges
-        workflow.add_conditional_edges(
-            "Bull Researcher",
-            self.conditional_logic.should_continue_debate,
-            {
-                "Bear Researcher": "Bear Researcher",
-                "Research Manager": "Research Manager",
-            },
-        )
-        workflow.add_conditional_edges(
-            "Bear Researcher",
-            self.conditional_logic.should_continue_debate,
-            {
-                "Bull Researcher": "Bull Researcher",
-                "Research Manager": "Research Manager",
-            },
-        )
-        workflow.add_edge("Research Manager", "Trader")
-        workflow.add_edge("Trader", "Aggressive Analyst")
-        workflow.add_conditional_edges(
-            "Aggressive Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Conservative Analyst": "Conservative Analyst",
-                "Portfolio Manager": "Portfolio Manager",
-            },
-        )
-        workflow.add_conditional_edges(
-            "Conservative Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Neutral Analyst": "Neutral Analyst",
-                "Portfolio Manager": "Portfolio Manager",
-            },
-        )
-        workflow.add_conditional_edges(
-            "Neutral Analyst",
-            self.conditional_logic.should_continue_risk_analysis,
-            {
-                "Aggressive Analyst": "Aggressive Analyst",
-                "Portfolio Manager": "Portfolio Manager",
-            },
-        )
-
-        workflow.add_edge("Portfolio Manager", END)
+        workflow.add_edge(START, _MARKET_INTELLIGENCE)
+        workflow.add_edge(_MARKET_INTELLIGENCE, _AGENT_QA)
+        workflow.add_edge(_AGENT_QA, _RESEARCH_MANAGER)
+        workflow.add_edge(_RESEARCH_MANAGER, _TRADER)
+        workflow.add_edge(_TRADER, _RISK_DEBATE)
+        workflow.add_edge(_RISK_DEBATE, _PORTFOLIO_MANAGER)
+        workflow.add_edge(_PORTFOLIO_MANAGER, END)
 
         return workflow

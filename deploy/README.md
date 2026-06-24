@@ -1,105 +1,117 @@
-# Tek komutla Linux kurulumu
+# One-Command Linux Deployment
 
-TradingAgents'ı bir Linux sunucusunda **tek komutla** kurup `systemd` servisi olarak çalıştırır.
+Deploys TradingAgents on a Linux server via a **single command** and configures it to run as a managed `systemd` daemon.
 
 ```bash
 sudo bash deploy/install.sh
 ```
 
-Bittiğinde tarayıcıdan `http://SUNUCU_IP:8000` adresine gidip, script'in ekrana yazdığı
-admin kullanıcı adı/şifresiyle giriş yaparsınız.
+Upon completion, navigate your browser to `http://SERVER_IP:8000` and log in using the administrator username and password printed to the console by the script.
 
 ---
 
-## Ne yapar?
+## What does it do?
 
-1. **Sistem paketleri** — Python 3.10+, Node 20 (Vite için), PostgreSQL, git, curl
-2. **Python sanal ortamı** (`.venv`) + `backend/requirements.txt`
-   *(pip `tradingagents` paketine gerek yok — yerel `backend/trading_agents` kullanılır)*
-3. **Frontend build** (`npm run build`) → `frontend/dist` (backend tarafından sunulur, ayrı sunucu gerekmez)
-4. **PostgreSQL** veritabanı + kullanıcı (rastgele şifreyle)
-5. **`.env`** — güvenli rastgele `SECRET_KEY`, `ENCRYPTION_KEY`, DB şifresi ve admin şifresi üretir
-   *(yalnızca `.env` yoksa — mevcut dosyayı asla ezmez)*
-6. **systemd servisi** — açılışta otomatik başlar, çökünce yeniden başlar
-7. Servisi başlatır, **sağlık kontrolü** yapar, erişim bilgilerini yazdırır
+1.  **System Packages:** Installs Python 3.10+, Node.js 20 (for Vite builds), PostgreSQL, git, and curl.
+2.  **Python Virtual Environment (`.venv`):** Configures a virtual environment and installs dependencies from `backend/requirements.txt`.
+    *(No need for the pip `tradingagents` package — it imports the local copy at `backend/trading_agents` directly).*
+3.  **Frontend Compilation:** Compiles the React UI using `npm run build` and outputs to `frontend/dist`. The static files are served directly by the FastAPI backend (no separate web server required).
+4.  **PostgreSQL Instance:** Automatically provisions a local database and a user with a secure random password.
+5.  **Environment Variables (`.env`):** Generates secure random credentials for `SECRET_KEY`, `ENCRYPTION_KEY`, database credentials, and administrator accounts.
+    *(Only creates the file if it does not already exist — it will never overwrite your active configuration).*
+6.  **Systemd Integration:** Configures a system service that starts on boot and automatically restarts if the process crashes.
+7.  **Health Check & Diagnostics:** Starts the service, runs a status query, and outputs access credentials.
 
-Tamamen **idempotent**: tekrar çalıştırmak güvenlidir (kod güncelledikten sonra yeniden çalıştırıp `systemctl restart` yapabilirsiniz).
+The installer script is fully **idempotent**: it is safe to run repeatedly (e.g. after updating source code, run the installer again and execute `systemctl restart`).
 
-## Gereksinimler
+---
 
-- Debian/Ubuntu (`apt`) veya Fedora/RHEL/Rocky/Alma (`dnf`/`yum`)
-- `systemd` ve `root` (sudo) yetkisi
+## Prerequisites
 
-## Özelleştirme (opsiyonel ortam değişkenleri)
+*   Debian/Ubuntu (`apt` package manager) or Fedora/RHEL/Rocky Linux/AlmaLinux (`dnf` or `yum` package manager).
+*   `systemd` and root (`sudo`) access privileges.
+
+---
+
+## Customization (Optional Environment Variables)
+
+You can pass configuration variables inline:
 
 ```bash
 sudo APP_PORT=80 ADMIN_USERNAME=patron bash deploy/install.sh
 ```
 
-| Değişken | Varsayılan | Açıklama |
-|---|---|---|
-| `APP_PORT` | `8000` | Dinlenecek port (80 de olur — servis `CAP_NET_BIND_SERVICE` ile gelir) |
-| `SERVICE_NAME` | `tradingagents` | systemd servis adı |
-| `SERVICE_USER` | sudo'yu çağıran kişi | Servisi çalıştıracak kullanıcı |
-| `ADMIN_USERNAME` | `admin` | Panel admin kullanıcı adı |
-| `ADMIN_PASSWORD` | rastgele | Belirtmezseniz güvenli rastgele üretir ve ekrana yazar |
-| `NODE_MAJOR` | `20` | Kurulacak Node sürümü |
-| `SKIP_DB` | `0` | `1` → harici PostgreSQL kullan (DB kurulumunu atla) |
-| `BUILD_FRONTEND` | `1` | `0` → yalnızca API (UI derleme atlanır) |
+| Variable | Default Value | Description |
+| :--- | :--- | :--- |
+| `APP_PORT` | `8000` | Target port. Port `80` is supported since the systemd service has the `CAP_NET_BIND_SERVICE` flag. |
+| `SERVICE_NAME` | `tradingagents` | The name of the registered systemd service. |
+| `SERVICE_USER` | *Invoking user* | System user that runs the daemon. |
+| `ADMIN_USERNAME` | `admin` | Initial admin portal username. |
+| `ADMIN_PASSWORD` | *Random* | Custom administrator password. If left blank, one is generated and printed. |
+| `NODE_MAJOR` | `20` | Major Node.js version to install. |
+| `SKIP_DB` | `0` | If set to `1`, skips database setup (use this if using an external database). |
+| `BUILD_FRONTEND` | `1` | If set to `0`, skips React compilation (API-only setup). |
 
-## Kurulumdan sonra: LLM anahtarı ekleyin
+---
 
-Analiz çalışması için en az bir LLM sağlayıcı anahtarı gerekir:
+## After Installation: Set Up LLM API Keys
 
+At least one LLM provider key is required to run agent analyses. Keys are **not** stored in `.env` — they are managed in the web dashboard and stored encrypted in the database:
+
+1.  Log in at `http://SERVER_IP:8000` with the admin credentials printed by the installer.
+2.  Open **Settings → Account & API Keys** (per-user keys) or **Admin Panel → Global Settings** (server-wide defaults).
+3.  Enter the provider key(s); they take effect immediately — no service restart required.
+
+---
+
+## Automated Updates (Dashboard "Update" Button)
+
+The installer configures a self-updating mechanism accessible from the web UI settings:
+*   The backend regularly checks the remote Git repository (`origin/main`).
+*   If new commits are detected, a notification banner is displayed on the UI for logged-in users.
+*   Clicking **Update** starts a detached one-shot systemd service `tradingagents-update.service`.
+*   This updater service runs `git pull`, `pip install`, and compiles the React frontend as the unprivileged `RUN_USER`, then restarts the main service under root.
+*   Once updated, the browser client automatically refreshes.
+
+> **Requirements:** The project directory must be owned by the `RUN_USER` (set up automatically by the installer), and the Git repository must be public or configure saved access credentials for `RUN_USER`.
+
+To run updates manually from the terminal (without the UI):
 ```bash
-sudo nano .env                       # OPENAI_API_KEY / ANTHROPIC_API_KEY / ...
-sudo systemctl restart tradingagents
+sudo bash deploy/update.sh
 ```
 
-## Otomatik güncelleme (uygulama içi "Güncelle" butonu)
+---
 
-Kurulum, uygulamaya **kendi kendini güncelleme** yeteneği ekler:
+## System Management
 
-- Backend periyodik olarak git remote'unu kontrol eder (`origin/main`).
-- Yeni commit geldiğinde **tüm giriş yapmış kullanıcılar** arayüzün üstünde bir
-  bildirim çubuğu görür ("Yeni sürüm mevcut — **Güncelle**").
-- **Güncelle**'ye tıklayınca: `git pull` → `pip install` → frontend build →
-  servisi yeniden başlatır. Sayfa, güncelleme bitince otomatik yenilenir.
-
-**Nasıl çalışır (güvenlik):** Güncelleme ayrı bir `tradingagents-update.service`
-(oneshot) içinde çalışır; ana servisi yeniden başlatmak bu süreci öldürmez.
-Backend kullanıcısı yalnızca **bu tek servisi başlatma** yetkisine sahiptir
-(`/etc/sudoers.d/...` ile, başka hiçbir komut değil). `git pull` ve build adımları
-ayrıcalıksız `RUN_USER` olarak çalışır; yalnızca servis restart'ı root'tur — yani
-çekilen kod root yetkisi kazanmaz.
-
-> Gereksinim: checkout `RUN_USER`'a ait olmalı (kurulum bunu otomatik yapar) ve
-> repo **public** olmalı ya da `RUN_USER` için git kimlik bilgisi tanımlı olmalı.
-
-Manuel güncelleme (UI olmadan): `sudo bash deploy/update.sh`
-
-## Yönetim
+Use standard system utilities to manage the background service:
 
 ```bash
-journalctl -u tradingagents -f          # canlı log
-systemctl status tradingagents
-systemctl restart tradingagents
-systemctl stop tradingagents
+journalctl -u tradingagents -f          # Stream active log entries
+systemctl status tradingagents          # Check service health status
+systemctl restart tradingagents         # Restart the application
+systemctl stop tradingagents            # Terminate the application
 ```
 
-## Kaldırma
+---
 
-```bash
-sudo bash deploy/uninstall.sh           # servisi kaldırır (DB ve .env korunur)
-sudo bash deploy/uninstall.sh --purge   # + veritabanını, .env ve venv'i siler
-```
+## Uninstallation
 
-## Notlar
+To remove the application:
 
-- **Tek process zorunlu.** Servis `uvicorn`'u tek process çalıştırır. Uygulama
-  in-memory WebSocket yöneticisi ve in-process APScheduler cron kullanır; birden çok
-  worker bunları çoğaltır (çift analiz / bozuk WebSocket). Unit'e `--workers` **eklemeyin**.
-- **Özel servis kullanıcısı** (`SERVICE_USER`) kullanacaksanız projeyi `/root` altına değil
-  `/opt` veya `/srv` gibi bir dizine koyun (izin/erişim için).
-- Frontend, backend tarafından `frontend/dist`'ten sunulur — ayrı bir web sunucusu (nginx) gerekmez.
-  TLS/alan adı isterseniz önüne nginx/Caddy reverse proxy koyabilirsiniz.
+*   **Remove service only** (retains database, logs, and venv files):
+    ```bash
+    sudo bash deploy/uninstall.sh
+    ```
+*   **Purge all files** (permanently deletes the PostgreSQL database, `.env`, virtual environment, and credentials):
+    ```bash
+    sudo bash deploy/uninstall.sh --purge
+    ```
+
+---
+
+## Important Operational Notes
+
+*   **Single-Process Execution (default):** The systemd service runs a single `uvicorn` process. With the default configuration the application uses in-memory WebSocket connections and an in-process `APScheduler`; running multiple workers would duplicate schedulers and break WebSocket routing. **Do not add `--workers`** to the service definition. To offload LLM-heavy analysis runs to a separate process, set `REDIS_URL` and `ANALYSIS_QUEUE_MODE=worker` in `.env` and run an additional `arq backend.worker.WorkerSettings` service — see `docs/configuration.md`.
+*   **Permissions:** If running the service under a custom user account (`SERVICE_USER`), make sure the project directory is not placed in `/root`. Store it in directories like `/opt` or `/srv`.
+*   **SPA Serving:** The frontend files are served by the backend from `frontend/dist` — no separate web server (such as nginx) is required. If SSL/TLS or domain mapping is needed, configure Caddy or nginx as a reverse proxy in front of port `8000`.

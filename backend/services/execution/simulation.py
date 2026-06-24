@@ -1,52 +1,29 @@
-"""SimulationTrader — wraps MockTradingEngine for paper trading."""
 import logging
-import sys
-import os
-from typing import Optional
+
+import backend.bootstrap  # noqa: F401  (sets engine env before importing the engine)
+from backend.core.database import AsyncSessionLocal
+from backend.services.market_data_service import get_live_price as _get_price
+from backend.services.mock_trading_service import (
+    execute_order,
+    get_or_create_sim_portfolio,
+    get_portfolio_with_live_prices,
+)
 
 from .base import BaseTraderInterface, OrderRequest, OrderResult
 
 _logger = logging.getLogger(__name__)
 
 
-def _ensure_project_in_path():
-    project_root = os.path.dirname(
-        os.path.dirname(os.path.dirname(os.path.dirname(os.path.dirname(__file__))))
-    )
-    if project_root not in sys.path:
-        sys.path.insert(0, project_root)
-
-
 class SimulationTrader(BaseTraderInterface):
-    """
-    Paper-trading implementation backed by MockTradingEngine.
-
-    Every call is forwarded to the existing mock_trading engine;
-    no real broker API is contacted.
-    """
-
     def __init__(self, portfolio_id: int = 1, initial_capital: float = 100_000.0, db=None):
-        _ensure_project_in_path()
-        from tradingagents.mock_trading.engine import MockTradingEngine
-        from tradingagents.mock_trading.database import TradingDatabase
-
         if db is None:
-            import tempfile
-            _cache = os.environ.get(
-                "TRADINGAGENTS_DATA_CACHE_DIR",
-                tempfile.gettempdir(),
-            )
-            import pathlib
-            pathlib.Path(_cache).mkdir(parents=True, exist_ok=True)
-            db = TradingDatabase(db_path=str(pathlib.Path(_cache) / "mock_trading.db"))
+            db = AsyncSessionLocal()
+            self._is_local_db = True
+        else:
+            self._is_local_db = False
         self._db = db
-        self._engine = MockTradingEngine(
-            portfolio_id=portfolio_id,
-            initial_capital=initial_capital,
-            db=self._db,
-            slippage_tolerance_pct=1.0,
-        )
         self._portfolio_id = portfolio_id
+        self._initial_capital = initial_capital
 
     @property
     def mode(self) -> str:
@@ -56,60 +33,32 @@ class SimulationTrader(BaseTraderInterface):
     def broker_name(self) -> str:
         return "simulation"
 
-    def get_current_price(self, ticker: str) -> Optional[float]:
+    async def get_current_price(self, ticker: str) -> float | None:
+        return await _get_price(ticker)
+
+    async def place_order(self, request: OrderRequest) -> OrderResult:
         try:
-            return self._engine.get_current_price(ticker)
-        except Exception as e:
-            _logger.warning("Could not fetch price for %s: %s", ticker, e)
-            return None
-
-    def place_order(self, request: OrderRequest) -> OrderResult:
-        try:
-            from tradingagents.mock_trading.order_manager import PriceType
-
-            if request.action == "BUY":
-                order_id = self._engine.create_buy_order(
-                    ticker=request.ticker,
-                    quantity=request.quantity,
-                    price_type=PriceType.CLOSE,
-                    reference_price=request.reference_price,
-                )
-            else:
-                order_id = self._engine.create_sell_order(
-                    ticker=request.ticker,
-                    quantity=request.quantity,
-                    price_type=PriceType.CLOSE,
-                    reference_price=request.reference_price,
-                )
-
-            execution_price = self.get_current_price(request.ticker) or request.reference_price
-            success = self._engine.execute_order(
-                order_id=order_id,
-                execution_price=execution_price,
-                quantity_filled=request.quantity,
-                available_volume=request.quantity * 10,
-                fees=0.0,
+            res = await execute_order(
+                db=self._db,
+                ticker=request.ticker,
+                action=request.action,
+                quantity=request.quantity,
+                portfolio_id=self._portfolio_id,
+                leverage=getattr(request, "leverage", 1.0),
+                stop_loss=getattr(request, "stop_loss", None),
+                take_profit=getattr(request, "take_profit", None),
+                allow_short=getattr(request, "allow_short", False),
             )
-
-            if success:
-                return OrderResult(
-                    order_id=order_id,
-                    status="FILLED",
-                    filled_price=execution_price,
-                    filled_quantity=request.quantity,
-                    message="Simulation order filled",
-                )
-            else:
-                order = self._engine.order_mgr.get_order(order_id)
-                return OrderResult(
-                    order_id=order_id,
-                    status=order.status.value if order else "REJECTED",
-                    filled_price=None,
-                    filled_quantity=None,
-                    message="Order rejected or slippage exceeded",
-                )
+            return OrderResult(
+                order_id=str(res["order_id"]),
+                status=res["status"],
+                filled_price=res["price"],
+                filled_quantity=res["quantity"],
+                commission=res["commission"],
+                message="Simulation order filled",
+            )
         except Exception as e:
-            _logger.error("Simulation order failed for %s: %s", request.ticker, e, exc_info=True)
+            _logger.exception("Simulation order failed for %s", request.ticker)
             return OrderResult(
                 order_id="",
                 status="REJECTED",
@@ -118,20 +67,32 @@ class SimulationTrader(BaseTraderInterface):
                 message=str(e),
             )
 
-    def cancel_order(self, order_id: str) -> bool:
-        try:
-            order = self._engine.order_mgr.get_order(order_id)
-            if order and order.status.value == "PENDING":
-                order.status = __import__(
-                    "tradingagents.mock_trading.order_manager", fromlist=["OrderStatus"]
-                ).OrderStatus.REJECTED
-                return True
-            return False
-        except Exception:
-            return False
+    async def cancel_order(self, order_id: str) -> bool:
+        return False
 
-    def get_balance(self) -> float:
-        return self._engine.portfolio_mgr.cash_available
+    async def get_balance(self) -> float:
+        portfolio = await get_or_create_sim_portfolio(
+            self._db, initial_capital=self._initial_capital, portfolio_id=self._portfolio_id
+        )
+        return portfolio.cash_available
 
-    def get_positions(self) -> dict[str, dict]:
-        return dict(self._engine.portfolio_mgr.holdings)
+    async def get_positions(self) -> dict[str, dict]:
+        portfolio_data = await get_portfolio_with_live_prices(self._db, portfolio_id=self._portfolio_id)
+        res = {}
+        for h in portfolio_data.get("holdings", []):
+            res[h["ticker"]] = {
+                "ticker": h["ticker"],
+                "quantity": h["quantity"],
+                "avg_price": h["avg_buy_price"],
+            }
+        return res
+
+    async def close(self) -> None:
+        if getattr(self, "_is_local_db", False) and self._db is not None:
+            await self._db.close()
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        await self.close()

@@ -1,10 +1,12 @@
 from datetime import datetime
-from pydantic import BaseModel
+from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 
 class AnalysisRunRequest(BaseModel):
     ticker: str
-    trade_date: str  # YYYY-MM-DD
+    trade_date: str
     asset_type: str = "stock"
 
 
@@ -29,20 +31,27 @@ class AnalysisResultRead(BaseModel):
     options_report: str
     quant_report: str
     earnings_report: str
+    insider_report: str = ""
+    ownership_report: str = ""
+    catalyst_report: str = ""
     review_report: str
+    agent_qa_report: str = ""
     investment_plan: str
     trader_plan: str
     final_decision: str
-    bull_history: str = ""
-    bear_history: str = ""
-    investment_debate_history: str = ""
-    risk_debate_history: str = ""
+    bull_history: Any = None
+    bear_history: Any = None
+    investment_debate_history: Any = None
+    risk_debate_history: Any = None
     judge_decision: str = ""
-    chart_annotations: str = ""
+    chart_annotations: Any = None
     llm_calls: int
     tool_calls: int
     tokens_in: int
     tokens_out: int
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    preset_name: str | None = None
     duration_seconds: float
     triggered_by: str
     created_at: datetime
@@ -50,8 +59,7 @@ class AnalysisResultRead(BaseModel):
     alpha_return: float | None = None
     holding_days: int | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
 
 
 class AnalysisListItem(BaseModel):
@@ -63,7 +71,22 @@ class AnalysisListItem(BaseModel):
     duration_seconds: float
     triggered_by: str
     created_at: datetime
-    chart_annotations: str = ""
+    chart_annotations: Any = None
+    llm_provider: str | None = None
+    llm_model: str | None = None
+    preset_name: str | None = None
 
-    class Config:
-        from_attributes = True
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ChatMessageRead(BaseModel):
+    id: int
+    role: str
+    content: str
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class ChatMessageCreate(BaseModel):
+    message: str

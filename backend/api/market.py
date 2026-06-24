@@ -1,81 +1,82 @@
-"""Market data API — OHLCV price data for charting."""
-import io
-import logging
-from datetime import datetime, timedelta
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
+from pydantic import BaseModel, Field
+from sqlalchemy.ext.asyncio import AsyncSession
 
-import pandas as pd
-from fastapi import APIRouter, Depends, HTTPException, Query
+from backend.api.deps import get_current_user
+from backend.core.database import get_db
+from backend.core.limiter import limiter
+from backend.models.user import User
+from backend.services.market_service import (
+    MarketDataError,
+    get_custom_indicator_series,
+    get_ohlcv,
+    get_sentiment_history,
+)
 
-from backend.core.security import get_current_user
-
-_logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/market", tags=["market"])
 
+_TICKER_DESCRIPTION = "Ticker symbol, e.g. AAPL"
 
-def _date_range(period: str) -> tuple[str, str]:
-    """Convert period string to (start_date, end_date)."""
-    end = datetime.now()
-    delta_map = {
-        "1m": timedelta(days=31),
-        "3m": timedelta(days=92),
-        "6m": timedelta(days=183),
-        "1y": timedelta(days=365),
-        "2y": timedelta(days=730),
-        "5y": timedelta(days=1825),
-    }
-    delta = delta_map.get(period, timedelta(days=365))
-    start = end - delta
-    return start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
+
+class FormulaAssistRequest(BaseModel):
+    prompt: str = Field(..., min_length=1, max_length=500, description="Plain-language indicator description")
 
 
 @router.get("/ohlcv")
-async def get_ohlcv(
-    ticker: str = Query(..., description="Ticker symbol, e.g. AAPL"),
+async def ohlcv(
+    ticker: str = Query(..., description=_TICKER_DESCRIPTION),
     start_date: str = Query(None, description="YYYY-MM-DD"),
     end_date: str = Query(None, description="YYYY-MM-DD"),
     period: str = Query("1y", description="1m|3m|6m|1y|2y|5y — ignored when start_date provided"),
-    _: dict = Depends(get_current_user),
+    _: User = Depends(get_current_user),
 ):
-    """Return OHLCV candlestick data for lightweight-charts."""
-    ticker = ticker.upper().strip()
-
-    if start_date and end_date:
-        s, e = start_date, end_date
-    else:
-        s, e = _date_range(period)
-
-    # Validate dates
     try:
-        datetime.strptime(s, "%Y-%m-%d")
-        datetime.strptime(e, "%Y-%m-%d")
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Tarih formatı YYYY-MM-DD olmalı")
+        return await get_ohlcv(ticker, period, start_date, end_date)
+    except MarketDataError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
+
+@router.get("/custom-indicator")
+async def custom_indicator(
+    ticker: str = Query(..., description=_TICKER_DESCRIPTION),
+    formula: str = Query(..., description="Mathematical formula, e.g. (Close - SMA(20)) / STD(20)"),
+    period: str = Query("1y", description="1m|3m|6m|1y|2y|5y"),
+    start_date: str = Query(None, description="YYYY-MM-DD"),
+    end_date: str = Query(None, description="YYYY-MM-DD"),
+    _: User = Depends(get_current_user),
+):
     try:
-        import yfinance as yf
+        return await get_custom_indicator_series(ticker, formula, period, start_date, end_date)
+    except MarketDataError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-        data = yf.Ticker(ticker).history(start=s, end=e)
-        if data.empty:
-            raise HTTPException(status_code=404, detail=f"{ticker} için veri bulunamadı")
 
-        if data.index.tz is not None:
-            data.index = data.index.tz_localize(None)
+@router.post("/formula-assist")
+@limiter.limit("10/minute")
+async def formula_assist(
+    request: Request,
+    body: FormulaAssistRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Generate a custom-indicator formula from a plain-language description.
 
-        candles = []
-        for ts, row in data.iterrows():
-            candles.append({
-                "time": ts.strftime("%Y-%m-%d"),
-                "open": round(float(row["Open"]), 2),
-                "high": round(float(row["High"]), 2),
-                "low": round(float(row["Low"]), 2),
-                "close": round(float(row["Close"]), 2),
-                "volume": int(row.get("Volume", 0)),
-            })
+    ValueError from the service (missing key, unsupported request, invalid
+    LLM output) maps to 400 via the central exception handler.
+    """
+    from backend.services.formula_assist_service import generate_formula
 
-        return {"ticker": ticker, "start_date": s, "end_date": e, "candles": candles}
+    formula = await generate_formula(db, body.prompt, current_user)
+    return {"formula": formula}
 
-    except HTTPException:
-        raise
-    except Exception as exc:
-        _logger.error("OHLCV fetch failed %s: %s", ticker, exc)
-        raise HTTPException(status_code=500, detail=str(exc))
+
+@router.get("/sentiment-history")
+async def sentiment_history(
+    ticker: str = Query(..., description=_TICKER_DESCRIPTION),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    try:
+        return await get_sentiment_history(db, ticker, user=current_user)
+    except MarketDataError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

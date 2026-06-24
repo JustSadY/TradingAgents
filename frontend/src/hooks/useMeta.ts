@@ -1,14 +1,75 @@
 import { useEffect, useState } from 'react'
 import axios from 'axios'
 
-// Mirrors the payload from GET /api/meta — the backend is the single source of
-// truth for every choice the UI renders (analysts, sections, signals, …).
+
+
 export interface AnalystMeta { key: string; label: string; description: string; default: boolean }
 export interface Choice { value: string; label: string }
 export interface SignalMeta { value: string; label: string; tone: 'positive' | 'neutral' | 'negative' }
 
+export type ToolSettingType =
+  | 'boolean'
+  | 'number'
+  | 'string'
+  | 'textarea'
+  | 'select'
+  | 'multi_select'
+  | 'string_list'
+  | 'secret'
+
+export interface ToolSettingFieldMeta {
+  key: string
+  type: ToolSettingType
+  scope: 'server' | 'user' | 'both'
+  label_key: string
+  description_key?: string
+  default?: any
+  required?: boolean
+  min?: number
+  max?: number
+  step?: number
+  options?: { value: string; label_key: string }[]
+  secret?: boolean
+  advanced?: boolean
+}
+
+export interface ToolMeta {
+  key: string
+  category: string
+  default_enabled: boolean
+  allowed_analysts: string[]
+  label_key: string
+  description_key: string
+  settings_schema: ToolSettingFieldMeta[]
+}
+
+export interface AgentSettingFieldMeta {
+  key: string
+  type: string
+  label_key: string
+  description_key?: string
+  default?: any
+  required?: boolean
+  min?: number
+  max?: number
+  step?: number
+  options?: { value: string; label_key: string }[]
+}
+
+export interface AgentMeta {
+  key: string
+  label: string
+  description: string
+  category: string
+  parent_key?: string | null
+  default_enabled: boolean
+  settings_schema: AgentSettingFieldMeta[]
+}
+
 export interface Meta {
   analysts: AnalystMeta[]
+  tools: ToolMeta[]
+  agents?: AgentMeta[]
   section_labels: Record<string, string>
   signals: SignalMeta[]
   asset_types: Choice[]
@@ -17,24 +78,47 @@ export interface Meta {
   trading_modes: Choice[]
   brokers: Choice[]
   provider_labels: Record<string, string>
+  investor_personas?: Choice[]
 }
 
-// Module-level cache so /api/meta is fetched once and shared by every component.
+
 let _cache: Meta | null = null
-let _inflight: Promise<Meta> | null = null
+let _inflight: Promise<any> | null = null
+const _listeners = new Set<(m: Meta | null) => void>()
+
+export function triggerMetaRefetch() {
+  _cache = null
+  _inflight = axios.get('/api/meta').then(r => {
+    _cache = r.data as Meta
+    _listeners.forEach(l => l(_cache))
+    return _cache
+  }).catch(err => {
+    _inflight = null
+    throw err
+  })
+}
 
 export function useMeta(): Meta | null {
   const [meta, setMeta] = useState<Meta | null>(_cache)
 
   useEffect(() => {
-    if (_cache) { setMeta(_cache); return }
-    if (!_inflight) {
-      _inflight = axios.get('/api/meta').then(r => { _cache = r.data as Meta; return _cache })
+    _listeners.add(setMeta)
+    if (_cache) {
+      setMeta(_cache)
+    } else if (!_inflight) {
+      _inflight = axios.get('/api/meta').then(r => {
+        _cache = r.data as Meta
+        _listeners.forEach(l => l(_cache))
+        return _cache
+      }).catch(() => {
+        _inflight = null
+      })
     }
-    let active = true
-    _inflight.then(m => { if (active) setMeta(m) }).catch(() => { _inflight = null })
-    return () => { active = false }
+    return () => {
+      _listeners.delete(setMeta)
+    }
   }, [])
 
   return meta
 }
+

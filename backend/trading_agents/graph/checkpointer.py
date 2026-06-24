@@ -1,24 +1,21 @@
-"""LangGraph checkpoint support for resumable analysis runs.
-
-Per-ticker SQLite databases so concurrent tickers don't contend.
-"""
-
 from __future__ import annotations
 
 import hashlib
+import logging
 import sqlite3
-from contextlib import contextmanager
+from collections.abc import AsyncGenerator, Generator
+from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
-from typing import Generator
 
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
-from tradingagents.dataflows.utils import safe_ticker_component
+from backend.core.utils import safe_ticker_component
+
+_logger = logging.getLogger(__name__)
 
 
 def _db_path(data_dir: str | Path, ticker: str) -> Path:
-    """Return the SQLite checkpoint DB path for a ticker."""
-    # Reject ticker values that would escape the checkpoints directory.
     safe = safe_ticker_component(ticker).upper()
     p = Path(data_dir) / "checkpoints"
     p.mkdir(parents=True, exist_ok=True)
@@ -26,13 +23,11 @@ def _db_path(data_dir: str | Path, ticker: str) -> Path:
 
 
 def thread_id(ticker: str, date: str) -> str:
-    """Deterministic thread ID for a ticker+date pair."""
     return hashlib.sha256(f"{ticker.upper()}:{date}".encode()).hexdigest()[:16]
 
 
 @contextmanager
 def get_checkpointer(data_dir: str | Path, ticker: str) -> Generator[SqliteSaver, None, None]:
-    """Context manager yielding a SqliteSaver backed by a per-ticker DB."""
     db = _db_path(data_dir, ticker)
     conn = sqlite3.connect(str(db), check_same_thread=False)
     try:
@@ -43,13 +38,15 @@ def get_checkpointer(data_dir: str | Path, ticker: str) -> Generator[SqliteSaver
         conn.close()
 
 
-def has_checkpoint(data_dir: str | Path, ticker: str, date: str) -> bool:
-    """Check whether a resumable checkpoint exists for ticker+date."""
-    return checkpoint_step(data_dir, ticker, date) is not None
+@asynccontextmanager
+async def get_async_checkpointer(data_dir: str | Path, ticker: str) -> AsyncGenerator[AsyncSqliteSaver, None]:
+    db = _db_path(data_dir, ticker)
+    async with AsyncSqliteSaver.from_conn_string(str(db)) as saver:
+        await saver.setup()
+        yield saver
 
 
 def checkpoint_step(data_dir: str | Path, ticker: str, date: str) -> int | None:
-    """Return the step number of the latest checkpoint, or None if none exists."""
     db = _db_path(data_dir, ticker)
     if not db.exists():
         return None
@@ -62,19 +59,20 @@ def checkpoint_step(data_dir: str | Path, ticker: str, date: str) -> int | None:
         return cp.metadata.get("step")
 
 
-def clear_all_checkpoints(data_dir: str | Path) -> int:
-    """Remove all checkpoint DBs. Returns number of files deleted."""
-    cp_dir = Path(data_dir) / "checkpoints"
-    if not cp_dir.exists():
-        return 0
-    dbs = list(cp_dir.glob("*.db"))
-    for db in dbs:
-        db.unlink()
-    return len(dbs)
+async def async_checkpoint_step(data_dir: str | Path, ticker: str, date: str) -> int | None:
+    db = _db_path(data_dir, ticker)
+    if not db.exists():
+        return None
+    tid = thread_id(ticker, date)
+    async with get_async_checkpointer(data_dir, ticker) as saver:
+        config = {"configurable": {"thread_id": tid}}
+        cp = await saver.aget_tuple(config)
+        if cp is None:
+            return None
+        return cp.metadata.get("step")
 
 
 def clear_checkpoint(data_dir: str | Path, ticker: str, date: str) -> None:
-    """Remove checkpoint for a specific ticker+date by deleting the thread's rows."""
     db = _db_path(data_dir, ticker)
     if not db.exists():
         return
@@ -84,7 +82,47 @@ def clear_checkpoint(data_dir: str | Path, ticker: str, date: str) -> None:
         for table in ("writes", "checkpoints"):
             conn.execute(f"DELETE FROM {table} WHERE thread_id = ?", (tid,))
         conn.commit()
-    except sqlite3.OperationalError:
-        pass
+    except sqlite3.OperationalError as exc:
+        # Table may not exist yet (no checkpoint ever written) — non-fatal.
+        _logger.debug("clear_checkpoint skipped for %s/%s: %s", ticker, date, exc)
     finally:
         conn.close()
+
+
+async def list_checkpoints_for_thread(data_dir: str | Path, ticker: str, date: str) -> list[dict]:
+    """Retrieve all checkpoints for a thread from the saver database, ordered by step."""
+    db = _db_path(data_dir, ticker)
+    if not db.exists():
+        return []
+
+    tid = thread_id(ticker, date)
+    config = {"configurable": {"thread_id": tid}}
+
+    checkpoints = []
+    async with get_async_checkpointer(data_dir, ticker) as saver:
+        async for cp in saver.alist(config):
+            metadata = cp.metadata or {}
+            step = metadata.get("step", -1)
+            writes = metadata.get("writes") or {}
+            # Try to identify which node executed to generate this checkpoint
+            node_name = next(iter(writes.keys()), "START") if writes else "START"
+
+            # Translate node name into a user-friendly label if possible
+            from backend.core.catalog import node_progress
+
+            prog = node_progress(node_name)
+            node_label = prog.get("label") if prog else node_name
+
+            checkpoints.append(
+                {
+                    "checkpoint_id": cp.config["configurable"]["checkpoint_id"],
+                    "step": step,
+                    "node": node_name,
+                    "label": node_label,
+                    "ts": metadata.get("ts", ""),
+                }
+            )
+
+    # Sort checkpoints by step number ascending
+    checkpoints.sort(key=lambda x: x["step"])
+    return checkpoints

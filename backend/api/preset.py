@@ -1,67 +1,100 @@
-"""Config preset CRUD — save/load named setting snapshots."""
-import json
 import logging
+
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, delete
 
-from backend.core.database import get_db
 from backend.api.deps import get_current_user
-from backend.models.preset import ConfigPreset
-from backend.models.settings import AppSettings
+from backend.core.database import get_db
+from backend.models.user import User
+from backend.repositories.permissions import get_user_setting_permission
 from backend.schemas.preset import PresetCreate, PresetRead
-from backend.api.settings import _get_or_create_settings
 
 router = APIRouter(prefix="/api/presets", tags=["presets"])
 _logger = logging.getLogger(__name__)
 
 
 @router.get("", response_model=list[PresetRead])
-async def list_presets(db: AsyncSession = Depends(get_db), _=Depends(get_current_user)):
-    result = await db.execute(select(ConfigPreset).order_by(ConfigPreset.created_at.desc()))
-    return result.scalars().all()
+async def list_presets_run(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from backend.repositories.preset import list_presets as _repo_list
+
+    return await _repo_list(db, user=current_user)
 
 
-@router.post("", response_model=PresetRead)
-async def create_preset(body: PresetCreate, db: AsyncSession = Depends(get_db), _=Depends(get_current_user)):
-    existing = await db.execute(select(ConfigPreset).where(ConfigPreset.name == body.name))
-    if existing.scalar_one_or_none():
-        raise HTTPException(status_code=409, detail=f"'{body.name}' adında şablon zaten var")
-    preset = ConfigPreset(name=body.name, description=body.description, settings_json=body.settings_json)
-    db.add(preset)
-    await db.flush()
-    return preset
+async def _check_presets_permission(user: User, db: AsyncSession):
+    if user.is_admin:
+        return
+    perm = await get_user_setting_permission(db, user.id, "presets")
+    if not perm or not perm.allowed:
+        raise HTTPException(status_code=403, detail="You do not have permission to manage preset templates.")
 
 
-@router.delete("/{preset_id}")
-async def delete_preset(preset_id: int, db: AsyncSession = Depends(get_db), _=Depends(get_current_user)):
-    result = await db.execute(select(ConfigPreset).where(ConfigPreset.id == preset_id))
-    preset = result.scalar_one_or_none()
+@router.post(
+    "",
+    response_model=PresetRead,
+    responses={403: {"description": "Permission denied"}, 409: {"description": "Conflict"}},
+)
+async def create_preset_run(
+    body: PresetCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await _check_presets_permission(current_user, db)
+    from backend.repositories.preset import create_preset as _repo_create
+    from backend.repositories.preset import get_preset_by_name
+
+    existing = await get_preset_by_name(db, body.name, current_user.id)
+    if existing:
+        raise HTTPException(status_code=409, detail=f"A template named '{body.name}' already exists")
+
+    return await _repo_create(
+        db, user_id=current_user.id, name=body.name, description=body.description, settings_json=body.settings_json
+    )
+
+
+@router.delete(
+    "/{preset_id}", responses={403: {"description": "Permission denied"}, 404: {"description": "Template not found"}}
+)
+async def delete_preset(
+    preset_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await _check_presets_permission(current_user, db)
+    from backend.repositories.preset import get_preset_by_id
+
+    preset = await get_preset_by_id(db, preset_id, user=current_user)
     if not preset:
-        raise HTTPException(status_code=404, detail="Şablon bulunamadı")
+        raise HTTPException(status_code=404, detail="Template not found")
     await db.delete(preset)
     return {"deleted": True}
 
 
-@router.post("/{preset_id}/apply")
-async def apply_preset(preset_id: int, db: AsyncSession = Depends(get_db), _=Depends(get_current_user)):
-    """Apply a preset's settings to the global AppSettings row."""
-    result = await db.execute(select(ConfigPreset).where(ConfigPreset.id == preset_id))
-    preset = result.scalar_one_or_none()
+@router.post(
+    "/{preset_id}/apply",
+    responses={
+        403: {"description": "Permission denied"},
+        404: {"description": "Template not found"},
+        422: {"description": "Validation error"},
+    },
+)
+async def apply_preset(
+    preset_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Apply a preset's settings to the current user's AppSettings row."""
+    await _check_presets_permission(current_user, db)
+    from backend.repositories.preset import get_preset_by_id
+    from backend.services.settings_service import apply_preset_to_settings
+
+    preset = await get_preset_by_id(db, preset_id, user=current_user)
     if not preset:
-        raise HTTPException(status_code=404, detail="Şablon bulunamadı")
-
-    settings = await _get_or_create_settings(db)
+        raise HTTPException(status_code=404, detail="Template not found")
     try:
-        data = json.loads(preset.settings_json)
-    except json.JSONDecodeError:
-        raise HTTPException(status_code=422, detail="Şablon JSON geçersiz")
-
-    for key, value in data.items():
-        if hasattr(settings, key) and value is not None:
-            if key in ("watchlist", "selected_analysts"):
-                setattr(settings, key, value)
-            else:
-                setattr(settings, key, value)
-
-    return {"applied": True, "preset_name": preset.name}
+        preset_name = await apply_preset_to_settings(db, current_user, preset)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    return {"applied": True, "preset_name": preset_name}

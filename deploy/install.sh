@@ -170,7 +170,6 @@ if [ ! -f "$ENV_FILE" ]; then
         printf "DATABASE_URL='postgresql+asyncpg://%s:%s@localhost:5432/%s'\n" "$DB_USER" "$DB_PASS" "$DB_NAME"
         printf "CORS_ORIGINS='[\"http://localhost:%s\"]'\n" "$APP_PORT"
         printf '\n# LLM sağlayıcı anahtarları — en az birini doldurun, sonra: systemctl restart %s\n' "$SERVICE_NAME"
-        printf 'OPENAI_API_KEY=\nANTHROPIC_API_KEY=\nGOOGLE_API_KEY=\nXAI_API_KEY=\nDEEPSEEK_API_KEY=\n'
         printf '\n# Veri sağlayıcı anahtarları (opsiyonel)\nALPHA_VANTAGE_API_KEY=\nREDDIT_CLIENT_ID=\nREDDIT_CLIENT_SECRET=\n'
     } > "$ENV_FILE"
     chmod 600 "$ENV_FILE"
@@ -207,16 +206,16 @@ else
     systemctl enable --now postgresql >/dev/null 2>&1 || systemctl enable --now postgresql || die "postgresql başlatılamadı."
 
     # Soketin hazır olmasını bekle (root olduğumuz için runuser yeterli; sudo gerekmez)
-    for _ in $(seq 1 10); do runuser -u postgres -- psql -tAc 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
+    for _ in $(seq 1 10); do runuser -u postgres -- psql -d template1 -tAc 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
 
-    psql_admin() { runuser -u postgres -- psql -v ON_ERROR_STOP=1 "$@"; }
+    psql_admin() { runuser -u postgres -- psql -d template1 -v ON_ERROR_STOP=1 "$@"; }
     if psql_admin -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1; then
         psql_admin -c "ALTER ROLE \"$DB_USER\" LOGIN PASSWORD '$DB_PASS';"
     else
         psql_admin -c "CREATE ROLE \"$DB_USER\" LOGIN PASSWORD '$DB_PASS';"
     fi
     if ! psql_admin -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
-        runuser -u postgres -- createdb -O "$DB_USER" "$DB_NAME"
+        runuser -u postgres -- createdb --maintenance-db=template1 -O "$DB_USER" "$DB_NAME"
     fi
     ok "PostgreSQL hazır (db=$DB_NAME, user=$DB_USER)."
 fi

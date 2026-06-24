@@ -1,59 +1,87 @@
+import asyncio
+
 from langchain_core.messages import HumanMessage, RemoveMessage
 
-# Import tools from separate utility files
-from tradingagents.agents.utils.core_stock_tools import (
-    get_stock_data
-)
-from tradingagents.agents.utils.technical_indicators_tools import (
-    get_indicators
-)
-from tradingagents.agents.utils.fundamental_data_tools import (
-    get_fundamentals,
+from backend.trading_agents.agents.data.backtest_tools import run_strategy_backtest
+from backend.trading_agents.agents.data.core_stock_tools import get_stock_data
+from backend.trading_agents.agents.data.fundamental_data_tools import (
     get_balance_sheet,
     get_cashflow,
-    get_income_statement
+    get_fundamentals,
+    get_income_statement,
 )
-from tradingagents.agents.utils.news_data_tools import (
-    get_news,
+from backend.trading_agents.agents.data.macro_tools import get_macro_data
+from backend.trading_agents.agents.data.news_data_tools import (
+    get_global_news,
     get_insider_transactions,
-    get_global_news
+    get_news,
 )
-from tradingagents.agents.utils.macro_tools import (
-    get_macro_data
-)
-from tradingagents.agents.utils.options_tools import (
-    get_options_data
-)
-from tradingagents.agents.utils.search_tools import (
-    search_web,
-    get_crypto_fear_and_greed_index
-)
-from tradingagents.agents.utils.quant_tools import (
-    get_quant_data
-)
-from tradingagents.agents.utils.backtest_tools import (
-    run_strategy_backtest
-)
+from backend.trading_agents.agents.data.options_tools import get_options_data
+from backend.trading_agents.agents.data.ownership_tools import get_catalyst_calendar, get_institutional_holdings
+from backend.trading_agents.agents.data.quant_tools import get_quant_data
+from backend.trading_agents.agents.data.search_tools import search_web
+from backend.trading_agents.agents.data.sec_tools import get_insider_transactions_deep, get_sec_filings
+from backend.trading_agents.agents.data.technical_indicators_tools import get_indicators
+
+__all__ = [
+    "search_web",
+    "get_fundamentals",
+    "get_balance_sheet",
+    "get_cashflow",
+    "get_income_statement",
+    "get_macro_data",
+    "get_indicators",
+    "get_stock_data",
+    "get_global_news",
+    "get_catalyst_calendar",
+    "get_insider_transactions",
+    "get_insider_transactions_deep",
+    "get_institutional_holdings",
+    "get_sec_filings",
+    "get_news",
+    "get_options_data",
+    "get_quant_data",
+    "run_strategy_backtest",
+    "get_language_instruction",
+    "get_general_settings_block",
+    "build_instrument_context",
+    "create_msg_delete",
+    "run_macd_rsi_backtests",
+]
 
 
-def get_language_instruction() -> str:
-    """Return a prompt instruction for the configured output language.
+def _get_language_instruction() -> str:
+    from backend.trading_agents.dataflows.config import get_config
 
-    Returns empty string when English (default), so no extra tokens are used.
-    Applied to every agent whose output reaches the saved report —
-    analysts, researchers, debaters, research manager, trader, and
-    portfolio manager — so a non-English run produces a fully localized
-    report rather than a mix of languages.
-    """
-    from tradingagents.dataflows.config import get_config
     lang = get_config().get("output_language", "English")
     if lang.strip().lower() == "english":
         return ""
-    return f" Write your entire response in {lang}."
+    return (
+        f"\n\n**CRITICAL LANGUAGE REQUIREMENT:** You MUST write your ENTIRE response in {lang}. "
+        f"This is a strict, non-negotiable requirement. Do NOT use any other language under any circumstances. "
+        f"Even if source data, tool outputs, or retrieved content are in a different language, "
+        f"all of your analysis, commentary, headings, and narrative text MUST be written in {lang}."
+    )
+
+
+def get_general_settings_block() -> str:
+    """Return all general settings that should be appended to every agent system prompt.
+
+    Add new global settings here — they will automatically apply to all agents
+    that go through run_tool_analyst, and to any agent that calls this function.
+    """
+    parts = []
+    lang = _get_language_instruction()
+    if lang:
+        parts.append(lang)
+    return "".join(parts)
+
+
+def get_language_instruction() -> str:
+    return get_general_settings_block()
 
 
 def build_instrument_context(ticker: str, asset_type: str = "stock") -> str:
-    """Describe the exact instrument so agents preserve exchange-qualified tickers."""
     instrument_label = "asset" if asset_type == "crypto" else "instrument"
     extra_hint = (
         " Treat it as a crypto asset rather than a company, and do not assume company fundamentals are available."
@@ -63,24 +91,29 @@ def build_instrument_context(ticker: str, asset_type: str = "stock") -> str:
     return (
         f"The {instrument_label} to analyze is `{ticker}`. "
         "Use this exact ticker in every tool call, report, and recommendation, "
-        "preserving any exchange suffix (e.g. `.TO`, `.L`, `.HK`, `.T`, `-USD`)."
-        + extra_hint
+        "preserving any exchange suffix (e.g. `.TO`, `.L`, `.HK`, `.T`, `-USD`)." + extra_hint
     )
+
 
 def create_msg_delete():
     def delete_messages(state):
-        """Clear messages and add placeholder for Anthropic compatibility"""
         messages = state["messages"]
-
-        # Remove all messages
         removal_operations = [RemoveMessage(id=m.id) for m in messages]
-
-        # Add a minimal placeholder message
         placeholder = HumanMessage(content="Continue")
-
         return {"messages": removal_operations + [placeholder]}
 
     return delete_messages
 
 
-        
+async def run_macd_rsi_backtests(ticker: str, trade_date: str | None = None) -> tuple[str, str]:
+    macd_args = {"ticker": ticker, "strategy_type": "macd_crossover"}
+    rsi_args = {"ticker": ticker, "strategy_type": "rsi_oversold"}
+    if trade_date:
+        macd_args["curr_date"] = trade_date
+        rsi_args["curr_date"] = trade_date
+
+    macd_results, rsi_results = await asyncio.gather(
+        asyncio.to_thread(run_strategy_backtest.invoke, macd_args),
+        asyncio.to_thread(run_strategy_backtest.invoke, rsi_args),
+    )
+    return macd_results, rsi_results

@@ -1,22 +1,12 @@
-# TradingAgents/graph/reflection.py
-
 from typing import Any
 
 
 class Reflector:
-    """Handles reflection on trading decisions."""
-
-    def __init__(self, quick_thinking_llm: Any):
-        """Initialize the reflector with an LLM."""
-        self.quick_thinking_llm = quick_thinking_llm
+    def __init__(self, llm: Any):
+        self.llm = llm
         self.log_reflection_prompt = self._get_log_reflection_prompt()
 
     def _get_log_reflection_prompt(self) -> str:
-        """Concise prompt for reflect_on_final_decision (Phase B log entries).
-
-        Produces 2-4 sentences of plain prose — compact enough to be re-injected
-        into future agent prompts without bloating the context window.
-        """
         return (
             "You are a trading analyst reviewing your own past decision now that the outcome is known.\n"
             "Write exactly 2-4 sentences of plain prose (no bullets, no headers, no markdown).\n\n"
@@ -35,16 +25,13 @@ class Reflector:
         alpha_return: float,
         benchmark_name: str = "SPY",
     ) -> str:
-        """Single reflection call on the final trade decision with outcome context.
+        from backend.trading_agents.dataflows.config import get_config
 
-        Used by Phase B deferred reflection. The final_trade_decision already
-        synthesises all analyst insights, so no separate market context is needed.
-        ``benchmark_name`` is the label used for the alpha line (e.g. ``"SPY"``
-        for US tickers, ``"^N225"`` for ``.T`` listings); defaults to SPY for
-        callers that haven't been updated to thread the benchmark through.
-        """
+        lang = get_config().get("output_language", "English")
+        lang_inst = "" if lang.strip().lower() == "english" else f"\nWrite your entire response in {lang}."
+
         messages = [
-            ("system", self.log_reflection_prompt),
+            ("system", self.log_reflection_prompt + lang_inst),
             (
                 "human",
                 (
@@ -54,4 +41,4 @@ class Reflector:
                 ),
             ),
         ]
-        return self.quick_thinking_llm.invoke(messages).content
+        return self.llm.invoke(messages).content

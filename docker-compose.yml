@@ -14,20 +14,56 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
   backend:
     build:
-      context: ..
-      dockerfile: tradingagents_web/Dockerfile.backend
+      context: .
+      dockerfile: Dockerfile.backend
+      network: host
     restart: unless-stopped
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://tradingagents:tradingagents@postgres:5432/tradingagents
+      DATABASE_URL: ${DATABASE_URL}
       CORS_ORIGINS: '["http://localhost:5173","http://localhost:80"]'
+      REDIS_URL: redis://redis:6379/0
+      ANALYSIS_QUEUE_MODE: worker
     ports:
       - "8000:8000"
+    volumes:
+      - tradingagents_data:/root/.tradingagents
+
+  worker:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+      network: host
+    restart: unless-stopped
+    healthcheck:
+      disable: true
+    command: ["arq", "backend.worker.WorkerSettings"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file: .env
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      REDIS_URL: redis://redis:6379/0
+      ANALYSIS_QUEUE_MODE: worker
     volumes:
       - tradingagents_data:/root/.tradingagents
 
@@ -35,11 +71,13 @@ services:
     build:
       context: frontend
       dockerfile: Dockerfile.frontend
+      network: host
     restart: unless-stopped
     ports:
       - "5173:80"
     depends_on:
-      - backend
+      backend:
+        condition: service_healthy
 
 volumes:
   pgdata:

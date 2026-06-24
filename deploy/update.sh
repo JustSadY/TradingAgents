@@ -14,10 +14,17 @@ set -uo pipefail
 CONF="${TRADINGAGENTS_UPDATE_CONF:-/etc/tradingagents/update.env}"
 # shellcheck disable=SC1090
 [ -f "$CONF" ] && . "$CONF"
-: "${PROJECT_ROOT:?update.env eksik: PROJECT_ROOT}"
-: "${SERVICE_NAME:?update.env eksik: SERVICE_NAME}"
-: "${RUN_USER:?update.env eksik: RUN_USER}"
-: "${VENV:?update.env eksik: VENV}"
+
+# Fallback values to allow running manually without update.env
+PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
+SERVICE_NAME="${SERVICE_NAME:-tradingagents}"
+RUN_USER="${RUN_USER:-${SUDO_USER:-root}}"
+VENV="${VENV:-$PROJECT_ROOT/.venv}"
+
+: "${PROJECT_ROOT:?update.env veya varsayılan eksik: PROJECT_ROOT}"
+: "${SERVICE_NAME:?update.env veya varsayılan eksik: SERVICE_NAME}"
+: "${RUN_USER:?update.env veya varsayılan eksik: RUN_USER}"
+: "${VENV:?update.env veya varsayılan eksik: VENV}"
 
 STATUS="$PROJECT_ROOT/.update.json"
 LOG="$PROJECT_ROOT/.update.log"

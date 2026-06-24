@@ -1,117 +1,58 @@
-"""Typed configuration for TradingAgents.
-
-`TradingAgentsConfig` is a Pydantic `BaseSettings` model that:
-- validates every field at construction time
-- reads TRADINGAGENTS_* environment variables automatically
-- keeps full backward-compat with the legacy dict-based DEFAULT_CONFIG
-
-Usage (new code):
-    from tradingagents.config import TradingAgentsConfig
-    cfg = TradingAgentsConfig(llm_provider="anthropic", max_debate_rounds=3)
-    ta = TradingAgentsGraph(config=cfg)
-
-Usage (legacy dict still works):
-    from tradingagents.default_config import DEFAULT_CONFIG
-    ta = TradingAgentsGraph(config=DEFAULT_CONFIG)
-"""
 import os
 from pathlib import Path
-from typing import Optional
 
-from pydantic import AliasChoices, Field, field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic import BaseModel, Field, field_validator
 
 _HOME = Path.home() / ".tradingagents"
 
 
-class TradingAgentsConfig(BaseSettings):
-    """Typed, validated configuration for TradingAgentsGraph.
-
-    All fields can be overridden via TRADINGAGENTS_* environment variables.
-    Complex types (lists, dicts) accept JSON strings in env vars.
-    """
-
-    model_config = SettingsConfigDict(
-        env_prefix="TRADINGAGENTS_",
-        env_file=str(Path(__file__).parent.parent.parent / ".env"),
-        env_file_encoding="utf-8",
-        extra="ignore",             # unknown env vars are silently ignored
-        populate_by_name=True,      # allow both field name and alias
-        env_ignore_empty=True,      # treat empty-string env vars as not set
-    )
-
-    # ── File paths ─────────────────────────────────────────────────────────────
+class TradingAgentsConfig(BaseModel):
     project_dir: str = Field(
         default_factory=lambda: str(Path(__file__).parent.resolve()),
     )
     results_dir: str = Field(
-        default_factory=lambda: str(_HOME / "logs"),
-        # backward-compat: TRADINGAGENTS_RESULTS_DIR (pydantic auto-maps this)
+        default_factory=lambda: os.environ.get("TRADINGAGENTS_RESULTS_DIR", str(_HOME / "logs")),
     )
     data_cache_dir: str = Field(
-        default_factory=lambda: str(_HOME / "cache"),
-        # legacy env var was TRADINGAGENTS_CACHE_DIR
-        validation_alias=AliasChoices(
-            "TRADINGAGENTS_CACHE_DIR",
-            "TRADINGAGENTS_DATA_CACHE_DIR",
+        default_factory=lambda: os.environ.get(
+            "TRADINGAGENTS_CACHE_DIR", os.environ.get("TRADINGAGENTS_DATA_CACHE_DIR", str(_HOME / "cache"))
         ),
     )
-    memory_log_path: str = Field(
-        default_factory=lambda: str(_HOME / "memory" / "trading_memory.md"),
-    )
-    memory_log_max_entries: Optional[int] = Field(default=None, ge=1)
-
-    # ── LLM settings ───────────────────────────────────────────────────────────
     llm_provider: str = "openai"
-    deep_think_llm: str = "gpt-5.4"
-    quick_think_llm: str = "gpt-5.4-mini"
-    backend_url: Optional[str] = Field(
-        default=None,
-        # legacy: TRADINGAGENTS_LLM_BACKEND_URL
-        validation_alias=AliasChoices(
-            "TRADINGAGENTS_LLM_BACKEND_URL",
-            "TRADINGAGENTS_BACKEND_URL",
-        ),
-    )
-
-    # Provider-specific thinking configuration
-    google_thinking_level: Optional[str] = None    # "high", "minimal", …
-    openai_reasoning_effort: Optional[str] = None  # "high", "medium", "low"
-    anthropic_effort: Optional[str] = None         # "high", "medium", "low"
-
-    # ── Graph behaviour ────────────────────────────────────────────────────────
-    checkpoint_enabled: bool = False
+    llm_model: str = "gpt-4o-mini"
+    google_thinking_level: str | None = None
+    openai_reasoning_effort: str | None = None
+    anthropic_effort: str | None = None
     output_language: str = "English"
+    investor_persona: str = "conservative"
     max_debate_rounds: int = Field(default=1, ge=1, le=10)
-    max_risk_discuss_rounds: int = Field(
-        default=1,
-        ge=1,
-        le=10,
-        # legacy: TRADINGAGENTS_MAX_RISK_ROUNDS
-        validation_alias=AliasChoices(
-            "TRADINGAGENTS_MAX_RISK_ROUNDS",
-            "TRADINGAGENTS_MAX_RISK_DISCUSS_ROUNDS",
-        ),
-    )
+    max_risk_discuss_rounds: int = Field(default=1, ge=1, le=10)
     max_recur_limit: int = Field(default=1000, ge=1)
+    keep_checkpoints: bool = True
     analyst_concurrency_limit: int = Field(default=1, ge=1)
-
-    # ── Prompt configuration ───────────────────────────────────────────────────
+    node_retry_attempts: int = Field(default=2, ge=1)
+    node_retry_base_delay: float = Field(default=1.0, ge=0.0)
+    memory_recall_count: int = Field(default=5, ge=1)
+    max_report_chars_in_prompts: int = Field(default=6000, ge=500)
+    max_debate_history_chars: int = Field(default=8000, ge=1000)
+    max_tool_output_chars: int = Field(default=12000, ge=1000)
+    anthropic_prompt_caching: bool = True
     super_portfolio_manager_prompt: str = (
-        "You are a Super Portfolio Manager advising a new investor with a $100,000 portfolio. "
+        "You are a Super Portfolio Manager. The user's actual portfolio (cash available and current "
+        "holdings) is provided in the prompt when available — build the allocation against those real "
+        "figures, not an assumed balance. If no portfolio is provided, give the allocation in percentages. "
         "Your team of analysts and traders has analyzed multiple assets, and your job is to build a "
-        "clear, beginner-friendly allocation across those assets. "
+        "clear, easy-to-follow allocation across those assets. "
         "Prioritize capital preservation, diversification, position sizing discipline, and "
         "risk-adjusted returns over aggressive speculation. "
-        "Provide percentage allocations for each ticker (e.g., AAPL: 40%, MSFT: 35%) and include a "
-        "cash allocation when the risk/reward profile is not attractive. "
+        "Provide a concrete allocation per ticker (both a percentage and, when the cash figure is known, "
+        "an approximate dollar amount, e.g. AAPL: 40% ≈ $X), and keep an explicit cash position when the "
+        "risk/reward profile is not attractive. Account for any existing holdings the user already has. "
         "Avoid concentrating too much capital in a single high-risk asset unless the reports provide "
         "unusually strong evidence. "
         "Write a detailed but easy-to-understand summary explaining the allocation strategy, the key "
-        "risks, and what a new investor should monitor after entering the positions."
+        "risks, and what the investor should monitor after entering the positions."
     )
-
-    # ── Data fetching ──────────────────────────────────────────────────────────
     news_article_limit: int = Field(default=20, ge=1)
     global_news_article_limit: int = Field(default=10, ge=1)
     global_news_lookback_days: int = Field(default=7, ge=1)
@@ -124,8 +65,6 @@ class TradingAgentsConfig(BaseSettings):
             "oil commodities supply chain energy",
         ]
     )
-
-    # ── Data vendors ───────────────────────────────────────────────────────────
     data_vendors: dict[str, str] = Field(
         default_factory=lambda: {
             "core_stock_apis": "yfinance",
@@ -134,25 +73,21 @@ class TradingAgentsConfig(BaseSettings):
             "news_data": "yfinance",
         }
     )
-    # Tool-level overrides (take precedence over category-level data_vendors)
     tool_vendors: dict[str, str] = Field(default_factory=dict)
-
-    # ── Benchmarks ─────────────────────────────────────────────────────────────
-    benchmark_ticker: Optional[str] = None
+    benchmark_ticker: str | None = None
     benchmark_map: dict[str, str] = Field(
         default_factory=lambda: {
-            ".NS":  "^NSEI",    # NSE India (Nifty 50)
-            ".BO":  "^BSESN",   # BSE India (Sensex)
-            ".T":   "^N225",    # Tokyo (Nikkei 225)
-            ".HK":  "^HSI",     # Hong Kong (Hang Seng)
-            ".L":   "^FTSE",    # London (FTSE 100)
-            ".TO":  "^GSPTSE",  # Toronto (TSX Composite)
-            ".AX":  "^AXJO",    # Australia (ASX 200)
-            "":     "SPY",      # default for US-listed tickers
+            ".NS": "^NSEI",
+            ".BO": "^BSESN",
+            ".T": "^N225",
+            ".HK": "^HSI",
+            ".L": "^FTSE",
+            ".TO": "^GSPTSE",
+            ".AX": "^AXJO",
+            "": "SPY",
         }
     )
 
-    # ── Validators ─────────────────────────────────────────────────────────────
     @field_validator("llm_provider", mode="before")
     @classmethod
     def normalise_provider(cls, v: str) -> str:
@@ -165,11 +100,5 @@ class TradingAgentsConfig(BaseSettings):
             return v
         return v.strip().lower()
 
-    # ── Compatibility ──────────────────────────────────────────────────────────
     def to_dict(self) -> dict:
-        """Return a plain dict identical in shape to the legacy DEFAULT_CONFIG.
-
-        Existing code that passes a dict to TradingAgentsGraph continues to
-        work without modification.
-        """
         return self.model_dump()
