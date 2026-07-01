@@ -133,6 +133,8 @@ class AgentHierarchy:
         agent_key: str,
         fallback_llm: Any,
         llm_factory: Callable[..., Any],
+        *,
+        _origin_key: str | None = None,
     ) -> Any:
         """
         Resolve the best LLM for *agent_key*:
@@ -141,19 +143,26 @@ class AgentHierarchy:
           2. the nearest ancestor with complete settings (branch default)
           3. *fallback_llm* (the global thinking LLM)
 
-        ``llm_factory(provider, model, temperature)`` builds a client.
+        ``llm_factory(provider, model, temperature)`` builds a client. The
+        *temperature* passed is always the originally-queried agent's own
+        setting (``_origin_key``, captured on the first call) — a child that
+        inherits an ancestor's provider/model still gets its own temperature
+        dial, instead of silently losing it while climbing the parent chain.
         """
+        origin_key = _origin_key or agent_key
         state = self._runtime_ctx.get(agent_key) or {}
         settings = state.get("settings") or {}
         provider = settings.get("llm_provider")
         model = settings.get("llm_model")
 
         if provider and model:
+            origin_state = self._runtime_ctx.get(origin_key) or {}
+            origin_temperature = (origin_state.get("settings") or {}).get("temperature")
             try:
                 return llm_factory(
                     provider=provider,
                     model=model,
-                    temperature=settings.get("temperature"),
+                    temperature=origin_temperature,
                 )
             except Exception as exc:  # noqa: BLE001
                 logger.warning(
@@ -164,12 +173,12 @@ class AgentHierarchy:
 
         parent = self.parent_of(agent_key)
         if parent:
-            return self.resolve_llm(parent, fallback_llm, llm_factory)
+            return self.resolve_llm(parent, fallback_llm, llm_factory, _origin_key=origin_key)
 
         # Ultimate master fallback: If we reached the top and it wasn't the portfolio_manager,
         # try to get the portfolio_manager settings before giving up to fallback_llm.
         if agent_key != "portfolio_manager":
-            return self.resolve_llm("portfolio_manager", fallback_llm, llm_factory)
+            return self.resolve_llm("portfolio_manager", fallback_llm, llm_factory, _origin_key=origin_key)
 
         return fallback_llm
 

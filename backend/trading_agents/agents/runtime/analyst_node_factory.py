@@ -49,15 +49,23 @@ async def run_tool_analyst(
         tools = graph._filter_tools_for_analyst(analyst_key, tools)
 
     effective_collab_system = collab_system
-    if not effective_collab_system and ctx and "graph" in ctx:
+    effective_system_message = system_message
+    if ctx and "graph" in ctx:
         graph = ctx["graph"]
         runtime_agent_ctx = (getattr(graph, "config", {}) or {}).get("runtime_agent_context", {})
         analyst_key = report_key.replace("_report", "")
         agent_state = runtime_agent_ctx.get(analyst_key, {}) if isinstance(runtime_agent_ctx, dict) else {}
         settings = agent_state.get("settings", {}) if isinstance(agent_state, dict) else {}
-        candidate = settings.get("collab_system_prompt") if isinstance(settings, dict) else None
-        if isinstance(candidate, str) and candidate.strip():
-            effective_collab_system = candidate.strip()
+        if isinstance(settings, dict):
+            if not effective_collab_system:
+                candidate = settings.get("collab_system_prompt")
+                if isinstance(candidate, str) and candidate.strip():
+                    effective_collab_system = candidate.strip()
+            # Per-agent "System Prompt Override" from Settings → Agents: replaces
+            # this analyst's own hard-coded instructions wholesale when set.
+            override = settings.get("system_instruction")
+            if isinstance(override, str) and override.strip():
+                effective_system_message = override.strip()
 
     effective_collab_system = effective_collab_system or _COLLAB_SYSTEM
     runtime_retry_config = None
@@ -69,7 +77,7 @@ async def run_tool_analyst(
             MessagesPlaceholder(variable_name="messages"),
         ]
     )
-    prompt = prompt.partial(system_message=system_message + get_general_settings_block())
+    prompt = prompt.partial(system_message=effective_system_message + get_general_settings_block())
     prompt = prompt.partial(tool_names=", ".join(tool.name for tool in tools))
     prompt = prompt.partial(current_date=state["trade_date"])
     prompt = prompt.partial(instrument_context=instrument_context)

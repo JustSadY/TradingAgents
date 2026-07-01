@@ -12,7 +12,10 @@ from backend.trading_agents.agents.schemas import PortfolioDecision, TraderPropo
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_general_settings_block,
+    get_system_instruction_override,
 )
+
+_DEFAULT_INSTRUCTION = "As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision."
 
 
 def create_portfolio_manager(llm):
@@ -83,7 +86,8 @@ def create_portfolio_manager(llm):
         persona = get_config().get("investor_persona", DEFAULT_PERSONA)
         persona_instructions = get_config().get("investor_persona_instructions") or get_persona_instructions(persona)
 
-        prompt = f"""As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision.
+        instruction = get_system_instruction_override("portfolio_manager") or _DEFAULT_INSTRUCTION
+        prompt = f"""{instruction}
 {persona_instructions}
 {instrument_context}
 ---

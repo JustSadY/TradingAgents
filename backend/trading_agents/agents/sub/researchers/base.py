@@ -16,16 +16,22 @@ from backend.trading_agents.agents.runtime.report_aggregator import (
     build_resources,
     tail_history,
 )
-from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
+from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block, get_system_instruction_override
 
-# A prompt builder receives the rendered context fields and returns the prompt
-# body: (target_label, resources_text, synthesis_report, qa_block,
-# recent_history, last_opposing_argument).
-PromptBuilder = Callable[[str, str, str, str, str, str], str]
+# A prompt builder receives (instruction, target_label, resources_text,
+# synthesis_report, qa_block, recent_history, last_opposing_argument) and
+# returns the prompt body. ``instruction`` is either this agent's Settings ->
+# Agents "System Prompt Override" (verbatim) or the rendered default.
+PromptBuilder = Callable[[str, str, str, str, str, str, str], str]
+# Renders this researcher's default opening instruction for a given target_label.
+DefaultInstruction = Callable[[str], str]
 
 
-def make_researcher(side: str, speaker: str, build_prompt: PromptBuilder) -> Callable:
+def make_researcher(
+    side: str, speaker: str, build_prompt: PromptBuilder, default_instruction: DefaultInstruction
+) -> Callable:
     """Build a ``create_<side>_researcher(llm)`` factory (``side`` is bull/bear)."""
+    from backend.trading_agents.agents.utils.agent_utils import get_system_instruction_override
 
     def create_researcher(llm):
         async def researcher_node(state) -> dict:
@@ -43,8 +49,10 @@ def make_researcher(side: str, speaker: str, build_prompt: PromptBuilder) -> Cal
             qa_block = f"\n### Analyst Cross-Examination (peer Q&A that probed these conflicts):\n{qa}\n" if qa else ""
             resources_text = build_resources(state, report_fields)
 
+            instruction = get_system_instruction_override(f"{side}_researcher") or default_instruction(target_label)
             prompt = (
                 build_prompt(
+                    instruction,
                     target_label,
                     resources_text,
                     synthesis_report,

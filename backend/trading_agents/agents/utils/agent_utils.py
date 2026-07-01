@@ -53,6 +53,7 @@ __all__ = [
     "run_strategy_backtest",
     "get_language_instruction",
     "get_general_settings_block",
+    "get_system_instruction_override",
     "build_instrument_context",
     "create_msg_delete",
     "run_macd_rsi_backtests",
@@ -71,6 +72,26 @@ def _get_language_instruction() -> str:
         f"Even if source data, tool outputs, or retrieved content are in a different language, "
         f"all of your analysis, commentary, headings, and narrative text MUST be written in {lang}."
     )
+
+
+def get_system_instruction_override(agent_key: str) -> str | None:
+    """Return *agent_key*'s Settings → Agents "System Prompt Override" text.
+
+    Returns ``None`` when unset/blank, so callers can keep their own default
+    instruction text. Reads the same ``active_run_context`` context-var the
+    analyst node factory uses, so it works with zero wiring from the graph.
+    """
+    from backend.trading_agents.agents.data.chart_tools import active_run_context
+
+    ctx = active_run_context.get(None)
+    if not ctx or "graph" not in ctx:
+        return None
+    graph = ctx["graph"]
+    runtime_agent_ctx = (getattr(graph, "config", {}) or {}).get("runtime_agent_context", {})
+    agent_state = runtime_agent_ctx.get(agent_key, {}) if isinstance(runtime_agent_ctx, dict) else {}
+    settings = agent_state.get("settings", {}) if isinstance(agent_state, dict) else {}
+    override = settings.get("system_instruction") if isinstance(settings, dict) else None
+    return override.strip() if isinstance(override, str) and override.strip() else None
 
 
 def get_general_settings_block() -> str:

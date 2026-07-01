@@ -17,17 +17,25 @@ from backend.trading_agents.agents.runtime.report_aggregator import (
 )
 from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
 
-# A prompt builder receives (trader_decision, resources_text, recent_history,
-# risk_debate_state) and returns the fully rendered prompt body.
-PromptBuilder = Callable[[str, str, str, dict], str]
+# A prompt builder receives (instruction, trader_decision, resources_text,
+# recent_history, risk_debate_state) and returns the fully rendered prompt
+# body. ``instruction`` is either the shared "risk_debate" agent's Settings ->
+# Agents "System Prompt Override" (verbatim) or this stance's rendered default.
+PromptBuilder = Callable[[str, str, str, str, dict], str]
+DefaultInstruction = Callable[[], str]
+
+# All three stances (aggressive/conservative/neutral) share a single settings
+# entry — see agents/main/risk.py: ctx.llm_for("risk_debate").
+_SETTINGS_AGENT_KEY = "risk_debate"
 
 
-def make_risk_debator(stance: str, speaker: str, build_prompt: PromptBuilder) -> Callable:
+def make_risk_debator(stance: str, speaker: str, build_prompt: PromptBuilder, default_instruction: DefaultInstruction) -> Callable:
     """Build a ``create_<stance>_debator(llm)`` factory.
 
     ``stance`` is one of ``aggressive`` / ``conservative`` / ``neutral`` and keys
     the per-stance ``*_history`` / ``current_*_response`` fields it owns.
     """
+    from backend.trading_agents.agents.utils.agent_utils import get_system_instruction_override
 
     def create_debator(llm):
         async def debator_node(state) -> dict:
@@ -41,8 +49,9 @@ def make_risk_debator(stance: str, speaker: str, build_prompt: PromptBuilder) ->
             # send each analyst's Executive Summary instead of the full report.
             resources_text = build_resources(state, report_fields, summary_only=True)
 
+            instruction = get_system_instruction_override(_SETTINGS_AGENT_KEY) or default_instruction()
             prompt = (
-                build_prompt(trader_decision, resources_text, tail_history(history), risk_debate_state)
+                build_prompt(instruction, trader_decision, resources_text, tail_history(history), risk_debate_state)
                 + get_general_settings_block()
             )
 

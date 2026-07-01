@@ -1,6 +1,7 @@
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_general_settings_block,
+    get_system_instruction_override,
     run_macd_rsi_backtests,
 )
 
@@ -23,7 +24,13 @@ def create_synthesis_manager(llm):
 
         resources_text = build_resources(state, get_report_fields(), prefix="### ")
 
-        prompt = f"""You are a Senior Investment Strategist. Your task is to synthesize the following analyst reports and historical backtests for {ticker}. Identify key alignments and critical conflicts.
+        default_instruction = (
+            f"You are a Senior Investment Strategist. Your task is to synthesize the following analyst "
+            f"reports and historical backtests for {ticker}. Identify key alignments and critical conflicts."
+        )
+        instruction = get_system_instruction_override("synthesis_manager") or default_instruction
+
+        prompt = f"""{instruction}
 
 ### Objective:
 1. **Alignments:** Areas where multiple analysts agree (e.g., both Technical and Sentiment are bullish).

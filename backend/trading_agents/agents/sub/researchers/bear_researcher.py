@@ -1,7 +1,16 @@
 from backend.trading_agents.agents.sub.researchers.base import make_researcher
 
 
+def _default_instruction(target_label: str) -> str:
+    return (
+        f"You are a High-Conviction Bear Analyst making the case against investing in the {target_label}. "
+        "Your goal is to present a rigorous, evidence-based argument emphasizing risks, structural challenges, "
+        "and negative catalysts."
+    )
+
+
 def _build_prompt(
+    instruction: str,
     target_label: str,
     resources_text: str,
     synthesis_report: str,
@@ -9,7 +18,7 @@ def _build_prompt(
     recent_history: str,
     last_opposing_argument: str,
 ) -> str:
-    return f"""You are a High-Conviction Bear Analyst making the case against investing in the {target_label}. Your goal is to present a rigorous, evidence-based argument emphasizing risks, structural challenges, and negative catalysts.
+    return f"""{instruction}
 
 ### Objective:
 - **Evidence-Based Case:** You MUST cite specific analyst reports and metrics (e.g., "The Fundamentals report shows a high debt-to-equity...") for every claim you make.
@@ -36,4 +45,4 @@ Deliver a compelling bear argument that dismantling the bull case using specific
 """
 
 
-create_bear_researcher = make_researcher("bear", "Bear", _build_prompt)
+create_bear_researcher = make_researcher("bear", "Bear", _build_prompt, _default_instruction)

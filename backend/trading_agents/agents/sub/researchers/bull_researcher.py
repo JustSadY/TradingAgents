@@ -1,7 +1,15 @@
 from backend.trading_agents.agents.sub.researchers.base import make_researcher
 
 
+def _default_instruction(target_label: str) -> str:
+    return (
+        f"You are a High-Conviction Bull Analyst advocating for a long position in the {target_label}. "
+        "Your task is to build a rigorous, evidence-based case emphasizing growth potential and market strength."
+    )
+
+
 def _build_prompt(
+    instruction: str,
     target_label: str,
     resources_text: str,
     synthesis_report: str,
@@ -9,7 +17,7 @@ def _build_prompt(
     recent_history: str,
     last_opposing_argument: str,
 ) -> str:
-    return f"""You are a High-Conviction Bull Analyst advocating for a long position in the {target_label}. Your task is to build a rigorous, evidence-based case emphasizing growth potential and market strength.
+    return f"""{instruction}
 
 ### Objective:
 - **Evidence-Based Case:** You MUST cite specific analyst reports and metrics (e.g., "According to the Market Analyst, the 50 SMA...") for every claim you make.
@@ -36,4 +44,4 @@ Deliver a compelling bull argument that refutes the bear's concerns using specif
 """
 
 
-create_bull_researcher = make_researcher("bull", "Bull", _build_prompt)
+create_bull_researcher = make_researcher("bull", "Bull", _build_prompt, _default_instruction)

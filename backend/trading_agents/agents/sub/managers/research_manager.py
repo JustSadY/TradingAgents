@@ -9,6 +9,12 @@ from backend.trading_agents.agents.schemas import ResearchPlan, render_research_
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_general_settings_block,
+    get_system_instruction_override,
+)
+
+_DEFAULT_INSTRUCTION = (
+    "As the Research Manager and debate facilitator, your role is to critically evaluate this round "
+    "of debate and deliver a clear, actionable investment plan for the trader."
 )
 
 
@@ -35,7 +41,8 @@ def create_research_manager(llm):
         except Exception:  # noqa: BLE001 — memory is best-effort
             memory_lessons = ""
 
-        prompt = f"""As the Research Manager and debate facilitator, your role is to critically evaluate this round of debate and deliver a clear, actionable investment plan for the trader.
+        instruction = get_system_instruction_override("research_manager") or _DEFAULT_INSTRUCTION
+        prompt = f"""{instruction}
 {instrument_context}
 ---
 **Audit Report (Fact-Check):**
