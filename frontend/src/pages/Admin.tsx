@@ -54,6 +54,18 @@ interface SystemMetrics {
   websocket_connections: number
 }
 
+interface SystemHealth {
+  signal_parse_fallbacks: number
+  auto_order_skipped: Record<string, number>
+  quality: {
+    period_days: number
+    total_runs: number
+    unknown: number
+    confidence_counts: { high: number; medium: number; low: number }
+    avg_score: number | null
+  }
+}
+
 export default function Admin() {
   const { t } = useTranslation()
   const { isOwner } = useAuth()
@@ -76,6 +88,7 @@ export default function Admin() {
   const [systemSettings, setSystemSettings] = useState<any>(null)
   const [sysSaved, setSysSaved] = useState(false)
   const [sysMetrics, setSysMetrics] = useState<SystemMetrics | null>(null)
+  const [sysHealth, setSysHealth] = useState<SystemHealth | null>(null)
   const [metricsLoading, setMetricsLoading] = useState(false)
 
   const loadUsers = useCallback(async () => {
@@ -95,9 +108,13 @@ export default function Admin() {
   const loadMetrics = useCallback(async () => {
     setMetricsLoading(true)
     try {
-      const r = await axios.get('/api/admin/system-metrics')
-      setSysMetrics(r.data)
-    } catch { /* admin-only */ } finally { setMetricsLoading(false) }
+      const [metricsRes, healthRes] = await Promise.allSettled([
+        axios.get('/api/admin/system-metrics'),
+        axios.get('/api/admin/system-health'),
+      ])
+      if (metricsRes.status === 'fulfilled') setSysMetrics(metricsRes.value.data)
+      if (healthRes.status === 'fulfilled') setSysHealth(healthRes.value.data)
+    } finally { setMetricsLoading(false) }
   }, [])
 
   useEffect(() => {
@@ -862,6 +879,38 @@ export default function Admin() {
                     Completed analyses used in duration avg: <span className="text-slate-300 font-mono font-bold">{sysMetrics.analysis_duration.count}</span>
                   </div>
                 </div>
+
+                {sysHealth && (
+                  <div className="border-t border-white/[0.04] pt-4 space-y-3">
+                    <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Guardrail Health</h4>
+                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                      <div className="glass-panel rounded-xl p-3">
+                        <p className="text-[9px] text-slate-500 uppercase font-bold">Signal Parse Fallbacks</p>
+                        <p className={`text-lg font-mono font-bold ${sysHealth.signal_parse_fallbacks > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>{sysHealth.signal_parse_fallbacks}</p>
+                      </div>
+                      <div className="glass-panel rounded-xl p-3">
+                        <p className="text-[9px] text-slate-500 uppercase font-bold">Quality-Gate Skips</p>
+                        <p className="text-lg font-mono font-bold text-slate-200">{sysHealth.auto_order_skipped.quality_gate ?? 0}</p>
+                      </div>
+                      <div className="glass-panel rounded-xl p-3">
+                        <p className="text-[9px] text-slate-500 uppercase font-bold">Drawdown-Breaker Skips</p>
+                        <p className="text-lg font-mono font-bold text-slate-200">{sysHealth.auto_order_skipped.drawdown_breaker ?? 0}</p>
+                      </div>
+                      <div className="glass-panel rounded-xl p-3">
+                        <p className="text-[9px] text-slate-500 uppercase font-bold">Avg Run Quality ({sysHealth.quality.period_days}d)</p>
+                        <p className="text-lg font-mono font-bold text-slate-200">{sysHealth.quality.avg_score ?? '—'}</p>
+                      </div>
+                    </div>
+                    {sysHealth.quality.total_runs > 0 && (
+                      <p className="text-[10px] text-slate-500">
+                        Last {sysHealth.quality.period_days}d: <span className="text-emerald-400 font-mono font-bold">{sysHealth.quality.confidence_counts.high}</span> high /{' '}
+                        <span className="text-amber-400 font-mono font-bold">{sysHealth.quality.confidence_counts.medium}</span> medium /{' '}
+                        <span className="text-rose-400 font-mono font-bold">{sysHealth.quality.confidence_counts.low}</span> low confidence
+                        {sysHealth.quality.unknown > 0 && <> ({sysHealth.quality.unknown} unscored)</>}
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
           </Section>

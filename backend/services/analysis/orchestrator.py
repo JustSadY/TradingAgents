@@ -86,6 +86,8 @@ REPORT_FIELDS = (
 
     "short_interest_report",
 
+    "valuation_report",
+
     "catalyst_report",
 
     "review_report",
@@ -529,6 +531,8 @@ async def run_individual_analysis(
             "ratings_report": result.ratings_report,
 
             "short_interest_report": result.short_interest_report,
+
+            "valuation_report": result.valuation_report,
 
             "catalyst_report": result.catalyst_report,
 

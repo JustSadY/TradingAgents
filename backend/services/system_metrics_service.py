@@ -49,6 +49,7 @@ def collect_system_metrics() -> dict[str, Any]:
         "node_retries": 0,
         "websocket_connections": 0,
         "signal_parse_fallbacks": 0,
+        "auto_order_skipped": {},
     }
 
     for metric in REGISTRY.collect():
@@ -65,6 +66,8 @@ def collect_system_metrics() -> dict[str, Any]:
             result["node_retries"] = sum(int(s.value) for s in _total_samples(metric))
         elif name == "tradingagents_signal_parse_fallback_total":
             result["signal_parse_fallbacks"] = sum(int(s.value) for s in _total_samples(metric))
+        elif name == "tradingagents_auto_order_skipped_total":
+            result["auto_order_skipped"] = _labeled_totals(metric, "reason")
         elif name == "tradingagents_websocket_connections":
             for sample in metric.samples:
                 result["websocket_connections"] = int(sample.value)

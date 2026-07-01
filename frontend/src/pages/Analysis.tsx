@@ -42,7 +42,7 @@ interface AnalysisDetail {
   market_report: string; sentiment_report: string; news_report: string
   fundamentals_report: string; macro_report: string; options_report: string
   quant_report: string; earnings_report: string; review_report: string
-  insider_report?: string; ownership_report?: string; ratings_report?: string; short_interest_report?: string; catalyst_report?: string
+  insider_report?: string; ownership_report?: string; ratings_report?: string; short_interest_report?: string; valuation_report?: string; catalyst_report?: string
   agent_qa_report: string
   investment_plan: string; trader_plan: string; final_decision: string
   bull_history: string; bear_history: string; investment_debate_history: string
@@ -74,6 +74,7 @@ const SECTION_LABELS: Record<string, string> = {
   insider_report: 'Insider Activity', ownership_report: 'Institutional Ownership',
   ratings_report: 'Analyst Ratings',
   short_interest_report: 'Short Interest',
+  valuation_report: 'Valuation Comparison',
   catalyst_report: 'Upcoming Catalysts',
   review_report: 'Review', agent_qa_report: 'Cross-Examination',
   investment_plan: 'Investment Plan',
@@ -568,6 +569,7 @@ function RunTab() {
                         ['ownership_report', detail.ownership_report],
                         ['ratings_report', detail.ratings_report],
                         ['short_interest_report', detail.short_interest_report],
+                        ['valuation_report', detail.valuation_report],
                         ['catalyst_report', detail.catalyst_report],
                         ['review_report', detail.review_report],
                         ['agent_qa_report', detail.agent_qa_report],

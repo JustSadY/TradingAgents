@@ -258,6 +258,80 @@ def get_short_interest(ticker: Annotated[str, "ticker symbol of the company"]):
         raise
 
 
+_SECTOR_ETF_BY_LABEL = {
+    "technology": "XLK",
+    "financial": "XLF",
+    "energy": "XLE",
+    "healthcare": "XLV",
+    "health care": "XLV",
+    "consumer cyclical": "XLY",
+    "consumer defensive": "XLP",
+    "industrials": "XLI",
+    "basic materials": "XLB",
+    "utilities": "XLU",
+    "real estate": "XLRE",
+    "communication": "XLC",
+}
+
+_VALUATION_FIELDS = {
+    "Trailing P/E": "trailingPE",
+    "Forward P/E": "forwardPE",
+    "Price/Sales": "priceToSalesTrailing12Months",
+    "Price/Book": "priceToBook",
+    "PEG Ratio": "pegRatio",
+    "EV/EBITDA": "enterpriseToEbitda",
+    "Profit Margin": "profitMargins",
+}
+
+
+def _sector_etf_for(sector: str | None) -> str | None:
+    """Best-effort match of a yfinance sector label to a SPDR sector ETF ticker."""
+    if not sector:
+        return None
+    s = sector.lower()
+    for label, etf in _SECTOR_ETF_BY_LABEL.items():
+        if label in s:
+            return etf
+    return None
+
+
+def _valuation_lines(info: dict) -> list[str]:
+    lines = []
+    for label, field in _VALUATION_FIELDS.items():
+        val = info.get(field)
+        if val is not None:
+            lines.append(f"- {label}: {val:.2f}" if isinstance(val, (int, float)) else f"- {label}: {val}")
+    return lines
+
+
+def get_valuation_comparison(ticker: Annotated[str, "ticker symbol of the company"]):
+    """Compare a stock's valuation multiples against its sector ETF as a peer proxy."""
+    try:
+        ticker_upper = ticker.upper()
+        info = yf_retry(lambda: yf.Ticker(ticker_upper).info) or {}
+        sector = info.get("sector")
+
+        parts = [f"# Valuation Comparison for {ticker_upper}"]
+        parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        parts.append(f"## {ticker_upper} Valuation Multiples (Sector: {sector or 'Unknown'})")
+        own_lines = _valuation_lines(info)
+        if not own_lines:
+            return f"No valuation data found for symbol '{ticker}'"
+        parts.extend(own_lines)
+
+        etf = _sector_etf_for(sector)
+        if etf:
+            etf_info = yf_retry(lambda: yf.Ticker(etf).info) or {}
+            etf_lines = _valuation_lines(etf_info)
+            if etf_lines:
+                parts.append(f"\n## Sector Benchmark ({etf} — proxy for {sector} peers)")
+                parts.extend(etf_lines)
+
+        return "\n".join(parts)
+    except Exception:
+        raise
+
+
 def get_analyst_ratings(ticker: Annotated[str, "ticker symbol of the company"]):
     """Wall Street analyst consensus: recommendation trend + price targets."""
     try:

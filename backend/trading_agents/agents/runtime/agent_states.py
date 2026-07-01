@@ -22,6 +22,7 @@ class StateKeys:
     OWNERSHIP_REPORT = "ownership_report"
     RATINGS_REPORT = "ratings_report"
     SHORT_INTEREST_REPORT = "short_interest_report"
+    VALUATION_REPORT = "valuation_report"
     CATALYST_REPORT = "catalyst_report"
     REVIEW_REPORT = "review_report"
     SYNTHESIS_REPORT = "synthesis_report"
@@ -45,6 +46,7 @@ class StateKeys:
         OWNERSHIP_REPORT,
         RATINGS_REPORT,
         SHORT_INTEREST_REPORT,
+        VALUATION_REPORT,
         CATALYST_REPORT,
         REVIEW_REPORT,
         SYNTHESIS_REPORT,
@@ -94,6 +96,7 @@ class AgentState(MessagesState):
     ownership_report: Annotated[str, "Report from the Institutional Ownership Analyst"]
     ratings_report: Annotated[str, "Report from the Analyst Ratings Analyst (Wall Street consensus)"]
     short_interest_report: Annotated[str, "Report from the Short Interest Analyst (squeeze positioning)"]
+    valuation_report: Annotated[str, "Report from the Valuation Analyst (relative valuation vs sector)"]
     catalyst_report: Annotated[str, "Report from the Catalyst Calendar Analyst"]
     review_report: Annotated[str, "Report from the Performance Review Analyst"]
     synthesis_report: Annotated[str, "Report identifying alignments and conflicts between analyst reports"]

@@ -34,6 +34,7 @@ _REPORT_SECTIONS = [
     ("INSTITUTIONAL OWNERSHIP REPORT", "ownership_report"),
     ("ANALYST RATINGS REPORT", "ratings_report"),
     ("SHORT INTEREST REPORT", "short_interest_report"),
+    ("VALUATION COMPARISON REPORT", "valuation_report"),
     ("UPCOMING CATALYSTS REPORT", "catalyst_report"),
 ]
 

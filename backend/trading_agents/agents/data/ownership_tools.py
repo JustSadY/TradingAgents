@@ -35,3 +35,11 @@ async def get_short_interest(
 ) -> str:
     """Retrieve short-interest data: shares short, short ratio (days to cover), and short % of float."""
     return await route_to_vendor("get_short_interest", ticker)
+
+
+@tool
+async def get_valuation_comparison(
+    ticker: Annotated[str, "ticker symbol"],
+) -> str:
+    """Compare a stock's valuation multiples (P/E, P/S, P/B, PEG, EV/EBITDA) against its sector ETF as a peer proxy."""
+    return await route_to_vendor("get_valuation_comparison", ticker)

@@ -12,6 +12,11 @@ class PriceAlert(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    # "price"/"support"/"resistance": condition compares target_price to live price.
+    # "rsi": condition (above/below) compares target_price (RSI threshold, e.g. 30/70)
+    #        to the ticker's current RSI(14).
+    # "macd_cross": condition "above"/"below" means a bullish/bearish MACD/signal
+    #        crossover somewhere in the last 2 bars; target_price is unused (send 0).
     alert_type: Mapped[str] = mapped_column(String(20), default="price", server_default="price")
     condition: Mapped[str] = mapped_column(String(10), nullable=False)
     target_price: Mapped[Decimal] = mapped_column(MONEY, nullable=False)

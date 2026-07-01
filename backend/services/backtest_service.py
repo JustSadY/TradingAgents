@@ -15,6 +15,17 @@ _logger = logging.getLogger(__name__)
 _COMMISSION_RATE = 0.001
 _MAX_HOLDING_DAYS = 10
 _ALLOCATION_PCT = 0.95
+_DEFAULT_SLIPPAGE_BPS = 5.0  # 0.05% — worsens every fill against the trader
+
+
+def _apply_slippage(price: float, action: str, slippage_bps: float) -> float:
+    """Worsen a fill price by ``slippage_bps`` in the trader's disadvantage.
+
+    ``action`` is the execution direction: "BUY" pays more, "SELL" receives less.
+    ``slippage_bps=0`` is a no-op (byte-identical to no slippage modeling).
+    """
+    factor = slippage_bps / 10_000.0
+    return price * (1 + factor) if action == "BUY" else price * (1 - factor)
 
 
 def _trade_pnl(side: str, entry_price: float, exit_price: float, size: float, rate: float) -> float:
@@ -180,6 +191,37 @@ def _compute_metrics(daily_values: list[float], trades: list[dict], initial_capi
     }
 
 
+async def _benchmark_return(benchmark_ticker: str | None, start_date: str, end_date: str) -> dict | None:
+    """Buy-and-hold return of ``benchmark_ticker`` over the same date range.
+
+    Returns ``None`` (never raises) when the benchmark can't be loaded — the
+    backtest result itself must never fail over a missing comparison series.
+    """
+    if not benchmark_ticker:
+        return None
+    try:
+        bench_data = await asyncio.to_thread(load_ohlcv, benchmark_ticker, end_date)
+        if bench_data.empty:
+            return None
+        bench_data["Date"] = pd.to_datetime(bench_data["Date"])
+        start_dt = pd.to_datetime(start_date)
+        end_dt = pd.to_datetime(end_date)
+        window = bench_data[(bench_data["Date"] >= start_dt) & (bench_data["Date"] <= end_dt)]
+        if len(window) < 2:
+            return None
+        first_close = float(window.iloc[0]["Close"])
+        last_close = float(window.iloc[-1]["Close"])
+        if first_close <= 0:
+            return None
+        return {
+            "ticker": benchmark_ticker,
+            "return_pct": round((last_close - first_close) / first_close * 100, 2),
+        }
+    except Exception as exc:  # noqa: BLE001 — benchmark comparison is best-effort
+        _logger.debug("Benchmark fetch failed for %s: %s", benchmark_ticker, exc)
+        return None
+
+
 async def _load_consensus_analyses(db, ticker: str, start_date: str, end_date: str, user) -> dict:
     """Map trade_date -> AnalysisResult for the consensus strategy (user-scoped)."""
     analyses_map: dict = {}
@@ -205,6 +247,8 @@ async def run_backtest_simulation(
     end_date: str,
     initial_capital: float = 100000.0,
     user=None,
+    slippage_bps: float = _DEFAULT_SLIPPAGE_BPS,
+    benchmark_ticker: str | None = "SPY",
 ) -> dict:
     try:
         data = await asyncio.to_thread(load_ohlcv, ticker, end_date)
@@ -250,6 +294,9 @@ async def run_backtest_simulation(
                     position_side, open_price, high_price, low_price, close_price, stop_loss, take_profit, holding_days
                 )
                 if exit_reason:
+                    exit_price = _apply_slippage(
+                        exit_price, "SELL" if position_side == "long" else "BUY", slippage_bps
+                    )
                     cash_delta, trade = _close_position(
                         position_side, entry_price, exit_price, position_size, entry_date, date_str, exit_reason, _COMMISSION_RATE
                     )
@@ -267,45 +314,49 @@ async def run_backtest_simulation(
 
                 if signal == "BUY" and position_side != "long":
                     if position_side == "short":
+                        cover_price = _apply_slippage(close_price, "BUY", slippage_bps)
                         cash_delta, trade = _close_position(
-                            "short", entry_price, close_price, position_size, entry_date, date_str, "SIGNAL", _COMMISSION_RATE
+                            "short", entry_price, cover_price, position_size, entry_date, date_str, "SIGNAL", _COMMISSION_RATE
                         )
                         cash += cash_delta
                         trades.append(trade)
                         position_side = None
                         position_size = 0.0
 
+                    fill_price = _apply_slippage(close_price, "BUY", slippage_bps)
                     allocated = cash * _ALLOCATION_PCT
-                    position_size = allocated / close_price
+                    position_size = allocated / fill_price
                     commission = allocated * _COMMISSION_RATE
                     cash -= allocated + commission
-                    entry_price = close_price
+                    entry_price = fill_price
                     entry_date = date_str
                     position_side = "long"
                     holding_days = 0
-                    stop_loss = float(rec_stop_loss) if rec_stop_loss else close_price * 0.95
-                    take_profit = float(rec_take_profit) if rec_take_profit else close_price * 1.10
+                    stop_loss = float(rec_stop_loss) if rec_stop_loss else fill_price * 0.95
+                    take_profit = float(rec_take_profit) if rec_take_profit else fill_price * 1.10
 
                 elif signal == "SELL" and position_side != "short":
                     if position_side == "long":
+                        sell_price = _apply_slippage(close_price, "SELL", slippage_bps)
                         cash_delta, trade = _close_position(
-                            "long", entry_price, close_price, position_size, entry_date, date_str, "SIGNAL", _COMMISSION_RATE
+                            "long", entry_price, sell_price, position_size, entry_date, date_str, "SIGNAL", _COMMISSION_RATE
                         )
                         cash += cash_delta
                         trades.append(trade)
                         position_side = None
                         position_size = 0.0
 
+                    fill_price = _apply_slippage(close_price, "SELL", slippage_bps)
                     allocated = cash * _ALLOCATION_PCT
-                    position_size = allocated / close_price
+                    position_size = allocated / fill_price
                     commission = allocated * _COMMISSION_RATE
                     cash -= commission
-                    entry_price = close_price
+                    entry_price = fill_price
                     entry_date = date_str
                     position_side = "short"
                     holding_days = 0
-                    stop_loss = float(rec_stop_loss) if rec_stop_loss else close_price * 1.05
-                    take_profit = float(rec_take_profit) if rec_take_profit else close_price * 0.90
+                    stop_loss = float(rec_stop_loss) if rec_stop_loss else fill_price * 1.05
+                    take_profit = float(rec_take_profit) if rec_take_profit else fill_price * 0.90
 
             holdings_value = 0.0
             if position_side == "long":
@@ -328,8 +379,9 @@ async def run_backtest_simulation(
             last_day = backtest_data.iloc[-1]
             date_str = last_day["Date"].strftime("%Y-%m-%d")
             close_price = float(last_day["Close"])
+            exit_price = _apply_slippage(close_price, "SELL" if position_side == "long" else "BUY", slippage_bps)
             cash_delta, trade = _close_position(
-                position_side, entry_price, close_price, position_size, entry_date, date_str, "END_OF_SIMULATION", _COMMISSION_RATE
+                position_side, entry_price, exit_price, position_size, entry_date, date_str, "END_OF_SIMULATION", _COMMISSION_RATE
             )
             cash += cash_delta
             trades.append(trade)
@@ -343,6 +395,8 @@ async def run_backtest_simulation(
             daily_values[-1] = cash
 
         metrics = _compute_metrics(daily_values, trades, initial_capital)
+        benchmark = await _benchmark_return(benchmark_ticker, start_date, end_date)
+        alpha_pct = round(metrics["total_return"] - benchmark["return_pct"], 2) if benchmark else None
         return {
             "initial_capital": initial_capital,
             "final_value": metrics["final_value"],
@@ -353,6 +407,9 @@ async def run_backtest_simulation(
             "trades_count": len(trades),
             "trades": trades,
             "equity_curve": equity_curve,
+            "slippage_bps": slippage_bps,
+            "benchmark": benchmark,
+            "alpha_pct": alpha_pct,
         }
 
     except Exception as e:

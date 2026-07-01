@@ -35,6 +35,16 @@ def is_actionable(signal: str | None) -> bool:
     return signal in _SIGNAL_TO_ACTION
 
 
+def _record_skip(reason: str) -> None:
+    """Best-effort Prometheus counter bump for a guardrail-skipped auto-order."""
+    try:
+        from backend.core.metrics import AUTO_ORDER_SKIPPED
+
+        AUTO_ORDER_SKIPPED.labels(reason=reason).inc()
+    except Exception:  # noqa: BLE001 — metrics are optional, never block trading
+        pass
+
+
 def _safe_float(raw) -> float | None:
     """``float()`` that folds ``None`` and non-numeric values into ``None``."""
     if raw is None:
@@ -267,6 +277,7 @@ async def place_signal_order(
                 ticker,
                 quality.get("score"),
             )
+            _record_skip("quality_gate")
             return None
 
     from backend.repositories.analysis import get_system_settings
@@ -302,6 +313,7 @@ async def place_signal_order(
                         drawdown_pct,
                         max_drawdown_pct,
                     )
+                    _record_skip("drawdown_breaker")
                     return None
         except Exception as exc:  # noqa: BLE001 — never block trading on the breaker calc itself
             _logger.debug("Drawdown breaker check failed for %s (allowing order): %s", ticker, exc)

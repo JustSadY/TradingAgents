@@ -64,3 +64,45 @@ def assess_run_quality(
         "reports_degraded": degraded,
         "fallback_used": fallback_used,
     }
+
+
+async def get_recent_quality_summary(db, days: int = 7) -> dict:
+    """Aggregate ``AnalysisResult.quality`` over the last ``days`` for the health panel.
+
+    Runs with no quality data (older rows, or the assessment failed and fell back
+    to ``None``) are excluded from the average but counted separately so a spike
+    in "unknown" isn't silently hidden.
+    """
+    from datetime import UTC, datetime, timedelta
+
+    from sqlalchemy import select
+
+    from backend.models.analysis import AnalysisResult
+
+    cutoff = datetime.now(UTC) - timedelta(days=days)
+    q = select(AnalysisResult.quality).where(
+        AnalysisResult.created_at >= cutoff, AnalysisResult.status == "completed"
+    )
+    rows = (await db.execute(q)).scalars().all()
+
+    counts = {"high": 0, "medium": 0, "low": 0}
+    scores: list[float] = []
+    unknown = 0
+    for quality in rows:
+        if not isinstance(quality, dict) or "confidence" not in quality:
+            unknown += 1
+            continue
+        confidence = quality.get("confidence")
+        if confidence in counts:
+            counts[confidence] += 1
+        score = quality.get("score")
+        if isinstance(score, (int, float)):
+            scores.append(score)
+
+    return {
+        "period_days": days,
+        "total_runs": len(rows),
+        "unknown": unknown,
+        "confidence_counts": counts,
+        "avg_score": round(sum(scores) / len(scores), 1) if scores else None,
+    }

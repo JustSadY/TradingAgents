@@ -22,6 +22,7 @@ from backend.trading_agents.agents.data.ownership_tools import (
     get_catalyst_calendar,
     get_institutional_holdings,
     get_short_interest,
+    get_valuation_comparison,
 )
 from backend.trading_agents.agents.data.quant_tools import get_quant_data
 from backend.trading_agents.agents.data.search_tools import search_web
@@ -41,6 +42,7 @@ __all__ = [
     "get_catalyst_calendar",
     "get_analyst_ratings",
     "get_short_interest",
+    "get_valuation_comparison",
     "get_insider_transactions",
     "get_insider_transactions_deep",
     "get_institutional_holdings",

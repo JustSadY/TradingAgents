@@ -18,6 +18,7 @@ export default function Alerts() {
   const [ticker, setTicker] = useState('')
   const [condition, setCondition] = useState<'above' | 'below'>('above')
   const [targetPrice, setTargetPrice] = useState('')
+  const [alertType, setAlertType] = useState<'price' | 'rsi' | 'macd_cross'>('price')
   const [autoAnalyze, setAutoAnalyze] = useState(false)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -33,11 +34,12 @@ export default function Alerts() {
 
   const handleCreate = async () => {
     const sym = ticker.trim().toUpperCase()
-    const price = Number.parseFloat(targetPrice)
-    if (!sym || Number.isNaN(price) || price <= 0) { setError(t('alerts.error_invalid')); return }
+    const needsPrice = alertType !== 'macd_cross'
+    const price = needsPrice ? Number.parseFloat(targetPrice) : 0
+    if (!sym || (needsPrice && (Number.isNaN(price) || price <= 0))) { setError(t('alerts.error_invalid')); return }
     setSaving(true); setError(null)
     try {
-      await axios.post('/api/alerts', { ticker: sym, condition, target_price: price, auto_analyze: autoAnalyze })
+      await axios.post('/api/alerts', { ticker: sym, condition, target_price: price, auto_analyze: autoAnalyze, alert_type: alertType })
       setTicker(''); setTargetPrice(''); setAutoAnalyze(false)
       await load()
     } catch (e: any) {
@@ -72,16 +74,28 @@ export default function Alerts() {
             <input className={Input} placeholder="AAPL" value={ticker} onChange={e => setTicker(e.target.value.toUpperCase())} />
           </div>
           <div>
-            <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('alerts.condition')}</label>
-            <select className={Input} value={condition} onChange={e => setCondition(e.target.value as any)}>
-              <option value="above">{t('alerts.condition_above')}</option>
-              <option value="below">{t('alerts.condition_below')}</option>
+            <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('alerts.type')}</label>
+            <select className={Input} value={alertType} onChange={e => setAlertType(e.target.value as any)}>
+              <option value="price">{t('alerts.type_price')}</option>
+              <option value="rsi">{t('alerts.type_rsi')}</option>
+              <option value="macd_cross">{t('alerts.type_macd_cross')}</option>
             </select>
           </div>
           <div>
-            <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('alerts.target_price')}</label>
-            <input className={Input} type="number" step="0.01" placeholder="150.00" value={targetPrice} onChange={e => setTargetPrice(e.target.value)} />
+            <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('alerts.condition')}</label>
+            <select className={Input} value={condition} onChange={e => setCondition(e.target.value as any)}>
+              <option value="above">{alertType === 'macd_cross' ? t('alerts.condition_bullish') : t('alerts.condition_above')}</option>
+              <option value="below">{alertType === 'macd_cross' ? t('alerts.condition_bearish') : t('alerts.condition_below')}</option>
+            </select>
           </div>
+          {alertType !== 'macd_cross' && (
+            <div>
+              <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">
+                {alertType === 'rsi' ? t('alerts.rsi_threshold') : t('alerts.target_price')}
+              </label>
+              <input className={Input} type="number" step="0.01" placeholder={alertType === 'rsi' ? '70' : '150.00'} value={targetPrice} onChange={e => setTargetPrice(e.target.value)} />
+            </div>
+          )}
           <div className="flex flex-col justify-end pb-1.5">
             <label className="flex items-center gap-2.5 text-xs font-semibold text-slate-400 cursor-pointer select-none">
               <input type="checkbox" checked={autoAnalyze} onChange={e => setAutoAnalyze(e.target.checked)} className="w-4.5 h-4.5 accent-violet-600 rounded cursor-pointer" />

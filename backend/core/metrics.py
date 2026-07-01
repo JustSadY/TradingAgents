@@ -54,6 +54,12 @@ SIGNAL_PARSE_FALLBACK = Counter(
     "Final signals that defaulted because no rating could be parsed from the decision text.",
 )
 
+AUTO_ORDER_SKIPPED = Counter(
+    "tradingagents_auto_order_skipped_total",
+    "Auto-orders skipped by a guardrail instead of being placed.",
+    ["reason"],
+)
+
 
 def render_latest() -> tuple[bytes, str]:
     return generate_latest(), CONTENT_TYPE_LATEST

@@ -61,6 +61,7 @@ def build_report_fields(news_label: str, fundamentals_label: str) -> dict[str, s
         "ownership_report": "Institutional Ownership Report",
         "ratings_report": "Analyst Ratings Report",
         "short_interest_report": "Short Interest Report",
+        "valuation_report": "Valuation Comparison Report",
         "catalyst_report": "Upcoming Catalysts Report",
         "review_report": "Hindsight Performance Review Report",
     }

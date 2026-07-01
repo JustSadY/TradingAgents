@@ -35,6 +35,7 @@ class AnalysisResultRead(BaseModel):
     ownership_report: str = ""
     ratings_report: str = ""
     short_interest_report: str = ""
+    valuation_report: str = ""
     catalyst_report: str = ""
     review_report: str
     agent_qa_report: str = ""

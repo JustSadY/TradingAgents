@@ -226,6 +226,15 @@ AGENTS: list[AgentInfo] = [
         "market_intelligence",
     ),
     AgentInfo(
+        "valuation",
+        "Valuation Analyst",
+        "Relative valuation multiples vs sector benchmark",
+        "analyst",
+        False,
+        get_standard_agent_settings(),
+        "market_intelligence",
+    ),
+    AgentInfo(
         "catalyst",
         "Catalyst Calendar Analyst",
         "Upcoming earnings, dividends and event risk windows",

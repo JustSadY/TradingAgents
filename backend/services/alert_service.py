@@ -3,6 +3,7 @@ import logging
 import uuid
 from datetime import UTC, datetime
 
+import pandas as pd
 from sqlalchemy import select
 
 from backend.core.database import AsyncSessionLocal
@@ -21,6 +22,76 @@ _BACKGROUND_TASKS: set[asyncio.Task] = set()
 _RECOVERY_SEMAPHORE = asyncio.Semaphore(3)
 _ALERT_SEMAPHORE = asyncio.Semaphore(5)
 
+_INDICATOR_ALERT_TYPES = frozenset({"rsi", "macd_cross"})
+
+
+async def _fetch_close_series(ticker: str, period: str = "6mo"):
+    """Daily close-price series for indicator alerts; ``None`` on any failure."""
+    try:
+        import yfinance as yf
+
+        return await asyncio.to_thread(lambda: yf.Ticker(ticker).history(period=period)["Close"])
+    except Exception as exc:  # noqa: BLE001 — never block the alert loop on one bad ticker
+        _logger.debug("Indicator alert history fetch failed for %s: %s", ticker, exc)
+        return None
+
+
+async def _check_indicator_alert(alert: PriceAlert) -> tuple[bool, str]:
+    """Evaluate an RSI/MACD-cross alert. Returns ``(hit, detail)`` for logging."""
+    from backend.services.indicator_service import calculate_macd, calculate_rsi
+
+    hist = await _fetch_close_series(alert.ticker)
+    if hist is None or len(hist) < 30:
+        return False, ""
+
+    if alert.alert_type == "rsi":
+        rsi = calculate_rsi(hist)
+        if rsi.empty or pd.isna(rsi.iloc[-1]):
+            return False, ""
+        current = float(rsi.iloc[-1])
+        threshold = float(alert.target_price)
+        hit = (alert.condition == "above" and current >= threshold) or (
+            alert.condition == "below" and current <= threshold
+        )
+        return hit, f"RSI={current:.1f}"
+
+    if alert.alert_type == "macd_cross":
+        macd, signal = calculate_macd(hist)
+        if len(macd) < 2 or macd.iloc[-2:].isna().any() or signal.iloc[-2:].isna().any():
+            return False, ""
+        prev_diff = float(macd.iloc[-2] - signal.iloc[-2])
+        curr_diff = float(macd.iloc[-1] - signal.iloc[-1])
+        bullish_cross = prev_diff <= 0 and curr_diff > 0
+        bearish_cross = prev_diff >= 0 and curr_diff < 0
+        hit = (alert.condition == "above" and bullish_cross) or (alert.condition == "below" and bearish_cross)
+        return hit, f"MACD-signal diff {prev_diff:.3f} -> {curr_diff:.3f}"
+
+    return False, ""
+
+
+async def _notify_and_maybe_analyze(db, alert: PriceAlert, settings, current_value: float | None) -> None:
+    """Shared trigger side-effects: mark triggered, notify, optionally auto-analyze."""
+    alert.triggered_at = datetime.now(UTC)
+
+    if settings:
+        # Resolve the alert owner's AppSettings (holds the webhook config) so the
+        # notification respects that user's delivery preferences.
+        user = await db.get(User, alert.user_id)
+        user_settings = await get_or_create_settings(db, user)
+        await notify_alert_triggered(
+            alert.ticker,
+            alert.condition,
+            current_value if current_value is not None else float(alert.target_price),
+            user_settings,
+            alert_type=getattr(alert, "alert_type", "price"),
+        )
+
+    if alert.auto_analyze:
+        today = datetime.now(UTC).strftime("%Y-%m-%d")
+        task = asyncio.create_task(_throttled_analyze(alert.ticker, today, alert.user_id, _ALERT_SEMAPHORE))
+        _BACKGROUND_TASKS.add(task)
+        task.add_done_callback(_BACKGROUND_TASKS.discard)
+
 
 async def check_price_alerts() -> None:
     async with AsyncSessionLocal() as db:
@@ -34,9 +105,12 @@ async def check_price_alerts() -> None:
 
         settings = await get_system_settings(db)
 
-        prices = await get_live_prices_batch([a.ticker for a in alerts])
+        price_alerts = [a for a in alerts if getattr(a, "alert_type", "price") not in _INDICATOR_ALERT_TYPES]
+        indicator_alerts = [a for a in alerts if getattr(a, "alert_type", "price") in _INDICATOR_ALERT_TYPES]
 
-        for alert in alerts:
+        prices = await get_live_prices_batch([a.ticker for a in price_alerts]) if price_alerts else {}
+
+        for alert in price_alerts:
             price = prices.get(alert.ticker)
             if price is None:
                 continue
@@ -47,7 +121,6 @@ async def check_price_alerts() -> None:
             if not hit:
                 continue
 
-            alert.triggered_at = datetime.now(UTC)
             _logger.info(
                 "Alert triggered: %s %s $%.2f (current: $%.2f)",
                 alert.ticker,
@@ -55,25 +128,20 @@ async def check_price_alerts() -> None:
                 alert.target_price,
                 price,
             )
+            await _notify_and_maybe_analyze(db, alert, settings, float(price))
 
-            if settings:
-                # Resolve the alert owner's AppSettings (holds the webhook config) so the
-                # notification respects that user's delivery preferences.
-                user = await db.get(User, alert.user_id)
-                user_settings = await get_or_create_settings(db, user)
-                await notify_alert_triggered(
-                    alert.ticker,
-                    alert.condition,
-                    alert.target_price,
-                    user_settings,
-                    alert_type=getattr(alert, "alert_type", "price"),
-                )
+        for alert in indicator_alerts:
+            try:
+                hit, detail = await _check_indicator_alert(alert)
+            except Exception as exc:  # noqa: BLE001 — one bad ticker must not break the loop
+                _logger.warning("Indicator alert check failed for %s: %s", alert.ticker, exc)
+                continue
+            if not hit:
+                continue
 
-            if alert.auto_analyze:
-                today = datetime.now(UTC).strftime("%Y-%m-%d")
-                task = asyncio.create_task(_throttled_analyze(alert.ticker, today, alert.user_id, _ALERT_SEMAPHORE))
-                _BACKGROUND_TASKS.add(task)
-                task.add_done_callback(_BACKGROUND_TASKS.discard)
+            _logger.info("Indicator alert triggered: %s %s (%s)", alert.ticker, alert.alert_type, detail)
+            await _notify_and_maybe_analyze(db, alert, settings, None)
+
         await db.commit()
 
 

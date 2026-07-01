@@ -37,6 +37,7 @@ async def create_alert_run(
         condition=body.condition,
         target_price=body.target_price,
         auto_analyze=body.auto_analyze,
+        alert_type=body.alert_type,
     )
 
 

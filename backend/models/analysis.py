@@ -26,6 +26,7 @@ class AnalysisResult(Base):
     ownership_report: Mapped[str] = mapped_column(Text, default="")
     ratings_report: Mapped[str] = mapped_column(Text, default="")
     short_interest_report: Mapped[str] = mapped_column(Text, default="")
+    valuation_report: Mapped[str] = mapped_column(Text, default="")
     catalyst_report: Mapped[str] = mapped_column(Text, default="")
     review_report: Mapped[str] = mapped_column(Text, default="")
     synthesis_report: Mapped[str] = mapped_column(Text, default="")

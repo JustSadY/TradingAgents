@@ -27,6 +27,7 @@ TOOLS_CATEGORIES = {
             "get_catalyst_calendar",
             "get_analyst_ratings",
             "get_short_interest",
+            "get_valuation_comparison",
         ],
     },
     "social_sentiment_data": {
