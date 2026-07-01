@@ -35,6 +35,22 @@ def is_actionable(signal: str | None) -> bool:
     return signal in _SIGNAL_TO_ACTION
 
 
+def _safe_float(raw) -> float | None:
+    """``float()`` that folds ``None`` and non-numeric values into ``None``."""
+    if raw is None:
+        return None
+    try:
+        return float(raw)
+    except (TypeError, ValueError):
+        return None
+
+
+def _annotations(row) -> dict:
+    """Return ``row.chart_annotations`` when it is a dict, else an empty dict."""
+    ann = getattr(row, "chart_annotations", None)
+    return ann if isinstance(ann, dict) else {}
+
+
 def _extract_confidence_score(row) -> float | None:
     chart_annotations = getattr(row, "chart_annotations", None)
     if isinstance(chart_annotations, dict):
@@ -75,70 +91,45 @@ def _extract_leverage(row) -> float:
     ``chart_annotations``; falls back to a "**Recommended Leverage**: Nx" line
     in the rendered decision text. Defaults to 1.0 (cash) when unspecified.
     """
-    candidates: list = []
-    chart_annotations = getattr(row, "chart_annotations", None)
-    if isinstance(chart_annotations, dict):
-        candidates.append(chart_annotations.get("recommended_leverage"))
-        for nested_key in ("portfolio_decision", "trader_proposal"):
-            nested = chart_annotations.get(nested_key)
-            if isinstance(nested, dict):
-                candidates.append(nested.get("recommended_leverage"))
+    ann = _annotations(row)
+    candidates: list = [ann.get("recommended_leverage")]
+    for nested_key in ("portfolio_decision", "trader_proposal"):
+        nested = ann.get(nested_key)
+        if isinstance(nested, dict):
+            candidates.append(nested.get("recommended_leverage"))
 
     for raw in candidates:
-        if raw is None:
-            continue
-        try:
-            value = float(raw)
-        except (TypeError, ValueError):
-            continue
-        if value >= 1.0:
+        value = _safe_float(raw)
+        if value is not None and value >= 1.0:
             return min(value, 10.0)
 
     for text in (getattr(row, "final_decision", "") or "", getattr(row, "trader_plan", "") or ""):
         match = re.search(r"Recommended\s+Leverage\s*[:=]\s*\*?\*?\s*([0-9]+(?:\.[0-9]+)?)\s*x", text, re.IGNORECASE)
-        if match:
-            try:
-                value = float(match.group(1))
-            except ValueError:
-                continue
-            if value >= 1.0:
-                return min(value, 10.0)
+        value = _safe_float(match.group(1)) if match else None
+        if value is not None and value >= 1.0:
+            return min(value, 10.0)
     return 1.0
 
 
 def _extract_price_level(text: str, label: str, row=None) -> float | None:
-    if row and hasattr(row, "chart_annotations") and isinstance(row.chart_annotations, dict):
-        trader_prop = row.chart_annotations.get("trader_proposal")
-        if isinstance(trader_prop, dict):
-            key_map = {"Entry Price": "entry_price", "Stop Loss": "stop_loss", "Take Profit": "take_profit_price"}
-            struct_key = key_map.get(label)
-            if struct_key and trader_prop.get(struct_key):
-                return float(trader_prop[struct_key])
+    trader_prop = _annotations(row).get("trader_proposal")
+    if isinstance(trader_prop, dict):
+        key_map = {"Entry Price": "entry_price", "Stop Loss": "stop_loss", "Take Profit": "take_profit_price"}
+        struct_key = key_map.get(label)
+        if struct_key and trader_prop.get(struct_key):
+            return float(trader_prop[struct_key])
 
     pattern = rf"\*\*{re.escape(label)}\*\*\s*:\s*\$?\s*([0-9]+(?:\.[0-9]+)?)"
     match = re.search(pattern, text, flags=re.IGNORECASE)
-    if not match:
-        return None
-    try:
-        value = float(match.group(1))
-    except ValueError:
-        return None
-    return value if value > 0 else None
+    value = _safe_float(match.group(1)) if match else None
+    return value if (value is not None and value > 0) else None
 
 
 def _extract_kelly_ceiling_pct(row, *, confidence_score: float | None, current_price: float) -> float | None:
-    chart_annotations = getattr(row, "chart_annotations", None)
-    if isinstance(chart_annotations, dict):
-        for key in ("kelly_recommendation_pct", "kelly_position_size_pct", "kelly_pct"):
-            raw = chart_annotations.get(key)
-            if raw is None:
-                continue
-            try:
-                parsed = float(raw)
-            except (TypeError, ValueError):
-                continue
-            if parsed > 0:
-                return min(parsed, 100.0)
+    for key in ("kelly_recommendation_pct", "kelly_position_size_pct", "kelly_pct"):
+        parsed = _safe_float(_annotations(row).get(key))
+        if parsed is not None and parsed > 0:
+            return min(parsed, 100.0)
 
     final_decision = getattr(row, "final_decision", "") or ""
     match = re.search(
@@ -146,13 +137,9 @@ def _extract_kelly_ceiling_pct(row, *, confidence_score: float | None, current_p
         final_decision,
         flags=re.IGNORECASE,
     )
-    if match:
-        try:
-            parsed = float(match.group(1))
-        except ValueError:
-            parsed = None
-        if parsed and parsed > 0:
-            return min(parsed, 100.0)
+    parsed = _safe_float(match.group(1)) if match else None
+    if parsed is not None and parsed > 0:
+        return min(parsed, 100.0)
 
     trader_plan = getattr(row, "trader_plan", "") or ""
     entry = _extract_price_level(trader_plan, "Entry Price", row=row) or current_price

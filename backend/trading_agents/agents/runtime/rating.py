@@ -10,10 +10,18 @@ RATINGS_5_TIER: tuple[str, ...] = (
     "Sell",
 )
 _RATING_SET = {r.lower() for r in RATINGS_5_TIER}
+# Leading markdown / emphasis noise a model may put before a label:
+# "**Rating**", "## Final Decision", "- Signal", "> Recommendation", etc.
+_LEADING_MD = r"[\s#>*_\-]*"
+_DECISION_KEYWORDS = r"(?:rating|recommendation|decision|signal|action)"
+# Tolerate emphasis both BEFORE the keyword and around the ``:``/``-`` separator,
+# so ``**Rating**: Buy`` (the exact output of render_pm_decision) is matched.
 _RATING_LABEL_RE = re.compile(
-    r"^\s*(?:final\s+)?rating\s*[:\-]\s*\**\s*(buy|overweight|hold|underweight|sell)\b", re.IGNORECASE
+    rf"^{_LEADING_MD}(?:final\s+)?{_DECISION_KEYWORDS}\s*\**\s*[:\-]\s*\**\s*(buy|overweight|hold|underweight|sell)\b",
+    re.IGNORECASE,
 )
 _RATING_TOKEN_RE = re.compile(r"\b(buy|overweight|hold|underweight|sell)\b", re.IGNORECASE)
+_DECISION_PREFIXES = ("final", "decision", "signal", "rating", "recommendation", "action")
 
 
 def parse_rating(text: str, default: str | None = "Hold") -> str | None:
@@ -24,10 +32,11 @@ def parse_rating(text: str, default: str | None = "Hold") -> str | None:
             return m.group(1).capitalize()
     structured_candidates = []
     for line in lines:
-        stripped = line.strip().lower()
+        # Strip leading markdown so headings like "## Final Decision: ..." are seen.
+        stripped = line.strip().lstrip("#>*_- ").strip().lower()
         if not stripped:
             continue
-        if stripped.startswith(("final", "decision", "signal")):
+        if stripped.startswith(_DECISION_PREFIXES):
             structured_candidates.extend(m.group(1).lower() for m in _RATING_TOKEN_RE.finditer(line))
     unique_structured = []
     for c in structured_candidates:

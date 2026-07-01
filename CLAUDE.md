@@ -674,6 +674,8 @@ backend/
 │   ├── pattern_detection_service.py # Numpy chart pattern algorithms
 │   ├── daily_summary_service.py # AI morning brief generation
 │   ├── risk_dashboard_service.py # Portfolio beta/volatility/concentration
+│   ├── earnings_service.py     # Earnings calendar fetch + shaping (yfinance)
+│   ├── system_metrics_service.py # Prometheus registry → admin-dashboard JSON
 │   ├── trade_journal_service.py # Per-order notes + AI debriefs
 │   ├── portfolio_rebalance_service.py # AI portfolio rebalance suggestions
 │   ├── cron_service.py

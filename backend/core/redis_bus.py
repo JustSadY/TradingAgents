@@ -13,7 +13,10 @@ When enabled, Redis carries:
 
 from __future__ import annotations
 
+import asyncio
+import json
 import logging
+from collections.abc import Awaitable, Callable
 
 from backend.core.config import get_settings
 
@@ -46,6 +49,41 @@ def set_redis_for_testing(client) -> None:
     """Inject a fake client in tests (bypasses REDIS_URL)."""
     global _client
     _client = client
+
+
+async def subscribe_loop(
+    channel: str,
+    handler: Callable[[dict], Awaitable[None]],
+    *,
+    name: str,
+) -> None:
+    """Long-lived consumer for a Redis pub/sub ``channel``.
+
+    Decodes each message's JSON payload and dispatches it to ``handler``. Exits
+    quietly when Redis is disabled (returns) and re-raises on cancellation;
+    reconnects with a 2s backoff on transport errors and drops an individual
+    malformed message without tearing down the subscription. ``name`` is used
+    only for log context.
+    """
+    while True:
+        try:
+            redis = get_redis()
+            if redis is None:
+                return
+            pubsub = redis.pubsub()
+            await pubsub.subscribe(channel)
+            async for message in pubsub.listen():
+                if message.get("type") != "message":
+                    continue
+                try:
+                    await handler(json.loads(message["data"]))
+                except Exception as exc:  # noqa: BLE001 — one bad message must not kill the loop
+                    _logger.warning("%s: dropped malformed message: %s", name, exc)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001 — reconnect on any transport error
+            _logger.warning("%s disconnected (%s); retrying in 2s", name, exc)
+            await asyncio.sleep(2)
 
 
 async def close_pool_or_client(connection, logger, label: str) -> None:

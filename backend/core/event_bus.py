@@ -10,12 +10,11 @@ including runs executed in a separate arq worker process.
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 from typing import Any
 
-from backend.core.redis_bus import EVENTS_CHANNEL, get_redis, redis_enabled
+from backend.core.redis_bus import EVENTS_CHANNEL, get_redis, redis_enabled, subscribe_loop
 from backend.core.websocket import ws_manager
 
 _logger = logging.getLogger(__name__)
@@ -47,28 +46,13 @@ async def _deliver(task_id: str, event: dict[str, Any]) -> None:
 
 
 async def event_forwarder() -> None:
-    """Subscribe to the events channel and feed the local WebSocket manager.
+    """Deliver Redis-published analysis events to this process's ws_manager.
 
     Runs as a long-lived background task in each web process while Redis is
-    enabled. Reconnects with backoff if the subscription drops.
+    enabled; see ``redis_bus.subscribe_loop`` for reconnect/error semantics.
     """
-    while True:
-        try:
-            redis = get_redis()
-            if redis is None:
-                return
-            pubsub = redis.pubsub()
-            await pubsub.subscribe(EVENTS_CHANNEL)
-            async for message in pubsub.listen():
-                if message.get("type") != "message":
-                    continue
-                try:
-                    payload = json.loads(message["data"])
-                    await _deliver(payload["task_id"], payload["event"])
-                except Exception as exc:  # noqa: BLE001 — one bad event must not kill the stream
-                    _logger.warning("Dropped malformed analysis event: %s", exc)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:  # noqa: BLE001 — reconnect on any transport error
-            _logger.warning("Event forwarder disconnected (%s); retrying in 2s", exc)
-            await asyncio.sleep(2)
+
+    async def deliver(payload: dict) -> None:
+        await _deliver(payload["task_id"], payload["event"])
+
+    await subscribe_loop(EVENTS_CHANNEL, deliver, name="Event forwarder")

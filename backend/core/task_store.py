@@ -12,11 +12,10 @@ Keys (all with a sliding TTL so crashed processes cannot leak entries):
 
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 
-from backend.core.redis_bus import CONTROL_CHANNEL, get_redis, redis_enabled
+from backend.core.redis_bus import CONTROL_CHANNEL, get_redis, redis_enabled, subscribe_loop
 
 _logger = logging.getLogger(__name__)
 
@@ -110,24 +109,8 @@ async def control_listener(cancel_local) -> None:
     ``cancel_local`` is an async callable ``(task_id) -> bool`` that cancels a
     task if it runs in the current process. Runs in web and worker processes.
     """
-    while True:
-        try:
-            redis = get_redis()
-            if redis is None:
-                return
-            pubsub = redis.pubsub()
-            await pubsub.subscribe(CONTROL_CHANNEL)
-            async for message in pubsub.listen():
-                if message.get("type") != "message":
-                    continue
-                try:
-                    payload = json.loads(message["data"])
-                    if payload.get("action") == "cancel" and payload.get("task_id"):
-                        await cancel_local(payload["task_id"])
-                except Exception as exc:  # noqa: BLE001 — one bad message must not kill the listener
-                    _logger.warning("Dropped malformed control message: %s", exc)
-        except asyncio.CancelledError:
-            raise
-        except Exception as exc:  # noqa: BLE001 — reconnect on any transport error
-            _logger.warning("Control listener disconnected (%s); retrying in 2s", exc)
-            await asyncio.sleep(2)
+    async def handle(payload: dict) -> None:
+        if payload.get("action") == "cancel" and payload.get("task_id"):
+            await cancel_local(payload["task_id"])
+
+    await subscribe_loop(CONTROL_CHANNEL, handle, name="Control listener")

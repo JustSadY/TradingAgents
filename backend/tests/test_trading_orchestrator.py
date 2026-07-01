@@ -75,6 +75,74 @@ def test_kelly_ceiling_from_annotations_and_text():
     assert tro._extract_kelly_ceiling_pct(_row(), confidence_score=0.7, current_price=100.0) is None
 
 
+def test_confidence_structured_is_returned_unclamped():
+    # Structured trader_proposal confidence bypasses the 0-1 normalization the
+    # text path applies — an out-of-range value is passed through verbatim.
+    row = _row(chart_annotations={"trader_proposal": {"confidence_score": 80}})
+    assert tro._extract_confidence_score(row) == 80.0
+
+
+def test_confidence_dict_without_key_does_not_fall_through_to_text():
+    # When chart_annotations is a dict but has no confidence, the function
+    # returns None rather than falling back to the text sources.
+    row = _row(chart_annotations={"foo": 1}, trader_plan="Confidence Score: 90")
+    assert tro._extract_confidence_score(row) is None
+
+
+def test_confidence_nonnumeric_annotation_falls_through_to_text():
+    row = _row(chart_annotations={"confidence_score": "abc"}, trader_plan="Confidence Score: 55")
+    assert tro._extract_confidence_score(row) == 0.55
+
+
+def test_confidence_text_over_100_is_clamped_to_1():
+    assert tro._extract_confidence_score(_row(trader_plan="confidence score: 250")) == 1.0
+
+
+def test_confidence_annotations_not_a_dict_uses_text():
+    row = _row(chart_annotations=[1, 2], trader_plan="Confidence Score: 30")
+    assert tro._extract_confidence_score(row) == 0.3
+
+
+def test_leverage_from_nested_structured_keys():
+    assert tro._extract_leverage(_row(chart_annotations={"portfolio_decision": {"recommended_leverage": 4}})) == 4.0
+    assert tro._extract_leverage(_row(chart_annotations={"trader_proposal": {"recommended_leverage": 2.5}})) == 2.5
+
+
+def test_leverage_below_1x_structured_falls_through_to_text():
+    row = _row(chart_annotations={"recommended_leverage": 0.5}, final_decision="**Recommended Leverage:** 3x")
+    assert tro._extract_leverage(row) == 3.0
+
+
+def test_leverage_nonnumeric_defaults_to_cash():
+    assert tro._extract_leverage(_row(chart_annotations={"recommended_leverage": "big"})) == 1.0
+
+
+def test_price_level_structured_and_text():
+    row = _row(chart_annotations={"trader_proposal": {"entry_price": 101.5, "stop_loss": 95}})
+    assert tro._extract_price_level("", "Entry Price", row=row) == 101.5
+    assert tro._extract_price_level("", "Stop Loss", row=row) == 95.0
+    assert tro._extract_price_level("**Take Profit**: $120.50", "Take Profit") == 120.5
+
+
+def test_price_level_no_match_and_non_positive_are_none():
+    assert tro._extract_price_level("nothing here", "Entry Price") is None
+    assert tro._extract_price_level("**Entry Price**: 0", "Entry Price") is None
+
+
+def test_kelly_ceiling_key_fallback_order_and_clamp():
+    assert tro._extract_kelly_ceiling_pct(_row(chart_annotations={"kelly_position_size_pct": 30}), confidence_score=None, current_price=100.0) == 30.0
+    assert tro._extract_kelly_ceiling_pct(_row(chart_annotations={"kelly_pct": 500}), confidence_score=None, current_price=100.0) == 100.0
+
+
+def test_kelly_ceiling_computed_from_risk_reward():
+    # Entry 100 / stop 90 / target 130 with confidence 0.6 -> Kelly-sized ceiling.
+    row = _row(trader_plan="**Entry Price**: 100\n**Stop Loss**: 90\n**Take Profit**: 130")
+    assert tro._extract_kelly_ceiling_pct(row, confidence_score=0.6, current_price=100.0) == 20.0
+    # Missing stop -> cannot compute -> None.
+    row2 = _row(trader_plan="**Entry Price**: 100\n**Take Profit**: 130")
+    assert tro._extract_kelly_ceiling_pct(row2, confidence_score=0.6, current_price=100.0) is None
+
+
 def test_position_quantity_risk_based_sizing():
     # 1% of 100k = $1000 risk; no stop -> notional sizing at $100/share = 10 shares.
     assert tro._position_quantity(1.0, 100_000, 100.0) == 10.0

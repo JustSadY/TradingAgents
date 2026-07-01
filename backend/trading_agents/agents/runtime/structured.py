@@ -63,6 +63,37 @@ def get_json_schema(schema: type[T]) -> str:
     return "{}"
 
 
+def parse_and_validate(text: str, schema: type[T]) -> T:
+    """Extract a JSON block from ``text`` and validate it against ``schema``.
+
+    Raises ``json.JSONDecodeError`` / validation errors on malformed input;
+    callers decide how to recover. Falls back to the stripped text when no
+    fenced/braced block is found.
+    """
+    json_str = extract_json_block(text) or text.strip()
+    return validate_schema(schema, json.loads(json_str))
+
+
+def _coerce_structured_result(result: Any, schema: type[T]) -> Any:
+    """Normalize a ``with_structured_output`` result into a validated model.
+
+    Handles the three shapes a provider may return: an already-built model, a
+    plain dict, or an AIMessage/string carrying JSON. Returns the raw ``result``
+    unchanged when it cannot be coerced.
+    """
+    if isinstance(result, schema):
+        return result
+    if isinstance(result, dict):
+        return validate_schema(schema, result)
+    content = getattr(result, "content", result)
+    if isinstance(content, str):
+        try:
+            return parse_and_validate(content, schema)
+        except Exception:
+            pass
+    return result
+
+
 async def self_correct_structured(
     plain_llm: Any,
     schema: type[T],
@@ -106,9 +137,7 @@ async def self_correct_structured(
     try:
         response = await plain_llm.ainvoke(correction_messages)
         text = response.content if hasattr(response, "content") else str(response)
-        json_str = extract_json_block(text) or text.strip()
-        parsed = json.loads(json_str)
-        return validate_schema(schema, parsed)
+        return parse_and_validate(text, schema)
     except Exception as exc:
         logger.warning(
             "%s: Self-correction attempt %d failed to validate: %s",
@@ -135,21 +164,9 @@ async def ainvoke_structured_or_freetext(
     if structured_llm is not None:
         try:
             result = await structured_llm.ainvoke(prompt)
-            # Ensure it is validated if a schema is given
-            if schema is not None:
-                if isinstance(result, schema):
-                    return result
-                if isinstance(result, dict):
-                    return validate_schema(schema, result)
-                # Handle AIMessage or string returned by with_structured_output fallback
-                content = getattr(result, "content", result)
-                if isinstance(content, str):
-                    try:
-                        parsed = json.loads(extract_json_block(content) or content.strip())
-                        return validate_schema(schema, parsed)
-                    except Exception:
-                        pass
-            return result
+            if schema is None:
+                return result
+            return _coerce_structured_result(result, schema)
         except Exception as exc:
             logger.warning(
                 "%s: structured-output ainvocation failed (%s); falling back to parsing free-text",
