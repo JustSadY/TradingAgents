@@ -35,6 +35,9 @@ interface BacktestResults {
   trades_count: number
   trades: Trade[]
   equity_curve: EquityPoint[]
+  slippage_bps?: number
+  benchmark?: { ticker: string; return_pct: number } | null
+  alpha_pct?: number | null
 }
 
 const Input = "w-full glass-input rounded-xl px-3 py-2 text-xs outline-none"
@@ -169,6 +172,20 @@ export default function Backtest() {
             <StatCard icon={<TrendingDown size={16} />} label={t('backtest.stats_max_dd')} value={`${results.max_drawdown}%`} color="text-rose-400" accent="from-rose-500/10" />
             <StatCard icon={<Sparkles size={16} />} label={t('backtest.stats_sharpe')} value={String(results.sharpe_ratio)} color={results.sharpe_ratio >= 1.5 ? 'text-emerald-400' : results.sharpe_ratio >= 0 ? 'text-slate-200' : 'text-rose-400'} />
           </div>
+
+          {results.benchmark && results.alpha_pct != null && (
+            <div className="glass-panel rounded-2xl p-4 flex items-center justify-between text-xs">
+              <span className="text-slate-400 font-semibold">
+                {t('backtest.vs_benchmark').replace('{ticker}', results.benchmark.ticker)}: <span className={results.benchmark.return_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{results.benchmark.return_pct >= 0 ? '+' : ''}{results.benchmark.return_pct}%</span>
+              </span>
+              <span className="font-bold">
+                {t('backtest.alpha')}: <span className={results.alpha_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}>{results.alpha_pct >= 0 ? '+' : ''}{results.alpha_pct}%</span>
+              </span>
+              {results.slippage_bps != null && (
+                <span className="text-slate-500">{t('backtest.slippage_applied').replace('{bps}', String(results.slippage_bps))}</span>
+              )}
+            </div>
+          )}
 
           {/* Chart Section */}
           <div className="glass-panel rounded-2xl p-5 space-y-4">

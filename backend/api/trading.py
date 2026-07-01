@@ -42,6 +42,8 @@ class BacktestRequest(BaseModel):
     start_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
     end_date: str = Field(..., pattern=r"^\d{4}-\d{2}-\d{2}$")
     initial_capital: float = Field(default=100_000.0, gt=0, le=10_000_000)
+    slippage_bps: float = Field(default=5.0, ge=0, le=100)
+    benchmark_ticker: str | None = Field(default=None, max_length=20)
 
     @field_validator("ticker")
     @classmethod
@@ -105,6 +107,13 @@ async def run_backtest(
     db: AsyncSession = Depends(get_db),
     _=Depends(get_current_user),
 ):
+    benchmark_ticker = req.benchmark_ticker
+    if not benchmark_ticker:
+        from backend.services.settings_service import get_or_create_settings
+
+        user_settings = await get_or_create_settings(db, _)
+        benchmark_ticker = getattr(user_settings, "benchmark_ticker", None) or "SPY"
+
     res = await run_backtest_simulation(
         db,
         ticker=req.ticker,
@@ -113,6 +122,8 @@ async def run_backtest(
         end_date=req.end_date,
         initial_capital=req.initial_capital,
         user=_,
+        slippage_bps=req.slippage_bps,
+        benchmark_ticker=benchmark_ticker,
     )
     if "error" in res:
         raise HTTPException(status_code=400, detail=res["error"])
