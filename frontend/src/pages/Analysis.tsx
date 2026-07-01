@@ -12,15 +12,16 @@ import { useTranslation } from '../contexts/LanguageContext'
 import {
   Loader2, CheckCircle, AlertCircle, History,
   X, BarChart2, FileText, Zap,
-  Download, FileDown, AlertTriangle, Scale, Share2, Copy
+  Download, FileDown, AlertTriangle, Scale, Share2, Copy,
+  MessageSquare, Bot, Terminal, BookOpen
 } from 'lucide-react'
 
 // Components
 import { SignalBadge } from '../components/analysis/SignalBadge'
 import { ReportCard } from '../components/analysis/ReportCard'
 import { AnalysisControls } from '../components/analysis/AnalysisControls'
-import { AnalysisLog } from '../components/analysis/AnalysisLog'
-import { DebateHistoryWidget, parseDebateMessage } from '../components/analysis/DebateHistoryWidget'
+
+import { DebateHistoryWidget, parseDebateMessage, getSenderStyles } from '../components/analysis/DebateHistoryWidget'
 import { AnalysisChatWidget } from '../components/analysis/AnalysisChatWidget'
 import { RiskMetricsCard } from '../components/analysis/RiskMetricsCard'
 import { MentalModelTicker } from '../components/analysis/MentalModelTicker'
@@ -32,6 +33,7 @@ interface WsEvent {
   llm_calls?: number; status?: string; agent?: string; analysis_id?: number
   label?: string; stage?: string; node?: string
   thought?: string; metrics?: any; token?: string; tokens_in?: number; tokens_out?: number
+  debate_type?: string
 }
 interface HistoryItem {
   id: number; ticker: string; trade_date: string; asset_type: string
@@ -78,7 +80,8 @@ const SECTION_LABELS: Record<string, string> = {
   catalyst_report: 'Upcoming Catalysts',
   review_report: 'Review', agent_qa_report: 'Cross-Examination',
   investment_plan: 'Investment Plan',
-  trader_investment_plan: 'Trader Plan', final_trade_decision: 'PM Decision',
+  trader_investment_plan: 'Trader Proposal (preliminary)', final_trade_decision: 'Final Decision (Portfolio Manager)',
+  trader_plan: 'Trader Proposal (preliminary)', final_decision: 'Final Decision (Portfolio Manager)',
   bull_history: 'Bull', bear_history: 'Bear',
   investment_debate_history: 'Debate', risk_debate_history: 'Risk Debate',
   judge_decision: 'Judge',
@@ -155,9 +158,9 @@ function RunTab() {
   const [activeSection, setActiveSection] = useState<string | null>(saved.activeSection)
   const [analysisId, setAnalysisId] = useState<number | null>(saved.analysisId || null)
   const [detail, setDetail] = useState<AnalysisDetail | null>(null)
-  const [activeDetailTab, setActiveDetailTab] = useState<'reports' | 'debate' | 'chat' | 'timetravel'>('reports')
-  const [leftTab, setLeftTab] = useState<'log' | 'debate'>('log')
-  const [liveDebate, setLiveDebate] = useState<{ sender: string; content: string }[]>([])
+  const [activeTab, setActiveTab] = useState<'consensus' | 'reports' | 'debate' | 'chat' | 'timetravel'>('consensus')
+  const [liveDebate, setLiveDebate] = useState<{ sender: string; content: string; type: string }[]>([])
+  const [liveDebateTab, setLiveDebateTab] = useState<'inv' | 'risk'>('inv')
   const [riskMetrics, setRiskMetrics] = useState<any>(null)
   const [mentalModel, setMentalModel] = useState<{ agent: string; thought: string } | null>(null)
   const [stats, setStats] = useState<{ llmCalls: number; tokensIn: number; tokensOut: number } | null>(null)
@@ -280,7 +283,7 @@ function RunTab() {
         setRiskMetrics(ev.metrics)
       } else if (ev.type === 'debate_bubble' && ev.message) {
         const parsed = parseDebateMessage(ev.message)
-        setLiveDebate(prev => [...prev, parsed])
+        setLiveDebate(prev => [...prev, { ...parsed, type: ev.debate_type || 'investment' }])
       } else if (ev.type === 'decision') {
         setSignal(ev.signal || null)
       } else if (ev.type === 'complete') {
@@ -538,89 +541,381 @@ function RunTab() {
         <MentalModelTicker agent={mentalModel.agent} thought={mentalModel.thought} />
       )}
 
-      {(running || log.length > 0 || reportEntries.length > 0 || !!detail) && (
-        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <AnalysisLog leftTab={leftTab} setLeftTab={setLeftTab} log={log} liveDebate={liveDebate} currentStep={currentStep} stats={stats} t={t} />
+      {(running || log.length > 0 || reportEntries.length > 0 || !!detail) && (() => {
+        const isCompleted = !!detail || runStatus === 'done';
+        const activeSignal = detail ? detail.signal : signal;
+        const activeRiskMetrics = detail ? detail.risk_metrics : riskMetrics;
+        const activeTraderProposal = detail ? detail.trader_proposal_json : reports.trader_proposal_json;
+        const activeId = detail ? detail.id : analysisId;
 
-          <div className="lg:col-span-2 glass-panel rounded-2xl overflow-hidden flex flex-col h-[40vh] sm:h-[50vh] lg:h-[65vh]">
-            {detail ? (
-              <>
-                <div className="flex items-center gap-1 p-1 bg-slate-900/40 border-b border-white/[0.04]">
-                  <button onClick={() => setActiveDetailTab('reports')} className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'reports' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.reports')}</button>
-                  <button onClick={() => setActiveDetailTab('debate')} className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.debate')}</button>
-                  <button onClick={() => setActiveDetailTab('chat')} className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'chat' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.qa')}</button>
-                  <button onClick={() => setActiveDetailTab('timetravel')} className={`flex-1 text-center py-2.5 text-xs sm:py-1.5 sm:text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer ${activeDetailTab === 'timetravel' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'}`}>{t('analysis.tab.timetravel')}</button>
-                </div>
-                <div className="flex-1 p-4 overflow-y-auto min-h-0">
-                  {activeDetailTab === 'reports' && (
-                    <div className="space-y-2">
-                      {detail.risk_metrics && <RiskMetricsCard metrics={detail.risk_metrics} />}
-                      <KellyPositioningFromJson json={detail.trader_proposal_json} />
-                      {([
-                        ['market_report', detail.market_report],
-                        ['sentiment_report', detail.sentiment_report],
-                        ['news_report', detail.news_report],
-                        ['fundamentals_report', detail.fundamentals_report],
-                        ['macro_report', detail.macro_report],
-                        ['options_report', detail.options_report],
-                        ['quant_report', detail.quant_report],
-                        ['earnings_report', detail.earnings_report],
-                        ['insider_report', detail.insider_report],
-                        ['ownership_report', detail.ownership_report],
-                        ['ratings_report', detail.ratings_report],
-                        ['short_interest_report', detail.short_interest_report],
-                        ['valuation_report', detail.valuation_report],
-                        ['catalyst_report', detail.catalyst_report],
-                        ['review_report', detail.review_report],
-                        ['agent_qa_report', detail.agent_qa_report],
-                        ['investment_plan', detail.investment_plan],
-                        ['trader_plan', detail.trader_plan],
-                        ['final_decision', detail.final_decision],
-                        ['bull_history', detail.bull_history],
-                        ['bear_history', detail.bear_history],
-                        ['judge_decision', detail.judge_decision],
-                      ] as [string, string | undefined][]).map(([k, v]) => (
-                        <ReportCard key={k} label={sectionLabels[k] || k} content={v || ''} />
-                      ))}
-                    </div>
+        const activePlans = detail ? {
+          investment_plan: detail.investment_plan,
+          trader_plan: detail.trader_plan,
+          final_decision: detail.final_decision,
+        } : {
+          investment_plan: reports.trader_investment_plan || reports.trader_plan || reports.investment_plan || '',
+          trader_plan: reports.trader_plan || '',
+          final_decision: reports.final_decision || '',
+        };
+
+        const analystReportKeys = [
+          'market_report', 'sentiment_report', 'news_report',
+          'fundamentals_report', 'macro_report', 'options_report',
+          'quant_report', 'earnings_report', 'insider_report',
+          'ownership_report', 'ratings_report', 'short_interest_report',
+          'valuation_report', 'catalyst_report', 'review_report', 'agent_qa_report'
+        ];
+
+        const activeReports = analystReportKeys
+          .map(k => [k, detail ? detail[k as keyof AnalysisDetail] : reports[k]])
+          .filter(([_, val]) => !!val) as [string, string][];
+
+        const filteredLiveMessages = liveDebate.filter(m => {
+          if (liveDebateTab === 'inv') {
+            return m.type === 'investment' || m.type === 'consensus';
+          } else {
+            return m.type === 'risk';
+          }
+        });
+
+        return (
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start animate-in fade-in duration-300">
+            {/* Left Column: Sidebar Dashboard & Terminal Log */}
+            <div className="lg:col-span-1 space-y-5 flex flex-col h-full">
+              {/* Engine Status & Mental Model */}
+              <div className="glass-panel p-4 rounded-2xl space-y-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Engine Status</span>
+                  {running ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/10 text-violet-400 border border-violet-500/20">
+                      <span className="h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse" />
+                      Running
+                    </span>
+                  ) : runStatus === 'done' ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                      <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
+                      Completed
+                    </span>
+                  ) : runStatus === 'error' ? (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                      <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
+                      Failed
+                    </span>
+                  ) : (
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-500/10 text-slate-400 border border-white/[0.04]">
+                      Idle
+                    </span>
                   )}
-                  {activeDetailTab === 'debate' && <DebateHistoryWidget investmentHistory={detail.investment_debate_history} riskHistory={detail.risk_debate_history} />}
-                  {activeDetailTab === 'chat' && <AnalysisChatWidget analysisId={detail.id} />}
-                  {activeDetailTab === 'timetravel' && <TimeTravelWidget analysisId={detail.id} onRollbackStart={handleRollbackStart} />}
                 </div>
-              </>
-            ) : (
-              <>
-                <div className="flex items-center gap-2 px-4 py-3 border-b border-white/[0.04] bg-slate-900/20">
-                  <FileText size={14} className="text-slate-400" />
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('analysis.reports.title')}</span>
-                  <span className="ml-auto text-[10px] text-slate-600 font-semibold">{reportEntries.length} {t('analysis.reports.sections')}</span>
+
+                {running && currentStep && (
+                  <div className="space-y-1.5 animate-in fade-in duration-300">
+                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block">Current Action</span>
+                    <p className="text-white text-xs font-semibold truncate flex items-center gap-1.5">
+                      <Loader2 size={11} className="animate-spin text-violet-400 shrink-0" />
+                      {currentStep.label}
+                    </p>
+                  </div>
+                )}
+
+                {running && mentalModel && (
+                  <div className="border-t border-white/[0.04] pt-3 mt-3 animate-in fade-in duration-500">
+                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Agent Thought Process</span>
+                    <MentalModelTicker agent={mentalModel.agent} thought={mentalModel.thought} />
+                  </div>
+                )}
+              </div>
+
+              {/* Statistics Dashboard */}
+              {(stats || detail) && (
+                <div className="glass-panel p-4 rounded-2xl grid grid-cols-3 gap-2">
+                  <div className="text-center p-2 rounded-xl bg-slate-900/40 border border-white/[0.03]">
+                    <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">LLM Calls</span>
+                    <span className="text-sm font-bold text-white font-mono">{detail ? detail.llm_calls : stats?.llmCalls || 0}</span>
+                  </div>
+                  <div className="text-center p-2 rounded-xl bg-slate-900/40 border border-white/[0.03]">
+                    <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">Tokens</span>
+                    <span className="text-sm font-bold text-white font-mono">
+                      {detail 
+                        ? ((detail.tokens_in + detail.tokens_out).toLocaleString()) 
+                        : (((stats?.tokensIn || 0) + (stats?.tokensOut || 0)).toLocaleString())
+                      }
+                    </span>
+                  </div>
+                  <div className="text-center p-2 rounded-xl bg-slate-900/40 border border-white/[0.03]">
+                    <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">Cost Est.</span>
+                    <span className="text-sm font-bold text-emerald-400 font-mono">
+                      ${detail?.estimated_cost_usd 
+                        ? detail.estimated_cost_usd.toFixed(4)
+                        : (((stats?.tokensIn || 0) * 0.000005 + (stats?.tokensOut || 0) * 0.000015).toFixed(4))
+                      }
+                    </span>
+                  </div>
                 </div>
-                <div className="flex-1 p-4 overflow-y-auto min-h-0 space-y-2">
-                  {riskMetrics && <RiskMetricsCard metrics={riskMetrics} />}
-                  <KellyPositioningFromJson json={reports.trader_proposal_json} />
-                  {reportEntries.length === 0 && !riskMetrics && (
-                    <div className="flex flex-col items-center justify-center py-16 text-slate-600">
-                      <FileText size={28} className="opacity-25 mb-2" />
-                      <p className="text-xs">{t('analysis.reports.empty')}</p>
+              )}
+
+              {/* System terminal log */}
+              <div className="glass-panel rounded-2xl overflow-hidden flex flex-col h-[28vh] sm:h-[35vh]">
+                <div className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900/40 border-b border-white/[0.04]">
+                  <Terminal size={12} className="text-slate-400" />
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">System Progress Log</span>
+                </div>
+                <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-slate-950/40 space-y-2 font-mono text-[10px]">
+                  {log.map((line, i) => (
+                    <div key={i} className="flex gap-2.5 leading-relaxed animate-in fade-in slide-in-from-left-2 duration-300">
+                      <span className="text-slate-600 shrink-0 select-none">{(i + 1).toString().padStart(2, '0')}</span>
+                      <span className={`${
+                        line.startsWith('Completed') ? 'text-emerald-400' :
+                        line.startsWith('Error') ? 'text-rose-400' :
+                        line.startsWith('Progress') ? 'text-violet-400' : 'text-slate-400'
+                      }`}>
+                        {line}
+                      </span>
                     </div>
-                  )}
-                  
-                  {reportEntries.map(([section, content]) => (
-                    <ReportCard
-                      key={section}
-                      label={sectionLabels[section] || section}
-                      content={content}
-                      defaultOpen={section === activeSection}
-                      isStreaming={running && section === activeSection}
-                    />
                   ))}
+                  {log.length === 0 && (
+                    <div className="h-full flex flex-col items-center justify-center opacity-25 py-12 text-slate-500 font-sans">
+                      <History size={20} className="mb-1.5" />
+                      <p className="text-[9px] uppercase tracking-widest font-semibold">Logs are empty</p>
+                    </div>
+                  )}
                 </div>
-              </>
-            )}
+              </div>
+            </div>
+
+            {/* Right Column: Unified Main Panel Arena */}
+            <div className="lg:col-span-2 glass-panel rounded-2xl overflow-hidden flex flex-col h-[65vh] sm:h-[70vh]">
+              {/* Arena tabs */}
+              <div className="flex gap-0.5 p-1 bg-slate-950/60 border-b border-white/[0.04] overflow-x-auto custom-scrollbar shrink-0">
+                <button
+                  onClick={() => setActiveTab('consensus')}
+                  className={`flex items-center justify-center gap-1.5 px-3 py-2 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'consensus' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
+                  }`}
+                >
+                  <Scale size={12} /> {sectionLabels.final_decision || 'Consensus'}
+                </button>
+                <button
+                  onClick={() => setActiveTab('reports')}
+                  className={`flex items-center justify-center gap-1.5 px-3 py-2 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'reports' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
+                  }`}
+                >
+                  <BookOpen size={12} /> {t('analysis.tab.reports')}
+                </button>
+                <button
+                  onClick={() => setActiveTab('debate')}
+                  className={`flex items-center justify-center gap-1.5 px-3 py-2 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'debate' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
+                  }`}
+                >
+                  <MessageSquare size={12} /> {t('analysis.tab.debate')}
+                </button>
+                <button
+                  onClick={() => setActiveTab('chat')}
+                  className={`flex items-center justify-center gap-1.5 px-3 py-2 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'chat' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
+                  }`}
+                >
+                  <Bot size={12} /> {t('analysis.tab.qa')}
+                </button>
+                <button
+                  onClick={() => setActiveTab('timetravel')}
+                  className={`flex items-center justify-center gap-1.5 px-3 py-2 text-[10px] uppercase tracking-wider font-bold rounded-lg transition-all cursor-pointer whitespace-nowrap ${
+                    activeTab === 'timetravel' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
+                  }`}
+                >
+                  <History size={12} /> {t('analysis.tab.timetravel')}
+                </button>
+              </div>
+
+              {/* Arena Content Area */}
+              <div className="flex-1 p-4 overflow-y-auto min-h-0 custom-scrollbar bg-slate-900/10">
+                {activeTab === 'consensus' && (
+                  <div className="space-y-4 animate-in fade-in duration-300">
+                    {/* Signal & Sizing Section */}
+                    <div className="flex flex-wrap gap-4 items-center justify-between p-4 bg-slate-900/50 border border-white/[0.04] rounded-2xl">
+                      <div className="space-y-1">
+                        <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest block">Consensus Recommendation</span>
+                        <div className="flex items-center gap-2">
+                          <SignalBadge signal={activeSignal} large />
+                          {detail?.quality && <QualityBadge quality={detail.quality} />}
+                        </div>
+                      </div>
+                      {activeTraderProposal && activeTraderProposal !== '{}' && (
+                        <div className="flex-1 max-w-md min-w-[200px]">
+                          <KellyPositioningFromJson json={activeTraderProposal} />
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Risk metrics if present */}
+                    {activeRiskMetrics && <RiskMetricsCard metrics={activeRiskMetrics} />}
+
+                    {/* PM Final Decision */}
+                    {activePlans.final_decision ? (
+                      <div className="glass-panel p-5 rounded-2xl space-y-3 bg-slate-950/20 border border-white/[0.05]">
+                        <h4 className="text-[10px] font-bold text-violet-300 uppercase tracking-widest flex items-center gap-1.5">
+                          <Scale size={13} /> {sectionLabels.final_decision || 'Nihai Karar (Portfolio Manager)'}
+                        </h4>
+                        <div className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed select-text font-sans">
+                          {activePlans.final_decision}
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="text-center py-12 text-slate-500 text-xs">
+                        {running ? 'Portfolio Manager decision is pending...' : 'No decision generated yet.'}
+                      </div>
+                    )}
+
+                    {/* Stacked Plan Cards */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      {activePlans.investment_plan && (
+                        <div className="glass-panel p-4 rounded-xl space-y-2 bg-slate-900/30">
+                          <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{sectionLabels.investment_plan || 'Investment Plan'}</h5>
+                          <div className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed select-text font-sans">{activePlans.investment_plan}</div>
+                        </div>
+                      )}
+                      {activePlans.trader_plan && (
+                        <div className="glass-panel p-4 rounded-xl space-y-2 bg-slate-900/30">
+                          <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{sectionLabels.trader_plan || 'Trader Proposal'}</h5>
+                          <div className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed select-text font-sans">{activePlans.trader_plan}</div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+
+                {activeTab === 'reports' && (
+                  <div className="space-y-3 animate-in fade-in duration-300">
+                    {activeReports.length === 0 ? (
+                      <div className="flex flex-col items-center justify-center py-16 text-slate-600">
+                        <FileText size={28} className="opacity-25 mb-2" />
+                        <p className="text-xs">{t('analysis.reports.empty')}</p>
+                      </div>
+                    ) : (
+                      activeReports.map(([key, content]) => (
+                        <ReportCard
+                          key={key}
+                          label={sectionLabels[key] || key}
+                          content={content}
+                          defaultOpen={key === activeSection}
+                          isStreaming={running && key === activeSection}
+                        />
+                      ))
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'debate' && (
+                  <div className="animate-in fade-in duration-300">
+                    {isCompleted && detail ? (
+                      <DebateHistoryWidget investmentHistory={detail.investment_debate_history} riskHistory={detail.risk_debate_history} />
+                    ) : (
+                      <div className="flex flex-col bg-slate-950/80 border border-white/[0.04] rounded-2xl p-4 space-y-4">
+                        <div className="flex gap-2 p-1 bg-slate-900/50 border border-white/[0.04] rounded-xl w-fit self-center">
+                          <button
+                            onClick={() => setLiveDebateTab('inv')}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer ${
+                              liveDebateTab === 'inv' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
+                            }`}
+                          >
+                            Consensus Debate
+                          </button>
+                          <button
+                            onClick={() => setLiveDebateTab('risk')}
+                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer ${
+                              liveDebateTab === 'risk' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
+                            }`}
+                          >
+                            Risk Debate
+                          </button>
+                        </div>
+                        <div className="flex-1 overflow-y-auto space-y-3 max-h-[45vh] pr-1">
+                          {filteredLiveMessages.length === 0 && (
+                            <div className="h-full flex flex-col items-center justify-center opacity-20 py-20">
+                              <MessageSquare size={30} className="mb-2" />
+                              <p className="text-xs font-medium uppercase tracking-widest text-center">
+                                {running && currentStep && (currentStep.stage === 'research' || currentStep.stage === 'risk')
+                                  ? t('analysis.debate.waiting')
+                                  : 'Live debate has not started yet.'}
+                              </p>
+                            </div>
+                          )}
+                          {filteredLiveMessages.map((bubble, i) => {
+                            const styles = getSenderStyles(bubble.sender);
+                            return (
+                              <div key={i} className={`flex w-full ${styles.side} animate-in zoom-in-95 fade-in duration-300`}>
+                                <div className={`border rounded-2xl px-4 py-2.5 text-xs flex flex-col gap-1 max-w-[85%] ${styles.bg}`}>
+                                  <span className="font-bold uppercase tracking-wider text-[9px] opacity-80 flex items-center gap-1">
+                                    {styles.icon} {bubble.sender}
+                                  </span>
+                                  <span className="leading-relaxed whitespace-pre-wrap">{bubble.content}</span>
+                                </div>
+                              </div>
+                            );
+                          })}
+                          
+                          {running && currentStep && (
+                            (liveDebateTab === 'inv' && currentStep.stage === 'research') ||
+                            (liveDebateTab === 'risk' && currentStep.stage === 'risk')
+                          ) && (
+                            <div className="flex justify-start items-center gap-3 animate-pulse pl-1 pt-2">
+                              <div className="w-6 h-6 rounded-full bg-slate-900/80 border border-white/[0.06] flex items-center justify-center shadow">
+                                <span className="relative flex h-2 w-2">
+                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
+                                </span>
+                              </div>
+                              <div className="bg-slate-900/40 border border-slate-800/40 rounded-2xl px-3.5 py-2 text-[10px] text-slate-400 flex items-center gap-1.5">
+                                <Loader2 size={10} className="animate-spin text-slate-500" />
+                                <span className="font-semibold uppercase tracking-tight">
+                                  {currentStep.label} {t('analysis.debate.typing')}
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'chat' && (
+                  <div className="animate-in fade-in duration-300 h-full">
+                    {activeId ? (
+                      <AnalysisChatWidget analysisId={activeId} />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+                        <Bot size={36} className="opacity-25 mb-3" />
+                        <p className="text-xs font-semibold">Q&A Assistant will be available once the analysis is completed.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {activeTab === 'timetravel' && (
+                  <div className="animate-in fade-in duration-300">
+                    {activeId ? (
+                      <TimeTravelWidget
+                        analysisId={activeId}
+                        onRollbackStart={(taskId) => {
+                          handleRollbackStart(taskId);
+                        }}
+                      />
+                    ) : (
+                      <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+                        <History size={36} className="opacity-25 mb-3" />
+                        <p className="text-xs font-semibold">Time Travel checkpoints will be available once the analysis is completed.</p>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        );
+      })()}
     </div>
   )
 }

@@ -11,7 +11,7 @@ from backend.core.metrics import WS_CONNECTIONS
 _logger = logging.getLogger(__name__)
 
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
-_BUFFER_SIZE = 64
+_BUFFER_SIZE = 10000
 _BUFFER_TTL = 30
 
 

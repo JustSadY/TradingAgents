@@ -47,7 +47,9 @@ class AnalysisResultRead(BaseModel):
     investment_debate_history: Any = None
     risk_debate_history: Any = None
     judge_decision: str = ""
+    trader_proposal_json: str = "{}"
     chart_annotations: Any = None
+    risk_metrics: Any = None
     quality: Any = None
     llm_calls: int
     tool_calls: int

@@ -52,8 +52,8 @@ const SECTION_LABELS: Record<Lang, Record<string, string>> = {
     review_report:     'Review',
     agent_qa_report:   'Agent Cross-Examination',
     investment_plan:   'Investment Plan',
-    trader_plan:       'Trader Plan',
-    final_decision:    'Portfolio Manager Decision',
+    trader_plan:       'Trader Proposal (preliminary)',
+    final_decision:    'Final Decision (Portfolio Manager)',
   },
   tr: {
     market_report:     'Piyasa Analizi',
@@ -73,8 +73,8 @@ const SECTION_LABELS: Record<Lang, Record<string, string>> = {
     review_report:     'Performans İnceleme',
     agent_qa_report:   'Ajan Çapraz Sorgu',
     investment_plan:   'Yatırım Planı',
-    trader_plan:       'Trader Planı',
-    final_decision:    'PM Kararı',
+    trader_plan:       'Trader Önerisi (ön karar)',
+    final_decision:    'Nihai Karar (Portfolio Manager)',
   },
 }
 

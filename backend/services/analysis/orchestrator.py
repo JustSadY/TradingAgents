@@ -382,6 +382,36 @@ async def run_individual_analysis(
 
                             await emitter.emit_debate_bubble(d_type, lines[-1])
 
+                        if d_type == "investment":
+
+                            await update_result_fields(
+
+                                db,
+
+                                row.id,
+
+                                investment_debate_history=history_json_from(history),
+
+                                bull_history=history_json_from(d_state.get("bull_history", "")),
+
+                                bear_history=history_json_from(d_state.get("bear_history", "")),
+
+                                judge_decision=str(d_state.get("judge_decision", "") or ""),
+
+                            )
+
+                        else:
+
+                            await update_result_fields(
+
+                                db,
+
+                                row.id,
+
+                                risk_debate_history=history_json_from(history),
+
+                            )
+
 
 
                                         
