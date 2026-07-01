@@ -1,4 +1,5 @@
 from .runtime.agent_states import AgentState, InvestDebateState, RiskDebateState
+from .sub.analysts.analyst_ratings_analyst import create_analyst_ratings_analyst
 from .sub.analysts.catalyst_analyst import create_catalyst_analyst
 from .sub.analysts.earnings_analyst import create_earnings_analyst
 from .sub.analysts.fundamentals_analyst import create_fundamentals_analyst
@@ -52,4 +53,5 @@ __all__ = [
     "create_institutional_analyst",
     "create_catalyst_analyst",
     "create_review_analyst",
+    "create_analyst_ratings_analyst",
 ]

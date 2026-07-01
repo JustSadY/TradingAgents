@@ -45,6 +45,11 @@ def _build_payload(url: str, event: str, data: dict) -> dict:
             event, 0x6B7280
         )
         return {"embeds": [{"title": _event_title(event), "description": text, "color": color}]}
+    if "api.telegram.org" in url:
+        # Telegram Bot API sendMessage. Configure the URL as
+        # https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<CHAT_ID>
+        # — chat_id rides in the query string; the message body carries the text.
+        return {"text": f"{_event_title(event)}\n\n{text}", "disable_web_page_preview": True}
     return {"event": event, "data": data, "text": text}
 
 

@@ -123,6 +123,7 @@ const translations = {
 
 
     'settings.row_webhook_url': 'Webhook URL',
+    'settings.webhook_help': 'Supported channels: Slack (hooks.slack.com), Discord (discord.com/api/webhooks), Telegram (api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<CHAT_ID>), or any custom endpoint that accepts a JSON POST. The format is auto-detected from the URL.',
     'settings.row_webhook_active': 'Webhook Active',
     'settings.webhook_test_button': 'Test',
     'settings.webhook_success': '✓ Success',
@@ -266,6 +267,7 @@ const translations = {
 
 
     'settings.row_webhook_url': 'Webhook URL',
+    'settings.webhook_help': 'Desteklenen kanallar: Slack (hooks.slack.com), Discord (discord.com/api/webhooks), Telegram (api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<CHAT_ID>) veya JSON POST kabul eden herhangi bir özel adres. Format URL\'den otomatik algılanır.',
     'settings.row_webhook_active': 'Webhook Aktif',
     'settings.webhook_test_button': 'Test Et',
     'settings.webhook_success': '✓ Başarılı',

@@ -502,12 +502,17 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           {activeTab === 'webhooks' && (
             <Section title={t('settings.section_notifications') || 'Alerts & Webhooks'}>
               <Row label={t('settings.row_webhook_url')}>
-                <input
-                  className={Input}
-                  placeholder="https://hooks.slack.com/..."
-                  value={s.webhook_url || ''}
-                  onChange={e => update('webhook_url', e.target.value || null)}
-                />
+                <div className="flex flex-col gap-1">
+                  <input
+                    className={Input}
+                    placeholder="https://hooks.slack.com/..."
+                    value={s.webhook_url || ''}
+                    onChange={e => update('webhook_url', e.target.value || null)}
+                  />
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    {t('settings.webhook_help')}
+                  </p>
+                </div>
               </Row>
               <Row label={t('settings.row_webhook_active')}>
                 <div className="flex items-center gap-3">

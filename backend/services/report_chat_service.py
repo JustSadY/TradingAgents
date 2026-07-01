@@ -32,6 +32,7 @@ _REPORT_SECTIONS = [
     ("EARNINGS REPORT", "earnings_report"),
     ("INSIDER ACTIVITY REPORT", "insider_report"),
     ("INSTITUTIONAL OWNERSHIP REPORT", "ownership_report"),
+    ("ANALYST RATINGS REPORT", "ratings_report"),
     ("UPCOMING CATALYSTS REPORT", "catalyst_report"),
 ]
 

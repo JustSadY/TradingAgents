@@ -49,6 +49,11 @@ WS_CONNECTIONS = Gauge(
     "Currently connected analysis WebSocket clients.",
 )
 
+SIGNAL_PARSE_FALLBACK = Counter(
+    "tradingagents_signal_parse_fallback_total",
+    "Final signals that defaulted because no rating could be parsed from the decision text.",
+)
+
 
 def render_latest() -> tuple[bytes, str]:
     return generate_latest(), CONTENT_TYPE_LATEST

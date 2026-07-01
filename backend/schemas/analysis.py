@@ -33,6 +33,7 @@ class AnalysisResultRead(BaseModel):
     earnings_report: str
     insider_report: str = ""
     ownership_report: str = ""
+    ratings_report: str = ""
     catalyst_report: str = ""
     review_report: str
     agent_qa_report: str = ""

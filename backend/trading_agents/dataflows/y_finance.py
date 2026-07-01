@@ -232,6 +232,31 @@ def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the compan
         raise
 
 
+def get_analyst_ratings(ticker: Annotated[str, "ticker symbol of the company"]):
+    """Wall Street analyst consensus: recommendation trend + price targets."""
+    try:
+        ticker_obj = yf.Ticker(ticker.upper())
+        parts: list[str] = [f"# Analyst Ratings & Price Targets for {ticker.upper()}"]
+        parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+        targets = yf_retry(lambda: ticker_obj.analyst_price_targets)
+        if isinstance(targets, dict) and targets:
+            parts.append("## Price Targets")
+            for key, value in targets.items():
+                parts.append(f"- {key}: {value}")
+
+        recommendations = yf_retry(lambda: ticker_obj.recommendations)
+        if recommendations is not None and not recommendations.empty:
+            parts.append("\n## Recommendation Trend (analyst counts by period)")
+            parts.append(recommendations.to_csv(index=False))
+
+        if len(parts) <= 2:
+            return f"No analyst ratings data found for symbol '{ticker}'"
+        return "\n".join(parts)
+    except Exception:
+        raise
+
+
 def get_catalyst_calendar(ticker: Annotated[str, "ticker symbol of the company"]):
     """Upcoming known catalysts: next earnings date, ex-dividend date, and any
     recent/scheduled earnings dates with EPS estimates."""

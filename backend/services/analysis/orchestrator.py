@@ -82,6 +82,8 @@ REPORT_FIELDS = (
 
     "ownership_report",
 
+    "ratings_report",
+
     "catalyst_report",
 
     "review_report",
@@ -513,6 +515,8 @@ async def run_individual_analysis(
             "insider_report": result.insider_report,
 
             "ownership_report": result.ownership_report,
+
+            "ratings_report": result.ratings_report,
 
             "catalyst_report": result.catalyst_report,
 

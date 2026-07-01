@@ -20,6 +20,7 @@ class StateKeys:
     EARNINGS_REPORT = "earnings_report"
     INSIDER_REPORT = "insider_report"
     OWNERSHIP_REPORT = "ownership_report"
+    RATINGS_REPORT = "ratings_report"
     CATALYST_REPORT = "catalyst_report"
     REVIEW_REPORT = "review_report"
     SYNTHESIS_REPORT = "synthesis_report"
@@ -41,6 +42,7 @@ class StateKeys:
         EARNINGS_REPORT,
         INSIDER_REPORT,
         OWNERSHIP_REPORT,
+        RATINGS_REPORT,
         CATALYST_REPORT,
         REVIEW_REPORT,
         SYNTHESIS_REPORT,
@@ -88,6 +90,7 @@ class AgentState(MessagesState):
     earnings_report: Annotated[str, "Report from the Earnings Analyst"]
     insider_report: Annotated[str, "Report from the Insider Activity Analyst"]
     ownership_report: Annotated[str, "Report from the Institutional Ownership Analyst"]
+    ratings_report: Annotated[str, "Report from the Analyst Ratings Analyst (Wall Street consensus)"]
     catalyst_report: Annotated[str, "Report from the Catalyst Calendar Analyst"]
     review_report: Annotated[str, "Report from the Performance Review Analyst"]
     synthesis_report: Annotated[str, "Report identifying alignments and conflicts between analyst reports"]
@@ -99,6 +102,11 @@ class AgentState(MessagesState):
     trader_proposal_json: Annotated[str, "Raw JSON of the Trader's proposal for mathematical sizing"]
     risk_debate_state: Annotated[RiskDebateState, "Current state of the debate on evaluating risk"]
     final_trade_decision: Annotated[str, "Final decision made by the Risk Analysts"]
+    final_signal: Annotated[
+        str,
+        "Structured final rating (Buy/Overweight/Hold/Underweight/Sell) carried straight "
+        "from the Portfolio Manager's PortfolioDecision, bypassing markdown re-parsing.",
+    ]
     past_context: Annotated[
         str, "Ambient run context injected at run start (performance attribution, market pulse, scenarios)"
     ]

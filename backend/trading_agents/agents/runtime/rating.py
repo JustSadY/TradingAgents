@@ -25,11 +25,21 @@ _DECISION_PREFIXES = ("final", "decision", "signal", "rating", "recommendation",
 
 
 def parse_rating(text: str, default: str | None = "Hold") -> str | None:
+    """Extract a Buy/Overweight/Hold/Underweight/Sell rating, or ``default``."""
+    return parse_rating_matched(text, default)[0]
+
+
+def parse_rating_matched(text: str, default: str | None = "Hold") -> tuple[str | None, bool]:
+    """Like :func:`parse_rating` but also report whether a rating was actually found.
+
+    Returns ``(rating, matched)``; ``matched`` is ``False`` when the result is the
+    fallback default because no rating could be located — useful for telemetry.
+    """
     lines = text.splitlines()
     for line in lines:
         m = _RATING_LABEL_RE.search(line)
         if m:
-            return m.group(1).capitalize()
+            return m.group(1).capitalize(), True
     structured_candidates = []
     for line in lines:
         # Strip leading markdown so headings like "## Final Decision: ..." are seen.
@@ -43,5 +53,5 @@ def parse_rating(text: str, default: str | None = "Hold") -> str | None:
         if c in _RATING_SET and c not in unique_structured:
             unique_structured.append(c)
     if len(unique_structured) == 1:
-        return unique_structured[0].capitalize()
-    return default
+        return unique_structured[0].capitalize(), True
+    return default, False

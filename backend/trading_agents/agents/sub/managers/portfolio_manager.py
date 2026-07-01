@@ -114,10 +114,14 @@ Be decisive and ground every conclusion in specific evidence from the analysts.{
             schema=PortfolioDecision,
         )
 
+        # When structured output succeeds, carry the rating enum straight through
+        # so the final signal never depends on re-parsing rendered markdown.
+        final_signal: str | None = None
         if isinstance(result, str):
             final_trade_decision = result
         else:
             final_trade_decision = render_pm_decision(result)
+            final_signal = result.rating.value
 
         new_risk_debate_state = {
             "judge_decision": final_trade_decision,
@@ -131,9 +135,12 @@ Be decisive and ground every conclusion in specific evidence from the analysts.{
             "current_neutral_response": risk_debate_state["current_neutral_response"],
             "count": risk_debate_state["count"],
         }
-        return {
+        out = {
             "risk_debate_state": new_risk_debate_state,
             "final_trade_decision": final_trade_decision,
         }
+        if final_signal is not None:
+            out["final_signal"] = final_signal
+        return out
 
     return portfolio_manager_node

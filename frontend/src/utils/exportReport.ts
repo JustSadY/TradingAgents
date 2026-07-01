@@ -13,6 +13,7 @@ export interface AnalysisForExport {
   earnings_report?: string
   insider_report?: string
   ownership_report?: string
+  ratings_report?: string
   catalyst_report?: string
   review_report?: string
   agent_qa_report?: string
@@ -42,6 +43,7 @@ const SECTION_LABELS: Record<Lang, Record<string, string>> = {
     earnings_report:   'Earnings Analysis',
     insider_report:    'Insider Activity',
     ownership_report:  'Institutional Ownership',
+    ratings_report:    'Analyst Ratings',
     catalyst_report:   'Upcoming Catalysts',
     review_report:     'Review',
     agent_qa_report:   'Agent Cross-Examination',
@@ -60,6 +62,7 @@ const SECTION_LABELS: Record<Lang, Record<string, string>> = {
     earnings_report:   'Kazanç Analizi',
     insider_report:    'İçeriden İşlem',
     ownership_report:  'Kurumsal Sahiplik',
+    ratings_report:    'Analist Tavsiyeleri',
     catalyst_report:   'Yaklaşan Katalizörler',
     review_report:     'Performans İnceleme',
     agent_qa_report:   'Ajan Çapraz Sorgu',
@@ -73,7 +76,7 @@ const SECTION_ORDER = [
   'final_decision', 'investment_plan', 'trader_plan',
   'market_report', 'fundamentals_report', 'news_report', 'sentiment_report',
   'macro_report', 'options_report', 'quant_report', 'earnings_report',
-  'insider_report', 'ownership_report', 'catalyst_report',
+  'insider_report', 'ownership_report', 'ratings_report', 'catalyst_report',
   'review_report', 'agent_qa_report',
 ]
 

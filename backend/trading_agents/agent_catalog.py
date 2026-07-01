@@ -208,6 +208,15 @@ AGENTS: list[AgentInfo] = [
         "market_intelligence",
     ),
     AgentInfo(
+        "ratings",
+        "Analyst Ratings Analyst",
+        "Wall Street analyst recommendations and price targets",
+        "analyst",
+        False,
+        get_standard_agent_settings(),
+        "market_intelligence",
+    ),
+    AgentInfo(
         "catalyst",
         "Catalyst Calendar Analyst",
         "Upcoming earnings, dividends and event risk windows",

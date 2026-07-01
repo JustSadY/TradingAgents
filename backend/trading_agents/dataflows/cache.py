@@ -25,6 +25,7 @@ TOOLS_CATEGORIES = {
             "get_insider_transactions",
             "get_institutional_holdings",
             "get_catalyst_calendar",
+            "get_analyst_ratings",
         ],
     },
     "social_sentiment_data": {

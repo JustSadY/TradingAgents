@@ -341,7 +341,7 @@ class TradingAgentsGraph:
         if not self.config.get("keep_checkpoints", True):
             clear_checkpoint(self.config["data_cache_dir"], company_name, str(trade_date))
 
-        return final_state, self.process_signal(final_state["final_trade_decision"])
+        return final_state, self._resolve_final_signal(final_state)
 
     def _log_state(self, trade_date, final_state):
         self.log_states_dict[str(trade_date)] = {
@@ -469,7 +469,18 @@ class TradingAgentsGraph:
         if not self.config.get("keep_checkpoints", True):
             clear_checkpoint(self.config["data_cache_dir"], company_name, str(trade_date))
 
-        return final_state, self.process_signal(final_state["final_trade_decision"])
+        return final_state, self._resolve_final_signal(final_state)
+
+    def _resolve_final_signal(self, final_state):
+        """Prefer the Portfolio Manager's structured rating; fall back to parsing text.
+
+        The structured path (``final_signal``) avoids re-parsing rendered markdown,
+        which is brittle for free-text output.
+        """
+        structured = final_state.get("final_signal")
+        if structured:
+            return structured
+        return self.process_signal(final_state["final_trade_decision"])
 
     def process_signal(self, full_signal):
         return self.signal_processor.process_signal(full_signal)
