@@ -154,29 +154,7 @@ ruff format --check # Format checks
 ruff format         # Format code
 ```
 
-**Continuous Integration:**
-`.github/workflows/ci.yml` runs on every push/PR to `main` and is blocking:
-- Backend: ruff lint + format check, pytest (against a PostgreSQL service)
-- Frontend: ESLint (errors fail; known debt is downgraded to warnings in `eslint.config.js`), Vitest, production build (`tsc -b && vite build`)
-
-### Testing
-
-**Running backend tests:**
-Backend unit and integration tests are written in Pytest (~20 modules in `backend/tests/` covering leverage/margin trading, backtests, screeners, token accounting, permissions, and agent plumbing).
-```bash
-cd backend
-pytest
-```
-- **Test Database:** Integration tests run against an in-memory SQLite database (`sqlite+aiosqlite:///:memory:`).
-- **Mocking Market Data:** Live price feeds are stubbed during tests by monkeypatching the `mock_trading_service` (specifically `get_live_price` and `get_live_prices_batch`). See [backend/tests/test_leverage_trading.py](backend/tests/test_leverage_trading.py) for examples.
-
-**Running frontend tests:**
-Frontend unit tests use Vitest + Testing Library (jsdom), co-located as `*.test.ts(x)` next to their sources (e.g. `src/contexts/PermissionsContext.test.tsx` for RBAC logic).
-```bash
-cd frontend && npm test
-```
-
-For agent behavior, you can also spin up the full stack and run analyses through the UI.
+For agent behavior, spin up the full stack and run analyses through the UI.
 
 
 ---

@@ -22,9 +22,3 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["backend"]
-
-[tool.pytest.ini_options]
-asyncio_mode = "auto"
-testpaths = ["tests"]
-python_files = "test_*.py"
-pythonpath = [".."]
