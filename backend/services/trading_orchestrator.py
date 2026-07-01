@@ -254,6 +254,21 @@ async def place_signal_order(
     action = _SIGNAL_TO_ACTION.get(row.signal)
     if action is None:
         return None
+
+    # Quality gate (opt-in): don't auto-trade low-confidence runs — the ones with
+    # degraded/missing analyst reports or an automated-fallback decision, which are
+    # the most likely to be noise. The analysis is still saved; only the auto-order
+    # is skipped.
+    if getattr(settings, "quality_gate_enabled", False):
+        quality = getattr(row, "quality", None)
+        if isinstance(quality, dict) and quality.get("confidence") == "low":
+            _logger.info(
+                "Quality gate: skipping auto-order for %s (low-confidence run, score=%s)",
+                ticker,
+                quality.get("score"),
+            )
+            return None
+
     from backend.repositories.analysis import get_system_settings
 
     sys_settings = await get_system_settings(db)

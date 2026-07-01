@@ -9,12 +9,37 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.user import User
 from backend.services.indicator_service import fetch_sector
 
+_BETA_THRESHOLD = 1.5  # portfolio beta above this is flagged
+_VOL_THRESHOLD = 0.40  # annualized volatility above this (40%) is flagged
+_SECTOR_THRESHOLD = 50.0  # single-sector weight above this (%) is flagged
+
+
+def _evaluate_breaches(
+    portfolio_beta: float | None,
+    portfolio_volatility: float | None,
+    sector_weights: list[dict],
+) -> list[dict]:
+    """Flag portfolio-level risk threshold breaches for the dashboard banner."""
+    breaches: list[dict] = []
+    if portfolio_beta is not None and portfolio_beta > _BETA_THRESHOLD:
+        breaches.append({"type": "beta", "value": portfolio_beta, "threshold": _BETA_THRESHOLD})
+    if portfolio_volatility is not None and portfolio_volatility > _VOL_THRESHOLD:
+        breaches.append({"type": "volatility", "value": portfolio_volatility, "threshold": _VOL_THRESHOLD})
+    for sw in sector_weights:
+        if sw.get("weight_pct", 0) > _SECTOR_THRESHOLD:
+            breaches.append(
+                {"type": "concentration", "sector": sw.get("sector"), "value": sw.get("weight_pct"), "threshold": _SECTOR_THRESHOLD}
+            )
+    return breaches
+
+
 _EMPTY_DASHBOARD = {
     "beta": None,
     "volatility": None,
     "sector_weights": [],
     "correlation": [],
     "holdings_risk": [],
+    "breaches": [],
     "message": "No open positions",
 }
 
@@ -306,4 +331,5 @@ async def get_risk_dashboard(db: AsyncSession, user: User) -> dict:
         "sector_weights": sector_weights,
         "correlation": correlation,
         "holdings_risk": holdings_risk,
+        "breaches": _evaluate_breaches(portfolio_beta, portfolio_volatility, sector_weights),
     }

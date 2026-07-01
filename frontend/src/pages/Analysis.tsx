@@ -48,7 +48,7 @@ interface AnalysisDetail {
   bull_history: string; bear_history: string; investment_debate_history: string
   risk_debate_history: string; judge_decision: string
   trader_proposal_json?: string
-  llm_calls: number; tokens_in: number; tokens_out: number; duration_seconds: number
+  llm_calls: number; tokens_in: number; tokens_out: number; duration_seconds: number; estimated_cost_usd?: number
   llm_provider?: string | null; llm_model?: string | null
   risk_metrics?: any
   quality?: { score: number; confidence: string; reports_total: number; reports_present: number; reports_degraded: number; fallback_used: boolean } | null
@@ -893,7 +893,7 @@ function HistoryTab({
                       <SignalBadge signal={detail.signal} large />
                       {detail.quality && <QualityBadge quality={detail.quality} />}
                     </div>
-                    <p className="text-[10px] text-slate-500 font-semibold">{detail.trade_date} • {(detail.duration_seconds ?? 0).toFixed(1)}s • {detail.llm_calls} LLM • {(detail.tokens_in + detail.tokens_out).toLocaleString()} token</p>
+                    <p className="text-[10px] text-slate-500 font-semibold">{detail.trade_date} • {(detail.duration_seconds ?? 0).toFixed(1)}s • {detail.llm_calls} LLM • {(detail.tokens_in + detail.tokens_out).toLocaleString()} token{detail.estimated_cost_usd ? ` • ~$${detail.estimated_cost_usd.toFixed(4)}` : ''}</p>
                   </div>
                   <div className="flex items-center gap-2 ml-4">
                     <button onClick={() => exportMarkdown(detail, language as 'en' | 'tr')} className="flex items-center gap-1 bg-white/5 hover:bg-white/10 text-[10px] font-bold text-slate-300 px-2.5 py-1.5 rounded-lg transition cursor-pointer" title={t('analysis.history.btn_download_md')}>

@@ -34,6 +34,7 @@ class AppSettings(Base):
     max_risk_per_trade_pct: Mapped[float] = mapped_column(Float, default=2.0)
     strict_stop_loss_mode: Mapped[bool] = mapped_column(Boolean, default=False)
     correlation_risk_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    quality_gate_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     node_retry_attempts: Mapped[int] = mapped_column(Integer, default=2)
     node_retry_base_delay: Mapped[float] = mapped_column(Float, default=1.0)
     webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)

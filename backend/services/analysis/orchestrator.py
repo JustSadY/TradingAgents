@@ -608,9 +608,15 @@ async def run_individual_analysis(
 
             send_analysis_webhook,
 
+            send_signal_flip_webhook,
+
             track_background_task,
 
         )
+
+        from backend.repositories.analysis import get_previous_signal
+
+        prev_signal = await get_previous_signal(db, user_id=user_id, ticker=ticker, exclude_id=row.id)
 
 
 
@@ -647,6 +653,12 @@ async def run_individual_analysis(
         track_background_task(
 
             send_analysis_webhook(ticker, trade_date, signal, result.final_decision, settings), task_id=emitter.task_id
+
+        )
+
+        track_background_task(
+
+            send_signal_flip_webhook(ticker, prev_signal, signal, settings), task_id=emitter.task_id
 
         )
 

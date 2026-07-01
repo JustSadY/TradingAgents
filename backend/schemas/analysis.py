@@ -52,6 +52,7 @@ class AnalysisResultRead(BaseModel):
     tool_calls: int
     tokens_in: int
     tokens_out: int
+    estimated_cost_usd: float = 0.0
     llm_provider: str | None = None
     llm_model: str | None = None
     preset_name: str | None = None

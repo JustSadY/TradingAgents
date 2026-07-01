@@ -6,7 +6,7 @@ from collections.abc import Awaitable
 
 from backend.core.database import AsyncSessionLocal
 from backend.services.annotation_service import extract_chart_annotations
-from backend.services.notification_service import notify_analysis_complete
+from backend.services.notification_service import notify_analysis_complete, notify_signal_flip
 
 _logger = logging.getLogger(__name__)
 
@@ -45,6 +45,13 @@ async def send_analysis_webhook(ticker, trade_date, signal, final_decision, sett
         await notify_analysis_complete(ticker, signal, trade_date, final_decision, settings)
     except Exception as exc:
         _logger.debug("Webhook notify failed (non-fatal): %s", exc)
+
+
+async def send_signal_flip_webhook(ticker, prev_signal, new_signal, settings):
+    try:
+        await notify_signal_flip(ticker, prev_signal, new_signal, settings)
+    except Exception as exc:
+        _logger.debug("Signal-flip notify failed (non-fatal): %s", exc)
 
 
 async def extract_and_save_annotations(

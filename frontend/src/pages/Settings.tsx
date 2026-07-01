@@ -59,6 +59,7 @@ interface Settings {
   max_risk_per_trade_pct: number
   strict_stop_loss_mode: boolean
   correlation_risk_enabled: boolean
+  quality_gate_enabled: boolean
   webhook_url: string | null
   webhook_enabled: boolean
   webhook_events: string
@@ -499,6 +500,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_correlation_risk')}</span>
                   <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.correlation_risk_enabled} onChange={e => update('correlation_risk_enabled', e.target.checked)} />
                 </label>
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_quality_gate')}</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.quality_gate_enabled} onChange={e => update('quality_gate_enabled', e.target.checked)} />
+                </label>
                 </div>
             </Section>
           )}
@@ -549,6 +554,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     ['analysis_complete', t('settings.event_analysis_complete')],
                     ['trade_executed', t('settings.event_trade_executed')],
                     ['alert_triggered', t('settings.event_alert_triggered')],
+                    ['signal_flip', t('settings.event_signal_flip')],
                   ] as [string, string][]).map(([key, label]) => (
                     <label key={key} className="flex items-center gap-2 text-xs font-medium text-slate-400 cursor-pointer hover:text-slate-300 select-none">
                       <input

@@ -39,6 +39,7 @@ interface RiskData {
   sector_weights: { sector: string; weight_pct: number }[]
   correlation: { ticker_a: string; ticker_b: string; correlation: number }[]
   holdings_risk: HoldingRisk[]
+  breaches?: { type: string; value?: number; threshold?: number; sector?: string }[]
   message?: string
 }
 
@@ -361,6 +362,18 @@ export default function Portfolio() {
                 <p className="text-xs text-slate-400">{riskData.message}</p>
               ) : (
                 <>
+                  {riskData.breaches && riskData.breaches.length > 0 && (
+                    <div className="rounded-xl border border-rose-500/30 bg-rose-500/10 p-3 space-y-1">
+                      <p className="text-[11px] font-bold text-rose-300 uppercase tracking-wide">⚠ {t('portfolio.risk_breach_title')}</p>
+                      {riskData.breaches.map((b, i) => (
+                        <p key={i} className="text-xs text-rose-200/90">
+                          {b.type === 'beta' && `${t('portfolio.risk_breach_beta')}: ${b.value?.toFixed(2)} > ${b.threshold}`}
+                          {b.type === 'volatility' && `${t('portfolio.risk_breach_vol')}: ${((b.value ?? 0) * 100).toFixed(1)}% > ${((b.threshold ?? 0) * 100).toFixed(0)}%`}
+                          {b.type === 'concentration' && `${t('portfolio.risk_breach_conc')}: ${b.sector} ${b.value?.toFixed(1)}% > ${b.threshold}%`}
+                        </p>
+                      ))}
+                    </div>
+                  )}
                   {/* Portfolio-level KPIs */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {[

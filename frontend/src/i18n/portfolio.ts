@@ -13,6 +13,10 @@ const portfolio = {
     'portfolio.col_current_price': 'Current Price',
     'portfolio.col_market_value': 'Market Value',
     'portfolio.col_unrealized_pnl': 'Unrealized P&L',
+    'portfolio.risk_breach_title': 'Risk thresholds breached',
+    'portfolio.risk_breach_beta': 'Portfolio beta',
+    'portfolio.risk_breach_vol': 'Annualized volatility',
+    'portfolio.risk_breach_conc': 'Sector concentration',
   },
   tr: {
     'portfolio.title': 'Portföy',
@@ -28,6 +32,10 @@ const portfolio = {
     'portfolio.col_current_price': 'Güncel Fiyat',
     'portfolio.col_market_value': 'Piyasa Değeri',
     'portfolio.col_unrealized_pnl': 'Gerçekleşmemiş K/Z',
+    'portfolio.risk_breach_title': 'Risk eşikleri aşıldı',
+    'portfolio.risk_breach_beta': 'Portföy betası',
+    'portfolio.risk_breach_vol': 'Yıllık volatilite',
+    'portfolio.risk_breach_conc': 'Sektör konsantrasyonu',
   },
 }
 

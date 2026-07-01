@@ -58,7 +58,28 @@ def _event_title(event: str) -> str:
         "analysis_complete": "📊 Analysis Complete",
         "trade_executed": "💰 Trade Executed",
         "alert_triggered": "🔔 Price Alert",
+        "signal_flip": "🔄 Signal Reversal",
     }.get(event, event)
+
+
+_BULLISH = {"buy", "overweight"}
+_BEARISH = {"sell", "underweight"}
+
+
+def _signal_direction(signal: str | None) -> str:
+    s = (signal or "").strip().lower()
+    if s in _BULLISH:
+        return "bullish"
+    if s in _BEARISH:
+        return "bearish"
+    return "neutral"
+
+
+def is_signal_flip(prev_signal: str | None, new_signal: str | None) -> bool:
+    """True when the directional stance reversed (bullish↔bearish)."""
+    prev_dir = _signal_direction(prev_signal)
+    new_dir = _signal_direction(new_signal)
+    return {prev_dir, new_dir} == {"bullish", "bearish"}
 
 
 def _format_text(event: str, data: dict) -> str:
@@ -71,6 +92,11 @@ def _format_text(event: str, data: dict) -> str:
         return (
             f"**{data.get('ticker', '?')}** {data.get('action', '?')} execution\n"
             f"Quantity: {data.get('quantity', 0):.4f} @ ${data.get('price', 0):.2f}"
+        )
+    if event == "signal_flip":
+        return (
+            f"🔄 **Signal Reversal** on **{data.get('ticker', '?')}**\n"
+            f"Changed from **{data.get('prev_signal', '?')}** to **{data.get('new_signal', '?')}**"
         )
     if event == "alert_triggered":
         alert_type = data.get("alert_type", "price")
@@ -182,6 +208,24 @@ async def notify_alert_triggered(
         url,
         "alert_triggered",
         {"ticker": ticker, "condition": condition, "target_price": target_price, "alert_type": alert_type},
+        user_id=user_id,
+    )
+
+
+async def notify_signal_flip(ticker: str, prev_signal: str | None, new_signal: str | None, settings) -> None:
+    if not getattr(settings, "webhook_enabled", False):
+        return
+    if not is_signal_flip(prev_signal, new_signal):
+        return
+    url = getattr(settings, "webhook_url", "") or ""
+    events = _parse_events(getattr(settings, "webhook_events", "[]"))
+    if "signal_flip" not in events or not url:
+        return
+    user_id = getattr(settings, "user_id", None)
+    await send_webhook(
+        url,
+        "signal_flip",
+        {"ticker": ticker, "prev_signal": prev_signal, "new_signal": new_signal},
         user_id=user_id,
     )
 

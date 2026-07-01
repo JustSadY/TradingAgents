@@ -59,6 +59,29 @@ async def list_analyses(
     return list(result.scalars().all())
 
 
+async def get_previous_signal(
+    db: AsyncSession, *, user_id: int | None, ticker: str, exclude_id: int
+) -> str | None:
+    """Signal of the most recent completed analysis for this ticker, before ``exclude_id``.
+
+    Scoped to ``user_id`` so one user's history never leaks into another's.
+    """
+    q = (
+        select(AnalysisResult.signal)
+        .where(
+            AnalysisResult.ticker == ticker.upper(),
+            AnalysisResult.id != exclude_id,
+            AnalysisResult.status == "completed",
+        )
+        .order_by(_desc(AnalysisResult.created_at))
+        .limit(1)
+    )
+    if user_id is not None:
+        q = q.where(AnalysisResult.user_id == user_id)
+    result = await db.execute(q)
+    return result.scalar_one_or_none()
+
+
 async def get_analysis_by_id(db: AsyncSession, analysis_id: int, user=None) -> AnalysisResult | None:
     q = select(AnalysisResult).where(AnalysisResult.id == analysis_id)
     q = scope_to_user(q, AnalysisResult, user)
