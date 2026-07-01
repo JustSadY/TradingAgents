@@ -42,7 +42,7 @@ interface AnalysisDetail {
   market_report: string; sentiment_report: string; news_report: string
   fundamentals_report: string; macro_report: string; options_report: string
   quant_report: string; earnings_report: string; review_report: string
-  insider_report?: string; ownership_report?: string; ratings_report?: string; catalyst_report?: string
+  insider_report?: string; ownership_report?: string; ratings_report?: string; short_interest_report?: string; catalyst_report?: string
   agent_qa_report: string
   investment_plan: string; trader_plan: string; final_decision: string
   bull_history: string; bear_history: string; investment_debate_history: string
@@ -51,6 +51,7 @@ interface AnalysisDetail {
   llm_calls: number; tokens_in: number; tokens_out: number; duration_seconds: number
   llm_provider?: string | null; llm_model?: string | null
   risk_metrics?: any
+  quality?: { score: number; confidence: string; reports_total: number; reports_present: number; reports_degraded: number; fallback_used: boolean } | null
   chart_annotations?: any
 }
 interface PortfolioHistoryItem {
@@ -72,6 +73,7 @@ const SECTION_LABELS: Record<string, string> = {
   quant_report: 'Quant', earnings_report: 'Earnings',
   insider_report: 'Insider Activity', ownership_report: 'Institutional Ownership',
   ratings_report: 'Analyst Ratings',
+  short_interest_report: 'Short Interest',
   catalyst_report: 'Upcoming Catalysts',
   review_report: 'Review', agent_qa_report: 'Cross-Examination',
   investment_plan: 'Investment Plan',
@@ -79,6 +81,30 @@ const SECTION_LABELS: Record<string, string> = {
   bull_history: 'Bull', bear_history: 'Bear',
   investment_debate_history: 'Debate', risk_debate_history: 'Risk Debate',
   judge_decision: 'Judge',
+}
+
+type RunQuality = NonNullable<AnalysisDetail['quality']>
+
+function QualityBadge({ quality }: { quality: RunQuality }) {
+  const { t } = useTranslation()
+  const tone: Record<string, string> = {
+    high: 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30',
+    medium: 'bg-amber-500/15 text-amber-300 border-amber-500/30',
+    low: 'bg-rose-500/15 text-rose-300 border-rose-500/30',
+  }
+  const cls = tone[quality.confidence] ?? tone.low
+  const title =
+    `${t('analysis.quality.reports')}: ${quality.reports_present}/${quality.reports_total}` +
+    (quality.reports_degraded ? ` • ${quality.reports_degraded} ${t('analysis.quality.degraded')}` : '') +
+    (quality.fallback_used ? ` • ${t('analysis.quality.fallback')}` : '')
+  return (
+    <span
+      title={title}
+      className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border ${cls}`}
+    >
+      {t(`analysis.quality.${quality.confidence}`)} · {quality.score}
+    </span>
+  )
 }
 
 const EMPTY_RUN = {
@@ -541,6 +567,7 @@ function RunTab() {
                         ['insider_report', detail.insider_report],
                         ['ownership_report', detail.ownership_report],
                         ['ratings_report', detail.ratings_report],
+                        ['short_interest_report', detail.short_interest_report],
                         ['catalyst_report', detail.catalyst_report],
                         ['review_report', detail.review_report],
                         ['agent_qa_report', detail.agent_qa_report],
@@ -864,6 +891,7 @@ function HistoryTab({
                     <div className="flex items-center gap-3">
                       <h3 className="text-xl font-display font-bold text-white font-mono">{detail.ticker}</h3>
                       <SignalBadge signal={detail.signal} large />
+                      {detail.quality && <QualityBadge quality={detail.quality} />}
                     </div>
                     <p className="text-[10px] text-slate-500 font-semibold">{detail.trade_date} • {(detail.duration_seconds ?? 0).toFixed(1)}s • {detail.llm_calls} LLM • {(detail.tokens_in + detail.tokens_out).toLocaleString()} token</p>
                   </div>

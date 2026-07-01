@@ -232,6 +232,32 @@ def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the compan
         raise
 
 
+def get_short_interest(ticker: Annotated[str, "ticker symbol of the company"]):
+    """Short-interest snapshot: shares short, short ratio (days-to-cover), and
+    short % of float — the ingredients of a squeeze setup."""
+    try:
+        ticker_obj = yf.Ticker(ticker.upper())
+        info = yf_retry(lambda: ticker_obj.info) or {}
+        fields = {
+            "Shares Short": info.get("sharesShort"),
+            "Shares Short (Prior Month)": info.get("sharesShortPriorMonth"),
+            "Short Ratio (days to cover)": info.get("shortRatio"),
+            "Short % of Float": info.get("shortPercentOfFloat"),
+            "Short % of Shares Outstanding": info.get("sharesPercentSharesOut"),
+            "Float Shares": info.get("floatShares"),
+            "Shares Outstanding": info.get("sharesOutstanding"),
+            "Date of Short Interest": info.get("dateShortInterest"),
+        }
+        rows = [f"- {k}: {v}" for k, v in fields.items() if v is not None]
+        if not rows:
+            return f"No short-interest data found for symbol '{ticker}'"
+        header = f"# Short Interest data for {ticker.upper()}\n"
+        header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        return header + "\n".join(rows)
+    except Exception:
+        raise
+
+
 def get_analyst_ratings(ticker: Annotated[str, "ticker symbol of the company"]):
     """Wall Street analyst consensus: recommendation trend + price targets."""
     try:

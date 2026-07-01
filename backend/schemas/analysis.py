@@ -34,6 +34,7 @@ class AnalysisResultRead(BaseModel):
     insider_report: str = ""
     ownership_report: str = ""
     ratings_report: str = ""
+    short_interest_report: str = ""
     catalyst_report: str = ""
     review_report: str
     agent_qa_report: str = ""
@@ -46,6 +47,7 @@ class AnalysisResultRead(BaseModel):
     risk_debate_history: Any = None
     judge_decision: str = ""
     chart_annotations: Any = None
+    quality: Any = None
     llm_calls: int
     tool_calls: int
     tokens_in: int

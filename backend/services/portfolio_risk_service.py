@@ -20,6 +20,7 @@ from dataclasses import dataclass
 
 DEFAULT_MAX_CONCENTRATION_PCT = 25.0  # max % of equity in a single ticker
 DEFAULT_MAX_GROSS_EXPOSURE = 3.0  # max sum(notional) / equity across positions
+DEFAULT_MAX_CORRELATED_PCT = 40.0  # max % of equity in a correlated cluster (this name + correlated holdings)
 
 
 @dataclass
@@ -37,13 +38,19 @@ def cap_order_notional(
     existing_gross_notional: float,
     max_concentration_pct: float = DEFAULT_MAX_CONCENTRATION_PCT,
     max_gross_exposure: float = DEFAULT_MAX_GROSS_EXPOSURE,
+    correlated_notional: float = 0.0,
+    max_correlated_pct: float = DEFAULT_MAX_CORRELATED_PCT,
 ) -> RiskAssessment:
     """Return how much of ``proposed_notional`` may be added without breaching
-    the concentration or gross-exposure limits.
+    the concentration, gross-exposure, or correlated-cluster limits.
 
     - ``equity``: current account equity (cash + position equity).
     - ``existing_ticker_notional``: notional already held in this ticker.
     - ``existing_gross_notional``: sum of notional across all current positions.
+    - ``correlated_notional``: correlation-weighted notional of *other* holdings
+      that move with this ticker (0 when correlation guarding is off). Adding a
+      name that is highly correlated with existing positions is, in risk terms,
+      adding to the same bet — this caps that hidden concentration.
     """
     if equity <= 0 or proposed_notional <= 0:
         return RiskAssessment(allowed_notional=0.0, capped=proposed_notional > 0, reason="no_equity")
@@ -56,9 +63,18 @@ def cap_order_notional(
     gross_ceiling = max_gross_exposure * equity
     gross_headroom = max(0.0, gross_ceiling - existing_gross_notional)
 
-    allowed = min(proposed_notional, conc_headroom, gross_headroom)
+    # Headroom under the correlated-cluster cap (this name + correlated holdings).
+    corr_ceiling = (max_correlated_pct / 100.0) * equity
+    corr_headroom = max(0.0, corr_ceiling - existing_ticker_notional - correlated_notional)
+
+    headrooms = {
+        "concentration": conc_headroom,
+        "gross_exposure": gross_headroom,
+        "correlation": corr_headroom,
+    }
+    allowed = min(proposed_notional, *headrooms.values())
     if allowed >= proposed_notional:
         return RiskAssessment(allowed_notional=proposed_notional, capped=False)
 
-    reason = "concentration" if conc_headroom <= gross_headroom else "gross_exposure"
+    reason = min(headrooms, key=headrooms.get)
     return RiskAssessment(allowed_notional=max(0.0, allowed), capped=True, reason=reason)

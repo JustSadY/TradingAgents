@@ -46,6 +46,9 @@ from .y_finance import (
     get_analyst_ratings as get_yfinance_analyst_ratings,
 )
 from .y_finance import (
+    get_short_interest as get_yfinance_short_interest,
+)
+from .y_finance import (
     get_catalyst_calendar as get_yfinance_catalyst_calendar,
 )
 from .y_finance import (
@@ -85,6 +88,7 @@ _TICKER_FIRST_METHODS = frozenset(
         "get_institutional_holdings",
         "get_catalyst_calendar",
         "get_analyst_ratings",
+        "get_short_interest",
         "fetch_reddit_posts",
         "fetch_stocktwits_messages",
     }
@@ -143,6 +147,9 @@ VENDOR_METHODS = {
     },
     "get_analyst_ratings": {
         "yfinance": get_yfinance_analyst_ratings,
+    },
+    "get_short_interest": {
+        "yfinance": get_yfinance_short_interest,
     },
     "fetch_reddit_posts": {
         "reddit": fetch_reddit_posts,

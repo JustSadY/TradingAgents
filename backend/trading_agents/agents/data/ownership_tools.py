@@ -27,3 +27,11 @@ async def get_analyst_ratings(
 ) -> str:
     """Retrieve Wall Street analyst consensus: recommendation trend and price targets (low/mean/high)."""
     return await route_to_vendor("get_analyst_ratings", ticker)
+
+
+@tool
+async def get_short_interest(
+    ticker: Annotated[str, "ticker symbol"],
+) -> str:
+    """Retrieve short-interest data: shares short, short ratio (days to cover), and short % of float."""
+    return await route_to_vendor("get_short_interest", ticker)

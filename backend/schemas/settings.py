@@ -22,6 +22,7 @@ class SettingsBase(BaseModel):
     max_position_size_pct: float = 10.0
     max_risk_per_trade_pct: float = 2.0
     strict_stop_loss_mode: bool = False
+    correlation_risk_enabled: bool = False
     openai_reasoning_effort: str | None = None
     anthropic_effort: str | None = None
     google_thinking_level: str | None = None
@@ -93,6 +94,7 @@ class SettingsUpdate(BaseModel):
     max_position_size_pct: float | None = Field(default=None, ge=1, le=100)
     max_risk_per_trade_pct: float | None = Field(default=None, ge=0.1, le=50)
     strict_stop_loss_mode: bool | None = None
+    correlation_risk_enabled: bool | None = None
     openai_reasoning_effort: str | None = None
     anthropic_effort: str | None = None
     google_thinking_level: str | None = None

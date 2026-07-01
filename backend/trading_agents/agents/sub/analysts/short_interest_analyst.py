@@ -1,0 +1,56 @@
+from backend.trading_agents.agents.analyst_registry import register_analyst
+from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
+from backend.trading_agents.agents.utils.agent_utils import (
+    build_instrument_context,
+    get_short_interest,
+)
+
+# Single source of truth shared by the ToolNode registration and the LLM binding.
+_SHORT_INTEREST_TOOLS = [get_short_interest]
+
+
+@register_analyst(
+    key="short_interest",
+    agent_node="Short Interest Analyst",
+    clear_node="Msg Clear Short Interest",
+    tool_node="tools_short_interest",
+    report_key="short_interest_report",
+    tools=_SHORT_INTEREST_TOOLS,
+)
+def create_short_interest_analyst(llm):
+
+    async def short_interest_node(state):
+        instrument_context = build_instrument_context(state["company_of_interest"])
+
+        tools = _SHORT_INTEREST_TOOLS
+
+        system_message = """You are a short-interest analyst. Your goal is to read positioning risk from how heavily the stock is sold short and how crowded that bet is.
+
+### Analytical Process (Chain-of-Thought):
+1. **Data Retrieval:** Use `get_short_interest` to pull shares short, the short ratio (days to cover), and short % of float.
+2. **Crowding Assessment:** High short % of float (>10-20%) plus a high short ratio (many days to cover) means a crowded short — fuel for a squeeze if the thesis turns.
+3. **Trend:** Compare current shares short to the prior month — rising shorts signal growing bearish conviction; falling shorts signal covering.
+4. **Synthesis:** Judge whether short positioning is a contrarian bullish setup (squeeze potential) or a confirmation of genuine weakness.
+
+### Guidelines:
+- Short % of float and days-to-cover together gauge squeeze risk — either alone is weaker.
+- A rising short base into strong price action is squeeze fuel; rising shorts into a breakdown confirms the bears.
+- Short interest is reported with a lag (bi-monthly); treat it as a slow-moving positioning input, not a timing tool.
+
+### Output Format:
+Your final report MUST follow this structure:
+1. **Executive Summary:** A 3-bullet summary of short positioning (crowded/light, rising/falling, squeeze risk).
+2. **Detailed Analysis:** Shares short, short ratio, short % of float, and the month-over-month change.
+3. **Actionable Insights:** What the positioning implies for the trade thesis (squeeze setup vs. confirmed weakness).
+4. **Short Interest Table:** A Markdown table of the key short-interest figures."""
+
+        return await run_tool_analyst(
+            llm,
+            state,
+            tools=tools,
+            system_message=system_message,
+            report_key="short_interest_report",
+            instrument_context=instrument_context,
+        )
+
+    return short_interest_node

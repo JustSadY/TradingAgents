@@ -84,6 +84,8 @@ REPORT_FIELDS = (
 
     "ratings_report",
 
+    "short_interest_report",
+
     "catalyst_report",
 
     "review_report",
@@ -456,6 +458,10 @@ async def run_individual_analysis(
 
         result = PropagateResult.from_state(final_state, signal)
 
+        from .run_quality import assess_run_quality
+
+        quality = assess_run_quality(final_state, permitted_analysts, result.final_decision)
+
         inv_debate = final_state.get("investment_debate_state", {}) or {}
 
         risk_debate = final_state.get("risk_debate_state", {}) or {}
@@ -518,6 +524,8 @@ async def run_individual_analysis(
 
             "ratings_report": result.ratings_report,
 
+            "short_interest_report": result.short_interest_report,
+
             "catalyst_report": result.catalyst_report,
 
             "review_report": result.review_report,
@@ -549,6 +557,8 @@ async def run_individual_analysis(
             "chart_annotations": structured_data,
 
             "risk_metrics": risk_metrics,
+
+            "quality": quality,
 
             "llm_calls": stats.get("llm_calls", 0),
 

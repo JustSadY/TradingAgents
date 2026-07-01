@@ -102,6 +102,12 @@ def list_analysts() -> list[str]:
     return sorted(_REGISTRY)
 
 
+def report_key_for(key: str) -> str | None:
+    """Return the report_key an analyst writes to, or ``None`` if not registered."""
+    reg = _REGISTRY.get(key)
+    return reg.report_key if reg else None
+
+
 def all_report_keys() -> tuple[str, ...]:
     """Every registered analyst's report key, in registration order.
 

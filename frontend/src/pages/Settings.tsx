@@ -58,6 +58,7 @@ interface Settings {
   max_position_size_pct: number
   max_risk_per_trade_pct: number
   strict_stop_loss_mode: boolean
+  correlation_risk_enabled: boolean
   webhook_url: string | null
   webhook_enabled: boolean
   webhook_events: string
@@ -493,6 +494,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
                   <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_strict_stop_loss')}</span>
                   <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.strict_stop_loss_mode} onChange={e => update('strict_stop_loss_mode', e.target.checked)} />
+                </label>
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_correlation_risk')}</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.correlation_risk_enabled} onChange={e => update('correlation_risk_enabled', e.target.checked)} />
                 </label>
                 </div>
             </Section>

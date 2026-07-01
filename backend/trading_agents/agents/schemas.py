@@ -217,6 +217,7 @@ class PropagateResult(BaseModel):
     insider_report: str = ""
     ownership_report: str = ""
     ratings_report: str = ""
+    short_interest_report: str = ""
     catalyst_report: str = ""
     review_report: str = ""
     synthesis_report: str = ""
@@ -245,6 +246,7 @@ class PropagateResult(BaseModel):
             insider_report=state.get(StateKeys.INSIDER_REPORT, ""),
             ownership_report=state.get(StateKeys.OWNERSHIP_REPORT, ""),
             ratings_report=state.get(StateKeys.RATINGS_REPORT, ""),
+            short_interest_report=state.get(StateKeys.SHORT_INTEREST_REPORT, ""),
             catalyst_report=state.get(StateKeys.CATALYST_REPORT, ""),
             review_report=state.get(StateKeys.REVIEW_REPORT, ""),
             synthesis_report=state.get(StateKeys.SYNTHESIS_REPORT, ""),

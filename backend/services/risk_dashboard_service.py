@@ -229,6 +229,57 @@ def _build_correlation_matrix(ticker_returns: dict[str, Any]) -> list[dict]:
     return correlation
 
 
+async def _fetch_returns(tickers: list[str]) -> dict[str, Any]:
+    """Fetch 3mo daily returns per ticker; failed/short series are omitted."""
+    results = await asyncio.gather(*[_fetch_close_history(t) for t in tickers], return_exceptions=True)
+    out: dict[str, Any] = {}
+    for ticker, hist in zip(tickers, results, strict=False):
+        if isinstance(hist, Exception) or hist is None:
+            continue
+        try:
+            r = hist.pct_change().dropna()
+            if len(r) >= 2:
+                out[ticker] = r
+        except Exception:
+            continue
+    return out
+
+
+async def correlated_notional(ticker: str, holdings: list[dict], threshold: float = 0.3) -> float:
+    """Correlation-weighted notional of *other* holdings that move with ``ticker``.
+
+    Σ over held names (excluding ``ticker``) of ``corr * market_value`` for names
+    whose return correlation with ``ticker`` exceeds ``threshold``. Best-effort:
+    returns 0.0 on any data failure so it can never block trading.
+    """
+    others = [h for h in holdings if h.get("ticker") and h["ticker"] != ticker]
+    if not others:
+        return 0.0
+    try:
+        returns = await _fetch_returns([ticker] + [h["ticker"] for h in others])
+    except Exception:
+        return 0.0
+    base = returns.get(ticker)
+    if base is None:
+        return 0.0
+
+    total = 0.0
+    for h in others:
+        r = returns.get(h["ticker"])
+        if r is None:
+            continue
+        common = base.index.intersection(r.index)
+        if len(common) < 10:
+            continue
+        try:
+            corr = float(base.loc[common].corr(r.loc[common]))
+        except Exception:
+            continue
+        if corr > threshold:
+            total += corr * float(h.get("market_value") or 0.0)
+    return total
+
+
 async def get_risk_dashboard(db: AsyncSession, user: User) -> dict:
     """Calculate portfolio risk metrics from current open holdings."""
     from backend.services.mock_trading_service import get_portfolio_with_live_prices

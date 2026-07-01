@@ -62,6 +62,7 @@ SECTION_LABELS: dict[str, str] = {
     "insider_report": "Insider Activity",
     "ownership_report": "Institutional Ownership",
     "ratings_report": "Analyst Ratings",
+    "short_interest_report": "Short Interest",
     "catalyst_report": "Upcoming Catalysts",
     "review_report": "Performance Review",
     "agent_qa_report": "Analyst Cross-Examination",

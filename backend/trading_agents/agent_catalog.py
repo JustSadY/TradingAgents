@@ -217,6 +217,15 @@ AGENTS: list[AgentInfo] = [
         "market_intelligence",
     ),
     AgentInfo(
+        "short_interest",
+        "Short Interest Analyst",
+        "Short interest, days-to-cover and squeeze positioning",
+        "analyst",
+        False,
+        get_standard_agent_settings(),
+        "market_intelligence",
+    ),
+    AgentInfo(
         "catalyst",
         "Catalyst Calendar Analyst",
         "Upcoming earnings, dividends and event risk windows",

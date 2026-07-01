@@ -205,6 +205,18 @@ async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, 
     existing_ticker = sum(float(h.get("market_value") or 0.0) for h in holdings if h.get("ticker") == ticker)
     proposed_notional = price * quantity
 
+    # Correlation-aware sizing is opt-in: it fetches price history for every
+    # holding, so we only pay that cost when the user enables it.
+    correlated = 0.0
+    if getattr(settings, "correlation_risk_enabled", False):
+        try:
+            from backend.services.risk_dashboard_service import correlated_notional
+
+            correlated = await correlated_notional(ticker, holdings)
+        except Exception as exc:  # noqa: BLE001 — never block trading on the correlation calc
+            _logger.debug("Correlation risk calc failed for %s (ignoring): %s", ticker, exc)
+            correlated = 0.0
+
     assessment = cap_order_notional(
         equity=equity,
         proposed_notional=proposed_notional,
@@ -212,6 +224,7 @@ async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, 
         existing_gross_notional=existing_gross,
         max_concentration_pct=getattr(settings, "max_concentration_pct", DEFAULT_MAX_CONCENTRATION_PCT),
         max_gross_exposure=getattr(settings, "max_gross_exposure", DEFAULT_MAX_GROSS_EXPOSURE),
+        correlated_notional=correlated,
     )
     if assessment.capped:
         _logger.info(
