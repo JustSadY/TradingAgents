@@ -24,6 +24,8 @@ const translations = {
     'performance.col_predictions': 'Predictions',
     'performance.col_accuracy': 'Accuracy',
     'performance.col_weight': 'Decision Weight',
+    'performance.chronic_underperformer': 'UNDERPERFORMING',
+    'performance.chronic_underperformer_hint': 'Consistently low win rate over enough graded calls — consider disabling this analyst.',
   },
   tr: {
     'performance.title': 'Sinyal Performansı',
@@ -50,6 +52,8 @@ const translations = {
     'performance.col_predictions': 'Tahminler',
     'performance.col_accuracy': 'Başarı Oranı',
     'performance.col_weight': 'Karar Ağırlığı',
+    'performance.chronic_underperformer': 'DÜŞÜK PERFORMANS',
+    'performance.chronic_underperformer_hint': 'Yeterli sayıda değerlendirilmiş tahminde sürekli düşük kazanma oranı — bu analisti devre dışı bırakmayı düşünün.',
   },
 }
 

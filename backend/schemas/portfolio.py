@@ -18,6 +18,7 @@ class HoldingRead(BaseModel):
     stop_loss: float = 0.0
     take_profit: float = 0.0
     updated_at: datetime
+    opened_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

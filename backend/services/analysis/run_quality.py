@@ -11,9 +11,16 @@ from __future__ import annotations
 _FALLBACK_MARKER = "automated fallback"
 
 
-def _is_degraded(text: str | None) -> bool:
-    """A report is degraded when it is empty or carries a guard fallback note."""
-    if not text or not text.strip():
+def _is_degraded(text) -> bool:
+    """A report is degraded when it is empty or carries a guard fallback note.
+
+    Report state values are expected to be strings, but this is defensive
+    against any non-string value ending up in state (never crash on it, treat
+    it as present as long as it's truthy).
+    """
+    if not isinstance(text, str):
+        return not bool(text)
+    if not text.strip():
         return True
     return "⚠️" in text or "unavailable" in text.lower()
 

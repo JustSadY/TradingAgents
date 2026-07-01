@@ -281,6 +281,31 @@ async def place_signal_order(
             return None
 
     portfolio = await get_or_create_sim_portfolio(db, user=user)
+
+    # Drawdown circuit breaker (opt-in): halt new auto-orders once the portfolio
+    # has fallen more than the configured % below its starting capital. Existing
+    # positions are untouched — this only blocks opening/adding new exposure.
+    if getattr(settings, "drawdown_breaker_enabled", False):
+        try:
+            initial_capital = float(portfolio.initial_capital)
+            if initial_capital > 0:
+                from backend.services.mock_trading_service import get_portfolio_with_live_prices
+
+                snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id)
+                current_equity = float(snapshot.get("total_value") or initial_capital)
+                drawdown_pct = max(0.0, (initial_capital - current_equity) / initial_capital * 100.0)
+                max_drawdown_pct = float(getattr(settings, "max_portfolio_drawdown_pct", 20.0))
+                if drawdown_pct > max_drawdown_pct:
+                    _logger.warning(
+                        "Drawdown circuit breaker: skipping auto-order for %s (drawdown %.1f%% > %.1f%%)",
+                        ticker,
+                        drawdown_pct,
+                        max_drawdown_pct,
+                    )
+                    return None
+        except Exception as exc:  # noqa: BLE001 — never block trading on the breaker calc itself
+            _logger.debug("Drawdown breaker check failed for %s (allowing order): %s", ticker, exc)
+
     trader = get_trader(
         mode=sys_mode,
         broker=sys_broker,

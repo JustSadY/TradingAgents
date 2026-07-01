@@ -39,6 +39,7 @@ interface AttributionItem {
   correct_predictions: number
   win_rate: number
   weight: number
+  chronic_underperformer?: boolean
 }
 
 interface TokenBreakdown {
@@ -310,7 +311,16 @@ export default function Performance() {
                   <tbody className="divide-y divide-white/[0.02]">
                     {attribution.map(item => (
                       <tr key={item.key} className="hover:bg-white/[0.01] transition-colors">
-                        <td className="px-5 py-3.5 font-bold text-white text-xs md:text-sm">{item.label}</td>
+                        <td className="px-5 py-3.5 font-bold text-white text-xs md:text-sm">
+                          <span className="flex items-center gap-1.5">
+                            {item.label}
+                            {item.chronic_underperformer && (
+                              <span title={t('performance.chronic_underperformer_hint')} className="text-[9px] font-bold text-rose-300 bg-rose-500/15 border border-rose-500/30 px-1.5 py-0.5 rounded-full">
+                                {t('performance.chronic_underperformer')}
+                              </span>
+                            )}
+                          </span>
+                        </td>
                         <td className="px-5 py-3.5 text-center text-slate-400 font-mono">{item.total_predictions}</td>
                         <td className="px-5 py-3.5">
                           <div className="flex items-center gap-3">

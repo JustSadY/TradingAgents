@@ -24,6 +24,8 @@ class SettingsBase(BaseModel):
     strict_stop_loss_mode: bool = False
     correlation_risk_enabled: bool = False
     quality_gate_enabled: bool = False
+    drawdown_breaker_enabled: bool = False
+    max_portfolio_drawdown_pct: float = 20.0
     openai_reasoning_effort: str | None = None
     anthropic_effort: str | None = None
     google_thinking_level: str | None = None
@@ -97,6 +99,8 @@ class SettingsUpdate(BaseModel):
     strict_stop_loss_mode: bool | None = None
     correlation_risk_enabled: bool | None = None
     quality_gate_enabled: bool | None = None
+    drawdown_breaker_enabled: bool | None = None
+    max_portfolio_drawdown_pct: float | None = Field(default=None, ge=1, le=100)
     openai_reasoning_effort: str | None = None
     anthropic_effort: str | None = None
     google_thinking_level: str | None = None

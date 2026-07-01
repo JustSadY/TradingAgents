@@ -458,9 +458,13 @@ async def run_individual_analysis(
 
         result = PropagateResult.from_state(final_state, signal)
 
-        from .run_quality import assess_run_quality
+        try:
+            from .run_quality import assess_run_quality
 
-        quality = assess_run_quality(final_state, permitted_analysts, result.final_decision)
+            quality = assess_run_quality(final_state, permitted_analysts, result.final_decision)
+        except Exception as quality_exc:  # noqa: BLE001 — never fail a run over a quality score
+            _logger.warning("Run-quality assessment failed for %s: %s", ticker, quality_exc)
+            quality = None
 
         inv_debate = final_state.get("investment_debate_state", {}) or {}
 
@@ -614,9 +618,13 @@ async def run_individual_analysis(
 
         )
 
-        from backend.repositories.analysis import get_previous_signal
+        try:
+            from backend.repositories.analysis import get_previous_signal
 
-        prev_signal = await get_previous_signal(db, user_id=user_id, ticker=ticker, exclude_id=row.id)
+            prev_signal = await get_previous_signal(db, user_id=user_id, ticker=ticker, exclude_id=row.id)
+        except Exception as prev_signal_exc:  # noqa: BLE001 — never fail a run over signal-flip lookup
+            _logger.debug("Previous-signal lookup failed for %s: %s", ticker, prev_signal_exc)
+            prev_signal = None
 
 
 

@@ -162,6 +162,17 @@ async def get_analyst_attribution_stats(db) -> dict:
             s["weight"] = round((win_rates[key] / sum_win_rates) * 100, 1)
         else:
             s["weight"] = round(100.0 / len(stats), 1)
+    from backend.services.analyst_prefilter_service import _PROTECTED_ANALYSTS
+
+    chronic_min_samples = 10
+    chronic_max_win_rate = 40.0
+    for key, s in stats.items():
+        s["chronic_underperformer"] = (
+            key not in _PROTECTED_ANALYSTS
+            and s["total_predictions"] >= chronic_min_samples
+            and s["win_rate"] < chronic_max_win_rate
+        )
+
     attribution_list = list(stats.values())
     total_runs_evaluated = sum(s["total_predictions"] for s in attribution_list)
     return {"attribution": attribution_list, "total_evaluated_runs": total_runs_evaluated}

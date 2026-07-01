@@ -60,6 +60,8 @@ interface Settings {
   strict_stop_loss_mode: boolean
   correlation_risk_enabled: boolean
   quality_gate_enabled: boolean
+  drawdown_breaker_enabled: boolean
+  max_portfolio_drawdown_pct: number
   webhook_url: string | null
   webhook_enabled: boolean
   webhook_events: string
@@ -504,6 +506,16 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_quality_gate')}</span>
                   <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.quality_gate_enabled} onChange={e => update('quality_gate_enabled', e.target.checked)} />
                 </label>
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_drawdown_breaker')}</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.drawdown_breaker_enabled} onChange={e => update('drawdown_breaker_enabled', e.target.checked)} />
+                </label>
+                {s.drawdown_breaker_enabled && (
+                  <div className="flex items-center justify-between p-2">
+                    <span className="text-xs font-semibold text-slate-400">{t('settings.row_max_drawdown_pct')}</span>
+                    <input type="number" min={1} max={100} className={`${Input} w-24 text-right`} value={s.max_portfolio_drawdown_pct} onChange={e => update('max_portfolio_drawdown_pct', Number(e.target.value))} />
+                  </div>
+                )}
                 </div>
             </Section>
           )}

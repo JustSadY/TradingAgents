@@ -17,6 +17,7 @@ const portfolio = {
     'portfolio.risk_breach_beta': 'Portfolio beta',
     'portfolio.risk_breach_vol': 'Annualized volatility',
     'portfolio.risk_breach_conc': 'Sector concentration',
+    'portfolio.long_held_hint': 'Held for {days} days — review whether this position still fits the thesis.',
   },
   tr: {
     'portfolio.title': 'Portföy',
@@ -36,6 +37,7 @@ const portfolio = {
     'portfolio.risk_breach_beta': 'Portföy betası',
     'portfolio.risk_breach_vol': 'Yıllık volatilite',
     'portfolio.risk_breach_conc': 'Sektör konsantrasyonu',
+    'portfolio.long_held_hint': '{days} gündür açık — bu pozisyonun hâlâ tezle uyumlu olup olmadığını gözden geçirin.',
   },
 }
 

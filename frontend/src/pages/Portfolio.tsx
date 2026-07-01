@@ -13,6 +13,16 @@ interface Holding {
   current_price: number | null
   unrealized_pnl: number | null
   updated_at: string
+  opened_at?: string | null
+}
+
+const LONG_HOLD_DAYS = 30
+
+function holdingDays(openedAt?: string | null): number | null {
+  if (!openedAt) return null
+  const opened = new Date(openedAt).getTime()
+  if (Number.isNaN(opened)) return null
+  return Math.max(0, Math.floor((Date.now() - opened) / 86_400_000))
 }
 
 interface PortfolioRow {
@@ -581,10 +591,21 @@ export default function Portfolio() {
                   const marketValue = price * h.quantity
                   const pnl = h.unrealized_pnl ?? (marketValue - h.avg_buy_price * h.quantity)
                   const positive = pnl >= 0
-                  
+                  const days = holdingDays(h.opened_at)
+                  const longHeld = days !== null && days >= LONG_HOLD_DAYS
+
                   return (
                     <tr key={h.id} className="hover:bg-white/[0.01] transition-colors">
-                      <td className="px-5 py-3.5 font-mono font-bold text-white text-sm">{h.ticker}</td>
+                      <td className="px-5 py-3.5 font-mono font-bold text-white text-sm">
+                        <span className="flex items-center gap-1.5">
+                          {h.ticker}
+                          {longHeld && (
+                            <span title={t('portfolio.long_held_hint').replace('{days}', String(days))} className="text-[9px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded-full normal-case">
+                              {days}d
+                            </span>
+                          )}
+                        </span>
+                      </td>
                       <td className="px-5 py-3.5 text-right font-mono font-semibold text-slate-300">{(h.quantity ?? 0).toFixed(4)}</td>
                       <td className="px-5 py-3.5 text-right font-mono text-slate-300">${(h.avg_buy_price ?? 0).toFixed(2)}</td>
                       <td className="px-5 py-3.5 text-right font-mono text-slate-300">
