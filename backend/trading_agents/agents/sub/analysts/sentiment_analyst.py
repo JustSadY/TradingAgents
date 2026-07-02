@@ -5,6 +5,8 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
+    get_general_settings_block,
+    get_system_instruction_override,
 )
 from backend.trading_agents.dataflows.interface import fetch_reddit_posts, fetch_stocktwits_messages, route_to_vendor
 
@@ -51,12 +53,17 @@ def create_sentiment_analyst(llm):
         else:
             stocktwits_block = "StockTwits sentiment data source is disabled by user or server settings."
 
-        system_message = _build_system_message(
-            ticker=ticker,
-            news_block=news_block,
-            stocktwits_block=stocktwits_block,
-            reddit_block=reddit_block,
-        )
+        # Allow per-agent system prompt override from Settings → Agents
+        override = get_system_instruction_override("social")
+        if override:
+            system_message = override
+        else:
+            system_message = _build_system_message(
+                ticker=ticker,
+                news_block=news_block,
+                stocktwits_block=stocktwits_block,
+                reddit_block=reddit_block,
+            )
         prompt = ChatPromptTemplate.from_messages(
             [
                 (
@@ -68,7 +75,7 @@ def create_sentiment_analyst(llm):
                 MessagesPlaceholder(variable_name="messages"),
             ]
         )
-        prompt = prompt.partial(system_message=system_message)
+        prompt = prompt.partial(system_message=system_message + get_general_settings_block())
         prompt = prompt.partial(current_date=end_date)
         prompt = prompt.partial(instrument_context=instrument_context)
         chain = prompt | llm
