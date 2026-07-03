@@ -780,15 +780,8 @@ export default function Admin() {
                     { key: 'openai',       label: 'OpenAI' },
                     { key: 'anthropic',    label: 'Anthropic (Claude)' },
                     { key: 'google',       label: 'Google (Gemini)' },
-                    { key: 'xai',          label: 'xAI (Grok)' },
-                    { key: 'deepseek',     label: 'DeepSeek' },
-                    { key: 'qwen',         label: 'Qwen (Global)' },
-                    { key: 'glm',          label: 'GLM / Z.AI' },
-                    { key: 'minimax',      label: 'MiniMax' },
-                    { key: 'ollama',       label: 'Ollama (Local)' },
                     { key: 'nvidia',       label: 'NVIDIA NIM' },
-                    { key: 'litellm',      label: 'LiteLLM Proxy' },
-                    { key: 'azure',        label: 'Azure OpenAI' },
+                    { key: 'ollama',       label: 'Ollama (Local)' },
                   ].map(p => {
                     const hasKey = userKeyProviders.includes(p.key)
                     return (
