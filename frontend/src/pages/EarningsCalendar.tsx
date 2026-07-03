@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import { CalendarDays, Loader2, Search, Play, AlertTriangle } from 'lucide-react'
 import axios from '../utils/api'
 import { notify } from '../utils/notify'
+import { useTranslation } from '../contexts/LanguageContext'
 
 interface EarningsEntry {
   ticker: string
@@ -13,24 +14,24 @@ interface EarningsEntry {
   status: 'upcoming' | 'reported' | 'unknown'
 }
 
-function StatusBadge({ status }: { status: string }) {
+function StatusBadge({ status, t }: { status: string; t: (key: string) => string }) {
   if (status === 'upcoming') {
     return (
       <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border bg-violet-500/10 text-violet-400 border-violet-500/20">
-        Upcoming
+        {t('earnings.status_upcoming')}
       </span>
     )
   }
   if (status === 'reported') {
     return (
       <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border bg-slate-500/10 text-slate-400 border-slate-500/20">
-        Reported
+        {t('earnings.status_reported')}
       </span>
     )
   }
   return (
     <span className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full border bg-slate-700/30 text-slate-500 border-slate-600/20">
-      Unknown
+      {t('earnings.status_unknown')}
     </span>
   )
 }
@@ -47,12 +48,12 @@ function SurpriseBadge({ pct }: { pct: number | null }) {
   )
 }
 
-function EarningsSoonBadge({ days_until }: { days_until: number | null }) {
+function EarningsSoonBadge({ days_until, t }: { days_until: number | null; t: (key: string) => string }) {
   if (days_until === null || days_until < 0 || days_until > 7) return null
   return (
     <span className="inline-flex items-center gap-1 text-[9px] font-bold px-1.5 py-0.5 rounded-full border bg-amber-500/10 text-amber-400 border-amber-500/20">
       <AlertTriangle size={9} />
-      Earnings Soon!
+      {t('earnings.soon_badge')}
     </span>
   )
 }
@@ -77,6 +78,7 @@ function fmtDaysUntil(days: number | null): string {
 }
 
 export default function EarningsCalendar() {
+  const { t } = useTranslation()
   const [results, setResults] = useState<EarningsEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [tickerInput, setTickerInput] = useState('')
@@ -138,13 +140,13 @@ export default function EarningsCalendar() {
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
       {/* Header */}
       <div>
-        <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight flex items-center gap-2">
-          <CalendarDays className="text-violet-400" size={20} />
-          Earnings Calendar
-        </h2>
-        <p className="text-xs text-slate-500 mt-1">
-          Upcoming and recent earnings for your watchlist — EPS estimates, reported results, and surprise percentages
-        </p>
+          <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight flex items-center gap-2">
+            <CalendarDays className="text-violet-400" size={20} />
+            {t('earnings.title')}
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">
+            {t('earnings.subtitle')}
+          </p>
       </div>
 
       {/* Controls */}
@@ -152,14 +154,14 @@ export default function EarningsCalendar() {
         <div className="flex gap-3 items-end">
           <div className="flex-1">
             <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
-              Tickers (leave blank to use your watchlist)
+              {t('earnings.ticker_label')}
             </label>
             <input
               type="text"
               value={tickerInput}
               onChange={e => setTickerInput(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSearch()}
-              placeholder="e.g. AAPL, MSFT, NVDA"
+              placeholder={t('earnings.ticker_placeholder')}
               className="w-full bg-white/[0.02] border border-white/[0.06] focus:border-violet-500/40 outline-none rounded-xl px-3.5 py-2.5 text-xs text-slate-200 placeholder-slate-600 transition-colors"
             />
           </div>
@@ -173,7 +175,7 @@ export default function EarningsCalendar() {
             ) : (
               <Search size={13} />
             )}
-            {loading ? 'Loading...' : 'Search'}
+            {loading ? t('earnings.loading') : t('earnings.search')}
           </button>
         </div>
       </div>
@@ -182,14 +184,14 @@ export default function EarningsCalendar() {
       {loading ? (
         <div className="glass-panel rounded-2xl p-12 text-center">
           <Loader2 size={24} className="animate-spin text-violet-400 mx-auto mb-3" />
-          <p className="text-xs text-slate-500">Fetching earnings data...</p>
+          <p className="text-xs text-slate-500">{t('earnings.fetching')}</p>
         </div>
       ) : hasLoaded && results.length === 0 ? (
         <div className="glass-panel rounded-2xl p-12 text-center">
           <CalendarDays size={32} className="text-slate-600 opacity-30 mx-auto mb-3" />
-          <p className="text-sm font-semibold text-slate-400">No earnings data found</p>
+          <p className="text-sm font-semibold text-slate-400">{t('earnings.no_data')}</p>
           <p className="text-xs text-slate-600 mt-1">
-            Add tickers to your watchlist or enter them above
+            {t('earnings.no_data_hint')}
           </p>
         </div>
       ) : results.length > 0 ? (
@@ -197,10 +199,10 @@ export default function EarningsCalendar() {
           {/* Table header */}
           <div className="px-5 py-3.5 border-b border-white/[0.04] flex items-center justify-between">
             <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              {results.length} ticker{results.length !== 1 ? 's' : ''}
+              {results.length} {t('earnings.col_ticker')}{results.length !== 1 ? 's' : ''}
             </p>
             <p className="text-[9px] text-slate-600 font-medium">
-              Sorted by earnings date — soonest first
+              {t('earnings.sorted_by_date')}
             </p>
           </div>
 
@@ -209,28 +211,28 @@ export default function EarningsCalendar() {
               <thead>
                 <tr className="border-b border-white/[0.04]">
                   <th className="px-4 py-2.5 text-left text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    Ticker
+                    {t('earnings.col_ticker')}
                   </th>
                   <th className="px-4 py-2.5 text-left text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    Earnings Date
+                    {t('earnings.col_date')}
                   </th>
                   <th className="px-4 py-2.5 text-right text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    Days Until
+                    {t('earnings.col_days_until')}
                   </th>
                   <th className="px-4 py-2.5 text-right text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    EPS Estimate
+                    {t('earnings.col_eps_estimate')}
                   </th>
                   <th className="px-4 py-2.5 text-right text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    Reported EPS
+                    {t('earnings.col_reported_eps')}
                   </th>
                   <th className="px-4 py-2.5 text-right text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    Surprise %
+                    {t('earnings.col_surprise')}
                   </th>
                   <th className="px-4 py-2.5 text-center text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    Status
+                    {t('earnings.col_status')}
                   </th>
                   <th className="px-4 py-2.5 text-center text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    Action
+                    {t('earnings.col_action')}
                   </th>
                 </tr>
               </thead>
@@ -255,7 +257,7 @@ export default function EarningsCalendar() {
                           <span className="font-mono font-bold text-white text-[11px]">
                             {row.ticker}
                           </span>
-                          <EarningsSoonBadge days_until={row.days_until} />
+                          <EarningsSoonBadge days_until={row.days_until} t={t} />
                         </div>
                       </td>
 
@@ -310,7 +312,7 @@ export default function EarningsCalendar() {
 
                       {/* Status */}
                       <td className="px-4 py-3 text-center">
-                        <StatusBadge status={row.status} />
+                        <StatusBadge status={row.status} t={t} />
                       </td>
 
                       {/* Analyse button */}
@@ -318,7 +320,7 @@ export default function EarningsCalendar() {
                         <button
                           onClick={() => runAnalysis(row.ticker)}
                           disabled={analyzing === row.ticker}
-                          title={`Run AI analysis for ${row.ticker}`}
+                          title={t('earnings.run_analysis_title').replace('{ticker}', row.ticker)}
                           className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-lg bg-violet-600/10 hover:bg-violet-600/20 text-violet-400 border border-violet-500/20 hover:border-violet-500/40 disabled:opacity-40 transition-all cursor-pointer"
                         >
                           {analyzing === row.ticker ? (
@@ -326,7 +328,7 @@ export default function EarningsCalendar() {
                           ) : (
                             <Play size={10} />
                           )}
-                          Analyse
+                          {t('earnings.analyse')}
                         </button>
                       </td>
                     </tr>

@@ -2,6 +2,7 @@ import { useState, useCallback, useEffect } from 'react'
 import axios from 'axios'
 import { TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, BarChart2 } from 'lucide-react'
 import { notify } from '../utils/notify'
+import { useTranslation } from '../contexts/LanguageContext'
 
 interface SectorData {
   ticker: string
@@ -17,13 +18,6 @@ interface SectorData {
 }
 
 type SortKey = 'momentum_score' | 'ret_1w' | 'ret_1m' | 'ret_3m'
-
-const SORT_OPTIONS: { key: SortKey; label: string }[] = [
-  { key: 'momentum_score', label: 'Momentum' },
-  { key: 'ret_1w', label: '1 Week' },
-  { key: 'ret_1m', label: '1 Month' },
-  { key: 'ret_3m', label: '3 Month' },
-]
 
 function retColor(val: number) {
   if (val > 2) return 'text-emerald-400'
@@ -70,9 +64,17 @@ function RsiGauge({ rsi }: { rsi: number }) {
 }
 
 export default function SectorRotation() {
+  const { t } = useTranslation()
   const [sectors, setSectors] = useState<SectorData[]>([])
   const [loading, setLoading] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('momentum_score')
+
+  const SORT_OPTIONS: { key: SortKey; label: string }[] = [
+    { key: 'momentum_score', label: t('sector.sort_momentum') },
+    { key: 'ret_1w', label: t('sector.sort_1w') },
+    { key: 'ret_1m', label: t('sector.sort_1m') },
+    { key: 'ret_3m', label: t('sector.sort_3m') },
+  ]
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   const load = useCallback(async () => {
@@ -101,11 +103,11 @@ export default function SectorRotation() {
         <div>
           <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight flex items-center gap-2">
             <BarChart2 className="text-violet-400" size={20} />
-            Sector Rotation Map
+            {t('sector.title')}
           </h2>
           <p className="text-xs text-slate-500 mt-1">
-            SPDR sector ETF momentum — identify sector leadership and rotation cycles
-            {lastUpdated && <span className="ml-2 text-slate-600">· Updated {lastUpdated.toLocaleTimeString()}</span>}
+            {t('sector.subtitle')}
+            {lastUpdated && <span className="ml-2 text-slate-600">· {t('sector.updated')} {lastUpdated.toLocaleTimeString()}</span>}
           </p>
         </div>
         <button
@@ -114,7 +116,7 @@ export default function SectorRotation() {
           className="flex items-center gap-2 px-3 py-1.5 rounded-xl bg-white/[0.04] hover:bg-white/[0.08] border border-white/[0.06] text-slate-400 text-xs font-bold transition disabled:opacity-40 cursor-pointer"
         >
           {loading ? <Loader2 size={12} className="animate-spin" /> : <RefreshCw size={12} />}
-          Refresh
+          {t('sector.refresh')}
         </button>
       </div>
 
@@ -136,7 +138,7 @@ export default function SectorRotation() {
       {loading && sectors.length === 0 && (
         <div className="glass-panel rounded-2xl p-16 flex flex-col items-center gap-3 text-slate-500">
           <Loader2 size={28} className="animate-spin text-violet-400" />
-          <p className="text-xs">Loading sector data…</p>
+          <p className="text-xs">{t('sector.loading')}</p>
         </div>
       )}
 
@@ -148,7 +150,7 @@ export default function SectorRotation() {
             <div className="glass-panel rounded-2xl p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <TrendingUp size={13} className="text-emerald-400" />
-                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">Top Leaders</span>
+                <span className="text-[10px] font-bold text-emerald-400 uppercase tracking-widest">{t('sector.top_leaders')}</span>
               </div>
               <div className="space-y-2">
                 {leaders.map((s, i) => {
@@ -173,7 +175,7 @@ export default function SectorRotation() {
             <div className="glass-panel rounded-2xl p-4 space-y-3">
               <div className="flex items-center gap-2">
                 <TrendingDown size={13} className="text-rose-400" />
-                <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest">Top Laggards</span>
+                <span className="text-[10px] font-bold text-rose-400 uppercase tracking-widest">{t('sector.top_laggards')}</span>
               </div>
               <div className="space-y-2">
                 {laggards.map((s, i) => {
@@ -246,7 +248,7 @@ export default function SectorRotation() {
                   {/* Momentum bar */}
                   <div>
                     <div className="flex items-center justify-between">
-                      <span className="text-[9px] text-slate-600 font-bold">MOMENTUM</span>
+                        <span className="text-[9px] text-slate-600 font-bold">{t('sector.momentum_label')}</span>
                       <span className={`text-[10px] font-mono font-bold ${retColor(s.momentum_score * 10)}`}>
                         {s.momentum_score > 0 ? '+' : ''}{s.momentum_score.toFixed(3)}
                       </span>
@@ -273,17 +275,17 @@ export default function SectorRotation() {
 
           {/* Legend */}
           <div className="flex flex-wrap items-center gap-4 text-[9px] text-slate-600">
-            <span className="font-bold uppercase tracking-widest">Legend:</span>
+            <span className="font-bold uppercase tracking-widest">{t('sector.legend')}</span>
             {[
-              { label: 'Strong Bull', cls: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400' },
-              { label: 'Bullish', cls: 'bg-teal-500/20 border-teal-500/40 text-teal-400' },
-              { label: 'Neutral', cls: 'bg-slate-500/20 border-slate-500/40 text-slate-400' },
-              { label: 'Bearish', cls: 'bg-amber-500/20 border-amber-500/40 text-amber-400' },
-              { label: 'Strong Bear', cls: 'bg-rose-500/20 border-rose-500/40 text-rose-400' },
+              { label: t('sector.legend_strong_bull'), cls: 'bg-emerald-500/20 border-emerald-500/40 text-emerald-400' },
+              { label: t('sector.legend_bullish'), cls: 'bg-teal-500/20 border-teal-500/40 text-teal-400' },
+              { label: t('sector.legend_neutral'), cls: 'bg-slate-500/20 border-slate-500/40 text-slate-400' },
+              { label: t('sector.legend_bearish'), cls: 'bg-amber-500/20 border-amber-500/40 text-amber-400' },
+              { label: t('sector.legend_strong_bear'), cls: 'bg-rose-500/20 border-rose-500/40 text-rose-400' },
             ].map(({ label, cls }) => (
               <span key={label} className={`px-2 py-0.5 rounded-full border font-bold ${cls}`}>{label}</span>
             ))}
-            <span className="text-slate-700 ml-auto">OS = Oversold · OB = Overbought · Vol = Volume vs 20-day avg</span>
+            <span className="text-slate-700 ml-auto">{t('sector.legend_hint')}</span>
           </div>
         </>
       )}
@@ -291,9 +293,9 @@ export default function SectorRotation() {
       {!loading && sectors.length === 0 && (
         <div className="glass-panel rounded-2xl p-12 text-center">
           <Minus size={32} className="mx-auto text-slate-600 mb-3 opacity-30" />
-          <p className="text-slate-400 text-xs font-semibold">No sector data available</p>
+          <p className="text-slate-400 text-xs font-semibold">{t('sector.empty')}</p>
           <button onClick={load} className="mt-3 text-[10px] text-violet-400 hover:text-violet-300 cursor-pointer">
-            Try again
+            {t('sector.retry')}
           </button>
         </div>
       )}

@@ -581,6 +581,22 @@ APScheduler runs in-process:
 
 ---
 
+## 💾 Analyst Report Cache (Data-Hash)
+
+All analysts (except `review`) use SHA-256 data-hash caching to skip redundant LLM calls:
+
+1. **Pre-fetch data** → `compute_data_hash(key, ticker, date, *data)` → SHA-256 digest
+2. **`check_analyst_cache(key, ticker, hash)`** → if hit, return cached report (no LLM call)
+3. **On miss** → call LLM → `store_analyst_cache(key, ticker, hash, report)` for next time
+
+Cache automatically invalidates when underlying data (news, prices, fundamentals) changes — hash changes, so stale cache is impossible. No TTL needed.
+
+**Shared helper:** `backend/trading_agents/agents/runtime/analyst_cache.py`
+**DB table:** `AnalystReportCache` in `backend/models/news_cache.py`
+**`summary_only_mode`:** When enabled in Settings, downstream agents (researchers, synthesis, auditor) see only executive summaries instead of full reports, via `build_resources(state, report_fields, summary_only=True)` in `report_aggregator.py`.
+
+---
+
 ## 🚨 Important Gotchas
 
 ### Circular Imports

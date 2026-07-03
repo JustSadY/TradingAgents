@@ -17,14 +17,13 @@ The backend uses a standard FastAPI structure:
 - `backend/schemas/` — Pydantic models
 - `backend/core/` — Core configs
 
-## Milestones
-| # | Name | Scope | Dependencies | Status |
-|---|------|-------|-------------|--------|
-| 1 | E2E Test Suite | Design and implement opaque-box E2E tests based on requirements | None | DONE |
-| 2 | Consolidate Duplicates | Merge duplicate RSI, Redis, sector lookups, settings repositories, LangChain callbacks, and OrderRequest | None | DONE |
-| 3 | Repos-Service Pattern | Move direct database queries from routers into repositories and services | M2 | DONE |
-| 4 | Critical Bugs Fixes | Fix simulation portfolio concurrency, GET idempotency, order validation, and price alert loop bugs | M3 | DONE |
-| 5 | Integrated E2E Pass | Run all tests (pytest + E2E), verify 100% correctness, perform adversarial hardening | M1, M4 | DONE |
+## Completed Milestones
+
+| # | Name | Scope |
+|---|------|-------|
+| 1 | Consolidate Duplicates | Merge duplicate RSI, Redis, sector lookups, settings repositories, LangChain callbacks, and OrderRequest |
+| 2 | Repos-Service Pattern | Move direct database queries from routers into repositories and services |
+| 3 | Critical Bugs Fixes | Fix simulation portfolio concurrency, GET idempotency, order validation, and price alert loop bugs |
 
 ## Interface Contracts
 ### `services/indicator_service.py` ↔ Other Services

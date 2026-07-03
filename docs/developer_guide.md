@@ -284,6 +284,70 @@ Numerical series can struggle with visual shapes. This system adds a visual anal
 ### I. Multi-Timeframe Alignment and Overlay Mapping
 Ensures daily-chart decisions remain aligned with long-term macro trendlines.
 
-1. **High-Timeframe Sampling:** The `get_mtf_trend` tool in [chart_tools.py](../backend/trading_agents/agents/data/chart_tools.py) fetches Weekly or Monthly historical data, computes a 20 EMA, and performs a backward merge/asof join mapping the values onto the daily trading index.
-2. **Chart Overlay:** The resulting series is registered with an `"overlay": true` parameter, signaling [Chart.tsx](../frontend/src/pages/Chart.tsx) to plot the macro trend directly on top of the main daily price candlesticks as an overlay line.
+1.  **High-Timeframe Sampling:** The `get_mtf_trend` tool in [chart_tools.py](../backend/trading_agents/agents/data/chart_tools.py) fetches Weekly or Monthly historical data, computes a 20 EMA, and performs a backward merge/asof join mapping the values onto the daily trading index.
+2.  **Chart Overlay:** The resulting series is registered with an `"overlay": true` parameter, signaling [Chart.tsx](../frontend/src/pages/Chart.tsx) to plot the macro trend directly on top of the main daily price candlesticks as an overlay line.
+
+---
+
+## 🔄 6. Analyst Report Caching (Data-Hash Based)
+
+Every analyst (except `review`) automatically caches its LLM output to avoid redundant API calls when the underlying data hasn't changed.
+
+### How It Works
+
+1.  **Pre-fetch:** The analyst fetches its required data via `route_to_vendor()` (or direct API calls) — the same data it would normally send to the LLM.
+2.  **Hash:** `compute_data_hash(analyst_key, ticker, trade_date, *data_blocks)` produces a SHA-256 hash of all fetched data plus the analyst key.
+3.  **Cache Check:** `check_analyst_cache(analyst_key, ticker, data_hash)` queries the `AnalystReportCache` table. If a match exists, the cached report is returned immediately — **zero LLM calls, zero token spend.**
+4.  **Store:** On cache miss, the LLM generates a fresh report, which is stored via `store_analyst_cache(analyst_key, ticker, data_hash, report)` for future runs.
+
+The hash automatically changes when the underlying data changes (new news, updated prices, different fundamentals), so stale cache is impossible — no TTL needed.
+
+### Cache Helper Module
+
+All cache logic lives in a single shared module:
+[`backend/trading_agents/agents/runtime/analyst_cache.py`](../backend/trading_agents/agents/runtime/analyst_cache.py)
+
+```python
+from backend.trading_agents.agents.runtime.analyst_cache import (
+    compute_data_hash,
+    check_analyst_cache,
+    store_analyst_cache,
+)
+```
+
+### Adding Cache to a Custom Analyst
+
+If you create a new analyst using `run_tool_analyst`, add cache by pre-fetching data and checking the hash before the LLM call:
+
+```python
+from backend.trading_agents.agents.runtime.analyst_cache import (
+    compute_data_hash, check_analyst_cache, store_analyst_cache,
+)
+
+async def my_analyst_node(state):
+    ticker = state["company_of_interest"]
+    trade_date = state.get("trade_date")
+    data = await route_to_vendor("get_my_data", ticker=ticker)
+    
+    data_hash = compute_data_hash("my_analyst", ticker, trade_date, data)
+    cached = await check_analyst_cache("my_analyst", ticker, data_hash)
+    if cached:
+        return {"my_report": cached}
+    
+    result = await run_tool_analyst(llm, state, tools, prompt)
+    await store_analyst_cache("my_analyst", ticker, data_hash, result)
+    return {"my_report": result}
+```
+
+### Cache Database Model
+
+The `AnalystReportCache` table is defined in
+[`backend/models/news_cache.py`](../backend/models/news_cache.py):
+- `analyst_key` — unique analyst identifier
+- `ticker` — the analysed symbol
+- `data_hash` — SHA-256 hex digest
+- `analysis_result` — the cached report text
+- `created_at` — timestamp (auto-set)
+
+The table is cleaned via an idempotent migration in `core/migrations.py` (no Alembic needed).
 

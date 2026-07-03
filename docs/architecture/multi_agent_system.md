@@ -62,6 +62,7 @@ stateDiagram-v2
 Each active analyst node queries third-party libraries (e.g. `yFinance`, `AlphaVantage`, or web searches) and processes the raw data.
 *   **Chain-of-Thought (CoT):** Analysts are now instructed to follow a multi-step reasoning process (Data Extraction -> Metric Evaluation -> Contextual Synthesis) before producing their report.
 *   **Standardized Output:** All analyst reports follow a fixed structure: Executive Summary, Detailed Analysis, and a Data Table.
+*   **Data-Hash Caching:** Every analyst (except `review`) uses SHA-256 data-hash caching. Before calling the LLM, the analyst fetches its input data, computes a hash of `(analyst_key, ticker, trade_date, data)`, and checks the `AnalystReportCache` table. If a cached report exists with the same hash, it is returned immediately without an LLM call — saving tokens and latency. The hash changes automatically when underlying data changes (news, prices, fundamentals), so stale cache is impossible.
 *   **Synthesis Manager:** Before the debate begins, the Synthesis Manager reviews all analyst reports to identify **Alignments** (agreements) and **Conflicts** (contradictions). These conflicts set the primary agenda for the Bull vs. Bear debate.
 
 ---

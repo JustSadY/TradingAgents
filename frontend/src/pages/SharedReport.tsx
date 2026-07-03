@@ -139,7 +139,7 @@ export default function SharedReport() {
     if (!token) return
     axios.get<ReportData>(`/api/share/${token}`)
       .then(r => setReport(r.data))
-      .catch(e => setError(e.response?.data?.detail || 'Report not found or expired'))
+      .catch(e => setError(e.response?.data?.detail || t('shared_report.error_not_found')))
       .finally(() => setLoading(false))
   }, [token])
 
@@ -170,8 +170,8 @@ export default function SharedReport() {
         <div className="w-14 h-14 rounded-full bg-rose-500/10 border border-rose-500/20 flex items-center justify-center mx-auto">
           <AlertCircle size={24} className="text-rose-400" />
         </div>
-        <p className="text-white font-bold">{error || 'Report unavailable'}</p>
-        <p className="text-xs text-slate-500">This link may have expired or been revoked.</p>
+        <p className="text-white font-bold">{error || t('shared_report.error_unavailable')}</p>
+        <p className="text-xs text-slate-500">{t('shared_report.error_expired')}</p>
       </div>
     </div>
   )
@@ -191,10 +191,10 @@ export default function SharedReport() {
     <div className="min-h-screen bg-slate-950 text-slate-100">
       {/* Top bar */}
       <div className="border-b border-white/[0.06] bg-slate-900/60 backdrop-blur-sm px-6 py-3 flex items-center justify-between sticky top-0 z-20">
-        <span className="text-xs font-bold text-violet-400 uppercase tracking-widest">TradingAgents — Shared Report</span>
+        <span className="text-xs font-bold text-violet-400 uppercase tracking-widest">{t('shared_report.brand')}</span>
         <div className="flex items-center gap-1.5 text-[10px] text-slate-500">
           <Clock size={11} />
-          Expires {expires.toLocaleDateString()}
+          {t('shared_report.expires')} {expires.toLocaleDateString()}
         </div>
       </div>
 
@@ -211,22 +211,22 @@ export default function SharedReport() {
 
           {(report.llm_provider || report.duration_seconds) && (
             <div className="flex flex-wrap gap-3 text-[10px] text-slate-600 font-mono">
-              {report.llm_provider && <span>LLM: {report.llm_provider}{report.llm_model ? ` / ${report.llm_model}` : ''}</span>}
-              {report.duration_seconds && <span>Duration: {report.duration_seconds.toFixed(1)}s</span>}
+              {report.llm_provider && <span>{t('shared_report.llm')}: {report.llm_provider}{report.llm_model ? ` / ${report.llm_model}` : ''}</span>}
+              {report.duration_seconds && <span>{t('shared_report.duration')}: {report.duration_seconds.toFixed(1)}s</span>}
             </div>
           )}
 
           {/* Section count summary */}
           <div className="flex items-center gap-2 text-[10px] text-slate-600">
             <FileText size={11} />
-            <span>{availableSections.length} sections</span>
+            <span>{availableSections.length} {t('shared_report.sections')}</span>
           </div>
         </div>
 
         {availableSections.length === 0 ? (
           <div className="flex flex-col items-center justify-center py-20 text-slate-600">
             <FileText size={32} className="opacity-25 mb-3" />
-            <p className="text-sm">No report sections available.</p>
+            <p className="text-sm">{t('shared_report.no_sections')}</p>
           </div>
         ) : (
           <div className="flex flex-col lg:flex-row gap-6 items-start">
@@ -277,7 +277,7 @@ export default function SharedReport() {
         )}
 
         <p className="text-[10px] text-slate-700 text-center border-t border-white/[0.04] pt-6 mt-8">
-          Powered by TradingAgents · This is a read-only shared report
+          {t('shared_report.footer')}
         </p>
       </div>
     </div>

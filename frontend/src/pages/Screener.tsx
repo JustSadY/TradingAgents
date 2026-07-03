@@ -2,6 +2,7 @@ import { useState, useCallback } from 'react'
 import axios from 'axios'
 import { Filter, Play, TrendingUp, Loader2, ExternalLink, BarChart2 } from 'lucide-react'
 import { notify } from '../utils/notify'
+import { useTranslation } from '../contexts/LanguageContext'
 
 interface ScreenResult {
   ticker: string
@@ -26,6 +27,7 @@ const VERDICT_STYLES: Record<string, string> = {
 const POPULAR = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'TSLA', 'AMD', 'JPM', 'V']
 
 export default function Screener() {
+  const { t } = useTranslation()
   const [results, setResults] = useState<ScreenResult[]>([])
   const [loading, setLoading] = useState(false)
   const [tickerInput, setTickerInput] = useState('')
@@ -80,18 +82,18 @@ export default function Screener() {
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
       {/* Header */}
       <div>
-        <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight flex items-center gap-2">
-          <Filter className="text-violet-400" size={20} />
-          Stock Screener
-        </h2>
-        <p className="text-xs text-slate-500 mt-1">Score and rank tickers by momentum, trend, volume, and RSI — then launch analysis on top candidates</p>
+          <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight flex items-center gap-2">
+            <Filter className="text-violet-400" size={20} />
+            {t('screener.title')}
+          </h2>
+          <p className="text-xs text-slate-500 mt-1">{t('screener.subtitle')}</p>
       </div>
 
       {/* Controls */}
       <div className="glass-panel rounded-2xl p-5 space-y-4">
         {/* Mode tabs */}
         <div className="flex gap-1 bg-white/[0.02] p-0.5 rounded-xl border border-white/[0.04] w-fit">
-          {([['default', 'Default Universe'], ['custom', 'Custom Tickers'], ['watchlist', 'My Watchlist']] as const).map(([m, label]) => (
+          {([['default', t('screener.mode_default')], ['custom', t('screener.mode_custom')], ['watchlist', t('screener.mode_watchlist')]] as const).map(([m, label]) => (
             <button
               key={m}
               onClick={() => setMode(m)}
@@ -106,11 +108,11 @@ export default function Screener() {
 
         {mode === 'custom' && (
           <div className="space-y-2">
-            <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">Tickers (comma or space separated)</label>
+            <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest">{t('screener.ticker_label')}</label>
             <textarea
               value={tickerInput}
               onChange={e => setTickerInput(e.target.value.toUpperCase())}
-              placeholder="AAPL, MSFT, NVDA, TSLA..."
+              placeholder={t('screener.ticker_placeholder')}
               rows={2}
               className="w-full bg-white/[0.02] border border-white/[0.06] focus:border-violet-500/40 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 placeholder-slate-600 outline-none resize-none font-mono transition-colors"
             />
@@ -133,7 +135,7 @@ export default function Screener() {
 
         {mode !== 'watchlist' && (
           <div className="flex items-center gap-3">
-            <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest shrink-0">Top N</label>
+            <label className="text-[10px] text-slate-500 font-bold uppercase tracking-widest shrink-0">{t('screener.top_n')}</label>
             <input
               type="number"
               min={1} max={50}
@@ -150,7 +152,7 @@ export default function Screener() {
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-bold transition cursor-pointer shadow shadow-violet-600/25"
         >
           {loading ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
-          {loading ? 'Scanning…' : 'Run Screen'}
+          {loading ? t('screener.scanning') : t('screener.run')}
         </button>
       </div>
 
@@ -160,24 +162,24 @@ export default function Screener() {
           <div className="px-5 py-3.5 border-b border-white/[0.04] flex items-center justify-between">
             <div className="flex items-center gap-2">
               <BarChart2 size={14} className="text-violet-400" />
-              <span className="text-sm font-bold text-white">Results</span>
+              <span className="text-sm font-bold text-white">{t('screener.results')}</span>
               <span className="text-[10px] text-violet-400 bg-violet-500/10 px-2 py-0.5 rounded-full border border-violet-500/20">{results.length}</span>
             </div>
-            <p className="text-[10px] text-slate-500">Sorted by composite score ↓</p>
+            <p className="text-[10px] text-slate-500">{t('screener.sorted_by_score')}</p>
           </div>
           <div className="overflow-x-auto">
             <table className="w-full text-xs min-w-[700px]">
               <thead>
                 <tr className="text-[9px] uppercase tracking-wider text-slate-500 bg-white/[0.01]">
-                  <th className="px-5 py-3 text-left font-bold">#</th>
-                  <th className="px-5 py-3 text-left font-bold">Ticker</th>
-                  <th className="px-5 py-3 text-center font-bold">Score</th>
-                  <th className="px-5 py-3 text-center font-bold">Momentum</th>
-                  <th className="px-5 py-3 text-center font-bold">Trend</th>
-                  <th className="px-5 py-3 text-center font-bold">Volume</th>
-                  <th className="px-5 py-3 text-right font-bold">RSI</th>
-                  <th className="px-5 py-3 text-center font-bold">Verdict</th>
-                  <th className="px-5 py-3 text-center font-bold">Action</th>
+                  <th className="px-5 py-3 text-left font-bold">{t('screener.col_rank')}</th>
+                  <th className="px-5 py-3 text-left font-bold">{t('screener.col_ticker')}</th>
+                  <th className="px-5 py-3 text-center font-bold">{t('screener.col_score')}</th>
+                  <th className="px-5 py-3 text-center font-bold">{t('screener.col_momentum')}</th>
+                  <th className="px-5 py-3 text-center font-bold">{t('screener.col_trend')}</th>
+                  <th className="px-5 py-3 text-center font-bold">{t('screener.col_volume')}</th>
+                  <th className="px-5 py-3 text-right font-bold">{t('screener.col_rsi')}</th>
+                  <th className="px-5 py-3 text-center font-bold">{t('screener.col_verdict')}</th>
+                  <th className="px-5 py-3 text-center font-bold">{t('screener.col_action')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.02]">
@@ -232,15 +234,15 @@ export default function Screener() {
                           onClick={() => runAnalysis(r.ticker)}
                           disabled={!!analyzing}
                           className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-violet-600/80 hover:bg-violet-600 text-white text-[9px] font-bold transition disabled:opacity-40 cursor-pointer"
-                          title="Run AI Analysis"
+                          title={t('screener.run_analysis_title')}
                         >
                           {analyzing === r.ticker ? <Loader2 size={9} className="animate-spin" /> : <TrendingUp size={9} />}
-                          Analyse
+                          {t('screener.analyse')}
                         </button>
                         <a
                           href={`/chart?ticker=${r.ticker}`}
                           className="p-1.5 rounded-lg text-slate-600 hover:text-violet-400 hover:bg-violet-500/10 transition"
-                          title="View Chart"
+                          title={t('screener.view_chart_title')}
                         >
                           <ExternalLink size={11} />
                         </a>
@@ -257,8 +259,8 @@ export default function Screener() {
       {!loading && results.length === 0 && (
         <div className="glass-panel rounded-2xl p-12 text-center">
           <Filter size={32} className="mx-auto text-slate-600 mb-3 opacity-30" />
-          <p className="text-slate-400 text-xs font-semibold">Select a universe and run the screener</p>
-          <p className="text-[10px] text-slate-500 mt-1">Scores momentum, trend, volume surge, and RSI positioning for each ticker</p>
+          <p className="text-slate-400 text-xs font-semibold">{t('screener.empty_title')}</p>
+          <p className="text-[10px] text-slate-500 mt-1">{t('screener.empty_subtitle')}</p>
         </div>
       )}
     </div>
