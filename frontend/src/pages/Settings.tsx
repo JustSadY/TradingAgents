@@ -163,11 +163,11 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     ]).then(([settings, presetList, allowedSet, cStatus]) => {
       setS(settings)
       setPresets(presetList)
-      setAllowedSettings(userId ? ['general', 'llm', 'risk', 'webhooks', 'cron'] : allowedSet)
+      setAllowedSettings(userId ? ['general', 'agents', 'tools', 'risk', 'webhooks', 'cron', 'memory', 'presets', 'personas'] : allowedSet)
       setCronStatus(cStatus)
       if (!userId) loadMemoryStatus()
 
-      const defaultTabs = ['general', 'llm', 'risk', 'webhooks', 'cron']
+      const defaultTabs = ['general', 'agents', 'tools', 'risk', 'webhooks', 'cron']
       const activeDefault = defaultTabs.find(tab => userId || allowedSet.includes(tab))
       if (activeDefault) {
         setActiveTab(activeDefault as any)
