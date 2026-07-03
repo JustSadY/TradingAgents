@@ -52,6 +52,7 @@ class SettingsBase(BaseModel):
     analyst_prefilter_min_samples: int = 5
     analyst_prefilter_max_win_rate: float = 40.0
     memory_recall_count: int = 5
+    summary_only_mode: bool = False
     news_article_limit: int = 20
     global_news_article_limit: int = 10
     global_news_lookback_days: int = 7
@@ -127,6 +128,7 @@ class SettingsUpdate(BaseModel):
     analyst_prefilter_min_samples: int | None = Field(default=None, ge=1, le=100)
     analyst_prefilter_max_win_rate: float | None = Field(default=None, ge=0, le=100)
     memory_recall_count: int | None = Field(default=None, ge=1, le=50)
+    summary_only_mode: bool | None = None
     news_article_limit: int | None = Field(default=None, ge=1, le=100)
     global_news_article_limit: int | None = Field(default=None, ge=1, le=100)
     global_news_lookback_days: int | None = Field(default=None, ge=1, le=90)

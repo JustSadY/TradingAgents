@@ -61,6 +61,7 @@ class AppSettings(Base):
     analyst_prefilter_min_samples: Mapped[int] = mapped_column(Integer, default=5)
     analyst_prefilter_max_win_rate: Mapped[float] = mapped_column(Float, default=40.0)
     memory_recall_count: Mapped[int] = mapped_column(Integer, default=5)
+    summary_only_mode: Mapped[bool] = mapped_column(Boolean, default=False)
     news_article_limit: Mapped[int] = mapped_column(Integer, default=20)
     global_news_article_limit: Mapped[int] = mapped_column(Integer, default=10)
     global_news_lookback_days: Mapped[int] = mapped_column(Integer, default=7)

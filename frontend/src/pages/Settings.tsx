@@ -85,6 +85,7 @@ interface Settings {
   analyst_prefilter_min_samples: number
   analyst_prefilter_max_win_rate: number
   memory_recall_count: number
+  summary_only_mode: boolean
   news_article_limit: number
   global_news_article_limit: number
   global_news_lookback_days: number
@@ -473,6 +474,12 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 <Row label={t('settings.row_max_tool_output') || 'Max Tool Output Chars'}>
                   <input type="number" min="1000" max="100000" step="1000" className={Input} value={s.max_tool_output_chars ?? 12000} onChange={e => update('max_tool_output_chars', Number.parseInt(e.target.value) || 12000)} />
                 </Row>
+
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group mt-1">
+                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_summary_only_mode') || 'Summary-Only Reports'}</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.summary_only_mode ?? false} onChange={e => update('summary_only_mode', e.target.checked)} />
+                </label>
+                <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.summary_only_mode_hint') || 'When enabled, downstream agents only see executive summaries — reducing token usage significantly.'}</p>
 
                 <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group mt-1">
                   <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_prefilter_enabled') || 'Pre-screen Weak Analysts'}</span>

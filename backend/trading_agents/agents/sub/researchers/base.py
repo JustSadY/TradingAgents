@@ -47,7 +47,9 @@ def make_researcher(
             synthesis_report = state.get("synthesis_report", "No synthesis report available.")
             qa = state.get("agent_qa_report") or ""
             qa_block = f"\n### Analyst Cross-Examination (peer Q&A that probed these conflicts):\n{qa}\n" if qa else ""
-            resources_text = build_resources(state, report_fields)
+            from backend.trading_agents.dataflows.config import get_config
+            summary_only = get_config().get("summary_only_mode", False)
+            resources_text = build_resources(state, report_fields, summary_only=summary_only)
 
             instruction = get_system_instruction_override(f"{side}_researcher") or default_instruction(target_label)
             prompt = (

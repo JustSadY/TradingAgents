@@ -83,6 +83,7 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         or DEFAULT_CONFIG["global_news_lookback_days"],
         "memory_recall_count": getattr(settings, "memory_recall_count", DEFAULT_CONFIG.get("memory_recall_count", 5))
         or DEFAULT_CONFIG.get("memory_recall_count", 5),
+        "summary_only_mode": getattr(settings, "summary_only_mode", False),
         "data_vendors": {
             "core_stock_apis": _vendor("data_vendor_core_stock"),
             "technical_indicators": _vendor("data_vendor_technicals"),

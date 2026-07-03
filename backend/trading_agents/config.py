@@ -33,6 +33,7 @@ class TradingAgentsConfig(BaseModel):
     node_retry_attempts: int = Field(default=2, ge=1)
     node_retry_base_delay: float = Field(default=1.0, ge=0.0)
     memory_recall_count: int = Field(default=5, ge=1)
+    summary_only_mode: bool = False
     max_report_chars_in_prompts: int = Field(default=6000, ge=500)
     max_debate_history_chars: int = Field(default=8000, ge=1000)
     max_tool_output_chars: int = Field(default=12000, ge=1000)

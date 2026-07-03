@@ -22,7 +22,8 @@ def create_synthesis_manager(llm):
         from backend.trading_agents.agents.analyst_registry import get_report_fields
         from backend.trading_agents.agents.runtime.report_aggregator import build_resources
 
-        resources_text = build_resources(state, get_report_fields(), prefix="### ")
+        summary_only = get_config().get("summary_only_mode", False)
+        resources_text = build_resources(state, get_report_fields(), prefix="### ", summary_only=summary_only)
 
         default_instruction = (
             f"You are a Senior Investment Strategist. Your task is to synthesize the following analyst "
