@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, field_validator
 
 
 class AnalysisRunRequest(BaseModel):
@@ -69,6 +69,13 @@ class AnalysisResultRead(BaseModel):
     raw_return: float | None = None
     alpha_return: float | None = None
     holding_days: int | None = None
+
+    @field_validator("failed_agents", mode="before")
+    @classmethod
+    def coerce_empty_string(cls, v: object) -> object:
+        if isinstance(v, str) and v == "":
+            return None
+        return v
 
     model_config = ConfigDict(from_attributes=True)
 
