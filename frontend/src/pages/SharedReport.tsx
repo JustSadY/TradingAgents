@@ -31,6 +31,8 @@ interface ReportData {
   valuation_report?: string | null
   catalyst_report?: string | null
   review_report?: string | null
+  synthesis_report?: string | null
+  audit_report?: string | null
   agent_qa_report?: string | null
   // Plans & decisions
   investment_plan?: string | null
@@ -76,6 +78,8 @@ const SECTION_DEFS: SectionDef[] = [
   { key: 'valuation_report',     labelKey: 'analysis.section.valuation_report',      fallbackLabel: 'Valuation Comparison',                icon: Layers,       category: 'analyst' },
   { key: 'catalyst_report',      labelKey: 'analysis.section.catalyst_report',       fallbackLabel: 'Upcoming Catalysts',                  icon: Calendar,     category: 'analyst' },
   { key: 'review_report',        labelKey: 'analysis.section.review_report',         fallbackLabel: 'Performance Review',                  icon: ShieldCheck,  category: 'analyst' },
+  { key: 'synthesis_report',     labelKey: 'analysis.section.synthesis_report',      fallbackLabel: 'Synthesis',                           icon: FileText,     category: 'research' },
+  { key: 'audit_report',         labelKey: 'analysis.section.audit_report',          fallbackLabel: 'Audit',                               icon: ShieldCheck,  category: 'research' },
   { key: 'agent_qa_report',      labelKey: 'analysis.section.agent_qa_report',       fallbackLabel: 'Cross-Examination',                   icon: MessageSquare,category: 'research' },
 ]
 

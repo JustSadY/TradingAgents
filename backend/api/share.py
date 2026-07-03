@@ -70,11 +70,26 @@ async def get_shared_report(token: str, db: AsyncSession = Depends(get_db)):
         "valuation_report": analysis.valuation_report,
         "catalyst_report": analysis.catalyst_report,
         "review_report": analysis.review_report,
+        "synthesis_report": analysis.synthesis_report or "",
+        "audit_report": analysis.audit_report or "",
         "agent_qa_report": analysis.agent_qa_report,
         # Plans & decisions
         "investment_plan": analysis.investment_plan,
         "trader_plan": analysis.trader_plan,
         "final_decision": analysis.final_decision,
+        # Debate history
+        "bull_history": analysis.bull_history,
+        "bear_history": analysis.bear_history,
+        "investment_debate_history": analysis.investment_debate_history,
+        "risk_debate_history": analysis.risk_debate_history,
+        "judge_decision": analysis.judge_decision or "",
+        # Trade details
+        "trader_proposal_json": analysis.trader_proposal_json or "{}",
+        "chart_annotations": analysis.chart_annotations,
+        "risk_metrics": analysis.risk_metrics,
+        "quality": analysis.quality,
+        "degraded": bool(analysis.degraded) if analysis.degraded is not None else False,
+        "failed_agents": analysis.failed_agents or [],
         # Backward-compatible aliases
         "fundamental_report": analysis.fundamentals_report,
         "research_report": analysis.investment_plan,

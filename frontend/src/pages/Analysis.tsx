@@ -113,7 +113,7 @@ function QualityBadge({ quality }: { quality: RunQuality }) {
       title={title}
       className={`inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-md border ${cls}`}
     >
-      {t(`analysis.quality.${quality.confidence}`)} · {quality.score}
+      {quality.confidence ? t(`analysis.quality.${quality.confidence}`) : '?'} · {quality.score}
     </span>
   )
 }
