@@ -52,17 +52,21 @@ def create_news_analyst(llm):
 
     async def news_analyst_node(state):
 
-        import hashlib
-
         from datetime import datetime, timedelta
 
         from langchain_core.messages import AIMessage
 
-        from sqlalchemy import select
+        from backend.trading_agents.agents.runtime.analyst_cache import (
 
-        from backend.core.database import AsyncSessionLocal
+            check_analyst_cache,
 
-        from backend.models.news_cache import NewsAnalysisCache
+            compute_data_hash,
+
+            emit_cache_hit,
+
+            store_analyst_cache,
+
+        )
 
         from backend.trading_agents.dataflows.interface import route_to_vendor
 
@@ -165,45 +169,17 @@ Your final report MUST follow this structure:
 
 
 
-        combined_text = f"{ticker}|{trade_date}|{news_data}|{global_news_data}|{insider_data}|{crypto_data}"
-
-        articles_hash = hashlib.sha256(combined_text.encode("utf-8")).hexdigest()
+        articles_hash = compute_data_hash("news", ticker, trade_date, news_data, global_news_data, insider_data, crypto_data)
 
 
 
-        cached_report = None
-
-        async with AsyncSessionLocal() as db:
-
-            stmt = select(NewsAnalysisCache).where(
-
-                NewsAnalysisCache.ticker == ticker,
-
-                NewsAnalysisCache.articles_hash == articles_hash
-
-            )
-
-            res = await db.execute(stmt)
-
-            entry = res.scalar_one_or_none()
-
-            if entry:
-
-                cached_report = entry.analysis_result
+        cached_report = await check_analyst_cache("news", ticker, articles_hash)
 
 
 
         if cached_report:
 
-            from backend.trading_agents.agents.data.chart_tools import active_run_context
-
-            ctx = active_run_context.get(None)
-
-            if ctx and "emitter" in ctx:
-
-                emitter = ctx["emitter"]
-
-                await emitter.emit_mental_model("news", f"Reusing cached news analysis for {ticker} (saved tokens).")
+            await emit_cache_hit("news", ticker)
 
             return {
 
@@ -235,21 +211,7 @@ Your final report MUST follow this structure:
 
         if report_text and not report_text.startswith("News analysis unavailable"):
 
-            async with AsyncSessionLocal() as db:
-
-                new_entry = NewsAnalysisCache(
-
-                    ticker=ticker,
-
-                    articles_hash=articles_hash,
-
-                    analysis_result=report_text
-
-                )
-
-                db.add(new_entry)
-
-                await db.commit()
+            await store_analyst_cache("news", ticker, articles_hash, report_text)
 
         return res
 

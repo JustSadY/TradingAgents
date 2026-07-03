@@ -20,7 +20,27 @@ _SHORT_INTEREST_TOOLS = [get_short_interest]
 def create_short_interest_analyst(llm):
 
     async def short_interest_node(state):
+        from backend.trading_agents.agents.runtime.analyst_cache import (
+            check_analyst_cache, store_analyst_cache, compute_data_hash, emit_cache_hit,
+        )
+        from backend.trading_agents.dataflows.interface import route_to_vendor
+        from langchain_core.messages import AIMessage
+
         instrument_context = build_instrument_context(state["company_of_interest"])
+        ticker = state.get("company_of_interest", "")
+        trade_date = state.get("trade_date", "")
+
+        # Pre-fetch data for cache hash
+        try:
+            data = await route_to_vendor("get_short_interest", ticker)
+        except Exception:
+            data = ""
+
+        data_hash = compute_data_hash("short_interest", ticker, trade_date, data)
+        cached = await check_analyst_cache("short_interest", ticker, data_hash)
+        if cached:
+            await emit_cache_hit("short_interest", ticker)
+            return {"messages": [AIMessage(content=cached)], "short_interest_report": cached}
 
         tools = _SHORT_INTEREST_TOOLS
 
@@ -44,7 +64,7 @@ Your final report MUST follow this structure:
 3. **Actionable Insights:** What the positioning implies for the trade thesis (squeeze setup vs. confirmed weakness).
 4. **Short Interest Table:** A Markdown table of the key short-interest figures."""
 
-        return await run_tool_analyst(
+        res = await run_tool_analyst(
             llm,
             state,
             tools=tools,
@@ -52,5 +72,11 @@ Your final report MUST follow this structure:
             report_key="short_interest_report",
             instrument_context=instrument_context,
         )
+
+        report_text = res.get("short_interest_report", "")
+        if report_text and "unavailable" not in report_text[:50].lower():
+            await store_analyst_cache("short_interest", ticker, data_hash, report_text)
+
+        return res
 
     return short_interest_node

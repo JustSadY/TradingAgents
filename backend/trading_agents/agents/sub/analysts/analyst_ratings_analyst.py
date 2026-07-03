@@ -20,7 +20,27 @@ _RATINGS_TOOLS = [get_analyst_ratings]
 def create_analyst_ratings_analyst(llm):
 
     async def analyst_ratings_node(state):
+        from backend.trading_agents.agents.runtime.analyst_cache import (
+            check_analyst_cache, store_analyst_cache, compute_data_hash, emit_cache_hit,
+        )
+        from backend.trading_agents.dataflows.interface import route_to_vendor
+        from langchain_core.messages import AIMessage
+
         instrument_context = build_instrument_context(state["company_of_interest"])
+        ticker = state.get("company_of_interest", "")
+        trade_date = state.get("trade_date", "")
+
+        # Pre-fetch data for cache hash
+        try:
+            data = await route_to_vendor("get_analyst_ratings", ticker)
+        except Exception:
+            data = ""
+
+        data_hash = compute_data_hash("ratings", ticker, trade_date, data)
+        cached = await check_analyst_cache("ratings", ticker, data_hash)
+        if cached:
+            await emit_cache_hit("ratings", ticker)
+            return {"messages": [AIMessage(content=cached)], "ratings_report": cached}
 
         tools = _RATINGS_TOOLS
 
@@ -44,7 +64,7 @@ Your final report MUST follow this structure:
 3. **Actionable Insights:** What the consensus (and any recent shift in it) implies for the trade thesis.
 4. **Ratings Table:** A Markdown table of the recommendation trend and key price-target figures."""
 
-        return await run_tool_analyst(
+        res = await run_tool_analyst(
             llm,
             state,
             tools=tools,
@@ -52,5 +72,11 @@ Your final report MUST follow this structure:
             report_key="ratings_report",
             instrument_context=instrument_context,
         )
+
+        report_text = res.get("ratings_report", "")
+        if report_text and "unavailable" not in report_text[:50].lower():
+            await store_analyst_cache("ratings", ticker, data_hash, report_text)
+
+        return res
 
     return analyst_ratings_node

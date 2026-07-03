@@ -5,6 +5,7 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_catalyst_calendar,
     search_web,
 )
+from datetime import datetime, timedelta
 
 # Single source of truth shared by the ToolNode registration and the LLM binding.
 _EARNINGS_TOOLS = [search_web, get_catalyst_calendar]
@@ -21,7 +22,32 @@ _EARNINGS_TOOLS = [search_web, get_catalyst_calendar]
 def create_earnings_analyst(llm):
 
     async def earnings_analyst_node(state):
+        from backend.trading_agents.agents.runtime.analyst_cache import (
+            check_analyst_cache, store_analyst_cache, compute_data_hash, emit_cache_hit,
+        )
+        from backend.trading_agents.dataflows.interface import route_to_vendor
+        from langchain_core.messages import AIMessage
+
         instrument_context = build_instrument_context(state["company_of_interest"])
+        ticker = state.get("company_of_interest", "")
+        trade_date = state.get("trade_date", "")
+
+        try:
+            catalyst_data = await route_to_vendor("get_catalyst_calendar", ticker)
+        except Exception:
+            catalyst_data = ""
+        try:
+            end_dt = datetime.strptime(trade_date, "%Y-%m-%d")
+            search_start = (end_dt - timedelta(days=365)).strftime("%Y-%m-%d")
+            search_data = await route_to_vendor("get_news", ticker, search_start, trade_date)
+        except Exception:
+            search_data = ""
+
+        data_hash = compute_data_hash("earnings", ticker, trade_date, catalyst_data, search_data)
+        cached = await check_analyst_cache("earnings", ticker, data_hash)
+        if cached:
+            await emit_cache_hit("earnings", ticker)
+            return {"messages": [AIMessage(content=cached)], "earnings_report": cached}
 
         tools = _EARNINGS_TOOLS
 
@@ -52,7 +78,7 @@ Your final report MUST follow this structure:
 4. **Actionable Insights:** Specific guidance-driven catalysts or risks for traders to monitor.
 5. **Earnings & Guidance Table:** A Markdown table summarizing key metrics, guidance changes, and management tone."""
 
-        return await run_tool_analyst(
+        res = await run_tool_analyst(
             llm,
             state,
             tools=tools,
@@ -60,5 +86,11 @@ Your final report MUST follow this structure:
             report_key="earnings_report",
             instrument_context=instrument_context,
         )
+
+        report_text = res.get("earnings_report", "")
+        if report_text and "unavailable" not in report_text[:50].lower():
+            await store_analyst_cache("earnings", ticker, data_hash, report_text)
+
+        return res
 
     return earnings_analyst_node

@@ -4,6 +4,7 @@ from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_options_data,
 )
+from datetime import datetime, timedelta
 
 # Single source of truth shared by the ToolNode registration and the LLM binding.
 _OPTIONS_TOOLS = [get_options_data]
@@ -20,7 +21,28 @@ _OPTIONS_TOOLS = [get_options_data]
 def create_options_analyst(llm):
 
     async def options_analyst_node(state):
+        from backend.trading_agents.agents.runtime.analyst_cache import (
+            check_analyst_cache, store_analyst_cache, compute_data_hash, emit_cache_hit,
+        )
+        from backend.trading_agents.dataflows.interface import route_to_vendor
+        from langchain_core.messages import AIMessage
+
         instrument_context = build_instrument_context(state["company_of_interest"])
+        ticker = state.get("company_of_interest", "")
+        trade_date = state.get("trade_date", "")
+
+        try:
+            end_dt = datetime.strptime(trade_date, "%Y-%m-%d")
+            start_dt = (end_dt - timedelta(days=90)).strftime("%Y-%m-%d")
+            data = await route_to_vendor("get_news", ticker, start_dt, trade_date)
+        except Exception:
+            data = ""
+
+        data_hash = compute_data_hash("options", ticker, trade_date, data)
+        cached = await check_analyst_cache("options", ticker, data_hash)
+        if cached:
+            await emit_cache_hit("options", ticker)
+            return {"messages": [AIMessage(content=cached)], "options_report": cached}
 
         tools = _OPTIONS_TOOLS
 
@@ -44,7 +66,7 @@ Your final report MUST follow this structure:
 3. **Actionable Insights:** Specific expected move ranges or sentiment-driven triggers for traders.
 4. **Options Data Table:** A Markdown table summarizing key options metrics and current values."""
 
-        return await run_tool_analyst(
+        res = await run_tool_analyst(
             llm,
             state,
             tools=tools,
@@ -52,5 +74,11 @@ Your final report MUST follow this structure:
             report_key="options_report",
             instrument_context=instrument_context,
         )
+
+        report_text = res.get("options_report", "")
+        if report_text and "unavailable" not in report_text[:50].lower():
+            await store_analyst_cache("options", ticker, data_hash, report_text)
+
+        return res
 
     return options_analyst_node

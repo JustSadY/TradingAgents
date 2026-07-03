@@ -20,7 +20,27 @@ _CATALYST_TOOLS = [get_catalyst_calendar]
 def create_catalyst_analyst(llm):
 
     async def catalyst_analyst_node(state):
+        from backend.trading_agents.agents.runtime.analyst_cache import (
+            check_analyst_cache, store_analyst_cache, compute_data_hash, emit_cache_hit,
+        )
+        from backend.trading_agents.dataflows.interface import route_to_vendor
+        from langchain_core.messages import AIMessage
+
         instrument_context = build_instrument_context(state["company_of_interest"])
+        ticker = state.get("company_of_interest", "")
+        trade_date = state.get("trade_date", "")
+
+        # Pre-fetch data for cache hash
+        try:
+            data = await route_to_vendor("get_catalyst_calendar", ticker)
+        except Exception:
+            data = ""
+
+        data_hash = compute_data_hash("catalyst", ticker, trade_date, data)
+        cached = await check_analyst_cache("catalyst", ticker, data_hash)
+        if cached:
+            await emit_cache_hit("catalyst", ticker)
+            return {"messages": [AIMessage(content=cached)], "catalyst_report": cached}
 
         tools = _CATALYST_TOOLS
 
@@ -44,7 +64,7 @@ Your final report MUST follow this structure:
 3. **Actionable Insights:** Concrete sizing/leverage/stop adjustments for trading through (or around) the events.
 4. **Catalyst Table:** A Markdown table of upcoming events with dates and risk ratings."""
 
-        return await run_tool_analyst(
+        res = await run_tool_analyst(
             llm,
             state,
             tools=tools,
@@ -52,5 +72,11 @@ Your final report MUST follow this structure:
             report_key="catalyst_report",
             instrument_context=instrument_context,
         )
+
+        report_text = res.get("catalyst_report", "")
+        if report_text and "unavailable" not in report_text[:50].lower():
+            await store_analyst_cache("catalyst", ticker, data_hash, report_text)
+
+        return res
 
     return catalyst_analyst_node

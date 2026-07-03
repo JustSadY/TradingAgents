@@ -74,19 +74,23 @@ def create_market_analyst(llm):
 
     async def market_analyst_node(state):
 
-        import hashlib
-
         from datetime import datetime, timedelta
 
-        from sqlalchemy import select
+        from langchain_core.messages import AIMessage
 
-        from backend.core.database import AsyncSessionLocal
+        from backend.trading_agents.agents.runtime.analyst_cache import (
 
-        from backend.models.news_cache import AnalystReportCache
+            check_analyst_cache,
+
+            compute_data_hash,
+
+            emit_cache_hit,
+
+            store_analyst_cache,
+
+        )
 
         from backend.trading_agents.dataflows.interface import route_to_vendor
-
-        from langchain_core.messages import AIMessage
 
 
 
@@ -186,47 +190,17 @@ Your final report MUST follow this structure:
 
 
 
-        combined_text = f"{ticker}|{trade_date}|{stock_data}|{indicators_data}"
-
-        data_hash = hashlib.sha256(combined_text.encode("utf-8")).hexdigest()
+        data_hash = compute_data_hash("market", ticker, trade_date, stock_data, indicators_data)
 
 
 
-        cached_report = None
-
-        async with AsyncSessionLocal() as db:
-
-            stmt = select(AnalystReportCache).where(
-
-                AnalystReportCache.analyst_key == "market",
-
-                AnalystReportCache.ticker == ticker,
-
-                AnalystReportCache.data_hash == data_hash
-
-            )
-
-            res = await db.execute(stmt)
-
-            entry = res.scalar_one_or_none()
-
-            if entry:
-
-                cached_report = entry.analysis_result
+        cached_report = await check_analyst_cache("market", ticker, data_hash)
 
 
 
         if cached_report:
 
-            from backend.trading_agents.agents.data.chart_tools import active_run_context
-
-            ctx = active_run_context.get(None)
-
-            if ctx and "emitter" in ctx:
-
-                emitter = ctx["emitter"]
-
-                await emitter.emit_mental_model("market", f"Reusing cached market analysis for {ticker} (saved tokens).")
+            await emit_cache_hit("market", ticker)
 
             return {
 
@@ -258,23 +232,7 @@ Your final report MUST follow this structure:
 
         if report_text and not report_text.startswith("Market analysis unavailable"):
 
-            async with AsyncSessionLocal() as db:
-
-                new_entry = AnalystReportCache(
-
-                    analyst_key="market",
-
-                    ticker=ticker,
-
-                    data_hash=data_hash,
-
-                    analysis_result=report_text
-
-                )
-
-                db.add(new_entry)
-
-                await db.commit()
+            await store_analyst_cache("market", ticker, data_hash, report_text)
 
         return res
 

@@ -1,6 +1,14 @@
 from datetime import datetime, timedelta
 
+from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+from backend.trading_agents.agents.runtime.analyst_cache import (
+    check_analyst_cache,
+    compute_data_hash,
+    emit_cache_hit,
+    store_analyst_cache,
+)
 
 from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
@@ -53,6 +61,16 @@ def create_sentiment_analyst(llm):
         else:
             stocktwits_block = "StockTwits sentiment data source is disabled by user or server settings."
 
+        # --- Cache check (after data fetch, before LLM call) ---
+        data_hash = compute_data_hash("social", ticker, end_date, news_block, reddit_block, stocktwits_block)
+        cached_report = await check_analyst_cache("social", ticker, data_hash)
+        if cached_report:
+            await emit_cache_hit("social", ticker)
+            return {
+                "messages": [AIMessage(content=cached_report)],
+                "sentiment_report": cached_report,
+            }
+
         # Allow per-agent system prompt override from Settings → Agents
         override = get_system_instruction_override("social")
         if override:
@@ -80,9 +98,11 @@ def create_sentiment_analyst(llm):
         prompt = prompt.partial(instrument_context=instrument_context)
         chain = prompt | llm
         result = await chain.ainvoke(state["messages"])
+        report_text = result.content
+        await store_analyst_cache("social", ticker, data_hash, report_text)
         return {
             "messages": [result],
-            "sentiment_report": result.content,
+            "sentiment_report": report_text,
         }
 
     return sentiment_analyst_node
