@@ -40,6 +40,13 @@ _ALLOWED_COLUMNS = {
         "active_broker",
         "active_data_vendor",
         "updated_at",
+        "node_retry_attempts",
+        "node_retry_base_delay",
+        "node_timeout_seconds",
+        "tool_timeout_seconds",
+        "circuit_breaker_threshold",
+        "circuit_breaker_cooldown",
+        "stall_timeout_seconds",
     },
     "app_settings": {
         "user_id",
