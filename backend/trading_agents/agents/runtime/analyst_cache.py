@@ -45,7 +45,6 @@ async def check_analyst_cache(analyst_key: str, ticker: str, data_hash: str) -> 
     from backend.models.news_cache import AnalystReportCache, NewsAnalysisCache
 
     async with AsyncSessionLocal() as db:
-        # News analyst uses its own table (NewsAnalysisCache)
         if analyst_key == "news":
             stmt = select(NewsAnalysisCache).where(
                 NewsAnalysisCache.ticker == ticker,
@@ -102,5 +101,3 @@ async def emit_cache_hit(analyst_key: str, ticker: str) -> None:
             )
     except Exception:
         pass  # Never fail the run over a cosmetic notification
-""",
-<parameter name="Description">Shared cache helper that all analysts will use instead of duplicating cache logic inline. Provides compute_data_hash, check_analyst_cache, store_analyst_cache, and emit_cache_hit functions.

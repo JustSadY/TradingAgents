@@ -65,26 +65,34 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         or DEFAULT_CONFIG["max_debate_history_chars"],
         "max_tool_output_chars": getattr(settings, "max_tool_output_chars", DEFAULT_CONFIG["max_tool_output_chars"])
         or DEFAULT_CONFIG["max_tool_output_chars"],
-        "node_retry_attempts": getattr(settings, "node_retry_attempts", DEFAULT_CONFIG["node_retry_attempts"])
-        or DEFAULT_CONFIG["node_retry_attempts"],
-        "node_retry_base_delay": getattr(settings, "node_retry_base_delay", DEFAULT_CONFIG["node_retry_base_delay"])
-        or DEFAULT_CONFIG["node_retry_base_delay"],
-        "node_timeout_seconds": getattr(settings, "node_timeout_seconds", DEFAULT_CONFIG.get("node_timeout_seconds", 120))
-        or DEFAULT_CONFIG.get("node_timeout_seconds", 120),
-        "tool_timeout_seconds": getattr(settings, "tool_timeout_seconds", DEFAULT_CONFIG.get("tool_timeout_seconds", 60))
-        or DEFAULT_CONFIG.get("tool_timeout_seconds", 60),
+        "node_retry_attempts": getattr(
+            settings, "node_retry_attempts",
+            getattr(sys_settings, "node_retry_attempts", DEFAULT_CONFIG["node_retry_attempts"])
+        ) or DEFAULT_CONFIG["node_retry_attempts"],
+        "node_retry_base_delay": getattr(
+            settings, "node_retry_base_delay",
+            getattr(sys_settings, "node_retry_base_delay", DEFAULT_CONFIG["node_retry_base_delay"])
+        ) or DEFAULT_CONFIG["node_retry_base_delay"],
+        "node_timeout_seconds": getattr(
+            settings, "node_timeout_seconds",
+            getattr(sys_settings, "node_timeout_seconds", DEFAULT_CONFIG.get("node_timeout_seconds", 120))
+        ) or DEFAULT_CONFIG.get("node_timeout_seconds", 120),
+        "tool_timeout_seconds": getattr(
+            settings, "tool_timeout_seconds",
+            getattr(sys_settings, "tool_timeout_seconds", DEFAULT_CONFIG.get("tool_timeout_seconds", 60))
+        ) or DEFAULT_CONFIG.get("tool_timeout_seconds", 60),
         "circuit_breaker_threshold": getattr(
-            settings, "circuit_breaker_threshold", DEFAULT_CONFIG.get("circuit_breaker_threshold", 3)
-        )
-        or DEFAULT_CONFIG.get("circuit_breaker_threshold", 3),
+            settings, "circuit_breaker_threshold",
+            getattr(sys_settings, "circuit_breaker_threshold", DEFAULT_CONFIG.get("circuit_breaker_threshold", 3))
+        ) or DEFAULT_CONFIG.get("circuit_breaker_threshold", 3),
         "circuit_breaker_cooldown": getattr(
-            settings, "circuit_breaker_cooldown", DEFAULT_CONFIG.get("circuit_breaker_cooldown", 60)
-        )
-        or DEFAULT_CONFIG.get("circuit_breaker_cooldown", 60),
+            settings, "circuit_breaker_cooldown",
+            getattr(sys_settings, "circuit_breaker_cooldown", DEFAULT_CONFIG.get("circuit_breaker_cooldown", 60))
+        ) or DEFAULT_CONFIG.get("circuit_breaker_cooldown", 60),
         "stall_timeout_seconds": getattr(
-            settings, "stall_timeout_seconds", DEFAULT_CONFIG.get("stall_timeout_seconds", 120)
-        )
-        or DEFAULT_CONFIG.get("stall_timeout_seconds", 120),
+            settings, "stall_timeout_seconds",
+            getattr(sys_settings, "stall_timeout_seconds", DEFAULT_CONFIG.get("stall_timeout_seconds", 120))
+        ) or DEFAULT_CONFIG.get("stall_timeout_seconds", 120),
         "max_recur_limit": getattr(settings, "max_recur_limit", DEFAULT_CONFIG["max_recur_limit"])
         or DEFAULT_CONFIG["max_recur_limit"],
         "news_article_limit": getattr(settings, "news_article_limit", DEFAULT_CONFIG["news_article_limit"])
