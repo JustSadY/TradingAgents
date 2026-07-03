@@ -89,6 +89,18 @@ async def get_analysis_by_id(db: AsyncSession, analysis_id: int, user=None) -> A
     return result.scalar_one_or_none()
 
 
+async def get_latest_analysis(db: AsyncSession, *, user) -> AnalysisResult | None:
+    q = (
+        select(AnalysisResult)
+        .where(AnalysisResult.status == "completed")
+        .order_by(_desc(AnalysisResult.created_at))
+        .limit(1)
+    )
+    q = scope_to_user(q, AnalysisResult, user)
+    result = await db.execute(q)
+    return result.scalar_one_or_none()
+
+
 async def get_sentiment_history_by_ticker(db: AsyncSession, ticker: str, user=None):
     q = (
         select(AnalysisResult.trade_date, AnalysisResult.signal)

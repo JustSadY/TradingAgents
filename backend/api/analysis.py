@@ -71,6 +71,24 @@ async def get_active_tasks(
     return await get_active_tasks_for_user(current_user.id)
 
 
+@router.get("/latest", response_model=AnalysisResultRead, responses={404: {"description": "No completed analyses"}})
+async def get_latest_analysis(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    from backend.repositories.analysis import get_latest_analysis as _repo_latest
+
+    row = await _repo_latest(db, user=current_user)
+    if row is None:
+        raise HTTPException(status_code=404, detail="No completed analyses found")
+    from backend.services.token_analytics_service import estimate_cost
+
+    row.estimated_cost_usd = estimate_cost(
+        row.llm_provider, row.llm_model, int(row.tokens_in or 0), int(row.tokens_out or 0)
+    )
+    return row
+
+
 @router.get("/history", response_model=list[AnalysisListItem])
 async def list_analysis(
     ticker: str | None = Query(default=None),

@@ -38,6 +38,8 @@ class AnalysisResultRead(BaseModel):
     valuation_report: str = ""
     catalyst_report: str = ""
     review_report: str
+    synthesis_report: str = ""
+    audit_report: str = ""
     agent_qa_report: str = ""
     investment_plan: str
     trader_plan: str
@@ -51,6 +53,8 @@ class AnalysisResultRead(BaseModel):
     chart_annotations: Any = None
     risk_metrics: Any = None
     quality: Any = None
+    degraded: bool = False
+    failed_agents: list[str] | None = None
     llm_calls: int
     tool_calls: int
     tokens_in: int

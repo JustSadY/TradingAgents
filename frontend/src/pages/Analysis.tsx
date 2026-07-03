@@ -34,6 +34,8 @@ interface WsEvent {
   label?: string; stage?: string; node?: string
   thought?: string; metrics?: any; token?: string; tokens_in?: number; tokens_out?: number
   debate_type?: string
+  attempt?: number; max_attempts?: number; error?: string; kind?: string
+  error_type?: string; elapsed_seconds?: number
 }
 interface HistoryItem {
   id: number; ticker: string; trade_date: string; asset_type: string
@@ -44,11 +46,12 @@ interface AnalysisDetail {
   market_report: string; sentiment_report: string; news_report: string
   fundamentals_report: string; macro_report: string; options_report: string
   quant_report: string; earnings_report: string; review_report: string
+  synthesis_report: string; audit_report: string
   insider_report?: string; ownership_report?: string; ratings_report?: string; short_interest_report?: string; valuation_report?: string; catalyst_report?: string
   agent_qa_report: string
   investment_plan: string; trader_plan: string; final_decision: string
-  bull_history: string; bear_history: string; investment_debate_history: string
-  risk_debate_history: string; judge_decision: string
+  bull_history: string; bear_history: string; investment_debate_history: string | string[]
+  risk_debate_history: string | string[]; judge_decision: string
   trader_proposal_json?: string
   llm_calls: number; tokens_in: number; tokens_out: number; duration_seconds: number; estimated_cost_usd?: number
   llm_provider?: string | null; llm_model?: string | null
@@ -78,10 +81,13 @@ const SECTION_LABELS: Record<string, string> = {
   short_interest_report: 'Short Interest',
   valuation_report: 'Valuation Comparison',
   catalyst_report: 'Upcoming Catalysts',
-  review_report: 'Review', agent_qa_report: 'Cross-Examination',
+  review_report: 'Review', synthesis_report: 'Synthesis',
+  audit_report: 'Audit', agent_qa_report: 'Cross-Examination',
   investment_plan: 'Investment Plan',
-  trader_investment_plan: 'Trader Proposal (preliminary)', final_trade_decision: 'Final Decision (Portfolio Manager)',
-  trader_plan: 'Trader Proposal (preliminary)', final_decision: 'Final Decision (Portfolio Manager)',
+  trader_investment_plan: 'Trader Proposal (preliminary)',
+  final_trade_decision: 'Final Decision (Portfolio Manager)',
+  trader_plan: 'Trader Proposal (preliminary)',
+  final_decision: 'Final Decision (Portfolio Manager)',
   bull_history: 'Bull', bear_history: 'Bear',
   investment_debate_history: 'Debate', risk_debate_history: 'Risk Debate',
   judge_decision: 'Judge',
@@ -117,6 +123,7 @@ const EMPTY_RUN = {
   signal: null as string | null, reports: {} as Record<string, string>,
   log: [] as string[], activeSection: null as string | null,
   analysisId: null as number | null,
+  liveDebate: [] as { sender: string; content: string; type: string }[],
 }
 
 function loadRunState() {
@@ -159,7 +166,7 @@ function RunTab() {
   const [analysisId, setAnalysisId] = useState<number | null>(saved.analysisId || null)
   const [detail, setDetail] = useState<AnalysisDetail | null>(null)
   const [activeTab, setActiveTab] = useState<'consensus' | 'reports' | 'debate' | 'chat' | 'timetravel'>('consensus')
-  const [liveDebate, setLiveDebate] = useState<{ sender: string; content: string; type: string }[]>([])
+  const [liveDebate, setLiveDebate] = useState<{ sender: string; content: string; type: string }[]>(saved.liveDebate || [])
   const [liveDebateTab, setLiveDebateTab] = useState<'inv' | 'risk'>('inv')
   const [riskMetrics, setRiskMetrics] = useState<any>(null)
   const [mentalModel, setMentalModel] = useState<{ agent: string; thought: string } | null>(null)
@@ -189,19 +196,57 @@ function RunTab() {
     try {
       // Don't persist reports while running — they're large and will be re-streamed via WS on reconnect
       const payload = runStatus === 'running'
-        ? { ticker, date, assetType, runStatus, signal, reports: {}, log: [], activeSection, analysisId }
-        : { ticker, date, assetType, runStatus, signal, reports, log, activeSection, analysisId }
+        ? { ticker, date, assetType, runStatus, signal, reports: {}, log: [], liveDebate: [], activeSection, analysisId }
+        : { ticker, date, assetType, runStatus, signal, reports, log, liveDebate, activeSection, analysisId }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
     } catch {
       // QuotaExceededError — ignore, state lives in memory
     }
-  }, [ticker, date, assetType, runStatus, signal, reports, log, activeSection, analysisId])
+  }, [ticker, date, assetType, runStatus, signal, reports, log, liveDebate, activeSection, analysisId])
 
   useEffect(() => {
     if (analysisId && runStatus === 'done' && !detail) {
       axios.get(`/api/analysis/${analysisId}`).then(r => setDetail(r.data)).catch(() => {})
     }
   }, [analysisId, runStatus, detail])
+
+  // Cross-device: mount'ta idle durumdaysak en son tamamlanmış analizi yükle
+  useEffect(() => {
+    if (runStatus === 'idle' && !analysisId) {
+      axios.get('/api/analysis/latest').then(r => {
+        const a = r.data
+        setTicker(a.ticker)
+        setDate(a.trade_date)
+        setSignal(a.signal)
+        setAnalysisId(a.id)
+        setRunStatus('done')
+        setReports({
+          market_report: a.market_report || '',
+          sentiment_report: a.sentiment_report || '',
+          news_report: a.news_report || '',
+          fundamentals_report: a.fundamentals_report || '',
+          macro_report: a.macro_report || '',
+          options_report: a.options_report || '',
+          quant_report: a.quant_report || '',
+          earnings_report: a.earnings_report || '',
+          insider_report: a.insider_report || '',
+          ownership_report: a.ownership_report || '',
+          ratings_report: a.ratings_report || '',
+          short_interest_report: a.short_interest_report || '',
+          valuation_report: a.valuation_report || '',
+          catalyst_report: a.catalyst_report || '',
+          review_report: a.review_report || '',
+          synthesis_report: a.synthesis_report || '',
+          audit_report: a.audit_report || '',
+          agent_qa_report: a.agent_qa_report || '',
+          investment_plan: a.investment_plan || '',
+          trader_plan: a.trader_plan || '',
+          final_decision: a.final_decision || '',
+        })
+        setDetail(a)
+      }).catch(() => {})
+    }
+  }, [])
 
   const setRunning_ = (v: boolean) => {
     setRunning(v)
@@ -211,7 +256,9 @@ function RunTab() {
     }
   }
 
-  const attachWs = useCallback((taskId: string, isReconnect = false) => {
+  const maxReconnectRetries = 3
+
+  const attachWs = useCallback((taskId: string, reconnectAttempt = 0) => {
     if (wsRef.current) {
       try {
         wsRef.current.onmessage = null
@@ -227,6 +274,22 @@ function RunTab() {
     const ws = new WebSocket(`/ws/analysis/${taskId}?token=${token}`)
     wsRef.current = ws
     let finished = false
+
+    const scheduleReconnect = () => {
+      const nextAttempt = reconnectAttempt + 1
+      if (nextAttempt <= maxReconnectRetries) {
+        const delay = Math.min(1000 * Math.pow(2, nextAttempt - 1), 8000)
+        appendLog(`🔄 Reconnecting... (attempt ${nextAttempt}/${maxReconnectRetries})`)
+        setTimeout(() => attachWs(taskId, nextAttempt), delay)
+      } else {
+        setRunStatus('error')
+        setRunning_(false)
+        appendLog(t('analysis.ws.conn_closed'))
+        if (reconnectAttempt > 0) {
+          notify('error', t('analysis.ws.conn_closed'), t('analysis.ws.analysis_interrupted'))
+        }
+      }
+    }
 
     const appendLog = (line: string) => {
       if (preRefreshLogRef.current && preRefreshLogRef.current.length > 0) {
@@ -262,6 +325,10 @@ function RunTab() {
           reportKey = 'trader_plan'
         } else if (ev.agent === 'research_manager') {
           reportKey = 'investment_plan'
+        } else if (ev.agent === 'synthesis_manager') {
+          reportKey = 'synthesis_report'
+        } else if (ev.agent === 'auditor') {
+          reportKey = 'audit_report'
         } else if (!ev.agent.endsWith('_report')) {
           reportKey = `${ev.agent}_report`
         }
@@ -284,6 +351,14 @@ function RunTab() {
       } else if (ev.type === 'debate_bubble' && ev.message) {
         const parsed = parseDebateMessage(ev.message)
         setLiveDebate(prev => [...prev, { ...parsed, type: ev.debate_type || 'investment' }])
+      } else if (ev.type === 'retry') {
+        appendLog(`⚠️ Retrying ${ev.node} (attempt ${ev.attempt}/${ev.max_attempts})`)
+      } else if (ev.type === 'fallback') {
+        appendLog(`⚠️ Fallback activated for ${ev.node} (${ev.kind})`)
+      } else if (ev.type === 'node_error') {
+        appendLog(`❌ Error in ${ev.node} (${ev.error_type})`)
+      } else if (ev.type === 'circuit_open') {
+        appendLog(`🔒 Circuit open for ${ev.node} (${ev.elapsed_seconds}s)`)
       } else if (ev.type === 'decision') {
         setSignal(ev.signal || null)
       } else if (ev.type === 'complete') {
@@ -321,23 +396,12 @@ function RunTab() {
     }
     ws.onerror = () => {
       if (!finished) {
-        setRunStatus('error'); setRunning_(false)
-        setLog(l => [...l, t('analysis.ws.conn_error')])
-        notify('error', t('analysis.ws.conn_error'), t('analysis.ws.analysis_error_title'))
+        // onclose will handle reconnect; don't set error here
       }
     }
     ws.onclose = () => {
       if (!finished) {
-        if (isReconnect) {
-          setRunStatus('idle')
-          setRunning_(false)
-          setLog(l => [...l, t('analysis.ws.conn_closed_reconnect')])
-        } else {
-          setRunStatus('error')
-          setRunning_(false)
-          setLog(l => [...l, t('analysis.ws.conn_closed')])
-          notify('error', t('analysis.ws.conn_closed'), t('analysis.ws.analysis_interrupted'))
-        }
+        scheduleReconnect()
       }
     }
     // ticker is intentionally read via tickerRef (not a dep) so the socket
@@ -360,7 +424,7 @@ function RunTab() {
         setAnalysisId(null)
         setDetail(null)
         localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: task.ticker, taskId: task.task_id, startedAt: new Date(task.started_at * 1000).toISOString() }))
-        attachWs(task.task_id, true)
+        attachWs(task.task_id, 1)
     }
   }, [activeTasks, running, attachWs])
 
@@ -374,7 +438,7 @@ function RunTab() {
       setRunning(true)
       setRunStatus('running')
       if (runTicker) setTicker(runTicker)
-      attachWs(taskId, true)
+      attachWs(taskId, 1)
     } catch { localStorage.removeItem(TASK_KEY) }
   }, [attachWs])
 
@@ -452,7 +516,7 @@ function RunTab() {
       })
       const taskId = data.task_id
       localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: ticker.toUpperCase(), taskId, startedAt: new Date().toISOString() }))
-      attachWs(taskId, false)
+      attachWs(taskId, 0)
     } catch (err: any) {
       setRunStatus('error')
       setRunning_(false)
@@ -486,7 +550,7 @@ function RunTab() {
     preRefreshLogRef.current = null
 
     localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: ticker.toUpperCase(), taskId, startedAt: new Date().toISOString() }))
-    attachWs(taskId, false)
+    attachWs(taskId, 0)
   }
 
   const reportEntries = Object.entries(reports)
@@ -563,12 +627,13 @@ function RunTab() {
           'fundamentals_report', 'macro_report', 'options_report',
           'quant_report', 'earnings_report', 'insider_report',
           'ownership_report', 'ratings_report', 'short_interest_report',
-          'valuation_report', 'catalyst_report', 'review_report', 'agent_qa_report'
+          'valuation_report', 'catalyst_report', 'review_report',
+          'synthesis_report', 'audit_report', 'agent_qa_report',
         ];
 
         const activeReports = analystReportKeys
-          .map(k => [k, detail ? detail[k as keyof AnalysisDetail] : reports[k]])
-          .filter(([_, val]) => !!val) as [string, string][];
+          .map(k => [k, detail ? detail[k as keyof AnalysisDetail] : reports[k]] as [string, string])
+          .filter(entry => !!entry[1]);
 
         const filteredLiveMessages = liveDebate.filter(m => {
           if (liveDebateTab === 'inv') {
@@ -1261,16 +1326,40 @@ function HistoryTab({
                       {detail.risk_metrics && <RiskMetricsCard metrics={detail.risk_metrics} />}
                       <KellyPositioningFromJson json={detail.trader_proposal_json} />
                       {([
-                        ['market_report', detail.market_report], ['sentiment_report', detail.sentiment_report],
-                        ['news_report', detail.news_report], ['fundamentals_report', detail.fundamentals_report],
-                        ['macro_report', detail.macro_report], ['options_report', detail.options_report],
-                        ['quant_report', detail.quant_report], ['earnings_report', detail.earnings_report],
-                        ['review_report', detail.review_report], ['agent_qa_report', detail.agent_qa_report],
+                        ['market_report', detail.market_report],
+                        ['sentiment_report', detail.sentiment_report],
+                        ['news_report', detail.news_report],
+                        ['fundamentals_report', detail.fundamentals_report],
+                        ['macro_report', detail.macro_report],
+                        ['options_report', detail.options_report],
+                        ['quant_report', detail.quant_report],
+                        ['earnings_report', detail.earnings_report],
+                        ['insider_report', detail.insider_report],
+                        ['ownership_report', detail.ownership_report],
+                        ['ratings_report', detail.ratings_report],
+                        ['short_interest_report', detail.short_interest_report],
+                        ['valuation_report', detail.valuation_report],
+                        ['catalyst_report', detail.catalyst_report],
+                        ['review_report', detail.review_report],
+                        ['synthesis_report', detail.synthesis_report],
+                        ['audit_report', detail.audit_report],
+                        ['agent_qa_report', detail.agent_qa_report],
                         ['investment_plan', detail.investment_plan],
-                        ['trader_plan', detail.trader_plan], ['final_decision', detail.final_decision],
-                        ['bull_history', detail.bull_history], ['bear_history', detail.bear_history],
-                        ['judge_decision', detail.judge_decision],
-                      ] as [string, string][]).map(([k, v]) => <ReportCard key={k} label={sectionLabels[k] || k} content={v} />)}
+                        ['trader_plan', detail.trader_plan],
+                        ['final_decision', detail.final_decision],
+                      ] as [string, string][]).filter(entry => !!entry[1]).map(([k, v]) => (
+                        <ReportCard key={k} label={sectionLabels[k] || k} content={v} />
+                      ))}
+                      {(detail.bull_history || detail.bear_history || detail.judge_decision) && (
+                        <div className="border-t border-white/[0.04] pt-3 mt-4">
+                          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Debate Records</h4>
+                          <div className="space-y-2">
+                            {detail.bull_history && <ReportCard label="Bull" content={detail.bull_history as string} />}
+                            {detail.bear_history && <ReportCard label="Bear" content={detail.bear_history as string} />}
+                            {detail.judge_decision && <ReportCard label="Judge" content={detail.judge_decision} />}
+                          </div>
+                        </div>
+                      )}
                     </div>
                   )}
                   {activeDetailTab === 'debate' && (

@@ -63,6 +63,10 @@ REPORT_FIELDS = (
 
     "review_report",
 
+    "synthesis_report",
+
+    "audit_report",
+
     "agent_qa_report",
 
     "investment_plan",
