@@ -137,6 +137,8 @@ _ALLOWED_COLUMNS = {
         "status",
         "synthesis_report",
         "audit_report",
+        "degraded",
+        "failed_agents",
     },
     "news_analysis_cache": {
         "id",

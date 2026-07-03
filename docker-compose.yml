@@ -27,7 +27,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
-      network: host
     restart: unless-stopped
     depends_on:
       postgres:
@@ -37,7 +36,7 @@ services:
     env_file: .env
     environment:
       DATABASE_URL: ${DATABASE_URL}
-      CORS_ORIGINS: '["http://localhost:5173","http://localhost:80"]'
+      CORS_ORIGINS: ${CORS_ORIGINS}
       REDIS_URL: redis://redis:6379/0
       ANALYSIS_QUEUE_MODE: worker
     ports:
@@ -49,7 +48,6 @@ services:
     build:
       context: .
       dockerfile: Dockerfile.backend
-      network: host
     restart: unless-stopped
     healthcheck:
       disable: true
@@ -71,7 +69,6 @@ services:
     build:
       context: frontend
       dockerfile: Dockerfile.frontend
-      network: host
     restart: unless-stopped
     ports:
       - "5173:80"
