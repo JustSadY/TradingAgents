@@ -41,7 +41,8 @@ class AnalysisEmitter:
         await self.emit({"type": "decision", "signal": signal, "final_decision": final_decision})
 
     async def emit_complete(
-        self, analysis_id: int, signal: str | None, duration_seconds: float, llm_calls: int
+        self, analysis_id: int, signal: str | None, duration_seconds: float, llm_calls: int,
+        estimated_cost_usd: float | None = None,
     ) -> None:
         await self.emit(
             {
@@ -50,6 +51,7 @@ class AnalysisEmitter:
                 "signal": signal,
                 "duration_seconds": round(duration_seconds, 2),
                 "llm_calls": llm_calls,
+                "estimated_cost_usd": estimated_cost_usd,
             }
         )
 

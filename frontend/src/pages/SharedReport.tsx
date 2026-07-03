@@ -5,7 +5,7 @@ import {
   TrendingUp, TrendingDown, Minus, Clock, AlertCircle, Loader2,
   FileText, BarChart2, BookOpen, Scale, MessageSquare, Zap,
   Activity, Building2, Newspaper, Brain, Globe, LineChart,
-  ShieldCheck, Eye, Star, TrendingDown as ShortIcon, Layers, Calendar, Search
+  ShieldCheck, Eye, Star, TrendingDown as ShortIcon, Layers, Calendar
 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 
@@ -146,7 +146,7 @@ export default function SharedReport() {
   // Build available sections from report data
   const availableSections = report
     ? SECTION_DEFS.filter(def => {
-        const val = (report as Record<string, unknown>)[def.key]
+        const val = (report as unknown as Record<string, unknown>)[def.key]
         return typeof val === 'string' && val.trim().length > 0
       })
     : []
@@ -179,7 +179,7 @@ export default function SharedReport() {
   const expires = new Date(report.expires_at)
   const activeSection = availableSections.find(s => s.key === activeKey) || availableSections[0]
   const activeContent = activeSection
-    ? ((report as Record<string, unknown>)[activeSection.key] as string)
+    ? ((report as unknown as Record<string, unknown>)[activeSection.key] as string)
     : null
 
   const getLabel = (def: SectionDef) => {

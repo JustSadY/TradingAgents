@@ -36,6 +36,7 @@ interface WsEvent {
   debate_type?: string
   attempt?: number; max_attempts?: number; error?: string; kind?: string
   error_type?: string; elapsed_seconds?: number
+  estimated_cost_usd?: number
 }
 interface HistoryItem {
   id: number; ticker: string; trade_date: string; asset_type: string
@@ -170,16 +171,18 @@ function RunTab() {
   const [liveDebateTab, setLiveDebateTab] = useState<'inv' | 'risk'>('inv')
   const [riskMetrics, setRiskMetrics] = useState<any>(null)
   const [mentalModel, setMentalModel] = useState<{ agent: string; thought: string } | null>(null)
-  const [stats, setStats] = useState<{ llmCalls: number; tokensIn: number; tokensOut: number } | null>(null)
+  const [stats, setStats] = useState<{ llmCalls: number; tokensIn: number; tokensOut: number; estimatedCost?: number } | null>(null)
 
   const wsRef = useRef<WebSocket | null>(null)
   const taskIdRef = useRef<string | null>(null)
   const preRefreshLogRef = useRef<string[] | null>(null)
+  const stoppedByUserRef = useRef(false)
   // Always-current ticker for use inside the WS handler, so attachWs doesn't
   // need `ticker` in its deps (which recreated the socket on every keystroke)
   // and the completion toast never shows a stale/empty symbol.
   const tickerRef = useRef(ticker)
   useEffect(() => { tickerRef.current = ticker }, [ticker])
+  const lastPersistRef = useRef(0)
 
   const meta = useMeta()
   const sectionLabels = meta?.section_labels ?? SECTION_LABELS
@@ -193,6 +196,9 @@ function RunTab() {
   const { activeTasks } = useActiveTasks()
 
   useEffect(() => {
+    const now = Date.now()
+    if (runStatus === 'running' && now - lastPersistRef.current < 2000) return
+    lastPersistRef.current = now
     try {
       // Don't persist reports while running — they're large and will be re-streamed via WS on reconnect
       const payload = runStatus === 'running'
@@ -276,6 +282,7 @@ function RunTab() {
     let finished = false
 
     const scheduleReconnect = () => {
+      if (stoppedByUserRef.current) return
       const nextAttempt = reconnectAttempt + 1
       if (nextAttempt <= maxReconnectRetries) {
         const delay = Math.min(1000 * Math.pow(2, nextAttempt - 1), 8000)
@@ -367,7 +374,7 @@ function RunTab() {
         setRunning_(false)
         setCurrentStep(null)
         setMentalModel(null)
-        setStats(prev => prev ? { ...prev, llmCalls: ev.llm_calls || prev.llmCalls } : null)
+        setStats(prev => prev ? { ...prev, llmCalls: ev.llm_calls || prev.llmCalls, estimatedCost: ev.estimated_cost_usd } : null)
         appendLog(`Completed in ${ev.duration_seconds}s / ${ev.llm_calls} LLM calls`)
         sendBrowserNotification(
           `${tickerRef.current.toUpperCase()} Analysis Completed`,
@@ -431,16 +438,35 @@ function RunTab() {
   useEffect(() => {
     const raw = localStorage.getItem(TASK_KEY)
     if (!raw) return
+    let cancelled = false
     try {
       const { taskId, ticker: runTicker } = JSON.parse(raw)
       if (!taskId) return
-      preRefreshLogRef.current = [...saved.log]
-      setRunning(true)
-      setRunStatus('running')
-      if (runTicker) setTicker(runTicker)
-      attachWs(taskId, 1)
+      // Verify task is still active before reconnecting
+      axios.get('/api/analysis/active').then(r => {
+        if (cancelled) return
+        const activeTasks: { task_id: string }[] = r.data
+        if (!activeTasks.some(t => t.task_id === taskId)) {
+          localStorage.removeItem(TASK_KEY)
+          return
+        }
+        preRefreshLogRef.current = [...saved.log]
+        setRunning(true)
+        setRunStatus('running')
+        if (runTicker) setTicker(runTicker)
+        attachWs(taskId, 1)
+      }).catch(() => {
+        // API unavailable — attempt reconnect anyway
+        if (cancelled) return
+        preRefreshLogRef.current = [...saved.log]
+        setRunning(true)
+        setRunStatus('running')
+        if (runTicker) setTicker(runTicker)
+        attachWs(taskId, 1)
+      })
     } catch { localStorage.removeItem(TASK_KEY) }
-  }, [attachWs])
+    return () => { cancelled = true }
+  }, [attachWs, saved.log])
 
   useEffect(() => {
     return () => {
@@ -480,6 +506,11 @@ function RunTab() {
 
   const handleStop = async () => {
     const tid = taskIdRef.current
+    setLog(l => [...l, 'Cancelling...'])
+    stoppedByUserRef.current = true
+    if (tid) {
+      try { await axios.post(`/api/analysis/${tid}/cancel`) } catch { /* best-effort cancel */ }
+    }
     if (wsRef.current) {
       wsRef.current.onmessage = null
       wsRef.current.onerror = null
@@ -489,14 +520,11 @@ function RunTab() {
     }
     setRunStatus('idle')
     setRunning_(false)
-    setLog(l => [...l, t('analysis.ws.stopped')])
-    if (tid) {
-      try { await axios.post(`/api/analysis/${tid}/cancel`) } catch { /* best-effort cancel */ }
-    }
   }
 
   const doRun = async () => {
     setShowRerunModal(false)
+    stoppedByUserRef.current = false
     setRunning(true)
     setRunStatus('running')
     setSignal(null)
@@ -644,7 +672,7 @@ function RunTab() {
         });
 
         return (
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start animate-in fade-in duration-300">
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
             {/* Left Column: Sidebar Dashboard & Terminal Log */}
             <div className="lg:col-span-1 space-y-5 flex flex-col h-full">
               {/* Engine Status & Mental Model */}
@@ -710,9 +738,11 @@ function RunTab() {
                   <div className="text-center p-2 rounded-xl bg-slate-900/40 border border-white/[0.03]">
                     <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">Cost Est.</span>
                     <span className="text-sm font-bold text-emerald-400 font-mono">
-                      ${detail?.estimated_cost_usd 
+                      ${detail?.estimated_cost_usd
                         ? detail.estimated_cost_usd.toFixed(4)
-                        : (((stats?.tokensIn || 0) * 0.000005 + (stats?.tokensOut || 0) * 0.000015).toFixed(4))
+                        : stats?.estimatedCost
+                          ? stats.estimatedCost.toFixed(4)
+                          : (((stats?.tokensIn || 0) * 0.000005 + (stats?.tokensOut || 0) * 0.000015).toFixed(4))
                       }
                     </span>
                   </div>
