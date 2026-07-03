@@ -538,6 +538,16 @@ Portfolio Manager **always** produces a final decision, so analysis completes ev
 - `node_retry_attempts` (default 2)
 - `node_retry_base_delay` (default 1.0s, exponential backoff)
 
+**Additional resilience built on this foundation (see `docs/architecture/resilience.md` §4):**
+- Per-node/per-tool hard timeout (`node_timeout_seconds`, `tool_timeout_seconds`) via `asyncio.wait_for`
+- Circuit breaker with configurable threshold/cooldown (`circuit_breaker_threshold`, `circuit_breaker_cooldown`)
+- Multi-level provider fallback chain (`fallback_llm_chain`; `FallbackLLM` accepts a list)
+- Per-agent report card persisted on `AnalysisResult` (`degraded`, `failed_agents` columns)
+- Whole-run retry (`_maybe_retry_analysis`; dead-letter after max attempts)
+- Error taxonomy (`classify_error`) + `NODE_ERRORS_BY_TYPE` / `TOOL_ERRORS` Prometheus counters
+- Real-time WS events for retry/fallback/stall (`emit_retry`, `emit_fallback`, `emit_node_error`, `emit_circuit_open`)
+- Heartbeat + stall detection (`stall_timeout_seconds`; heartbeat every 30s during propagation)
+
 ### Async & Database
 
 All async:
@@ -840,6 +850,7 @@ See `docs/developer_guide.md` sections 5A–5I for:
 - `backend/main.py` — Entry point, lifespan hooks
 - `backend/trading_agents/graph/trading_graph.py` — LangGraph runner
 - `backend/trading_agents/agents/hierarchy.py` — Kill-switches, LLM fallback
+- `backend/trading_agents/agents/runtime/resilience.py` — Retry, circuit breaker, timeout, fallback, error classification, run report card
 - `backend/trading_agents/agent_catalog.py` — Agent metadata, hierarchy tree
 - `backend/services/analysis_service.py` — Analysis orchestration
 - `backend/services/memory_service.py` — Pinecone episodic memory interface

@@ -45,6 +45,8 @@ class AnalysisResult(Base):
     chart_annotations: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     risk_metrics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     quality: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    degraded: Mapped[bool] = mapped_column(Integer, default=0)
+    failed_agents: Mapped[list | None] = mapped_column(JSON, nullable=True)
     llm_calls: Mapped[int] = mapped_column(Integer, default=0)
     tool_calls: Mapped[int] = mapped_column(Integer, default=0)
     tokens_in: Mapped[int] = mapped_column(Integer, default=0)

@@ -31,7 +31,6 @@ def make_researcher(
     side: str, speaker: str, build_prompt: PromptBuilder, default_instruction: DefaultInstruction
 ) -> Callable:
     """Build a ``create_<side>_researcher(llm)`` factory (``side`` is bull/bear)."""
-    from backend.trading_agents.agents.utils.agent_utils import get_system_instruction_override
 
     def create_researcher(llm):
         async def researcher_node(state) -> dict:

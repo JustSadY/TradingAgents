@@ -38,9 +38,27 @@ NODE_ERRORS = Counter(
     ["node", "kind"],
 )
 
+NODE_ERRORS_BY_TYPE = Counter(
+    "tradingagents_node_errors_by_type_total",
+    "Guarded node errors classified by error category.",
+    ["node", "kind", "error_type"],
+)
+
+TOOL_ERRORS = Counter(
+    "tradingagents_tool_errors_total",
+    "Tool execution errors classified by error category.",
+    ["tool_name", "error_type"],
+)
+
 NODE_FALLBACKS = Counter(
     "tradingagents_node_fallbacks_total",
     "Failed nodes replaced by their fallback stub.",
+    ["node", "kind"],
+)
+
+NODE_CIRCUIT_OPEN = Counter(
+    "tradingagents_node_circuit_open_total",
+    "Times a node was short-circuited by the circuit breaker.",
     ["node", "kind"],
 )
 

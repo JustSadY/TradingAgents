@@ -31,7 +31,8 @@ from .signal_processing import SignalProcessor
 
 def _cap_tool_outputs(tool_node: ToolNode, max_chars: int):
     """Wrap a ToolNode so oversized tool results are middle-truncated before
-    they enter the analyst's conversation.
+    they enter the analyst's conversation, and a hard timeout prevents a hung
+    external API from stalling the run.
 
     Every tool result stays in the message list and is re-sent on each LLM
     round-trip within the analyst's run, so one unbounded CSV dump multiplies
@@ -39,9 +40,20 @@ def _cap_tool_outputs(tool_node: ToolNode, max_chars: int):
     the tail (most recent rows) — see ``middle_truncate``."""
 
     async def _run(state, *args, **kwargs):
-        from backend.trading_agents.agents.runtime.report_aggregator import middle_truncate
+        import asyncio
 
-        result = await tool_node.ainvoke(state, *args, **kwargs)
+        from backend.trading_agents.agents.runtime.report_aggregator import middle_truncate
+        from backend.trading_agents.dataflows.config import get_config
+
+        _cfg = get_config()
+        timeout = _cfg.get("tool_timeout_seconds", 60)
+        try:
+            result = await asyncio.wait_for(tool_node.ainvoke(state, *args, **kwargs), timeout=timeout)
+        except TimeoutError:
+            from backend.trading_agents.agents.runtime.resilience import log_event
+
+            log_event("tool_timeout", level=logging.WARNING, tool=tool_node.name if hasattr(tool_node, "name") else str(tool_node))
+            return {"messages": [{"role": "tool", "content": f"Tool timed out after {timeout}s. Try a simpler query."}]}
         messages = result.get("messages", []) if isinstance(result, dict) else []
         for message in messages:
             content = getattr(message, "content", None)
@@ -168,28 +180,50 @@ class TradingAgentsGraph:
                 self.agent_llms[key] = self.thinking_llm.with_config(tags=[key], metadata={"agent": key})
 
     def _with_fallback(self, llm, provider: str, model: str, temperature=None):
-        """Wrap *llm* with the user's opt-in fallback provider/model, when one is
-        configured and differs from the primary. Failure to build the fallback
-        never blocks the run — the primary is returned unwrapped."""
-        fb_prov = (self.config.get("fallback_llm_provider") or "").strip().lower()
-        fb_model = (self.config.get("fallback_llm_model") or "").strip()
-        if not fb_prov or not fb_model:
-            return llm
-        if fb_prov == (provider or "").lower() and fb_model == model:
-            return llm
-        kwargs = self._get_provider_kwargs(fb_prov)
-        if temperature is not None:
-            kwargs["temperature"] = float(temperature)
-        if self.callbacks:
-            kwargs["callbacks"] = self.callbacks
-        try:
-            fallback_llm = create_llm_client(provider=fb_prov, model=fb_model, **kwargs).get_llm()
-        except Exception as exc:
-            logger.warning("Fallback LLM %s/%s unavailable: %s — continuing without failover.", fb_prov, fb_model, exc)
-            return llm
+        """Wrap *llm* with the user's opt-in fallback chain.
+
+        Reads ``fallback_llm_chain`` (a list of ``{"provider": ..., "model":
+        ...}`` dicts) from config. Falls back to the legacy single
+        ``fallback_llm_provider`` / ``fallback_llm_model`` keys when the new
+        structured field is absent. Failure to build a fallback never blocks
+        the run — entries that fail are silently dropped, and if nothing can be
+        built the primary is returned unwrapped.
+        """
         from backend.trading_agents.llm_clients.fallback import FallbackLLM
 
-        return FallbackLLM(llm, fallback_llm)
+        # Resolve the fallback list from config, supporting both the new
+        # structured chain and the legacy single-fallback keys.
+        chain: list[dict] = self.config.get("fallback_llm_chain", [])
+        if not chain:
+            fb_prov = (self.config.get("fallback_llm_provider") or "").strip().lower()
+            fb_model = (self.config.get("fallback_llm_model") or "").strip()
+            if fb_prov and fb_model:
+                chain = [{"provider": fb_prov, "model": fb_model}]
+            else:
+                return llm
+
+        fallbacks = []
+        for entry in chain:
+            prov = entry.get("provider", "").strip().lower()
+            mod = entry.get("model", "").strip()
+            if not prov or not mod:
+                continue
+            if prov == (provider or "").lower() and mod == model:
+                continue  # skip if same as primary to avoid pointless failover
+            try:
+                kwargs = self._get_provider_kwargs(prov)
+                if temperature is not None:
+                    kwargs["temperature"] = float(temperature)
+                if self.callbacks:
+                    kwargs["callbacks"] = self.callbacks
+                fb = create_llm_client(provider=prov, model=mod, **kwargs).get_llm()
+                fallbacks.append(fb)
+            except Exception as exc:
+                logger.warning("Fallback LLM %s/%s unavailable: %s — dropped from chain.", prov, mod, exc)
+
+        if not fallbacks:
+            return llm
+        return FallbackLLM(llm, fallbacks)
 
     def _get_provider_kwargs(self, provider: str = None) -> dict[str, Any]:
         kwargs = {}

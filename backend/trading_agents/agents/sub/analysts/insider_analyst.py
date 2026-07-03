@@ -20,11 +20,15 @@ _INSIDER_TOOLS = [get_insider_transactions]
 def create_insider_analyst(llm):
 
     async def insider_analyst_node(state):
+        from langchain_core.messages import AIMessage
+
         from backend.trading_agents.agents.runtime.analyst_cache import (
-            check_analyst_cache, store_analyst_cache, compute_data_hash, emit_cache_hit,
+            check_analyst_cache,
+            compute_data_hash,
+            emit_cache_hit,
+            store_analyst_cache,
         )
         from backend.trading_agents.dataflows.interface import route_to_vendor
-        from langchain_core.messages import AIMessage
 
         instrument_context = build_instrument_context(state["company_of_interest"])
         ticker = state.get("company_of_interest", "")

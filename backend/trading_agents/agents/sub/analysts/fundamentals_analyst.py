@@ -1,28 +1,14 @@
 from backend.trading_agents.agents.analyst_registry import register_analyst
-
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
-
 from backend.trading_agents.agents.utils.agent_utils import (
-
     build_instrument_context,
-
     get_balance_sheet,
-
     get_cashflow,
-
     get_fundamentals,
-
     get_income_statement,
-
     get_insider_transactions_deep,
-
     get_sec_filings,
-
 )
-
-
-
-                                                                                 
 
 _FUNDAMENTALS_TOOLS = [
 
@@ -67,17 +53,11 @@ def create_fundamentals_analyst(llm):
         from langchain_core.messages import AIMessage
 
         from backend.trading_agents.agents.runtime.analyst_cache import (
-
             check_analyst_cache,
-
             compute_data_hash,
-
             emit_cache_hit,
-
             store_analyst_cache,
-
         )
-
         from backend.trading_agents.dataflows.interface import route_to_vendor
 
 

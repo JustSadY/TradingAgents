@@ -3,14 +3,13 @@ from datetime import datetime, timedelta
 from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
+from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.runtime.analyst_cache import (
     check_analyst_cache,
     compute_data_hash,
     emit_cache_hit,
     store_analyst_cache,
 )
-
-from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_general_settings_block,

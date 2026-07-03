@@ -1,36 +1,16 @@
 from backend.trading_agents.agents.analyst_registry import register_analyst
-
 from backend.trading_agents.agents.data.chart_tools import (
-
     add_chart_annotation,
-
     add_custom_indicator,
-
     get_mtf_trend,
-
     get_vision_chart_analysis,
-
 )
-
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
-
 from backend.trading_agents.agents.utils.agent_utils import (
-
     build_instrument_context,
-
     get_indicators,
-
     get_stock_data,
-
 )
-
-
-
-                                                                                
-
-                                                                                
-
-                                                    
 
 _MARKET_TOOLS = [
 
@@ -79,17 +59,11 @@ def create_market_analyst(llm):
         from langchain_core.messages import AIMessage
 
         from backend.trading_agents.agents.runtime.analyst_cache import (
-
             check_analyst_cache,
-
             compute_data_hash,
-
             emit_cache_hit,
-
             store_analyst_cache,
-
         )
-
         from backend.trading_agents.dataflows.interface import route_to_vendor
 
 

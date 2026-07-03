@@ -68,6 +68,11 @@ interface Settings {
   watchlist: string[]
   node_retry_attempts: number
   node_retry_base_delay: number
+  node_timeout_seconds: number
+  tool_timeout_seconds: number
+  circuit_breaker_threshold: number
+  circuit_breaker_cooldown: number
+  stall_timeout_seconds: number
   memory_store: string
   pinecone_index: string
   pinecone_cloud: string
@@ -455,6 +460,28 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 <Row label={t('settings.row_node_retry_base_delay') || 'Retry Base Delay (s)'}>
                   <input type="number" step="0.1" min="0.1" max="10" className={Input} value={s.node_retry_base_delay ?? 1.0} onChange={e => update('node_retry_base_delay', Number.parseFloat(e.target.value))} />
                 </Row>
+                <Row label={t('settings.row_node_timeout_seconds') || 'Node Timeout (s)'}>
+                  <input type="number" step="10" min="30" max="600" className={Input} value={s.node_timeout_seconds ?? 120} onChange={e => update('node_timeout_seconds', Number.parseInt(e.target.value) || 120)} />
+                </Row>
+                <Row label={t('settings.row_tool_timeout_seconds') || 'Tool Timeout (s)'}>
+                  <input type="number" step="5" min="15" max="300" className={Input} value={s.tool_timeout_seconds ?? 60} onChange={e => update('tool_timeout_seconds', Number.parseInt(e.target.value) || 60)} />
+                </Row>
+                <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.hard_timeout_hint') || 'Hard wall-clock limits per node / tool. If exceeded the call is treated as a transient error and retried automatically.'}</p>
+              </div>
+
+              <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
+                <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Circuit Breaker & Stall Detection</h4>
+                <Row label={t('settings.row_circuit_breaker_threshold') || 'Circuit Breaker Threshold'}>
+                  <input type="number" min="1" max="20" className={Input} value={s.circuit_breaker_threshold ?? 3} onChange={e => update('circuit_breaker_threshold', Number.parseInt(e.target.value))} />
+                </Row>
+                <Row label={t('settings.row_circuit_breaker_cooldown') || 'Circuit Breaker Cooldown (s)'}>
+                  <input type="number" step="10" min="10" max="600" className={Input} value={s.circuit_breaker_cooldown ?? 60} onChange={e => update('circuit_breaker_cooldown', Number.parseInt(e.target.value) || 60)} />
+                </Row>
+                <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.circuit_breaker_hint') || 'After N consecutive failures of the same node, short-circuit it and skip directly to fallback for a cooldown period.'}</p>
+                <Row label={t('settings.row_stall_timeout_seconds') || 'Stall Timeout (s)'}>
+                  <input type="number" step="10" min="30" max="600" className={Input} value={s.stall_timeout_seconds ?? 120} onChange={e => update('stall_timeout_seconds', Number.parseInt(e.target.value) || 120)} />
+                </Row>
+                <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.stall_hint') || 'If no node produces output for this many seconds, emit a stall warning via WebSocket.'}</p>
               </div>
 
               <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">

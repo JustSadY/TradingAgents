@@ -32,6 +32,11 @@ class TradingAgentsConfig(BaseModel):
     analyst_concurrency_limit: int = Field(default=1, ge=1)
     node_retry_attempts: int = Field(default=2, ge=1)
     node_retry_base_delay: float = Field(default=1.0, ge=0.0)
+    node_timeout_seconds: int = Field(default=120, ge=30)
+    tool_timeout_seconds: int = Field(default=60, ge=15)
+    circuit_breaker_threshold: int = Field(default=3, ge=1)
+    circuit_breaker_cooldown: int = Field(default=60, ge=10)
+    stall_timeout_seconds: int = Field(default=120, ge=30)
     memory_recall_count: int = Field(default=5, ge=1)
     summary_only_mode: bool = False
     max_report_chars_in_prompts: int = Field(default=6000, ge=500)

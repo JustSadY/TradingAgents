@@ -37,19 +37,13 @@ from .config import get_config
 from .reddit import fetch_reddit_posts
 from .stocktwits import fetch_stocktwits_messages
 from .y_finance import (
+    get_analyst_ratings as get_yfinance_analyst_ratings,
+)
+from .y_finance import (
     get_balance_sheet as get_yfinance_balance_sheet,
 )
 from .y_finance import (
     get_cashflow as get_yfinance_cashflow,
-)
-from .y_finance import (
-    get_analyst_ratings as get_yfinance_analyst_ratings,
-)
-from .y_finance import (
-    get_short_interest as get_yfinance_short_interest,
-)
-from .y_finance import (
-    get_valuation_comparison as get_yfinance_valuation_comparison,
 )
 from .y_finance import (
     get_catalyst_calendar as get_yfinance_catalyst_calendar,
@@ -70,8 +64,14 @@ from .y_finance import (
     get_sec_filings as get_yfinance_sec_filings,
 )
 from .y_finance import (
+    get_short_interest as get_yfinance_short_interest,
+)
+from .y_finance import (
     get_stock_stats_indicators_window,
     get_yfin_data_online,
+)
+from .y_finance import (
+    get_valuation_comparison as get_yfinance_valuation_comparison,
 )
 from .yfinance_news import get_global_news_yfinance, get_news_yfinance
 

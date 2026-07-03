@@ -31,6 +31,11 @@ class SettingsBase(BaseModel):
     google_thinking_level: str | None = None
     node_retry_attempts: int = 2
     node_retry_base_delay: float = 1.0
+    node_timeout_seconds: int = 120
+    tool_timeout_seconds: int = 60
+    circuit_breaker_threshold: int = 3
+    circuit_breaker_cooldown: int = 60
+    stall_timeout_seconds: int = 120
     webhook_url: str | None = None
     webhook_enabled: bool = False
     webhook_events: str = '["analysis_complete"]'
@@ -107,6 +112,11 @@ class SettingsUpdate(BaseModel):
     google_thinking_level: str | None = None
     node_retry_attempts: int | None = Field(default=None, ge=1, le=10)
     node_retry_base_delay: float | None = Field(default=None, ge=0.1, le=10.0)
+    node_timeout_seconds: int | None = Field(default=None, ge=30, le=600)
+    tool_timeout_seconds: int | None = Field(default=None, ge=15, le=300)
+    circuit_breaker_threshold: int | None = Field(default=None, ge=1, le=20)
+    circuit_breaker_cooldown: int | None = Field(default=None, ge=10, le=600)
+    stall_timeout_seconds: int | None = Field(default=None, ge=30, le=600)
     webhook_url: str | None = None
     webhook_enabled: bool | None = None
     webhook_events: str | None = None

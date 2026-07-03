@@ -157,6 +157,9 @@ async def run_analysis(
         await emitter.close()
 
 
+_ANALYSIS_RETRY_MAX = 1
+
+
 async def run_analysis_task(
     ticker: str,
     trade_date: str,
@@ -192,6 +195,48 @@ async def run_analysis_task(
         except Exception:
             _logger.exception("Background analysis failed")
             await db.rollback()
+            try:
+                await _maybe_retry_analysis(ticker, trade_date, asset_type, settings, task_id, user)
+            except Exception as retry_exc:
+                _logger.exception("Analysis retry failed for task=%s: %s", task_id, retry_exc)
+
+
+async def _maybe_retry_analysis(
+    ticker: str,
+    trade_date: str,
+    asset_type: str,
+    settings: AppSettings,
+    task_id: str,
+    user=None,
+) -> None:
+    """Re-enqueue the analysis if it hasn't been retried too many times.
+
+    The retry counter lives in ``task_store`` metadata so it survives across
+    web and worker processes. After ``_ANALYSIS_RETRY_MAX`` attempts the task
+    is marked as a dead letter (logged but no further action).
+    """
+    from backend.core.task_store import get_meta, set_meta
+
+    meta = await get_meta(task_id) or {}
+    retry_count = meta.get("retry_count", 0)
+    if retry_count >= _ANALYSIS_RETRY_MAX:
+        _logger.warning("Analysis dead-letter task=%s ticker=%s (retried %d times)", task_id, ticker, retry_count)
+        return
+    meta["retry_count"] = retry_count + 1
+    await set_meta(task_id, meta)
+    _logger.info("Re-enqueuing analysis task=%s ticker=%s (retry %d/%d)", task_id, ticker, retry_count + 1, _ANALYSIS_RETRY_MAX)
+
+    from backend.services.analysis_queue import queue_mode as _queue_mode
+
+    if _queue_mode() == "worker":
+        from backend.services.analysis_queue import get_arq_pool
+
+        pool = await get_arq_pool()
+        await pool.enqueue_job("run_analysis_job", ticker, trade_date, asset_type, user.id if user else None, task_id)
+    else:
+        import asyncio
+
+        asyncio.create_task(run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user))
 
 
 async def run_portfolio_task(

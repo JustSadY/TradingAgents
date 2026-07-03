@@ -11,11 +11,11 @@ from .sub.analysts.news_analyst import create_news_analyst
 from .sub.analysts.options_analyst import create_options_analyst
 from .sub.analysts.quant_analyst import create_quant_analyst
 from .sub.analysts.review_analyst import create_review_analyst
-from .sub.analysts.short_interest_analyst import create_short_interest_analyst
-from .sub.analysts.valuation_analyst import create_valuation_analyst
 from .sub.analysts.sentiment_analyst import (
     create_sentiment_analyst,
 )
+from .sub.analysts.short_interest_analyst import create_short_interest_analyst
+from .sub.analysts.valuation_analyst import create_valuation_analyst
 from .sub.managers.auditor_node import create_auditor_node
 from .sub.managers.portfolio_manager import create_portfolio_manager
 from .sub.managers.research_manager import create_research_manager

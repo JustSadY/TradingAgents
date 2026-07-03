@@ -1,60 +1,31 @@
 from __future__ import annotations
 
-
-
 import asyncio
-
 import logging
-
 import time
-
-
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-
-
 from backend.core.catalog import node_progress
-
 from backend.core.metrics import ANALYSIS_DURATION, ANALYSIS_RUNS
-
 from backend.repositories.analysis import get_system_settings
-
 from backend.services.stats_handler import StatsCallbackHandler
-
 from backend.trading_agents.agents.schemas import PropagateResult
-
 from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
 
-
-
 from .config_builder import (
-
     build_analysis_config,
-
     history_json_from,
-
     prepare_graph_config,
-
 )
-
 from .emitter import AnalysisEmitter
-
 from .persistence import (
-
     create_skeleton_result,
-
     finalize_result,
-
     mark_as_cancelled,
-
     mark_as_failed,
-
     update_result_fields,
-
 )
-
-
 
 _logger = logging.getLogger(__name__)
 
@@ -138,7 +109,7 @@ async def run_individual_analysis(
 
 
 
-                                 
+
 
     row = await create_skeleton_result(db, emitter.task_id, ticker, trade_date, asset_type, triggered_by, user_id)
 
@@ -148,7 +119,7 @@ async def run_individual_analysis(
 
     try:
 
-                                
+
 
         sys_settings = await get_system_settings(db)
 
@@ -158,7 +129,7 @@ async def run_individual_analysis(
 
 
 
-                                                                                     
+
 
         persona_key = config.get("investor_persona")
 
@@ -171,8 +142,6 @@ async def run_individual_analysis(
             if not _get_builtin_persona(persona_key):
 
                 from sqlalchemy import select as _sel
-
-
 
                 from backend.models.persona import UserPersona as _UP
 
@@ -190,14 +159,11 @@ async def run_individual_analysis(
 
 
 
-                                             
+
 
         from backend.services.analysis.market_pulse_service import get_market_pulse
-
         from backend.services.analysis.scenario_service import get_active_scenarios
-
         from backend.services.performance_service import get_analyst_performance_context
-
         from backend.services.signal_backtest_service import get_signal_replay_context
 
 
@@ -212,29 +178,29 @@ async def run_individual_analysis(
 
 
 
-                                                                            
 
-                                                                               
 
-                                                                               
 
-                                                                         
+
+
+
+
 
         config["historical_context"] = attribution_md + market_pulse_md + scenarios_md + signal_replay_md
 
 
 
-                                                                  
+
 
         permitted_analysts = await prepare_graph_config(db, user_id, config)
 
 
 
-                                                                                
 
-                                                                             
 
-                                                                             
+
+
+
 
         if getattr(settings, "analyst_prefilter_enabled", False):
 
@@ -264,12 +230,13 @@ async def run_individual_analysis(
 
 
 
-                                   
+
+
+        from backend.trading_agents.agents.runtime.resilience import get_report_card, init_report_card
 
         from .streaming_handler import TokenStreamingCallbackHandler
 
-
-
+        init_report_card()
         stats_handler = StatsCallbackHandler()
 
         streaming_handler = TokenStreamingCallbackHandler(emitter)
@@ -286,7 +253,7 @@ async def run_individual_analysis(
 
 
 
-                                                                         
+
 
         from backend.trading_agents.agents.data.chart_tools import active_run_context
 
@@ -322,11 +289,28 @@ async def run_individual_analysis(
 
         last_node = None
 
+        last_event_time = time.time()
 
+        async def _heartbeat_monitor():
+            stall_timeout = config.get("stall_timeout_seconds", 120)
+            heartbeat_interval = min(30, max(10, stall_timeout / 4))
+            while True:
+                await asyncio.sleep(heartbeat_interval)
+                elapsed = time.time() - last_event_time
+                if elapsed > stall_timeout:
+                    await emitter.emit({
+                        "type": "stall_warning",
+                        "seconds_since_last_event": round(elapsed, 1),
+                        "threshold": stall_timeout,
+                    })
+                    _logger.warning("Stall detected task=%s — no event for %.0fs (threshold %ds)", emitter.task_id, elapsed, stall_timeout)
+                    break
+                await emitter.emit_progress("heartbeat", "running", "system")
 
         async def _stream_observer(mode: str, chunk: dict) -> None:
 
-            nonlocal prev_inv_count, prev_risk_count, last_node
+            nonlocal prev_inv_count, prev_risk_count, last_node, last_event_time
+            last_event_time = time.time()
 
             if mode == "updates":
 
@@ -346,7 +330,7 @@ async def run_individual_analysis(
 
 
 
-                                   
+
 
             for d_type, key in [("investment", "investment_debate_state"), ("risk", "risk_debate_state")]:
 
@@ -414,7 +398,7 @@ async def run_individual_analysis(
 
 
 
-                                        
+
 
             for key, value in chunk.items():
 
@@ -428,13 +412,21 @@ async def run_individual_analysis(
 
 
 
-                   
-
-        final_state, signal = await ta.async_propagate(ticker, trade_date, asset_type, stream_observer=_stream_observer)
 
 
+        heartbeat_task = asyncio.create_task(_heartbeat_monitor())
+        try:
+            final_state, signal = await ta.async_propagate(ticker, trade_date, asset_type, stream_observer=_stream_observer)
+        finally:
+            heartbeat_task.cancel()
+            try:
+                await heartbeat_task
+            except asyncio.CancelledError:
+                pass
 
-                         
+
+
+
 
         duration = time.time() - start_time
 
@@ -442,7 +434,7 @@ async def run_individual_analysis(
 
 
 
-                                  
+
 
         risk_metrics = {}
 
@@ -450,23 +442,19 @@ async def run_individual_analysis(
 
             from datetime import datetime, timedelta
 
-
-
             from backend.core.utils import resolve_benchmark
-
             from backend.services.analysis.risk_metrics_service import get_risk_metrics
-
             from backend.services.market_data_service import get_historical_data
 
 
 
-                               
+
 
             benchmark_ticker = resolve_benchmark(ticker, config)
 
 
 
-                                                   
+
 
             risk_start = (datetime.strptime(trade_date, "%Y-%m-%d") - timedelta(days=365)).strftime("%Y-%m-%d")
 
@@ -504,7 +492,7 @@ async def run_individual_analysis(
 
 
 
-                                                             
+
 
         structured_data = final_state.get("chart_annotations") or {}
 
@@ -514,11 +502,11 @@ async def run_individual_analysis(
 
 
 
-                                                               
 
-                                                                                       
 
-                                                                            
+
+
+
 
         trader_obj = final_state.get("trader_investment_plan_obj")
 
@@ -597,6 +585,8 @@ async def run_individual_analysis(
             "risk_metrics": risk_metrics,
 
             "quality": quality,
+            "degraded": any(v.get("fallback") for v in (get_report_card() or {}).values()),
+            "failed_agents": [k for k, v in (get_report_card() or {}).items() if v.get("fallback")] or None,
 
             "llm_calls": stats.get("llm_calls", 0),
 
@@ -636,20 +626,14 @@ async def run_individual_analysis(
 
 
 
-                                        
+
 
         from .tasks import (
-
             await_analysis_background_tasks,
-
             extract_and_save_annotations,
-
             send_analysis_webhook,
-
             send_signal_flip_webhook,
-
             track_background_task,
-
         )
 
         try:
@@ -766,7 +750,7 @@ async def run_individual_analysis(
 
 
 
-                                                                 
+
 
         if "404" in exc_str or "not_found" in exc_str.lower() or "not found" in exc_str.lower():
 

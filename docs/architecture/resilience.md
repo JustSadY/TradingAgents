@@ -60,30 +60,73 @@ decision, so the analysis completes (as `Hold`) even if the terminal agent fails
 
 ---
 
-## 4. Ideas for further hardening (roadmap)
+## 4. Further hardening (implemented)
 
-Concrete next steps that build on this foundation:
+Eight additional resilience features build on the foundation above:
 
-1. **Per-node / per-tool timeouts** — wrap LLM and tool calls with a hard wall
-   clock so a hung provider can't stall a run; treat a timeout as a transient
-   error feeding the existing retry path.
-2. **Circuit breaker** — after N consecutive failures of a given tool/provider in
-   a run (or window), short-circuit it (skip + log) instead of retrying, and
-   surface "degraded" in the result.
-3. **Provider/model fallback chain** — on repeated LLM failure for a provider,
-   transparently fail over to a configured secondary model/provider before
-   giving up on the agent.
-4. **Persisted run status & per-agent report card** — record which agents
-   succeeded / retried / were skipped on the `AnalysisResult` (e.g. a
-   `degraded: bool` + `failed_agents: [...]`), expose it in the API and badge it
-   in the UI so users know a report ran in degraded mode.
-5. **Whole-run retry / dead-letter** — if an analysis fails non-transiently,
-   enqueue it for a delayed automatic re-run (the cron/queue already exists);
-   keep a dead-letter list after K attempts.
-6. **Error taxonomy & metrics** — classify errors (auth / quota / data / bug),
-   count success & retry rates per agent and per tool over time, and show them on
-   the existing Performance / A-B Testing dashboards to spot flaky tools/providers.
-7. **Streaming the run-event trace over WebSocket** — push `run_event`s to the
-   live analysis view so users watch retries/skips happen in real time.
-8. **Stall/heartbeat detection** — emit periodic heartbeats; if a run produces no
-   `node_*` event for T seconds, flag and (optionally) cancel + retry it.
+### 4.1 Per-node / per-tool timeouts
+- **Config:** `node_timeout_seconds` (default 120), `tool_timeout_seconds` (default 60)
+- **Mechanism:** `asyncio.wait_for` wraps every LLM call in `retry_call` and every `ToolNode.ainvoke` in `_cap_tool_outputs`
+- `asyncio.TimeoutError` is classified as transient and feeds into the retry path automatically
+- **Source:** `resilience.py:retry_call`, `trading_graph.py:_cap_tool_outputs`
+
+### 4.2 Circuit breaker
+- **Config:** `circuit_breaker_threshold` (default 3), `circuit_breaker_cooldown` (default 60s)
+- **Mechanism:** Module-level `_circuit_state` dict tracks consecutive failures per node (keyed by `{kind}:{name}`)
+  - **Closed** → normal operation; failures increment a counter
+  - **Open** → after threshold failures, skip directly to fallback without retrying
+  - **Half-open** → after cooldown, allow one try; success resets to closed
+- Emits `circuit_open` / `circuit_tripped` log events and `NODE_CIRCUIT_OPEN` Prometheus counter
+- **Source:** `resilience.py:guard_node`
+
+### 4.3 Provider/model fallback chain
+- **Config:** `fallback_llm_chain` (list of `{"provider": ..., "model": ...}` dicts); legacy `fallback_llm_provider` / `fallback_llm_model` keys also supported
+- **Mechanism:** `FallbackLLM` now accepts a list of fallbacks. `bind_tools`, `with_structured_output`, `invoke`, `ainvoke`, `stream`, `astream` all apply the full chain via LangChain `with_fallbacks`
+- Runtime provider failover on every LLM call — if the primary raises, the next fallback is tried in order
+- **Source:** `llm_clients/fallback.py`, `trading_graph.py:_with_fallback`
+
+### 4.4 Persisted run status & per-agent report card
+- **DB columns:** `AnalysisResult.degraded` (bool), `AnalysisResult.failed_agents` (JSON list)
+- **Mechanism:** `_run_report_card` contextvar (`contextvars.ContextVar`) is initialised before graph propagation; `guard_node` records each agent's retries/fallback/error into it; `orchestrator.py` reads it after propagation and stores in `final_payload`
+- `degraded` is true when any agent was replaced by its fallback stub
+- `failed_agents` lists the names of every agent that fell back
+- **Source:** `resilience.py:_run_report_card`, `orchestrator.py`, `models/analysis.py`
+
+### 4.5 Whole-run retry / dead-letter
+- **Config:** `_ANALYSIS_RETRY_MAX = 1` (module-level constant in `analysis_service.py`)
+- **Mechanism:** On unhandled exception in `run_analysis_task`, `_maybe_retry_analysis` checks `task_store.get_meta(task_id).retry_count`; if under max, increments and re-dispatches (inline `asyncio.create_task` or arq job). After max retries, logged as dead-letter.
+- Re-uses the existing `task_store` metadata + `dispatch_analysis` pipeline
+- **Source:** `analysis_service.py:_maybe_retry_analysis`
+
+### 4.6 Error taxonomy & Prometheus metrics
+- **Function:** `classify_error(exc)` returns `"auth" | "quota" | "timeout" | "transient" | "bug"`
+- **New counters:**
+  - `NODE_ERRORS_BY_TYPE` — labels `node, kind, error_type`
+  - `TOOL_ERRORS` — labels `tool_name, error_type`
+- `_log_node_error` and `tool_error_handler` classify every error and increment the appropriate counter
+- **Source:** `resilience.py:classify_error`, `core/metrics.py`
+
+### 4.7 Streaming the run-event trace over WebSocket
+- **New emitter methods:** `emit_retry`, `emit_fallback`, `emit_node_error`, `emit_circuit_open`
+- `_emit_retry_progress` now also sends a typed `retry` event alongside the existing `progress` warning
+- Circuit breaker open → `emit_circuit_open` event
+- Node error after retry exhaustion → `emit_node_error` event (with `error_type` classification)
+- Fallback activation → `emit_fallback` event
+- All WS events are fire-and-forget (best-effort, never crash the run)
+- **Source:** `emitter.py`, `resilience.py:_emit_retry_progress`
+
+### 4.8 Stall/heartbeat detection
+- **Config:** `stall_timeout_seconds` (default 120)
+- **Mechanism:** `_heartbeat_monitor` async task runs alongside graph propagation; emits a heartbeat `progress` event every 30s. Monitors `last_event_time` in `_stream_observer`; if no node event for `stall_timeout_seconds`, emits a `stall_warning` WS event and logs a warning.
+- The heartbeat task is cancelled when propagation completes normally.
+- **Source:** `orchestrator.py:_heartbeat_monitor`
+
+### Config keys added
+
+| Key | Type | Default | Settings UI | Description |
+|-----|------|---------|-------------|-------------|
+| `node_timeout_seconds` | int | 120 | Agent Run Resilience | Hard timeout per node |
+| `tool_timeout_seconds` | int | 60 | Agent Run Resilience | Hard timeout per tool |
+| `circuit_breaker_threshold` | int | 3 | Circuit Breaker | Failures before circuit opens |
+| `circuit_breaker_cooldown` | int | 60s | Circuit Breaker | Cooldown before half-open |
+| `stall_timeout_seconds` | int | 120 | Circuit Breaker | Seconds without output before stall warning |

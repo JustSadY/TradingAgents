@@ -20,11 +20,15 @@ _RATINGS_TOOLS = [get_analyst_ratings]
 def create_analyst_ratings_analyst(llm):
 
     async def analyst_ratings_node(state):
+        from langchain_core.messages import AIMessage
+
         from backend.trading_agents.agents.runtime.analyst_cache import (
-            check_analyst_cache, store_analyst_cache, compute_data_hash, emit_cache_hit,
+            check_analyst_cache,
+            compute_data_hash,
+            emit_cache_hit,
+            store_analyst_cache,
         )
         from backend.trading_agents.dataflows.interface import route_to_vendor
-        from langchain_core.messages import AIMessage
 
         instrument_context = build_instrument_context(state["company_of_interest"])
         ticker = state.get("company_of_interest", "")

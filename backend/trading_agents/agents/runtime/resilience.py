@@ -18,6 +18,7 @@ what happens *on failure*.
 
 from __future__ import annotations
 
+import contextvars
 import logging
 import time
 import traceback
@@ -44,6 +45,42 @@ _TRANSIENT_HINTS = (
     "unavailable",
     "again",
 )
+
+# ---- Circuit breaker state ----
+# Maps node/agent name → {"failures": int, "open_since": float | None}
+# Module-level so it persists for the lifetime of the process.
+_circuit_state: dict[str, dict] = {}
+
+
+def _circuit_key(name: str, kind: str) -> str:
+    return f"{kind}:{name}"
+
+
+# ---- Per-run report card ----
+# ContextVar so concurrent analysis runs don't clobber each other's data.
+# Each value is a dict: {agent_key: {"retries": int, "fallback": bool, "error": str | None}}
+_run_report_card: contextvars.ContextVar[dict[str, dict] | None] = contextvars.ContextVar(
+    "agent_report_card", default=None
+)
+
+
+def init_report_card() -> dict[str, dict]:
+    """Create (or reset) the per-run report card and return it."""
+    card: dict[str, dict] = {}
+    _run_report_card.set(card)
+    return card
+
+
+def get_report_card() -> dict[str, dict]:
+    card = _run_report_card.get()
+    if card is None:
+        card = init_report_card()
+    return card
+
+
+def record_agent_result(agent_key: str, *, retries: int = 0, fallback: bool = False, error: str | None = None) -> None:
+    card = get_report_card()
+    card[agent_key] = {"retries": retries, "fallback": fallback, "error": error[:200] if error else None}
 
 
 def _cfg(key: str, default, runtime_config: dict | None = None):
@@ -79,6 +116,25 @@ def is_transient(exc: BaseException) -> bool:
     return any(hint in str(exc).lower() for hint in _TRANSIENT_HINTS)
 
 
+def classify_error(exc: BaseException) -> str:
+    """Classify an exception into a high-level error category.
+
+    Returns one of ``"auth"``, ``"quota"``, ``"timeout"``, ``"transient"``,
+    or ``"bug"``. Used for Prometheus label cardinality and post-run
+    diagnostics.
+    """
+    msg = str(exc).lower()
+    if any(k in msg for k in ("401", "unauthorized", "invalid api key", "auth")):
+        return "auth"
+    if any(k in msg for k in ("429", "quota", "rate limit", "ratelimit", "rate_limit")):
+        return "quota"
+    if any(k in msg for k in ("timeout", "timed out", "deadline")):
+        return "timeout"
+    if is_transient(exc):
+        return "transient"
+    return "bug"
+
+
 async def _execute_fn(fn: Callable[[], Any], run_in_thread: bool) -> Any:
     import asyncio
     import inspect
@@ -97,6 +153,7 @@ async def retry_call(
     label: str,
     attempts: int | None = None,
     base_delay: float | None = None,
+    timeout: float | None = None,
     retry_all: bool = True,
     run_in_thread: bool = False,
     runtime_config: dict | None = None,
@@ -106,16 +163,22 @@ async def retry_call(
     ``attempts`` is the total number of tries (default from config
     ``node_retry_attempts`` = 2). By default every exception is retried; set
     ``retry_all=False`` to only retry errors that look transient.
+
+    ``timeout`` wraps each invocation in ``asyncio.wait_for`` so a hung
+    provider can't stall the run. Timeouts are treated as transient errors
+    and feed into the retry path.
     """
     attempts = int(attempts if attempts is not None else _cfg("node_retry_attempts", 2, runtime_config))
     base_delay = float(base_delay if base_delay is not None else _cfg("node_retry_base_delay", 1.0, runtime_config))
+    timeout = float(timeout) if timeout is not None else _cfg("node_timeout_seconds", 120, runtime_config)
     attempts = max(1, attempts)
     last: BaseException | None = None
     import asyncio
 
     for i in range(attempts):
         try:
-            return await _execute_fn(fn, run_in_thread)
+            coro = _execute_fn(fn, run_in_thread)
+            return await asyncio.wait_for(coro, timeout=timeout)
         except Exception as exc:  # noqa: BLE001 — deliberately broad for resilience
             last = exc
             if i + 1 >= attempts or (not retry_all and not is_transient(exc)):
@@ -172,6 +235,7 @@ async def _emit_retry_progress(label: str, i: int, attempts: int, exc: Exception
                 "stage": "warning",
             }
         )
+        await emitter.emit_retry(clean_label, i + 1, attempts, err_msg)
     except Exception:
         pass
 
@@ -180,6 +244,9 @@ def tool_error_handler(exc: Exception) -> str:
     """``ToolNode`` error handler: log the failure and hand the LLM a message it
     can act on, so a failing tool falls through to the next one."""
     log_event("tool_error", level=logging.WARNING, error=str(exc)[:300])
+    m = _metrics()
+    if m:
+        m.TOOL_ERRORS.labels(tool_name="unknown", error_type=classify_error(exc)).inc()
     return (
         f"This tool failed ({exc}). Do not retry it; use a different tool or "
         "continue your analysis with the data already gathered."
@@ -202,6 +269,27 @@ def guard_node(
     async def wrapped(state, *args, **kwargs):
         start = time.time()
         log_event("node_start", node=name, kind=kind)
+
+        ck = _circuit_key(name, kind)
+        cb = _circuit_state.get(ck)
+        cb_threshold = _cfg("circuit_breaker_threshold", 3)
+        cb_cooldown = _cfg("circuit_breaker_cooldown", 60)
+
+        if cb and cb.get("open_since") is not None:
+            elapsed = time.time() - cb["open_since"]
+            if elapsed < cb_cooldown:
+                log_event("circuit_open", level=logging.WARNING, node=name, kind=kind, elapsed_seconds=round(elapsed, 1))
+                m = _metrics()
+                if m:
+                    m.NODE_CIRCUIT_OPEN.labels(node=name, kind=kind).inc()
+                _emit_circuit_open_ws(name, kind, elapsed)
+                record_agent_result(name, retries=cb_threshold, fallback=True, error=f"Circuit breaker open ({elapsed:.0f}s elapsed)")
+                if fallback is None:
+                    raise RuntimeError(f"Circuit breaker open for {name} — not retrying.")
+                return await _handle_node_fallback(name, kind, fallback, state, RuntimeError(f"Circuit breaker open for {name}"))
+            cb["open_since"] = None
+            cb["failures"] = 0
+
         try:
             is_async = inspect.iscoroutinefunction(fn)
             if is_async:
@@ -216,10 +304,17 @@ def guard_node(
                     label=f"{kind}:{name}",
                     run_in_thread=True,
                 )
+            _circuit_state.pop(ck, None)
             _log_node_success(name, kind, start)
             return result
         except Exception as exc:  # noqa: BLE001
-            _log_node_error(name, kind, exc)
+            await _log_node_error(name, kind, exc)
+            entry = _circuit_state.setdefault(ck, {"failures": 0, "open_since": None})
+            entry["failures"] += 1
+            if entry["failures"] >= cb_threshold:
+                entry["open_since"] = time.time()
+                log_event("circuit_tripped", level=logging.WARNING, node=name, kind=kind, failures=entry["failures"])
+            record_agent_result(name, retries=entry["failures"], fallback=fallback is not None, error=str(exc)[:200])
             if fallback is None:
                 raise
             return await _handle_node_fallback(name, kind, fallback, state, exc)
@@ -236,7 +331,7 @@ def _log_node_success(name: str, kind: str, start_time: float):
         m.NODE_DURATION.labels(node=name, kind=kind).observe(time.time() - start_time)
 
 
-def _log_node_error(name: str, kind: str, exc: Exception):
+async def _log_node_error(name: str, kind: str, exc: Exception):
     log_event(
         "node_error",
         level=logging.ERROR,
@@ -248,6 +343,8 @@ def _log_node_error(name: str, kind: str, exc: Exception):
     m = _metrics()
     if m:
         m.NODE_ERRORS.labels(node=name, kind=kind).inc()
+        m.NODE_ERRORS_BY_TYPE.labels(node=name, kind=kind, error_type=classify_error(exc)).inc()
+    _emit_node_error_ws(name, kind, exc)
 
 
 async def _handle_node_fallback(name: str, kind: str, fallback: Callable, state: dict, exc: Exception) -> dict:
@@ -266,4 +363,49 @@ async def _handle_node_fallback(name: str, kind: str, fallback: Callable, state:
     m = _metrics()
     if m:
         m.NODE_FALLBACKS.labels(node=name, kind=kind).inc()
+    _emit_fallback_ws(name, kind, exc)
     return update
+
+
+def _emit_circuit_open_ws(node: str, kind: str, elapsed: float):
+    """Fire-and-forget WS event for circuit-open state, best-effort."""
+    try:
+        from backend.trading_agents.agents.data.chart_tools import active_run_context
+
+        ctx = active_run_context.get(None)
+        if ctx and "emitter" in ctx:
+            import asyncio
+
+            asyncio.create_task(ctx["emitter"].emit_circuit_open(node, kind, elapsed))
+    except Exception:
+        pass
+
+
+def _emit_node_error_ws(node: str, kind: str, exc: Exception):
+    """Fire-and-forget WS event for node error, best-effort."""
+    try:
+        from backend.trading_agents.agents.data.chart_tools import active_run_context
+
+        ctx = active_run_context.get(None)
+        if ctx and "emitter" in ctx:
+            import asyncio
+
+            asyncio.create_task(
+                ctx["emitter"].emit_node_error(node, kind, str(exc)[:200], classify_error(exc))
+            )
+    except Exception:
+        pass
+
+
+def _emit_fallback_ws(node: str, kind: str, exc: Exception):
+    """Fire-and-forget WS event for fallback activation, best-effort."""
+    try:
+        from backend.trading_agents.agents.data.chart_tools import active_run_context
+
+        ctx = active_run_context.get(None)
+        if ctx and "emitter" in ctx:
+            import asyncio
+
+            asyncio.create_task(ctx["emitter"].emit_fallback(node, kind, str(exc)[:200]))
+    except Exception:
+        pass

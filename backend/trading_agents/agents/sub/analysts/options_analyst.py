@@ -1,10 +1,11 @@
+from datetime import datetime, timedelta
+
 from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_options_data,
 )
-from datetime import datetime, timedelta
 
 # Single source of truth shared by the ToolNode registration and the LLM binding.
 _OPTIONS_TOOLS = [get_options_data]
@@ -21,11 +22,15 @@ _OPTIONS_TOOLS = [get_options_data]
 def create_options_analyst(llm):
 
     async def options_analyst_node(state):
+        from langchain_core.messages import AIMessage
+
         from backend.trading_agents.agents.runtime.analyst_cache import (
-            check_analyst_cache, store_analyst_cache, compute_data_hash, emit_cache_hit,
+            check_analyst_cache,
+            compute_data_hash,
+            emit_cache_hit,
+            store_analyst_cache,
         )
         from backend.trading_agents.dataflows.interface import route_to_vendor
-        from langchain_core.messages import AIMessage
 
         instrument_context = build_instrument_context(state["company_of_interest"])
         ticker = state.get("company_of_interest", "")
