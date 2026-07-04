@@ -20,7 +20,7 @@ interface UserRecord {
 
 const ALL_PAGE_KEYS = [
   'dashboard', 'analysis', 'chart', 'trading', 'portfolio',
-  'watchlist', 'orders', 'performance', 'alerts', 'ab-testing', 'logs', 'profile'
+  'watchlist', 'orders', 'performance', 'backtest', 'alerts', 'ab-testing', 'logs', 'profile'
 ]
 
 const PAGE_LABELS: Record<string, string> = {
@@ -82,6 +82,7 @@ export default function Admin() {
   const [newUser, setNewUser] = useState({ username: '', password: '', email: '', display_name: '', role: 'user' })
   const [creating, setCreating] = useState(false)
   const [createError, setCreateError] = useState<string | null>(null)
+  const [errorMsg, setErrorMsg] = useState<string | null>(null)
   const [userKeyProviders, setUserKeyProviders] = useState<string[]>([])
   const [keySaved, setKeySaved] = useState(false)
   const [keyError, setKeyError] = useState<string | null>(null)
@@ -122,20 +123,28 @@ export default function Admin() {
     loadSystemSettings()
   }, [loadUsers, loadSystemSettings])
 
+  useEffect(() => {
+    setSelectedUserId(null)
+  }, [tab])
+
   const loadUserPermissions = async (userId: number) => {
-    const [pRes, sRes, agentRes, toolRes, toolFieldRes] = await Promise.all([
-      axios.get(`/api/users/${userId}/permissions`),
-      axios.get(`/api/users/${userId}/setting-permissions`),
-      axios.get(`/api/users/${userId}/agent-access`),
-      axios.get(`/api/users/${userId}/tool-access`),
-      axios.get(`/api/users/${userId}/tool-field-access`),
-    ])
-    setPermissions(pRes.data.permissions)
-    setSettingPermissions(sRes.data.permissions)
-    setAgentAccess(agentRes.data)
-    setToolAccess(toolRes.data)
-    setToolFieldAccess(toolFieldRes.data)
-    setSelectedUserId(userId)
+    try {
+      const [pRes, sRes, agentRes, toolRes, toolFieldRes] = await Promise.all([
+        axios.get(`/api/users/${userId}/permissions`),
+        axios.get(`/api/users/${userId}/setting-permissions`),
+        axios.get(`/api/users/${userId}/agent-access`),
+        axios.get(`/api/users/${userId}/tool-access`),
+        axios.get(`/api/users/${userId}/tool-field-access`),
+      ])
+      setPermissions(pRes.data.permissions)
+      setSettingPermissions(sRes.data.permissions)
+      setAgentAccess(agentRes.data)
+      setToolAccess(toolRes.data)
+      setToolFieldAccess(toolFieldRes.data)
+      setSelectedUserId(userId)
+    } catch {
+      setErrorMsg('Failed to load user permissions')
+    }
   }
 
   const loadUserApiKeys = async (userId: number) => {
@@ -168,15 +177,20 @@ export default function Admin() {
 
   const savePermissions = async () => {
     if (!selectedUserId) return
-    await Promise.all([
-      axios.put(`/api/users/${selectedUserId}/permissions`, { permissions }),
-      axios.put(`/api/users/${selectedUserId}/setting-permissions`, { permissions: settingPermissions }),
-      axios.put(`/api/users/${selectedUserId}/agent-access`, { agents: agentAccess }),
-      axios.put(`/api/users/${selectedUserId}/tool-access`, { tools: toolAccess }),
-      axios.put(`/api/users/${selectedUserId}/tool-field-access`, { fields: toolFieldAccess }),
-    ])
-    setPermSaved(true)
-    setTimeout(() => setPermSaved(false), 2500)
+    setErrorMsg(null)
+    try {
+      await Promise.all([
+        axios.put(`/api/users/${selectedUserId}/permissions`, { permissions }),
+        axios.put(`/api/users/${selectedUserId}/setting-permissions`, { permissions: settingPermissions }),
+        axios.put(`/api/users/${selectedUserId}/agent-access`, { agents: agentAccess }),
+        axios.put(`/api/users/${selectedUserId}/tool-access`, { tools: toolAccess }),
+        axios.put(`/api/users/${selectedUserId}/tool-field-access`, { fields: toolFieldAccess }),
+      ])
+      setPermSaved(true)
+      setTimeout(() => setPermSaved(false), 2500)
+    } catch {
+      setErrorMsg('Failed to save permissions')
+    }
   }
 
   const createUser = async () => {
@@ -447,6 +461,7 @@ export default function Admin() {
                     {permSaved ? t('admin.saved') : t('admin.save_permissions')}
                   </button>
                 )}
+                {errorMsg && <p className="text-rose-400 text-[10px] font-semibold mt-2">{errorMsg}</p>}
               </div>
 
               {selectedUserId && (
@@ -473,14 +488,11 @@ export default function Admin() {
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {[
                         { key: 'general',  label: t('settings.general') || 'Preferences' },
-                        { key: 'agents',   label: 'AI Configuration' },
-                        { key: 'tools',    label: t('settings.section_tools') || 'Agent Tools' },
+                        { key: 'llm',      label: t('settings.row_llm_provider') || 'LLM Provider' },
                         { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety' },
                         { key: 'webhooks', label: t('settings.section_notifications') || 'Personal Webhooks' },
                         { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler' },
                         { key: 'presets',  label: t('settings.section_presets') || 'Configuration Templates' },
-                        { key: 'memory',   label: 'Memory' },
-                        { key: 'personas', label: 'Personas' },
                       ].map(s => (
                         <label key={s.key} className="flex items-center gap-2.5 text-xs font-semibold text-slate-300 cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 rounded-xl px-3 py-2 border border-white/[0.03] transition-colors select-none">
                           <input

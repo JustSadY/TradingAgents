@@ -1039,6 +1039,37 @@ function MultiTab() {
   }
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTicker() } }
 
+  const connectWs = useCallback(function connectWs(taskId: string, retries = 0) {
+    try { wsRef.current?.close() } catch { /* noop */ }
+    const token = getAccessToken()
+    const ws = new WebSocket(`/ws/analysis/${taskId}?token=${token}`)
+    wsRef.current = ws
+    ws.onmessage = (e) => {
+      let ev: any
+      try { ev = JSON.parse(e.data) } catch { return }
+      if (ev.type === 'progress') {
+        setProgress(ev.label || '')
+      } else if (ev.type === 'complete') {
+        setDone(true); setRunning(false)
+        try { ws.close() } catch { /* noop */ }
+      } else if (ev.type === 'error') {
+        setError(ev.message || t('analysis.multi.error_default')); setRunning(false)
+        try { ws.close() } catch { /* noop */ }
+      }
+    }
+    const reconnect = () => {
+      if (retries < 3) {
+        const delay = Math.min(1000 * Math.pow(2, retries), 8000)
+        setTimeout(() => connectWs(taskId, retries + 1), delay)
+      } else {
+        setError(t('analysis.ws.conn_closed') || 'Connection lost')
+        setRunning(false)
+      }
+    }
+    ws.onclose = reconnect
+    ws.onerror = reconnect
+  }, [t])
+
   const handleRun = async () => {
     if (tickers.length < 2) return
     setRunning(true); setDone(false); setError(null); setProgress('')
@@ -1046,25 +1077,7 @@ function MultiTab() {
       const { data } = await axios.post('/api/analysis/run-portfolio', { tickers, trade_date: date, asset_type: assetType })
       const taskId = data.task_id
       if (!taskId) { setDone(true); setRunning(false); return }
-
-      try { wsRef.current?.close() } catch { /* noop */ }
-      const token = getAccessToken()
-      const ws = new WebSocket(`/ws/analysis/${taskId}?token=${token}`)
-      wsRef.current = ws
-      ws.onmessage = (e) => {
-        let ev: any
-        try { ev = JSON.parse(e.data) } catch { return }
-        if (ev.type === 'progress') {
-          setProgress(ev.label || '')
-        } else if (ev.type === 'complete') {
-          setDone(true); setRunning(false)
-          try { ws.close() } catch { /* noop */ }
-        } else if (ev.type === 'error') {
-          setError(ev.message || t('analysis.multi.error_default')); setRunning(false)
-          try { ws.close() } catch { /* noop */ }
-        }
-      }
-      ws.onerror = () => { setRunning(false) }
+      connectWs(taskId, 0)
     } catch (err: any) {
       setError(err.response?.data?.detail || t('analysis.multi.error_default'))
       setRunning(false)
@@ -1135,7 +1148,7 @@ function PortfolioHistorySection() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    axios.get('/api/analysis/portfolio-history').then(r => setItems(r.data)).finally(() => setLoading(false))
+    axios.get('/api/analysis/portfolio-history').then(r => setItems(r.data)).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
   if (loading) return <div className="text-slate-500 text-xs px-2">{t('analysis.portfolio_history.loading')}</div>
@@ -1146,7 +1159,7 @@ function PortfolioHistorySection() {
       {items.length === 0 ? <p className="text-slate-600 text-xs">{t('analysis.portfolio_history.empty')}</p> : (
         <div className="space-y-2">
           {items.map(item => (
-            <div key={item.id} onClick={() => axios.get(`/api/analysis/portfolio/${item.id}`).then(r => setDetail(r.data))}
+            <div key={item.id} onClick={() => axios.get(`/api/analysis/portfolio/${item.id}`).then(r => setDetail(r.data)).catch(() => {})}
               className="flex items-center justify-between p-3 rounded-xl bg-slate-900/20 hover:bg-slate-900/60 cursor-pointer transition-colors border border-white/[0.03] hover:border-white/[0.08]">
               <div className="flex items-center gap-2">
                 <span className="text-white font-mono text-xs font-bold">{item.tickers.join(', ')}</span>
@@ -1210,7 +1223,7 @@ function HistoryTab({
   const sectionLabels = meta?.section_labels ?? SECTION_LABELS
 
   useEffect(() => {
-    axios.get('/api/analysis/history?limit=50').then(r => setItems(r.data)).finally(() => setLoading(false))
+    axios.get('/api/analysis/history?limit=50').then(r => setItems(r.data)).catch(() => {}).finally(() => setLoading(false))
   }, [])
 
   const openDetail = useCallback(async (id: number) => {
@@ -1493,7 +1506,7 @@ function TimeTravelWidget({
   analysisId: number
   onRollbackStart: (taskId: string) => void
 }) {
-  const { t } = useTranslation()
+  const { t, language } = useTranslation()
   const [checkpoints, setCheckpoints] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedCp, setSelectedCp] = useState<any>(null)
@@ -1534,7 +1547,7 @@ function TimeTravelWidget({
         checkpoint_id: selectedCp.checkpoint_id,
         update_state: updateFields,
       })
-      notify('success', t('language') === 'tr' ? 'Zaman yolculuğu başlatıldı!' : 'Time travel initiated!')
+      notify('success', language === 'tr' ? 'Zaman yolculuğu başlatıldı!' : 'Time travel initiated!')
       onRollbackStart(data.task_id)
     } catch (err: any) {
       notify('error', err.response?.data?.detail || 'Rollback failed')
@@ -1566,7 +1579,7 @@ function TimeTravelWidget({
           {t('analysis.timetravel.title')}
         </h4>
         <p className="text-slate-400 text-[11px] leading-relaxed">
-          {t('language') === 'tr'
+          {language === 'tr'
             ? 'Mevcut analizi seçtiğiniz bir adıma geri sarıp durum verilerini değiştirerek oradan itibaren yeniden çalıştırabilirsiniz.'
             : 'Roll back the execution flow to a selected checkpoint step, edit state fields, and resume propagation.'}
         </p>

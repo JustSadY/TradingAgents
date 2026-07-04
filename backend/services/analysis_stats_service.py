@@ -57,9 +57,12 @@ def _is_correct(signal: str | None, raw_return: float) -> bool:
 # Static placeholder definition deleted to avoid returning fake/mock data in production.
 
 
-async def get_ab_comparison(db: AsyncSession) -> list[dict]:
+async def get_ab_comparison(db: AsyncSession, user_id: int | None = None) -> list[dict]:
     try:
-        rows = (await db.execute(select(AnalysisResult).where(AnalysisResult.status == "completed"))).scalars().all()
+        q = select(AnalysisResult).where(AnalysisResult.status == "completed")
+        if user_id is not None:
+            q = q.where(AnalysisResult.user_id == user_id)
+        rows = (await db.execute(q)).scalars().all()
     except Exception as exc:  # tolerate an un-migrated DB
         _logger.warning("Failed to query AnalysisResult (DB may be unmigrated): %s", exc)
         rows = []
@@ -159,8 +162,10 @@ def _calc_realized(runs: list[AnalysisResult]) -> dict:
     }
 
 
-async def get_signal_performance(db: AsyncSession, ticker: str | None = None) -> dict:
+async def get_signal_performance(db: AsyncSession, ticker: str | None = None, user_id: int | None = None) -> dict:
     q = select(AnalysisResult).where(AnalysisResult.status == "completed").where(AnalysisResult.raw_return.isnot(None))
+    if user_id is not None:
+        q = q.where(AnalysisResult.user_id == user_id)
     if ticker:
         q = q.where(AnalysisResult.ticker == ticker.upper())
     rows = (await db.execute(q)).scalars().all()

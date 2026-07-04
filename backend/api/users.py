@@ -1,4 +1,3 @@
-import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -27,7 +26,6 @@ from backend.services.user_service import (
 )
 
 router = APIRouter(prefix="/api/users", tags=["users"])
-_logger = logging.getLogger(__name__)
 
 _USER_NOT_FOUND = "User not found"
 

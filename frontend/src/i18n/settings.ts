@@ -127,7 +127,6 @@ const translations = {
     'settings.benchmark_placeholder': 'Leave empty = auto (SPY)',
     'settings.row_reddit_enabled': 'Reddit Sentiment Data',
     'settings.reddit_enabled_hint': 'Use Reddit posts for sentiment analysis',
-    'settings.row_azure_deployment': 'Azure Deployment Name',
 
 
     'settings.preset_name_placeholder': 'Template name...',
@@ -286,7 +285,7 @@ const translations = {
     'settings.benchmark_placeholder': 'Boş bırakın = otomatik (SPY)',
     'settings.row_reddit_enabled': 'Reddit Duygu Verisi',
     'settings.reddit_enabled_hint': 'Duygu analizi için Reddit gönderilerini kullan',
-    'settings.row_azure_deployment': 'Azure Deployment Adı',
+
 
 
     'settings.preset_name_placeholder': 'Şablon adı...',

@@ -99,13 +99,15 @@ async def backfill_returns(db) -> int:
     return updated
 
 
-async def get_analyst_attribution_stats(db) -> dict:
+async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
     from sqlalchemy import select
 
     from backend.models.analysis import AnalysisResult
     from backend.trading_agents.agents.analyst_registry import get_report_fields
 
     q = select(AnalysisResult).where(AnalysisResult.raw_return.isnot(None))
+    if user_id is not None:
+        q = q.where(AnalysisResult.user_id == user_id)
     result = await db.execute(q)
     rows = result.scalars().all()
 

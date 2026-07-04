@@ -38,6 +38,20 @@ interface ReportData {
   investment_plan?: string | null
   trader_plan?: string | null
   final_decision?: string | null
+  // Debate history
+  bull_history?: string | null
+  bear_history?: string | null
+  investment_debate_history?: string | null
+  risk_debate_history?: string | null
+  judge_decision?: string | null
+  // Trade details
+  trader_proposal_json?: string | null
+  chart_annotations?: unknown | null
+  risk_metrics?: unknown | null
+  // Quality & degraded
+  quality?: unknown | null
+  degraded?: boolean
+  failed_agents?: string[]
   // Backward-compatible aliases (may exist)
   fundamental_report?: string | null
   research_report?: string | null
@@ -81,6 +95,11 @@ const SECTION_DEFS: SectionDef[] = [
   { key: 'synthesis_report',     labelKey: 'analysis.section.synthesis_report',      fallbackLabel: 'Synthesis',                           icon: FileText,     category: 'research' },
   { key: 'audit_report',         labelKey: 'analysis.section.audit_report',          fallbackLabel: 'Audit',                               icon: ShieldCheck,  category: 'research' },
   { key: 'agent_qa_report',      labelKey: 'analysis.section.agent_qa_report',       fallbackLabel: 'Cross-Examination',                   icon: MessageSquare,category: 'research' },
+  { key: 'bull_history',         labelKey: 'analysis.section.bull_history',          fallbackLabel: 'Bull Arguments',                      icon: TrendingUp,   category: 'research' },
+  { key: 'bear_history',         labelKey: 'analysis.section.bear_history',           fallbackLabel: 'Bear Arguments',                      icon: TrendingDown,   category: 'research' },
+  { key: 'investment_debate_history', labelKey: 'analysis.section.investment_debate_history', fallbackLabel: 'Investment Debate',           icon: MessageSquare,category: 'research' },
+  { key: 'risk_debate_history',  labelKey: 'analysis.section.risk_debate_history',    fallbackLabel: 'Risk Debate',                         icon: ShieldCheck,  category: 'research' },
+  { key: 'judge_decision',       labelKey: 'analysis.section.judge_decision',         fallbackLabel: 'Judge Decision',                      icon: Scale,        category: 'decision' },
 ]
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -88,8 +107,8 @@ const SECTION_DEFS: SectionDef[] = [
 function SignalBadge({ signal }: { signal: string | null }) {
   if (!signal) return null
   const s = signal.toLowerCase()
-  const isBuy = s.includes('buy') || s.includes('over')
-  const isSell = s.includes('sell') || s.includes('under')
+  const isBuy = ['buy', 'strong_buy', 'overweight'].includes(s)
+  const isSell = ['sell', 'strong_sell', 'underweight'].includes(s)
   const cls = isBuy
     ? 'bg-emerald-500/15 text-emerald-300 border-emerald-500/30'
     : isSell
@@ -140,7 +159,11 @@ export default function SharedReport() {
   const [activeKey, setActiveKey] = useState<string | null>(null)
 
   useEffect(() => {
-    if (!token) return
+    if (!token) {
+      setError(t('shared_report.error_not_found'))
+      setLoading(false)
+      return
+    }
     axios.get<ReportData>(`/api/share/${token}`)
       .then(r => setReport(r.data))
       .catch(e => setError(e.response?.data?.detail || t('shared_report.error_not_found')))
@@ -216,7 +239,7 @@ export default function SharedReport() {
           {(report.llm_provider || report.duration_seconds) && (
             <div className="flex flex-wrap gap-3 text-[10px] text-slate-600 font-mono">
               {report.llm_provider && <span>{t('shared_report.llm')}: {report.llm_provider}{report.llm_model ? ` / ${report.llm_model}` : ''}</span>}
-              {report.duration_seconds && <span>{t('shared_report.duration')}: {report.duration_seconds.toFixed(1)}s</span>}
+              {report.duration_seconds != null && <span>{t('shared_report.duration')}: {report.duration_seconds.toFixed(1)}s</span>}
             </div>
           )}
 

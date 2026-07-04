@@ -43,7 +43,6 @@ interface Settings {
   llm_model: string
   fallback_llm_provider: string | null
   fallback_llm_model: string | null
-  backend_url: string | null
   openai_reasoning_effort: string | null
   anthropic_effort: string | null
   google_thinking_level: string | null
@@ -52,7 +51,6 @@ interface Settings {
   analyst_concurrency_limit: number
   max_recur_limit: number
   benchmark_ticker: string | null
-  azure_deployment: string | null
   max_debate_rounds: number
   max_risk_rounds: number
   max_position_size_pct: number
@@ -225,14 +223,14 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     setSaveError(null)
     setSaving(true)
     try {
-      if (activeTab === 'agents') {
-        if (agentPanelRef.current) await agentPanelRef.current.save()
-      } else if (activeTab === 'tools') {
-        if (toolPanelRef.current) await toolPanelRef.current.save()
-      } else {
-        const url = userId ? `/api/settings/users/${userId}` : '/api/settings'
-        await axios.put(url, s)
-        triggerMetaRefetch()
+      const url = userId ? `/api/settings/users/${userId}` : '/api/settings'
+      await axios.put(url, s)
+      triggerMetaRefetch()
+      if (activeTab === 'agents' && agentPanelRef.current) {
+        await agentPanelRef.current.save()
+      }
+      if (activeTab === 'tools' && toolPanelRef.current) {
+        await toolPanelRef.current.save()
       }
       setSaved(true)
       setTimeout(() => setSaved(false), 2000)
@@ -273,7 +271,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     ...(userId ? [] : [{ key: 'memory',   label: 'Memory',                          icon: <Database size={14} /> }]),
     ...(userId ? [] : [{ key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={14} /> }]),
     ...(userId ? [] : [{ key: 'personas', label: 'Personas',                        icon: <UserCircle size={14} /> }]),
-  ].filter(tab => isAdmin || tab.key === 'tools' || tab.key === 'agents' || tab.key === 'memory' || allowedSettings.includes(tab.key))
+  ].filter(tab => isAdmin || allowedSettings.includes(tab.key))
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
@@ -355,6 +353,29 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed mb-2">
                   Global LLM settings and performance parameters. Per-agent models are configured in the AI Configuration tab.
                 </p>
+
+                <Row label={t('settings.row_llm_provider') || 'LLM Provider'}>
+                  <select
+                    className={Input}
+                    value={s.llm_provider}
+                    onChange={e => {
+                      update('llm_provider', e.target.value)
+                      update('llm_model', '')
+                    }}
+                  >
+                    {Object.entries(meta?.provider_labels ?? {}).map(([key, label]) => (
+                      <option key={key} value={key}>{label}</option>
+                    ))}
+                  </select>
+                </Row>
+                <Row label={t('settings.row_llm_model') || 'LLM Model'}>
+                  <input
+                    className={Input}
+                    value={s.llm_model}
+                    onChange={e => update('llm_model', e.target.value)}
+                    placeholder={t('settings.llm_model_placeholder') || 'e.g. gpt-4o-mini'}
+                  />
+                </Row>
 
                 <Row label={t('settings.row_fallback_provider')}>
                   <select

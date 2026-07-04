@@ -1,10 +1,10 @@
-import logging
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user
+from backend.api.deps import get_current_user, require_admin
 from backend.core.database import get_db
 from backend.core.limiter import limiter
 from backend.core.utils import safe_ticker_component
@@ -26,7 +26,6 @@ from backend.schemas.portfolio_analysis import (
 from backend.services.settings_service import get_or_create_settings
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
-_logger = logging.getLogger(__name__)
 
 _ANALYSIS_NOT_FOUND = "Analysis not found"
 
@@ -143,32 +142,32 @@ async def cost_estimate(
 @router.get("/ab-comparison")
 async def get_ab_comparison(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_admin),
 ):
     from backend.services.analysis_stats_service import get_ab_comparison as _ab
 
-    return await _ab(db)
+    return await _ab(db, user_id=None)
 
 
 @router.get("/performance")
 async def get_performance(
     ticker: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     from backend.services.analysis_stats_service import get_signal_performance as _perf
 
-    return await _perf(db, ticker)
+    return await _perf(db, ticker, user_id=current_user.id)
 
 
 @router.get("/performance-attribution")
 async def get_performance_attribution(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_user),
 ):
     from backend.services.performance_service import get_analyst_attribution_stats as _attr
 
-    return await _attr(db)
+    return await _attr(db, user_id=current_user.id)
 
 
 @router.post(
@@ -294,9 +293,6 @@ async def ask_analysis_report(
     from backend.services.report_chat_service import answer_report_question
 
     return await answer_report_question(db, analysis_id, body.message, current_user)
-
-
-from pydantic import BaseModel
 
 
 class TimeTravelRequest(BaseModel):

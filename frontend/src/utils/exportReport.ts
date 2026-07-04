@@ -18,10 +18,17 @@ export interface AnalysisForExport {
   valuation_report?: string
   catalyst_report?: string
   review_report?: string
+  synthesis_report?: string
+  audit_report?: string
   agent_qa_report?: string
   investment_plan?: string
   trader_plan?: string
   final_decision?: string
+  bull_history?: string
+  bear_history?: string
+  investment_debate_history?: string
+  risk_debate_history?: string
+  judge_decision?: string
   // Metadata
   llm_provider?: string | null
   llm_model?: string | null
@@ -50,10 +57,17 @@ const SECTION_LABELS: Record<Lang, Record<string, string>> = {
     valuation_report: 'Valuation Comparison',
     catalyst_report:   'Upcoming Catalysts',
     review_report:     'Review',
+    synthesis_report:  'Synthesis',
+    audit_report:      'Audit',
     agent_qa_report:   'Agent Cross-Examination',
     investment_plan:   'Investment Plan',
     trader_plan:       'Trader Proposal (preliminary)',
     final_decision:    'Final Decision (Portfolio Manager)',
+    bull_history:      'Bull Arguments',
+    bear_history:      'Bear Arguments',
+    investment_debate_history: 'Investment Debate',
+    risk_debate_history:      'Risk Debate',
+    judge_decision:    'Judge Decision',
   },
   tr: {
     market_report:     'Piyasa Analizi',
@@ -71,10 +85,17 @@ const SECTION_LABELS: Record<Lang, Record<string, string>> = {
     valuation_report: 'Değerleme Karşılaştırması',
     catalyst_report:   'Yaklaşan Katalizörler',
     review_report:     'Performans İnceleme',
+    synthesis_report:  'Sentez',
+    audit_report:      'Denetim',
     agent_qa_report:   'Ajan Çapraz Sorgu',
     investment_plan:   'Yatırım Planı',
     trader_plan:       'Trader Önerisi (ön karar)',
     final_decision:    'Nihai Karar (Portfolio Manager)',
+    bull_history:      'Boğa Argümanları',
+    bear_history:      'Ayı Argümanları',
+    investment_debate_history: 'Yatırım Tartışması',
+    risk_debate_history:      'Risk Tartışması',
+    judge_decision:    'Hakem Kararı',
   },
 }
 
@@ -83,7 +104,8 @@ const SECTION_ORDER = [
   'market_report', 'fundamentals_report', 'news_report', 'sentiment_report',
   'macro_report', 'options_report', 'quant_report', 'earnings_report',
   'insider_report', 'ownership_report', 'ratings_report', 'short_interest_report', 'valuation_report', 'catalyst_report',
-  'review_report', 'agent_qa_report',
+  'review_report', 'synthesis_report', 'audit_report', 'agent_qa_report',
+  'bull_history', 'bear_history', 'investment_debate_history', 'risk_debate_history', 'judge_decision',
 ]
 
 // ── Markdown export ──────────────────────────────────────────────────────────
