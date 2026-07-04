@@ -5,17 +5,7 @@ import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
 import { exportPortfolioCSV } from '../utils/csvExport'
 import { ErrorBoundary } from '../components/ErrorBoundary'
-
-interface Holding {
-  id: number
-  ticker: string
-  quantity: number
-  avg_buy_price: number
-  current_price: number | null
-  unrealized_pnl: number | null
-  updated_at: string
-  opened_at?: string | null
-}
+import type { HoldingRead, PortfolioRead, RiskDashboardResponse, RebalanceResponse } from '../api/types'
 
 const LONG_HOLD_DAYS = 30
 
@@ -26,47 +16,12 @@ function holdingDays(openedAt?: string | null): number | null {
   return Math.max(0, Math.floor((Date.now() - opened) / 86_400_000))
 }
 
-interface PortfolioRow {
-  id: number
-  mode: string
-  broker: string
-  initial_capital: number
-  current_balance: number
-  cash_available: number
-  status: string
-}
-
-interface HoldingRisk {
-  ticker: string
-  weight_pct: number
-  volatility_annual: number | null
-  beta: number | null
-  sector: string
-}
-
-interface RiskData {
-  portfolio_beta: number | null
-  portfolio_volatility: number | null
-  sector_weights: { sector: string; weight_pct: number }[]
-  correlation: { ticker_a: string; ticker_b: string; correlation: number }[]
-  holdings_risk: HoldingRisk[]
-  breaches?: { type: string; value?: number; threshold?: number; sector?: string }[]
-  message?: string
-}
-
 interface RebalanceSuggestion {
-  action: 'BUY' | 'SELL'
+  action: string
   ticker: string
   quantity: number
   rationale: string
-  urgency: 'low' | 'medium' | 'high'
-}
-
-interface RebalanceResult {
-  summary: string
-  score: number
-  issues: string[]
-  suggestions: RebalanceSuggestion[]
+  urgency: string
 }
 
 function HealthBadge({ score }: { score: number }) {
@@ -83,14 +38,14 @@ function HealthBadge({ score }: { score: number }) {
   )
 }
 
-function UrgencyBadge({ urgency }: { urgency: 'low' | 'medium' | 'high' }) {
-  const styles = {
+function UrgencyBadge({ urgency }: { urgency: string }) {
+  const styles: Record<string, string> = {
     high: 'bg-rose-500/10 text-rose-400 border-rose-500/20',
     medium: 'bg-amber-500/10 text-amber-400 border-amber-500/20',
     low: 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20',
   }
   return (
-    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border capitalize ${styles[urgency]}`}>
+    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded border capitalize ${styles[urgency] ?? styles.low}`}>
       {urgency}
     </span>
   )
@@ -98,14 +53,14 @@ function UrgencyBadge({ urgency }: { urgency: 'low' | 'medium' | 'high' }) {
 
 export default function Portfolio() {
   const { t, language } = useTranslation()
-  const [holdings, setHoldings] = useState<Holding[]>([])
-  const [portfolios, setPortfolios] = useState<PortfolioRow[]>([])
+  const [holdings, setHoldings] = useState<HoldingRead[]>([])
+  const [portfolios, setPortfolios] = useState<PortfolioRead[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState(false)
   const [rebalancing, setRebalancing] = useState(false)
-  const [rebalanceResult, setRebalanceResult] = useState<RebalanceResult | null>(null)
+  const [rebalanceResult, setRebalanceResult] = useState<RebalanceResponse | null>(null)
   const [applyingIdx, setApplyingIdx] = useState<number | null>(null)
-  const [riskData, setRiskData] = useState<RiskData | null>(null)
+  const [riskData, setRiskData] = useState<RiskDashboardResponse | null>(null)
   const [loadingRisk, setLoadingRisk] = useState(false)
   const [showRisk, setShowRisk] = useState(false)
 
@@ -113,8 +68,8 @@ export default function Portfolio() {
     if (!quiet) setLoading(true)
     setError(false)
     Promise.all([
-      axios.get<PortfolioRow[]>('/api/portfolio').then(r => r.data),
-      axios.get<Holding[]>('/api/portfolio/holdings').then(r => r.data),
+      axios.get<PortfolioRead[]>('/api/portfolio').then(r => r.data),
+      axios.get<HoldingRead[]>('/api/portfolio/holdings').then(r => r.data),
     ]).then(([p, h]) => {
       setPortfolios(p)
       setHoldings(h)
@@ -136,7 +91,7 @@ export default function Portfolio() {
   const runRebalance = useCallback(async () => {
     setRebalancing(true)
     try {
-      const { data } = await axios.post<RebalanceResult>('/api/trading/rebalance')
+      const { data } = await axios.post<RebalanceResponse>('/api/trading/rebalance')
       setRebalanceResult(data)
     } catch (err: any) {
       notify('error', err.response?.data?.detail || 'Rebalance failed', 'AI Rebalance')
@@ -148,7 +103,7 @@ export default function Portfolio() {
   const loadRiskDashboard = useCallback(async () => {
     setLoadingRisk(true)
     try {
-      const { data } = await axios.get<RiskData>('/api/trading/risk-dashboard')
+      const { data } = await axios.get<RiskDashboardResponse>('/api/trading/risk-dashboard')
       setRiskData(data)
       setShowRisk(true)
     } catch (err: any) {
@@ -359,9 +314,9 @@ export default function Portfolio() {
             <div className="flex items-center gap-2.5">
               <Activity size={15} className="text-slate-400" />
               <span className="text-sm font-bold text-white">Risk Dashboard</span>
-              {riskData.portfolio_beta !== null && (
+              {riskData.beta != null && (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-slate-500/10 text-slate-400 border-slate-500/20">
-                  β {riskData.portfolio_beta.toFixed(2)} · σ {riskData.portfolio_volatility !== null ? `${(riskData.portfolio_volatility * 100).toFixed(1)}%` : '—'}
+                  β {riskData.beta.toFixed(2)} · σ {riskData.volatility != null ? `${(riskData.volatility * 100).toFixed(1)}%` : '—'}
                 </span>
               )}
             </div>
@@ -389,8 +344,8 @@ export default function Portfolio() {
                   {/* Portfolio-level KPIs */}
                   <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
                     {[
-                      { label: 'Portfolio Beta', value: riskData.portfolio_beta !== null ? riskData.portfolio_beta.toFixed(2) : '—', hint: 'vs SPY', color: riskData.portfolio_beta !== null && riskData.portfolio_beta > 1.5 ? 'text-rose-400' : 'text-white' },
-                      { label: 'Annualized Vol', value: riskData.portfolio_volatility !== null ? `${(riskData.portfolio_volatility * 100).toFixed(1)}%` : '—', hint: 'weighted avg', color: riskData.portfolio_volatility !== null && riskData.portfolio_volatility > 0.4 ? 'text-rose-400' : 'text-amber-400' },
+                      { label: 'Portfolio Beta', value: riskData.beta != null ? riskData.beta.toFixed(2) : '—', hint: 'vs SPY', color: riskData.beta != null && riskData.beta > 1.5 ? 'text-rose-400' : 'text-white' },
+                      { label: 'Annualized Vol', value: riskData.volatility != null ? `${(riskData.volatility * 100).toFixed(1)}%` : '—', hint: 'weighted avg', color: riskData.volatility != null && riskData.volatility > 0.4 ? 'text-rose-400' : 'text-amber-400' },
                       { label: 'Sectors', value: String(riskData.sector_weights.length), hint: 'diversification', color: 'text-white' },
                     ].map(k => (
                       <div key={k.label} className="bg-white/[0.02] border border-white/[0.04] rounded-xl p-3">
@@ -446,12 +401,12 @@ export default function Portfolio() {
                               <td className="px-4 py-2.5 text-slate-400 text-[10px]">{h.sector}</td>
                               <td className="px-4 py-2.5 text-right font-mono text-slate-300">{h.weight_pct.toFixed(1)}%</td>
                               <td className="px-4 py-2.5 text-right font-mono">
-                                {h.beta !== null
+                                {h.beta != null
                                   ? <span className={h.beta > 1.5 ? 'text-rose-400' : h.beta < 0 ? 'text-amber-400' : 'text-slate-300'}>{h.beta.toFixed(2)}</span>
                                   : <span className="text-slate-600">—</span>}
                               </td>
                               <td className="px-4 py-2.5 text-right font-mono">
-                                {h.volatility_annual !== null
+                                {h.volatility_annual != null
                                   ? <span className={h.volatility_annual > 0.5 ? 'text-rose-400' : 'text-slate-300'}>{(h.volatility_annual * 100).toFixed(1)}%</span>
                                   : <span className="text-slate-600">—</span>}
                               </td>

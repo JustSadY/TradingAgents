@@ -3,65 +3,10 @@ import { useParams } from 'react-router-dom'
 import axios from 'axios'
 import {
   TrendingUp, TrendingDown, Minus, Clock, AlertCircle, Loader2,
-  FileText, BarChart2, BookOpen, Scale, MessageSquare, Zap,
-  Activity, Building2, Newspaper, Brain, Globe, LineChart,
-  ShieldCheck, Eye, Star, TrendingDown as ShortIcon, Layers, Calendar
+  FileText, BookOpen, Scale, Zap,
 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
-
-// ── Types ────────────────────────────────────────────────────────────────────
-
-interface ReportData {
-  ticker: string
-  trade_date: string | null
-  signal: string | null
-  // All analyst reports
-  market_report?: string | null
-  sentiment_report?: string | null
-  news_report?: string | null
-  fundamentals_report?: string | null
-  macro_report?: string | null
-  options_report?: string | null
-  quant_report?: string | null
-  earnings_report?: string | null
-  insider_report?: string | null
-  ownership_report?: string | null
-  ratings_report?: string | null
-  short_interest_report?: string | null
-  valuation_report?: string | null
-  catalyst_report?: string | null
-  review_report?: string | null
-  synthesis_report?: string | null
-  audit_report?: string | null
-  agent_qa_report?: string | null
-  // Plans & decisions
-  investment_plan?: string | null
-  trader_plan?: string | null
-  final_decision?: string | null
-  // Debate history
-  bull_history?: string | null
-  bear_history?: string | null
-  investment_debate_history?: string | null
-  risk_debate_history?: string | null
-  judge_decision?: string | null
-  // Trade details
-  trader_proposal_json?: string | null
-  chart_annotations?: unknown | null
-  risk_metrics?: unknown | null
-  // Quality & degraded
-  quality?: unknown | null
-  degraded?: boolean
-  failed_agents?: string[]
-  // Backward-compatible aliases (may exist)
-  fundamental_report?: string | null
-  research_report?: string | null
-  // Metadata
-  duration_seconds: number | null
-  llm_provider: string | null
-  llm_model: string | null
-  expires_at: string
-  created_at: string
-}
+import type { SharedReportResponse } from '../api/types'
 
 // ── Section definitions ──────────────────────────────────────────────────────
 
@@ -73,33 +18,10 @@ interface SectionDef {
   category: 'decision' | 'analyst' | 'research'
 }
 
-const SECTION_DEFS: SectionDef[] = [
-  { key: 'final_decision',       labelKey: 'analysis.section.final_trade_decision', fallbackLabel: 'Final Decision (Portfolio Manager)',  icon: Scale,        category: 'decision' },
-  { key: 'investment_plan',      labelKey: 'analysis.section.investment_plan',       fallbackLabel: 'Investment Plan',                     icon: BookOpen,     category: 'decision' },
-  { key: 'trader_plan',          labelKey: 'analysis.section.trader_investment_plan',fallbackLabel: 'Trader Proposal (preliminary)',       icon: Zap,          category: 'decision' },
-  { key: 'market_report',        labelKey: 'analysis.section.market_report',         fallbackLabel: 'Market Analysis',                     icon: BarChart2,    category: 'analyst' },
-  { key: 'sentiment_report',     labelKey: 'analysis.section.sentiment_report',      fallbackLabel: 'Sentiment Analysis',                  icon: Activity,     category: 'analyst' },
-  { key: 'news_report',          labelKey: 'analysis.section.news_report',           fallbackLabel: 'News Analysis',                       icon: Newspaper,    category: 'analyst' },
-  { key: 'fundamentals_report',  labelKey: 'analysis.section.fundamentals_report',   fallbackLabel: 'Fundamental Analysis',                icon: Building2,    category: 'analyst' },
-  { key: 'macro_report',         labelKey: 'analysis.section.macro_report',          fallbackLabel: 'Macro Analysis',                      icon: Globe,        category: 'analyst' },
-  { key: 'options_report',       labelKey: 'analysis.section.options_report',        fallbackLabel: 'Options Analysis',                    icon: LineChart,    category: 'analyst' },
-  { key: 'quant_report',         labelKey: 'analysis.section.quant_report',          fallbackLabel: 'Quantitative Analysis',               icon: Brain,        category: 'analyst' },
-  { key: 'earnings_report',      labelKey: 'analysis.section.earnings_report',       fallbackLabel: 'Earnings Analysis',                   icon: Layers,       category: 'analyst' },
-  { key: 'insider_report',       labelKey: 'analysis.section.insider_report',        fallbackLabel: 'Insider Activity',                    icon: Eye,          category: 'analyst' },
-  { key: 'ownership_report',     labelKey: 'analysis.section.ownership_report',      fallbackLabel: 'Institutional Ownership',             icon: Building2,    category: 'analyst' },
-  { key: 'ratings_report',       labelKey: 'analysis.section.ratings_report',        fallbackLabel: 'Analyst Ratings',                     icon: Star,         category: 'analyst' },
-  { key: 'short_interest_report',labelKey: 'analysis.section.short_interest_report', fallbackLabel: 'Short Interest',                      icon: ShortIcon,    category: 'analyst' },
-  { key: 'valuation_report',     labelKey: 'analysis.section.valuation_report',      fallbackLabel: 'Valuation Comparison',                icon: Layers,       category: 'analyst' },
-  { key: 'catalyst_report',      labelKey: 'analysis.section.catalyst_report',       fallbackLabel: 'Upcoming Catalysts',                  icon: Calendar,     category: 'analyst' },
-  { key: 'review_report',        labelKey: 'analysis.section.review_report',         fallbackLabel: 'Performance Review',                  icon: ShieldCheck,  category: 'analyst' },
-  { key: 'synthesis_report',     labelKey: 'analysis.section.synthesis_report',      fallbackLabel: 'Synthesis',                           icon: FileText,     category: 'research' },
-  { key: 'audit_report',         labelKey: 'analysis.section.audit_report',          fallbackLabel: 'Audit',                               icon: ShieldCheck,  category: 'research' },
-  { key: 'agent_qa_report',      labelKey: 'analysis.section.agent_qa_report',       fallbackLabel: 'Cross-Examination',                   icon: MessageSquare,category: 'research' },
-  { key: 'bull_history',         labelKey: 'analysis.section.bull_history',          fallbackLabel: 'Bull Arguments',                      icon: TrendingUp,   category: 'research' },
-  { key: 'bear_history',         labelKey: 'analysis.section.bear_history',           fallbackLabel: 'Bear Arguments',                      icon: TrendingDown,   category: 'research' },
-  { key: 'investment_debate_history', labelKey: 'analysis.section.investment_debate_history', fallbackLabel: 'Investment Debate',           icon: MessageSquare,category: 'research' },
-  { key: 'risk_debate_history',  labelKey: 'analysis.section.risk_debate_history',    fallbackLabel: 'Risk Debate',                         icon: ShieldCheck,  category: 'research' },
-  { key: 'judge_decision',       labelKey: 'analysis.section.judge_decision',         fallbackLabel: 'Judge Decision',                      icon: Scale,        category: 'decision' },
+const FALLBACK_SECTION_DEFS: SectionDef[] = [
+  { key: 'final_decision',       labelKey: 'analysis.section.final_trade_decision', fallbackLabel: 'Final Decision',  icon: Scale,        category: 'decision' },
+  { key: 'investment_plan',      labelKey: 'analysis.section.investment_plan',       fallbackLabel: 'Investment Plan', icon: BookOpen,     category: 'decision' },
+  { key: 'trader_plan',          labelKey: 'analysis.section.trader_investment_plan',fallbackLabel: 'Trader Proposal', icon: Zap,          category: 'decision' },
 ]
 
 // ── Sub-components ───────────────────────────────────────────────────────────
@@ -153,10 +75,11 @@ function ReportContent({ content }: { content: string }) {
 export default function SharedReport() {
   const { token } = useParams<{ token: string }>()
   const { t } = useTranslation()
-  const [report, setReport] = useState<ReportData | null>(null)
+  const [report, setReport] = useState<SharedReportResponse | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
   const [activeKey, setActiveKey] = useState<string | null>(null)
+  const sectionDefs = FALLBACK_SECTION_DEFS
 
   useEffect(() => {
     if (!token) {
@@ -164,7 +87,7 @@ export default function SharedReport() {
       setLoading(false)
       return
     }
-    axios.get<ReportData>(`/api/share/${token}`)
+    axios.get<SharedReportResponse>(`/api/share/${token}`)
       .then(r => setReport(r.data))
       .catch(e => setError(e.response?.data?.detail || t('shared_report.error_not_found')))
       .finally(() => setLoading(false))
@@ -172,7 +95,7 @@ export default function SharedReport() {
 
   // Build available sections from report data
   const availableSections = report
-    ? SECTION_DEFS.filter(def => {
+    ? sectionDefs.filter(def => {
         const val = (report as unknown as Record<string, unknown>)[def.key]
         return typeof val === 'string' && val.trim().length > 0
       })
@@ -233,7 +156,7 @@ export default function SharedReport() {
               <h1 className="text-3xl font-display font-extrabold text-white tracking-tight">{report.ticker}</h1>
               {report.trade_date && <p className="text-slate-500 text-sm mt-1">{report.trade_date}</p>}
             </div>
-            <SignalBadge signal={report.signal} />
+            <SignalBadge signal={report.signal ?? null} />
           </div>
 
           {(report.llm_provider || report.duration_seconds) && (

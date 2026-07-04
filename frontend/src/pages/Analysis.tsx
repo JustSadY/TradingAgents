@@ -15,6 +15,7 @@ import {
   Download, FileDown, AlertTriangle, Scale, Share2, Copy,
   MessageSquare, Bot, Terminal, BookOpen
 } from 'lucide-react'
+import type { AnalysisListItem, AnalysisResultRead, MultiTickerListItem, MultiTickerResultRead } from '../api/types'
 
 // Components
 import { SignalBadge } from '../components/analysis/SignalBadge'
@@ -39,63 +40,13 @@ interface WsEvent {
   error_type?: string; elapsed_seconds?: number
   estimated_cost_usd?: number
 }
-interface HistoryItem {
-  id: number; ticker: string; trade_date: string; asset_type: string
-  signal: string | null; duration_seconds: number; triggered_by: string; created_at: string
-}
-interface AnalysisDetail {
-  id: number; ticker: string; trade_date: string; signal: string | null
-  market_report: string; sentiment_report: string; news_report: string
-  fundamentals_report: string; macro_report: string; options_report: string
-  quant_report: string; earnings_report: string; review_report: string
-  synthesis_report: string; audit_report: string
-  insider_report?: string; ownership_report?: string; ratings_report?: string; short_interest_report?: string; valuation_report?: string; catalyst_report?: string
-  agent_qa_report: string
-  investment_plan: string; trader_plan: string; final_decision: string
-  bull_history: string; bear_history: string; investment_debate_history: string | string[]
-  risk_debate_history: string | string[]; judge_decision: string
-  trader_proposal_json?: string
-  llm_calls: number; tokens_in: number; tokens_out: number; duration_seconds: number; estimated_cost_usd?: number
-  llm_provider?: string | null; llm_model?: string | null
-  risk_metrics?: any
-  quality?: { score: number; confidence: string; reports_total: number; reports_present: number; reports_degraded: number; fallback_used: boolean } | null
-  chart_annotations?: any
-}
-interface PortfolioHistoryItem {
-  id: number; tickers: string[]; trade_date: string; asset_type: string
-  triggered_by: string; created_at: string
-}
-interface PortfolioDetail {
-  id: number; tickers: string[]; trade_date: string
-  super_portfolio_report: string; analysis_ids: number[]; created_at: string
-}
-
 const STORAGE_KEY = 'ta_last_run'
 const TASK_KEY = 'ta_task_running'
 
-const SECTION_LABELS: Record<string, string> = {
-  market_report: 'Market', sentiment_report: 'Sentiment',
-  news_report: 'News', fundamentals_report: 'Fundamentals',
-  macro_report: 'Macro', options_report: 'Options',
-  quant_report: 'Quant', earnings_report: 'Earnings',
-  insider_report: 'Insider Activity', ownership_report: 'Institutional Ownership',
-  ratings_report: 'Analyst Ratings',
-  short_interest_report: 'Short Interest',
-  valuation_report: 'Valuation Comparison',
-  catalyst_report: 'Upcoming Catalysts',
-  review_report: 'Review', synthesis_report: 'Synthesis',
-  audit_report: 'Audit', agent_qa_report: 'Cross-Examination',
-  investment_plan: 'Investment Plan',
-  trader_investment_plan: 'Trader Proposal (preliminary)',
-  final_trade_decision: 'Final Decision (Portfolio Manager)',
-  trader_plan: 'Trader Proposal (preliminary)',
-  final_decision: 'Final Decision (Portfolio Manager)',
-  bull_history: 'Bull', bear_history: 'Bear',
-  investment_debate_history: 'Debate', risk_debate_history: 'Risk Debate',
-  judge_decision: 'Judge',
+interface QualityFields {
+  score: number; confidence: string; reports_total: number; reports_present: number; reports_degraded: number; fallback_used: boolean
 }
-
-type RunQuality = NonNullable<AnalysisDetail['quality']>
+type RunQuality = NonNullable<QualityFields>
 
 function QualityBadge({ quality }: { quality: RunQuality }) {
   const { t } = useTranslation()
@@ -166,7 +117,7 @@ function RunTab() {
   const [log, setLog] = useState<string[]>(saved.log)
   const [activeSection, setActiveSection] = useState<string | null>(saved.activeSection)
   const [analysisId, setAnalysisId] = useState<number | null>(saved.analysisId || null)
-  const [detail, setDetail] = useState<AnalysisDetail | null>(null)
+  const [detail, setDetail] = useState<AnalysisResultRead | null>(null)
   const [activeTab, setActiveTab] = useState<'consensus' | 'reports' | 'debate' | 'chat' | 'timetravel'>('consensus')
   const [liveDebate, setLiveDebate] = useState<{ sender: string; content: string; type: string }[]>(saved.liveDebate || [])
   const [liveDebateTab, setLiveDebateTab] = useState<'inv' | 'risk'>('inv')
@@ -177,6 +128,7 @@ function RunTab() {
   const wsRef = useRef<WebSocket | null>(null)
   const taskIdRef = useRef<string | null>(null)
   const preRefreshLogRef = useRef<string[] | null>(null)
+  const seenLogRef = useRef<Set<string>>(new Set())
   const stoppedByUserRef = useRef(false)
   // Always-current ticker for use inside the WS handler, so attachWs doesn't
   // need `ticker` in its deps (which recreated the socket on every keystroke)
@@ -187,7 +139,9 @@ function RunTab() {
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const meta = useMeta()
-  const sectionLabels = meta?.section_labels ?? SECTION_LABELS
+  const sectionLabels = meta?.section_labels ?? {}
+  const sectionLabelsRef = useRef(sectionLabels)
+  useEffect(() => { sectionLabelsRef.current = sectionLabels }, [sectionLabels])
   const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Stock' }, { value: 'crypto', label: 'Crypto' }]
   const [currentStep, setCurrentStep] = useState<{ label: string; stage: string } | null>(null)
 
@@ -310,12 +264,9 @@ function RunTab() {
           preRefreshLogRef.current = []
         }
       }
-      setLog(l => {
-        if (l.length > 0 && l[l.length - 1] === line) {
-          return l
-        }
-        return [...l, line]
-      })
+      if (seenLogRef.current.has(line)) return
+      seenLogRef.current.add(line)
+      setLog(l => [...l, line])
     }
 
     ws.onmessage = (e) => {
@@ -352,7 +303,7 @@ function RunTab() {
       } else if (ev.type === 'report' && ev.section && ev.content) {
         setReports(r => ({ ...r, [ev.section!]: ev.content! }))
         setActiveSection(ev.section)
-        appendLog(`Completed: ${SECTION_LABELS[ev.section!] || ev.section}`)
+        appendLog(`Completed: ${sectionLabelsRef.current[ev.section!] || ev.section}`)
       } else if (ev.type === 'mental_model' && ev.agent && ev.thought) {
         setMentalModel({ agent: ev.agent, thought: ev.thought })
       } else if (ev.type === 'risk_metrics' && ev.metrics) {
@@ -428,6 +379,7 @@ function RunTab() {
         setRunning(true)
         setRunStatus('running')
         setLog([])
+        seenLogRef.current = new Set()
         setReports({})
         setSignal(null)
         setAnalysisId(null)
@@ -500,7 +452,7 @@ function RunTab() {
     const tid = setTimeout(async () => {
       try {
         const { data } = await axios.get('/api/analysis/history', { params: { limit: 5 } })
-        const match = data.find((x: HistoryItem) => x.ticker === ticker.toUpperCase() && x.trade_date === date)
+        const match = data.find((x: AnalysisListItem) => x.ticker === ticker.toUpperCase() && x.trade_date === date)
         setExistingId(match?.id ?? null)
       } catch { setExistingId(null) }
     }, 400)
@@ -523,6 +475,7 @@ function RunTab() {
     }
     setRunStatus('idle')
     setRunning_(false)
+    seenLogRef.current = new Set()
   }
 
   const doRun = async () => {
@@ -540,6 +493,7 @@ function RunTab() {
     setCurrentStep(null)
     setStats(null)
     preRefreshLogRef.current = null
+    seenLogRef.current = new Set()
 
     try {
       const { data } = await axios.post('/api/analysis/run', {
@@ -579,6 +533,7 @@ function RunTab() {
     setCurrentStep(null)
     setStats(null)
     preRefreshLogRef.current = null
+    seenLogRef.current = new Set()
 
     localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: ticker.toUpperCase(), taskId, startedAt: new Date().toISOString() }))
     attachWs(taskId, 0)
@@ -663,7 +618,7 @@ function RunTab() {
         ];
 
         const activeReports = analystReportKeys
-          .map(k => [k, detail ? detail[k as keyof AnalysisDetail] : reports[k]] as [string, string])
+          .map(k => [k, detail ? detail[k as keyof AnalysisResultRead] : reports[k]] as [string, string])
           .filter(entry => !!entry[1]);
 
         const filteredLiveMessages = liveDebate.filter(m => {
@@ -837,7 +792,7 @@ function RunTab() {
                         <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest block">Consensus Recommendation</span>
                         <div className="flex items-center gap-2">
                           <SignalBadge signal={activeSignal} large />
-                          {detail?.quality && <QualityBadge quality={detail.quality} />}
+                          {detail?.quality ? <QualityBadge quality={detail.quality as RunQuality} /> : null}
                         </div>
                       </div>
                       {activeTraderProposal && activeTraderProposal !== '{}' && (
@@ -1152,8 +1107,8 @@ function MultiTab() {
 
 function PortfolioHistorySection() {
   const { t } = useTranslation()
-  const [items, setItems] = useState<PortfolioHistoryItem[]>([])
-  const [detail, setDetail] = useState<PortfolioDetail | null>(null)
+  const [items, setItems] = useState<MultiTickerListItem[]>([])
+  const [detail, setDetail] = useState<MultiTickerResultRead | null>(null)
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
@@ -1205,9 +1160,9 @@ function HistoryTab({
   onRollbackStart: (taskId: string, ticker: string) => void
 }) {
   const { t, language } = useTranslation()
-  const [items, setItems] = useState<HistoryItem[]>([])
+  const [items, setItems] = useState<AnalysisListItem[]>([])
   const [loading, setLoading] = useState(true)
-  const [detail, setDetail] = useState<AnalysisDetail | null>(null)
+  const [detail, setDetail] = useState<AnalysisResultRead | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [activeDetailTab, setActiveDetailTab] = useState<'reports' | 'debate' | 'chat' | 'timetravel'>('reports')
   const [shareLink, setShareLink] = useState<string | null>(null)
@@ -1229,7 +1184,7 @@ function HistoryTab({
     }
   }, [])
   const meta = useMeta()
-  const sectionLabels = meta?.section_labels ?? SECTION_LABELS
+  const sectionLabels = meta?.section_labels ?? {}
 
   useEffect(() => {
     axios.get('/api/analysis/history?limit=50').then(r => setItems(r.data)).catch(() => {}).finally(() => setLoading(false))
@@ -1305,7 +1260,7 @@ function HistoryTab({
                     <div className="flex items-center gap-3">
                       <h3 className="text-xl font-display font-bold text-white font-mono">{detail.ticker}</h3>
                       <SignalBadge signal={detail.signal} large />
-                      {detail.quality && <QualityBadge quality={detail.quality} />}
+                      {detail.quality ? <QualityBadge quality={detail.quality as RunQuality} /> : null}
                     </div>
                     <p className="text-[10px] text-slate-500 font-semibold">{detail.trade_date} • {(detail.duration_seconds ?? 0).toFixed(1)}s • {detail.llm_calls} LLM • {(detail.tokens_in + detail.tokens_out).toLocaleString()} token{detail.estimated_cost_usd ? ` • ~$${detail.estimated_cost_usd.toFixed(4)}` : ''}</p>
                   </div>
@@ -1375,7 +1330,7 @@ function HistoryTab({
                 <div className="flex-1 min-h-0 overflow-y-auto">
                   {activeDetailTab === 'reports' && (
                     <div className="space-y-2 pr-1">
-                      {detail.risk_metrics && <RiskMetricsCard metrics={detail.risk_metrics} />}
+                      {detail.risk_metrics ? <RiskMetricsCard metrics={detail.risk_metrics as any} /> : null}
                       <KellyPositioningFromJson json={detail.trader_proposal_json} />
                       {([
                         ['market_report', detail.market_report],
@@ -1406,8 +1361,8 @@ function HistoryTab({
                         <div className="border-t border-white/[0.04] pt-3 mt-4">
                           <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Debate Records</h4>
                           <div className="space-y-2">
-                            {detail.bull_history && <ReportCard label="Bull" content={detail.bull_history as string} />}
-                            {detail.bear_history && <ReportCard label="Bear" content={detail.bear_history as string} />}
+                            {detail.bull_history ? <ReportCard label="Bull" content={detail.bull_history as string} /> : null}
+                            {detail.bear_history ? <ReportCard label="Bear" content={detail.bear_history as string} /> : null}
                             {detail.judge_decision && <ReportCard label="Judge" content={detail.judge_decision} />}
                           </div>
                         </div>

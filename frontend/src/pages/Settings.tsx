@@ -16,15 +16,6 @@ function parseWebhookEvents(raw: string): string[] {
   return s.split(',').map(x => x.trim()).filter(Boolean)
 }
 
-interface DeliveryRecord {
-  id: number
-  event: string
-  url: string
-  success: boolean
-  status_code: number | null
-  error: string | null
-  created_at: string
-}
 import { useMeta, triggerMetaRefetch } from '../hooks/useMeta'
 import { useAuth } from '../contexts/AuthContext'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
@@ -34,68 +25,9 @@ import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
 import type { ToolSettingsPanelHandle } from '../components/settings/ToolSettingsPanel'
 import AgentSettingsPanel from '../components/settings/AgentSettingsPanel'
 import type { AgentSettingsPanelHandle } from '../components/settings/AgentSettingsPanel'
+import type { WebhookDeliveryRead, SettingsRead, PresetRead } from '../api/types'
 
-// ... (interfaces unchanged) ...
-interface Settings {
-  cron_enabled: boolean
-  cron_schedule: string
-  price_tolerance_pct: number
-  llm_provider: string
-  llm_model: string
-  fallback_llm_provider: string | null
-  fallback_llm_model: string | null
-  openai_reasoning_effort: string | null
-  anthropic_effort: string | null
-  google_thinking_level: string | null
-  output_language: string
-  investor_persona: string
-  analyst_concurrency_limit: number
-  max_recur_limit: number
-  benchmark_ticker: string | null
-  max_debate_rounds: number
-  max_risk_rounds: number
-  max_position_size_pct: number
-  max_risk_per_trade_pct: number
-  strict_stop_loss_mode: boolean
-  correlation_risk_enabled: boolean
-  quality_gate_enabled: boolean
-  drawdown_breaker_enabled: boolean
-  max_portfolio_drawdown_pct: number
-  webhook_url: string | null
-  webhook_enabled: boolean
-  webhook_events: string
-  watchlist: string[]
-  node_retry_attempts: number
-  node_retry_base_delay: number
-  node_timeout_seconds: number
-  tool_timeout_seconds: number
-  circuit_breaker_threshold: number
-  circuit_breaker_cooldown: number
-  stall_timeout_seconds: number
-  memory_store: string
-  pinecone_index: string
-  pinecone_cloud: string
-  pinecone_region: string
-  memory_embedder: string
-  pinecone_embed_model: string
-  memory_openai_embed_model: string
-  memory_ollama_embed_model: string
-  agent_qa_enabled: boolean
-  anthropic_prompt_caching: boolean
-  max_report_chars_in_prompts: number
-  max_debate_history_chars: number
-  max_tool_output_chars: number
-  analyst_prefilter_enabled: boolean
-  analyst_prefilter_min_samples: number
-  analyst_prefilter_max_win_rate: number
-  memory_recall_count: number
-  summary_only_mode: boolean
-  news_article_limit: number
-  global_news_article_limit: number
-  global_news_lookback_days: number
-}
-
-interface Preset { id: number; name: string; description: string | null; created_at: string }
+type Settings = SettingsRead
 
 const Input = "w-full glass-input rounded-xl px-3 py-2 text-xs outline-none"
 
@@ -124,20 +56,20 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [presets, setPresets] = useState<Preset[]>([])
+  const [presets, setPresets] = useState<PresetRead[]>([])
   const [presetName, setPresetName] = useState('')
   const [presetSaving, setPresetSaving] = useState(false)
   const [browserNotify, setBrowserNotify] = useState(isBrowserNotifyEnabled())
   const [webhookTesting, setWebhookTesting] = useState(false)
   const [webhookTestResult, setWebhookTestResult] = useState<string | null>(null)
-  const [deliveries, setDeliveries] = useState<DeliveryRecord[]>([])
+  const [deliveries, setDeliveries] = useState<WebhookDeliveryRead[]>([])
   const [loadingDeliveries, setLoadingDeliveries] = useState(false)
   const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => { return () => { if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current) } }, [])
   const loadDeliveries = useCallback(() => {
     setLoadingDeliveries(true)
     const url = userId ? `/api/settings/webhook-deliveries?user_id=${userId}` : '/api/settings/webhook-deliveries'
-    axios.get<DeliveryRecord[]>(url)
+    axios.get<WebhookDeliveryRead[]>(url)
       .then(r => setDeliveries(r.data))
       .catch(() => {})
       .finally(() => setLoadingDeliveries(false))
@@ -430,28 +362,40 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     <Row label="Reasoning Effort">
                       <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>
                         <option value="">{t('settings.effort_default')}</option>
-                        <option value="low">{t('settings.effort_low_fast_cheap')}</option>
-                        <option value="medium">{t('settings.effort_medium_balanced')}</option>
-                        <option value="high">{t('settings.effort_high_deep')}</option>
+                        {(meta?.effort_options?.openai ?? [
+                          { value: 'low', label: t('settings.effort_low_fast_cheap') },
+                          { value: 'medium', label: t('settings.effort_medium_balanced') },
+                          { value: 'high', label: t('settings.effort_high_deep') },
+                        ]).map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
                       </select>
                     </Row>
                     
                     <Row label="Thinking Effort">
                       <select className={Input} value={s.anthropic_effort || ''} onChange={e => update('anthropic_effort', e.target.value || null)}>
                         <option value="">{t('settings.effort_default')}</option>
-                        <option value="low">{t('settings.effort_low_fast')}</option>
-                        <option value="medium">{t('settings.effort_medium_balanced')}</option>
-                        <option value="high">{t('settings.effort_high_extended')}</option>
+                        {(meta?.effort_options?.anthropic ?? [
+                          { value: 'low', label: t('settings.effort_low_fast') },
+                          { value: 'medium', label: t('settings.effort_medium_balanced') },
+                          { value: 'high', label: t('settings.effort_high_extended') },
+                        ]).map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
                       </select>
                     </Row>
                     
                     <Row label="Thinking Level">
                       <select className={Input} value={s.google_thinking_level || ''} onChange={e => update('google_thinking_level', e.target.value || null)}>
                         <option value="">{t('settings.effort_default')}</option>
-                        <option value="minimal">{t('settings.effort_minimal_fastest')}</option>
-                        <option value="low">Low</option>
-                        <option value="medium">Medium</option>
-                        <option value="high">{t('settings.effort_high_deepest')}</option>
+                        {(meta?.effort_options?.google ?? [
+                          { value: 'minimal', label: t('settings.effort_minimal_fastest') },
+                          { value: 'low', label: 'Low' },
+                          { value: 'medium', label: 'Medium' },
+                          { value: 'high', label: t('settings.effort_high_deepest') },
+                        ]).map(o => (
+                          <option key={o.value} value={o.value}>{o.label}</option>
+                        ))}
                       </select>
                     </Row>
 
@@ -640,12 +584,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
               </Row>
               <Row label={t('settings.row_notification_events')}>
                 <div className="flex flex-col gap-2.5 pt-1">
-                  {([
-                    ['analysis_complete', t('settings.event_analysis_complete')],
-                    ['trade_executed', t('settings.event_trade_executed')],
-                    ['alert_triggered', t('settings.event_alert_triggered')],
-                    ['signal_flip', t('settings.event_signal_flip')],
-                  ] as [string, string][]).map(([key, label]) => (
+                  {(meta?.webhook_events ?? ['analysis_complete', 'alert_triggered', 'order_filled', 'risk_breach']).map(key => (
                     <label key={key} className="flex items-center gap-2 text-xs font-medium text-slate-400 cursor-pointer hover:text-slate-300 select-none">
                       <input
                         type="checkbox"
@@ -657,7 +596,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                           update('webhook_events', JSON.stringify(next))
                         }}
                       />
-                      {label}
+                      {t(`settings.event_${key}`) || key}
                     </label>
                   ))}
                 </div>
@@ -817,8 +756,9 @@ export default function Settings({ userId }: { userId?: number } = {}) {
             <Section title="Vector Memory">
               <Row label={t('settings.row_memory_store')}>
                 <select className={Input} value={s.memory_store} onChange={e => update('memory_store', e.target.value)}>
-                  <option value="pinecone">{t('settings.memory_store_pinecone')}</option>
-                  <option value="pgvector">{t('settings.memory_store_pgvector')}</option>
+                  {(meta?.memory_stores ?? [{ value: 'pinecone', label: t('settings.memory_store_pinecone') }, { value: 'pgvector', label: t('settings.memory_store_pgvector') }]).map(o => (
+                    <option key={o.value} value={o.value}>{o.label}</option>
+                  ))}
                 </select>
               </Row>
               <Row label="Status">
@@ -856,9 +796,9 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   <Row label="Region"><input className={Input} value={s.pinecone_region} onChange={e => update('pinecone_region', e.target.value)} placeholder="us-east-1" /></Row>
                   <Row label="Embedder">
                     <select className={Input} value={s.memory_embedder} onChange={e => update('memory_embedder', e.target.value)}>
-                      <option value="pinecone">Pinecone hosted (no extra key)</option>
-                      <option value="openai">OpenAI (uses your OpenAI key)</option>
-                      <option value="ollama">Ollama (local, free)</option>
+                      {(meta?.embedders ?? [{ value: 'pinecone', label: 'Pinecone hosted (no extra key)' }, { value: 'openai', label: 'OpenAI (uses your OpenAI key)' }, { value: 'ollama', label: 'Ollama (local, free)' }]).map(o => (
+                        <option key={o.value} value={o.value}>{o.label}</option>
+                      ))}
                     </select>
                   </Row>
                   {s.memory_embedder === 'openai' && (

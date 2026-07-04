@@ -5,47 +5,10 @@ import {
   RefreshCw, RotateCcw, AlertCircle, CheckCircle, Loader2
 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
+import type { OrderResponse } from '../api/types'
+import type { components } from '../api/schema'
 
-interface Holding {
-  ticker: string
-  quantity: number
-  avg_buy_price: number
-  current_price: number
-  market_value: number
-  unrealized_pnl: number
-  pnl_pct: number
-  side?: string
-  leverage?: number
-  liquidation_price?: number
-  borrowed_amount?: number
-  stop_loss?: number
-  take_profit?: number
-}
-
-interface PortfolioData {
-  id: number
-  initial_capital: number
-  cash_available: number
-  positions_value: number
-  total_value: number
-  total_pnl: number
-  total_pnl_pct: number
-  holdings: Holding[]
-  benchmark_ticker?: string
-  benchmark_return_pct?: number | null
-  alpha_pct?: number | null
-}
-
-interface OrderResult {
-  order_id: number
-  ticker: string
-  action: string
-  quantity: number
-  price: number
-  total_value: number
-  commission: number
-  status: string
-}
+type PortfolioData = components['schemas']['backend__schemas__trading__PerformanceResponse']
 
 function StatCard({
   icon, label, value, sub, positive,
@@ -111,7 +74,7 @@ export default function MockTrading() {
     setSubmitting(true)
     setOrderResult(null)
     try {
-      const { data } = await axios.post<OrderResult>('/api/trading/order', {
+      const { data } = await axios.post<OrderResponse>('/api/trading/order', {
         ticker: ticker.toUpperCase(),
         action,
         quantity: Number.parseFloat(quantity),

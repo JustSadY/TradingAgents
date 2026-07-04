@@ -5,27 +5,7 @@ import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
 import { exportOrdersCSV } from '../utils/csvExport'
 import { ErrorBoundary } from '../components/ErrorBoundary'
-
-interface Order {
-  id: number
-  ticker: string
-  action: string
-  quantity_requested: number
-  quantity_filled: number
-  status: string
-  price_per_share: number | null
-  total_value: number | null
-  realized_pnl: number | null
-  ai_signal: string
-  created_at: string
-}
-
-interface JournalEntry {
-  order_id: number
-  note: string
-  ai_debrief: string | null
-  has_debrief: boolean
-}
+import type { OrderRead, JournalNoteReadResponse } from '../api/types'
 
 const STATUS_BADGES: Record<string, string> = {
   FILLED: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
@@ -40,8 +20,8 @@ const ACTION_BADGES: Record<string, string> = {
 }
 
 // ── Trade Journal Modal ────────────────────────────────────────────────────────
-function JournalModal({ order, onClose }: { order: Order; onClose: () => void }) {
-  const [entry, setEntry] = useState<JournalEntry | null>(null)
+function JournalModal({ order, onClose }: { order: OrderRead; onClose: () => void }) {
+  const [entry, setEntry] = useState<JournalNoteReadResponse | null>(null)
   const [note, setNote] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
@@ -49,7 +29,7 @@ function JournalModal({ order, onClose }: { order: Order; onClose: () => void })
   const textareaRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
-    axios.get<JournalEntry>(`/api/trading/journal/${order.id}`)
+    axios.get<JournalNoteReadResponse>(`/api/trading/journal/${order.id}`)
       .then(r => {
         setEntry(r.data)
         setNote(r.data.note || '')
@@ -193,9 +173,9 @@ function JournalModal({ order, onClose }: { order: Order; onClose: () => void })
 // ── Main Orders Page ───────────────────────────────────────────────────────────
 export default function Orders() {
   const { t } = useTranslation()
-  const [orders, setOrders] = useState<Order[]>([])
+  const [orders, setOrders] = useState<OrderRead[]>([])
   const [loading, setLoading] = useState(true)
-  const [journalOrder, setJournalOrder] = useState<Order | null>(null)
+  const [journalOrder, setJournalOrder] = useState<OrderRead | null>(null)
 
   const loadOrders = useCallback(() => {
     setLoading(true)

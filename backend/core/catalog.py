@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from backend.core.constants import PAGE_KEYS, SETTING_KEYS
 from backend.trading_agents.agent_catalog import label_for
 from backend.trading_agents.agent_catalog import list_analysts as _engine_analysts
 
@@ -117,6 +118,53 @@ PROVIDER_LABELS: dict[str, str] = llm_registry.get_provider_labels()
 
 EFFORT_OPTIONS: dict[str, list[dict]] = llm_registry.get_effort_options()
 
+WEBHOOK_EVENTS: list[str] = [
+    "analysis_complete",
+    "alert_triggered",
+    "order_filled",
+    "risk_breach",
+]
+
+MEMORY_STORES: list[dict] = [
+    {"value": "pinecone", "label": "Pinecone"},
+    {"value": "pgvector", "label": "pgvector (PostgreSQL)"},
+]
+
+EMBEDDERS: list[dict] = [
+    {"value": "pinecone", "label": "Pinecone hosted", "note": "No extra key needed"},
+    {"value": "openai", "label": "OpenAI", "note": "Uses your OpenAI key"},
+    {"value": "ollama", "label": "Ollama", "note": "Local, free"},
+]
+
+SECTIONS: list[dict] = [
+    {"key": "market_report", "label": "Market Analysis", "category": "analyst", "order": 1, "icon": "BarChart"},
+    {"key": "sentiment_report", "label": "Sentiment Analysis", "category": "analyst", "order": 2, "icon": "Activity"},
+    {"key": "news_report", "label": "News Analysis", "category": "analyst", "order": 3, "icon": "Newspaper"},
+    {"key": "fundamentals_report", "label": "Fundamental Analysis", "category": "analyst", "order": 4, "icon": "Scale"},
+    {"key": "macro_report", "label": "Macro Analysis", "category": "analyst", "order": 5, "icon": "Globe"},
+    {"key": "options_report", "label": "Options Analysis", "category": "analyst", "order": 6, "icon": "TrendingUp"},
+    {"key": "quant_report", "label": "Quantitative Analysis", "category": "analyst", "order": 7, "icon": "Brain"},
+    {"key": "earnings_report", "label": "Earnings Analysis", "category": "analyst", "order": 8, "icon": "DollarSign"},
+    {"key": "insider_report", "label": "Insider Activity", "category": "analyst", "order": 9, "icon": "Eye"},
+    {"key": "ownership_report", "label": "Institutional Ownership", "category": "analyst", "order": 10, "icon": "Users"},
+    {"key": "ratings_report", "label": "Analyst Ratings", "category": "analyst", "order": 11, "icon": "Star"},
+    {"key": "short_interest_report", "label": "Short Interest", "category": "analyst", "order": 12, "icon": "TrendingDown"},
+    {"key": "valuation_report", "label": "Valuation Comparison", "category": "analyst", "order": 13, "icon": "Target"},
+    {"key": "catalyst_report", "label": "Upcoming Catalysts", "category": "analyst", "order": 14, "icon": "Zap"},
+    {"key": "review_report", "label": "Performance Review", "category": "research", "order": 15, "icon": "ShieldCheck"},
+    {"key": "synthesis_report", "label": "Synthesis", "category": "research", "order": 16, "icon": "Brain"},
+    {"key": "audit_report", "label": "Audit", "category": "research", "order": 17, "icon": "ShieldAlert"},
+    {"key": "agent_qa_report", "label": "Cross-Examination", "category": "research", "order": 18, "icon": "Bot"},
+    {"key": "investment_plan", "label": "Investment Plan", "category": "trade", "order": 19, "icon": "Target"},
+    {"key": "trader_plan", "label": "Trader Proposal", "category": "trade", "order": 20, "icon": "Play"},
+    {"key": "bull_history", "label": "Bull Arguments", "category": "debate", "order": 21, "icon": "TrendingUp"},
+    {"key": "bear_history", "label": "Bear Arguments", "category": "debate", "order": 22, "icon": "TrendingDown"},
+    {"key": "investment_debate_history", "label": "Investment Debate", "category": "debate", "order": 23, "icon": "MessageSquare"},
+    {"key": "risk_debate_history", "label": "Risk Debate", "category": "debate", "order": 24, "icon": "ShieldAlert"},
+    {"key": "judge_decision", "label": "Judge Decision", "category": "decision", "order": 25, "icon": "Gavel"},
+    {"key": "final_decision", "label": "Final Decision", "category": "decision", "order": 26, "icon": "CheckCircle"},
+]
+
 
 async def investor_personas(db=None, user=None) -> list[dict]:
     from backend.trading_agents.personas import list_personas
@@ -200,6 +248,12 @@ async def build_meta(db=None, user=None) -> dict:
         "order_statuses": ORDER_STATUSES,
         "order_actions": ORDER_ACTIONS,
         "chart_periods": CHART_PERIODS,
+        "page_keys": PAGE_KEYS,
+        "setting_keys": SETTING_KEYS,
+        "sections": SECTIONS,
+        "webhook_events": WEBHOOK_EVENTS,
+        "memory_stores": MEMORY_STORES,
+        "embedders": EMBEDDERS,
     }
 
 

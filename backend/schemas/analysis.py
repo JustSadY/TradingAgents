@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Any
 
@@ -72,9 +73,14 @@ class AnalysisResultRead(BaseModel):
 
     @field_validator("failed_agents", mode="before")
     @classmethod
-    def coerce_empty_string(cls, v: object) -> object:
-        if isinstance(v, str) and v == "":
-            return None
+    def coerce_failed_agents(cls, v: object) -> object:
+        if isinstance(v, str):
+            if v == "":
+                return None
+            try:
+                return json.loads(v)
+            except (json.JSONDecodeError, TypeError):
+                return None
         return v
 
     model_config = ConfigDict(from_attributes=True)

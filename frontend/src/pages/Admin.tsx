@@ -19,12 +19,12 @@ interface UserRecord {
   created_at: string
 }
 
-const ALL_PAGE_KEYS = [
+const FALLBACK_PAGE_KEYS = [
   'dashboard', 'analysis', 'chart', 'trading', 'portfolio',
   'watchlist', 'orders', 'performance', 'backtest', 'alerts', 'ab-testing', 'logs', 'profile'
 ]
 
-const PAGE_LABELS: Record<string, string> = {
+const FALLBACK_PAGE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard', analysis: 'Analysis', chart: 'Charts',
   trading: 'Simulation', portfolio: 'Portfolio', watchlist: 'Watchlist',
   orders: 'Orders', performance: 'Performance', alerts: 'Alerts',
@@ -71,6 +71,8 @@ export default function Admin() {
   const { t } = useTranslation()
   const { isOwner } = useAuth()
   const meta = useMeta()
+  const ALL_PAGE_KEYS = meta?.page_keys ?? FALLBACK_PAGE_KEYS
+  const PAGE_LABELS = meta?.section_labels ?? FALLBACK_PAGE_LABELS
   const [tab, setTab] = useState<Tab>('users')
   const [users, setUsers] = useState<UserRecord[]>([])
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
@@ -489,24 +491,24 @@ export default function Admin() {
                     </h4>
                     <p className="text-[10px] text-slate-500 font-semibold mb-1">Select which settings tabs this user is permitted to edit:</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
-                      {[
-                        { key: 'general',  label: t('settings.general') || 'Preferences' },
-                        { key: 'llm',      label: t('settings.row_llm_provider') || 'LLM Provider' },
-                        { key: 'agents',   label: 'AI Configuration' },
-                        { key: 'tools',    label: t('settings.section_tools') || 'Agent Tools' },
-                        { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety' },
-                        { key: 'webhooks', label: t('settings.section_notifications') || 'Personal Webhooks' },
-                        { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler' },
-                        { key: 'presets',  label: t('settings.section_presets') || 'Configuration Templates' },
-                        { key: 'memory',   label: 'Memory' },
-                        { key: 'personas', label: 'Personas' },
-                      ].map(s => (
-                        <label key={s.key} className="flex items-center gap-2.5 text-xs font-semibold text-slate-300 cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 rounded-xl px-3 py-2 border border-white/[0.03] transition-colors select-none">
+                      {(meta?.setting_keys ?? [
+                        { value: 'general',  label: t('settings.general') || 'Preferences' },
+                        { value: 'llm',      label: t('settings.row_llm_provider') || 'LLM Provider' },
+                        { value: 'agents',   label: 'AI Configuration' },
+                        { value: 'tools',    label: t('settings.section_tools') || 'Agent Tools' },
+                        { value: 'risk',     label: t('settings.section_risk') || 'Risk & Safety' },
+                        { value: 'webhooks', label: t('settings.section_notifications') || 'Personal Webhooks' },
+                        { value: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler' },
+                        { value: 'presets',  label: t('settings.section_presets') || 'Configuration Templates' },
+                        { value: 'memory',   label: 'Memory' },
+                        { value: 'personas', label: 'Personas' },
+                      ]).map(s => (
+                        <label key={s.value} className="flex items-center gap-2.5 text-xs font-semibold text-slate-300 cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 rounded-xl px-3 py-2 border border-white/[0.03] transition-colors select-none">
                           <input
                             type="checkbox"
                             className="accent-amber-500 w-4 h-4 rounded cursor-pointer"
-                            checked={settingPermissions[s.key] ?? false}
-                            onChange={e => setSettingPermissions(prev => ({ ...prev, [s.key]: e.target.checked }))}
+                            checked={settingPermissions[s.value] ?? false}
+                            onChange={e => setSettingPermissions(prev => ({ ...prev, [s.value]: e.target.checked }))}
                           />
                           {s.label}
                         </label>
@@ -741,19 +743,19 @@ export default function Admin() {
                   Admins cannot see existing API key characters, but can define/set or delete them.
                 </p>
                 <div className="space-y-3 bg-slate-900/40 border border-white/[0.04] p-4 rounded-2xl">
-                  {[
-                    { key: 'openai',       label: 'OpenAI' },
-                    { key: 'anthropic',    label: 'Anthropic (Claude)' },
-                    { key: 'google',       label: 'Google (Gemini)' },
-                    { key: 'nvidia',       label: 'NVIDIA NIM' },
-                    { key: 'ollama',       label: 'Ollama (Local)' },
-                  ].map(p => {
-                    const hasKey = userKeyProviders.includes(p.key)
+                  {Object.entries(meta?.provider_labels ?? {
+                    openai: 'OpenAI',
+                    anthropic: 'Anthropic (Claude)',
+                    google: 'Google (Gemini)',
+                    nvidia: 'NVIDIA NIM',
+                    ollama: 'Ollama (Local)',
+                  }).map(([key, label]) => {
+                    const hasKey = userKeyProviders.includes(key)
                     return (
                       <AdminApiKeyRow
-                        key={p.key}
-                        providerKey={p.key}
-                        label={p.label}
+                        key={key}
+                        providerKey={key}
+                        label={label}
                         hasKey={hasKey}
                         onSave={async (prov, val) => saveUserApiKey(selectedUserId, prov, val)}
                         onDelete={async (prov) => deleteUserApiKey(selectedUserId, prov)}

@@ -1,42 +1,4 @@
-export interface AnalysisForExport {
-  ticker: string
-  trade_date: string
-  signal: string | null
-  // Report sections
-  market_report?: string
-  sentiment_report?: string
-  news_report?: string
-  fundamentals_report?: string
-  macro_report?: string
-  options_report?: string
-  quant_report?: string
-  earnings_report?: string
-  insider_report?: string
-  ownership_report?: string
-  ratings_report?: string
-  short_interest_report?: string
-  valuation_report?: string
-  catalyst_report?: string
-  review_report?: string
-  synthesis_report?: string
-  audit_report?: string
-  agent_qa_report?: string
-  investment_plan?: string
-  trader_plan?: string
-  final_decision?: string
-  bull_history?: string
-  bear_history?: string
-  investment_debate_history?: string | string[]
-  risk_debate_history?: string | string[]
-  judge_decision?: string
-  // Metadata
-  llm_provider?: string | null
-  llm_model?: string | null
-  llm_calls?: number
-  tokens_in?: number
-  tokens_out?: number
-  duration_seconds?: number
-}
+import type { AnalysisResultRead } from '../api/types'
 
 type Lang = 'en' | 'tr'
 
@@ -110,7 +72,7 @@ const SECTION_ORDER = [
 
 // ── Markdown export ──────────────────────────────────────────────────────────
 
-export function exportMarkdown(analysis: AnalysisForExport, language: Lang = 'en'): void {
+export function exportMarkdown(analysis: AnalysisResultRead, language: Lang = 'en'): void {
   const labels = SECTION_LABELS[language]
   const meta = _metaLines(analysis, language)
   const lines: string[] = [
@@ -140,7 +102,7 @@ export function exportMarkdown(analysis: AnalysisForExport, language: Lang = 'en
 
 // ── PDF export ───────────────────────────────────────────────────────────────
 
-export function exportPDF(analysis: AnalysisForExport, language: Lang = 'en'): void {
+export function exportPDF(analysis: AnalysisResultRead, language: Lang = 'en'): void {
   const labels = SECTION_LABELS[language]
   const meta = _metaLines(analysis, language)
 
@@ -218,7 +180,7 @@ export function exportPDF(analysis: AnalysisForExport, language: Lang = 'en'): v
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function _metaLines(a: AnalysisForExport, lang: Lang): string[] {
+function _metaLines(a: AnalysisResultRead, lang: Lang): string[] {
   const lines: string[] = [
     `${lang === 'tr' ? 'Tarih' : 'Date'}: ${a.trade_date}`,
     `${lang === 'tr' ? 'Sinyal' : 'Signal'}: ${a.signal ?? 'N/A'}`,

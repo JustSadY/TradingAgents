@@ -79,6 +79,12 @@ export interface Meta {
   brokers: Choice[]
   provider_labels: Record<string, string>
   investor_personas?: Choice[]
+  webhook_events: string[]
+  memory_stores: Choice[]
+  embedders: Choice[]
+  page_keys: string[]
+  setting_keys: Choice[]
+  effort_options?: Record<string, Choice[]>
 }
 
 
