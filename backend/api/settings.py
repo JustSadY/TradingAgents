@@ -162,12 +162,19 @@ async def test_webhook(body: WebhookTestRequest, _: User = Depends(get_current_u
 
 @router.get("/webhook-deliveries", response_model=list[WebhookDeliveryRead])
 async def get_webhook_deliveries(
+    user_id: int | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    target_user = current_user
+    if user_id is not None and current_user.is_admin:
+        target_user = await get_user_by_id(db, user_id)
+        if not target_user:
+            raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+
     from backend.services.settings_service import get_webhook_deliveries as get_webhook_deliveries_svc
 
-    rows = await get_webhook_deliveries_svc(db, current_user.id, 20)
+    rows = await get_webhook_deliveries_svc(db, target_user.id, 20)
     return [
         WebhookDeliveryRead(
             id=r.id,

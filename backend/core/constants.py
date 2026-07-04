@@ -18,7 +18,7 @@ PAGE_KEYS = [
     "settings",
 ]
 
-SETTING_KEYS = ["general", "llm", "risk", "webhooks", "cron", "presets"]
+SETTING_KEYS = ["general", "llm", "agents", "tools", "risk", "webhooks", "cron", "presets", "memory", "personas"]
 
 PERIOD_DELTAS = {
     "1m": timedelta(days=31),

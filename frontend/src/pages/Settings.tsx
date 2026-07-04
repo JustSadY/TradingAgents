@@ -136,11 +136,12 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   useEffect(() => { return () => { if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current) } }, [])
   const loadDeliveries = useCallback(() => {
     setLoadingDeliveries(true)
-    axios.get<DeliveryRecord[]>('/api/settings/webhook-deliveries')
+    const url = userId ? `/api/settings/webhook-deliveries?user_id=${userId}` : '/api/settings/webhook-deliveries'
+    axios.get<DeliveryRecord[]>(url)
       .then(r => setDeliveries(r.data))
       .catch(() => {})
       .finally(() => setLoadingDeliveries(false))
-  }, [])
+  }, [userId])
   const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'agents' | 'risk' | 'webhooks' | 'presets' | 'advanced' | 'cron' | 'tools' | 'memory' | 'personas'>('general')
   const [memoryStatus, setMemoryStatus] = useState<any>(null)
   const [pineconeKey, setPineconeKey] = useState('')
@@ -365,105 +366,107 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   </Row>
                 </Section>
 
-                <Section title={t('settings.llm_settings') || 'Core Engine Configuration'}>
-                  <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed mb-2">
-                    Global LLM settings and performance parameters. Per-agent models are configured in the AI Configuration tab.
-                  </p>
+                {allowedSettings.includes('llm') && (
+                  <Section title={t('settings.llm_settings') || 'Core Engine Configuration'}>
+                    <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed mb-2">
+                      Global LLM settings and performance parameters. Per-agent models are configured in the AI Configuration tab.
+                    </p>
 
-                  <Row label={t('settings.row_llm_provider') || 'LLM Provider'}>
-                    <select
-                      className={Input}
-                      value={s.llm_provider}
-                      onChange={e => {
-                        update('llm_provider', e.target.value)
-                        update('llm_model', '')
-                      }}
-                    >
-                      {Object.entries(meta?.provider_labels ?? {}).map(([key, label]) => (
-                        <option key={key} value={key}>{label}</option>
-                      ))}
-                    </select>
-                  </Row>
-                  <Row label={t('settings.row_llm_model') || 'LLM Model'}>
-                    <input
-                      className={Input}
-                      value={s.llm_model}
-                      onChange={e => update('llm_model', e.target.value)}
-                      placeholder={t('settings.llm_model_placeholder') || 'e.g. gpt-4o-mini'}
-                    />
-                  </Row>
+                    <Row label={t('settings.row_llm_provider') || 'LLM Provider'}>
+                      <select
+                        className={Input}
+                        value={s.llm_provider}
+                        onChange={e => {
+                          update('llm_provider', e.target.value)
+                          update('llm_model', '')
+                        }}
+                      >
+                        {Object.entries(meta?.provider_labels ?? {}).map(([key, label]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                      </select>
+                    </Row>
+                    <Row label={t('settings.row_llm_model') || 'LLM Model'}>
+                      <input
+                        className={Input}
+                        value={s.llm_model}
+                        onChange={e => update('llm_model', e.target.value)}
+                        placeholder={t('settings.llm_model_placeholder') || 'e.g. gpt-4o-mini'}
+                      />
+                    </Row>
 
-                  <Row label={t('settings.row_fallback_provider')}>
-                    <select
-                      className={Input}
-                      value={s.fallback_llm_provider || ''}
-                      onChange={e => {
-                        const v = e.target.value || null
-                        update('fallback_llm_provider', v)
-                        if (!v) update('fallback_llm_model', null)
-                      }}
-                    >
-                      <option value="">{t('settings.fallback_disabled')}</option>
-                      {Object.entries(meta?.provider_labels ?? {}).map(([key, label]) => (
-                        <option key={key} value={key}>{label}</option>
-                      ))}
-                    </select>
-                  </Row>
-                  {s.fallback_llm_provider && (
-                    <>
-                      <Row label={t('settings.row_fallback_model')}>
-                        <input
-                          className={Input}
-                          value={s.fallback_llm_model || ''}
-                          onChange={e => update('fallback_llm_model', e.target.value || null)}
-                          placeholder={t('settings.fallback_model_placeholder')}
-                        />
-                      </Row>
-                      <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed">
-                        {t('settings.fallback_hint')}
-                      </p>
-                    </>
-                  )}
+                    <Row label={t('settings.row_fallback_provider')}>
+                      <select
+                        className={Input}
+                        value={s.fallback_llm_provider || ''}
+                        onChange={e => {
+                          const v = e.target.value || null
+                          update('fallback_llm_provider', v)
+                          if (!v) update('fallback_llm_model', null)
+                        }}
+                      >
+                        <option value="">{t('settings.fallback_disabled')}</option>
+                        {Object.entries(meta?.provider_labels ?? {}).map(([key, label]) => (
+                          <option key={key} value={key}>{label}</option>
+                        ))}
+                      </select>
+                    </Row>
+                    {s.fallback_llm_provider && (
+                      <>
+                        <Row label={t('settings.row_fallback_model')}>
+                          <input
+                            className={Input}
+                            value={s.fallback_llm_model || ''}
+                            onChange={e => update('fallback_llm_model', e.target.value || null)}
+                            placeholder={t('settings.fallback_model_placeholder')}
+                          />
+                        </Row>
+                        <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed">
+                          {t('settings.fallback_hint')}
+                        </p>
+                      </>
+                    )}
 
-                  <Row label="Reasoning Effort">
-                    <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>
-                      <option value="">{t('settings.effort_default')}</option>
-                      <option value="low">{t('settings.effort_low_fast_cheap')}</option>
-                      <option value="medium">{t('settings.effort_medium_balanced')}</option>
-                      <option value="high">{t('settings.effort_high_deep')}</option>
-                    </select>
-                  </Row>
-                  
-                  <Row label="Thinking Effort">
-                    <select className={Input} value={s.anthropic_effort || ''} onChange={e => update('anthropic_effort', e.target.value || null)}>
-                      <option value="">{t('settings.effort_default')}</option>
-                      <option value="low">{t('settings.effort_low_fast')}</option>
-                      <option value="medium">{t('settings.effort_medium_balanced')}</option>
-                      <option value="high">{t('settings.effort_high_extended')}</option>
-                    </select>
-                  </Row>
-                  
-                  <Row label="Thinking Level">
-                    <select className={Input} value={s.google_thinking_level || ''} onChange={e => update('google_thinking_level', e.target.value || null)}>
-                      <option value="">{t('settings.effort_default')}</option>
-                      <option value="minimal">{t('settings.effort_minimal_fastest')}</option>
-                      <option value="low">Low</option>
-                      <option value="medium">Medium</option>
-                      <option value="high">{t('settings.effort_high_deepest')}</option>
-                    </select>
-                  </Row>
+                    <Row label="Reasoning Effort">
+                      <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>
+                        <option value="">{t('settings.effort_default')}</option>
+                        <option value="low">{t('settings.effort_low_fast_cheap')}</option>
+                        <option value="medium">{t('settings.effort_medium_balanced')}</option>
+                        <option value="high">{t('settings.effort_high_deep')}</option>
+                      </select>
+                    </Row>
+                    
+                    <Row label="Thinking Effort">
+                      <select className={Input} value={s.anthropic_effort || ''} onChange={e => update('anthropic_effort', e.target.value || null)}>
+                        <option value="">{t('settings.effort_default')}</option>
+                        <option value="low">{t('settings.effort_low_fast')}</option>
+                        <option value="medium">{t('settings.effort_medium_balanced')}</option>
+                        <option value="high">{t('settings.effort_high_extended')}</option>
+                      </select>
+                    </Row>
+                    
+                    <Row label="Thinking Level">
+                      <select className={Input} value={s.google_thinking_level || ''} onChange={e => update('google_thinking_level', e.target.value || null)}>
+                        <option value="">{t('settings.effort_default')}</option>
+                        <option value="minimal">{t('settings.effort_minimal_fastest')}</option>
+                        <option value="low">Low</option>
+                        <option value="medium">Medium</option>
+                        <option value="high">{t('settings.effort_high_deepest')}</option>
+                      </select>
+                    </Row>
 
-                  <Row label={t('settings.row_max_recursion')}>
-                    <input
-                      type="number"
-                      min="1"
-                      max="5000"
-                      className={Input}
-                      value={s.max_recur_limit}
-                      onChange={e => update('max_recur_limit', Number.parseInt(e.target.value) || 1000)}
-                    />
-                  </Row>
-                </Section>
+                    <Row label={t('settings.row_max_recursion')}>
+                      <input
+                        type="number"
+                        min="1"
+                        max="5000"
+                        className={Input}
+                        value={s.max_recur_limit}
+                        onChange={e => update('max_recur_limit', Number.parseInt(e.target.value) || 1000)}
+                      />
+                    </Row>
+                  </Section>
+                )}
               </div>
             </ErrorBoundary>
           )}

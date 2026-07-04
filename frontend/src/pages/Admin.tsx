@@ -492,10 +492,14 @@ export default function Admin() {
                       {[
                         { key: 'general',  label: t('settings.general') || 'Preferences' },
                         { key: 'llm',      label: t('settings.row_llm_provider') || 'LLM Provider' },
+                        { key: 'agents',   label: 'AI Configuration' },
+                        { key: 'tools',    label: t('settings.section_tools') || 'Agent Tools' },
                         { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety' },
                         { key: 'webhooks', label: t('settings.section_notifications') || 'Personal Webhooks' },
                         { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler' },
                         { key: 'presets',  label: t('settings.section_presets') || 'Configuration Templates' },
+                        { key: 'memory',   label: 'Memory' },
+                        { key: 'personas', label: 'Personas' },
                       ].map(s => (
                         <label key={s.key} className="flex items-center gap-2.5 text-xs font-semibold text-slate-300 cursor-pointer bg-slate-900/40 hover:bg-slate-900/80 rounded-xl px-3 py-2 border border-white/[0.03] transition-colors select-none">
                           <input
