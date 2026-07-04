@@ -71,6 +71,15 @@ class AnalysisResultRead(BaseModel):
     alpha_return: float | None = None
     holding_days: int | None = None
 
+    @field_validator("signal", mode="before")
+    @classmethod
+    def validate_signal(cls, v: object) -> object:
+        _VALID = {"Buy", "Overweight", "Hold", "Underweight", "Sell", None}
+        if v in _VALID:
+            return v
+        logger.warning("AnalysisResultRead.signal: unexpected value %r — coercing to None", v)
+        return None
+
     @field_validator("failed_agents", mode="before")
     @classmethod
     def coerce_failed_agents(cls, v: object) -> object:

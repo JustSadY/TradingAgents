@@ -527,9 +527,18 @@ async def run_individual_analysis(
 
 
 
+        _VALID_SIGNALS = {"Buy", "Overweight", "Hold", "Underweight", "Sell"}
+        raw_signal = result.signal
+        if raw_signal not in _VALID_SIGNALS:
+            logger.warning(
+                "Signal validation: unexpected signal=%r for ticker=%s — defaulting to Hold. "
+                "This indicates a prompt or parsing issue in the Portfolio Manager.",
+                raw_signal, result.ticker,
+            )
+            raw_signal = "Hold"
         final_payload = {
 
-            "signal": result.signal,
+            "signal": raw_signal,
 
             "market_report": result.market_report,
 

@@ -107,8 +107,7 @@ def create_portfolio_manager(llm):
 - **Leverage (recommended_leverage):** Set a per-stock leverage multiplier between 1.0 (cash, no leverage) and 10.0. Default to 1.0 unless this is a high-conviction (Buy) setup on a liquid instrument with a clearly defined stop-loss. Volatile or speculative names must stay at 1.0-2.0. Remember that higher leverage moves the liquidation price closer to entry — never set leverage so high that ordinary volatility would liquidate the position before the stop-loss is hit. Honour the investor persona: conservative profiles should keep leverage at or near 1.0.
 **Risk Analysts Debate History:**
 {history}
-{conviction_instructions}---
-Be decisive and ground every conclusion in specific evidence from the analysts.{get_general_settings_block()}"""
+{conviction_instructions}---\nUse the full rating scale — Buy, Overweight, Hold, Underweight, Sell — and choose the one that best matches the evidence. Reserve Buy/Sell for high-conviction scenarios. Ground every conclusion in specific evidence from the analysts.{get_general_settings_block()}"""
 
         result = await ainvoke_structured_or_freetext(
             structured_llm,

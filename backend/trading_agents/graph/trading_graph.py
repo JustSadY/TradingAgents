@@ -513,8 +513,11 @@ class TradingAgentsGraph:
         """
         structured = final_state.get("final_signal")
         if structured:
+            _logger.info("Final signal (structured): %r", structured)
             return structured
-        return self.process_signal(final_state["final_trade_decision"])
+        parsed = self.process_signal(final_state.get("final_trade_decision", ""))
+        _logger.info("Final signal (parsed from text): %r", parsed)
+        return parsed
 
     def process_signal(self, full_signal):
         return self.signal_processor.process_signal(full_signal)
