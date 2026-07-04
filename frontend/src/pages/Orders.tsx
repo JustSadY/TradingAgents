@@ -4,7 +4,7 @@ import { Briefcase, RefreshCw, NotebookPen, X, Save, Sparkles, Loader2, Bot, Dow
 import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
 import { exportOrdersCSV } from '../utils/csvExport'
-import ErrorBoundary from '../components/ErrorBoundary'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 
 interface Order {
   id: number

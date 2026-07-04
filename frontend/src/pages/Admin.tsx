@@ -3,7 +3,7 @@ import axios from 'axios'
 import { Save, Trash2, Plus, UserCog, ShieldCheck, Globe, CheckCircle2, Key, Sliders, BarChart3, RefreshCw, Zap, AlertTriangle, Clock, Wifi } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { useAuth } from '../contexts/AuthContext'
-import ErrorBoundary from '../components/ErrorBoundary'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 import Settings from './Settings'
 import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
 import { useMeta } from '../hooks/useMeta'
@@ -703,64 +703,7 @@ export default function Admin() {
                     </div>
                   ))}
 
-                  <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
-                    <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Agent Run Resilience (Global Defaults)</h4>
-                    <p className="text-[10px] text-slate-500 leading-snug">Users can override these values in their own Risk & Safety settings.</p>
 
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-                      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Node Retry Attempts</span>
-                      <input type="number" min={1} max={10} className={Input}
-                        value={systemSettings.node_retry_attempts ?? 2}
-                        onChange={e => setSystemSettings({ ...systemSettings, node_retry_attempts: parseInt(e.target.value) || 2 })}
-                      />
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-                      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Node Retry Base Delay (s)</span>
-                      <input type="number" step={0.1} min={0.1} max={10} className={Input}
-                        value={systemSettings.node_retry_base_delay ?? 1.0}
-                        onChange={e => setSystemSettings({ ...systemSettings, node_retry_base_delay: parseFloat(e.target.value) || 1.0 })}
-                      />
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-                      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Node Timeout (s)</span>
-                      <input type="number" step={10} min={30} max={600} className={Input}
-                        value={systemSettings.node_timeout_seconds ?? 120}
-                        onChange={e => setSystemSettings({ ...systemSettings, node_timeout_seconds: parseInt(e.target.value) || 120 })}
-                      />
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-                      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Tool Timeout (s)</span>
-                      <input type="number" step={5} min={15} max={300} className={Input}
-                        value={systemSettings.tool_timeout_seconds ?? 60}
-                        onChange={e => setSystemSettings({ ...systemSettings, tool_timeout_seconds: parseInt(e.target.value) || 60 })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
-                    <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Circuit Breaker & Stall Detection (Global Defaults)</h4>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-                      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Circuit Breaker Threshold</span>
-                      <input type="number" min={1} max={20} className={Input}
-                        value={systemSettings.circuit_breaker_threshold ?? 3}
-                        onChange={e => setSystemSettings({ ...systemSettings, circuit_breaker_threshold: parseInt(e.target.value) })}
-                      />
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-                      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Circuit Breaker Cooldown (s)</span>
-                      <input type="number" step={10} min={10} max={600} className={Input}
-                        value={systemSettings.circuit_breaker_cooldown ?? 60}
-                        onChange={e => setSystemSettings({ ...systemSettings, circuit_breaker_cooldown: parseInt(e.target.value) || 60 })}
-                      />
-                    </div>
-                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4">
-                      <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Stall Timeout (s)</span>
-                      <input type="number" step={10} min={30} max={600} className={Input}
-                        value={systemSettings.stall_timeout_seconds ?? 120}
-                        onChange={e => setSystemSettings({ ...systemSettings, stall_timeout_seconds: parseInt(e.target.value) || 120 })}
-                      />
-                    </div>
-                  </div>
                 </div>
               )}
             </Section>

@@ -26,7 +26,7 @@ import { AnalysisChatWidget } from '../components/analysis/AnalysisChatWidget'
 import { RiskMetricsCard } from '../components/analysis/RiskMetricsCard'
 import { MentalModelTicker } from '../components/analysis/MentalModelTicker'
 import { KellyPositioningCard } from '../components/analysis/KellyPositioningCard'
-import ErrorBoundary from '../components/ErrorBoundary'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 
 interface WsEvent {
   type: string; section?: string; content?: string; signal?: string

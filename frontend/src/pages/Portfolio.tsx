@@ -4,7 +4,7 @@ import { TrendingUp, TrendingDown, DollarSign, Briefcase, Loader2, AlertCircle, 
 import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
 import { exportPortfolioCSV } from '../utils/csvExport'
-import ErrorBoundary from '../components/ErrorBoundary'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 
 interface Holding {
   id: number

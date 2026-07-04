@@ -29,7 +29,7 @@ import { useMeta, triggerMetaRefetch } from '../hooks/useMeta'
 import { useAuth } from '../contexts/AuthContext'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
 import { useTranslation } from '../contexts/LanguageContext'
-import ErrorBoundary from '../components/ErrorBoundary'
+import { ErrorBoundary } from '../components/ErrorBoundary'
 import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
 import type { ToolSettingsPanelHandle } from '../components/settings/ToolSettingsPanel'
 import AgentSettingsPanel from '../components/settings/AgentSettingsPanel'
@@ -145,7 +145,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const [memoryStatus, setMemoryStatus] = useState<any>(null)
   const [pineconeKey, setPineconeKey] = useState('')
   const [pineconeSaving, setPineconeSaving] = useState(false)
-  const loadMemoryStatus = () => axios.get('/api/settings/memory').then(r => setMemoryStatus(r.data)).catch(() => {})
+  const loadMemoryStatus = () => {
+    const url = userId ? `/api/settings/memory?user_id=${userId}` : '/api/settings/memory'
+    axios.get(url).then(r => setMemoryStatus(r.data)).catch(() => {})
+  }
   const [allowedSettings, setAllowedSettings] = useState<string[]>([])
   const [cronStatus, setCronStatus] = useState<{ running: boolean; job_configured: boolean; next_run_time: string | null } | null>(null)
   const meta = useMeta()
@@ -156,9 +159,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   useEffect(() => {
     const settingsUrl = userId ? `/api/settings/users/${userId}` : '/api/settings'
     const permUrl = userId ? `/api/users/${userId}/setting-permissions` : '/api/users/me/setting-permissions'
+    const presetsUrl = userId ? `/api/presets?user_id=${userId}` : '/api/presets'
     Promise.all([
       axios.get(settingsUrl).then(r => r.data),
-      axios.get('/api/presets').then(r => r.data).catch(() => []),
+      axios.get(presetsUrl).then(r => r.data).catch(() => []),
       axios.get(permUrl).then(r => r.data.allowed_settings || r.data.permissions || []).catch(() => []),
       axios.get('/api/cron/status').then(r => r.data).catch(() => null),
     ]).then(([settings, presetList, allowedSet, cStatus]) => {
@@ -166,7 +170,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
       setPresets(presetList)
       setAllowedSettings(userId ? ['general', 'agents', 'tools', 'risk', 'webhooks', 'cron', 'memory', 'presets', 'personas'] : allowedSet)
       setCronStatus(cStatus)
-      if (!userId) loadMemoryStatus()
+      loadMemoryStatus()
 
       const defaultTabs = ['general', 'agents', 'tools', 'risk', 'webhooks', 'cron']
       const activeDefault = defaultTabs.find(tab => userId || allowedSet.includes(tab))
@@ -178,27 +182,33 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     })
   }, [isAdmin, userId])
 
-  const loadPresets = () => axios.get('/api/presets').then(r => setPresets(r.data)).catch(() => {})
+  const loadPresets = () => {
+    const url = userId ? `/api/presets?user_id=${userId}` : '/api/presets'
+    axios.get(url).then(r => setPresets(r.data)).catch(() => {})
+  }
 
   const savePreset = async () => {
     if (!presetName.trim() || !s) return
     setPresetSaving(true)
     try {
-      await axios.post('/api/presets', { name: presetName.trim(), settings_json: JSON.stringify(s) })
+      const url = userId ? `/api/presets?user_id=${userId}` : '/api/presets'
+      await axios.post(url, { name: presetName.trim(), settings_json: JSON.stringify(s) })
       setPresetName('')
       await loadPresets()
     } finally { setPresetSaving(false) }
   }
 
   const applyPreset = async (id: number) => {
-    await axios.post(`/api/presets/${id}/apply`)
+    const url = userId ? `/api/presets/${id}/apply?user_id=${userId}` : `/api/presets/${id}/apply`
+    await axios.post(url)
     const settingsUrl = userId ? `/api/settings/users/${userId}` : '/api/settings'
     const settingsRes = await axios.get(settingsUrl)
     setS(settingsRes.data)
   }
 
   const deletePreset = async (id: number) => {
-    await axios.delete(`/api/presets/${id}`)
+    const url = userId ? `/api/presets/${id}?user_id=${userId}` : `/api/presets/${id}`
+    await axios.delete(url)
     setPresets(prev => prev.filter(p => p.id !== id))
   }
 
@@ -252,13 +262,15 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     if (!pineconeKey.trim()) return
     setPineconeSaving(true)
     try {
-      await axios.put('/api/users/me/api-keys', { provider: 'pinecone', api_key: pineconeKey.trim() })
+      const url = userId ? `/api/users/${userId}/api-keys` : '/api/users/me/api-keys'
+      await axios.put(url, { provider: 'pinecone', api_key: pineconeKey.trim() })
       setPineconeKey('')
       await loadMemoryStatus()
     } finally { setPineconeSaving(false) }
   }
   const deletePineconeKey = async () => {
-    await axios.delete('/api/users/me/api-keys/pinecone').catch(() => {})
+    const url = userId ? `/api/users/${userId}/api-keys/pinecone` : '/api/users/me/api-keys/pinecone'
+    await axios.delete(url).catch(() => {})
     await loadMemoryStatus()
   }
 
@@ -271,9 +283,9 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety', icon: <ShieldAlert size={14} /> },
     { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={14} /> },
     { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={14} /> },
-    ...(userId ? [] : [{ key: 'memory',   label: 'Memory',                          icon: <Database size={14} /> }]),
-    ...(userId ? [] : [{ key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={14} /> }]),
-    ...(userId ? [] : [{ key: 'personas', label: 'Personas',                        icon: <UserCircle size={14} /> }]),
+    { key: 'memory',   label: 'Memory',                          icon: <Database size={14} /> },
+    { key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={14} /> },
+    { key: 'personas', label: 'Personas',                        icon: <UserCircle size={14} /> },
   ].filter(tab => isAdmin || allowedSettings.includes(tab.key))
 
   return (
@@ -894,7 +906,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
           {activeTab === 'personas' && (
             <ErrorBoundary name="SettingsPersonas">
-              <PersonaEditor />
+              <PersonaEditor userId={userId} />
             </ErrorBoundary>
           )}
 
@@ -912,7 +924,7 @@ interface PersonaItem {
   is_builtin: boolean
 }
 
-function PersonaEditor() {
+function PersonaEditor({ userId }: { userId?: number } = {}) {
   const [personas, setPersonas] = useState<PersonaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -923,8 +935,12 @@ function PersonaEditor() {
 
   const load = useCallback(async () => {
     setLoading(true)
-    try { const r = await axios.get('/api/personas'); setPersonas(r.data) } finally { setLoading(false) }
-  }, [])
+    try {
+      const url = userId ? `/api/personas?user_id=${userId}` : '/api/personas'
+      const r = await axios.get(url)
+      setPersonas(r.data)
+    } finally { setLoading(false) }
+  }, [userId])
 
   useEffect(() => { load() }, [load])
 
@@ -936,10 +952,12 @@ function PersonaEditor() {
     setSaving(true); setError(null)
     try {
       if (editKey) {
-        await axios.put(`/api/personas/${editKey}`, { label: form.label, description: form.description, instructions: form.instructions })
+        const url = userId ? `/api/personas/${editKey}?user_id=${userId}` : `/api/personas/${editKey}`
+        await axios.put(url, { label: form.label, description: form.description, instructions: form.instructions })
       } else {
         if (!form.key.trim()) { setError('Key is required'); setSaving(false); return }
-        await axios.post('/api/personas', form)
+        const url = userId ? `/api/personas?user_id=${userId}` : '/api/personas'
+        await axios.post(url, form)
       }
       setShowForm(false); await load()
     } catch (e: unknown) {
@@ -949,7 +967,11 @@ function PersonaEditor() {
   }
 
   const del = async (key: string) => {
-    try { await axios.delete(`/api/personas/${key}`); await load() } catch { /* ignore */ }
+    try {
+      const url = userId ? `/api/personas/${key}?user_id=${userId}` : `/api/personas/${key}`
+      await axios.delete(url)
+      await load()
+    } catch { /* ignore */ }
   }
 
   return (

@@ -30,6 +30,7 @@ _USER_NOT_FOUND = "User not found"
 
 @router.get("/memory", response_model=MemoryStatusResponse)
 async def get_memory_status(
+    user_id: int | None = None,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
@@ -37,9 +38,15 @@ async def get_memory_status(
     from backend.core.config import get_settings as _cfg
     from backend.services.user_service import list_user_api_key_providers
 
+    target_user = current_user
+    if user_id is not None and current_user.is_admin:
+        target_user = await get_user_by_id(db, user_id)
+        if not target_user:
+            raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+
     fernet = _cfg().get_fernet()
-    providers = list_user_api_key_providers(current_user, fernet)
-    settings = await get_or_create_settings(db, current_user)
+    providers = list_user_api_key_providers(target_user, fernet)
+    settings = await get_or_create_settings(db, target_user)
     store_kind = getattr(settings, "memory_store", None) or "pinecone"
     using_openai = store_kind == "pgvector" or settings.memory_embedder == "openai"
     return {

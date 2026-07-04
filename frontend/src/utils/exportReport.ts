@@ -26,8 +26,8 @@ export interface AnalysisForExport {
   final_decision?: string
   bull_history?: string
   bear_history?: string
-  investment_debate_history?: string
-  risk_debate_history?: string
+  investment_debate_history?: string | string[]
+  risk_debate_history?: string | string[]
   judge_decision?: string
   // Metadata
   llm_provider?: string | null
