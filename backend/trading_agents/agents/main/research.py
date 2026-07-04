@@ -45,7 +45,7 @@ async def _safe(label: str, fn, state: dict, fallback: dict) -> dict:
             return await fn(state)
         return fn(state)
     except Exception as exc:  # noqa: BLE001
-        logger.warning("[research_manager] sub '%s' failed: %s — using fallback.", label, exc)
+        logger.warning("[research_manager] sub '%s' failed: %s — using fallback.", label, exc, exc_info=True)
         return fallback
 
 

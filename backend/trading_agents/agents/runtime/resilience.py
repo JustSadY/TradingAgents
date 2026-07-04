@@ -34,6 +34,7 @@ _TRANSIENT_HINTS = (
     "rate limit",
     "ratelimit",
     "429",
+    "resourceexhausted",
     "timeout",
     "timed out",
     "temporar",
@@ -219,7 +220,7 @@ async def _emit_retry_progress(label: str, i: int, attempts: int, exc: Exception
         emitter = ctx["emitter"]
         clean_label = label.replace("analyst:", "").replace("main:", "").title()
         err_msg = str(exc)
-        if "429" in err_msg or "rate_limit" in err_msg.lower() or "rate limit" in err_msg.lower():
+        if "429" in err_msg or "rate_limit" in err_msg.lower() or "rate limit" in err_msg.lower() or "resourceexhausted" in err_msg.lower():
             err_msg = "Rate limit (429) detected"
         elif "503" in err_msg or "service unavailable" in err_msg.lower():
             err_msg = "Service unavailable (503)"

@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import re
+from time import time
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
@@ -148,6 +150,48 @@ async def self_correct_structured(
         return None
 
 
+async def _retry_llm_call(
+    llm: Any,
+    prompt: Any,
+    agent_name: str,
+    max_retries: int = 3,
+    base_delay: float = 2.0,
+    timeout: float = 90.0,
+) -> Any:
+    """Invoke *llm* with retry and exponential backoff, handling rate limits.
+
+    ``ResourceExhausted`` / 429 / 503 errors trigger a longer backoff (up to 60s).
+    """
+    last_exc: Exception | None = None
+    for attempt in range(max_retries):
+        try:
+            return await asyncio.wait_for(llm.ainvoke(prompt), timeout=timeout)
+        except Exception as exc:
+            last_exc = exc
+            err_msg = str(exc).lower()
+            is_rate_limit = (
+                "resourceexhausted" in err_msg
+                or "429" in err_msg
+                or "rate limit" in err_msg
+                or "rate_limit" in err_msg
+                or "503" in err_msg
+                or "service unavailable" in err_msg
+            )
+            delay = base_delay * (4**attempt) if is_rate_limit else base_delay * (2**attempt)
+            delay = min(delay, 60.0)
+            if attempt + 1 < max_retries:
+                logger.warning(
+                    "%s: LLM call failed (attempt %d/%d, retry in %.0fs): %s",
+                    agent_name,
+                    attempt + 1,
+                    max_retries,
+                    delay,
+                    exc,
+                )
+                await asyncio.sleep(delay)
+    raise last_exc  # type: ignore[misc]
+
+
 async def ainvoke_structured_or_freetext(
     structured_llm: Any | None,
     plain_llm: Any,
@@ -163,7 +207,7 @@ async def ainvoke_structured_or_freetext(
     # 1. Attempt structured LLM if configured
     if structured_llm is not None:
         try:
-            result = await structured_llm.ainvoke(prompt)
+            result = await _retry_llm_call(structured_llm, prompt, agent_name)
             if schema is None:
                 return result
             return _coerce_structured_result(result, schema)
@@ -174,8 +218,8 @@ async def ainvoke_structured_or_freetext(
                 exc,
             )
 
-    # 2. Call plain LLM
-    response = await plain_llm.ainvoke(prompt)
+    # 2. Call plain LLM with retry
+    response = await _retry_llm_call(plain_llm, prompt, agent_name)
     raw_text = response.content if hasattr(response, "content") else str(response)
 
     # If no schema was requested, we return raw text content

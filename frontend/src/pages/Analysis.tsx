@@ -275,7 +275,7 @@ function RunTab() {
       if (ev.type === 'status') {
         appendLog(`${ev.agent}`)
       } else if (ev.type === 'progress') {
-        setCurrentStep({ label: ev.label || '', stage: ev.stage || '' })
+        setCurrentStep(prev => prev?.label === ev.label && prev?.stage === ev.stage ? prev : { label: ev.label || '', stage: ev.stage || '' })
         appendLog(`Progress: ${ev.label}`)
       } else if (ev.type === 'token' && ev.agent && ev.token) {
         let reportKey = ev.agent
@@ -297,12 +297,16 @@ function RunTab() {
           const prevContent = r[reportKey] || ''
           return { ...r, [reportKey]: prevContent + ev.token }
         })
-        setActiveSection(reportKey)
+        setActiveSection(prev => prev === reportKey ? prev : reportKey)
       } else if (ev.type === 'stats') {
-        setStats({ llmCalls: ev.llm_calls || 0, tokensIn: ev.tokens_in || 0, tokensOut: ev.tokens_out || 0 })
+        setStats(prev => {
+          const next = { llmCalls: ev.llm_calls || 0, tokensIn: ev.tokens_in || 0, tokensOut: ev.tokens_out || 0 }
+          if (prev?.llmCalls === next.llmCalls && prev?.tokensIn === next.tokensIn && prev?.tokensOut === next.tokensOut) return prev
+          return next
+        })
       } else if (ev.type === 'report' && ev.section && ev.content) {
         setReports(r => ({ ...r, [ev.section!]: ev.content! }))
-        setActiveSection(ev.section)
+        setActiveSection(prev => prev === ev.section ? prev : ev.section!)
         appendLog(`Completed: ${sectionLabelsRef.current[ev.section!] || ev.section}`)
       } else if (ev.type === 'mental_model' && ev.agent && ev.thought) {
         setMentalModel({ agent: ev.agent, thought: ev.thought })
