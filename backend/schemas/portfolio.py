@@ -38,6 +38,13 @@ class PortfolioRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class CorrelationResponse(BaseModel):
+    tickers: list[str]
+    matrix: list[list]
+    avg_correlation: float | None
+    warning: str | None
+
+
 class OrderRead(BaseModel):
     id: int
     portfolio_id: int

@@ -61,3 +61,31 @@ class PagePermissionsUpdate(BaseModel):
 
 class PagePermissionsRead(BaseModel):
     allowed_pages: list[str]
+
+
+class ApiKeyProvidersResponse(BaseModel):
+    providers: list[str]
+
+
+class SettingPermissionsResponse(BaseModel):
+    allowed_settings: list[str]
+
+
+class UserPermissionsResponse(BaseModel):
+    user_id: int
+    permissions: dict[str, bool]
+
+
+class AgentAccessUpdateResponse(BaseModel):
+    detail: str
+    agents: dict
+
+
+class ToolAccessUpdateResponse(BaseModel):
+    detail: str
+    tools: dict
+
+
+class ToolFieldAccessUpdateResponse(BaseModel):
+    detail: str
+    fields: dict

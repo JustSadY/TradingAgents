@@ -7,7 +7,7 @@ from backend.api.deps import get_current_user
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.repositories.permissions import get_user_setting_permission
-from backend.schemas.preset import PresetCreate, PresetRead
+from backend.schemas.preset import PresetApplyResponse, PresetCreate, PresetDeleteResponse, PresetRead
 
 router = APIRouter(prefix="/api/presets", tags=["presets"])
 _logger = logging.getLogger(__name__)
@@ -55,7 +55,9 @@ async def create_preset_run(
 
 
 @router.delete(
-    "/{preset_id}", responses={403: {"description": "Permission denied"}, 404: {"description": "Template not found"}}
+    "/{preset_id}",
+    response_model=PresetDeleteResponse,
+    responses={403: {"description": "Permission denied"}, 404: {"description": "Template not found"}},
 )
 async def delete_preset(
     preset_id: int,
@@ -74,6 +76,7 @@ async def delete_preset(
 
 @router.post(
     "/{preset_id}/apply",
+    response_model=PresetApplyResponse,
     responses={
         403: {"description": "Permission denied"},
         404: {"description": "Template not found"},

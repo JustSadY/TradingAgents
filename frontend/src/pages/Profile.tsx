@@ -1,4 +1,4 @@
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, useRef } from 'react'
 import axios from 'axios'
 import { Save, Key, Trash2, Eye, EyeOff, CheckCircle2, User2 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
@@ -140,6 +140,8 @@ export default function Profile() {
   const [profileForm, setProfileForm] = useState({ email: '', display_name: '', password: '', password2: '' })
   const [profileSaved, setProfileSaved] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
+  const profileTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => { return () => { if (profileTimeoutRef.current) clearTimeout(profileTimeoutRef.current) } }, [])
 
   const providerLabels = meta?.provider_labels
   const providers = useMemo(() => {
@@ -175,7 +177,7 @@ export default function Profile() {
       if (profileForm.password) body.password = profileForm.password
       await axios.put('/api/users/me', body)
       setProfileSaved(true)
-      setTimeout(() => setProfileSaved(false), 2500)
+      profileTimeoutRef.current = setTimeout(() => setProfileSaved(false), 2500)
       await load()
     } catch (err: any) {
       setProfileError(err.response?.data?.detail || t('profile.save_error'))

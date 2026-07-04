@@ -13,7 +13,9 @@ from backend.models.user import User
 from backend.repositories.permissions import list_allowed_setting_sections
 from backend.repositories.users import get_user_by_id
 from backend.schemas.agent_settings import AgentSettingsRead, AgentSettingsUpdate
-from backend.schemas.settings import SettingsRead, SettingsUpdate
+from backend.schemas.settings import MemoryStatusResponse, SettingsRead, SettingsUpdate
+from backend.schemas.common import OkResponse
+from backend.schemas.webhook import WebhookDeliveryRead
 from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate
 from backend.services.settings_service import (
     apply_settings_update,
@@ -26,7 +28,7 @@ router = APIRouter(prefix="/api/settings", tags=["settings"])
 _USER_NOT_FOUND = "User not found"
 
 
-@router.get("/memory")
+@router.get("/memory", response_model=MemoryStatusResponse)
 async def get_memory_status(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -134,7 +136,7 @@ def _validate_webhook_url(url: str) -> None:
             raise HTTPException(status_code=400, detail="Webhook URL resolves to a disallowed internal address")
 
 
-@router.post("/test-webhook", responses={400: {"description": "Invalid webhook URL or delivery failed"}})
+@router.post("/test-webhook", response_model=OkResponse, responses={400: {"description": "Invalid webhook URL or delivery failed"}})
 async def test_webhook(body: WebhookTestRequest, _: User = Depends(get_current_user)):
     _validate_webhook_url(body.url)
     payload = {
@@ -151,7 +153,7 @@ async def test_webhook(body: WebhookTestRequest, _: User = Depends(get_current_u
     return {"ok": True}
 
 
-@router.get("/webhook-deliveries")
+@router.get("/webhook-deliveries", response_model=list[WebhookDeliveryRead])
 async def get_webhook_deliveries(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -160,15 +162,15 @@ async def get_webhook_deliveries(
 
     rows = await get_webhook_deliveries_svc(db, current_user.id, 20)
     return [
-        {
-            "id": r.id,
-            "event": r.event,
-            "url": r.url,
-            "success": r.success,
-            "status_code": r.status_code,
-            "error": r.error,
-            "created_at": r.created_at.isoformat(),
-        }
+        WebhookDeliveryRead(
+            id=r.id,
+            event=r.event,
+            url=r.url,
+            success=r.success,
+            status_code=r.status_code,
+            error=r.error,
+            created_at=r.created_at.isoformat(),
+        )
         for r in rows
     ]
 

@@ -29,6 +29,7 @@ import { useMeta, triggerMetaRefetch } from '../hooks/useMeta'
 import { useAuth } from '../contexts/AuthContext'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
 import { useTranslation } from '../contexts/LanguageContext'
+import ErrorBoundary from '../components/ErrorBoundary'
 import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
 import type { ToolSettingsPanelHandle } from '../components/settings/ToolSettingsPanel'
 import AgentSettingsPanel from '../components/settings/AgentSettingsPanel'
@@ -131,6 +132,8 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const [webhookTestResult, setWebhookTestResult] = useState<string | null>(null)
   const [deliveries, setDeliveries] = useState<DeliveryRecord[]>([])
   const [loadingDeliveries, setLoadingDeliveries] = useState(false)
+  const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => { return () => { if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current) } }, [])
   const loadDeliveries = useCallback(() => {
     setLoadingDeliveries(true)
     axios.get<DeliveryRecord[]>('/api/settings/webhook-deliveries')
@@ -175,7 +178,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     })
   }, [isAdmin, userId])
 
-  const loadPresets = () => axios.get('/api/presets').then(r => setPresets(r.data))
+  const loadPresets = () => axios.get('/api/presets').then(r => setPresets(r.data)).catch(() => {})
 
   const savePreset = async () => {
     if (!presetName.trim() || !s) return
@@ -233,7 +236,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
         await toolPanelRef.current.save()
       }
       setSaved(true)
-      setTimeout(() => setSaved(false), 2000)
+      savedTimeoutRef.current = setTimeout(() => setSaved(false), 2000)
     } catch (err: any) {
       setSaveError(err.message || err.response?.data?.detail || t('settings.save_error_default'))
     } finally {
@@ -316,267 +319,272 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
           {/* Preferences */}
           {activeTab === 'general' && (
-            <div className="space-y-4">
-              <Section title={t('settings.general') || 'Preferences'}>
-                <Row label={t('settings.row_output_language')}>
-                  <select className={Input} value={s.output_language} onChange={e => update('output_language', e.target.value)}>
-                    {languages.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
-                  </select>
-                </Row>
-                <Row label={t('settings.row_investor_persona')}>
-                  <select className={Input} value={s.investor_persona} onChange={e => update('investor_persona', e.target.value)}>
-                    {(meta?.investor_personas ?? []).map(p => (
-                      <option key={p.value} value={p.value}>
-                        {t(`settings.persona_${p.value}`) || p.label}
-                      </option>
-                    ))}
-                  </select>
-                </Row>
-                <Row label={t('settings.row_benchmark_symbol')}>
-                  <input className={Input} value={s.benchmark_ticker || ''} onChange={e => update('benchmark_ticker', e.target.value || null)} placeholder={t('settings.benchmark_placeholder')} />
-                </Row>
-              </Section>
+            <ErrorBoundary name="SettingsGeneral">
+              <div className="space-y-4">
+                <Section title={t('settings.general') || 'Preferences'}>
+                  <Row label={t('settings.row_output_language')}>
+                    <select className={Input} value={s.output_language} onChange={e => update('output_language', e.target.value)}>
+                      {languages.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+                    </select>
+                  </Row>
+                  <Row label={t('settings.row_investor_persona')}>
+                    <select className={Input} value={s.investor_persona} onChange={e => update('investor_persona', e.target.value)}>
+                      {(meta?.investor_personas ?? []).map(p => (
+                        <option key={p.value} value={p.value}>
+                          {t(`settings.persona_${p.value}`) || p.label}
+                        </option>
+                      ))}
+                    </select>
+                  </Row>
+                  <Row label={t('settings.row_benchmark_symbol')}>
+                    <input className={Input} value={s.benchmark_ticker || ''} onChange={e => update('benchmark_ticker', e.target.value || null)} placeholder={t('settings.benchmark_placeholder')} />
+                  </Row>
+                </Section>
 
-              <Section title="News & Sentiment Limits">
-                <Row label="News Article Limit">
-                  <input type="number" min={1} max={100} className={Input} value={s.news_article_limit ?? 20} onChange={e => update('news_article_limit', parseInt(e.target.value) || 20)} />
-                </Row>
-                <Row label="Global News Limit">
-                  <input type="number" min={1} max={100} className={Input} value={s.global_news_article_limit ?? 10} onChange={e => update('global_news_article_limit', parseInt(e.target.value) || 10)} />
-                </Row>
-                <Row label="Global News Lookback (Days)">
-                  <input type="number" min={1} max={90} className={Input} value={s.global_news_lookback_days ?? 7} onChange={e => update('global_news_lookback_days', parseInt(e.target.value) || 7)} />
-                </Row>
-              </Section>
+                <Section title="News & Sentiment Limits">
+                  <Row label="News Article Limit">
+                    <input type="number" min={1} max={100} className={Input} value={s.news_article_limit ?? 20} onChange={e => update('news_article_limit', parseInt(e.target.value) || 20)} />
+                  </Row>
+                  <Row label="Global News Limit">
+                    <input type="number" min={1} max={100} className={Input} value={s.global_news_article_limit ?? 10} onChange={e => update('global_news_article_limit', parseInt(e.target.value) || 10)} />
+                  </Row>
+                  <Row label="Global News Lookback (Days)">
+                    <input type="number" min={1} max={90} className={Input} value={s.global_news_lookback_days ?? 7} onChange={e => update('global_news_lookback_days', parseInt(e.target.value) || 7)} />
+                  </Row>
+                </Section>
 
-              <Section title={t('settings.llm_settings') || 'Core Engine Configuration'}>
-                <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed mb-2">
-                  Global LLM settings and performance parameters. Per-agent models are configured in the AI Configuration tab.
-                </p>
+                <Section title={t('settings.llm_settings') || 'Core Engine Configuration'}>
+                  <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed mb-2">
+                    Global LLM settings and performance parameters. Per-agent models are configured in the AI Configuration tab.
+                  </p>
 
-                <Row label={t('settings.row_llm_provider') || 'LLM Provider'}>
-                  <select
-                    className={Input}
-                    value={s.llm_provider}
-                    onChange={e => {
-                      update('llm_provider', e.target.value)
-                      update('llm_model', '')
-                    }}
-                  >
-                    {Object.entries(meta?.provider_labels ?? {}).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </select>
-                </Row>
-                <Row label={t('settings.row_llm_model') || 'LLM Model'}>
-                  <input
-                    className={Input}
-                    value={s.llm_model}
-                    onChange={e => update('llm_model', e.target.value)}
-                    placeholder={t('settings.llm_model_placeholder') || 'e.g. gpt-4o-mini'}
-                  />
-                </Row>
+                  <Row label={t('settings.row_llm_provider') || 'LLM Provider'}>
+                    <select
+                      className={Input}
+                      value={s.llm_provider}
+                      onChange={e => {
+                        update('llm_provider', e.target.value)
+                        update('llm_model', '')
+                      }}
+                    >
+                      {Object.entries(meta?.provider_labels ?? {}).map(([key, label]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                  </Row>
+                  <Row label={t('settings.row_llm_model') || 'LLM Model'}>
+                    <input
+                      className={Input}
+                      value={s.llm_model}
+                      onChange={e => update('llm_model', e.target.value)}
+                      placeholder={t('settings.llm_model_placeholder') || 'e.g. gpt-4o-mini'}
+                    />
+                  </Row>
 
-                <Row label={t('settings.row_fallback_provider')}>
-                  <select
-                    className={Input}
-                    value={s.fallback_llm_provider || ''}
-                    onChange={e => {
-                      const v = e.target.value || null
-                      update('fallback_llm_provider', v)
-                      if (!v) update('fallback_llm_model', null)
-                    }}
-                  >
-                    <option value="">{t('settings.fallback_disabled')}</option>
-                    {Object.entries(meta?.provider_labels ?? {}).map(([key, label]) => (
-                      <option key={key} value={key}>{label}</option>
-                    ))}
-                  </select>
-                </Row>
-                {s.fallback_llm_provider && (
-                  <>
-                    <Row label={t('settings.row_fallback_model')}>
-                      <input
-                        className={Input}
-                        value={s.fallback_llm_model || ''}
-                        onChange={e => update('fallback_llm_model', e.target.value || null)}
-                        placeholder={t('settings.fallback_model_placeholder')}
-                      />
-                    </Row>
-                    <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed">
-                      {t('settings.fallback_hint')}
-                    </p>
-                  </>
-                )}
+                  <Row label={t('settings.row_fallback_provider')}>
+                    <select
+                      className={Input}
+                      value={s.fallback_llm_provider || ''}
+                      onChange={e => {
+                        const v = e.target.value || null
+                        update('fallback_llm_provider', v)
+                        if (!v) update('fallback_llm_model', null)
+                      }}
+                    >
+                      <option value="">{t('settings.fallback_disabled')}</option>
+                      {Object.entries(meta?.provider_labels ?? {}).map(([key, label]) => (
+                        <option key={key} value={key}>{label}</option>
+                      ))}
+                    </select>
+                  </Row>
+                  {s.fallback_llm_provider && (
+                    <>
+                      <Row label={t('settings.row_fallback_model')}>
+                        <input
+                          className={Input}
+                          value={s.fallback_llm_model || ''}
+                          onChange={e => update('fallback_llm_model', e.target.value || null)}
+                          placeholder={t('settings.fallback_model_placeholder')}
+                        />
+                      </Row>
+                      <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed">
+                        {t('settings.fallback_hint')}
+                      </p>
+                    </>
+                  )}
 
-                <Row label="Reasoning Effort">
-                  <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>
-                    <option value="">{t('settings.effort_default')}</option>
-                    <option value="low">{t('settings.effort_low_fast_cheap')}</option>
-                    <option value="medium">{t('settings.effort_medium_balanced')}</option>
-                    <option value="high">{t('settings.effort_high_deep')}</option>
-                  </select>
-                </Row>
-                
-                <Row label="Thinking Effort">
-                  <select className={Input} value={s.anthropic_effort || ''} onChange={e => update('anthropic_effort', e.target.value || null)}>
-                    <option value="">{t('settings.effort_default')}</option>
-                    <option value="low">{t('settings.effort_low_fast')}</option>
-                    <option value="medium">{t('settings.effort_medium_balanced')}</option>
-                    <option value="high">{t('settings.effort_high_extended')}</option>
-                  </select>
-                </Row>
-                
-                <Row label="Thinking Level">
-                  <select className={Input} value={s.google_thinking_level || ''} onChange={e => update('google_thinking_level', e.target.value || null)}>
-                    <option value="">{t('settings.effort_default')}</option>
-                    <option value="minimal">{t('settings.effort_minimal_fastest')}</option>
-                    <option value="low">Low</option>
-                    <option value="medium">Medium</option>
-                    <option value="high">{t('settings.effort_high_deepest')}</option>
-                  </select>
-                </Row>
+                  <Row label="Reasoning Effort">
+                    <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>
+                      <option value="">{t('settings.effort_default')}</option>
+                      <option value="low">{t('settings.effort_low_fast_cheap')}</option>
+                      <option value="medium">{t('settings.effort_medium_balanced')}</option>
+                      <option value="high">{t('settings.effort_high_deep')}</option>
+                    </select>
+                  </Row>
+                  
+                  <Row label="Thinking Effort">
+                    <select className={Input} value={s.anthropic_effort || ''} onChange={e => update('anthropic_effort', e.target.value || null)}>
+                      <option value="">{t('settings.effort_default')}</option>
+                      <option value="low">{t('settings.effort_low_fast')}</option>
+                      <option value="medium">{t('settings.effort_medium_balanced')}</option>
+                      <option value="high">{t('settings.effort_high_extended')}</option>
+                    </select>
+                  </Row>
+                  
+                  <Row label="Thinking Level">
+                    <select className={Input} value={s.google_thinking_level || ''} onChange={e => update('google_thinking_level', e.target.value || null)}>
+                      <option value="">{t('settings.effort_default')}</option>
+                      <option value="minimal">{t('settings.effort_minimal_fastest')}</option>
+                      <option value="low">Low</option>
+                      <option value="medium">Medium</option>
+                      <option value="high">{t('settings.effort_high_deepest')}</option>
+                    </select>
+                  </Row>
 
-                <Row label={t('settings.row_max_recursion')}>
-                  <input
-                    type="number"
-                    min="1"
-                    max="5000"
-                    className={Input}
-                    value={s.max_recur_limit}
-                    onChange={e => update('max_recur_limit', Number.parseInt(e.target.value) || 1000)}
-                  />
-                </Row>
-              </Section>
-            </div>
+                  <Row label={t('settings.row_max_recursion')}>
+                    <input
+                      type="number"
+                      min="1"
+                      max="5000"
+                      className={Input}
+                      value={s.max_recur_limit}
+                      onChange={e => update('max_recur_limit', Number.parseInt(e.target.value) || 1000)}
+                    />
+                  </Row>
+                </Section>
+              </div>
+            </ErrorBoundary>
           )}
 
           {/* Risk Management */}
           {activeTab === 'risk' && (
-            <Section title={t('settings.section_risk') || 'Risk Management'}>
-              <Row label={t('settings.row_risk_per_trade')}>
-                <input type="number" step="0.1" min="0.1" max="50" className={Input} value={s.max_risk_per_trade_pct} onChange={e => update('max_risk_per_trade_pct', Number.parseFloat(e.target.value))} />
-              </Row>
-              <Row label={t('settings.row_max_position_size')}>
-                <input type="number" step="1" min="1" max="100" className={Input} value={s.max_position_size_pct} onChange={e => update('max_position_size_pct', Number.parseFloat(e.target.value))} />
-              </Row>
-              <Row label={t('settings.row_debate_rounds')}>
-                <input type="number" min="1" max="10" className={Input} value={s.max_debate_rounds} onChange={e => update('max_debate_rounds', Number.parseInt(e.target.value))} />
-              </Row>
-              <Row label={t('settings.row_risk_rounds')}>
-                <input type="number" min="1" max="10" className={Input} value={s.max_risk_rounds} onChange={e => update('max_risk_rounds', Number.parseInt(e.target.value))} />
-              </Row>
-              <Row label={t('settings.row_price_tolerance')}>
-                <input type="number" step="0.1" min="0" max="10" className={Input} value={s.price_tolerance_pct} onChange={e => update('price_tolerance_pct', Number.parseFloat(e.target.value))} />
-              </Row>
-              <Row label={t('settings.row_parallel_analysts')}>
-                <input type="number" min="1" max="16" className={Input} value={s.analyst_concurrency_limit} onChange={e => update('analyst_concurrency_limit', Number.parseInt(e.target.value))} />
-              </Row>
-
-              <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
-                <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Agent Run Resilience</h4>
-                <Row label={t('settings.row_node_retry_attempts') || 'Node Retry Attempts'}>
-                  <input type="number" min="1" max="10" className={Input} value={s.node_retry_attempts ?? 2} onChange={e => update('node_retry_attempts', Number.parseInt(e.target.value))} />
+            <ErrorBoundary name="SettingsRisk">
+              <Section title={t('settings.section_risk') || 'Risk Management'}>
+                <Row label={t('settings.row_risk_per_trade')}>
+                  <input type="number" step="0.1" min="0.1" max="50" className={Input} value={s.max_risk_per_trade_pct} onChange={e => update('max_risk_per_trade_pct', Number.parseFloat(e.target.value))} />
                 </Row>
-                <Row label={t('settings.row_node_retry_base_delay') || 'Retry Base Delay (s)'}>
-                  <input type="number" step="0.1" min="0.1" max="10" className={Input} value={s.node_retry_base_delay ?? 1.0} onChange={e => update('node_retry_base_delay', Number.parseFloat(e.target.value))} />
+                <Row label={t('settings.row_max_position_size')}>
+                  <input type="number" step="1" min="1" max="100" className={Input} value={s.max_position_size_pct} onChange={e => update('max_position_size_pct', Number.parseFloat(e.target.value))} />
                 </Row>
-                <Row label={t('settings.row_node_timeout_seconds') || 'Node Timeout (s)'}>
-                  <input type="number" step="10" min="30" max="600" className={Input} value={s.node_timeout_seconds ?? 120} onChange={e => update('node_timeout_seconds', Number.parseInt(e.target.value) || 120)} />
+                <Row label={t('settings.row_debate_rounds')}>
+                  <input type="number" min="1" max="10" className={Input} value={s.max_debate_rounds} onChange={e => update('max_debate_rounds', Number.parseInt(e.target.value))} />
                 </Row>
-                <Row label={t('settings.row_tool_timeout_seconds') || 'Tool Timeout (s)'}>
-                  <input type="number" step="5" min="15" max="300" className={Input} value={s.tool_timeout_seconds ?? 60} onChange={e => update('tool_timeout_seconds', Number.parseInt(e.target.value) || 60)} />
+                <Row label={t('settings.row_risk_rounds')}>
+                  <input type="number" min="1" max="10" className={Input} value={s.max_risk_rounds} onChange={e => update('max_risk_rounds', Number.parseInt(e.target.value))} />
                 </Row>
-                <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.hard_timeout_hint') || 'Hard wall-clock limits per node / tool. If exceeded the call is treated as a transient error and retried automatically.'}</p>
-              </div>
-
-              <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
-                <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Circuit Breaker & Stall Detection</h4>
-                <Row label={t('settings.row_circuit_breaker_threshold') || 'Circuit Breaker Threshold'}>
-                  <input type="number" min="1" max="20" className={Input} value={s.circuit_breaker_threshold ?? 3} onChange={e => update('circuit_breaker_threshold', Number.parseInt(e.target.value))} />
+                <Row label={t('settings.row_price_tolerance')}>
+                  <input type="number" step="0.1" min="0" max="10" className={Input} value={s.price_tolerance_pct} onChange={e => update('price_tolerance_pct', Number.parseFloat(e.target.value))} />
                 </Row>
-                <Row label={t('settings.row_circuit_breaker_cooldown') || 'Circuit Breaker Cooldown (s)'}>
-                  <input type="number" step="10" min="10" max="600" className={Input} value={s.circuit_breaker_cooldown ?? 60} onChange={e => update('circuit_breaker_cooldown', Number.parseInt(e.target.value) || 60)} />
-                </Row>
-                <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.circuit_breaker_hint') || 'After N consecutive failures of the same node, short-circuit it and skip directly to fallback for a cooldown period.'}</p>
-                <Row label={t('settings.row_stall_timeout_seconds') || 'Stall Timeout (s)'}>
-                  <input type="number" step="10" min="30" max="600" className={Input} value={s.stall_timeout_seconds ?? 120} onChange={e => update('stall_timeout_seconds', Number.parseInt(e.target.value) || 120)} />
-                </Row>
-                <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.stall_hint') || 'If no node produces output for this many seconds, emit a stall warning via WebSocket.'}</p>
-              </div>
-
-              <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
-                <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">{t('settings.token_budget') || 'Token Budget'}</h4>
-                <p className="text-[10px] text-slate-500 px-1 leading-snug">{t('settings.token_budget_hint') || 'Lower values reduce LLM token cost per analysis at the expense of how much detail each agent re-reads.'}</p>
-
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_prompt_caching') || 'Anthropic Prompt Caching'}</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.anthropic_prompt_caching ?? true} onChange={e => update('anthropic_prompt_caching', e.target.checked)} />
-                </label>
-                <Row label={t('settings.row_max_report_chars') || 'Max Report Chars / Prompt'}>
-                  <input type="number" min="500" max="50000" step="500" className={Input} value={s.max_report_chars_in_prompts ?? 6000} onChange={e => update('max_report_chars_in_prompts', Number.parseInt(e.target.value) || 6000)} />
-                </Row>
-                <Row label={t('settings.row_max_debate_history') || 'Max Debate History Chars'}>
-                  <input type="number" min="1000" max="100000" step="1000" className={Input} value={s.max_debate_history_chars ?? 8000} onChange={e => update('max_debate_history_chars', Number.parseInt(e.target.value) || 8000)} />
-                </Row>
-                <Row label={t('settings.row_max_tool_output') || 'Max Tool Output Chars'}>
-                  <input type="number" min="1000" max="100000" step="1000" className={Input} value={s.max_tool_output_chars ?? 12000} onChange={e => update('max_tool_output_chars', Number.parseInt(e.target.value) || 12000)} />
+                <Row label={t('settings.row_parallel_analysts')}>
+                  <input type="number" min="1" max="16" className={Input} value={s.analyst_concurrency_limit} onChange={e => update('analyst_concurrency_limit', Number.parseInt(e.target.value))} />
                 </Row>
 
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group mt-1">
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_summary_only_mode') || 'Summary-Only Reports'}</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.summary_only_mode ?? false} onChange={e => update('summary_only_mode', e.target.checked)} />
-                </label>
-                <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.summary_only_mode_hint') || 'When enabled, downstream agents only see executive summaries — reducing token usage significantly.'}</p>
-
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group mt-1">
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_prefilter_enabled') || 'Pre-screen Weak Analysts'}</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.analyst_prefilter_enabled ?? false} onChange={e => update('analyst_prefilter_enabled', e.target.checked)} />
-                </label>
-                <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.prefilter_hint') || 'Skip analysts whose past calls on the analysed ticker have a poor hit rate. Needs realized history; core analysts are always kept.'}</p>
-                {s.analyst_prefilter_enabled && (
-                  <>
-                    <Row label={t('settings.row_prefilter_min_samples') || 'Min. Graded Calls'}>
-                      <input type="number" min="1" max="100" className={Input} value={s.analyst_prefilter_min_samples ?? 5} onChange={e => update('analyst_prefilter_min_samples', Number.parseInt(e.target.value) || 5)} />
-                    </Row>
-                    <Row label={t('settings.row_prefilter_max_win_rate') || 'Drop Below Win Rate (%)'}>
-                      <input type="number" min="0" max="100" step="1" className={Input} value={s.analyst_prefilter_max_win_rate ?? 40} onChange={e => update('analyst_prefilter_max_win_rate', Number.parseFloat(e.target.value) || 40)} />
-                    </Row>
-                  </>
-                )}
-              </div>
-
-              <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
-                <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Institutional Features</h4>
-
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_strict_stop_loss')}</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.strict_stop_loss_mode} onChange={e => update('strict_stop_loss_mode', e.target.checked)} />
-                </label>
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_correlation_risk')}</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.correlation_risk_enabled} onChange={e => update('correlation_risk_enabled', e.target.checked)} />
-                </label>
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_quality_gate')}</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.quality_gate_enabled} onChange={e => update('quality_gate_enabled', e.target.checked)} />
-                </label>
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_drawdown_breaker')}</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.drawdown_breaker_enabled} onChange={e => update('drawdown_breaker_enabled', e.target.checked)} />
-                </label>
-                {s.drawdown_breaker_enabled && (
-                  <div className="flex items-center justify-between p-2">
-                    <span className="text-xs font-semibold text-slate-400">{t('settings.row_max_drawdown_pct')}</span>
-                    <input type="number" min={1} max={100} className={`${Input} w-24 text-right`} value={s.max_portfolio_drawdown_pct} onChange={e => update('max_portfolio_drawdown_pct', Number(e.target.value))} />
-                  </div>
-                )}
+                <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
+                  <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Agent Run Resilience</h4>
+                  <Row label={t('settings.row_node_retry_attempts') || 'Node Retry Attempts'}>
+                    <input type="number" min="1" max="10" className={Input} value={s.node_retry_attempts ?? 2} onChange={e => update('node_retry_attempts', Number.parseInt(e.target.value))} />
+                  </Row>
+                  <Row label={t('settings.row_node_retry_base_delay') || 'Retry Base Delay (s)'}>
+                    <input type="number" step="0.1" min="0.1" max="10" className={Input} value={s.node_retry_base_delay ?? 1.0} onChange={e => update('node_retry_base_delay', Number.parseFloat(e.target.value))} />
+                  </Row>
+                  <Row label={t('settings.row_node_timeout_seconds') || 'Node Timeout (s)'}>
+                    <input type="number" step="10" min="30" max="600" className={Input} value={s.node_timeout_seconds ?? 120} onChange={e => update('node_timeout_seconds', Number.parseInt(e.target.value) || 120)} />
+                  </Row>
+                  <Row label={t('settings.row_tool_timeout_seconds') || 'Tool Timeout (s)'}>
+                    <input type="number" step="5" min="15" max="300" className={Input} value={s.tool_timeout_seconds ?? 60} onChange={e => update('tool_timeout_seconds', Number.parseInt(e.target.value) || 60)} />
+                  </Row>
+                  <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.hard_timeout_hint') || 'Hard wall-clock limits per node / tool. If exceeded the call is treated as a transient error and retried automatically.'}</p>
                 </div>
-            </Section>
+
+                <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
+                  <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Circuit Breaker & Stall Detection</h4>
+                  <Row label={t('settings.row_circuit_breaker_threshold') || 'Circuit Breaker Threshold'}>
+                    <input type="number" min="1" max="20" className={Input} value={s.circuit_breaker_threshold ?? 3} onChange={e => update('circuit_breaker_threshold', Number.parseInt(e.target.value))} />
+                  </Row>
+                  <Row label={t('settings.row_circuit_breaker_cooldown') || 'Circuit Breaker Cooldown (s)'}>
+                    <input type="number" step="10" min="10" max="600" className={Input} value={s.circuit_breaker_cooldown ?? 60} onChange={e => update('circuit_breaker_cooldown', Number.parseInt(e.target.value) || 60)} />
+                  </Row>
+                  <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.circuit_breaker_hint') || 'After N consecutive failures of the same node, short-circuit it and skip directly to fallback for a cooldown period.'}</p>
+                  <Row label={t('settings.row_stall_timeout_seconds') || 'Stall Timeout (s)'}>
+                    <input type="number" step="10" min="30" max="600" className={Input} value={s.stall_timeout_seconds ?? 120} onChange={e => update('stall_timeout_seconds', Number.parseInt(e.target.value) || 120)} />
+                  </Row>
+                  <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.stall_hint') || 'If no node produces output for this many seconds, emit a stall warning via WebSocket.'}</p>
+                </div>
+
+                <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
+                  <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">{t('settings.token_budget') || 'Token Budget'}</h4>
+                  <p className="text-[10px] text-slate-500 px-1 leading-snug">{t('settings.token_budget_hint') || 'Lower values reduce LLM token cost per analysis at the expense of how much detail each agent re-reads.'}</p>
+
+                  <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_prompt_caching') || 'Anthropic Prompt Caching'}</span>
+                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.anthropic_prompt_caching ?? true} onChange={e => update('anthropic_prompt_caching', e.target.checked)} />
+                  </label>
+                  <Row label={t('settings.row_max_report_chars') || 'Max Report Chars / Prompt'}>
+                    <input type="number" min="500" max="50000" step="500" className={Input} value={s.max_report_chars_in_prompts ?? 6000} onChange={e => update('max_report_chars_in_prompts', Number.parseInt(e.target.value) || 6000)} />
+                  </Row>
+                  <Row label={t('settings.row_max_debate_history') || 'Max Debate History Chars'}>
+                    <input type="number" min="1000" max="100000" step="1000" className={Input} value={s.max_debate_history_chars ?? 8000} onChange={e => update('max_debate_history_chars', Number.parseInt(e.target.value) || 8000)} />
+                  </Row>
+                  <Row label={t('settings.row_max_tool_output') || 'Max Tool Output Chars'}>
+                    <input type="number" min="1000" max="100000" step="1000" className={Input} value={s.max_tool_output_chars ?? 12000} onChange={e => update('max_tool_output_chars', Number.parseInt(e.target.value) || 12000)} />
+                  </Row>
+
+                  <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group mt-1">
+                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_summary_only_mode') || 'Summary-Only Reports'}</span>
+                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.summary_only_mode ?? false} onChange={e => update('summary_only_mode', e.target.checked)} />
+                  </label>
+                  <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.summary_only_mode_hint') || 'When enabled, downstream agents only see executive summaries — reducing token usage significantly.'}</p>
+
+                  <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group mt-1">
+                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_prefilter_enabled') || 'Pre-screen Weak Analysts'}</span>
+                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.analyst_prefilter_enabled ?? false} onChange={e => update('analyst_prefilter_enabled', e.target.checked)} />
+                  </label>
+                  <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.prefilter_hint') || 'Skip analysts whose past calls on the analysed ticker have a poor hit rate. Needs realized history; core analysts are always kept.'}</p>
+                  {s.analyst_prefilter_enabled && (
+                    <>
+                      <Row label={t('settings.row_prefilter_min_samples') || 'Min. Graded Calls'}>
+                        <input type="number" min="1" max="100" className={Input} value={s.analyst_prefilter_min_samples ?? 5} onChange={e => update('analyst_prefilter_min_samples', Number.parseInt(e.target.value) || 5)} />
+                      </Row>
+                      <Row label={t('settings.row_prefilter_max_win_rate') || 'Drop Below Win Rate (%)'}>
+                        <input type="number" min="0" max="100" step="1" className={Input} value={s.analyst_prefilter_max_win_rate ?? 40} onChange={e => update('analyst_prefilter_max_win_rate', Number.parseFloat(e.target.value) || 40)} />
+                      </Row>
+                    </>
+                  )}
+                </div>
+
+                <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
+                  <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Institutional Features</h4>
+
+                  <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_strict_stop_loss')}</span>
+                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.strict_stop_loss_mode} onChange={e => update('strict_stop_loss_mode', e.target.checked)} />
+                  </label>
+                  <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_correlation_risk')}</span>
+                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.correlation_risk_enabled} onChange={e => update('correlation_risk_enabled', e.target.checked)} />
+                  </label>
+                  <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_quality_gate')}</span>
+                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.quality_gate_enabled} onChange={e => update('quality_gate_enabled', e.target.checked)} />
+                  </label>
+                  <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_drawdown_breaker')}</span>
+                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.drawdown_breaker_enabled} onChange={e => update('drawdown_breaker_enabled', e.target.checked)} />
+                  </label>
+                  {s.drawdown_breaker_enabled && (
+                    <div className="flex items-center justify-between p-2">
+                      <span className="text-xs font-semibold text-slate-400">{t('settings.row_max_drawdown_pct')}</span>
+                      <input type="number" min={1} max={100} className={`${Input} w-24 text-right`} value={s.max_portfolio_drawdown_pct} onChange={e => update('max_portfolio_drawdown_pct', Number(e.target.value))} />
+                    </div>
+                  )}
+                  </div>
+              </Section>
+            </ErrorBoundary>
           )}
 
           {/* Webhooks & Alerts */}
           {activeTab === 'webhooks' && (
+            <ErrorBoundary name="SettingsWebhooks">
             <Section title={t('settings.section_notifications') || 'Alerts & Webhooks'}>
               <Row label={t('settings.row_webhook_url')}>
                 <div className="flex flex-col gap-1">
@@ -690,10 +698,12 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 )}
               </div>
             </Section>
+            </ErrorBoundary>
           )}
 
           {/* Presets / Templates */}
           {activeTab === 'presets' && (
+            <ErrorBoundary name="SettingsPresets">
             <Section title={t('settings.section_presets') || 'Presets Templates'}>
               <div className="flex gap-2">
                 <input
@@ -731,10 +741,12 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 </div>
               )}
             </Section>
+            </ErrorBoundary>
           )}
 
           {/* Cron Scheduler */}
           {activeTab === 'cron' && (
+            <ErrorBoundary name="SettingsCron">
             <Section title={t('settings.section_cron') || 'Cron Scheduler'}>
               <div className="flex items-center justify-between bg-white/[0.02] border border-white/[0.04] p-3 rounded-xl mb-2">
                 <div className="flex flex-col">
@@ -782,9 +794,11 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 </p>
               </Row>
             </Section>
+            </ErrorBoundary>
           )}
 
           {activeTab === 'memory' && (
+            <ErrorBoundary name="SettingsMemory">
             <Section title="Vector Memory">
               <Row label={t('settings.row_memory_store')}>
                 <select className={Input} value={s.memory_store} onChange={e => update('memory_store', e.target.value)}>
@@ -863,17 +877,26 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 <input type="number" min={1} max={50} className={Input} value={s.memory_recall_count ?? 5} onChange={e => update('memory_recall_count', parseInt(e.target.value) || 5)} />
               </Row>
             </Section>
+            </ErrorBoundary>
           )}
 
           {activeTab === 'tools' && (
-            <ToolSettingsPanel ref={toolPanelRef} userId={userId} hideSaveButton={true} />
+            <ErrorBoundary name="SettingsTools">
+              <ToolSettingsPanel ref={toolPanelRef} userId={userId} hideSaveButton={true} />
+            </ErrorBoundary>
           )}
 
           {activeTab === 'agents' && (
-            <AgentSettingsPanel ref={agentPanelRef} userId={userId} />
+            <ErrorBoundary name="SettingsAgents">
+              <AgentSettingsPanel ref={agentPanelRef} userId={userId} />
+            </ErrorBoundary>
           )}
 
-          {activeTab === 'personas' && <PersonaEditor />}
+          {activeTab === 'personas' && (
+            <ErrorBoundary name="SettingsPersonas">
+              <PersonaEditor />
+            </ErrorBoundary>
+          )}
 
         </div>
       </div>

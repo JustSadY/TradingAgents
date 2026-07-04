@@ -84,6 +84,16 @@ class SettingsRead(SettingsBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class MemoryStatusResponse(BaseModel):
+    enabled: bool
+    store: str
+    embedder: str | None
+    index: str | None
+    embed_model: str | None
+    needs_openai_key: bool
+    agent_qa_enabled: bool
+
+
 class SettingsUpdate(BaseModel):
     cron_enabled: bool | None = None
     cron_schedule: str | None = None

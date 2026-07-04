@@ -4,6 +4,7 @@ import { TrendingUp, TrendingDown, DollarSign, Briefcase, Loader2, AlertCircle, 
 import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
 import { exportPortfolioCSV } from '../utils/csvExport'
+import ErrorBoundary from '../components/ErrorBoundary'
 
 interface Holding {
   id: number
@@ -348,6 +349,7 @@ export default function Portfolio() {
       )}
 
       {/* ── Risk Dashboard Panel ────────────────────────────────────────── */}
+      <ErrorBoundary name="RiskDashboard">
       {riskData && (
         <div className="glass-panel rounded-2xl overflow-hidden border border-slate-500/15">
           <button
@@ -486,6 +488,7 @@ export default function Portfolio() {
           )}
         </div>
       )}
+      </ErrorBoundary>
 
       {/* Account Performance Cards Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -631,7 +634,9 @@ export default function Portfolio() {
       </div>
 
       {/* ── Correlation Heatmap ─────────────────────────────────────────── */}
-      <CorrelationHeatmap />
+      <ErrorBoundary name="CorrelationHeatmap">
+        <CorrelationHeatmap />
+      </ErrorBoundary>
     </div>
   )
 }

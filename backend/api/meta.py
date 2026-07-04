@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -9,7 +11,7 @@ from backend.models.user import User
 router = APIRouter(prefix="/api/meta", tags=["meta"])
 
 
-@router.get("")
+@router.get("", response_model=dict[str, Any])
 async def get_meta(
     current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),

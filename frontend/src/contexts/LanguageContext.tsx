@@ -76,6 +76,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'common.delete': 'Delete',
     'common.add': 'Add',
     'common.no_data': 'No data available',
+    'common.retry': 'Retry Connection',
 
 
     'settings.title': 'Preferences',
@@ -159,6 +160,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
     'common.delete': 'Sil',
     'common.add': 'Ekle',
     'common.no_data': 'Veri bulunamadı',
+    'common.retry': 'Yeniden Bağlan',
 
 
     'settings.title': 'Ayarlar',

@@ -4,6 +4,8 @@ import asyncio
 import logging
 import time
 
+from typing import Any
+
 from fastapi import APIRouter
 
 router = APIRouter(prefix="/api/market", tags=["market"])
@@ -60,7 +62,7 @@ async def _fetch_rates() -> dict[str, float]:
     return rates
 
 
-@router.get("/fx-rates")
+@router.get("/fx-rates", response_model=dict[str, float | None])
 async def get_fx_rates():
     """
     Returns exchange rates vs USD for supported currencies.

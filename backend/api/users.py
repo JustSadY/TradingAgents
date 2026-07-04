@@ -1,4 +1,4 @@
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -10,13 +10,20 @@ from backend.core.security import hash_password
 from backend.models.user import User
 from backend.repositories.permissions import list_allowed_page_keys, list_allowed_setting_sections
 from backend.repositories.users import email_exists, get_user_by_id, username_exists
+from backend.schemas.common import MessageResponse
 from backend.schemas.user import (
+    AgentAccessUpdateResponse,
+    ApiKeyProvidersResponse,
     ApiKeySet,
     PagePermissionsRead,
     PagePermissionsUpdate,
     ProfileUpdate,
+    SettingPermissionsResponse,
+    ToolAccessUpdateResponse,
+    ToolFieldAccessUpdateResponse,
     UserAdminUpdate,
     UserCreate,
+    UserPermissionsResponse,
     UserRead,
 )
 from backend.services.user_service import (
@@ -60,14 +67,14 @@ async def update_me(
     )
 
 
-@router.get("/me/api-keys")
+@router.get("/me/api-keys", response_model=ApiKeyProvidersResponse)
 async def list_my_api_keys(current_user: Annotated[User, Depends(get_current_user)]):
     fernet = _get_settings().get_fernet()
     providers = list_user_api_key_providers(current_user, fernet)
     return {"providers": providers}
 
 
-@router.put("/me/api-keys")
+@router.put("/me/api-keys", response_model=MessageResponse)
 async def set_my_api_key(
     body: ApiKeySet,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -78,7 +85,7 @@ async def set_my_api_key(
     return {"detail": f"API key for '{body.provider}' saved"}
 
 
-@router.delete("/me/api-keys/{provider}", responses={404: {"description": "No key found for provider"}})
+@router.delete("/me/api-keys/{provider}", response_model=MessageResponse, responses={404: {"description": "No key found for provider"}})
 async def delete_my_api_key(
     provider: str,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -222,7 +229,7 @@ async def delete_user(
     emit("user_deleted", user_id=user_id)
 
 
-@router.get("/{user_id}/permissions")
+@router.get("/{user_id}/permissions", response_model=UserPermissionsResponse)
 async def get_user_permissions(
     user_id: int,
     _: Annotated[User, Depends(require_admin)],
@@ -236,7 +243,7 @@ async def get_user_permissions(
     return {"user_id": user_id, "permissions": full}
 
 
-@router.put("/{user_id}/permissions", responses={404: {"description": _USER_NOT_FOUND}})
+@router.put("/{user_id}/permissions", response_model=MessageResponse, responses={404: {"description": _USER_NOT_FOUND}})
 async def set_user_permissions(
     user_id: int,
     body: PagePermissionsUpdate,
@@ -259,7 +266,7 @@ async def set_user_permissions(
     return {"detail": "Permissions updated"}
 
 
-@router.get("/{user_id}/api-keys", responses={404: {"description": _USER_NOT_FOUND}})
+@router.get("/{user_id}/api-keys", response_model=ApiKeyProvidersResponse, responses={404: {"description": _USER_NOT_FOUND}})
 async def list_user_api_keys(
     user_id: int,
     _: Annotated[User, Depends(require_admin)],
@@ -273,7 +280,7 @@ async def list_user_api_keys(
     return {"providers": providers}
 
 
-@router.put("/{user_id}/api-keys", responses={404: {"description": _USER_NOT_FOUND}})
+@router.put("/{user_id}/api-keys", response_model=MessageResponse, responses={404: {"description": _USER_NOT_FOUND}})
 async def set_user_api_key_endpoint(
     user_id: int,
     body: ApiKeySet,
@@ -289,7 +296,7 @@ async def set_user_api_key_endpoint(
     return {"detail": f"API key for '{body.provider}' saved for user {user.username}"}
 
 
-@router.delete("/{user_id}/api-keys/{provider}", responses={404: {"description": "User or key not found"}})
+@router.delete("/{user_id}/api-keys/{provider}", response_model=MessageResponse, responses={404: {"description": "User or key not found"}})
 async def delete_user_api_key_endpoint(
     user_id: int,
     provider: str,
@@ -307,7 +314,7 @@ async def delete_user_api_key_endpoint(
     return {"detail": f"API key for '{provider}' deleted for user {user.username}"}
 
 
-@router.get("/me/setting-permissions")
+@router.get("/me/setting-permissions", response_model=SettingPermissionsResponse)
 async def get_my_setting_permissions(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
@@ -320,7 +327,7 @@ async def get_my_setting_permissions(
     return {"allowed_settings": allowed}
 
 
-@router.get("/{user_id}/setting-permissions", responses={404: {"description": _USER_NOT_FOUND}})
+@router.get("/{user_id}/setting-permissions", response_model=UserPermissionsResponse, responses={404: {"description": _USER_NOT_FOUND}})
 async def get_user_setting_permissions(
     user_id: int,
     _: Annotated[User, Depends(require_admin)],
@@ -341,7 +348,7 @@ class SettingPermissionsUpdate(BaseModel):
     permissions: dict[str, bool]
 
 
-@router.put("/{user_id}/setting-permissions", responses={404: {"description": _USER_NOT_FOUND}})
+@router.put("/{user_id}/setting-permissions", response_model=MessageResponse, responses={404: {"description": _USER_NOT_FOUND}})
 async def set_user_setting_permissions(
     user_id: int,
     body: SettingPermissionsUpdate,
@@ -364,7 +371,7 @@ async def set_user_setting_permissions(
     return {"detail": "Setting permissions updated"}
 
 
-@router.get("/{user_id}/agent-access")
+@router.get("/{user_id}/agent-access", response_model=dict[str, Any])
 async def get_agent_access(
     user_id: int,
     _: Annotated[User, Depends(require_admin)],
@@ -379,7 +386,7 @@ class AgentAccessUpdate(BaseModel):
     agents: dict[str, bool]
 
 
-@router.put("/{user_id}/agent-access")
+@router.put("/{user_id}/agent-access", response_model=AgentAccessUpdateResponse)
 async def set_agent_access(
     user_id: int,
     body: AgentAccessUpdate,
@@ -392,7 +399,7 @@ async def set_agent_access(
     return {"detail": "Agent access updated", "agents": updated}
 
 
-@router.get("/{user_id}/tool-access")
+@router.get("/{user_id}/tool-access", response_model=dict[str, Any])
 async def get_tool_access(
     user_id: int,
     _: Annotated[User, Depends(require_admin)],
@@ -407,7 +414,7 @@ class ToolAccessUpdate(BaseModel):
     tools: dict[str, dict]
 
 
-@router.put("/{user_id}/tool-access")
+@router.put("/{user_id}/tool-access", response_model=ToolAccessUpdateResponse)
 async def set_tool_access(
     user_id: int,
     body: ToolAccessUpdate,
@@ -420,7 +427,7 @@ async def set_tool_access(
     return {"detail": "Tool access updated", "tools": updated}
 
 
-@router.get("/{user_id}/tool-field-access")
+@router.get("/{user_id}/tool-field-access", response_model=dict[str, Any])
 async def get_tool_field_access(
     user_id: int,
     _: Annotated[User, Depends(require_admin)],
@@ -435,7 +442,7 @@ class ToolFieldAccessUpdate(BaseModel):
     fields: dict[str, dict[str, dict]]
 
 
-@router.put("/{user_id}/tool-field-access")
+@router.put("/{user_id}/tool-field-access", response_model=ToolFieldAccessUpdateResponse)
 async def set_tool_field_access(
     user_id: int,
     body: ToolFieldAccessUpdate,

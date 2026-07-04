@@ -1,3 +1,5 @@
+from typing import Any
+
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -6,6 +8,7 @@ from backend.api.deps import get_current_user
 from backend.core.database import get_db
 from backend.core.limiter import limiter
 from backend.models.user import User
+from backend.schemas.market import FormulaAssistResponse
 from backend.services.market_service import (
     MarketDataError,
     get_custom_indicator_series,
@@ -22,7 +25,7 @@ class FormulaAssistRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=500, description="Plain-language indicator description")
 
 
-@router.get("/ohlcv")
+@router.get("/ohlcv", response_model=dict[str, Any])
 async def ohlcv(
     ticker: str = Query(..., description=_TICKER_DESCRIPTION),
     start_date: str = Query(None, description="YYYY-MM-DD"),
@@ -36,7 +39,7 @@ async def ohlcv(
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
-@router.get("/custom-indicator")
+@router.get("/custom-indicator", response_model=dict[str, Any])
 async def custom_indicator(
     ticker: str = Query(..., description=_TICKER_DESCRIPTION),
     formula: str = Query(..., description="Mathematical formula, e.g. (Close - SMA(20)) / STD(20)"),
@@ -51,7 +54,7 @@ async def custom_indicator(
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
-@router.post("/formula-assist")
+@router.post("/formula-assist", response_model=FormulaAssistResponse)
 @limiter.limit("10/minute")
 async def formula_assist(
     request: Request,
@@ -70,7 +73,7 @@ async def formula_assist(
     return {"formula": formula}
 
 
-@router.get("/sentiment-history")
+@router.get("/sentiment-history", response_model=list[dict[str, Any]])
 async def sentiment_history(
     ticker: str = Query(..., description=_TICKER_DESCRIPTION),
     db: AsyncSession = Depends(get_db),

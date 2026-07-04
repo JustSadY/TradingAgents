@@ -44,11 +44,11 @@ class ErrorBoundary extends React.Component<
     if (this.state.error) {
       return (
         <div style={{ padding: 32, fontFamily: 'monospace', color: '#f87171', background: '#0f172a', minHeight: '100vh' }}>
-          <h2 style={{ color: '#fca5a5', marginBottom: 12 }}>⚠ Uygulama Hatası</h2>
+          <h2 style={{ color: '#fca5a5', marginBottom: 12 }}>⚠ App Error</h2>
           <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: '#1e293b', padding: 16, borderRadius: 8, fontSize: 12 }}>
             {this.state.error.message}
           </pre>
-          <button style={{ marginTop: 16, padding: '8px 16px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }} onClick={() => window.location.reload()}>Yenile</button>
+          <button style={{ marginTop: 16, padding: '8px 16px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }} onClick={() => window.location.reload()}>Refresh</button>
         </div>
       )
     }
@@ -60,7 +60,7 @@ function AppRoutes() {
   const { isAuthenticated, isAdmin, loading } = useAuth()
 
   if (loading) {
-    return <div style={{ background: '#0f172a', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1', fontWeight: 600 }}>BAŞLATILIYOR...</div>
+    return <div style={{ background: '#0f172a', minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#6366f1', fontWeight: 600 }}>STARTING...</div>
   }
 
   return (

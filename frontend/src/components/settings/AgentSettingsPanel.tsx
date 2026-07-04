@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useMemo, useState, forwardRef, useImperativeHandle } from 'react'
+import { type ReactNode, useEffect, useMemo, useState, forwardRef, useImperativeHandle, useRef } from 'react'
 import axios from 'axios'
 import { AlertCircle, ChevronDown, ChevronRight, Settings2 } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
@@ -529,6 +529,8 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
   const [loading, setLoading] = useState(true)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const agentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => { return () => { if (agentTimeoutRef.current) clearTimeout(agentTimeoutRef.current) } }, [])
 
   const apiPath = serverScope
     ? '/api/settings/agents/server'
@@ -559,7 +561,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
       setSettings(res.data)
       triggerMetaRefetch()
       setSaveSuccess(true)
-      setTimeout(() => setSaveSuccess(false), 2000)
+      agentTimeoutRef.current = setTimeout(() => setSaveSuccess(false), 2000)
     } catch (err: any) {
       const msg = err.response?.data?.detail || 'Failed to save agent settings.'
       setSaveError(msg)

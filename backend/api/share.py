@@ -7,12 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_db
 from backend.models.user import User
+from backend.schemas.share import ShareCreateResponse, SharedReportResponse
 from backend.services import share_service
 
 router = APIRouter(tags=["share"])
 
 
-@router.post("/api/analysis/{analysis_id}/share", responses={404: {"description": "Analysis not found"}})
+@router.post("/api/analysis/{analysis_id}/share", response_model=ShareCreateResponse, responses={404: {"description": "Analysis not found"}})
 async def create_share(
     analysis_id: int,
     db: AsyncSession = Depends(get_db),
@@ -34,6 +35,7 @@ async def create_share(
 
 @router.get(
     "/api/share/{token}",
+    response_model=SharedReportResponse,
     responses={
         404: {"description": "Report or analysis data not found"},
         410: {"description": "Shared report has expired"},

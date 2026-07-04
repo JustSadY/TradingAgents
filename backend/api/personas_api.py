@@ -47,7 +47,7 @@ class PersonaUpdate(BaseModel):
     instructions: str = Field(default="")
 
 
-@router.get("")
+@router.get("", response_model=list[dict[str, Any]])
 async def list_all_personas(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -67,7 +67,7 @@ async def list_all_personas(
     return builtins + custom
 
 
-@router.post("", status_code=201, responses={400: {"description": "Key conflict or duplicate key"}})
+@router.post("", response_model=dict[str, Any], status_code=201, responses={400: {"description": "Key conflict or duplicate key"}})
 async def create_persona(
     body: PersonaCreate,
     db: AsyncSession = Depends(get_db),
@@ -97,6 +97,7 @@ async def create_persona(
 
 @router.put(
     "/{key}",
+    response_model=dict[str, Any],
     responses={400: {"description": "Cannot edit built-in persona"}, 404: {"description": "Persona not found"}},
 )
 async def update_persona(

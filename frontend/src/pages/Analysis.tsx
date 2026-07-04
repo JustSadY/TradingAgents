@@ -26,6 +26,7 @@ import { AnalysisChatWidget } from '../components/analysis/AnalysisChatWidget'
 import { RiskMetricsCard } from '../components/analysis/RiskMetricsCard'
 import { MentalModelTicker } from '../components/analysis/MentalModelTicker'
 import { KellyPositioningCard } from '../components/analysis/KellyPositioningCard'
+import ErrorBoundary from '../components/ErrorBoundary'
 
 interface WsEvent {
   type: string; section?: string; content?: string; signal?: string
@@ -183,6 +184,7 @@ function RunTab() {
   const tickerRef = useRef(ticker)
   useEffect(() => { tickerRef.current = ticker }, [ticker])
   const lastPersistRef = useRef(0)
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
   const meta = useMeta()
   const sectionLabels = meta?.section_labels ?? SECTION_LABELS
@@ -287,7 +289,7 @@ function RunTab() {
       if (nextAttempt <= maxReconnectRetries) {
         const delay = Math.min(1000 * Math.pow(2, nextAttempt - 1), 8000)
         appendLog(`🔄 Reconnecting... (attempt ${nextAttempt}/${maxReconnectRetries})`)
-        setTimeout(() => attachWs(taskId, nextAttempt), delay)
+        reconnectTimeoutRef.current = setTimeout(() => attachWs(taskId, nextAttempt), delay)
       } else {
         setRunStatus('error')
         setRunning_(false)
@@ -470,6 +472,7 @@ function RunTab() {
 
   useEffect(() => {
     return () => {
+      if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
       if (wsRef.current) {
         try {
           wsRef.current.onmessage = null
@@ -882,111 +885,117 @@ function RunTab() {
                 )}
 
                 {activeTab === 'reports' && (
-                  <div className="space-y-3 animate-in fade-in duration-300">
-                    {activeReports.length === 0 ? (
-                      <div className="flex flex-col items-center justify-center py-16 text-slate-600">
-                        <FileText size={28} className="opacity-25 mb-2" />
-                        <p className="text-xs">{t('analysis.reports.empty')}</p>
-                      </div>
-                    ) : (
-                      activeReports.map(([key, content]) => (
-                        <ReportCard
-                          key={key}
-                          label={sectionLabels[key] || key}
-                          content={content}
-                          defaultOpen={key === activeSection}
-                          isStreaming={running && key === activeSection}
-                        />
-                      ))
-                    )}
-                  </div>
+                  <ErrorBoundary name="AnalysisReports">
+                    <div className="space-y-3 animate-in fade-in duration-300">
+                      {activeReports.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-16 text-slate-600">
+                          <FileText size={28} className="opacity-25 mb-2" />
+                          <p className="text-xs">{t('analysis.reports.empty')}</p>
+                        </div>
+                      ) : (
+                        activeReports.map(([key, content]) => (
+                          <ReportCard
+                            key={key}
+                            label={sectionLabels[key] || key}
+                            content={content}
+                            defaultOpen={key === activeSection}
+                            isStreaming={running && key === activeSection}
+                          />
+                        ))
+                      )}
+                    </div>
+                  </ErrorBoundary>
                 )}
 
                 {activeTab === 'debate' && (
-                  <div className="animate-in fade-in duration-300">
-                    {isCompleted && detail ? (
-                      <DebateHistoryWidget investmentHistory={detail.investment_debate_history} riskHistory={detail.risk_debate_history} />
-                    ) : (
-                      <div className="flex flex-col bg-slate-950/80 border border-white/[0.04] rounded-2xl p-4 space-y-4">
-                        <div className="flex gap-2 p-1 bg-slate-900/50 border border-white/[0.04] rounded-xl w-fit self-center">
-                          <button
-                            onClick={() => setLiveDebateTab('inv')}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer ${
-                              liveDebateTab === 'inv' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
-                            }`}
-                          >
-                            Consensus Debate
-                          </button>
-                          <button
-                            onClick={() => setLiveDebateTab('risk')}
-                            className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer ${
-                              liveDebateTab === 'risk' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
-                            }`}
-                          >
-                            Risk Debate
-                          </button>
-                        </div>
-                        <div className="flex-1 overflow-y-auto space-y-3 max-h-[45vh] pr-1">
-                          {filteredLiveMessages.length === 0 && (
-                            <div className="h-full flex flex-col items-center justify-center opacity-20 py-20">
-                              <MessageSquare size={30} className="mb-2" />
-                              <p className="text-xs font-medium uppercase tracking-widest text-center">
-                                {running && currentStep && (currentStep.stage === 'research' || currentStep.stage === 'risk')
-                                  ? t('analysis.debate.waiting')
-                                  : 'Live debate has not started yet.'}
-                              </p>
-                            </div>
-                          )}
-                          {filteredLiveMessages.map((bubble, i) => {
-                            const styles = getSenderStyles(bubble.sender);
-                            return (
-                              <div key={i} className={`flex w-full ${styles.side} animate-in zoom-in-95 fade-in duration-300`}>
-                                <div className={`border rounded-2xl px-4 py-2.5 text-xs flex flex-col gap-1 max-w-[85%] ${styles.bg}`}>
-                                  <span className="font-bold uppercase tracking-wider text-[9px] opacity-80 flex items-center gap-1">
-                                    {styles.icon} {bubble.sender}
+                  <ErrorBoundary name="AnalysisDebate">
+                    <div className="animate-in fade-in duration-300">
+                      {isCompleted && detail ? (
+                        <DebateHistoryWidget investmentHistory={detail.investment_debate_history} riskHistory={detail.risk_debate_history} />
+                      ) : (
+                        <div className="flex flex-col bg-slate-950/80 border border-white/[0.04] rounded-2xl p-4 space-y-4">
+                          <div className="flex gap-2 p-1 bg-slate-900/50 border border-white/[0.04] rounded-xl w-fit self-center">
+                            <button
+                              onClick={() => setLiveDebateTab('inv')}
+                              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer ${
+                                liveDebateTab === 'inv' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
+                              }`}
+                            >
+                              Consensus Debate
+                            </button>
+                            <button
+                              onClick={() => setLiveDebateTab('risk')}
+                              className={`px-3 py-1.5 rounded-lg text-[10px] font-bold uppercase tracking-wider transition cursor-pointer ${
+                                liveDebateTab === 'risk' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
+                              }`}
+                            >
+                              Risk Debate
+                            </button>
+                          </div>
+                          <div className="flex-1 overflow-y-auto space-y-3 max-h-[45vh] pr-1">
+                            {filteredLiveMessages.length === 0 && (
+                              <div className="h-full flex flex-col items-center justify-center opacity-20 py-20">
+                                <MessageSquare size={30} className="mb-2" />
+                                <p className="text-xs font-medium uppercase tracking-widest text-center">
+                                  {running && currentStep && (currentStep.stage === 'research' || currentStep.stage === 'risk')
+                                    ? t('analysis.debate.waiting')
+                                    : 'Live debate has not started yet.'}
+                                </p>
+                              </div>
+                            )}
+                            {filteredLiveMessages.map((bubble, i) => {
+                              const styles = getSenderStyles(bubble.sender);
+                              return (
+                                <div key={i} className={`flex w-full ${styles.side} animate-in zoom-in-95 fade-in duration-300`}>
+                                  <div className={`border rounded-2xl px-4 py-2.5 text-xs flex flex-col gap-1 max-w-[85%] ${styles.bg}`}>
+                                    <span className="font-bold uppercase tracking-wider text-[9px] opacity-80 flex items-center gap-1">
+                                      {styles.icon} {bubble.sender}
+                                    </span>
+                                    <span className="leading-relaxed whitespace-pre-wrap">{bubble.content}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            
+                            {running && currentStep && (
+                              (liveDebateTab === 'inv' && currentStep.stage === 'research') ||
+                              (liveDebateTab === 'risk' && currentStep.stage === 'risk')
+                            ) && (
+                              <div className="flex justify-start items-center gap-3 animate-pulse pl-1 pt-2">
+                                <div className="w-6 h-6 rounded-full bg-slate-900/80 border border-white/[0.06] flex items-center justify-center shadow">
+                                  <span className="relative flex h-2 w-2">
+                                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+                                    <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
                                   </span>
-                                  <span className="leading-relaxed whitespace-pre-wrap">{bubble.content}</span>
+                                </div>
+                                <div className="bg-slate-900/40 border border-slate-800/40 rounded-2xl px-3.5 py-2 text-[10px] text-slate-400 flex items-center gap-1.5">
+                                  <Loader2 size={10} className="animate-spin text-slate-500" />
+                                  <span className="font-semibold uppercase tracking-tight">
+                                    {currentStep.label} {t('analysis.debate.typing')}
+                                  </span>
                                 </div>
                               </div>
-                            );
-                          })}
-                          
-                          {running && currentStep && (
-                            (liveDebateTab === 'inv' && currentStep.stage === 'research') ||
-                            (liveDebateTab === 'risk' && currentStep.stage === 'risk')
-                          ) && (
-                            <div className="flex justify-start items-center gap-3 animate-pulse pl-1 pt-2">
-                              <div className="w-6 h-6 rounded-full bg-slate-900/80 border border-white/[0.06] flex items-center justify-center shadow">
-                                <span className="relative flex h-2 w-2">
-                                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
-                                  <span className="relative inline-flex rounded-full h-2 w-2 bg-violet-500"></span>
-                                </span>
-                              </div>
-                              <div className="bg-slate-900/40 border border-slate-800/40 rounded-2xl px-3.5 py-2 text-[10px] text-slate-400 flex items-center gap-1.5">
-                                <Loader2 size={10} className="animate-spin text-slate-500" />
-                                <span className="font-semibold uppercase tracking-tight">
-                                  {currentStep.label} {t('analysis.debate.typing')}
-                                </span>
-                              </div>
-                            </div>
-                          )}
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    )}
-                  </div>
+                      )}
+                    </div>
+                  </ErrorBoundary>
                 )}
 
                 {activeTab === 'chat' && (
-                  <div className="animate-in fade-in duration-300 h-full">
-                    {activeId ? (
-                      <AnalysisChatWidget analysisId={activeId} />
-                    ) : (
-                      <div className="flex flex-col items-center justify-center py-20 text-slate-500">
-                        <Bot size={36} className="opacity-25 mb-3" />
-                        <p className="text-xs font-semibold">Q&A Assistant will be available once the analysis is completed.</p>
-                      </div>
-                    )}
-                  </div>
+                  <ErrorBoundary name="AnalysisChat">
+                    <div className="animate-in fade-in duration-300 h-full">
+                      {activeId ? (
+                        <AnalysisChatWidget analysisId={activeId} />
+                      ) : (
+                        <div className="flex flex-col items-center justify-center py-20 text-slate-500">
+                          <Bot size={36} className="opacity-25 mb-3" />
+                          <p className="text-xs font-semibold">Q&A Assistant will be available once the analysis is completed.</p>
+                        </div>
+                      )}
+                    </div>
+                  </ErrorBoundary>
                 )}
 
                 {activeTab === 'timetravel' && (

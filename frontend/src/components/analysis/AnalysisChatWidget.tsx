@@ -12,9 +12,11 @@ export function AnalysisChatWidget({ analysisId }: { analysisId: number }) {
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
+    let cancelled = false
     axios.get(`/api/analysis/${analysisId}/chat`)
-      .then(r => setMessages(r.data))
+      .then(r => { if (!cancelled) setMessages(r.data) })
       .catch(() => {})
+    return () => { cancelled = true }
   }, [analysisId])
 
   useEffect(() => {

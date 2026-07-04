@@ -1,8 +1,9 @@
-import { useEffect, useState, useCallback } from 'react'
+import { useEffect, useState, useCallback, useRef } from 'react'
 import axios from 'axios'
 import { Save, Trash2, Plus, UserCog, ShieldCheck, Globe, CheckCircle2, Key, Sliders, BarChart3, RefreshCw, Zap, AlertTriangle, Clock, Wifi } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { useAuth } from '../contexts/AuthContext'
+import ErrorBoundary from '../components/ErrorBoundary'
 import Settings from './Settings'
 import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
 import { useMeta } from '../hooks/useMeta'
@@ -91,6 +92,8 @@ export default function Admin() {
   const [sysMetrics, setSysMetrics] = useState<SystemMetrics | null>(null)
   const [sysHealth, setSysHealth] = useState<SystemHealth | null>(null)
   const [metricsLoading, setMetricsLoading] = useState(false)
+  const adminTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => { return () => { if (adminTimeoutRef.current) clearTimeout(adminTimeoutRef.current) } }, [])
 
   const loadUsers = useCallback(async () => {
     const r = await axios.get('/api/users')
@@ -158,7 +161,7 @@ export default function Admin() {
     try {
       await axios.put(`/api/users/${userId}/api-keys`, { provider, api_key: apiKey })
       setKeySaved(true)
-      setTimeout(() => setKeySaved(false), 2000)
+      adminTimeoutRef.current = setTimeout(() => setKeySaved(false), 2000)
       await loadUserApiKeys(userId)
     } catch (err: any) {
       setKeyError(err.response?.data?.detail || 'Key could not be saved')
@@ -187,7 +190,7 @@ export default function Admin() {
         axios.put(`/api/users/${selectedUserId}/tool-field-access`, { fields: toolFieldAccess }),
       ])
       setPermSaved(true)
-      setTimeout(() => setPermSaved(false), 2500)
+      adminTimeoutRef.current = setTimeout(() => setPermSaved(false), 2500)
     } catch {
       setErrorMsg('Failed to save permissions')
     }
@@ -240,7 +243,7 @@ export default function Admin() {
     try {
       await axios.put('/api/system-settings', systemSettings)
       setSysSaved(true)
-      setTimeout(() => setSysSaved(false), 2000)
+      adminTimeoutRef.current = setTimeout(() => setSysSaved(false), 2000)
     } catch (err) {
       console.error('Failed to save system settings:', err)
     }
@@ -844,6 +847,7 @@ export default function Admin() {
         )}
 
         {tab === 'metrics' && (
+          <ErrorBoundary name="AdminMetrics">
           <Section title="System Metrics">
             <div className="flex items-center justify-between">
               <p className="text-[10px] text-slate-500">Live Prometheus counters — metrics reset on server restart</p>
@@ -980,8 +984,9 @@ export default function Admin() {
                 )}
               </div>
             )}
-          </Section>
-        )}
+            </Section>
+            </ErrorBoundary>
+          )}
       </div>
     </div>
   )

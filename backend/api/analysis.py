@@ -10,12 +10,20 @@ from backend.core.limiter import limiter
 from backend.core.utils import safe_ticker_component
 from backend.models.user import User
 from backend.schemas.analysis import (
+    ABComparisonItem,
+    ActiveTaskRead,
     AnalysisListItem,
     AnalysisResultRead,
     AnalysisRunRequest,
     AnalysisRunResponse,
+    CancelTaskResponse,
     ChatMessageCreate,
     ChatMessageRead,
+    CheckpointItem,
+    CostEstimateResponse,
+    PerformanceAttributionResponse,
+    PerformanceResponse,
+    TimeTravelResponse,
 )
 from backend.schemas.portfolio_analysis import (
     MultiTickerListItem,
@@ -61,7 +69,7 @@ async def run_analysis(
     return AnalysisRunResponse(task_id=task_id, ticker=body.ticker, trade_date=body.trade_date)
 
 
-@router.get("/active")
+@router.get("/active", response_model=list[ActiveTaskRead])
 async def get_active_tasks(
     current_user: User = Depends(get_current_user),
 ):
@@ -101,7 +109,7 @@ async def list_analysis(
     return await _repo_list(db, user=current_user, ticker=ticker, limit=limit, offset=offset)
 
 
-@router.post("/{task_id}/cancel", responses={404: {"description": "Task not found"}})
+@router.post("/{task_id}/cancel", response_model=CancelTaskResponse, responses={404: {"description": "Task not found"}})
 async def cancel_analysis(
     task_id: str,
     current_user: User = Depends(get_current_user),
@@ -115,7 +123,7 @@ async def cancel_analysis(
     return {"cancelled": cancelled, "task_id": task_id}
 
 
-@router.get("/cost-estimate")
+@router.get("/cost-estimate", response_model=CostEstimateResponse)
 async def cost_estimate(
     user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
@@ -139,7 +147,7 @@ async def cost_estimate(
     return _est(analysts_str, debate_rounds, model)
 
 
-@router.get("/ab-comparison")
+@router.get("/ab-comparison", response_model=list[ABComparisonItem])
 async def get_ab_comparison(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),
@@ -149,7 +157,7 @@ async def get_ab_comparison(
     return await _ab(db, user_id=None)
 
 
-@router.get("/performance")
+@router.get("/performance", response_model=PerformanceResponse)
 async def get_performance(
     ticker: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
@@ -160,7 +168,7 @@ async def get_performance(
     return await _perf(db, ticker, user_id=current_user.id)
 
 
-@router.get("/performance-attribution")
+@router.get("/performance-attribution", response_model=PerformanceAttributionResponse)
 async def get_performance_attribution(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -300,7 +308,7 @@ class TimeTravelRequest(BaseModel):
     update_state: dict
 
 
-@router.get("/{analysis_id}/checkpoints", responses={404: {"description": _ANALYSIS_NOT_FOUND}})
+@router.get("/{analysis_id}/checkpoints", response_model=list[CheckpointItem], responses={404: {"description": _ANALYSIS_NOT_FOUND}})
 async def list_checkpoints(
     analysis_id: int,
     db: AsyncSession = Depends(get_db),
@@ -325,6 +333,7 @@ async def list_checkpoints(
 
 @router.post(
     "/{analysis_id}/time-travel",
+    response_model=TimeTravelResponse,
     responses={400: {"description": "Invalid checkpoint or state"}, 404: {"description": _ANALYSIS_NOT_FOUND}},
 )
 async def time_travel_resume(

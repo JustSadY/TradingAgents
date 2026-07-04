@@ -108,3 +108,83 @@ class ChatMessageRead(BaseModel):
 
 class ChatMessageCreate(BaseModel):
     message: str
+
+
+class ActiveTaskRead(BaseModel):
+    task_id: str
+    ticker: str | None = None
+    trade_date: str | None = None
+    asset_type: str | None = None
+    user_id: int | None = None
+    started_at: float | None = None
+    status: str | None = None
+
+
+class CancelTaskResponse(BaseModel):
+    cancelled: bool
+    task_id: str
+
+
+class CostEstimateResponse(BaseModel):
+    analyst_count: int
+    estimated_tokens: int
+    estimated_cost_usd: float
+    estimated_duration_min: float
+
+
+class ABComparisonItem(BaseModel):
+    preset_name: str
+    total_runs: int
+    avg_duration: float
+    avg_tokens: int
+    avg_cost_usd: float
+    win_rate: float | None
+    total_graded: int
+    win_rate_last_50: float | None
+    avg_alpha_last_50: float
+    avg_raw_return_last_50: float
+    total_graded_last_50: int
+
+
+class BySignalItem(BaseModel):
+    count: int
+    wins: int
+    avg_return: float
+    win_rate: float
+
+
+class PerformanceResponse(BaseModel):
+    total: int
+    win_rate: float | None
+    avg_raw_return: float | None
+    avg_alpha_return: float | None
+    by_signal: dict[str, BySignalItem]
+
+
+class AnalystAttributionItem(BaseModel):
+    key: str
+    label: str
+    total_predictions: int
+    correct_predictions: int
+    win_rate: float
+    weight: float
+    chronic_underperformer: bool
+
+
+class PerformanceAttributionResponse(BaseModel):
+    attribution: list[AnalystAttributionItem]
+    total_evaluated_runs: int
+
+
+class CheckpointItem(BaseModel):
+    checkpoint_id: str
+    step: int
+    node: str
+    label: str
+    ts: str
+
+
+class TimeTravelResponse(BaseModel):
+    task_id: str
+    ticker: str
+    trade_date: str

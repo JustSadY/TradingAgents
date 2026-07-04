@@ -7,6 +7,19 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.deps import get_current_user, get_db
 from backend.core.utils import safe_ticker_component
 from backend.models.user import User
+from backend.schemas.trading import (
+    BacktestResponse,
+    JournalDebriefResponse,
+    JournalNoteReadResponse,
+    JournalNoteResponse,
+    OrderResponse,
+    PerformanceResponse,
+    PortfolioResponse,
+    PortfolioStatsResponse,
+    RebalanceResponse,
+    ResetResponse,
+    RiskDashboardResponse,
+)
 from backend.services import mock_trading_service as svc
 from backend.services import trade_journal_service
 from backend.services.backtest_service import run_backtest_simulation
@@ -55,7 +68,7 @@ class BacktestRequest(BaseModel):
             raise ValueError(str(exc)) from exc
 
 
-@router.get("/portfolio")
+@router.get("/portfolio", response_model=PortfolioResponse)
 async def get_portfolio(
     db: AsyncSession = Depends(get_db),
     _=Depends(get_current_user),
@@ -63,7 +76,7 @@ async def get_portfolio(
     return await svc.get_portfolio_with_live_prices(db, user=_, read_only=True)
 
 
-@router.post("/order", status_code=status.HTTP_201_CREATED)
+@router.post("/order", response_model=OrderResponse, status_code=status.HTTP_201_CREATED)
 async def create_order(
     req: APIOrderRequest,
     db: AsyncSession = Depends(get_db),
@@ -83,7 +96,7 @@ async def create_order(
     return result
 
 
-@router.get("/performance")
+@router.get("/performance", response_model=PerformanceResponse)
 async def get_performance(
     db: AsyncSession = Depends(get_db),
     _=Depends(get_current_user),
@@ -91,7 +104,7 @@ async def get_performance(
     return await svc.get_performance(db, user=_)
 
 
-@router.post("/reset")
+@router.post("/reset", response_model=ResetResponse)
 async def reset_portfolio(
     req: ResetRequest,
     db: AsyncSession = Depends(get_db),
@@ -101,7 +114,7 @@ async def reset_portfolio(
     return result
 
 
-@router.post("/backtest", responses={400: {"description": "Backtest simulation failed"}})
+@router.post("/backtest", response_model=BacktestResponse, responses={400: {"description": "Backtest simulation failed"}})
 async def run_backtest(
     req: BacktestRequest,
     db: AsyncSession = Depends(get_db),
@@ -130,7 +143,7 @@ async def run_backtest(
     return res
 
 
-@router.get("/portfolio-stats")
+@router.get("/portfolio-stats", response_model=PortfolioStatsResponse)
 async def get_portfolio_stats(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
@@ -140,7 +153,7 @@ async def get_portfolio_stats(
     return await get_portfolio_stats(db, _)
 
 
-@router.get("/risk-dashboard")
+@router.get("/risk-dashboard", response_model=RiskDashboardResponse)
 async def get_risk_dashboard(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
@@ -150,7 +163,7 @@ async def get_risk_dashboard(
     return await get_risk_dashboard(db, _)
 
 
-@router.post("/rebalance")
+@router.post("/rebalance", response_model=RebalanceResponse)
 async def rebalance_portfolio(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
@@ -164,7 +177,7 @@ class JournalNoteRequest(BaseModel):
     note: str = Field(..., max_length=2000)
 
 
-@router.post("/journal/{order_id}/note", status_code=200)
+@router.post("/journal/{order_id}/note", response_model=JournalNoteResponse, status_code=200)
 async def save_trade_note(
     order_id: int,
     req: JournalNoteRequest,
@@ -174,7 +187,7 @@ async def save_trade_note(
     return await trade_journal_service.save_note(db, _, order_id, req.note)
 
 
-@router.get("/journal/{order_id}")
+@router.get("/journal/{order_id}", response_model=JournalNoteReadResponse)
 async def get_trade_note(
     order_id: int,
     db: AsyncSession = Depends(get_db),
@@ -184,7 +197,7 @@ async def get_trade_note(
     return result or {"order_id": order_id, "note": "", "ai_debrief": None, "has_debrief": False}
 
 
-@router.post("/journal/{order_id}/debrief")
+@router.post("/journal/{order_id}/debrief", response_model=JournalDebriefResponse)
 async def generate_trade_debrief(
     order_id: int,
     db: AsyncSession = Depends(get_db),

@@ -7,12 +7,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.deps import get_current_user
 from backend.core.database import get_db
 from backend.models.user import User
+from backend.schemas.portfolio import CorrelationResponse
 from backend.services.portfolio_service import get_active_holdings, get_user_simulation_portfolio
 
 router = APIRouter(prefix="/api/trading", tags=["trading"])
 
 
-@router.get("/correlation")
+@router.get("/correlation", response_model=CorrelationResponse)
 async def get_correlation(
     period: str = Query(default="90d", description="Data period: 30d, 90d, 180d, 1y"),
     db: AsyncSession = Depends(get_db),

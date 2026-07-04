@@ -9,6 +9,15 @@ class PresetCreate(BaseModel):
     settings_json: str
 
 
+class PresetDeleteResponse(BaseModel):
+    deleted: bool
+
+
+class PresetApplyResponse(BaseModel):
+    applied: bool
+    preset_name: str
+
+
 class PresetRead(BaseModel):
     id: int
     name: str

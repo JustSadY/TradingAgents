@@ -1,4 +1,4 @@
-import { useEffect, useState, forwardRef, useImperativeHandle } from 'react'
+import { useEffect, useState, forwardRef, useImperativeHandle, useRef } from 'react'
 import axios from 'axios'
 import { Save, RefreshCw, AlertCircle } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
@@ -33,6 +33,8 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
   const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
+  const toolTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => { return () => { if (toolTimeoutRef.current) clearTimeout(toolTimeoutRef.current) } }, [])
 
   const apiPath = serverScope
     ? '/api/system-settings/tools'
@@ -70,7 +72,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
       const res = await axios.put(apiPath, settings)
       setSettings(res.data)
       setSaveSuccess(true)
-      setTimeout(() => setSaveSuccess(false), 2000)
+      toolTimeoutRef.current = setTimeout(() => setSaveSuccess(false), 2000)
     } catch (err: any) {
       const msg = err.response?.data?.detail || 'Failed to save tool settings.'
       setSaveError(msg)

@@ -7,6 +7,7 @@ from backend.api.deps import get_current_user
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.schemas.alert import AlertCreate, AlertRead, AlertUpdate
+from backend.schemas.common import DeleteResponse
 
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 _logger = logging.getLogger(__name__)
@@ -60,7 +61,7 @@ async def update_alert(
     return alert
 
 
-@router.delete("/{alert_id}", responses={404: {"description": "Alert not found"}})
+@router.delete("/{alert_id}", response_model=DeleteResponse, responses={404: {"description": "Alert not found"}})
 async def delete_alert(
     alert_id: int,
     db: AsyncSession = Depends(get_db),

@@ -36,8 +36,34 @@ def compute_data_hash(analyst_key: str, ticker: str, trade_date: str, *data_bloc
     """Build a SHA-256 digest from the analyst key, ticker, trade date, and
     all fetched data blocks.  Any change in the underlying data produces a
     different hash, so the cached report is automatically invalidated."""
-    combined = "|".join([analyst_key, ticker, trade_date, *(str(b) for b in data_blocks)])
+    config_meta = {}
+    try:
+        from backend.trading_agents.agents.data.chart_tools import active_run_context
+        ctx = active_run_context.get(None)
+        if ctx and "graph" in ctx:
+            graph = ctx["graph"]
+            config_meta["global_provider"] = getattr(graph, "llm_provider", "") or ""
+            config_meta["global_model"] = getattr(graph, "llm_model", "") or ""
+            if hasattr(graph, "config") and isinstance(graph.config, dict):
+                config_meta["persona"] = graph.config.get("investor_persona", "") or ""
+                config_meta["language"] = graph.config.get("output_language", "") or ""
+                
+                # Capture agent-specific settings overrides (custom LLM, prompt, temperature, etc.)
+                runtime_agent_ctx = graph.config.get("runtime_agent_context", {})
+                if isinstance(runtime_agent_ctx, dict):
+                    agent_ctx = runtime_agent_ctx.get(analyst_key, {})
+                    if isinstance(agent_ctx, dict):
+                        agent_settings = agent_ctx.get("settings", {})
+                        if isinstance(agent_settings, dict):
+                            config_meta["agent_settings"] = agent_settings
+    except Exception:
+        pass
+
+    import json
+    config_str = json.dumps(config_meta, sort_keys=True)
+    combined = "|".join([analyst_key, ticker, trade_date, config_str, *(str(b) for b in data_blocks)])
     return hashlib.sha256(combined.encode("utf-8")).hexdigest()
+
 
 
 async def check_analyst_cache(analyst_key: str, ticker: str, data_hash: str) -> str | None:

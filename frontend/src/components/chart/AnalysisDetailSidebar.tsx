@@ -58,7 +58,7 @@ export const AnalysisDetailSidebar: React.FC<AnalysisDetailSidebarProps> = ({
         {selected.final_decision && (
           <div className="bg-slate-900/40 rounded-xl p-4 border border-white/[0.04]">
             <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2 flex items-center gap-2">
-               <Shield size={12} className="text-blue-400" /> Executive Summary
+               <Shield size={12} className="text-blue-400" /> {t('chart.executive_summary')}
             </p>
             <p className="text-xs text-slate-300 leading-relaxed max-h-40 overflow-y-auto pr-2 custom-scrollbar">
               {selected.final_decision}
@@ -75,30 +75,30 @@ export const AnalysisDetailSidebar: React.FC<AnalysisDetailSidebarProps> = ({
           return (
             <div className="bg-slate-900/40 rounded-xl p-4 border border-white/[0.04] space-y-3">
               <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest flex items-center gap-2">
-                 <Shield size={12} className="text-violet-400" /> Technical Levels
+                 <Shield size={12} className="text-violet-400" /> {t('chart.technical_levels')}
               </p>
               <div className="grid grid-cols-2 gap-3 text-xs">
                 {ann.target_price && (
                   <div>
-                    <span className="text-[10px] text-slate-500 block uppercase tracking-wider">Target Price</span>
+                    <span className="text-[10px] text-slate-500 block uppercase tracking-wider">{t('chart.target_price')}</span>
                     <span className="font-mono font-bold text-emerald-400">${ann.target_price.toFixed(2)}</span>
                   </div>
                 )}
                 {ann.stop_loss && (
                   <div>
-                    <span className="text-[10px] text-slate-500 block uppercase tracking-wider">Stop Loss</span>
+                    <span className="text-[10px] text-slate-500 block uppercase tracking-wider">{t('chart.stop_loss')}</span>
                     <span className="font-mono font-bold text-rose-400">${ann.stop_loss.toFixed(2)}</span>
                   </div>
                 )}
                 {ann.leverage && (
                   <div>
-                    <span className="text-[10px] text-slate-500 block uppercase tracking-wider">Rec. Leverage</span>
+                    <span className="text-[10px] text-slate-500 block uppercase tracking-wider">{t('chart.recommended_leverage')}</span>
                     <span className="font-mono font-bold text-violet-400">{ann.leverage}x</span>
                   </div>
                 )}
                 {ann.liquidation_price && (
                   <div>
-                    <span className="text-[10px] text-slate-500 block uppercase tracking-wider">Liquidation</span>
+                    <span className="text-[10px] text-slate-500 block uppercase tracking-wider">{t('chart.liquidation')}</span>
                     <span className="font-mono font-bold text-amber-400">${ann.liquidation_price.toFixed(2)}</span>
                   </div>
                 )}
@@ -108,13 +108,13 @@ export const AnalysisDetailSidebar: React.FC<AnalysisDetailSidebarProps> = ({
                 <div className="pt-2 border-t border-white/[0.02] space-y-1.5 text-[10px]">
                   {ann.support_levels && ann.support_levels.length > 0 && (
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-500 font-bold uppercase tracking-wider">Support</span>
+                      <span className="text-slate-500 font-bold uppercase tracking-wider">{t('chart.support_label')}</span>
                       <span className="font-mono text-emerald-400 font-bold">{ann.support_levels.map((x: number) => `$${x.toFixed(2)}`).join(', ')}</span>
                     </div>
                   )}
                   {ann.resistance_levels && ann.resistance_levels.length > 0 && (
                     <div className="flex items-center justify-between">
-                      <span className="text-slate-500 font-bold uppercase tracking-wider">Resistance</span>
+                      <span className="text-slate-500 font-bold uppercase tracking-wider">{t('chart.resistance_label')}</span>
                       <span className="font-mono text-blue-400 font-bold">{ann.resistance_levels.map((x: number) => `$${x.toFixed(2)}`).join(', ')}</span>
                     </div>
                   )}
@@ -129,7 +129,7 @@ export const AnalysisDetailSidebar: React.FC<AnalysisDetailSidebarProps> = ({
                 onClick={() => navigate(`/analysis?id=${selected.id}`)}
                 className="w-full py-2.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition-all shadow-lg shadow-violet-600/20 cursor-pointer"
             >
-                View Full Report
+                {t('chart.view_full_report')}
             </button>
         </div>
       </div>

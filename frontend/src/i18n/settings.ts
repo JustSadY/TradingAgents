@@ -1,6 +1,7 @@
 const translations = {
   en: {
 
+    'settings.llm_model_placeholder': 'e.g. gpt-4o-mini',
     'settings.loading': 'Loading...',
 
 
@@ -69,9 +70,11 @@ const translations = {
     'settings.memory_disabled_pinecone': 'DISABLED — add a Pinecone API key',
     'settings.memory_disabled_pgvector': 'DISABLED — add an OpenAI API key',
     'settings.pgvector_hint': "Episodes are stored in the app's own PostgreSQL database. Requires the pgvector extension on the database server and your OpenAI API key (Profile → API Keys) for embedding.",
-
-
     'settings.row_investor_persona': 'Investor Persona',
+    'settings.row_llm_model': 'LLM Model',
+    'settings.row_llm_provider': 'LLM Provider',
+
+
     'settings.persona_conservative': 'Conservative Dividend Investor',
     'settings.persona_risk_loving': 'Risk-Loving Crypto/Growth Trader',
     'settings.persona_esg_focused': 'Sustainability/ESG-Focused',
@@ -159,6 +162,7 @@ const translations = {
   },
   tr: {
 
+    'settings.llm_model_placeholder': 'ör. gpt-4o-mini',
     'settings.loading': 'Yükleniyor...',
 
 
@@ -227,9 +231,11 @@ const translations = {
     'settings.memory_disabled_pinecone': 'KAPALI — Pinecone API anahtarı ekleyin',
     'settings.memory_disabled_pgvector': 'KAPALI — OpenAI API anahtarı ekleyin',
     'settings.pgvector_hint': 'Epizotlar uygulamanın kendi PostgreSQL veritabanında saklanır. Veritabanı sunucusunda pgvector eklentisi ve embedding için OpenAI API anahtarınız (Profil → API Anahtarları) gerekir.',
-
-
     'settings.row_investor_persona': 'Yatırımcı Kişiliği',
+    'settings.row_llm_model': 'LLM Model',
+    'settings.row_llm_provider': 'LLM Sağlayıcı',
+
+
     'settings.persona_conservative': 'Muhafazakar Temettü Yatırımcısı',
     'settings.persona_risk_loving': 'Risk Sever Kripto/Büyüme Traderı',
     'settings.persona_esg_focused': 'Sürdürülebilirlik/ESG Odaklı',

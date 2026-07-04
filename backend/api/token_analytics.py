@@ -13,7 +13,7 @@ from backend.services import system_metrics_service, token_analytics_service
 router = APIRouter(tags=["analytics"])
 
 
-@router.get("/api/analytics/token-usage")
+@router.get("/api/analytics/token-usage", response_model=dict[str, Any])
 async def get_token_usage(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
@@ -21,7 +21,7 @@ async def get_token_usage(
     return await token_analytics_service.get_token_analytics(db, current_user.id)
 
 
-@router.get("/api/admin/system-metrics")
+@router.get("/api/admin/system-metrics", response_model=dict[str, Any])
 async def get_system_metrics(
     _: User = Depends(require_admin),
 ) -> dict[str, Any]:
@@ -29,7 +29,7 @@ async def get_system_metrics(
     return system_metrics_service.collect_system_metrics()
 
 
-@router.get("/api/admin/system-health")
+@router.get("/api/admin/system-health", response_model=dict[str, Any])
 async def get_system_health(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_admin),

@@ -4,6 +4,7 @@ import { Briefcase, RefreshCw, NotebookPen, X, Save, Sparkles, Loader2, Bot, Dow
 import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
 import { exportOrdersCSV } from '../utils/csvExport'
+import ErrorBoundary from '../components/ErrorBoundary'
 
 interface Order {
   id: number
@@ -208,7 +209,7 @@ export default function Orders() {
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
-      {journalOrder && <JournalModal order={journalOrder} onClose={() => setJournalOrder(null)} />}
+      {journalOrder && <ErrorBoundary name="TradeJournal"><JournalModal order={journalOrder} onClose={() => setJournalOrder(null)} /></ErrorBoundary>}
 
       {/* Header Panel */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
@@ -251,73 +252,75 @@ export default function Orders() {
           <p className="text-[10px] text-slate-500 mt-1">No execution logs found matching your filter criteria</p>
         </div>
       ) : (
-        <div className="glass-panel rounded-2xl overflow-hidden">
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs text-slate-300 min-w-[760px]">
-              <thead>
-                <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
-                  <th className="px-5 py-3.5 text-left font-bold">{t('orders.col_symbol')}</th>
-                  <th className="px-5 py-3.5 text-left font-bold">{t('orders.col_direction')}</th>
-                  <th className="px-5 py-3.5 text-right font-bold">{t('orders.col_quantity')}</th>
-                  <th className="px-5 py-3.5 text-right font-bold">{t('orders.col_price')}</th>
-                  <th className="px-5 py-3.5 text-right font-bold">{t('orders.col_total')}</th>
-                  <th className="px-5 py-3.5 text-right font-bold">P&amp;L</th>
-                  <th className="px-5 py-3.5 text-center font-bold">{t('orders.col_status')}</th>
-                  <th className="px-5 py-3.5 text-left font-bold">{t('orders.col_signal')}</th>
-                  <th className="px-5 py-3.5 text-right font-bold">{t('orders.col_date')}</th>
-                  <th className="px-5 py-3.5 text-center font-bold">Journal</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.02]">
-                {orders.map(o => {
-                  const pnl = o.realized_pnl ?? 0
-                  return (
-                    <tr key={o.id} className="hover:bg-white/[0.01] transition-colors">
-                      <td className="px-5 py-3 font-mono font-bold text-white text-sm">{o.ticker}</td>
-                      <td className="px-5 py-3">
-                        <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-md ${ACTION_BADGES[o.action] || 'text-white'}`}>
-                          {o.action}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-right font-mono font-semibold text-slate-300">{(o.quantity_filled ?? 0).toFixed(4)}</td>
-                      <td className="px-5 py-3 text-right font-mono text-slate-300">
-                        {o.price_per_share ? `$${(o.price_per_share).toFixed(2)}` : '—'}
-                      </td>
-                      <td className="px-5 py-3 text-right font-mono text-slate-300 font-semibold">
-                        {o.total_value ? `$${(o.total_value).toFixed(2)}` : '—'}
-                      </td>
-                      <td className="px-5 py-3 text-right font-mono">
-                        {o.action === 'SELL' && o.realized_pnl !== null ? (
-                          <span className={pnl >= 0 ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold'}>
-                            {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
+        <ErrorBoundary name="OrdersTable">
+          <div className="glass-panel rounded-2xl overflow-hidden">
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-slate-300 min-w-[760px]">
+                <thead>
+                  <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
+                    <th className="px-5 py-3.5 text-left font-bold">{t('orders.col_symbol')}</th>
+                    <th className="px-5 py-3.5 text-left font-bold">{t('orders.col_direction')}</th>
+                    <th className="px-5 py-3.5 text-right font-bold">{t('orders.col_quantity')}</th>
+                    <th className="px-5 py-3.5 text-right font-bold">{t('orders.col_price')}</th>
+                    <th className="px-5 py-3.5 text-right font-bold">{t('orders.col_total')}</th>
+                    <th className="px-5 py-3.5 text-right font-bold">P&amp;L</th>
+                    <th className="px-5 py-3.5 text-center font-bold">{t('orders.col_status')}</th>
+                    <th className="px-5 py-3.5 text-left font-bold">{t('orders.col_signal')}</th>
+                    <th className="px-5 py-3.5 text-right font-bold">{t('orders.col_date')}</th>
+                    <th className="px-5 py-3.5 text-center font-bold">Journal</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-white/[0.02]">
+                  {orders.map(o => {
+                    const pnl = o.realized_pnl ?? 0
+                    return (
+                      <tr key={o.id} className="hover:bg-white/[0.01] transition-colors">
+                        <td className="px-5 py-3 font-mono font-bold text-white text-sm">{o.ticker}</td>
+                        <td className="px-5 py-3">
+                          <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-md ${ACTION_BADGES[o.action] || 'text-white'}`}>
+                            {o.action}
                           </span>
-                        ) : <span className="text-slate-600">—</span>}
-                      </td>
-                      <td className="px-5 py-3 text-center">
-                        <span className={`inline-flex items-center text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${STATUS_BADGES[o.status] || 'text-slate-300'}`}>
-                          {o.status}
-                        </span>
-                      </td>
-                      <td className="px-5 py-3 text-slate-400 font-medium truncate max-w-[160px]">{o.ai_signal || '—'}</td>
-                      <td className="px-5 py-3 text-right text-slate-500 font-mono text-[10px]">
-                        {new Date(o.created_at).toLocaleString()}
-                      </td>
-                      <td className="px-5 py-3 text-center">
-                        <button
-                          onClick={() => setJournalOrder(o)}
-                          className="p-1.5 rounded-lg text-slate-600 hover:text-violet-400 hover:bg-violet-500/10 transition cursor-pointer"
-                          title="Open Trade Journal"
-                        >
-                          <NotebookPen size={13} />
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
+                        </td>
+                        <td className="px-5 py-3 text-right font-mono font-semibold text-slate-300">{(o.quantity_filled ?? 0).toFixed(4)}</td>
+                        <td className="px-5 py-3 text-right font-mono text-slate-300">
+                          {o.price_per_share ? `$${(o.price_per_share).toFixed(2)}` : '—'}
+                        </td>
+                        <td className="px-5 py-3 text-right font-mono text-slate-300 font-semibold">
+                          {o.total_value ? `$${(o.total_value).toFixed(2)}` : '—'}
+                        </td>
+                        <td className="px-5 py-3 text-right font-mono">
+                          {o.action === 'SELL' && o.realized_pnl !== null ? (
+                            <span className={pnl >= 0 ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold'}>
+                              {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
+                            </span>
+                          ) : <span className="text-slate-600">—</span>}
+                        </td>
+                        <td className="px-5 py-3 text-center">
+                          <span className={`inline-flex items-center text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${STATUS_BADGES[o.status] || 'text-slate-300'}`}>
+                            {o.status}
+                          </span>
+                        </td>
+                        <td className="px-5 py-3 text-slate-400 font-medium truncate max-w-[160px]">{o.ai_signal || '—'}</td>
+                        <td className="px-5 py-3 text-right text-slate-500 font-mono text-[10px]">
+                          {new Date(o.created_at).toLocaleString()}
+                        </td>
+                        <td className="px-5 py-3 text-center">
+                          <button
+                            onClick={() => setJournalOrder(o)}
+                            className="p-1.5 rounded-lg text-slate-600 hover:text-violet-400 hover:bg-violet-500/10 transition cursor-pointer"
+                            title="Open Trade Journal"
+                          >
+                            <NotebookPen size={13} />
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
-        </div>
+        </ErrorBoundary>
       )}
     </div>
   )

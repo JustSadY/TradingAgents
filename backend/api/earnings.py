@@ -4,12 +4,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.deps import get_current_user, get_db
 from backend.core.limiter import limiter
 from backend.models.user import User
+from backend.schemas.common import EarningsCalendarResponse
 from backend.services.earnings_service import get_earnings_calendar
 
 router = APIRouter(prefix="/api/market", tags=["earnings"])
 
 
-@router.get("/earnings-calendar")
+@router.get("/earnings-calendar", response_model=EarningsCalendarResponse)
 @limiter.limit("20/minute")
 async def earnings_calendar(
     request: Request,
