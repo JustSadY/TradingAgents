@@ -30,11 +30,13 @@ from typing import Any
 run_logger = logging.getLogger("tradingagents.run")
 
 # Substrings that mark an error as worth retrying (rate limits, timeouts, 5xx…).
+# NOTE: "resourceexhausted" without "total"/"quota" is a transient rate limit;
+#       quota exhaustion (e.g. "total request limit reached") is permanent and
+#       not included here — \_retry_llm_call in structured.py handles that.
 _TRANSIENT_HINTS = (
     "rate limit",
     "ratelimit",
     "429",
-    "resourceexhausted",
     "timeout",
     "timed out",
     "temporar",
@@ -182,6 +184,10 @@ async def retry_call(
             return await asyncio.wait_for(coro, timeout=timeout)
         except Exception as exc:  # noqa: BLE001 — deliberately broad for resilience
             last = exc
+            # Quota exhaustion is permanent — no point retrying.
+            err_msg = str(exc).lower()
+            if "resourceexhausted" in err_msg and ("total" in err_msg or "quota" in err_msg):
+                break
             if i + 1 >= attempts or (not retry_all and not is_transient(exc)):
                 break
 
@@ -220,9 +226,12 @@ async def _emit_retry_progress(label: str, i: int, attempts: int, exc: Exception
         emitter = ctx["emitter"]
         clean_label = label.replace("analyst:", "").replace("main:", "").title()
         err_msg = str(exc)
-        if "429" in err_msg or "rate_limit" in err_msg.lower() or "rate limit" in err_msg.lower() or "resourceexhausted" in err_msg.lower():
+        low = err_msg.lower()
+        if "resourceexhausted" in low and ("total" in low or "quota" in low):
+            err_msg = "Quota exhausted — skipping retries"
+        elif "429" in err_msg or "rate_limit" in low or "rate limit" in low:
             err_msg = "Rate limit (429) detected"
-        elif "503" in err_msg or "service unavailable" in err_msg.lower():
+        elif "503" in err_msg or "service unavailable" in low:
             err_msg = "Service unavailable (503)"
         else:
             err_msg = err_msg[:60]

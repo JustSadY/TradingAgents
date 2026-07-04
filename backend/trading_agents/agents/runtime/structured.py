@@ -150,6 +150,28 @@ async def self_correct_structured(
         return None
 
 
+def _is_quota_exhausted(exc: Exception) -> bool:
+    """Check if the error indicates a hard quota exhaustion (not a transient rate limit).
+
+    ``ResourceExhausted`` with "total request limit" or "quota" means the provider
+    has permanently denied requests for the current period — retrying is useless.
+    """
+    err_msg = str(exc).lower()
+    return "resourceexhausted" in err_msg and ("total" in err_msg or "quota" in err_msg)
+
+
+def _is_rate_limit(exc: Exception) -> bool:
+    """Check if the error is a transient rate limit (429) worth retrying."""
+    err_msg = str(exc).lower()
+    return "429" in err_msg or "rate limit" in err_msg or "rate_limit" in err_msg
+
+
+def _is_server_error(exc: Exception) -> bool:
+    """Check if the error is a transient server error worth retrying."""
+    err_msg = str(exc).lower()
+    return "503" in err_msg or "service unavailable" in err_msg or "502" in err_msg
+
+
 async def _retry_llm_call(
     llm: Any,
     prompt: Any,
@@ -158,9 +180,10 @@ async def _retry_llm_call(
     base_delay: float = 2.0,
     timeout: float = 90.0,
 ) -> Any:
-    """Invoke *llm* with retry and exponential backoff, handling rate limits.
+    """Invoke *llm* with retry and exponential backoff for transient errors.
 
-    ``ResourceExhausted`` / 429 / 503 errors trigger a longer backoff (up to 60s).
+    Permanent quota exhaustion (``ResourceExhausted`` + "total"/"quota") is detected
+    immediately — no retries wasted, the exception propagates so callers can use fallback.
     """
     last_exc: Exception | None = None
     for attempt in range(max_retries):
@@ -168,17 +191,16 @@ async def _retry_llm_call(
             return await asyncio.wait_for(llm.ainvoke(prompt), timeout=timeout)
         except Exception as exc:
             last_exc = exc
-            err_msg = str(exc).lower()
-            is_rate_limit = (
-                "resourceexhausted" in err_msg
-                or "429" in err_msg
-                or "rate limit" in err_msg
-                or "rate_limit" in err_msg
-                or "503" in err_msg
-                or "service unavailable" in err_msg
-            )
-            delay = base_delay * (4**attempt) if is_rate_limit else base_delay * (2**attempt)
-            delay = min(delay, 60.0)
+            if _is_quota_exhausted(exc):
+                logger.warning(
+                    "%s: quota exhausted (%s) — skipping retries, using fallback.",
+                    agent_name, exc,
+                )
+                raise
+            retriable = _is_rate_limit(exc) or _is_server_error(exc) or "timeout" in str(exc).lower()
+            if not retriable:
+                raise
+            delay = min(base_delay * (2**attempt), 30.0)
             if attempt + 1 < max_retries:
                 logger.warning(
                     "%s: LLM call failed (attempt %d/%d, retry in %.0fs): %s",
