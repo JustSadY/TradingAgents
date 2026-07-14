@@ -84,10 +84,14 @@ async def apply_settings_update(
 
     settings.updated_at = datetime.now(UTC)
     await db.flush()
+    await db.commit()
 
     from backend.core.events import emit
 
-    emit("settings_updated", settings=settings)
+    try:
+        emit("settings_updated", settings=settings)
+    except Exception:
+        _logger.warning("Settings update event emission failed", exc_info=True)
 
     return settings
 

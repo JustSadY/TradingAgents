@@ -168,7 +168,7 @@ function RunTab() {
 
   useEffect(() => {
     if (analysisId && runStatus === 'done' && !detail) {
-      axios.get(`/api/analysis/${analysisId}`).then(r => setDetail(r.data)).catch(() => {})
+      axios.get(`/api/analysis/${analysisId}`).then(r => setDetail(r.data)).catch(e => console.error('Failed to fetch analysis detail', e))
     }
   }, [analysisId, runStatus, detail])
 
@@ -206,7 +206,7 @@ function RunTab() {
           final_decision: a.final_decision || '',
         })
         setDetail(a)
-      }).catch(() => {})
+      }).catch(e => console.error('Failed to load latest analysis', e))
     }
   }, [])
 
@@ -339,7 +339,7 @@ function RunTab() {
         )
         if (ev.analysis_id) {
           setAnalysisId(ev.analysis_id)
-          axios.get(`/api/analysis/${ev.analysis_id}`).then(r => setDetail(r.data)).catch(() => {})
+          axios.get(`/api/analysis/${ev.analysis_id}`).then(r => setDetail(r.data)).catch(e => console.error('Failed to fetch analysis detail on complete', e))
         }
       } else if (ev.type === 'error') {
         finished = true
@@ -1116,7 +1116,7 @@ function PortfolioHistorySection() {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    axios.get('/api/analysis/portfolio-history').then(r => setItems(r.data)).catch(() => {}).finally(() => setLoading(false))
+    axios.get('/api/analysis/portfolio-history').then(r => setItems(r.data)).catch(e => { console.error('Failed to load portfolio history', e); setItems([]) }).finally(() => setLoading(false))
   }, [])
 
   if (loading) return <div className="text-slate-500 text-xs px-2">{t('analysis.portfolio_history.loading')}</div>
@@ -1127,7 +1127,7 @@ function PortfolioHistorySection() {
       {items.length === 0 ? <p className="text-slate-600 text-xs">{t('analysis.portfolio_history.empty')}</p> : (
         <div className="space-y-2">
           {items.map(item => (
-            <div key={item.id} onClick={() => axios.get(`/api/analysis/portfolio/${item.id}`).then(r => setDetail(r.data)).catch(() => {})}
+            <div key={item.id} onClick={() => axios.get(`/api/analysis/portfolio/${item.id}`).then(r => setDetail(r.data)).catch(e => console.error('Failed to load portfolio detail', e))}
               className="flex items-center justify-between p-3 rounded-xl bg-slate-900/20 hover:bg-slate-900/60 cursor-pointer transition-colors border border-white/[0.03] hover:border-white/[0.08]">
               <div className="flex items-center gap-2">
                 <span className="text-white font-mono text-xs font-bold">{item.tickers.join(', ')}</span>
@@ -1191,7 +1191,7 @@ function HistoryTab({
   const sectionLabels = meta?.section_labels ?? {}
 
   useEffect(() => {
-    axios.get('/api/analysis/history?limit=50').then(r => setItems(r.data)).catch(() => {}).finally(() => setLoading(false))
+    axios.get('/api/analysis/history?limit=50').then(r => setItems(r.data)).catch(e => { console.error('Failed to load analysis history', e); setItems([]) }).finally(() => setLoading(false))
   }, [])
 
   const openDetail = useCallback(async (id: number) => {

@@ -351,17 +351,14 @@ async def rollback_and_resume_analysis(
                 from backend.services.analysis.orchestrator import run_individual_analysis
 
                 emitter = AnalysisEmitter(task_id)
-                current_task = asyncio.current_task()
-                if current_task:
-                    _RUNNING_TASKS[task_id] = current_task
-                    _TASK_REGISTRY[task_id] = {
-                        "ticker": analysis.ticker,
-                        "trade_date": analysis.trade_date,
-                        "asset_type": analysis.asset_type,
-                        "user_id": current_user.id if current_user else None,
-                        "started_at": time.time(),
-                        "status": "running",
-                    }
+                _TASK_REGISTRY[task_id] = {
+                    "ticker": analysis.ticker,
+                    "trade_date": analysis.trade_date,
+                    "asset_type": analysis.asset_type,
+                    "user_id": current_user.id if current_user else None,
+                    "started_at": time.time(),
+                    "status": "running",
+                }
 
                 try:
                     await run_individual_analysis(
