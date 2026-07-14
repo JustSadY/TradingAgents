@@ -164,14 +164,20 @@ async def retry_call(
     """Call ``fn`` with retries + exponential backoff.
 
     ``attempts`` is the total number of tries (default from config
-    ``node_retry_attempts`` = 2). By default every exception is retried; set
+    ``node_retry_attempts`` = 1). By default every exception is retried; set
     ``retry_all=False`` to only retry errors that look transient.
 
     ``timeout`` wraps each invocation in ``asyncio.wait_for`` so a hung
     provider can't stall the run. Timeouts are treated as transient errors
     and feed into the retry path.
+
+    Note: ``node_retry_attempts = 1`` (no retries) is the default because
+    the provider quota (32 requests) is tight — each retry burns a precious
+    request. The inner ``_retry_llm_call`` or ``retry_call`` at the
+    sub-agent level already provides a finer-grained retry for transient
+    LLM errors.
     """
-    attempts = int(attempts if attempts is not None else _cfg("node_retry_attempts", 2, runtime_config))
+    attempts = int(attempts if attempts is not None else _cfg("node_retry_attempts", 1, runtime_config))
     base_delay = float(base_delay if base_delay is not None else _cfg("node_retry_base_delay", 1.0, runtime_config))
     timeout = float(timeout) if timeout is not None else _cfg("node_timeout_seconds", 120, runtime_config)
     attempts = max(1, attempts)
@@ -186,6 +192,8 @@ async def retry_call(
             last = exc
             # Quota exhaustion is permanent — no point retrying.
             err_msg = str(exc).lower()
+            if "quota exhausted" in err_msg:
+                break
             if "resourceexhausted" in err_msg and ("total" in err_msg or "quota" in err_msg):
                 break
             if i + 1 >= attempts or (not retry_all and not is_transient(exc)):

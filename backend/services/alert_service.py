@@ -25,6 +25,46 @@ _ALERT_SEMAPHORE = asyncio.Semaphore(5)
 _INDICATOR_ALERT_TYPES = frozenset({"rsi", "macd_cross"})
 
 
+async def _fetch_alert_market_summary(ticker: str) -> str:
+    try:
+        import yfinance as yf
+
+        info = await asyncio.to_thread(lambda: yf.Ticker(ticker).info)
+        hist = await asyncio.to_thread(lambda: yf.Ticker(ticker).history(period="5d"))
+
+        parts = []
+        price = info.get("regularMarketPrice") or info.get("currentPrice")
+        prev_close = info.get("regularMarketPreviousClose")
+        if price and prev_close:
+            change_pct = ((price - prev_close) / prev_close) * 100
+            parts.append(f"Fiyat: ${price:.2f} ({change_pct:+.2f}%)")
+
+        volume = info.get("volume")
+        avg_vol = info.get("averageVolume")
+        if volume and avg_vol and avg_vol > 0:
+            vol_ratio = volume / avg_vol
+            parts.append(f"Hacim: {vol_ratio:.1f}x ortalama")
+
+        if hist is not None and len(hist) >= 20:
+            from backend.services.indicator_service import calculate_rsi
+            rsi_series = calculate_rsi(hist["Close"])
+            if not rsi_series.empty and not pd.isna(rsi_series.iloc[-1]):
+                rsi_val = float(rsi_series.iloc[-1])
+                parts.append(f"RSI(14): {rsi_val:.1f}")
+
+        from backend.services.news_service import get_news_feed
+        news = await get_news_feed(ticker, 3)
+        if news:
+            headlines = [n.get("title", "")[:80] for n in news[:3] if n.get("title")]
+            if headlines:
+                parts.append("Haberler: " + " | ".join(headlines))
+
+        return " | ".join(parts) if parts else ""
+    except Exception as exc:
+        _logger.debug("Market summary fetch failed for %s: %s", ticker, exc)
+        return ""
+
+
 async def _fetch_close_series(ticker: str, period: str = "6mo"):
     """Daily close-price series for indicator alerts; ``None`` on any failure."""
     try:
@@ -73,9 +113,11 @@ async def _notify_and_maybe_analyze(db, alert: PriceAlert, settings, current_val
     """Shared trigger side-effects: mark triggered, notify, optionally auto-analyze."""
     alert.triggered_at = datetime.now(UTC)
 
+    summary = await _fetch_alert_market_summary(alert.ticker)
+    if summary:
+        _logger.info("Alert market summary for %s: %s", alert.ticker, summary)
+
     if settings:
-        # Resolve the alert owner's AppSettings (holds the webhook config) so the
-        # notification respects that user's delivery preferences.
         user = await db.get(User, alert.user_id)
         user_settings = await get_or_create_settings(db, user)
         await notify_alert_triggered(
@@ -84,6 +126,7 @@ async def _notify_and_maybe_analyze(db, alert: PriceAlert, settings, current_val
             current_value if current_value is not None else float(alert.target_price),
             user_settings,
             alert_type=getattr(alert, "alert_type", "price"),
+            market_summary=summary,
         )
 
     if alert.auto_analyze:

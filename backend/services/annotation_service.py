@@ -16,7 +16,7 @@ _SYSTEM_PROMPT_EN = """You are a financial analyst assistant. Extract numerical 
   ]
 }
 Rules:
-- Extract at most 2-3 support and resistance levels.
+- Extract at most 4-5 support and resistance levels.
 - Prices might be rounded — show clean values close to integers.
 - Use null for missing or ambiguous values.
 - leverage: the recommended leverage multiplier if the report states one (e.g. "3x" -> 3), else null.
@@ -46,7 +46,7 @@ async def extract_chart_annotations(
     prefix = _LANG_PREFIXES.get(lang, "")
     system_prompt = prefix + _SYSTEM_PROMPT_EN
 
-    text = f"PIYASA RAPORU:\n{market_report[:2000]}\n\nSON KARAR:\n{final_decision[:1000]}"
+    text = f"PIYASA RAPORU:\n{market_report}\n\nSON KARAR:\n{final_decision}"
     try:
         response = await _call_llm_async(quick_llm, text, system_prompt)
         raw = response.strip()

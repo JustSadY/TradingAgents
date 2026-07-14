@@ -31,10 +31,10 @@ class CronService:
             self.scheduler.add_job(
                 _run_alert_checker,
                 "interval",
-                minutes=15,
+                minutes=5,
                 id="alert_checker",
                 replace_existing=True,
-                misfire_grace_time=120,
+                misfire_grace_time=60,
             )
             self.scheduler.add_job(
                 _run_performance_backfill,

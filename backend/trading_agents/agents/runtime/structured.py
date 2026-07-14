@@ -155,8 +155,11 @@ def _is_quota_exhausted(exc: Exception) -> bool:
 
     ``ResourceExhausted`` with "total request limit" or "quota" means the provider
     has permanently denied requests for the current period — retrying is useless.
+    Also catches ``QuotaExhaustedError`` from the LLM client layer.
     """
     err_msg = str(exc).lower()
+    if "quota exhausted" in err_msg:
+        return True
     return "resourceexhausted" in err_msg and ("total" in err_msg or "quota" in err_msg)
 
 
@@ -176,7 +179,7 @@ async def _retry_llm_call(
     llm: Any,
     prompt: Any,
     agent_name: str,
-    max_retries: int = 3,
+    max_retries: int = 2,
     base_delay: float = 2.0,
     timeout: float = 90.0,
 ) -> Any:
@@ -184,6 +187,10 @@ async def _retry_llm_call(
 
     Permanent quota exhaustion (``ResourceExhausted`` + "total"/"quota") is detected
     immediately — no retries wasted, the exception propagates so callers can use fallback.
+
+    Note: ``max_retries = 2`` (1 retry) is the default — the provider quota (32
+    requests) is tight; burning 3+ requests per failed call can exhaust it before
+    essential nodes get to run.
     """
     last_exc: Exception | None = None
     for attempt in range(max_retries):

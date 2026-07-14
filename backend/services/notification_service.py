@@ -195,7 +195,7 @@ async def notify_trade_executed(ticker: str, action: str, quantity: float, price
 
 
 async def notify_alert_triggered(
-    ticker: str, condition: str, target_price: float, settings, alert_type: str = "price"
+    ticker: str, condition: str, target_price: float, settings, alert_type: str = "price", market_summary: str = ""
 ) -> None:
     if not getattr(settings, "webhook_enabled", False):
         return
@@ -204,12 +204,10 @@ async def notify_alert_triggered(
     if "alert_triggered" not in events or not url:
         return
     user_id = getattr(settings, "user_id", None)
-    await send_webhook(
-        url,
-        "alert_triggered",
-        {"ticker": ticker, "condition": condition, "target_price": target_price, "alert_type": alert_type},
-        user_id=user_id,
-    )
+    payload = {"ticker": ticker, "condition": condition, "target_price": target_price, "alert_type": alert_type}
+    if market_summary:
+        payload["market_summary"] = market_summary
+    await send_webhook(url, "alert_triggered", payload, user_id=user_id)
 
 
 async def notify_signal_flip(ticker: str, prev_signal: str | None, new_signal: str | None, settings) -> None:

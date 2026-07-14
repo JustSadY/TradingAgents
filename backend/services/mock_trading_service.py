@@ -296,7 +296,7 @@ async def execute_order(
 
     portfolio = await get_or_create_sim_portfolio(db, user=user, portfolio_id=portfolio_id)
 
-    stmt = select(Portfolio).where(Portfolio.id == portfolio.id).with_for_update()
+    stmt = select(Portfolio).where(Portfolio.id == portfolio.id).with_for_update().populate_existing()
     res = await db.execute(stmt)
     portfolio = res.scalar_one()
 

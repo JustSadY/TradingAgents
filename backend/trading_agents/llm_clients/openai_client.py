@@ -1,3 +1,4 @@
+import logging
 from typing import Any
 
 from langchain_core.messages import AIMessageChunk
@@ -7,6 +8,8 @@ from langchain_openai import ChatOpenAI
 from .base_client import BaseLLMClient, normalize_content
 from .capabilities import get_capabilities
 from .validators import validate_model
+
+logger = logging.getLogger(__name__)
 
 
 def _strip_chunk_usage(chunk) -> Any | None:
@@ -39,6 +42,12 @@ def _final_usage_chunk(usage) -> ChatGenerationChunk:
     return ChatGenerationChunk(message=AIMessageChunk(content="", usage_metadata=usage))
 
 
+def _is_quota_exhausted(exc: Exception) -> bool:
+    """Permanent quota exhaustion (not a transient rate limit)."""
+    err_msg = str(exc).lower()
+    return "resourceexhausted" in err_msg and ("total" in err_msg or "quota" in err_msg)
+
+
 class NormalizedChatOpenAI(ChatOpenAI):
     """ChatOpenAI with normalized content and sane streamed token usage.
 
@@ -49,34 +58,60 @@ class NormalizedChatOpenAI(ChatOpenAI):
     input_tokens × chunk_count and the per-analysis counters explode into the
     billions. We strip per-chunk usage and re-emit only the LAST snapshot at
     the end of the stream, which is correct for both behaviours (cumulative →
-    last snapshot is the total; final-only → last snapshot is the only one)."""
+    last snapshot is the total; final-only → last snapshot is the only one).
+
+    Quota exhaustion: detects ``ResourceExhausted`` + ``total``/``quota``
+    errors from the provider and logs them. The exception propagates so the
+    calling retry wrapper (``_retry_llm_call`` / ``retry_call`` / ``_safe``)
+    can fall back immediately without burning quota on retries.
+    """
 
     def _stream(self, *args, **kwargs):
         last_usage = None
-        for chunk in super()._stream(*args, **kwargs):
-            usage = _strip_chunk_usage(chunk)
-            if usage is not None:
-                last_usage = usage
-            yield chunk
+        try:
+            for chunk in super()._stream(*args, **kwargs):
+                usage = _strip_chunk_usage(chunk)
+                if usage is not None:
+                    last_usage = usage
+                yield chunk
+        except Exception as exc:
+            if _is_quota_exhausted(exc):
+                logger.warning("Quota exhausted: %s", exc)
+            raise
         if last_usage is not None:
             yield _final_usage_chunk(last_usage)
 
     async def _astream(self, *args, **kwargs):
         last_usage = None
-        async for chunk in super()._astream(*args, **kwargs):
-            usage = _strip_chunk_usage(chunk)
-            if usage is not None:
-                last_usage = usage
-            yield chunk
+        try:
+            async for chunk in super()._astream(*args, **kwargs):
+                usage = _strip_chunk_usage(chunk)
+                if usage is not None:
+                    last_usage = usage
+                yield chunk
+        except Exception as exc:
+            if _is_quota_exhausted(exc):
+                logger.warning("Quota exhausted: %s", exc)
+            raise
         if last_usage is not None:
             yield _final_usage_chunk(last_usage)
 
     def invoke(self, input, config=None, **kwargs):
-        return normalize_content(super().invoke(input, config, **kwargs))
+        try:
+            return normalize_content(super().invoke(input, config, **kwargs))
+        except Exception as exc:
+            if _is_quota_exhausted(exc):
+                logger.warning("Quota exhausted: %s", exc)
+            raise
 
     async def ainvoke(self, input, config=None, **kwargs):
-        result = await super().ainvoke(input, config, **kwargs)
-        return normalize_content(result)
+        try:
+            result = await super().ainvoke(input, config, **kwargs)
+            return normalize_content(result)
+        except Exception as exc:
+            if _is_quota_exhausted(exc):
+                logger.warning("Quota exhausted: %s", exc)
+            raise
 
     def _use_responses_api(self, payload: dict) -> bool:
         # Always use Chat Completions API — Responses API is not needed for

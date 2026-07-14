@@ -446,6 +446,7 @@ async def _tool_place_paper_order(
             result = await execute_order(
                 order_db, ticker=ticker.strip().upper(), action=act, quantity=quantity, user=user
             )
+            await order_db.commit()
         filled = result.get("filled_quantity", quantity)
         price = result.get("price_per_share", 0)
         return f"Order placed: {act} {filled:.4f} shares of {ticker.upper()} @ ${float(price):,.2f}. Total: ${float(filled) * float(price):,.2f}."
