@@ -41,6 +41,7 @@ _logger = logging.getLogger(__name__)
 # Redis so other processes (web vs. arq worker) can see and cancel them too.
 _RUNNING_TASKS: dict[str, asyncio.Task] = {}
 _TASK_REGISTRY: dict[str, dict] = {}  # Re-used by get_active_tasks_for_user
+_BACKGROUND_TASKS: set[asyncio.Task] = set()  # Strong refs for fire-and-forget retry tasks
 
 # Maps an analysis task_id to the id of the user who started it. Populated
 # by the API handlers before the task_id is returned to the client, so the
@@ -185,16 +186,16 @@ async def run_analysis_task(
                 task_id=task_id,
                 user=user,
             )
-            # Signal-based paper trading
+            await db.commit()
+            # Signal-based paper trading (separate txn — analysis already committed)
             try:
                 await place_signal_order(db, ticker=ticker, row=row, settings=settings, user=user)
                 await db.commit()
             except Exception as exc:
-                _logger.warning("Order execution skipped for %s: %s", ticker, exc)
                 await db.rollback()
+                _logger.warning("Order execution skipped for %s: %s", ticker, exc)
         except Exception:
             _logger.exception("Background analysis failed")
-            await db.rollback()
             try:
                 await _maybe_retry_analysis(ticker, trade_date, asset_type, settings, task_id, user)
             except Exception as retry_exc:
@@ -234,9 +235,9 @@ async def _maybe_retry_analysis(
         pool = await get_arq_pool()
         await pool.enqueue_job("run_analysis_job", ticker, trade_date, asset_type, user.id if user else None, task_id)
     else:
-        import asyncio
-
-        asyncio.create_task(run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user))
+        task = asyncio.create_task(run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user))
+        _BACKGROUND_TASKS.add(task)
+        task.add_done_callback(_BACKGROUND_TASKS.discard)
 
 
 async def run_portfolio_task(

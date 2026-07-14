@@ -6,7 +6,10 @@ import time
 
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
+
+from backend.api.deps import get_current_user
+from backend.models.user import User
 
 router = APIRouter(prefix="/api/market", tags=["market"])
 _logger = logging.getLogger(__name__)
@@ -63,7 +66,7 @@ async def _fetch_rates() -> dict[str, float]:
 
 
 @router.get("/fx-rates", response_model=dict[str, float | None])
-async def get_fx_rates():
+async def get_fx_rates(_: User = Depends(get_current_user)):
     """
     Returns exchange rates vs USD for supported currencies.
     Response: {"USD": 1.0, "EUR": 1.085, "GBP": 1.27, ...}

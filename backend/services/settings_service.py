@@ -89,7 +89,7 @@ async def apply_settings_update(
     from backend.core.events import emit
 
     try:
-        emit("settings_updated", settings=settings)
+        await emit("settings_updated", settings=settings)
     except Exception:
         _logger.warning("Settings update event emission failed", exc_info=True)
 

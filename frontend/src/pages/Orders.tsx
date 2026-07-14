@@ -181,7 +181,7 @@ export default function Orders() {
     setLoading(true)
     axios.get('/api/portfolio/orders')
       .then(r => setOrders(r.data))
-      .catch(() => {})
+      .catch(e => console.error('Failed to load orders', e))
       .finally(() => setLoading(false))
   }, [])
 

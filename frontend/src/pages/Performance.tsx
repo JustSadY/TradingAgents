@@ -95,7 +95,7 @@ export default function Performance() {
 
   useEffect(() => {
     load()
-    axios.get('/api/analytics/token-usage').then(r => setTokenUsage(r.data)).catch(() => {})
+    axios.get('/api/analytics/token-usage').then(r => setTokenUsage(r.data)).catch(e => console.error('Failed to load token usage', e))
   }, [])
 
   const handleFilter = () => { setFilterTicker(ticker); load(ticker || undefined) }

@@ -59,7 +59,7 @@ export default function Dashboard() {
       setWatchlist(w)
       setAttribution(attr.attribution || [])
     })
-      .catch(() => {})
+      .catch(e => console.error('Dashboard data load failed', e))
       .finally(() => setLoading(false))
     loadSummary()
   }, [loadSummary])

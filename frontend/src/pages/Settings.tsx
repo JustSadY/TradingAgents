@@ -71,7 +71,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     const url = userId ? `/api/settings/webhook-deliveries?user_id=${userId}` : '/api/settings/webhook-deliveries'
     axios.get<WebhookDeliveryRead[]>(url)
       .then(r => setDeliveries(r.data))
-      .catch(() => {})
+      .catch(e => console.error('Failed to load webhook deliveries', e))
       .finally(() => setLoadingDeliveries(false))
   }, [userId])
   const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'agents' | 'risk' | 'webhooks' | 'presets' | 'advanced' | 'cron' | 'tools' | 'memory' | 'personas'>('general')
@@ -80,7 +80,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const [pineconeSaving, setPineconeSaving] = useState(false)
   const loadMemoryStatus = () => {
     const url = userId ? `/api/settings/memory?user_id=${userId}` : '/api/settings/memory'
-    axios.get(url).then(r => setMemoryStatus(r.data)).catch(() => {})
+    axios.get(url).then(r => setMemoryStatus(r.data)).catch(e => console.error('Failed to load memory status', e))
   }
   const [allowedSettings, setAllowedSettings] = useState<string[]>([])
   const [cronStatus, setCronStatus] = useState<{ running: boolean; job_configured: boolean; next_run_time: string | null } | null>(null)
@@ -95,9 +95,9 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     const presetsUrl = userId ? `/api/presets?user_id=${userId}` : '/api/presets'
     Promise.all([
       axios.get(settingsUrl).then(r => r.data),
-      axios.get(presetsUrl).then(r => r.data).catch(() => []),
-      axios.get(permUrl).then(r => r.data.allowed_settings || r.data.permissions || []).catch(() => []),
-      axios.get('/api/cron/status').then(r => r.data).catch(() => null),
+      axios.get(presetsUrl).then(r => r.data).catch(e => { console.error('Failed to load presets', e); return [] }),
+      axios.get(permUrl).then(r => r.data.allowed_settings || r.data.permissions || []).catch(e => { console.error('Failed to load permissions', e); return [] }),
+      axios.get('/api/cron/status').then(r => r.data).catch(e => { console.error('Failed to load cron status', e); return null }),
     ]).then(([settings, presetList, allowedSet, cStatus]) => {
       setS(settings)
       setPresets(presetList)
@@ -117,7 +117,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
   const loadPresets = () => {
     const url = userId ? `/api/presets?user_id=${userId}` : '/api/presets'
-    axios.get(url).then(r => setPresets(r.data)).catch(() => {})
+    axios.get(url).then(r => setPresets(r.data)).catch(e => console.error('Failed to load presets list', e))
   }
 
   const savePreset = async () => {
@@ -203,7 +203,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   }
   const deletePineconeKey = async () => {
     const url = userId ? `/api/users/${userId}/api-keys/pinecone` : '/api/users/me/api-keys/pinecone'
-    await axios.delete(url).catch(() => {})
+    await axios.delete(url).catch(e => console.error('Failed to delete Pinecone key', e))
     await loadMemoryStatus()
   }
 

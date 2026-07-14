@@ -18,6 +18,7 @@ what happens *on failure*.
 
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import logging
 import time
@@ -28,6 +29,9 @@ from typing import Any
 # Dedicated run-log stream. Filter logs by this logger name to get the
 # per-agent / per-tool execution trace.
 run_logger = logging.getLogger("tradingagents.run")
+
+# Strong references to in-flight WS event tasks so GC doesn't collect them mid-flight.
+_WS_BG_TASKS: set[asyncio.Task] = set()
 
 # Substrings that mark an error as worth retrying (rate limits, timeouts, 5xx…).
 # NOTE: "resourceexhausted" without "total"/"quota" is a transient rate limit;
@@ -385,6 +389,14 @@ async def _handle_node_fallback(name: str, kind: str, fallback: Callable, state:
     return update
 
 
+def _spawn_ws_task(coro):
+    """Create a tracked fire-and-forget WS task so GC doesn't collect it mid-flight."""
+    task = asyncio.create_task(coro)
+    _WS_BG_TASKS.add(task)
+    task.add_done_callback(_WS_BG_TASKS.discard)
+    return task
+
+
 def _emit_circuit_open_ws(node: str, kind: str, elapsed: float):
     """Fire-and-forget WS event for circuit-open state, best-effort."""
     try:
@@ -392,9 +404,7 @@ def _emit_circuit_open_ws(node: str, kind: str, elapsed: float):
 
         ctx = active_run_context.get(None)
         if ctx and "emitter" in ctx:
-            import asyncio
-
-            asyncio.create_task(ctx["emitter"].emit_circuit_open(node, kind, elapsed))
+            _spawn_ws_task(ctx["emitter"].emit_circuit_open(node, kind, elapsed))
     except Exception:
         pass
 
@@ -406,9 +416,7 @@ def _emit_node_error_ws(node: str, kind: str, exc: Exception):
 
         ctx = active_run_context.get(None)
         if ctx and "emitter" in ctx:
-            import asyncio
-
-            asyncio.create_task(
+            _spawn_ws_task(
                 ctx["emitter"].emit_node_error(node, kind, str(exc)[:200], classify_error(exc))
             )
     except Exception:
@@ -422,8 +430,6 @@ def _emit_fallback_ws(node: str, kind: str, exc: Exception):
 
         ctx = active_run_context.get(None)
         if ctx and "emitter" in ctx:
-            import asyncio
-
-            asyncio.create_task(ctx["emitter"].emit_fallback(node, kind, str(exc)[:200]))
+            _spawn_ws_task(ctx["emitter"].emit_fallback(node, kind, str(exc)[:200]))
     except Exception:
         pass

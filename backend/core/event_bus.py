@@ -26,7 +26,6 @@ async def publish_event(task_id: str, event: dict[str, Any]) -> None:
     if redis_enabled():
         redis = get_redis()
         await redis.publish(EVENTS_CHANNEL, json.dumps({"task_id": task_id, "event": event}, ensure_ascii=False))
-        return
     await ws_manager.send(task_id, event)
 
 
@@ -34,7 +33,6 @@ async def publish_close(task_id: str) -> None:
     if redis_enabled():
         redis = get_redis()
         await redis.publish(EVENTS_CHANNEL, json.dumps({"task_id": task_id, "event": {"type": _CLOSE_TYPE}}))
-        return
     await ws_manager.close_task(task_id)
 
 

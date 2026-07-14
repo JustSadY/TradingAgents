@@ -222,11 +222,9 @@ async def delete_user(
 
     from backend.core.events import emit
 
-    # Delete and commit first, then notify — so listeners never act on a
-    # deletion that ends up rolled back.
     await db.delete(user)
     await db.commit()
-    emit("user_deleted", user_id=user_id)
+    await emit("user_deleted", user_id=user_id)
 
 
 @router.get("/{user_id}/permissions", response_model=UserPermissionsResponse)

@@ -156,6 +156,21 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
             except Exception as e:
                 _logger.debug("Failed to emit tool progress: %s", e)
 
+    async def on_tool_error(
+        self,
+        error: BaseException,
+        *,
+        run_id: UUID,
+        parent_run_id: UUID | None = None,
+        tags: list[str] | None = None,
+        metadata: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> None:
+        self._tool_starts.pop(run_id, None)
+        self._stats_handler.on_tool_error(
+            error, run_id=run_id, parent_run_id=parent_run_id, tags=tags, metadata=metadata, **kwargs
+        )
+
     async def on_tool_end(
         self,
         output: Any,
