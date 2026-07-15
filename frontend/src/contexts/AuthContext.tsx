@@ -180,7 +180,6 @@ axios.interceptors.response.use(
       _queue = []
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem(REFRESH_KEY)
-      window.location.href = '/login'
       throw err
     } finally {
       _refreshing = false
