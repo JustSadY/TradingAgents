@@ -296,8 +296,8 @@ async def execute_order(
 
     portfolio = await get_or_create_sim_portfolio(db, user=user, portfolio_id=portfolio_id)
 
-    stmt = select(Portfolio).where(Portfolio.id == portfolio.id).with_for_update().populate_existing()
-    res = await db.execute(stmt)
+    stmt = select(Portfolio).where(Portfolio.id == portfolio.id).with_for_update()
+    res = await db.execute(stmt, execution_options={"populate_existing": True})
     portfolio = res.scalar_one()
 
     notional = price * qty_dec
