@@ -145,6 +145,18 @@ async def cleanup_stale_analyses(db: AsyncSession) -> int:
 
 
 async def create_analysis_result(db: AsyncSession, **kwargs) -> AnalysisResult:
+    task_id = kwargs.get("task_id")
+    if task_id:
+        stmt = select(AnalysisResult).where(AnalysisResult.task_id == task_id)
+        result = await db.execute(stmt)
+        existing = result.scalar_one_or_none()
+        if existing:
+            for k, v in kwargs.items():
+                if hasattr(existing, k):
+                    setattr(existing, k, v)
+            await db.commit()
+            await db.refresh(existing)
+            return existing
     row = AnalysisResult(**kwargs)
     db.add(row)
     await db.commit()
