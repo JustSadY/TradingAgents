@@ -52,7 +52,7 @@ class WebSocketManager:
         self._schedule_buffer_cleanup(task_id, ttl=600)  # Refresh with 10-minute sliding TTL
         text = json.dumps(event, ensure_ascii=False)
 
-        active_conns = self._connections.get(task_id, [])
+        active_conns = list(self._connections.get(task_id, []))
         if not active_conns:
             return
 
