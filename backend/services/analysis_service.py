@@ -209,16 +209,16 @@ async def _maybe_retry_analysis(
     web and worker processes. After ``_ANALYSIS_RETRY_MAX`` attempts the task
     is marked as a dead letter (logged but no further action).
     """
-    from backend.core.task_store import get_meta, set_meta
+    from backend.core.task_store import set_meta as _redis_set_meta
 
-    meta = await get_meta(task_id) or {}
+    meta = await task_store.get_meta(task_id) or {}
     retry_count = meta.get("retry_count", 0)
     if retry_count >= _ANALYSIS_RETRY_MAX:
         _logger.warning("Analysis dead-letter task=%s ticker=%s (retried %d times)", task_id, ticker, retry_count)
         await task_store.clear_meta(task_id, user.id if user else None)
         return
     meta["retry_count"] = retry_count + 1
-    await set_meta(task_id, meta)
+    await _redis_set_meta(task_id, meta)
     _logger.info("Re-enqueuing analysis task=%s ticker=%s (retry %d/%d)", task_id, ticker, retry_count + 1, _ANALYSIS_RETRY_MAX)
 
     from backend.services.analysis_queue import queue_mode as _queue_mode

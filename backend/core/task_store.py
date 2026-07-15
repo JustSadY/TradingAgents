@@ -55,6 +55,19 @@ async def clear_owner(task_id: str) -> None:
     await get_redis().delete(_owner_key(task_id))
 
 
+async def get_meta(task_id: str) -> dict | None:
+    """Return task meta dict, or None when unknown."""
+    if not redis_enabled():
+        return None
+    raw = await get_redis().get(_meta_key(task_id))
+    if raw is None:
+        return None
+    try:
+        return json.loads(raw)
+    except (TypeError, ValueError):
+        return None
+
+
 async def set_meta(task_id: str, meta: dict) -> None:
     if not redis_enabled():
         return
