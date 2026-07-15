@@ -81,7 +81,7 @@ export default function ChartPage() {
     try {
       const [ohlcvRes, histRes, sentRes] = await Promise.all([
         api.get('/api/market/ohlcv', { params: { ticker, period: p } }),
-        api.get('/api/analysis/history', { params: { ticker, limit: 200 } }),
+        api.get('/api/market/analysis/history', { params: { ticker, limit: 200 } }),
         api.get('/api/market/sentiment-history', { params: { ticker } }),
       ])
       if (reqId !== loadReqId.current) return
@@ -97,18 +97,26 @@ export default function ChartPage() {
     }
   }, [t])
 
+  // Keep refs in sync so the URL-sync effect never captures stale closures.
+  const activeTickerRef = useRef(activeTicker)
+  activeTickerRef.current = activeTicker
+  const periodRef = useRef(period)
+  periodRef.current = period
+  const loadRef = useRef(load)
+  loadRef.current = load
+
   useEffect(() => { if (activeTicker) load(activeTicker, period) }, [])
 
   // Sync state when URL params change due to in-app navigation
   const urlTicker = searchParams.get('ticker');
   const urlPeriod = searchParams.get('period');
   useEffect(() => {
-    if (urlTicker && urlTicker !== activeTicker) {
+    if (urlTicker && urlTicker !== activeTickerRef.current) {
       setActiveTicker(urlTicker);
-      load(urlTicker, urlPeriod || period);
-    }
-    if (urlPeriod && urlPeriod !== period) {
+      loadRef.current(urlTicker, urlPeriod || periodRef.current);
+    } else if (urlPeriod && urlPeriod !== periodRef.current) {
       setPeriod(urlPeriod);
+      if (activeTickerRef.current) loadRef.current(activeTickerRef.current, urlPeriod);
     }
   }, [urlTicker, urlPeriod]);
 

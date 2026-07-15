@@ -53,8 +53,11 @@ NEUTRAL: [neutral analyst's full response]"""
 def _parse_perspectives(text: str) -> dict[str, str]:
     sections = {"aggressive": "", "conservative": "", "neutral": ""}
     for key in sections:
-        # Match the heading (case-insensitive) and capture everything up to the next heading or end-of-string
-        pattern = rf'(?:^|\n){re.escape(key.upper())}:\s*(.*?)(?=\n(?:AGGRESSIVE|CONSERVATIVE|NEUTRAL):|\Z)'
+        heading = key.upper()
+        # Match the heading allowing optional markdown bold (**HEADING:** or **HEADING**:)
+        # and capture everything up to the next heading or end-of-string.
+        # Handles: AGGRESSIVE:, **AGGRESSIVE:**, **AGGRESSIVE**:, AGGRESSIVE :, etc.
+        pattern = rf'(?:^|\n)\*{{0,2}}{re.escape(heading)}\*{{0,2}}\s*:\s*(.*?)(?=\n\*{{0,2}}(?:AGGRESSIVE|CONSERVATIVE|NEUTRAL)\*{{0,2}}\s*:|\Z)'
         m = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
         if m:
             sections[key] = m.group(1).strip()
