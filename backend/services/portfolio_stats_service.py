@@ -62,8 +62,6 @@ async def get_portfolio_stats(db: AsyncSession, user: User) -> dict:
     winning_trades = sum(1 for o in orders if (o.realized_pnl or Decimal("0")) > 0)
     win_rate = winning_trades / total_trades
 
-    # Per-trade return percentages: realized_pnl / cost_basis * 100
-    # cost_basis = total_value - realized_pnl  (what was spent to acquire)
     returns_pct: list[float] = []
     trade_data: list[dict] = []
 
@@ -125,10 +123,8 @@ async def get_portfolio_stats(db: AsyncSession, user: User) -> dict:
                 if dd > max_dd:
                     max_dd = dd
 
-        # Return as negative number (or 0 if no drawdown)
         max_drawdown_pct = -max_dd if max_dd > 0.0 else 0.0
 
-    # By-ticker breakdown
     ticker_map: dict[str, dict] = {}
     for o in orders:
         t = o.ticker

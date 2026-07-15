@@ -9,7 +9,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_system_instruction_override,
 )
 
-# Single source of truth shared by the ToolNode registration and the LLM binding.
 _REVIEW_TOOLS = [get_past_performance_data]
 
 
@@ -30,7 +29,6 @@ def create_review_analyst(llm):
         context_str = build_instrument_context(ticker, asset_type)
         curr_date = state.get("trade_date")
 
-        # Allow per-agent system prompt override from Settings → Agents
         override = get_system_instruction_override("review")
         if override:
             system_message = override
@@ -55,7 +53,6 @@ def create_review_analyst(llm):
                 f"{context_str}\n"
             )
 
-        # Append language and general settings
         system_message += get_general_settings_block()
 
         messages = [
@@ -63,7 +60,6 @@ def create_review_analyst(llm):
             *state["messages"],
         ]
 
-        # Use ainvoke for async compatibility
         response = await llm_with_tools.ainvoke(messages)
         return {"messages": [response], "review_report": response.content}
 

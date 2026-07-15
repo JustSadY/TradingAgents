@@ -82,7 +82,6 @@ async def run_tool_analyst(
     prompt = prompt.partial(current_date=state["trade_date"])
     prompt = prompt.partial(instrument_context=instrument_context)
 
-    # Bind tools only if we have at least one tool
     if tools:
         bound_llm = llm.bind_tools(tools)
     else:
@@ -98,7 +97,6 @@ async def run_tool_analyst(
     _start = _time.time()
     log_event("node_start", node=analyst, kind="analyst")
 
-    # Progress: Emit analyst progress event
     if ctx and "emitter" in ctx:
         emitter = ctx["emitter"]
         from backend.core.catalog import node_progress
@@ -107,7 +105,6 @@ async def run_tool_analyst(
         if prog:
             await emitter.emit(prog)
 
-    # Mental Model: Emit thinking event
     if ctx and "emitter" in ctx:
         emitter = ctx["emitter"]
         thought = f"Examining {state['company_of_interest']} {analyst.title()} data..."
@@ -121,7 +118,6 @@ async def run_tool_analyst(
         await emitter.emit_mental_model(analyst, thought)
 
     try:
-        # Use ainvoke directly for better consistency and to stay on the main loop
         result = await retry_call(
             lambda: (prompt | bound_llm).ainvoke(state["messages"]),
             label=f"analyst:{analyst}",
@@ -129,9 +125,6 @@ async def run_tool_analyst(
             runtime_config=runtime_retry_config,
         )
     except Exception as exc:  # noqa: BLE001
-        # Retries exhausted — skip this analyst with a visible note instead of
-        # aborting the whole run. The empty AIMessage carries no tool calls, so
-        # the graph routes straight to the next analyst.
         import traceback as _tb
 
         log_event(

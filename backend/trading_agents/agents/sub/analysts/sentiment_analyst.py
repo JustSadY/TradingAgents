@@ -47,7 +47,6 @@ def create_sentiment_analyst(llm):
             reddit_enabled = fetch_reddit_posts in filtered
             stocktwits_enabled = fetch_stocktwits_messages in filtered
 
-        # Use route_to_vendor directly
         news_block = await route_to_vendor("get_news", ticker, start_date, end_date)
 
         if reddit_enabled:
@@ -60,7 +59,6 @@ def create_sentiment_analyst(llm):
         else:
             stocktwits_block = "StockTwits sentiment data source is disabled by user or server settings."
 
-        # --- Cache check (after data fetch, before LLM call) ---
         data_hash = compute_data_hash("social", ticker, end_date, news_block, reddit_block, stocktwits_block)
         cached_report = await check_analyst_cache("social", ticker, data_hash)
         if cached_report:
@@ -70,7 +68,6 @@ def create_sentiment_analyst(llm):
                 "sentiment_report": cached_report,
             }
 
-        # Allow per-agent system prompt override from Settings → Agents
         override = get_system_instruction_override("social")
         if override:
             system_message = override

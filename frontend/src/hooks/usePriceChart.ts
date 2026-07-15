@@ -73,7 +73,6 @@ export function usePriceChart(
   const trendlineSeriesRefs = useRef<ISeriesApi<'Line'>[]>([])
   const overlaySeriesRefs = useRef<ISeriesApi<'Line'>[]>([])
 
-  // 1. Initialize Chart (Run once when container is available)
   useEffect(() => {
     if (!containerRef.current || chartRef.current) return
 
@@ -153,11 +152,9 @@ export function usePriceChart(
     // containerRef is a stable ref object; the chartRef guard prevents re-init.
   }, [containerRef])
 
-  // Update Data and Overlays
   useEffect(() => {
     if (!candleSeriesRef.current || !volSeriesRef.current || candles.length === 0) return
 
-    // Sort and deduplicate candles to ensure lightweight-charts doesn't crash
     const sortedCandles = [...candles]
       .filter(c => c && c.time)
       .sort((a, b) => a.time.localeCompare(b.time))
@@ -187,7 +184,6 @@ export function usePriceChart(
         emaSeriesRef.current.setData(showEMA ? sortedCandles.filter(c => c.ema != null).map(c => ({ time: c.time as Time, value: c.ema! })) : [])
     }
 
-    // Cleanup previous overlays
     priceLineRefs.current.forEach(pl => { try { candleSeriesRef.current?.removePriceLine(pl) } catch { /* overlay already gone */ } })
     priceLineRefs.current = []
     trendlineSeriesRefs.current.forEach(ts => { try { chartRef.current?.removeSeries(ts) } catch { /* overlay already gone */ } })
@@ -197,7 +193,6 @@ export function usePriceChart(
 
     const tradeDatesInRange = new Set(candles.map(c => c.time))
 
-    // Helper for safe JSON parsing (backend might return string or object)
     const getAnn = (a: ChartAnalysis): ChartAnnotations => {
         if (!a.chart_annotations) return {}
         if (typeof a.chart_annotations === 'object') return a.chart_annotations

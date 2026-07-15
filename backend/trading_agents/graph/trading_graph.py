@@ -81,19 +81,11 @@ class TradingAgentsGraph:
         os.makedirs(self.config["data_cache_dir"], exist_ok=True)
         os.makedirs(self.config["results_dir"], exist_ok=True)
 
-        # ------------------------------------------------------------------
-        # Build the agent hierarchy from runtime context
-        # ------------------------------------------------------------------
         runtime_agent_ctx = self.config.get("runtime_agent_context") or {}
         self.hierarchy = AgentHierarchy(runtime_agent_ctx)
 
         self._init_llms(runtime_agent_ctx)
 
-        # ------------------------------------------------------------------
-        # Filter selected analysts using hierarchy enable state.
-        # is_enabled() cascades through market_intelligence → portfolio_manager,
-        # so disabling either branch transparently drops every analyst.
-        # ------------------------------------------------------------------
         _effective_analysts = [k for k in selected_analysts if self.hierarchy.is_enabled(k)]
         skipped = set(selected_analysts) - set(_effective_analysts)
         if skipped:

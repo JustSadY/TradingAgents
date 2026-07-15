@@ -7,7 +7,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_options_data,
 )
 
-# Single source of truth shared by the ToolNode registration and the LLM binding.
 _OPTIONS_TOOLS = [get_options_data]
 
 

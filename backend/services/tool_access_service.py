@@ -42,7 +42,6 @@ async def update_user_agent_access(db: AsyncSession, user_id: int, access_map: d
 
 
 async def get_user_tool_access(db: AsyncSession, user_id: int) -> dict[str, dict]:
-    # Get all registered tools
     tools = registry.list()
     access_map = {
         tool.key: {

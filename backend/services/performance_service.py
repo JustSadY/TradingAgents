@@ -58,7 +58,6 @@ async def backfill_returns(db) -> int:
                 from backend.trading_agents.graph.reflection import Reflector
                 from backend.trading_agents.llm_clients import create_llm_client
 
-                # Use a lightweight client for reflection
                 client = create_llm_client(
                     provider=DEFAULT_CONFIG.get("llm_provider", "openai"),
                     model=DEFAULT_CONFIG.get("llm_model", "gpt-4o-mini"),
@@ -76,8 +75,6 @@ async def backfill_returns(db) -> int:
             except Exception as ref_exc:
                 _logger.warning("Could not generate reflection for analysis_id=%s: %s", row.id, ref_exc)
 
-            # Store this completed, outcome-known analysis as an episode so future
-            # runs can recall similar situations (and avoid repeating losing actions).
             from backend.services.memory_service import record_episode
 
             await record_episode(
@@ -111,7 +108,6 @@ async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
     result = await db.execute(q)
     rows = result.scalars().all()
 
-    # Dynamically build analyst map from registry
     report_fields = get_report_fields()
     analysts = {rf.replace("_report", ""): {"label": label, "report_field": rf} for rf, label in report_fields.items()}
 

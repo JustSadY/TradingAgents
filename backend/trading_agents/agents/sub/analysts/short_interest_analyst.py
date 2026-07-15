@@ -5,7 +5,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_short_interest,
 )
 
-# Single source of truth shared by the ToolNode registration and the LLM binding.
 _SHORT_INTEREST_TOOLS = [get_short_interest]
 
 
@@ -34,7 +33,6 @@ def create_short_interest_analyst(llm):
         ticker = state.get("company_of_interest", "")
         trade_date = state.get("trade_date", "")
 
-        # Pre-fetch data for cache hash
         try:
             data = await route_to_vendor("get_short_interest", ticker)
         except Exception:

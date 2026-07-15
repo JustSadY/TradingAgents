@@ -16,8 +16,6 @@ import {
   MessageSquare, Bot, Terminal, BookOpen
 } from 'lucide-react'
 import type { AnalysisListItem, AnalysisResultRead, MultiTickerListItem, MultiTickerResultRead } from '../api/types'
-
-// Components
 import { SignalBadge } from '../components/analysis/SignalBadge'
 import { ReportCard } from '../components/analysis/ReportCard'
 import { AnalysisControls } from '../components/analysis/AnalysisControls'

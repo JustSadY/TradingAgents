@@ -113,13 +113,11 @@ async def self_correct_structured(
         validation_error,
     )
 
-    # Convert original prompt to a readable string representation
     if isinstance(original_prompt, list):
         prompt_str = "\n".join(str(m) for m in original_prompt)
     else:
         prompt_str = str(original_prompt)
 
-    # Build system instructions and correction user prompt
     system_content = (
         "You are a strict data-parsing assistant. Your task is to output valid JSON that conforms exactly "
         f"to the following JSON Schema:\n{get_json_schema(schema)}\n\n"
@@ -233,7 +231,6 @@ async def ainvoke_structured_or_freetext(
     If schema is provided, we guarantee validation of the returned Pydantic model
     by extracting JSON from free text and running a self-correction loop if it fails.
     """
-    # 1. Attempt structured LLM if configured
     if structured_llm is not None:
         try:
             result = await _retry_llm_call(structured_llm, prompt, agent_name)
@@ -247,15 +244,12 @@ async def ainvoke_structured_or_freetext(
                 exc,
             )
 
-    # 2. Call plain LLM with retry
     response = await _retry_llm_call(plain_llm, prompt, agent_name)
     raw_text = response.content if hasattr(response, "content") else str(response)
 
-    # If no schema was requested, we return raw text content
     if schema is None:
         return raw_text
 
-    # 3. Try to extract and validate JSON from the raw response
     json_str = extract_json_block(raw_text)
     validation_error = ""
     if json_str:
@@ -267,7 +261,6 @@ async def ainvoke_structured_or_freetext(
     else:
         validation_error = "Could not locate a valid JSON curly brace block in the text response."
 
-    # 4. Trigger self-correction loop (max 2 attempts)
     for attempt in range(1, 3):
         corrected = await self_correct_structured(
             plain_llm=plain_llm,
@@ -281,7 +274,6 @@ async def ainvoke_structured_or_freetext(
         if corrected is not None:
             return corrected
 
-    # 5. Ultimate fallback if all attempts fail: log error and return raw text
     logger.error(
         "%s: All parsing and self-correction attempts failed. Returning unvalidated free text.",
         agent_name,

@@ -14,9 +14,9 @@ interface ToolSettings {
 }
 
 interface ToolSettingsPanelProps {
-  userId?: number // If specified, read/edit user-specific settings (admin mode)
-  serverScope?: boolean // If true, read/edit server-scope global settings
-  hideSaveButton?: boolean // If true, hide the save button
+  userId?: number
+  serverScope?: boolean
+  hideSaveButton?: boolean
 }
 
 export interface ToolSettingsPanelHandle {
@@ -136,7 +136,6 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
     )
   }
 
-  // Filter schema fields based on scope
   const filterFields = (fields: any[]) => {
     return fields.filter(field => {
       if (serverScope) {
@@ -147,7 +146,6 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
     })
   }
 
-  // Group tools by category
   const categories = Array.from(new Set(tools.map(t => t.category)))
 
   return (

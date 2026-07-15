@@ -62,6 +62,3 @@ def decode_token_payload(token: str, expected_type: str = "access") -> dict:
         raise ValueError(f"Invalid token: {exc}") from exc
 
 
-# NOTE: API key encryption/decryption is handled via AppSettings.get_fernet()
-# in backend/services/user_service.py — do not add encrypt_secret/decrypt_secret
-# helpers here as they duplicate that responsibility.

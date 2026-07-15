@@ -57,7 +57,6 @@ class WebSocketManager:
             return
 
         dead: list[WebSocket] = []
-        # Send to all active connections for this task
         results = await asyncio.gather(*[ws.send_text(text) for ws in active_conns], return_exceptions=True)
 
         for i, res in enumerate(results):

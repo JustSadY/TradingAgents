@@ -1,4 +1,3 @@
-# Import all built-in tools to register them
 from .builtin import (
     backtest,  # noqa: F401
     chart,  # noqa: F401

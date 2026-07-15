@@ -68,10 +68,6 @@ class AgentHierarchy:
             if agent.parent_key:
                 self._children.setdefault(agent.parent_key, []).append(agent.key)
 
-    # ------------------------------------------------------------------
-    # Tree traversal
-    # ------------------------------------------------------------------
-
     def children(self, key: str) -> list[str]:
         """Direct child keys of *key*, in catalog order."""
         return list(self._children.get(key, []))
@@ -79,10 +75,6 @@ class AgentHierarchy:
     def parent_of(self, key: str) -> str | None:
         agent = self._info.get(key)
         return agent.parent_key if agent else None
-
-    # ------------------------------------------------------------------
-    # Enable / disable resolution (cascading kill-switch)
-    # ------------------------------------------------------------------
 
     def _own_enabled(self, key: str) -> bool | None:
         """Explicit enabled flag for *key*, or None when unset."""
@@ -123,10 +115,6 @@ class AgentHierarchy:
         """
         own = self._own_enabled(main_key)
         return self._default_enabled(main_key) if own is None else own
-
-    # ------------------------------------------------------------------
-    # LLM resolution (recursive parent fallback)
-    # ------------------------------------------------------------------
 
     def resolve_llm(
         self,
@@ -181,10 +169,6 @@ class AgentHierarchy:
             return self.resolve_llm("portfolio_manager", fallback_llm, llm_factory, _origin_key=origin_key)
 
         return fallback_llm
-
-    # ------------------------------------------------------------------
-    # Tool reachability (Tier-3 gating)
-    # ------------------------------------------------------------------
 
     def tool_is_reachable(self, agent_tool_key: str) -> bool:
         """

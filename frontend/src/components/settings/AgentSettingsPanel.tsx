@@ -4,10 +4,6 @@ import { AlertCircle, ChevronDown, ChevronRight, Settings2 } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
 import { useMeta, triggerMetaRefetch } from '../../hooks/useMeta'
 
-// ---------------------------------------------------------------------------
-// Types
-// ---------------------------------------------------------------------------
-
 interface FieldSchema {
   key: string
   type: 'select' | 'string' | 'number' | 'textarea' | 'boolean'
@@ -46,11 +42,6 @@ interface AgentSettingsPanelProps {
   serverScope?: boolean
 }
 
-// ---------------------------------------------------------------------------
-// Constants
-// ---------------------------------------------------------------------------
-
-// Tier-1 branch roots shown as top-level accordion sections.
 const MAIN_AGENT_KEYS = new Set([
   'portfolio_manager',
   'market_intelligence',
@@ -62,10 +53,6 @@ const MAIN_AGENT_KEYS = new Set([
 const InputCls =
   'w-full glass-input rounded-xl px-3 py-2 text-xs outline-none text-slate-300 placeholder-slate-650 disabled:opacity-40 disabled:cursor-not-allowed'
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
-
 function buildChildrenMap(agents: AgentMeta[]): Map<string | null, AgentMeta[]> {
   const map = new Map<string | null, AgentMeta[]>()
   for (const a of agents) {
@@ -75,10 +62,6 @@ function buildChildrenMap(agents: AgentMeta[]): Map<string | null, AgentMeta[]> 
   }
   return map
 }
-
-// ---------------------------------------------------------------------------
-// Settings fields renderer
-// ---------------------------------------------------------------------------
 
 function AgentSettingsFields({
   agent,
@@ -179,10 +162,6 @@ function AgentSettingsFields({
   )
 }
 
-// ---------------------------------------------------------------------------
-// Single agent card (leaf or mid-level node)
-// ---------------------------------------------------------------------------
-
 function AgentCard({
   agent,
   agentState,
@@ -217,9 +196,7 @@ function AgentCard({
           : 'border-white/[0.04] opacity-60'
       }`}
     >
-      {/* Header row */}
       <div className="flex items-start gap-2 p-3">
-        {/* Expand/collapse children toggle */}
         {hasChildren ? (
           <button
             className="mt-0.5 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer shrink-0"
@@ -232,7 +209,6 @@ function AgentCard({
           <span className="w-3.5 shrink-0" />
         )}
 
-        {/* Info */}
         <div className="flex-1 min-w-0">
           <div className="flex items-center justify-between gap-2">
             <div className="min-w-0">
@@ -244,7 +220,6 @@ function AgentCard({
               </p>
             </div>
 
-            {/* Enable toggle */}
             <button
               onClick={() => !effectivelyDisabled && onToggleEnabled(agent.key, !ownEnabled)}
               disabled={effectivelyDisabled}
@@ -263,7 +238,6 @@ function AgentCard({
             </button>
           </div>
 
-          {/* Settings toggle */}
           <button
             className="mt-2 flex items-center gap-1 text-[10px] text-slate-500 hover:text-violet-400 transition-colors cursor-pointer"
             onClick={() => setSettingsOpen(v => !v)}
@@ -273,7 +247,6 @@ function AgentCard({
             {settingsOpen ? <ChevronDown size={10} /> : <ChevronRight size={10} />}
           </button>
 
-          {/* Settings fields */}
           {settingsOpen && (
             <AgentSettingsFields
               agent={agent}
@@ -286,7 +259,6 @@ function AgentCard({
         </div>
       </div>
 
-      {/* Sub-agents */}
       {hasChildren && childrenOpen && (
         <div className="px-3 pb-3 space-y-2 border-t border-white/[0.04] pt-2">
           {children}
@@ -295,10 +267,6 @@ function AgentCard({
     </div>
   )
 }
-
-// ---------------------------------------------------------------------------
-// Recursive sub-tree renderer
-// ---------------------------------------------------------------------------
 
 function AgentSubTree({
   parentKey,
@@ -317,8 +285,6 @@ function AgentSubTree({
   onFieldChange: (key: string, fieldKey: string, value: any) => void
   t: (key: string) => string
 }) {
-  // Main agents render as their own top-level accordion sections, so they must
-  // not also appear nested under their parent (e.g. under Portfolio Manager).
   const directChildren = (childrenMap.get(parentKey) ?? []).filter(
     a => !MAIN_AGENT_KEYS.has(a.key),
   )
@@ -362,10 +328,6 @@ function AgentSubTree({
   )
 }
 
-// ---------------------------------------------------------------------------
-// Main Agent accordion section
-// ---------------------------------------------------------------------------
-
 function MainAgentSection({
   agent,
   childrenMap,
@@ -392,8 +354,6 @@ function MainAgentSection({
     enabled: agent.default_enabled,
     settings: {},
   }
-  // Root kill-switch: when an ancestor (Portfolio Manager) is off, the whole
-  // branch is forced off — matching the backend's cascading kill-switch.
   const ownEnabled = agentState.enabled && !ancestorDisabled
   const children = childrenMap.get(agent.key) ?? []
 
@@ -405,7 +365,6 @@ function MainAgentSection({
           : 'border-white/[0.04] bg-white/[0.005]'
       }`}
     >
-      {/* Section header */}
       <div
         className="flex items-center gap-3 p-4 cursor-pointer select-none"
         onClick={() => setExpanded(v => !v)}
@@ -434,7 +393,6 @@ function MainAgentSection({
           </p>
         </div>
 
-        {/* Enable toggle — stop propagation so it doesn't toggle accordion */}
         <button
           onClick={e => {
             e.stopPropagation()
@@ -454,10 +412,8 @@ function MainAgentSection({
         </button>
       </div>
 
-      {/* Expanded body */}
       {expanded && (
         <div className="px-4 pb-4 space-y-3 border-t border-white/[0.04] pt-3">
-          {/* Main agent's own LLM settings */}
           <button
             className="flex items-center gap-1.5 text-[10px] text-slate-500 hover:text-violet-400 transition-colors cursor-pointer"
             onClick={() => setSettingsOpen(v => !v)}
@@ -483,7 +439,6 @@ function MainAgentSection({
             </div>
           )}
 
-          {/* Sub-agents */}
           {children.length > 0 && (
             <div
               className={`space-y-2 transition-opacity duration-200 ${
@@ -511,10 +466,6 @@ function MainAgentSection({
   )
 }
 
-// ---------------------------------------------------------------------------
-// Main panel
-// ---------------------------------------------------------------------------
-
 export interface AgentSettingsPanelHandle {
   save: () => Promise<void>
 }
@@ -538,7 +489,6 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
     ? `/api/settings/users/${userId}/agents`
     : '/api/settings/agents'
 
-  // Fetch
   useEffect(() => {
     let cancelled = false
     setLoading(true)
@@ -551,7 +501,6 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
     return () => { cancelled = true }
   }, [apiPath, meta])
 
-  // Save
   const save = async () => {
     if (!settings) return
     setSaveSuccess(false)
@@ -573,7 +522,6 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
     save
   }))
 
-  // State updaters (immutable)
   const handleToggleEnabled = (agentKey: string, enabled: boolean) => {
     setSettings(prev => {
       if (!prev) return prev
@@ -604,13 +552,10 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
     })
   }
 
-  // Build tree structures
   const agents: AgentMeta[] = (meta?.agents as AgentMeta[]) ?? []
 
   const childrenMap = useMemo(() => buildChildrenMap(agents), [agents])
 
-  // Tier-1 agents (shown as accordion sections). Portfolio Manager is the root
-  // decision-maker, so it leads; the rest follow in catalog order.
   const mainAgents = useMemo(() => {
     const mains = agents.filter(a => MAIN_AGENT_KEYS.has(a.key))
     return mains.sort((a, b) => {
@@ -620,7 +565,6 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
     })
   }, [agents])
 
-  // ---------------------------------------------------------------------------
   if (loading) {
     return (
       <div className="text-slate-500 text-xs font-semibold p-4">
@@ -649,7 +593,6 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
 
   return (
     <div className="space-y-5 animate-in fade-in duration-150">
-      {/* Header banner */}
       <div className="flex justify-between items-center bg-white/[0.01] border border-white/[0.04] p-3 rounded-2xl sticky top-0 z-10 backdrop-blur-sm">
         <div>
           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
@@ -669,7 +612,6 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
         </div>
       </div>
 
-      {/* Hierarchy info banner */}
       <div className="text-[10px] text-slate-600 bg-white/[0.01] border border-white/[0.03] rounded-xl px-3 py-2 leading-relaxed">
         <span className="text-violet-400 font-bold">Hierarchy:</span>
         {' '}Portfolio Manager (root) → Market Intelligence / Research Manager / Trader / Risk Debate.
@@ -677,8 +619,6 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
         Sub-agents inherit the parent&apos;s LLM unless overridden.
       </div>
 
-      {/* Main agent sections. Portfolio Manager is the root: disabling it forces
-          every other branch off (matching the backend cascade). */}
       <div className="space-y-4">
         {mainAgents.map(agent => {
           const pmEnabled = settings.agents['portfolio_manager']?.enabled ?? true

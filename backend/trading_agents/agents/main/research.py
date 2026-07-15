@@ -68,14 +68,12 @@ def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
             out.update(update)
             local.update(update)
 
-        # ---- Synthesis Manager (sub) ----
         if ctx.is_enabled("synthesis_manager"):
             node = create_synthesis_manager(ctx.llm_for("synthesis_manager"))
             apply(await _safe("synthesis_manager", node, local, {"synthesis_report": ""}))
         else:
             apply({"synthesis_report": ""})
 
-        # ---- Bull ⇄ Bear debate (subs) ----
         bull_on = ctx.is_enabled("bull_researcher")
         bear_on = ctx.is_enabled("bear_researcher")
         if bull_on and bear_on:
@@ -105,14 +103,12 @@ def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
             if not local.get("investment_debate_state"):
                 apply({"investment_debate_state": neutral_invest_debate_state()})
 
-        # ---- Auditor (sub) ----
         if ctx.is_enabled("auditor"):
             node = create_auditor_node(ctx.llm_for("auditor"))
             apply(await _safe("auditor", node, local, {"audit_report": ""}))
         else:
             apply({"audit_report": ""})
 
-        # ---- Research Manager judgement (this main agent's own decision) ----
         judge = create_research_manager(ctx.llm_for("research_manager"))
         apply(
             await _safe(

@@ -107,7 +107,6 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
         if not await _check_tool_availability(db, user.id, tool):
             continue
 
-        # Get defaults
         default_enabled = tool.default_enabled
         default_settings = tool.default_settings(scope="user")
 
@@ -145,7 +144,6 @@ async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
 
 
 async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSettingsUpdate) -> ToolSettingsRead:
-    # Get existing user rows
     from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
 
     user_rows_list = await _repo_get_user(db, user.id)

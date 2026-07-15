@@ -90,15 +90,12 @@ class GraphSetup:
             selected_analysts=list(selected_analysts),
         )
 
-        # ---- Main Agent nodes (guard-wrapped for resilience) ----
         market_intelligence = guard_node(
             create_market_intelligence_node(ctx),
             name=_MARKET_INTELLIGENCE,
             kind="main",
             fallback=lambda state, exc: {},
         )
-        # After analysts finish, they cross-examine each other; on any error this
-        # contributes nothing and the run proceeds to synthesis unchanged.
         agent_qa = guard_node(
             create_agent_qa_node(ctx),
             name=_AGENT_QA,
@@ -140,7 +137,6 @@ class GraphSetup:
             },
         )
 
-        # ---- Wire the five main nodes linearly ----
         workflow = StateGraph(AgentState)
         workflow.add_node(_MARKET_INTELLIGENCE, market_intelligence)
         workflow.add_node(_AGENT_QA, agent_qa)

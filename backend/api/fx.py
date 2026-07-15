@@ -79,7 +79,6 @@ async def get_fx_rates(_: User = Depends(get_current_user)):
             _cache["rates"] = rates
             _cache["ts"] = now
 
-    # Return cached rates, fill missing with None
     result = {}
     for currency in SUPPORTED_CURRENCIES:
         result[currency] = _cache["rates"].get(currency)

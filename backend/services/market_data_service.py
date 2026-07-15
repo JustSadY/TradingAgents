@@ -64,13 +64,11 @@ async def get_live_prices_batch(tickers: list[str]) -> dict[str, float]:
     unique = list(dict.fromkeys([t.upper() for t in tickers]))
     prices = await _fetch_yahoo_quotes_rest(unique)
 
-    # 2. If any tickers are missing, download via yfinance or use get_live_price fallback
     missing = [symbol for symbol in unique if symbol not in prices]
     if missing:
         fallback_res = await _fetch_yfinance_download_fallback(missing)
         prices.update(fallback_res)
 
-        # 3. Final individual fallback for any remaining missing tickers
         still_missing = [symbol for symbol in unique if symbol not in prices]
         if still_missing:
             prices.update(await _fetch_individual_fallbacks(still_missing))

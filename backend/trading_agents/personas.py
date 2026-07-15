@@ -109,8 +109,6 @@ def list_personas() -> list[InvestorPersona]:
     return list(_PERSONAS.values())
 
 
-# --- Built-in personas (instruction text preserved verbatim from the PM) -------
-
 register_persona(
     InvestorPersona(
         key="conservative",

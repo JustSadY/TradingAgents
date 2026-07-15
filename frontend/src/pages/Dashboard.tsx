@@ -8,8 +8,6 @@ import {
 } from 'recharts'
 import { usePortfolio } from '../hooks/usePortfolio'
 import { useNewsFeed } from '../hooks/useNewsFeed'
-
-// Components
 import { PortfolioOverview } from '../components/dashboard/PortfolioOverview'
 import { RecentAnalysisTable } from '../components/dashboard/RecentAnalysisTable'
 import { NewsFeed } from '../components/dashboard/NewsFeed'

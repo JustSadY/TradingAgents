@@ -5,7 +5,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_insider_transactions,
 )
 
-# Single source of truth shared by the ToolNode registration and the LLM binding.
 _INSIDER_TOOLS = [get_insider_transactions]
 
 
@@ -34,7 +33,6 @@ def create_insider_analyst(llm):
         ticker = state.get("company_of_interest", "")
         trade_date = state.get("trade_date", "")
 
-        # Pre-fetch data for cache hash
         try:
             data = await route_to_vendor("get_insider_transactions", ticker)
         except Exception:

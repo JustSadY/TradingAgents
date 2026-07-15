@@ -36,17 +36,9 @@ from .analysis.portfolio_orchestrator import run_portfolio_analysis
 
 _logger = logging.getLogger(__name__)
 
-# In-process task tracking — the source of truth for runs executing in THIS
-# process. With REDIS_URL set, ``task_store`` mirrors ownership and metadata to
-# Redis so other processes (web vs. arq worker) can see and cancel them too.
 _RUNNING_TASKS: dict[str, asyncio.Task] = {}
-_TASK_REGISTRY: dict[str, dict] = {}  # Re-used by get_active_tasks_for_user
-_BACKGROUND_TASKS: set[asyncio.Task] = set()  # Strong refs for fire-and-forget retry tasks
-
-# Maps an analysis task_id to the id of the user who started it. Populated
-# by the API handlers before the task_id is returned to the client, so the
-# WebSocket endpoint can verify ownership before streaming a run's
-# reports/decisions to a connecting socket.
+_TASK_REGISTRY: dict[str, dict] = {}
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
 _TASK_OWNERS: dict[str, int | None] = {}
 
 
@@ -302,18 +294,15 @@ async def rollback_and_resume_analysis(
     from backend.trading_agents.graph.checkpointer import get_async_checkpointer, thread_id
     from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
 
-    # 1. Fetch analysis and verify access
     analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
     if analysis is None:
         raise ValueError("Analysis not found or access denied")
 
-    # 2. Get user and system settings
     settings = await get_or_create_settings(db, current_user)
     sys_settings = await get_system_settings(db)
     config = build_analysis_config(settings, user=current_user, sys_settings=sys_settings)
     permitted_analysts = await prepare_graph_config(db, current_user.id if current_user else None, config)
 
-    # 3. Resolve the target node name from checkpoint_id
     ta = TradingAgentsGraph(selected_analysts=permitted_analysts, config=config)
     tid = thread_id(analysis.ticker, analysis.trade_date)
     node_name = "START"
@@ -327,20 +316,17 @@ async def rollback_and_resume_analysis(
                 node_name = next(iter(writes.keys()), "START") if writes else "START"
                 break
 
-    # 4. Save the updated state on the selected checkpoint (this creates a new checkpoint fork)
     async with get_async_checkpointer(config["data_cache_dir"], analysis.ticker) as saver:
         graph = ta.workflow.compile(checkpointer=saver)
         update_config = {"configurable": {"thread_id": tid, "checkpoint_id": checkpoint_id}}
         await graph.aupdate_state(update_config, update_state, as_node=node_name)
 
-    # 5. Update database record status back to running for progressive updates
     analysis.status = "running"
     analysis.task_id = task_id
     analysis.signal = None
     analysis.final_decision = ""
     await db.commit()
 
-    # 6. Register task owner and spawn background task to resume graph execution
     await register_task_owner(task_id, current_user.id if current_user else None)
 
     async def run_resume():
@@ -374,9 +360,7 @@ async def rollback_and_resume_analysis(
                         triggered_by="time-travel",
                         user=current_user,
                     )
-                    # Place order if signal triggers
                     try:
-                        # Fetch the updated row
                         from backend.repositories.analysis import get_analysis_by_id as _get_row
 
                         updated_row = await _get_row(session, analysis_id, user=current_user)

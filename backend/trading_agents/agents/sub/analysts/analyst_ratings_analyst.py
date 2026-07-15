@@ -5,7 +5,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_analyst_ratings,
 )
 
-# Single source of truth shared by the ToolNode registration and the LLM binding.
 _RATINGS_TOOLS = [get_analyst_ratings]
 
 
@@ -34,7 +33,6 @@ def create_analyst_ratings_analyst(llm):
         ticker = state.get("company_of_interest", "")
         trade_date = state.get("trade_date", "")
 
-        # Pre-fetch data for cache hash
         try:
             data = await route_to_vendor("get_analyst_ratings", ticker)
         except Exception:

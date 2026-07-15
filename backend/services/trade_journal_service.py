@@ -43,17 +43,13 @@ async def get_note(db: AsyncSession, user: User, order_id: int) -> dict | None:
 
 async def generate_debrief(db: AsyncSession, user: User, order_id: int) -> dict:
     """Generate AI debrief for a trade and persist it."""
-    # 1. Fetch the order, scoped to the user's own portfolios (prevents reading
-    #    another user's trade via a guessed order_id — orders have no user_id).
     order = await portfolio_repo.get_order_by_id(db, order_id, user=user)
     if order is None:
         raise HTTPException(status_code=404, detail="Order not found.")
 
-    # 2. Fetch the note (may be empty string)
     trade_note = await repo.get_note(db, order_id=order_id, user_id=user.id)
     note_text = trade_note.note if trade_note else ""
 
-    # 3. Build prompt
     qty = float(order.quantity_filled or 0)
     price = float(order.price_per_share or 0)
     pnl = float(order.realized_pnl or 0)
@@ -79,7 +75,6 @@ Trader's Note: {note_text or "None provided"}
 
 Give a direct, honest assessment."""
 
-    # 4. Call LLM
     from langchain_core.messages import HumanMessage
 
     from backend.core.config import get_settings
@@ -114,9 +109,7 @@ Give a direct, honest assessment."""
         _logger.warning("Trade debrief LLM error: %s", e)
         raise HTTPException(status_code=500, detail=f"LLM error: {e}") from e
 
-    # 5. Save the debrief
     await repo.set_debrief(db, order_id=order_id, user_id=user.id, debrief=content)
     await db.commit()
 
-    # 6. Return result
     return {"order_id": order_id, "ai_debrief": content}

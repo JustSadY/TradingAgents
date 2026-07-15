@@ -97,13 +97,19 @@ export default function ChartPage() {
     }
   }, [t])
 
-  // Keep refs in sync so the URL-sync effect never captures stale closures.
   const activeTickerRef = useRef(activeTicker)
-  activeTickerRef.current = activeTicker
   const periodRef = useRef(period)
-  periodRef.current = period
   const loadRef = useRef(load)
-  loadRef.current = load
+
+  useEffect(() => {
+    activeTickerRef.current = activeTicker
+  }, [activeTicker])
+  useEffect(() => {
+    periodRef.current = period
+  }, [period])
+  useEffect(() => {
+    loadRef.current = load
+  }, [load])
 
   useEffect(() => { if (activeTicker) load(activeTicker, period) }, [])
 
