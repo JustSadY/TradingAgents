@@ -59,7 +59,7 @@ async def _fetch_rates() -> dict[str, float]:
         if currency == "USD":
             continue
         rate = sym_to_rate.get(symbol)
-        if rate:
+        if rate is not None:
             rates[currency] = round(rate, 6)
 
     return rates

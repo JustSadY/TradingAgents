@@ -131,6 +131,7 @@ async def run_analysis(
     user_id = user.id if user else None
     current = asyncio.current_task()
     if current:
+        existing = await task_store.get_meta(task_id) or {}
         meta = {
             "ticker": ticker,
             "trade_date": trade_date,
@@ -138,12 +139,11 @@ async def run_analysis(
             "user_id": user_id,
             "started_at": time.time(),
             "status": "running",
+            "retry_count": existing.get("retry_count", 0),
         }
         _RUNNING_TASKS[task_id] = current
         _TASK_REGISTRY[task_id] = meta
         await task_store.set_meta(task_id, meta)
-        # Record ownership for runs that don't pass through the API handler
-        # (alert-/cron-triggered), so their owner can still reconnect via WS.
         await register_task_owner(task_id, user_id)
 
     emitter = AnalysisEmitter(task_id)
@@ -153,7 +153,6 @@ async def run_analysis(
         _RUNNING_TASKS.pop(task_id, None)
         _TASK_REGISTRY.pop(task_id, None)
         _TASK_OWNERS.pop(task_id, None)
-        await task_store.clear_meta(task_id, user_id)
         await task_store.clear_owner(task_id)
         await emitter.close()
 
@@ -187,6 +186,8 @@ async def run_analysis_task(
                 user=user,
             )
             await db.commit()
+            # Analysis success — clear task metadata
+            await task_store.clear_meta(task_id, user.id if user else None)
             # Signal-based paper trading (separate txn — analysis already committed)
             try:
                 await place_signal_order(db, ticker=ticker, row=row, settings=settings, user=user)
@@ -222,6 +223,7 @@ async def _maybe_retry_analysis(
     retry_count = meta.get("retry_count", 0)
     if retry_count >= _ANALYSIS_RETRY_MAX:
         _logger.warning("Analysis dead-letter task=%s ticker=%s (retried %d times)", task_id, ticker, retry_count)
+        await task_store.clear_meta(task_id, user.id if user else None)
         return
     meta["retry_count"] = retry_count + 1
     await set_meta(task_id, meta)

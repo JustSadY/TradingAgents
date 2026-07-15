@@ -99,6 +99,19 @@ export default function ChartPage() {
 
   useEffect(() => { if (activeTicker) load(activeTicker, period) }, [])
 
+  // Sync state when URL params change due to in-app navigation
+  const urlTicker = searchParams.get('ticker');
+  const urlPeriod = searchParams.get('period');
+  useEffect(() => {
+    if (urlTicker && urlTicker !== activeTicker) {
+      setActiveTicker(urlTicker);
+      load(urlTicker, urlPeriod || period);
+    }
+    if (urlPeriod && urlPeriod !== period) {
+      setPeriod(urlPeriod);
+    }
+  }, [urlTicker, urlPeriod]);
+
   const handleSearch = () => {
     const tk = tickerInput.trim().toUpperCase()
     if (!tk) return
