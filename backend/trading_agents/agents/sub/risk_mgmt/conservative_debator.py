@@ -13,7 +13,9 @@ def _default_instruction() -> str:
     )
 
 
-def _build_prompt(instruction: str, trader_decision: str, resources_text: str, recent_history: str, risk_debate_state: dict) -> str:
+def _build_prompt(
+    instruction: str, trader_decision: str, resources_text: str, recent_history: str, risk_debate_state: dict
+) -> str:
     current_aggressive_response = risk_debate_state.get("current_aggressive_response", "")
     current_neutral_response = risk_debate_state.get("current_neutral_response", "")
     return f"""{instruction} Here is the trader's decision:

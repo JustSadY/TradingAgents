@@ -65,8 +65,7 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         or DEFAULT_CONFIG["max_debate_history_chars"],
         "max_tool_output_chars": getattr(settings, "max_tool_output_chars", DEFAULT_CONFIG["max_tool_output_chars"])
         or DEFAULT_CONFIG["max_tool_output_chars"],
-        "node_retry_attempts": getattr(settings, "node_retry_attempts", None)
-        or DEFAULT_CONFIG["node_retry_attempts"],
+        "node_retry_attempts": getattr(settings, "node_retry_attempts", None) or DEFAULT_CONFIG["node_retry_attempts"],
         "node_retry_base_delay": getattr(settings, "node_retry_base_delay", None)
         or DEFAULT_CONFIG["node_retry_base_delay"],
         "node_timeout_seconds": getattr(settings, "node_timeout_seconds", None)

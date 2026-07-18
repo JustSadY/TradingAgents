@@ -47,12 +47,14 @@ async def _fetch_alert_market_summary(ticker: str) -> str:
 
         if hist is not None and len(hist) >= 20:
             from backend.services.indicator_service import calculate_rsi
+
             rsi_series = calculate_rsi(hist["Close"])
             if not rsi_series.empty and not pd.isna(rsi_series.iloc[-1]):
                 rsi_val = float(rsi_series.iloc[-1])
                 parts.append(f"RSI(14): {rsi_val:.1f}")
 
         from backend.services.news_service import get_news_feed
+
         news = await get_news_feed(ticker, 3)
         if news:
             headlines = [n.get("title", "")[:80] for n in news[:3] if n.get("title")]

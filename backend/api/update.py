@@ -15,7 +15,11 @@ async def update_status(_: User = Depends(get_current_user)):
     return await asyncio.to_thread(update_service.get_status)
 
 
-@router.post("/apply", response_model=dict[str, Any], responses={409: {"description": "Update already in progress or not supported"}})
+@router.post(
+    "/apply",
+    response_model=dict[str, Any],
+    responses={409: {"description": "Update already in progress or not supported"}},
+)
 async def update_apply(_: User = Depends(require_admin)):
     try:
         return await asyncio.to_thread(update_service.request_update)

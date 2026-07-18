@@ -1,5 +1,6 @@
 from sqlalchemy import desc as _desc
 from sqlalchemy import select, update
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
 
@@ -59,9 +60,7 @@ async def list_analyses(
     return list(result.scalars().all())
 
 
-async def get_previous_signal(
-    db: AsyncSession, *, user_id: int | None, ticker: str, exclude_id: int
-) -> str | None:
+async def get_previous_signal(db: AsyncSession, *, user_id: int | None, ticker: str, exclude_id: int) -> str | None:
     """Signal of the most recent completed analysis for this ticker, before ``exclude_id``.
 
     Scoped to ``user_id`` so one user's history never leaks into another's.
@@ -157,11 +156,25 @@ async def create_analysis_result(db: AsyncSession, **kwargs) -> AnalysisResult:
             await db.commit()
             await db.refresh(existing)
             return existing
-    row = AnalysisResult(**kwargs)
-    db.add(row)
-    await db.commit()
-    await db.refresh(row)
-    return row
+    try:
+        row = AnalysisResult(**kwargs)
+        db.add(row)
+        await db.commit()
+        await db.refresh(row)
+        return row
+    except IntegrityError:
+        await db.rollback()
+        stmt = select(AnalysisResult).where(AnalysisResult.task_id == task_id)
+        result = await db.execute(stmt)
+        existing = result.scalar_one_or_none()
+        if existing:
+            for k, v in kwargs.items():
+                if hasattr(existing, k):
+                    setattr(existing, k, v)
+            await db.commit()
+            await db.refresh(existing)
+            return existing
+        raise
 
 
 async def update_analysis_result(db: AsyncSession, row_id: int, **fields) -> AnalysisResult | None:

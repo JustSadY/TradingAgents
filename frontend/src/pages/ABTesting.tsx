@@ -32,7 +32,7 @@ export default function ABTesting() {
       .then(r => setData(r.data))
       .catch(() => setError(t('common.error')))
       .finally(() => setLoading(false))
-  }, [t])
+  }, [language])
 
   if (loading) {
     return (

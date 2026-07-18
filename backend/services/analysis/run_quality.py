@@ -80,9 +80,7 @@ async def get_recent_quality_summary(db, days: int = 7) -> dict:
     from backend.models.analysis import AnalysisResult
 
     cutoff = datetime.now(UTC) - timedelta(days=days)
-    q = select(AnalysisResult.quality).where(
-        AnalysisResult.created_at >= cutoff, AnalysisResult.status == "completed"
-    )
+    q = select(AnalysisResult.quality).where(AnalysisResult.created_at >= cutoff, AnalysisResult.status == "completed")
     rows = (await db.execute(q)).scalars().all()
 
     counts = {"high": 0, "medium": 0, "low": 0}

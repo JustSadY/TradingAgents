@@ -76,10 +76,13 @@ def _signal_direction(signal: str | None) -> str:
 
 
 def is_signal_flip(prev_signal: str | None, new_signal: str | None) -> bool:
-    """True when the directional stance reversed (bullish↔bearish)."""
+    """True when the directional stance reversed (bullish↔bearish) or
+    when a first directional signal appears from a neutral/unknown state."""
     prev_dir = _signal_direction(prev_signal)
     new_dir = _signal_direction(new_signal)
-    return {prev_dir, new_dir} == {"bullish", "bearish"}
+    if prev_dir == new_dir:
+        return False
+    return prev_dir == "neutral" or new_dir == "neutral" or {prev_dir, new_dir} == {"bullish", "bearish"}
 
 
 def _format_text(event: str, data: dict) -> str:

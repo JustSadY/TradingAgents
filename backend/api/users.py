@@ -82,10 +82,15 @@ async def set_my_api_key(
 ):
     fernet = _get_settings().get_fernet()
     set_user_api_key(current_user, body.provider, body.api_key, fernet)
+    await db.flush()
     return {"detail": f"API key for '{body.provider}' saved"}
 
 
-@router.delete("/me/api-keys/{provider}", response_model=MessageResponse, responses={404: {"description": "No key found for provider"}})
+@router.delete(
+    "/me/api-keys/{provider}",
+    response_model=MessageResponse,
+    responses={404: {"description": "No key found for provider"}},
+)
 async def delete_my_api_key(
     provider: str,
     current_user: Annotated[User, Depends(get_current_user)],
@@ -264,7 +269,9 @@ async def set_user_permissions(
     return {"detail": "Permissions updated"}
 
 
-@router.get("/{user_id}/api-keys", response_model=ApiKeyProvidersResponse, responses={404: {"description": _USER_NOT_FOUND}})
+@router.get(
+    "/{user_id}/api-keys", response_model=ApiKeyProvidersResponse, responses={404: {"description": _USER_NOT_FOUND}}
+)
 async def list_user_api_keys(
     user_id: int,
     _: Annotated[User, Depends(require_admin)],
@@ -294,7 +301,11 @@ async def set_user_api_key_endpoint(
     return {"detail": f"API key for '{body.provider}' saved for user {user.username}"}
 
 
-@router.delete("/{user_id}/api-keys/{provider}", response_model=MessageResponse, responses={404: {"description": "User or key not found"}})
+@router.delete(
+    "/{user_id}/api-keys/{provider}",
+    response_model=MessageResponse,
+    responses={404: {"description": "User or key not found"}},
+)
 async def delete_user_api_key_endpoint(
     user_id: int,
     provider: str,
@@ -325,7 +336,11 @@ async def get_my_setting_permissions(
     return {"allowed_settings": allowed}
 
 
-@router.get("/{user_id}/setting-permissions", response_model=UserPermissionsResponse, responses={404: {"description": _USER_NOT_FOUND}})
+@router.get(
+    "/{user_id}/setting-permissions",
+    response_model=UserPermissionsResponse,
+    responses={404: {"description": _USER_NOT_FOUND}},
+)
 async def get_user_setting_permissions(
     user_id: int,
     _: Annotated[User, Depends(require_admin)],
@@ -346,7 +361,9 @@ class SettingPermissionsUpdate(BaseModel):
     permissions: dict[str, bool]
 
 
-@router.put("/{user_id}/setting-permissions", response_model=MessageResponse, responses={404: {"description": _USER_NOT_FOUND}})
+@router.put(
+    "/{user_id}/setting-permissions", response_model=MessageResponse, responses={404: {"description": _USER_NOT_FOUND}}
+)
 async def set_user_setting_permissions(
     user_id: int,
     body: SettingPermissionsUpdate,

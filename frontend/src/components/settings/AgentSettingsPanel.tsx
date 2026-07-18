@@ -510,6 +510,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
       setSettings(res.data)
       triggerMetaRefetch()
       setSaveSuccess(true)
+      if (agentTimeoutRef.current) clearTimeout(agentTimeoutRef.current)
       agentTimeoutRef.current = setTimeout(() => setSaveSuccess(false), 2000)
     } catch (err: any) {
       const msg = err.response?.data?.detail || 'Failed to save agent settings.'

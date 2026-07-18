@@ -294,11 +294,16 @@ async def run_backtest_simulation(
                     position_side, open_price, high_price, low_price, close_price, stop_loss, take_profit, holding_days
                 )
                 if exit_reason:
-                    exit_price = _apply_slippage(
-                        exit_price, "SELL" if position_side == "long" else "BUY", slippage_bps
-                    )
+                    exit_price = _apply_slippage(exit_price, "SELL" if position_side == "long" else "BUY", slippage_bps)
                     cash_delta, trade = _close_position(
-                        position_side, entry_price, exit_price, position_size, entry_date, date_str, exit_reason, _COMMISSION_RATE
+                        position_side,
+                        entry_price,
+                        exit_price,
+                        position_size,
+                        entry_date,
+                        date_str,
+                        exit_reason,
+                        _COMMISSION_RATE,
                     )
                     cash += cash_delta
                     trades.append(trade)
@@ -316,7 +321,14 @@ async def run_backtest_simulation(
                     if position_side == "short":
                         cover_price = _apply_slippage(close_price, "BUY", slippage_bps)
                         cash_delta, trade = _close_position(
-                            "short", entry_price, cover_price, position_size, entry_date, date_str, "SIGNAL", _COMMISSION_RATE
+                            "short",
+                            entry_price,
+                            cover_price,
+                            position_size,
+                            entry_date,
+                            date_str,
+                            "SIGNAL",
+                            _COMMISSION_RATE,
                         )
                         cash += cash_delta
                         trades.append(trade)
@@ -339,7 +351,14 @@ async def run_backtest_simulation(
                     if position_side == "long":
                         sell_price = _apply_slippage(close_price, "SELL", slippage_bps)
                         cash_delta, trade = _close_position(
-                            "long", entry_price, sell_price, position_size, entry_date, date_str, "SIGNAL", _COMMISSION_RATE
+                            "long",
+                            entry_price,
+                            sell_price,
+                            position_size,
+                            entry_date,
+                            date_str,
+                            "SIGNAL",
+                            _COMMISSION_RATE,
                         )
                         cash += cash_delta
                         trades.append(trade)
@@ -381,7 +400,14 @@ async def run_backtest_simulation(
             close_price = float(last_day["Close"])
             exit_price = _apply_slippage(close_price, "SELL" if position_side == "long" else "BUY", slippage_bps)
             cash_delta, trade = _close_position(
-                position_side, entry_price, exit_price, position_size, entry_date, date_str, "END_OF_SIMULATION", _COMMISSION_RATE
+                position_side,
+                entry_price,
+                exit_price,
+                position_size,
+                entry_date,
+                date_str,
+                "END_OF_SIMULATION",
+                _COMMISSION_RATE,
             )
             cash += cash_delta
             trades.append(trade)

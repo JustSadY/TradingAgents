@@ -308,26 +308,28 @@ class TimeTravelRequest(BaseModel):
     update_state: dict
 
 
-@router.get("/{analysis_id}/checkpoints", response_model=list[CheckpointItem], responses={404: {"description": _ANALYSIS_NOT_FOUND}})
+@router.get(
+    "/{analysis_id}/checkpoints",
+    response_model=list[CheckpointItem],
+    responses={404: {"description": _ANALYSIS_NOT_FOUND}},
+)
 async def list_checkpoints(
     analysis_id: int,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from backend.repositories.analysis import get_analysis_by_id, get_system_settings
-    from backend.services.analysis.config_builder import build_analysis_config
-    from backend.services.settings_service import get_or_create_settings
+    import os
+
+    from backend.repositories.analysis import get_analysis_by_id
+    from backend.trading_agents.default_config import DEFAULT_CONFIG
     from backend.trading_agents.graph.checkpointer import list_checkpoints_for_thread
 
     analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
     if not analysis:
         raise HTTPException(status_code=404, detail=_ANALYSIS_NOT_FOUND)
 
-    settings = await get_or_create_settings(db, current_user)
-    sys_settings = await get_system_settings(db)
-    config = build_analysis_config(settings, user=current_user, sys_settings=sys_settings)
-
-    checkpoints = await list_checkpoints_for_thread(config["data_cache_dir"], analysis.ticker, analysis.trade_date)
+    data_cache_dir = os.environ.get("TRADINGAGENTS_DATA_CACHE_DIR", DEFAULT_CONFIG["data_cache_dir"])
+    checkpoints = await list_checkpoints_for_thread(data_cache_dir, analysis.ticker, analysis.trade_date)
     return checkpoints
 
 

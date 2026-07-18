@@ -122,6 +122,7 @@ async def control_listener(cancel_local) -> None:
     ``cancel_local`` is an async callable ``(task_id) -> bool`` that cancels a
     task if it runs in the current process. Runs in web and worker processes.
     """
+
     async def handle(payload: dict) -> None:
         if payload.get("action") == "cancel" and payload.get("task_id"):
             await cancel_local(payload["task_id"])

@@ -169,9 +169,7 @@ def _sort_key(r: dict) -> tuple:
     return (1, -d)
 
 
-async def _resolve_tickers(
-    db: AsyncSession, user: User, tickers: str | None
-) -> list[str]:
+async def _resolve_tickers(db: AsyncSession, user: User, tickers: str | None) -> list[str]:
     """Resolve the request's ticker list (explicit, else the user's watchlist)."""
     if tickers:
         raw_list = [t.strip().upper() for t in tickers.split(",") if t.strip()]
@@ -190,9 +188,7 @@ async def _resolve_tickers(
     return cleaned[:MAX_TICKERS]
 
 
-async def get_earnings_calendar(
-    db: AsyncSession, user: User, tickers: str | None
-) -> list[dict]:
+async def get_earnings_calendar(db: AsyncSession, user: User, tickers: str | None) -> list[dict]:
     """Return earnings data for the given tickers (or the user's watchlist)."""
     cleaned = await _resolve_tickers(db, user, tickers)
     if not cleaned:

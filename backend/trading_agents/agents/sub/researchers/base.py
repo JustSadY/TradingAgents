@@ -47,6 +47,7 @@ def make_researcher(
             qa = state.get("agent_qa_report") or ""
             qa_block = f"\n### Analyst Cross-Examination (peer Q&A that probed these conflicts):\n{qa}\n" if qa else ""
             from backend.trading_agents.dataflows.config import get_config
+
             summary_only = get_config().get("summary_only_mode", False)
             resources_text = build_resources(state, report_fields, summary_only=summary_only)
 

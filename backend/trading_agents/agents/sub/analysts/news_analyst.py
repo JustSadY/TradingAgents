@@ -11,25 +11,14 @@ from backend.trading_agents.agents.utils.agent_utils import (
 _NEWS_TOOLS = [get_news, get_global_news, get_insider_transactions, get_crypto_fear_and_greed_index]
 
 
-
-
-
 @register_analyst(
-
     key="news",
-
     agent_node="News Analyst",
-
     clear_node="Msg Clear News",
-
     tool_node="tools_news",
-
     report_key="news_report",
-
     tools=_NEWS_TOOLS,
-
 )
-
 def create_news_analyst(llm):
 
     async def news_analyst_node(state):
@@ -46,19 +35,13 @@ def create_news_analyst(llm):
         )
         from backend.trading_agents.dataflows.interface import route_to_vendor
 
-
-
         asset_type = state.get("asset_type", "stock")
 
         asset_label = "company" if asset_type == "stock" else "asset"
 
         instrument_context = build_instrument_context(state["company_of_interest"], asset_type)
 
-
-
         tools = _NEWS_TOOLS
-
-
 
         system_message = f"""You are a senior news and macro analyst. Your goal is to identify market-moving events and broader economic trends through rigorous news analysis.
 
@@ -81,16 +64,11 @@ Your final report MUST follow this structure:
 3. **Actionable Insights:** Specific upcoming catalysts or risks for traders to monitor.
 4. **News Event Table:** A Markdown table summarizing key events, their dates, impact (High/Med/Low), and a brief description."""
 
-
-
         ticker = state.get("company_of_interest", "")
 
         trade_date = state.get("trade_date", "")
 
-
-
         try:
-
             trade_dt = datetime.strptime(trade_date, "%Y-%m-%d")
 
             start_dt = trade_dt - timedelta(days=7)
@@ -98,100 +76,62 @@ Your final report MUST follow this structure:
             start_date_str = start_dt.strftime("%Y-%m-%d")
 
         except Exception:
-
             start_date_str = trade_date
 
-
-
         try:
-
             news_data = await route_to_vendor("get_news", ticker, start_date_str, trade_date)
 
         except Exception:
-
             news_data = ""
 
-
-
         try:
-
             global_news_data = await route_to_vendor("get_global_news", trade_date)
 
         except Exception:
-
             global_news_data = ""
-
-
 
         insider_data = ""
 
         if asset_type == "stock":
-
             try:
-
                 insider_data = await route_to_vendor("get_insider_transactions", ticker)
 
             except Exception:
-
                 insider_data = ""
-
-
 
         crypto_data = ""
 
         if asset_type == "crypto":
-
             crypto_data = "Fear and Greed Index: 45 (Neutral)"
 
-
-
-        articles_hash = compute_data_hash("news", ticker, trade_date, news_data, global_news_data, insider_data, crypto_data)
-
-
+        articles_hash = compute_data_hash(
+            "news", ticker, trade_date, news_data, global_news_data, insider_data, crypto_data
+        )
 
         cached_report = await check_analyst_cache("news", ticker, articles_hash)
 
-
-
         if cached_report:
-
             await emit_cache_hit("news", ticker)
 
             return {
-
                 "messages": [AIMessage(content=cached_report)],
-
                 "news_report": cached_report,
-
             }
 
-
-
         res = await run_tool_analyst(
-
             llm,
-
             state,
-
             tools=tools,
-
             system_message=system_message,
-
             report_key="news_report",
-
             instrument_context=instrument_context,
-
         )
 
         report_text = res.get("news_report", "")
 
         if report_text and not report_text.startswith("News analysis unavailable"):
-
             await store_analyst_cache("news", ticker, articles_hash, report_text)
 
         return res
 
-
-
     return news_analyst_node
-

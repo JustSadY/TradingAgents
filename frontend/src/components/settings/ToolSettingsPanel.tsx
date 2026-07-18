@@ -72,6 +72,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
       const res = await axios.put(apiPath, settings)
       setSettings(res.data)
       setSaveSuccess(true)
+      if (toolTimeoutRef.current) clearTimeout(toolTimeoutRef.current)
       toolTimeoutRef.current = setTimeout(() => setSaveSuccess(false), 2000)
     } catch (err: any) {
       const msg = err.response?.data?.detail || 'Failed to save tool settings.'

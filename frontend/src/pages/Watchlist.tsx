@@ -37,7 +37,10 @@ export default function Watchlist() {
   }, [fetchPrices])
 
   useEffect(() => {
-    fetchWatchlist()
+    const doFetch = async () => {
+      await fetchWatchlist()
+    }
+    doFetch()
     const interval = setInterval(() => {
       fetchWatchlist(true)
     }, 15000)

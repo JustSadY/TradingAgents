@@ -57,7 +57,7 @@ def _parse_perspectives(text: str) -> dict[str, str]:
         # Match the heading allowing optional markdown bold (**HEADING:** or **HEADING**:)
         # and capture everything up to the next heading or end-of-string.
         # Handles: AGGRESSIVE:, **AGGRESSIVE:**, **AGGRESSIVE**:, AGGRESSIVE :, etc.
-        pattern = rf'(?:^|\n)\*{{0,2}}{re.escape(heading)}\*{{0,2}}\s*:\s*(.*?)(?=\n\*{{0,2}}(?:AGGRESSIVE|CONSERVATIVE|NEUTRAL)\*{{0,2}}\s*:|\Z)'
+        pattern = rf"(?:^|\n)\*{{0,2}}{re.escape(heading)}\*{{0,2}}\s*:\s*(.*?)(?=\n\*{{0,2}}(?:AGGRESSIVE|CONSERVATIVE|NEUTRAL)\*{{0,2}}\s*:|\Z)"
         m = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
         if m:
             sections[key] = m.group(1).strip()
@@ -78,9 +78,7 @@ def create_risk_debate_node(ctx: AgentRunContext) -> NodeFn:
         llm = ctx.llm_for("risk_debate")
 
         trader_decision = state.get("trader_investment_plan", "No trader decision available.")
-        report_fields = build_report_fields(
-            "Latest World Affairs Report", "Company Fundamentals Report"
-        )
+        report_fields = build_report_fields("Latest World Affairs Report", "Company Fundamentals Report")
         resources_text = build_resources(state, report_fields, summary_only=True)
         prompt = _build_merged_prompt(trader_decision, resources_text)
 

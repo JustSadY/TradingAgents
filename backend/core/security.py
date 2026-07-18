@@ -60,5 +60,3 @@ def decode_token_payload(token: str, expected_type: str = "access") -> dict:
         return payload
     except JWTError as exc:
         raise ValueError(f"Invalid token: {exc}") from exc
-
-

@@ -191,8 +191,8 @@ async def run_analysis_task(
             _logger.exception("Background analysis failed")
             try:
                 await _maybe_retry_analysis(ticker, trade_date, asset_type, settings, task_id, user)
-            except Exception as retry_exc:
-                _logger.exception("Analysis retry failed for task=%s: %s", task_id, retry_exc)
+            except Exception:
+                _logger.exception("Analysis retry failed for task=%s", task_id)
 
 
 async def _maybe_retry_analysis(
@@ -219,7 +219,9 @@ async def _maybe_retry_analysis(
         return
     meta["retry_count"] = retry_count + 1
     await _redis_set_meta(task_id, meta)
-    _logger.info("Re-enqueuing analysis task=%s ticker=%s (retry %d/%d)", task_id, ticker, retry_count + 1, _ANALYSIS_RETRY_MAX)
+    _logger.info(
+        "Re-enqueuing analysis task=%s ticker=%s (retry %d/%d)", task_id, ticker, retry_count + 1, _ANALYSIS_RETRY_MAX
+    )
 
     from backend.services.analysis_queue import queue_mode as _queue_mode
 

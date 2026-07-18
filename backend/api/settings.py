@@ -13,10 +13,10 @@ from backend.models.user import User
 from backend.repositories.permissions import list_allowed_setting_sections
 from backend.repositories.users import get_user_by_id
 from backend.schemas.agent_settings import AgentSettingsRead, AgentSettingsUpdate
-from backend.schemas.settings import MemoryStatusResponse, SettingsRead, SettingsUpdate
 from backend.schemas.common import OkResponse
-from backend.schemas.webhook import WebhookDeliveryRead
+from backend.schemas.settings import MemoryStatusResponse, SettingsRead, SettingsUpdate
 from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate
+from backend.schemas.webhook import WebhookDeliveryRead
 from backend.services.settings_service import (
     apply_settings_update,
     get_or_create_settings,
@@ -143,7 +143,11 @@ def _validate_webhook_url(url: str) -> None:
             raise HTTPException(status_code=400, detail="Webhook URL resolves to a disallowed internal address")
 
 
-@router.post("/test-webhook", response_model=OkResponse, responses={400: {"description": "Invalid webhook URL or delivery failed"}})
+@router.post(
+    "/test-webhook",
+    response_model=OkResponse,
+    responses={400: {"description": "Invalid webhook URL or delivery failed"}},
+)
 async def test_webhook(body: WebhookTestRequest, _: User = Depends(get_current_user)):
     _validate_webhook_url(body.url)
     payload = {

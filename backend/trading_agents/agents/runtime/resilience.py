@@ -300,15 +300,21 @@ def guard_node(
         if cb and cb.get("open_since") is not None:
             elapsed = time.time() - cb["open_since"]
             if elapsed < cb_cooldown:
-                log_event("circuit_open", level=logging.WARNING, node=name, kind=kind, elapsed_seconds=round(elapsed, 1))
+                log_event(
+                    "circuit_open", level=logging.WARNING, node=name, kind=kind, elapsed_seconds=round(elapsed, 1)
+                )
                 m = _metrics()
                 if m:
                     m.NODE_CIRCUIT_OPEN.labels(node=name, kind=kind).inc()
                 _emit_circuit_open_ws(name, kind, elapsed)
-                record_agent_result(name, retries=cb_threshold, fallback=True, error=f"Circuit breaker open ({elapsed:.0f}s elapsed)")
+                record_agent_result(
+                    name, retries=cb_threshold, fallback=True, error=f"Circuit breaker open ({elapsed:.0f}s elapsed)"
+                )
                 if fallback is None:
                     raise RuntimeError(f"Circuit breaker open for {name} — not retrying.")
-                return await _handle_node_fallback(name, kind, fallback, state, RuntimeError(f"Circuit breaker open for {name}"))
+                return await _handle_node_fallback(
+                    name, kind, fallback, state, RuntimeError(f"Circuit breaker open for {name}")
+                )
             cb["open_since"] = None
             cb["failures"] = 0
 
@@ -416,9 +422,7 @@ def _emit_node_error_ws(node: str, kind: str, exc: Exception):
 
         ctx = active_run_context.get(None)
         if ctx and "emitter" in ctx:
-            _spawn_ws_task(
-                ctx["emitter"].emit_node_error(node, kind, str(exc)[:200], classify_error(exc))
-            )
+            _spawn_ws_task(ctx["emitter"].emit_node_error(node, kind, str(exc)[:200], classify_error(exc)))
     except Exception:
         pass
 

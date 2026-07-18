@@ -13,7 +13,11 @@ from backend.services import share_service
 router = APIRouter(tags=["share"])
 
 
-@router.post("/api/analysis/{analysis_id}/share", response_model=ShareCreateResponse, responses={404: {"description": "Analysis not found"}})
+@router.post(
+    "/api/analysis/{analysis_id}/share",
+    response_model=ShareCreateResponse,
+    responses={404: {"description": "Analysis not found"}},
+)
 async def create_share(
     analysis_id: int,
     db: AsyncSession = Depends(get_db),
@@ -45,7 +49,10 @@ async def get_shared_report(token: str, db: AsyncSession = Depends(get_db)):
     share = await share_service.get_shared_report(db, token)
     if not share:
         raise HTTPException(status_code=404, detail="Report not found or expired")
-    if share.expires_at.replace(tzinfo=UTC) < datetime.now(UTC):
+    expires = share.expires_at
+    if expires.tzinfo is None:
+        expires = expires.replace(tzinfo=UTC)
+    if expires < datetime.now(UTC):
         raise HTTPException(status_code=410, detail="This shared report has expired")
 
     analysis = await share_service.get_analysis_for_share(db, share.analysis_id)

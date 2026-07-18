@@ -41,7 +41,11 @@ class AnalysisEmitter:
         await self.emit({"type": "decision", "signal": signal, "final_decision": final_decision})
 
     async def emit_complete(
-        self, analysis_id: int, signal: str | None, duration_seconds: float, llm_calls: int,
+        self,
+        analysis_id: int,
+        signal: str | None,
+        duration_seconds: float,
+        llm_calls: int,
         estimated_cost_usd: float | None = None,
     ) -> None:
         await self.emit(
@@ -59,38 +63,46 @@ class AnalysisEmitter:
         await self.emit({"type": "error", "message": message})
 
     async def emit_retry(self, node: str, attempt: int, max_attempts: int, error: str) -> None:
-        await self.emit({
-            "type": "retry",
-            "node": node,
-            "attempt": attempt,
-            "max_attempts": max_attempts,
-            "error": error,
-        })
+        await self.emit(
+            {
+                "type": "retry",
+                "node": node,
+                "attempt": attempt,
+                "max_attempts": max_attempts,
+                "error": error,
+            }
+        )
 
     async def emit_fallback(self, node: str, kind: str, error: str) -> None:
-        await self.emit({
-            "type": "fallback",
-            "node": node,
-            "kind": kind,
-            "error": error,
-        })
+        await self.emit(
+            {
+                "type": "fallback",
+                "node": node,
+                "kind": kind,
+                "error": error,
+            }
+        )
 
     async def emit_node_error(self, node: str, kind: str, error: str, error_type: str) -> None:
-        await self.emit({
-            "type": "node_error",
-            "node": node,
-            "kind": kind,
-            "error": error,
-            "error_type": error_type,
-        })
+        await self.emit(
+            {
+                "type": "node_error",
+                "node": node,
+                "kind": kind,
+                "error": error,
+                "error_type": error_type,
+            }
+        )
 
     async def emit_circuit_open(self, node: str, kind: str, elapsed_seconds: float) -> None:
-        await self.emit({
-            "type": "circuit_open",
-            "node": node,
-            "kind": kind,
-            "elapsed_seconds": round(elapsed_seconds, 1),
-        })
+        await self.emit(
+            {
+                "type": "circuit_open",
+                "node": node,
+                "kind": kind,
+                "elapsed_seconds": round(elapsed_seconds, 1),
+            }
+        )
 
     async def close(self) -> None:
         await publish_close(self.task_id)

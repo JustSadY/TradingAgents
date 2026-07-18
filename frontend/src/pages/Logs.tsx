@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useCallback } from 'react'
 import axios from 'axios'
 import { RefreshCw, Terminal, Clock, ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
@@ -158,7 +158,7 @@ export default function Logs() {
   const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<number | null>(null)
 
-  const fetch = () => {
+  const fetch = useCallback(() => {
     setLoading(true)
     const queryParts: string[] = []
     if (level) queryParts.push(`level=${level}`)
@@ -175,9 +175,9 @@ export default function Logs() {
       .catch(() => {
         setLoading(false)
       })
-  }
+  }, [level, source, userIdFilter, isAdmin])
 
-  useEffect(() => { fetch() }, [level, source, userIdFilter])
+  useEffect(() => { fetch() }, [fetch])
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
@@ -250,7 +250,7 @@ export default function Logs() {
             return (
               <div
                 key={l.id}
-                className={`glass-panel rounded-2xl border transition-all duration-200 cursor-pointer overflow-hidden ${
+                className={`group glass-panel rounded-2xl border transition-all duration-200 cursor-pointer overflow-hidden ${
                   isExpanded ? 'border-violet-500/20 bg-gray-950/60' : 'border-white/[0.04] hover:border-white/[0.08] hover:bg-white/[0.01]'
                 }`}
                 onClick={() => setExpanded(isExpanded ? null : l.id)}

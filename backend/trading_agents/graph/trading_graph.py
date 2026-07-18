@@ -52,7 +52,11 @@ def _cap_tool_outputs(tool_node: ToolNode, max_chars: int):
         except TimeoutError:
             from backend.trading_agents.agents.runtime.resilience import log_event
 
-            log_event("tool_timeout", level=logging.WARNING, tool=tool_node.name if hasattr(tool_node, "name") else str(tool_node))
+            log_event(
+                "tool_timeout",
+                level=logging.WARNING,
+                tool=tool_node.name if hasattr(tool_node, "name") else str(tool_node),
+            )
             return {"messages": [{"role": "tool", "content": f"Tool timed out after {timeout}s. Try a simpler query."}]}
         messages = result.get("messages", []) if isinstance(result, dict) else []
         for message in messages:

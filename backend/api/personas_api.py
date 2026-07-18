@@ -79,7 +79,12 @@ async def list_all_personas(
     return builtins + custom
 
 
-@router.post("", response_model=dict[str, Any], status_code=201, responses={400: {"description": "Key conflict or duplicate key"}})
+@router.post(
+    "",
+    response_model=dict[str, Any],
+    status_code=201,
+    responses={400: {"description": "Key conflict or duplicate key"}},
+)
 async def create_persona(
     body: PersonaCreate,
     user_id: int | None = Query(default=None),

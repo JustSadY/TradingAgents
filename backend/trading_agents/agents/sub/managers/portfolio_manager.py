@@ -15,7 +15,9 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_system_instruction_override,
 )
 
-_DEFAULT_INSTRUCTION = "As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision."
+_DEFAULT_INSTRUCTION = (
+    "As the Portfolio Manager, synthesize the risk analysts' debate and deliver the final trading decision."
+)
 
 
 def create_portfolio_manager(llm):

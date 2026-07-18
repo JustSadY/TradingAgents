@@ -28,7 +28,12 @@ def _evaluate_breaches(
     for sw in sector_weights:
         if sw.get("weight_pct", 0) > _SECTOR_THRESHOLD:
             breaches.append(
-                {"type": "concentration", "sector": sw.get("sector"), "value": sw.get("weight_pct"), "threshold": _SECTOR_THRESHOLD}
+                {
+                    "type": "concentration",
+                    "sector": sw.get("sector"),
+                    "value": sw.get("weight_pct"),
+                    "threshold": _SECTOR_THRESHOLD,
+                }
             )
     return breaches
 
@@ -216,9 +221,7 @@ def _build_holdings_risk(
     return holdings_risk, portfolio_beta, portfolio_volatility, ticker_returns
 
 
-def _build_sector_weights(
-    holdings: list[dict], sector_map: dict[str, str], total_equity: float
-) -> list[dict]:
+def _build_sector_weights(holdings: list[dict], sector_map: dict[str, str], total_equity: float) -> list[dict]:
     """Aggregate market value by sector into descending weight-percent rows."""
     sector_values: dict[str, float] = {}
     for h in holdings:

@@ -159,7 +159,16 @@ async def _seed_admin_user():
         result = await db.execute(select(User).where(User.username == settings.ADMIN_USERNAME))
         existing = result.scalar_one_or_none()
         if existing is None:
-            hashed = settings.ADMIN_PASSWORD_HASH or hash_password("changeme")
+            raw_hash = settings.ADMIN_PASSWORD_HASH
+            if raw_hash:
+                try:
+                    import bcrypt
+
+                    bcrypt.checkpw(b"test", raw_hash.encode())
+                except Exception:
+                    _logger.warning("ADMIN_PASSWORD_HASH in .env is not a valid bcrypt hash; using fallback.")
+                    raw_hash = None
+            hashed = raw_hash or hash_password("changeme")
             db.add(User(username=settings.ADMIN_USERNAME, hashed_password=hashed, role="owner"))
             await db.commit()
             _logger.info("Owner user created: %s", settings.ADMIN_USERNAME)
@@ -172,10 +181,10 @@ async def _seed_admin_user():
 async def _seed_setting_permissions():
     from sqlalchemy import select
 
-    from backend.core.database import AsyncSessionLocal
     from backend.core.constants import SETTING_KEYS
-    from backend.models.user import User
+    from backend.core.database import AsyncSessionLocal
     from backend.models.page_permission import UserSettingPermission
+    from backend.models.user import User
 
     async with AsyncSessionLocal() as db:
         res = await db.execute(select(User))

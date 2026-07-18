@@ -1,7 +1,3 @@
-import logging
-
-_logger = logging.getLogger(__name__)
-
 SCENARIOS = [
     {
         "id": "rate_hike",
