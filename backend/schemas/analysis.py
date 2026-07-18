@@ -1,8 +1,11 @@
 import json
+import logging
 from datetime import datetime
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, field_validator
+
+logger = logging.getLogger(__name__)
 
 
 class AnalysisRunRequest(BaseModel):

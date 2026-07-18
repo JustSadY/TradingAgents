@@ -4,8 +4,6 @@ import asyncio
 import logging
 import time
 
-from typing import Any
-
 from fastapi import APIRouter
 
 router = APIRouter(prefix="/api/market", tags=["market"])

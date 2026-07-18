@@ -4,7 +4,6 @@ import asyncio
 import json
 import logging
 import re
-from time import time
 from typing import Any, TypeVar
 
 from pydantic import BaseModel
@@ -199,7 +198,8 @@ async def _retry_llm_call(
             if _is_quota_exhausted(exc):
                 logger.warning(
                     "%s: quota exhausted (%s) — skipping retries, using fallback.",
-                    agent_name, exc,
+                    agent_name,
+                    exc,
                 )
                 raise
             retriable = _is_rate_limit(exc) or _is_server_error(exc) or "timeout" in str(exc).lower()
