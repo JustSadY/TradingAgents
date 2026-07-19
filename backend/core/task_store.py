@@ -46,7 +46,13 @@ async def get_owner(task_id: str) -> int | None:
     if not redis_enabled():
         return None
     raw = await get_redis().get(_owner_key(task_id))
-    return int(raw) if raw else None
+    if not raw:
+        return None
+    try:
+        return int(raw)
+    except (ValueError, TypeError):
+        _logger.warning("Invalid owner value for task=%s: %r", task_id, raw)
+        return None
 
 
 async def clear_owner(task_id: str) -> None:

@@ -65,7 +65,7 @@ SIGNAL_SENTIMENT_VALUES = {
     "Sell": -0.85,
 }
 
-# Tone mappings (could also be here if shared)
+# Tone mappings
 SIGNAL_TONES = {
     "Buy": "positive",
     "Overweight": "positive",
@@ -73,3 +73,23 @@ SIGNAL_TONES = {
     "Underweight": "negative",
     "Sell": "negative",
 }
+
+# Signal → trade action mapping
+SIGNAL_TO_ACTION: dict[str, str] = {
+    "Buy": "BUY",
+    "Overweight": "BUY",
+    "Sell": "SELL",
+    "Underweight": "SELL",
+}
+
+BULLISH_SIGNALS: set[str] = {"buy", "overweight"}
+BEARISH_SIGNALS: set[str] = {"sell", "underweight"}
+
+
+def signal_direction(signal: str | None) -> str:
+    s = (signal or "").strip().lower()
+    if s in BULLISH_SIGNALS:
+        return "bullish"
+    if s in BEARISH_SIGNALS:
+        return "bearish"
+    return "neutral"

@@ -6,7 +6,7 @@ from .log import SystemLog
 from .market_summary import MarketDailySummary
 from .news_cache import AnalystReportCache, NewsAnalysisCache, NewsCache
 from .order import Order
-from .page_permission import UserSettingPermission
+from .page_permission import UserPagePermission, UserSettingPermission
 from .persona import UserPersona
 from .portfolio import Holding, Portfolio
 from .portfolio_analysis import MultiTickerAnalysis
@@ -38,6 +38,7 @@ __all__ = [
     "PriceAlert",
     "SharedReport",
     "SystemSettings",
+    "UserPagePermission",
     "UserSettingPermission",
     "MultiTickerAnalysis",
     "NewsCache",

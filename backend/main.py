@@ -305,10 +305,10 @@ async def websocket_analysis(
         while True:
             await websocket.receive_text()
     except WebSocketDisconnect:
-        ws_manager.disconnect(task_id, websocket)
+        await ws_manager.disconnect(task_id, websocket)
     except Exception:
         _logger.exception("WebSocket error for task=%s", task_id)
-        ws_manager.disconnect(task_id, websocket)
+        await ws_manager.disconnect(task_id, websocket)
 
 
 @app.get("/health")

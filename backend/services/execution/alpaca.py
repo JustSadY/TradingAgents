@@ -1,10 +1,12 @@
 import asyncio
 import logging
+from decimal import Decimal
 
 import httpx
 
 import backend.bootstrap  # noqa: F401
 from backend.core.database import AsyncSessionLocal
+from backend.core.money import safe_decimal
 from backend.services.market_data_service import get_live_price as _get_price
 
 from .base import BaseTraderInterface, OrderRequest, OrderResult
@@ -167,8 +169,8 @@ class AlpacaTrader(BaseTraderInterface):
                 return OrderResult(
                     order_id=order_id,
                     status=status,
-                    filled_price=filled_price,
-                    filled_quantity=filled_qty,
+                    filled_price=safe_decimal(filled_price),
+                    filled_quantity=safe_decimal(filled_qty),
                     message=f"Alpaca order status: {status}",
                 )
 

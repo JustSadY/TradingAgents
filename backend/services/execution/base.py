@@ -1,19 +1,20 @@
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
+from decimal import Decimal
 
 
 @dataclass
 class OrderRequest:
     ticker: str
     action: str
-    quantity: float
-    reference_price: float
+    quantity: Decimal
+    reference_price: Decimal
     ai_signal: str = ""
     ai_reasoning: str = ""
     leverage: float = 1.0
-    stop_loss: float | None = None
-    take_profit: float | None = None
+    stop_loss: Decimal | None = None
+    take_profit: Decimal | None = None
     allow_short: bool = False
 
 
@@ -21,9 +22,9 @@ class OrderRequest:
 class OrderResult:
     order_id: str
     status: str
-    filled_price: float | None
-    filled_quantity: float | None
-    commission: float = 0.0
+    filled_price: Decimal | None
+    filled_quantity: Decimal | None
+    commission: Decimal = Decimal("0")
     message: str = ""
     executed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
 

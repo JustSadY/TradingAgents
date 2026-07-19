@@ -14,8 +14,12 @@ from __future__ import annotations
 import logging
 import re
 
+from decimal import Decimal
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.constants import SIGNAL_TO_ACTION
+from backend.core.money import safe_decimal
 from backend.services.execution.base import OrderRequest, OrderResult
 from backend.services.execution.factory import get_trader
 from backend.services.mock_trading_service import get_or_create_sim_portfolio
@@ -23,16 +27,9 @@ from backend.trading_agents.agents.runtime.risk_math import calculate_kelly_size
 
 _logger = logging.getLogger(__name__)
 
-_SIGNAL_TO_ACTION = {
-    "Buy": "BUY",
-    "Overweight": "BUY",
-    "Sell": "SELL",
-    "Underweight": "SELL",
-}
-
 
 def is_actionable(signal: str | None) -> bool:
-    return signal in _SIGNAL_TO_ACTION
+    return signal in SIGNAL_TO_ACTION
 
 
 def _record_skip(reason: str) -> None:
@@ -261,7 +258,7 @@ async def place_signal_order(
     or ``None`` when the signal is not actionable or no price is available.
     The caller is responsible for committing the transaction.
     """
-    action = _SIGNAL_TO_ACTION.get(row.signal)
+    action = SIGNAL_TO_ACTION.get(row.signal)
     if action is None:
         return None
 
@@ -390,13 +387,13 @@ async def place_signal_order(
     request = OrderRequest(
         ticker=ticker,
         action=action,
-        quantity=quantity,
-        reference_price=price,
+        quantity=safe_decimal(quantity),
+        reference_price=safe_decimal(price),
         ai_signal=row.signal or "",
         ai_reasoning=(row.final_decision or "")[:500],
         leverage=leverage,
-        stop_loss=stop_loss if opening_exposure else None,
-        take_profit=take_profit if opening_exposure else None,
+        stop_loss=safe_decimal(stop_loss) if opening_exposure and stop_loss else None,
+        take_profit=safe_decimal(take_profit) if opening_exposure and take_profit else None,
         allow_short=allow_short,
     )
     result = await trader.place_order(request)

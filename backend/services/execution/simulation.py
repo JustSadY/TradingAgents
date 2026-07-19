@@ -1,7 +1,9 @@
 import logging
+from decimal import Decimal
 
 import backend.bootstrap  # noqa: F401  (sets engine env before importing the engine)
 from backend.core.database import AsyncSessionLocal
+from backend.core.money import safe_decimal
 from backend.services.market_data_service import get_live_price as _get_price
 from backend.services.mock_trading_service import (
     execute_order,
@@ -52,9 +54,9 @@ class SimulationTrader(BaseTraderInterface):
             return OrderResult(
                 order_id=str(res["order_id"]),
                 status=res["status"],
-                filled_price=res["price"],
-                filled_quantity=res["quantity"],
-                commission=res["commission"],
+                filled_price=safe_decimal(res["price"]),
+                filled_quantity=safe_decimal(res["quantity"]),
+                commission=safe_decimal(res["commission"]),
                 message="Simulation order filled",
             )
         except Exception as e:

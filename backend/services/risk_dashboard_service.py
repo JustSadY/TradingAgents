@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import math
+from decimal import Decimal
 from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.money import safe_decimal
 from backend.models.user import User
 from backend.services.indicator_service import fetch_sector
 
@@ -49,22 +51,18 @@ _EMPTY_DASHBOARD = {
 }
 
 
-def _prepare_holdings(holdings: list[dict]) -> float:
-    """Annotate each holding with a numeric ``_market_value``; return total equity.
-
-    Equity is floored to 1.0 when (near-)zero so weight divisions stay finite.
-    """
+def _prepare_holdings(holdings: list[dict]) -> Decimal:
     for h in holdings:
         market_value = h.get("market_value")
         if market_value is None:
-            qty = float(h.get("quantity", 0))
-            price = float(h.get("current_price", 0))
+            qty = safe_decimal(h.get("quantity", 0))
+            price = safe_decimal(h.get("current_price", 0))
             h["_market_value"] = qty * price
         else:
-            h["_market_value"] = float(market_value)
+            h["_market_value"] = safe_decimal(market_value)
 
     total_equity = sum(h["_market_value"] for h in holdings)
-    return total_equity if abs(total_equity) >= 1e-9 else 1.0
+    return total_equity if total_equity >= Decimal("1e-9") else Decimal("1")
 
 
 async def _fetch_close_history(ticker: str, period: str = "3mo"):
@@ -180,19 +178,15 @@ def _build_holdings_risk(
     ticker_hist: dict[str, Any],
     spy_returns: Any,
     sector_map: dict[str, str],
-    total_equity: float,
+    total_equity: Decimal,
 ) -> tuple[list[dict], float | None, float | None, dict[str, Any]]:
-    """Per-holding risk rows plus weight-averaged portfolio beta/volatility.
-
-    Also returns the per-ticker daily-return series for correlation.
-    """
     holdings_risk: list[dict] = []
     ticker_returns: dict[str, Any] = {}
     beta_num = beta_den = vol_num = vol_den = 0.0
 
     for h in holdings:
         ticker = h["ticker"]
-        weight = h["_market_value"] / total_equity
+        weight = float(h["_market_value"] / total_equity)
         sector = sector_map.get(ticker, "Unknown")
 
         daily_ret, vol_annual, beta = _holding_vol_beta(ticker_hist.get(ticker), spy_returns)
@@ -221,15 +215,14 @@ def _build_holdings_risk(
     return holdings_risk, portfolio_beta, portfolio_volatility, ticker_returns
 
 
-def _build_sector_weights(holdings: list[dict], sector_map: dict[str, str], total_equity: float) -> list[dict]:
-    """Aggregate market value by sector into descending weight-percent rows."""
-    sector_values: dict[str, float] = {}
+def _build_sector_weights(holdings: list[dict], sector_map: dict[str, str], total_equity: Decimal) -> list[dict]:
+    sector_values: dict[str, Decimal] = {}
     for h in holdings:
         s = sector_map.get(h["ticker"], "Unknown")
-        sector_values[s] = sector_values.get(s, 0.0) + h["_market_value"]
+        sector_values[s] = sector_values.get(s, Decimal("0")) + h["_market_value"]
 
     sector_weights = [
-        {"sector": s, "weight_pct": round(mv / total_equity * 100.0, 4)} for s, mv in sector_values.items()
+        {"sector": s, "weight_pct": round(float(mv / total_equity * Decimal("100")), 4)} for s, mv in sector_values.items()
     ]
     sector_weights.sort(key=lambda x: x["weight_pct"], reverse=True)
     return sector_weights
@@ -304,7 +297,7 @@ async def correlated_notional(ticker: str, holdings: list[dict], threshold: floa
         except Exception:
             continue
         if corr > threshold:
-            total += corr * float(h.get("market_value") or 0.0)
+            total += corr * float(safe_decimal(h.get("market_value")))
     return total
 
 

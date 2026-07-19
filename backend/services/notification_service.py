@@ -62,17 +62,11 @@ def _event_title(event: str) -> str:
     }.get(event, event)
 
 
-_BULLISH = {"buy", "overweight"}
-_BEARISH = {"sell", "underweight"}
+from backend.core.constants import signal_direction
 
 
 def _signal_direction(signal: str | None) -> str:
-    s = (signal or "").strip().lower()
-    if s in _BULLISH:
-        return "bullish"
-    if s in _BEARISH:
-        return "bearish"
-    return "neutral"
+    return signal_direction(signal)
 
 
 def is_signal_flip(prev_signal: str | None, new_signal: str | None) -> bool:

@@ -22,3 +22,19 @@ ignore = [
 
 [tool.ruff.lint.isort]
 known-first-party = ["backend"]
+
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+pythonpath = [".."]
+markers = [
+    "slow: marks tests as slow (deselect with '-m \"not slow\"')",
+    "integration: marks tests as integration tests (require external services)",
+    "llm: marks tests that call LLM endpoints",
+]
+addopts = "-q --tb=short --strict-markers"
+
+[tool.coverage.run]
+source = ["backend"]
+omit = ["backend/tests/*", "backend/trading_agents/*"]
+

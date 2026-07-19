@@ -18,17 +18,16 @@ async def get_system_settings(db: AsyncSession) -> SystemSettings | None:
 async def list_historical_analyses(
     db: AsyncSession,
     *,
+    user=None,
     ticker: str,
     before_trade_date: str,
     limit: int,
 ) -> list[AnalysisResult]:
-    result = await db.execute(
-        select(AnalysisResult)
-        .where(AnalysisResult.ticker == ticker)
-        .where(AnalysisResult.trade_date < before_trade_date)
-        .order_by(_desc(AnalysisResult.created_at))
-        .limit(limit)
-    )
+    q = scope_to_user(select(AnalysisResult), AnalysisResult, user)
+    q = q.where(AnalysisResult.ticker == ticker).where(
+        AnalysisResult.trade_date < before_trade_date
+    ).order_by(_desc(AnalysisResult.created_at)).limit(limit)
+    result = await db.execute(q)
     return list(result.scalars().all())
 
 

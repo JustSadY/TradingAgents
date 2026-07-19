@@ -1,7 +1,7 @@
 from datetime import UTC, datetime
 from decimal import Decimal
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy import Boolean, DateTime, ForeignKey, Index, Integer, String
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import MONEY, Base
@@ -9,6 +9,9 @@ from backend.core.database import MONEY, Base
 
 class PriceAlert(Base):
     __tablename__ = "price_alerts"
+    __table_args__ = (
+        Index("ix_price_alerts_enabled_triggered", "enabled", "triggered_at"),
+    )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)

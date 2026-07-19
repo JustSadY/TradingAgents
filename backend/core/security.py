@@ -39,7 +39,7 @@ def create_refresh_token(username: str, token_version: int = 0) -> str:
     )
 
 
-def decode_token(token: str, expected_type: str = "access") -> str | None:
+def decode_token(token: str, expected_type: str = "access") -> str:
     """Validate a token and return its subject (username).
 
     Kept for callers that only need the username; use ``decode_token_payload``
@@ -49,9 +49,17 @@ def decode_token(token: str, expected_type: str = "access") -> str | None:
 
 
 def decode_token_payload(token: str, expected_type: str = "access") -> dict:
-    """Validate a token and return its full payload (sub, ver, role, ...)."""
+    """Validate a token and return its full payload (sub, ver, role, ...).
+
+    Raises ``ValueError`` on invalid/expired/wrong-type tokens.
+    """
     try:
-        payload = jwt.decode(token, settings.SECRET_KEY, algorithms=[settings.ALGORITHM])
+        payload = jwt.decode(
+            token,
+            settings.SECRET_KEY,
+            algorithms=[settings.ALGORITHM],
+            options={"require": ["exp"]},
+        )
         if payload.get("type") != expected_type:
             raise ValueError("Wrong token type")
         username: str = payload.get("sub")

@@ -148,7 +148,7 @@ def get_status(do_fetch: bool = True) -> dict:
                     }
                     _write_status(status)
             except Exception:
-                pass
+                _logger.warning("Failed to parse update status timestamp '%s'", at_str)
 
     return {
         "git": True,
@@ -212,7 +212,7 @@ def reset_stuck_update() -> None:
                 return
             stuck_reason = f"Update timed out after {int(elapsed // 60)} minutes."
         except Exception:
-            pass
+            _logger.warning("Failed to parse stuck-update timestamp '%s'", at_str)
 
     _logger.info("Resetting stuck update state to 'failed': %s", stuck_reason)
     _write_status(
