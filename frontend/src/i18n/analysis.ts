@@ -250,7 +250,7 @@ const analysis = {
     'analysis.section.agent_qa_report': 'Çapraz Sorgu',
     'analysis.section.investment_plan': 'Yatırım Planı',
     'analysis.section.trader_investment_plan': 'Trader Önerisi (ön karar)',
-    'analysis.section.final_trade_decision': 'Nihai Karar (Portfolio Manager)',
+    'analysis.section.final_trade_decision': 'Nihai Karar (Portföy Yöneticisi)',
     'analysis.section.bull_history': 'Boğa Argümanları',
     'analysis.section.bear_history': 'Ayı Argümanları',
     'analysis.section.investment_debate_history': 'Tartışma',

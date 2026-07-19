@@ -20,7 +20,7 @@ const QUICK_PROMPTS = [
   "Set an alert when AAPL goes above $200",
 ]
 
-function MessageBubble({ msg }: { msg: Message }) {
+const MessageBubble = React.memo(function MessageBubble({ msg }: { msg: Message }) {
   const isUser = msg.role === 'user'
   return (
     <div className={`flex ${isUser ? 'justify-end' : 'justify-start'} gap-2`}>
@@ -41,7 +41,7 @@ function MessageBubble({ msg }: { msg: Message }) {
       </div>
     </div>
   )
-}
+})
 
 export function PortfolioAssistant() {
   const { isAuthenticated } = useAuth()
@@ -80,7 +80,7 @@ export function PortfolioAssistant() {
     scrollToBottom()
   }, [messages, loading, scrollToBottom])
 
-  const send = async (text?: string) => {
+  const send = useCallback(async (text?: string) => {
     const msg = (text ?? input).trim()
     if (!msg || loading) return
     setInput('')
@@ -105,7 +105,7 @@ export function PortfolioAssistant() {
     } finally {
       setLoading(false)
     }
-  }
+  }, [input, loading])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()

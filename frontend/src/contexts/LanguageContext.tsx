@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState } from 'react'
+import React, { createContext, useContext, useState, useCallback } from 'react'
 
 export type Language = 'en' | 'tr'
 
@@ -202,10 +202,9 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
     return (localStorage.getItem('ta_language') as Language) || 'en'
   })
 
-  const setLanguage = (lang: Language) => {
+  const setLanguage = useCallback((lang: Language) => {
     localStorage.setItem('ta_language', lang)
     setLanguageState(lang)
-    // Sync agent output language with UI language selection
     const langMap: Record<Language, string> = { en: 'English', tr: 'Turkish' }
     const token = localStorage.getItem('ta_access')
     if (token) {
@@ -215,11 +214,11 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         body: JSON.stringify({ output_language: langMap[lang] }),
       }).catch(() => {})
     }
-  }
+  }, [])
 
-  const t = (key: string): string => {
+  const t = useCallback((key: string): string => {
     return TRANSLATIONS[language]?.[key] || TRANSLATIONS['en']?.[key] || key
-  }
+  }, [language])
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage, t }}>

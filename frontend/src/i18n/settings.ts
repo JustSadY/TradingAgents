@@ -213,7 +213,7 @@ const translations = {
     'settings.effort_medium_balanced': 'Medium — Dengeli',
     'settings.effort_high_deep': 'High — En derin düşünce',
     'settings.effort_low_fast': 'Low — Hızlı',
-    'settings.effort_high_extended': 'High — Extended thinking',
+    'settings.effort_high_extended': 'Yüksek — Genişletilmiş düşünce',
     'settings.effort_minimal_fastest': 'Minimal — En hızlı',
     'settings.effort_high_deepest': 'High — En derin',
 

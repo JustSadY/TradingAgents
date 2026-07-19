@@ -1,4 +1,4 @@
-import { useEffect, useState, forwardRef, useImperativeHandle, useRef } from 'react'
+import { useEffect, useState, forwardRef, useImperativeHandle, useRef, useCallback } from 'react'
 import axios from 'axios'
 import { Save, RefreshCw, AlertCircle } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
@@ -42,7 +42,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
     ? `/api/settings/users/${userId}/tools`
     : '/api/settings/tools'
 
-  const fetchSettings = async () => {
+  const fetchSettings = useCallback(async () => {
     setLoading(true)
     setSaveError(null)
     try {
@@ -53,17 +53,17 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
     } finally {
       setLoading(false)
     }
-  }
+  }, [apiPath])
 
   useEffect(() => {
     fetchSettings()
-  }, [apiPath, meta])
+  }, [fetchSettings])
 
   useImperativeHandle(ref, () => ({
     save
   }))
 
-  const save = async () => {
+  const save = useCallback(async () => {
     if (!settings) return
     setSaving(true)
     setSaveSuccess(false)
@@ -81,9 +81,9 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
     } finally {
       setSaving(false)
     }
-  }
+  }, [settings, apiPath])
 
-  const resetField = (toolKey: string, fieldKey: string) => {
+  const resetField = useCallback((toolKey: string, fieldKey: string) => {
     if (!settings) return
     const toolMeta = meta?.tools?.find(t => t.key === toolKey)
     const fieldMeta = toolMeta?.settings_schema?.find(f => f.key === fieldKey)
@@ -99,9 +99,9 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
       tools[toolKey] = toolState
       return { ...prev, tools }
     })
-  }
+  }, [settings, meta])
 
-  const updateToolEnabled = (toolKey: string, enabled: boolean) => {
+  const updateToolEnabled = useCallback((toolKey: string, enabled: boolean) => {
     setSettings(prev => {
       if (!prev) return prev
       const tools = { ...prev.tools }
@@ -109,9 +109,9 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
       tools[toolKey] = toolState
       return { ...prev, tools }
     })
-  }
+  }, [])
 
-  const updateSettingField = (toolKey: string, fieldKey: string, value: any) => {
+  const updateSettingField = useCallback((toolKey: string, fieldKey: string, value: any) => {
     setSettings(prev => {
       if (!prev) return prev
       const tools = { ...prev.tools }
@@ -121,7 +121,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
       tools[toolKey] = toolState
       return { ...prev, tools }
     })
-  }
+  }, [])
 
   if (loading) {
     return <div className="text-slate-500 text-xs font-semibold p-4">{t('common.loading') || 'Loading...'}</div>
