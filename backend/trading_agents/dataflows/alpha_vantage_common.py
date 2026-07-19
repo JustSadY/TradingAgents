@@ -7,9 +7,15 @@ from io import StringIO
 import pandas as pd
 import requests
 
+from backend.trading_agents.dataflows.config import get_config
+from backend.trading_agents.dataflows.rate_limiter import TokenBucketRateLimiter
+from backend.trading_agents.dataflows.retry import retry_sync
+
 _logger = logging.getLogger(__name__)
 API_BASE_URL = "https://www.alphavantage.co/query"
-from backend.trading_agents.dataflows.config import get_config
+
+# Alpha Vantage free tier: 5 calls per minute.
+_AV_RATE_LIMITER = TokenBucketRateLimiter(calls=5, window_seconds=60.0, name="Alpha Vantage")
 
 
 def get_api_key() -> str:
@@ -43,26 +49,36 @@ class AlphaVantageRateLimitError(Exception):
 
 
 def _make_api_request(function_name: str, params: dict) -> dict | str:
-    api_params = params.copy()
-    api_params.update(
-        {
-            "function": function_name,
-            "apikey": get_api_key(),
-            "source": "trading_agents",
-        }
+    _AV_RATE_LIMITER.acquire_sync()
+
+    def _do_request() -> str:
+        api_params = params.copy()
+        api_params.update(
+            {
+                "function": function_name,
+                "apikey": get_api_key(),
+                "source": "trading_agents",
+            }
+        )
+        response = requests.get(API_BASE_URL, params=api_params)
+        response.raise_for_status()
+        response_text = response.text
+        try:
+            response_json = json.loads(response_text)
+            if "Information" in response_json:
+                info_message = response_json["Information"]
+                if "rate limit" in info_message.lower() or "api key" in info_message.lower():
+                    raise AlphaVantageRateLimitError(f"Alpha Vantage rate limit exceeded: {info_message}")
+        except json.JSONDecodeError:
+            pass
+        return response_text
+
+    return retry_sync(
+        _do_request,
+        max_retries=3,
+        base_delay=2.0,
+        retryable_exceptions=(requests.RequestException, AlphaVantageRateLimitError, ConnectionError),
     )
-    response = requests.get(API_BASE_URL, params=api_params)
-    response.raise_for_status()
-    response_text = response.text
-    try:
-        response_json = json.loads(response_text)
-        if "Information" in response_json:
-            info_message = response_json["Information"]
-            if "rate limit" in info_message.lower() or "api key" in info_message.lower():
-                raise AlphaVantageRateLimitError(f"Alpha Vantage rate limit exceeded: {info_message}")
-    except json.JSONDecodeError:
-        pass
-    return response_text
 
 
 def _filter_csv_by_date_range(csv_data: str, start_date: str, end_date: str) -> str:
