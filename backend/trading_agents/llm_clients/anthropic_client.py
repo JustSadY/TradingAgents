@@ -4,7 +4,7 @@ from typing import Any
 
 from langchain_anthropic import ChatAnthropic
 
-from .base_client import BaseLLMClient, normalize_content
+from .base_client import BaseLLMClient, is_quota_exhausted, normalize_content
 from .validators import validate_model
 
 _logger = logging.getLogger(__name__)
@@ -72,15 +72,25 @@ class NormalizedChatAnthropic(ChatAnthropic):
     prompt_caching: bool = False
 
     def invoke(self, input_value, config=None, **kwargs):
-        if self.prompt_caching:
-            input_value = _apply_cache_control(input_value)
-        return normalize_content(super().invoke(input_value, config, **kwargs))
+        try:
+            if self.prompt_caching:
+                input_value = _apply_cache_control(input_value)
+            return normalize_content(super().invoke(input_value, config, **kwargs))
+        except Exception as exc:
+            if is_quota_exhausted(exc):
+                _logger.warning("Anthropic quota exhausted: %s", exc)
+            raise
 
     async def ainvoke(self, input_value, config=None, **kwargs):
-        if self.prompt_caching:
-            input_value = _apply_cache_control(input_value)
-        result = await super().ainvoke(input_value, config, **kwargs)
-        return normalize_content(result)
+        try:
+            if self.prompt_caching:
+                input_value = _apply_cache_control(input_value)
+            result = await super().ainvoke(input_value, config, **kwargs)
+            return normalize_content(result)
+        except Exception as exc:
+            if is_quota_exhausted(exc):
+                _logger.warning("Anthropic quota exhausted: %s", exc)
+            raise
 
 
 class AnthropicClient(BaseLLMClient):

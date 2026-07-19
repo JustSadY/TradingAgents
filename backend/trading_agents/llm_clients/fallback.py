@@ -17,10 +17,44 @@ also raises, ``fb_b``; and so on.
 
 from __future__ import annotations
 
+import logging
 from typing import Any
+
+from .base_client import classify_error
+
+logger = logging.getLogger(__name__)
+
+
+def _is_permanent_failure(exc: Exception) -> bool:
+    """Check if an exception indicates a permanent failure that would also
+    affect fallback providers (e.g. invalid API key format).
+
+    ``invalid_request`` is deliberately excluded here — it often signals a
+    model-specific content-filter rejection that a different provider would
+    handle successfully.
+    """
+    category = classify_error(exc)
+    if category == "auth":
+        return True
+    err_msg = str(exc).lower()
+    high_confidence = (
+        "invalid_api_key",
+        "insufficient_quota",
+        "account_deactivated",
+        "billing",
+    )
+    return any(s in err_msg for s in high_confidence)
 
 
 class FallbackLLM:
+    """Multilevel fallback chain for chat models.
+
+    Wraps a primary LLM with a list of fallbacks. All chat-model surface
+    methods (bind_tools, with_structured_output, invoke, stream, etc.) are
+    forwarded to each member individually, so the fallback chain works with
+    LangGraph agent nodes that expect a ``BaseChatModel`` interface.
+    """
+
     def __init__(self, primary: Any, fallbacks: list[Any] | Any):
         self.primary = primary
         if isinstance(fallbacks, list):
@@ -28,18 +62,49 @@ class FallbackLLM:
         else:
             self.fallbacks = [fallbacks]
 
+    def __repr__(self) -> str:
+        return (
+            f"FallbackLLM(primary={self.primary.model_name}, "
+            f"fallbacks={[getattr(fb, 'model_name', str(fb)) for fb in self.fallbacks]})"
+        )
+
     def _combined(self):
-        return self.primary.with_fallbacks(self.fallbacks)
+        fallback_list = self.fallbacks.copy()
+        if not fallback_list:
+            logger.debug("FallbackLLM: no fallbacks configured, returning primary only")
+        else:
+            logger.debug(
+                "FallbackLLM: chain ready — primary=%s, fallbacks=%s",
+                self.primary.model_name,
+                [getattr(fb, "model_name", "?") for fb in fallback_list],
+            )
+        return self.primary.with_fallbacks(fallback_list)
 
     def bind_tools(self, tools, **kwargs):
-        return self.primary.bind_tools(tools, **kwargs).with_fallbacks(
-            [fb.bind_tools(tools, **kwargs) for fb in self.fallbacks]
-        )
+        bound_fallbacks = []
+        for fb in self.fallbacks:
+            try:
+                bound_fallbacks.append(fb.bind_tools(tools, **kwargs))
+            except Exception as exc:
+                logger.warning(
+                    "FallbackLLM: failed to bind_tools on fallback %s: %s — dropping",
+                    getattr(fb, "model_name", "?"),
+                    exc,
+                )
+        return self.primary.bind_tools(tools, **kwargs).with_fallbacks(bound_fallbacks)
 
     def with_structured_output(self, schema, **kwargs):
-        return self.primary.with_structured_output(schema, **kwargs).with_fallbacks(
-            [fb.with_structured_output(schema, **kwargs) for fb in self.fallbacks]
-        )
+        bound_fallbacks = []
+        for fb in self.fallbacks:
+            try:
+                bound_fallbacks.append(fb.with_structured_output(schema, **kwargs))
+            except Exception as exc:
+                logger.warning(
+                    "FallbackLLM: with_structured_output failed on fallback %s: %s — dropping",
+                    getattr(fb, "model_name", "?"),
+                    exc,
+                )
+        return self.primary.with_structured_output(schema, **kwargs).with_fallbacks(bound_fallbacks)
 
     def with_config(self, *args, **kwargs):
         return FallbackLLM(
@@ -58,6 +123,14 @@ class FallbackLLM:
 
     def astream(self, *args, **kwargs):
         return self._combined().astream(*args, **kwargs)
+
+    def astream_events(self, *args, **kwargs):
+        """Passthrough to primary's ``astream_events``.
+
+        LangGraph uses ``astream_events`` for streaming event-based output.
+        This forwards ``with_fallbacks``-wrapped runnable's events.
+        """
+        return self._combined().astream_events(*args, **kwargs)
 
     def __getattr__(self, name: str):
         return getattr(self.primary, name)

@@ -2,17 +2,32 @@ from typing import Any
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-from .base_client import BaseLLMClient, normalize_content
+from .base_client import BaseLLMClient, is_quota_exhausted, normalize_content
 from .validators import validate_model
+
+
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class NormalizedChatGoogleGenerativeAI(ChatGoogleGenerativeAI):
     def invoke(self, input, config=None, **kwargs):
-        return normalize_content(super().invoke(input, config, **kwargs))
+        try:
+            return normalize_content(super().invoke(input, config, **kwargs))
+        except Exception as exc:
+            if is_quota_exhausted(exc):
+                logger.warning("Google Gemini quota exhausted: %s", exc)
+            raise
 
     async def ainvoke(self, input, config=None, **kwargs):
-        result = await super().ainvoke(input, config, **kwargs)
-        return normalize_content(result)
+        try:
+            result = await super().ainvoke(input, config, **kwargs)
+            return normalize_content(result)
+        except Exception as exc:
+            if is_quota_exhausted(exc):
+                logger.warning("Google Gemini quota exhausted: %s", exc)
+            raise
 
 
 class GoogleClient(BaseLLMClient):

@@ -26,4 +26,14 @@ def create_llm_client(
 
         return GoogleClient(model, **kwargs)
 
+    if provider_lower == "mistral":
+        from .mistral_client import MistralClient
+
+        return MistralClient(model, **kwargs)
+
+    if provider_lower == "groq":
+        from .groq_client import GroqClient
+
+        return GroqClient(model, **kwargs)
+
     raise ValueError(f"Unsupported LLM provider: {provider}")

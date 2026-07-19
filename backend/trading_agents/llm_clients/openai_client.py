@@ -5,7 +5,7 @@ from langchain_core.messages import AIMessageChunk
 from langchain_core.outputs import ChatGenerationChunk
 from langchain_openai import ChatOpenAI
 
-from .base_client import BaseLLMClient, normalize_content
+from .base_client import BaseLLMClient, is_quota_exhausted, normalize_content
 from .capabilities import get_capabilities
 from .validators import validate_model
 
@@ -42,12 +42,6 @@ def _final_usage_chunk(usage) -> ChatGenerationChunk:
     return ChatGenerationChunk(message=AIMessageChunk(content="", usage_metadata=usage))
 
 
-def _is_quota_exhausted(exc: Exception) -> bool:
-    """Permanent quota exhaustion (not a transient rate limit)."""
-    err_msg = str(exc).lower()
-    return "resourceexhausted" in err_msg and ("total" in err_msg or "quota" in err_msg)
-
-
 class NormalizedChatOpenAI(ChatOpenAI):
     """ChatOpenAI with normalized content and sane streamed token usage.
 
@@ -75,7 +69,7 @@ class NormalizedChatOpenAI(ChatOpenAI):
                     last_usage = usage
                 yield chunk
         except Exception as exc:
-            if _is_quota_exhausted(exc):
+            if is_quota_exhausted(exc):
                 logger.warning("Quota exhausted: %s", exc)
             raise
         if last_usage is not None:
@@ -90,7 +84,7 @@ class NormalizedChatOpenAI(ChatOpenAI):
                     last_usage = usage
                 yield chunk
         except Exception as exc:
-            if _is_quota_exhausted(exc):
+            if is_quota_exhausted(exc):
                 logger.warning("Quota exhausted: %s", exc)
             raise
         if last_usage is not None:
@@ -100,7 +94,7 @@ class NormalizedChatOpenAI(ChatOpenAI):
         try:
             return normalize_content(super().invoke(input, config, **kwargs))
         except Exception as exc:
-            if _is_quota_exhausted(exc):
+            if is_quota_exhausted(exc):
                 logger.warning("Quota exhausted: %s", exc)
             raise
 
@@ -109,7 +103,7 @@ class NormalizedChatOpenAI(ChatOpenAI):
             result = await super().ainvoke(input, config, **kwargs)
             return normalize_content(result)
         except Exception as exc:
-            if _is_quota_exhausted(exc):
+            if is_quota_exhausted(exc):
                 logger.warning("Quota exhausted: %s", exc)
             raise
 
@@ -139,10 +133,17 @@ _PASSTHROUGH_KWARGS = (
     "callbacks",
     "http_client",
     "http_async_client",
+    "temperature",
+    "max_tokens",
+    "top_p",
+    "stop",
+    "frequency_penalty",
+    "presence_penalty",
 )
 
 _PROVIDER_BASE_URL = {
     "nvidia": "https://integrate.api.nvidia.com/v1",
+    "deepseek": "https://api.deepseek.com/v1",
     "ollama": "http://localhost:11434/v1",
 }
 
@@ -194,8 +195,15 @@ class OpenAIClient(BaseLLMClient):
             llm_kwargs["api_key"] = api_key
 
         for key in _PASSTHROUGH_KWARGS:
-            if key in self.kwargs:
-                llm_kwargs[key] = self.kwargs[key]
+            if key not in self.kwargs:
+                continue
+            value = self.kwargs[key]
+            if key in ("temperature", "frequency_penalty", "presence_penalty", "top_p"):
+                llm_kwargs[key] = float(value)
+            elif key in ("max_tokens", "max_retries"):
+                llm_kwargs[key] = int(value)
+            else:
+                llm_kwargs[key] = value
 
         return NormalizedChatOpenAI(**llm_kwargs)
 

@@ -28,7 +28,7 @@ class LLMProviderRegistry:
 
     def list_providers(self) -> list[LLMProvider]:
         # Return in a specific order for the UI
-        order = ["openai", "anthropic", "google", "nvidia", "ollama"]
+        order = ["openai", "anthropic", "google", "mistral", "groq", "nvidia", "deepseek", "ollama"]
         return [self._providers[k] for k in order if k in self._providers]
 
     def get_provider_labels(self) -> dict[str, str]:
@@ -116,6 +116,52 @@ llm_registry.register(
             ("Llama-3.1 70B Instruct", "meta/llama-3.1-70b-instruct"),
             ("Llama-3.1 8B Instruct", "meta/llama-3.1-8b-instruct"),
             ("Llama-3.2 3B Instruct", "meta/llama-3.2-3b-instruct"),
+        ],
+    )
+)
+
+llm_registry.register(
+    LLMProvider(
+        key="mistral",
+        label="Mistral AI",
+        effort_options=_STANDARD_EFFORT,
+        models=[
+            ("Mistral Large - Flagship, state-of-the-art reasoning", "mistral-large-latest"),
+            ("Mistral Small - Fast and cost-efficient", "mistral-small-latest"),
+            ("Codestral - Code generation specialist", "codestral-latest"),
+            ("Open Mistral Nemo - Open-weight balanced model", "open-mistral-nemo"),
+            ("Open Mixtral 8x22B - High-capacity MoE", "open-mixtral-8x22b"),
+            ("Open Mixtral 8x7B - Efficient MoE", "open-mixtral-8x7b"),
+            ("Open Mistral 7B - Lightweight open model", "open-mistral-7b"),
+        ],
+    )
+)
+
+llm_registry.register(
+    LLMProvider(
+        key="groq",
+        label="Groq (Fast Inference)",
+        effort_options=_STANDARD_EFFORT,
+        models=[
+            ("Llama 3.3 70B - Fast inference via Groq", "llama-3.3-70b-versatile"),
+            ("Llama 3.1 70B - Groq-hosted versatile model", "llama-3.1-70b-versatile"),
+            ("Llama 3.1 8B - Fast and lightweight", "llama-3.1-8b-instant"),
+            ("Llama Guard 3 8B - Safety classification", "llama-guard-3-8b"),
+            ("Mixtral 8x7B - Efficient MoE on Groq", "mixtral-8x7b-32768"),
+            ("Gemma 2 9B - Google's efficient model", "gemma2-9b-it"),
+        ],
+    )
+)
+
+llm_registry.register(
+    LLMProvider(
+        key="deepseek",
+        label="DeepSeek",
+        is_openai_compatible=True,
+        effort_options=_STANDARD_EFFORT,
+        models=[
+            ("DeepSeek V3 - Flagship, state-of-the-art reasoning", "deepseek-chat"),
+            ("DeepSeek R1 - Advanced reasoning with chain-of-thought", "deepseek-reasoner"),
         ],
     )
 )
