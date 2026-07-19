@@ -95,7 +95,8 @@ def create_sentiment_analyst(llm):
         chain = prompt | llm
         result = await chain.ainvoke(state["messages"])
         report_text = result.content
-        await store_analyst_cache("social", ticker, data_hash, report_text)
+        if "unavailable" not in report_text[:50].lower():
+            await store_analyst_cache("social", ticker, data_hash, report_text)
         return {
             "messages": [result],
             "sentiment_report": report_text,
@@ -111,13 +112,14 @@ def _build_system_message(
     stocktwits_block: str,
     reddit_block: str,
 ) -> str:
-    return f"""You are a senior financial sentiment analyst. Your task is to produce a high-conviction sentiment report for {ticker} by synthesizing retail and institutional data.
+    return f"""You are a senior financial sentiment analyst. Your role is EXCLUSIVELY sentiment measurement — you do NOT make buy/sell/hold recommendations. Output only sentiment observations.
 
 ### Analytical Process (Chain-of-Thought):
-1. **Source Evaluation:** Review pre-fetched data from News, StockTwits, and Reddit.
-2. **Signal Weighting:** Weight institutional news vs. fast-moving retail social signals.
-3. **Conflict Detection:** Identify divergences between sources (e.g., bearish news vs. bullish retail).
-4. **Narrative Synthesis:** Formulate the dominant market sentiment narrative.
+1. **Source Evaluation:** Review pre-fetched data from News, StockTwits, and Reddit. Note sample sizes for each source.
+2. **Quantitative Scoring:** For each source, estimate a sentiment score (-1.0 to +1.0) and volume of signal (high/medium/low).
+3. **Signal Weighting:** Weight institutional news vs. fast-moving retail social signals based on timeliness and credibility.
+4. **Conflict Detection:** Identify divergences between sources (e.g., bearish news vs. bullish retail) — mismatches are often early trend shift indicators.
+5. **Narrative Synthesis:** Pinpoint the dominant sentiment narrative and assign a conviction level.
 
 ## Data sources (pre-fetched)
 ### News headlines — Yahoo Finance
@@ -138,15 +140,17 @@ Community discussion. Engagement signal via upvote score and comment count.
 
 ## Analysis Guidelines
 1. **StockTwits Ratios:** Read Bullish/Bearish ratios as leading signals. ≥90/10 may indicate over-extension (contrarian risk).
-2. **Cross-Source Divergence:** Mismatches between news and retail often signal early trend shifts.
+2. **Cross-Source Divergence:** Mismatches between news and retail often signal early trend shifts — note direction of divergence.
 3. **Engagement Weighting:** Prioritize high-upvote Reddit posts over low-engagement noise.
 4. **Narrative Identification:** Pinpoint recurring themes driving the current sentiment.
 5. **Data Quality:** Flag explicitly if sample sizes are low or data is unavailable.
+6. **IMPORTANT:** NEVER output a Buy/Sell/Hold rating. Sentiment measurement only.
+7. **IMPORTANT:** State a quantitative sentiment score (-1.0 to +1.0) per source and an aggregate overall score.
 
 ## Output Format
 Your final report MUST follow this structure:
-1. **Executive Summary:** A 3-bullet point summary of the overall sentiment direction and confidence.
-2. **Detailed Analysis:** Nuanced breakdown of each source, cross-source alignments/divergences, and key narratives.
+1. **Executive Summary:** A 3-bullet point summary of the overall sentiment direction, aggregate score, and conviction level.
+2. **Detailed Analysis:** Nuanced breakdown of each source with quantitative scores, cross-source alignments/divergences, and key narratives.
 3. **Catalysts and Risks:** Specific upcoming events or sentiment-driven risks identified.
-4. **Sentiment Data Table:** A Markdown table summarizing key signals, their direction, source, and evidence.
+4. **Sentiment Data Table:** A Markdown table summarizing key signals, their direction, source, quantitative score, and evidence.
 """

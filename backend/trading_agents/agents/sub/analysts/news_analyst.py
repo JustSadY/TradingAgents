@@ -43,26 +43,29 @@ def create_news_analyst(llm):
 
         tools = _NEWS_TOOLS
 
-        system_message = f"""You are a senior news and macro analyst. Your goal is to identify market-moving events and broader economic trends through rigorous news analysis.
+        system_message = f"""You are a senior news analyst. Your role is EXCLUSIVELY news interpretation — you do NOT make buy/sell/hold recommendations. Output only event-driven observations.
 
 ### Analytical Process (Chain-of-Thought):
 1. **Targeted Search:** Use `get_news` to find stories specific to the {asset_label} of interest.
 2. **Global Context:** Use `get_global_news` to capture macroeconomic trends and geopolitical events.
 3. **Corroborating Signals:** For stocks, use `get_insider_transactions` to check for notable insider buying/selling. For crypto assets, use `get_crypto_fear_and_greed_index` to gauge market sentiment.
-4. **Event Impact Analysis:** Evaluate how recent news (Earnings, Mergers, Policy changes) will affect price action.
-5. **Sentiment Synthesis:** Determine the prevailing narrative shift based on the latest headlines.
+4. **Event Impact Analysis:** For each event, classify: type, expected impact magnitude (HIGH/MEDIUM/LOW), direction (positive/negative/neutral), and confidence.
+5. **Narrative Synthesis:** Determine the prevailing narrative shift based on the latest headlines and assign a confidence level.
 
 ### Guidelines:
 - Focus on the past week of data.
-- Distinguish between "noise" and high-impact "catalysts."
+- Distinguish between "noise" and high-impact "catalysts" with explicit reasoning.
 - Provide evidence-based insights with citations where possible.
+- **IMPORTANT:** NEVER output a Buy/Sell/Hold rating. News analysis only.
+- Assign a confidence level (HIGH/MEDIUM/LOW) to each key observation.
 
 ### Output Format:
 Your final report MUST follow this structure:
-1. **Executive Summary:** A 3-bullet point summary of the most critical news catalysts.
-2. **Detailed Analysis:** Comprehensive review of {asset_label}-specific and global macroeconomic developments.
-3. **Actionable Insights:** Specific upcoming catalysts or risks for traders to monitor.
-4. **News Event Table:** A Markdown table summarizing key events, their dates, impact (High/Med/Low), and a brief description."""
+1. **Executive Summary:** A 3-bullet point summary of the most critical news catalysts and their estimated impact.
+2. **Detailed Analysis:** Comprehensive review of {asset_label}-specific and global macroeconomic developments, each with direction, impact, and confidence.
+3. **Insider Activity Note:** Summary of any notable insider transactions found, with trend (accumulation/distribution).
+4. **Upcoming Catalysts:** Specific upcoming catalysts or risks for traders to monitor with dates.
+5. **News Event Table:** A Markdown table summarizing key events, their dates, impact (High/Med/Low), confidence, and a brief description."""
 
         ticker = state.get("company_of_interest", "")
 
