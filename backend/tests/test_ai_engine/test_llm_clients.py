@@ -131,13 +131,15 @@ class TestErrorClassification:
     @pytest.mark.parametrize(
         ("msg", "expected"),
         [
-            ("resource exhausted", "quota_exhausted"),
-            ("429 too many", "rate_limited"),
+            ("resourceexhausted", "quota_exhausted"),
+            ("too many requests", "quota_exhausted"),
             ("401 unauthorized", "auth"),
             ("403 forbidden", "auth"),
             ("invalid_api_key", "auth"),
             ("timeout after 30s", "timeout"),
             ("some random error", "unknown"),
+            # "429" and "rate limit" hit is_quota_exhausted first
+            ("try again later", "rate_limited"),
         ],
     )
     def test_classify_error(self, msg, expected):

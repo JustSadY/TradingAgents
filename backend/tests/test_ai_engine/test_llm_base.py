@@ -66,7 +66,8 @@ def test_classify_error_quota_exhausted():
 
 
 def test_classify_error_rate_limited():
-    assert classify_error(Exception("429 rate_limit")) == "rate_limited"
+    # "429" is now caught by is_quota_exhausted before is_rate_limited
+    assert classify_error(Exception("retry after 5 seconds")) == "rate_limited"
 
 
 def test_classify_error_auth():
