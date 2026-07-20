@@ -1,12 +1,10 @@
+import logging
 from typing import Any
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
 from .base_client import BaseLLMClient, is_quota_exhausted, normalize_content
 from .validators import validate_model
-
-
-import logging
 
 logger = logging.getLogger(__name__)
 

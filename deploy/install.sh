@@ -301,6 +301,16 @@ systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
 systemctl restart "$SERVICE_NAME"
 ok "Servis başlatıldı: $SERVICE_NAME"
 
+# ── 8. Logrotate ────────────────────────────────────────────────────────────────
+if command -v logrotate >/dev/null; then
+    info "Logrotate yapılandırması kuruluyor..."
+    cp "$PROJECT_ROOT/deploy/logrotate.conf" /etc/logrotate.d/tradingagents 2>/dev/null && \
+        ok "Logrotate kuruldu: /etc/logrotate.d/tradingagents" || \
+        warn "Logrotate kurulamadı."
+else
+    warn "logrotate bulunamadı — log rotasyonu atlandı."
+fi
+
 # Güvenlik duvarı (opsiyonel, ufw aktifse)
 if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
     ufw allow "${APP_PORT}/tcp" >/dev/null 2>&1 || true
@@ -337,9 +347,11 @@ if [ "$HEALTHY" = 1 ]; then
     echo "                (otomatik git pull + build + restart). Manuel: sudo bash deploy/update.sh"
     echo
     echo "  Yönetim:"
-    echo "    journalctl -u $SERVICE_NAME -f      # canlı log"
+    echo "    journalctl -u $SERVICE_NAME -f              # canlı log"
     echo "    systemctl restart|stop $SERVICE_NAME"
-    echo "    bash deploy/uninstall.sh            # kaldır"
+    echo "    bash deploy/backup.sh                      # manuel yedek"
+    echo "    bash deploy/setup-backup-cron.sh            # otomatik yedek (systemd timer)"
+    echo "    bash deploy/uninstall.sh                    # kaldır"
 else
     err "Servis sağlık kontrolünden geçemedi. Logları inceleyin:"
     err "    journalctl -u $SERVICE_NAME -n 50 --no-pager"

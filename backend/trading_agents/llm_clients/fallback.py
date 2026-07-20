@@ -113,10 +113,20 @@ class FallbackLLM:
         )
 
     def invoke(self, *args, **kwargs):
-        return self._combined().invoke(*args, **kwargs)
+        try:
+            return self.primary.invoke(*args, **kwargs)
+        except Exception as exc:
+            if _is_permanent_failure(exc):
+                raise
+            return self._combined().invoke(*args, **kwargs)
 
     async def ainvoke(self, *args, **kwargs):
-        return await self._combined().ainvoke(*args, **kwargs)
+        try:
+            return await self.primary.ainvoke(*args, **kwargs)
+        except Exception as exc:
+            if _is_permanent_failure(exc):
+                raise
+            return await self._combined().ainvoke(*args, **kwargs)
 
     def stream(self, *args, **kwargs):
         return self._combined().stream(*args, **kwargs)

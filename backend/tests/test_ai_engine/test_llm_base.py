@@ -20,7 +20,8 @@ def test_normalize_content_aimessage():
     from langchain_core.messages import AIMessage
 
     result = normalize_content(_FakeResponse(AIMessage(content="world")))
-    assert result.content == "world"
+    assert isinstance(result, _FakeResponse)
+    assert result.content.content == "world"
 
 
 def test_normalize_content_list_of_text_blocks():
