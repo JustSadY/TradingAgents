@@ -290,7 +290,8 @@ async def rollback_and_resume_analysis(
     import time
 
     from backend.core.database import AsyncSessionLocal
-    from backend.repositories.analysis import get_analysis_by_id, get_system_settings
+    from backend.repositories.analysis import get_analysis_by_id
+    from backend.repositories.system_settings import get_system_settings
     from backend.services.analysis.config_builder import build_analysis_config, prepare_graph_config
     from backend.services.settings_service import get_or_create_settings
     from backend.trading_agents.graph.checkpointer import get_async_checkpointer, thread_id

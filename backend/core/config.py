@@ -36,6 +36,12 @@ class Settings(BaseSettings):
     # "inline" runs analyses in the web process (default). "worker" enqueues
     # them onto arq (requires REDIS_URL and a running `arq backend.worker.WorkerSettings`).
     ANALYSIS_QUEUE_MODE: str = "inline"
+    # Off by default: request.client.host is the only trustworthy source of the
+    # caller's IP for rate-limiting unless this app sits behind a reverse proxy
+    # that YOU control and that overwrites (not appends to) X-Forwarded-For.
+    # Turning this on without such a proxy lets any client forge the header and
+    # get its own private rate-limit bucket (or blame another IP for its abuse).
+    TRUST_PROXY_HEADERS: bool = False
 
     @model_validator(mode="after")
     def _validate_queue_mode(self) -> "Settings":

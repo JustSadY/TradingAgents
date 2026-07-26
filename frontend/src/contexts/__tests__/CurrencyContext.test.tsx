@@ -24,7 +24,7 @@ vi.mock('axios', async () => {
 })
 
 function TestConsumer() {
-  const { currency, setCurrency, symbol, convert, fmt, rates, loadingRates } = useCurrency()
+  const { currency, setCurrency, symbol, convert, fmt, loadingRates } = useCurrency()
   return (
     <div>
       <span data-testid="currency">{currency}</span>
@@ -77,7 +77,7 @@ describe('CurrencyContext', () => {
   it('convert applies rate for non-USD', async () => {
     renderWithCurrency(<TestConsumer />)
     await waitFor(() => {
-      const select = screen.getByTestId('select')
+      expect(screen.getByTestId('select')).toBeInTheDocument()
     })
     await userEvent.selectOptions(screen.getByTestId('select'), 'TRY')
     await waitFor(() => {
@@ -95,7 +95,7 @@ describe('CurrencyContext', () => {
   it('fmt formats JPY with 0 decimals', async () => {
     renderWithCurrency(<TestConsumer />)
     await waitFor(() => {
-      const select = screen.getByTestId('select')
+      expect(screen.getByTestId('select')).toBeInTheDocument()
     })
     await userEvent.selectOptions(screen.getByTestId('select'), 'JPY')
     await waitFor(() => {

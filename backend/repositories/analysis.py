@@ -6,13 +6,7 @@ from sqlalchemy.orm import defer
 
 from backend.models.analysis import AnalysisResult
 from backend.models.portfolio_analysis import MultiTickerAnalysis
-from backend.models.system_settings import SystemSettings
 from backend.repositories.common import scope_to_user
-
-
-async def get_system_settings(db: AsyncSession) -> SystemSettings | None:
-    result = await db.execute(select(SystemSettings).where(SystemSettings.id == 1))
-    return result.scalar_one_or_none()
 
 
 async def list_historical_analyses(

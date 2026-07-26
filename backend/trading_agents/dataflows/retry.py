@@ -23,12 +23,10 @@ def retry_sync(
     retryable_exceptions: tuple[type[Exception], ...] = (Exception,),
     on_retry: Callable[[Exception, int, float], None] | None = None,
 ) -> T:
-    last_exc: Exception | None = None
     for attempt in range(max_retries + 1):
         try:
             return func()
         except retryable_exceptions as exc:
-            last_exc = exc
             if attempt < max_retries:
                 delay = min(base_delay * (2**attempt), max_delay)
                 sleep_time = _jitter(delay, jitter_factor)
@@ -56,12 +54,10 @@ async def retry_async(
     retryable_exceptions: tuple[type[Exception], ...] = (Exception,),
     on_retry: Callable[[Exception, int, float], None] | None = None,
 ) -> T:
-    last_exc: Exception | None = None
     for attempt in range(max_retries + 1):
         try:
             return await coro_factory()
         except retryable_exceptions as exc:
-            last_exc = exc
             if attempt < max_retries:
                 delay = min(base_delay * (2**attempt), max_delay)
                 sleep_time = _jitter(delay, jitter_factor)

@@ -1,5 +1,4 @@
 import logging
-from decimal import Decimal
 
 import backend.bootstrap  # noqa: F401  (sets engine env before importing the engine)
 from backend.core.database import AsyncSessionLocal

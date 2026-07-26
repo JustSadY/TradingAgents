@@ -41,6 +41,14 @@ interface WsEvent {
 const STORAGE_KEY = 'ta_last_run'
 const TASK_KEY = 'ta_task_running'
 
+// Build an absolute ws(s)://host URL rather than a bare relative path —
+// `new WebSocket('/path')` (protocol-relative-by-omission) is only reliably
+// supported by fairly recent browsers; older ones throw a SyntaxError.
+function analysisWsUrl(taskId: string, token: string): string {
+  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
+  return `${protocol}//${window.location.host}/ws/analysis/${taskId}?token=${token}`
+}
+
 interface QualityFields {
   score: number; confidence: string; reports_total: number; reports_present: number; reports_degraded: number; fallback_used: boolean
 }
@@ -238,7 +246,7 @@ function RunTab() {
     }
     taskIdRef.current = taskId
     const token = getAccessToken()
-    const ws = new WebSocket(`/ws/analysis/${taskId}?token=${token}`)
+    const ws = new WebSocket(analysisWsUrl(taskId, token))
     wsRef.current = ws
     let finished = false
 
@@ -1015,7 +1023,7 @@ function MultiTab() {
   const connectWs = useCallback(function connectWs(taskId: string, retries = 0) {
     try { wsRef.current?.close() } catch { /* noop */ }
     const token = getAccessToken()
-    const ws = new WebSocket(`/ws/analysis/${taskId}?token=${token}`)
+    const ws = new WebSocket(analysisWsUrl(taskId, token))
     wsRef.current = ws
     ws.onmessage = (e) => {
       let ev: any

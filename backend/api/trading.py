@@ -186,7 +186,10 @@ async def save_trade_note(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return await trade_journal_service.save_note(db, _, order_id, req.note)
+    try:
+        return await trade_journal_service.save_note(db, _, order_id, req.note)
+    except trade_journal_service.TradeJournalError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 
 @router.get("/journal/{order_id}", response_model=JournalNoteReadResponse)
@@ -205,4 +208,7 @@ async def generate_trade_debrief(
     db: AsyncSession = Depends(get_db),
     _: User = Depends(get_current_user),
 ):
-    return await trade_journal_service.generate_debrief(db, _, order_id)
+    try:
+        return await trade_journal_service.generate_debrief(db, _, order_id)
+    except trade_journal_service.TradeJournalError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc

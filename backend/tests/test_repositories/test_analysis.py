@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.analysis import AnalysisResult

@@ -73,6 +73,7 @@ async def lifespan(app: FastAPI):
     await create_all_tables()
     await _seed_admin_user()
     await _seed_setting_permissions()
+    await _migrate_analysis_subpage_permissions()
 
     # PERSISTENCE: Cleanup analyses that were interrupted by a crash/restart
     try:
@@ -199,6 +200,46 @@ async def _seed_setting_permissions():
                 existing = exists_res.scalar_one_or_none()
                 if not existing:
                     db.add(UserSettingPermission(user_id=u.id, setting_key=s_key, allowed=True))
+        await db.commit()
+
+
+async def _migrate_analysis_subpage_permissions():
+    """One-time backfill for the "screener"/"sector-rotation"/"earnings" page
+    keys added after they used to piggyback on the "analysis" permission.
+
+    Without this, every existing non-admin user who could already reach these
+    pages via "analysis" access would silently lose them the moment this
+    version deploys, until an admin re-granted each one individually. Grant a
+    page only when the user already has "analysis" allowed and has no
+    explicit row yet for the new key — never override an admin's own choice.
+    """
+    from sqlalchemy import select
+
+    from backend.core.database import AsyncSessionLocal
+    from backend.models.page_permission import UserPagePermission
+    from backend.models.user import User
+
+    new_keys = ("screener", "sector-rotation", "earnings")
+    async with AsyncSessionLocal() as db:
+        res = await db.execute(select(User))
+        users = res.scalars().all()
+        for u in users:
+            analysis_res = await db.execute(
+                select(UserPagePermission)
+                .where(UserPagePermission.user_id == u.id)
+                .where(UserPagePermission.page_key == "analysis")
+            )
+            analysis_perm = analysis_res.scalar_one_or_none()
+            if not analysis_perm or not analysis_perm.allowed:
+                continue
+            for key in new_keys:
+                exists_res = await db.execute(
+                    select(UserPagePermission)
+                    .where(UserPagePermission.user_id == u.id)
+                    .where(UserPagePermission.page_key == key)
+                )
+                if not exists_res.scalar_one_or_none():
+                    db.add(UserPagePermission(user_id=u.id, page_key=key, allowed=True))
         await db.commit()
 
 

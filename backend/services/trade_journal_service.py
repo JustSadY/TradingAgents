@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.user import User
@@ -14,11 +13,21 @@ from backend.repositories import trade_note as repo
 _logger = logging.getLogger(__name__)
 
 
+class TradeJournalError(Exception):
+    """Raised for client-correctable problems (missing order, missing API key,
+    upstream LLM failure) — the API layer translates ``status_code`` into an
+    ``HTTPException``, keeping FastAPI/HTTP concerns out of the service."""
+
+    def __init__(self, message: str, status_code: int = 400):
+        super().__init__(message)
+        self.status_code = status_code
+
+
 async def save_note(db: AsyncSession, user: User, order_id: int, note: str) -> dict:
     """Upsert a user note for an order. Returns {"order_id", "note", "has_debrief"}."""
     # Only allow notes on the user's own orders (orders have no user_id).
     if await portfolio_repo.get_order_by_id(db, order_id, user=user) is None:
-        raise HTTPException(status_code=404, detail="Order not found.")
+        raise TradeJournalError("Order not found.", status_code=404)
     trade_note = await repo.upsert_note(db, order_id=order_id, user_id=user.id, note=note)
     await db.commit()
     return {
@@ -45,7 +54,7 @@ async def generate_debrief(db: AsyncSession, user: User, order_id: int) -> dict:
     """Generate AI debrief for a trade and persist it."""
     order = await portfolio_repo.get_order_by_id(db, order_id, user=user)
     if order is None:
-        raise HTTPException(status_code=404, detail="Order not found.")
+        raise TradeJournalError("Order not found.", status_code=404)
 
     trade_note = await repo.get_note(db, order_id=order_id, user_id=user.id)
     note_text = trade_note.note if trade_note else ""
@@ -95,9 +104,9 @@ Give a direct, honest assessment."""
         user_key = None
 
     if not user_key and not user.is_admin:
-        raise HTTPException(
+        raise TradeJournalError(
+            f"No API key set for provider '{provider}'. Please add it in Settings.",
             status_code=400,
-            detail=f"No API key set for provider '{provider}'. Please add it in Settings.",
         )
 
     try:
@@ -107,7 +116,7 @@ Give a direct, honest assessment."""
         content = (response.content or "").strip()
     except Exception as e:
         _logger.warning("Trade debrief LLM error: %s", e)
-        raise HTTPException(status_code=500, detail=f"LLM error: {e}") from e
+        raise TradeJournalError(f"LLM error: {e}", status_code=500) from e
 
     await repo.set_debrief(db, order_id=order_id, user_id=user.id, debrief=content)
     await db.commit()

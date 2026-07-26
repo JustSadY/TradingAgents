@@ -328,6 +328,33 @@ Client-side CSV download (no library; BOM for Excel compatibility):
 - Inline panel in Portfolio: beta, annualized volatility, sector concentration, holdings risk table
 - **Backend:** `backend/services/risk_dashboard_service.py`, `GET /api/trading/risk-dashboard`
 
+### Live Trading (Alpaca) — Owner-Only, Single Account
+
+The "paper trading" framing elsewhere in this doc describes the default and
+primary mode, but the execution layer also supports **real order placement**:
+
+- `backend/services/execution/alpaca.py` (`AlpacaTrader`) sends live orders to
+  `api.alpaca.markets` (or `paper-api.alpaca.markets` in paper mode) when the
+  admin sets **System Settings → Active Broker = Alpaca** and **Trading Mode =
+  Live**. Selected via `backend/services/execution/factory.py::get_trader()`.
+- **Single account for the whole server:** credentials always come from the
+  **owner** user's encrypted API keys (`alpaca_key` / `alpaca_secret`), never
+  the requesting user's own — see `AlpacaTrader._get_credentials()`. There is
+  no per-user brokerage account.
+- **Guarded to the owner:** `trading_orchestrator.py::place_signal_order()`
+  refuses to place an order through the Alpaca broker unless the triggering
+  user `is_owner` — regular/admin users' analyses fall through to simulation
+  even if the system is configured for live Alpaca trading.
+- The `trading_modes` (`simulation`/`live`) and `brokers` (`simulation`/
+  `alpaca`) option lists returned by `/api/meta` are **not filtered by role**
+  — every user sees the same dropdown in Settings, even though only the owner
+  can actually trigger a live-broker order. The UI does not warn non-owners
+  that selecting "Live" has no effect for them.
+- This is a genuinely multi-tenant platform everywhere else (per-user
+  portfolios, API keys, analyses); live trading is the one feature that is
+  intentionally single-account. Keep that in mind before pointing multiple
+  users at a shared Alpaca-live deployment.
+
 ### Multi-Currency Support
 
 - `CurrencyContext` fetches live FX rates from `GET /api/market/fx-rates` (1-hour cache, yfinance)
@@ -348,7 +375,7 @@ Client-side CSV download (no library; BOM for Excel compatibility):
 - Built-in indicators: SMA(20), EMA(20), RSI(14), MACD(12,26,9)
 - Custom indicator pane: RSI, MACD, Sentiment overlaid
 - **Custom Formula Engine** (`GET /api/market/custom-indicator`) — evaluate user-defined formulas against OHLCV data using a safe DSL
-  - Supported functions: `SMA(n)`, `EMA(n)`, `RSI(n)`, `MACD(f,s,sg)`, `ATR(n)`, `ADX(n)`, `VWAP`, `VOLSMA(n)`, `MAX(n)`, `MIN(n)`, `SHIFT(col,n)`
+  - Supported functions (single integer arg, computed on `Close` unless noted): `SMA(n)`, `EMA(n)`, `STD(n)`, `RSI(n)`, `ATR(n)`, `ADX(n)`, `VWAP(n)` (rolling), `VOLSMA(n)` (Volume average), `MAX(n)` (highest High), `MIN(n)` (lowest Low), `SHIFT(n)` (Close from n bars ago). No `MACD()` function — express it as `EMA(12) - EMA(26)`; `SHIFT` takes one arg (bars back), not a column name.
   - Example: `(Close - SMA(20)) / STD(20)` — Z-score distance from 20-day MA
 - **AI Formula Assistant** (`POST /api/market/formula-assist`) — converts natural language to formulas
   - Powered by `services/formula_assist_service.py`
@@ -630,7 +657,7 @@ By default the systemd service runs **one** uvicorn process. APScheduler, WebSoc
 
 - Adding columns: auto-applied
 - Renaming/dropping/changing types: manual SQL (think hard first)
-- Alembic is scaffolded as the opt-in successor (see `backend/alembic/README.md`). Once a database is stamped with a baseline (`alembic_version` table exists), the startup migrator defers to Alembic for that database. No revisions are committed yet — generate the baseline per that README before relying on it.
+- Alembic is the opt-in successor (see `backend/alembic/README.md`). Once a database is stamped with a baseline (`alembic_version` table exists), the startup migrator defers to Alembic for that database. Two revisions are committed under `backend/alembic/versions/`: a baseline and a follow-up for cascade/relationship rules — review both before stamping a database against them.
 
 ### IDOR Prevention
 

@@ -102,9 +102,9 @@ function AppRoutes() {
           element={isAdmin ? <Admin /> : <Navigate to="/dashboard" replace />} 
         />
 
-        <Route path="screener" element={<RequirePage page="analysis"><Screener /></RequirePage>} />
-        <Route path="sector-rotation" element={<RequirePage page="analysis"><SectorRotation /></RequirePage>} />
-        <Route path="earnings" element={<RequirePage page="analysis"><EarningsCalendar /></RequirePage>} />
+        <Route path="screener" element={<RequirePage page="screener"><Screener /></RequirePage>} />
+        <Route path="sector-rotation" element={<RequirePage page="sector-rotation"><SectorRotation /></RequirePage>} />
+        <Route path="earnings" element={<RequirePage page="earnings"><EarningsCalendar /></RequirePage>} />
 
         {/* Catch-all within the layout */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />

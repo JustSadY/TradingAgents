@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.database import AsyncSessionLocal
 from backend.models.portfolio_analysis import MultiTickerAnalysis
 from backend.models.settings import AppSettings
-from backend.repositories.analysis import get_system_settings
+from backend.repositories.system_settings import get_system_settings
 from backend.trading_agents.agents.sub.managers.super_portfolio_manager import create_super_portfolio_manager
 from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
 

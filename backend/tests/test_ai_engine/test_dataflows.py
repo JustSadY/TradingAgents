@@ -5,11 +5,8 @@ rotation, and vendor routing fallback logic.  These tests mock external IO and
 never call real APIs.
 """
 
-import json
 import os
-import tempfile
 import threading
-import time
 
 import pytest
 
@@ -184,7 +181,6 @@ def test_alpha_vantage_get_api_key_comma_separated():
 
 def test_alpha_vantage_rotation():
     from backend.trading_agents.dataflows.alpha_vantage_common import (
-        _read_api_keys,
         _rotate_api_key,
         get_api_key,
         reset_state,

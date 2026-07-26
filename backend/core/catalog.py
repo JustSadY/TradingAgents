@@ -118,6 +118,15 @@ PROVIDER_LABELS: dict[str, str] = llm_registry.get_provider_labels()
 
 EFFORT_OPTIONS: dict[str, list[dict]] = llm_registry.get_effort_options()
 
+# Per-provider model dropdown, served via GET /api/settings/llm-catalog.
+LLM_CATALOG: dict[str, dict] = {
+    p.key: {
+        "label": p.label,
+        "models": [{"value": value, "label": label} for label, value in p.models],
+    }
+    for p in llm_registry.list_providers()
+}
+
 WEBHOOK_EVENTS: list[str] = [
     "analysis_complete",
     "alert_triggered",

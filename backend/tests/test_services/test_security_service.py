@@ -1,9 +1,7 @@
 from __future__ import annotations
 
 import pytest
-from jose import jwt
 
-from backend.core.config import get_settings
 from backend.core.security import (
     create_access_token,
     create_refresh_token,

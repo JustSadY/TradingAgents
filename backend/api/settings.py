@@ -9,7 +9,7 @@ from backend.repositories.permissions import list_allowed_setting_sections
 from backend.repositories.users import get_user_by_id
 from backend.schemas.agent_settings import AgentSettingsRead, AgentSettingsUpdate
 from backend.schemas.common import OkResponse
-from backend.schemas.settings import MemoryStatusResponse, SettingsRead, SettingsUpdate
+from backend.schemas.settings import LLMProviderCatalogEntry, MemoryStatusResponse, SettingsRead, SettingsUpdate
 from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate
 from backend.schemas.webhook import WebhookDeliveryRead
 from backend.services.notification_service import test_webhook_url, validate_webhook_url
@@ -54,6 +54,14 @@ async def get_memory_status(
         "needs_openai_key": using_openai and "openai" not in providers,
         "agent_qa_enabled": settings.agent_qa_enabled,
     }
+
+
+@router.get("/llm-catalog", response_model=dict[str, LLMProviderCatalogEntry])
+async def get_llm_catalog(_: User = Depends(get_current_user)):
+    """Per-provider model dropdown options, sourced from llm_clients/registry.py."""
+    from backend.core.catalog import LLM_CATALOG
+
+    return LLM_CATALOG
 
 
 @router.get("", response_model=SettingsRead)

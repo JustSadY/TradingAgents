@@ -125,4 +125,40 @@ describe('AuthContext', () => {
   it('getAccessToken returns null when no token', () => {
     expect(getAccessToken()).toBeNull()
   })
+
+  it('clears React auth state (not just localStorage) when token refresh fails', async () => {
+    const payload = { sub: 'alice', role: 'user', exp: Math.floor(Date.now() / 1000) + 3600 }
+    localStorage.setItem('ta_access', `header.${btoa(JSON.stringify(payload))}.signature`)
+    localStorage.setItem('ta_refresh', 'stale_refresh_token')
+
+    const axios = await import('axios')
+    const mockedAxios = vi.mocked(axios.default)
+    // /auth/refresh itself fails (e.g. refresh token revoked/expired)
+    mockedAxios.post.mockImplementation((url: string) => {
+      if (url === '/auth/refresh') return Promise.reject(new Error('refresh rejected'))
+      return Promise.resolve({ data: {} })
+    })
+
+    renderWithAuth(<TestConsumer />)
+    expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('true')
+
+    // Grab the response error-handler AuthContext registered on the (mocked)
+    // axios.interceptors.response.use, and invoke it as axios would for a
+    // downstream 401 — this is what used to leave localStorage cleared but
+    // React state (and thus the UI) still showing "logged in".
+    const responseUseCalls = vi.mocked(mockedAxios.interceptors.response.use).mock.calls
+    const errorHandler = responseUseCalls[responseUseCalls.length - 1][1]
+
+    const fakeError = {
+      config: { url: '/api/portfolio', headers: {} },
+      response: { status: 401, data: {} },
+    }
+    await expect(errorHandler(fakeError)).rejects.toBeTruthy()
+
+    await waitFor(() => {
+      expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('false')
+    })
+    expect(screen.getByTestId('user')).toHaveTextContent('null')
+    expect(localStorage.getItem('ta_access')).toBeNull()
+  })
 })

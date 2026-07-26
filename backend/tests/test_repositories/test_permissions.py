@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.page_permission import UserPagePermission, UserSettingPermission
 from backend.repositories.permissions import (
     get_user_page_permission,
     get_user_page_permissions_map,

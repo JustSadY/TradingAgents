@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
-import axios from 'axios'
 import { AnalysisChatWidget } from '../AnalysisChatWidget'
 
 const mockAxiosGet = vi.fn()

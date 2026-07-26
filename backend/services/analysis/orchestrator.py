@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.catalog import node_progress
 from backend.core.metrics import ANALYSIS_DURATION, ANALYSIS_RUNS
-from backend.repositories.analysis import get_system_settings
+from backend.repositories.system_settings import get_system_settings
 from backend.services.stats_handler import StatsCallbackHandler
 from backend.services.token_analytics_service import estimate_cost
 from backend.trading_agents.agents.schemas import PropagateResult

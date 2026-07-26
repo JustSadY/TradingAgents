@@ -227,12 +227,12 @@ export default function Settings({ userId }: { userId?: number } = {}) {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b border-white/[0.04] pb-4 gap-3">
         <div>
           <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('settings.title')}</h2>
-          <p className="text-xs text-slate-500 mt-1">Configure your personal trading agent preferences and models</p>
+          <p className="text-xs text-slate-500 mt-1">{t('settings.subtitle')}</p>
         </div>
         <div className="flex items-center gap-3">
           {saveError && <span className="text-rose-400 text-xs font-semibold">{saveError}</span>}
           <button onClick={save} disabled={saving} className="flex items-center gap-2 bg-gradient-to-r from-violet-600 to-indigo-600 hover:from-violet-500 hover:to-indigo-500 text-white rounded-xl px-5 py-2.5 text-xs font-semibold shadow-md shadow-violet-500/20 transition-all shrink-0 cursor-pointer disabled:opacity-50">
-            <Save size={14} /> {saving ? 'Saving...' : saved ? t('settings.save_button_saved') : t('settings.save_button')}
+            <Save size={14} /> {saving ? t('settings.saving') : saved ? t('settings.save_button_saved') : t('settings.save_button')}
           </button>
         </div>
       </div>
@@ -301,7 +301,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 {allowedSettings.includes('llm') && (
                   <Section title={t('settings.llm_settings') || 'Core Engine Configuration'}>
                     <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed mb-2">
-                      Global LLM settings and performance parameters. Per-agent models are configured in the AI Configuration tab.
+                      {t('settings.llm_settings_description')}
                     </p>
 
                     <Row label={t('settings.row_llm_provider') || 'LLM Provider'}>
@@ -630,7 +630,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   </button>
                 </div>
                 {deliveries.length === 0 ? (
-                  <p className="text-[10px] text-slate-600 italic">No deliveries logged yet. Webhook events will appear here after they fire.</p>
+                  <p className="text-[10px] text-slate-600 italic">{t('settings.webhook_no_deliveries')}</p>
                 ) : (
                   <div className="space-y-1.5">
                     {deliveries.map(d => (
@@ -820,12 +820,12 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 </>
               )}
               {memoryStatus?.needs_openai_key && (
-                <Row label=""><span className="text-[11px] text-amber-400">Add your OpenAI API key in Profile to use the OpenAI embedder.</span></Row>
+                <Row label=""><span className="text-[11px] text-amber-400">{t('settings.memory_needs_openai_key')}</span></Row>
               )}
-              <Row label="Inter-Agent Q&A">
+              <Row label={t('settings.row_agent_qa')}>
                 <label className="flex items-center gap-2.5 cursor-pointer text-slate-300 select-none">
                   <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded" checked={s.agent_qa_enabled} onChange={e => update('agent_qa_enabled', e.target.checked)} />
-                  <span className="text-xs font-semibold">Analysts question each other after their reports</span>
+                  <span className="text-xs font-semibold">{t('settings.agent_qa_description')}</span>
                 </label>
               </Row>
               <Row label="Memory Recall Count">
@@ -868,6 +868,7 @@ interface PersonaItem {
 }
 
 function PersonaEditor({ userId }: { userId?: number } = {}) {
+  const { t } = useTranslation()
   const [personas, setPersonas] = useState<PersonaItem[]>([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -921,19 +922,19 @@ function PersonaEditor({ userId }: { userId?: number } = {}) {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <p className="text-xs font-bold text-white">Investor Personas</p>
-          <p className="text-[10px] text-slate-500 mt-0.5">Create custom investor personas that guide the Portfolio Manager's decision style</p>
+          <p className="text-xs font-bold text-white">{t('settings.personas_title')}</p>
+          <p className="text-[10px] text-slate-500 mt-0.5">{t('settings.personas_description')}</p>
         </div>
         {!showForm && (
           <button onClick={openCreate} className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-600/20 hover:bg-violet-600/30 border border-violet-500/20 text-violet-300 text-[10px] font-bold transition cursor-pointer">
-            <Plus size={11} /> New Persona
+            <Plus size={11} /> {t('settings.persona_new')}
           </button>
         )}
       </div>
 
       {showForm && (
         <div className="glass-panel rounded-2xl p-4 space-y-3 border border-violet-500/20">
-          <p className="text-xs font-bold text-violet-300">{editKey ? 'Edit Persona' : 'New Persona'}</p>
+          <p className="text-xs font-bold text-violet-300">{editKey ? t('settings.persona_edit') : t('settings.persona_new')}</p>
           {!editKey && (
             <div>
               <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Key (a-z, 0-9, _)</label>
@@ -965,7 +966,7 @@ function PersonaEditor({ userId }: { userId?: number } = {}) {
       )}
 
       {loading ? (
-        <div className="text-center py-8 opacity-40 text-[10px] text-slate-500">Loading personas…</div>
+        <div className="text-center py-8 opacity-40 text-[10px] text-slate-500">{t('settings.personas_loading')}</div>
       ) : (
         <div className="space-y-2">
           {personas.map(p => (

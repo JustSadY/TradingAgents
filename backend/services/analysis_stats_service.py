@@ -17,24 +17,22 @@ from backend.core.constants import (
     BUY_SIGNALS as _BUY_SIGNALS,
 )
 from backend.core.constants import (
-    MODEL_COST_PER_1K,
-)
-from backend.core.constants import (
     SELL_SIGNALS as _SELL_SIGNALS,
 )
 from backend.core.constants import (
     TOKENS_PER_ANALYST as _TOKENS_PER_ANALYST,
 )
 from backend.models.analysis import AnalysisResult
+from backend.services.token_analytics_service import get_blended_rate_per_1k
 
 _logger = logging.getLogger(__name__)
 
-# Indicative blended USD cost per 1K tokens, keyed by substring of the model id.
-
 
 def _rate_for_model(model: str, default: float) -> float:
-    model = (model or "").lower()
-    return next((v for k, v in MODEL_COST_PER_1K.items() if k in model), default)
+    # Delegates to token_analytics_service's MODEL_COSTS table — the single
+    # source of truth for model pricing, so this pre-run estimate can't drift
+    # from the actual post-run cost calculation.
+    return get_blended_rate_per_1k(model, default)
 
 
 def estimate_cost(analysts: str, debate_rounds: int, model: str) -> dict:

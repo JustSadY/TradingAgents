@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.alert import PriceAlert
 from backend.models.user import User
 from backend.repositories.alerts import (
     create_alert,

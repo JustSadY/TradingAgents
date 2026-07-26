@@ -5,10 +5,9 @@ import { usePriceChart, type ChartCandle, type ChartAnalysis } from '../usePrice
 const {
   mockCreateChart, mockCandlestickSeries, mockHistogramSeries, mockLineSeries,
   mockCreateSeriesMarkers, mockSetMarkers,
-  mockCandleSetData, mockVolSetData, mockSmaSetData, mockEmaSetData,
   mockRemovePriceLine, mockCreatePriceLine,
   mockCandleSeries, mockVolSeries, mockSmaSeries, mockEmaSeries,
-  mockPriceScale, mockTimeScale, mockRemoveSeries, mockApplyOptions, mockChart,
+  mockPriceScale, mockChart,
   resetSeriesCounter,
 } = vi.hoisted(() => {
   const _candleSetData = vi.fn()
@@ -42,7 +41,7 @@ const {
 
   const _createChart = vi.fn()
   const _chart = {
-    addSeries: vi.fn((seriesType, _opts) => {
+    addSeries: vi.fn((seriesType) => {
       if (seriesType === _candlestickSeries) return _candleSeries
       if (seriesType === _histogramSeries) return _volSeries
       if (seriesType === _lineSeries) {
@@ -75,10 +74,6 @@ const {
     mockLineSeries: _lineSeries,
     mockCreateSeriesMarkers: _createSeriesMarkers,
     mockSetMarkers: _setMarkers,
-    mockCandleSetData: _candleSetData,
-    mockVolSetData: _volSetData,
-    mockSmaSetData: _smaSetData,
-    mockEmaSetData: _emaSetData,
     mockRemovePriceLine: _removePriceLine,
     mockCreatePriceLine: _createPriceLine,
     mockCandleSeries: _candleSeries,
@@ -86,9 +81,6 @@ const {
     mockSmaSeries: _smaSeries,
     mockEmaSeries: _emaSeries,
     mockPriceScale: _priceScale,
-    mockTimeScale: _timeScale,
-    mockRemoveSeries: _removeSeries,
-    mockApplyOptions: _applyOptions,
     mockChart: _chart,
     resetSeriesCounter: () => { _lineSeriesCallCount = 0 },
   }

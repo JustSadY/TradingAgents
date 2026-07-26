@@ -50,7 +50,7 @@ async def run_analysis(
     try:
         safe_ticker_component(body.ticker)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        raise HTTPException(status_code=422, detail=str(e)) from e
     settings = await get_or_create_settings(db, current_user)
     task_id = str(uuid.uuid4())
     from backend.services.analysis_queue import dispatch_analysis

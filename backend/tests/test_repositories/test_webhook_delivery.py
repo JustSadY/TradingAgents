@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from datetime import UTC, datetime
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -53,7 +52,9 @@ class TestWebhookDeliveryRepository:
         d2 = await self._create_delivery(db, test_user.id)
 
         deliveries = await list_webhook_deliveries(db, test_user.id)
-        assert deliveries[0].id >= deliveries[1].id if len(deliveries) > 1 else True
+        assert len(deliveries) == 2
+        assert deliveries[0].id == d2.id
+        assert deliveries[1].id == d1.id
 
     async def test_list_webhook_deliveries_tracks_failure(self, db: AsyncSession, test_user):
         d = await self._create_delivery(db, test_user.id, success=False, status_code=500, error="Timeout")

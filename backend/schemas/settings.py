@@ -3,6 +3,27 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+def _validate_webhook_url_shape(v: str | None) -> str | None:
+    """Shared shape check for the ``webhook_url`` field on both settings models.
+
+    This only validates it's a well-formed http(s) URL — it can't do the DNS
+    resolution needed to catch SSRF targets (localhost, 169.254.169.254,
+    RFC1918 ranges). That check runs separately at the actual save path via
+    ``notification_service.validate_webhook_url``.
+    """
+    if v is None or v == "":
+        return v
+    from urllib.parse import urlparse
+
+    try:
+        parsed = urlparse(v)
+        if parsed.scheme not in ("http", "https") or not parsed.netloc:
+            raise ValueError("webhook_url must be a valid http or https URL")
+    except Exception as exc:
+        raise ValueError("webhook_url must be a valid http or https URL") from exc
+    return v
+
+
 class SettingsBase(BaseModel):
     cron_enabled: bool = False
     cron_schedule: str = "0 9 * * 1-5"
@@ -65,17 +86,7 @@ class SettingsBase(BaseModel):
     @field_validator("webhook_url")
     @classmethod
     def validate_webhook_url(cls, v: str | None) -> str | None:
-        if v is None or v == "":
-            return v
-        from urllib.parse import urlparse
-
-        try:
-            parsed = urlparse(v)
-            if parsed.scheme not in ("http", "https") or not parsed.netloc:
-                raise ValueError("webhook_url must be a valid http or https URL")
-        except Exception as exc:
-            raise ValueError("webhook_url must be a valid http or https URL") from exc
-        return v
+        return _validate_webhook_url_shape(v)
 
 
 class SettingsRead(SettingsBase):
@@ -92,6 +103,16 @@ class MemoryStatusResponse(BaseModel):
     embed_model: str | None
     needs_openai_key: bool
     agent_qa_enabled: bool
+
+
+class LLMModelOption(BaseModel):
+    value: str
+    label: str
+
+
+class LLMProviderCatalogEntry(BaseModel):
+    label: str
+    models: list[LLMModelOption]
 
 
 class SettingsUpdate(BaseModel):
@@ -156,14 +177,4 @@ class SettingsUpdate(BaseModel):
     @field_validator("webhook_url")
     @classmethod
     def validate_webhook_url(cls, v: str | None) -> str | None:
-        if v is None or v == "":
-            return v
-        from urllib.parse import urlparse
-
-        try:
-            parsed = urlparse(v)
-            if parsed.scheme not in ("http", "https") or not parsed.netloc:
-                raise ValueError("webhook_url must be a valid http or https URL")
-        except Exception as exc:
-            raise ValueError("webhook_url must be a valid http or https URL") from exc
-        return v
+        return _validate_webhook_url_shape(v)

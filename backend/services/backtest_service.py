@@ -2,6 +2,7 @@ import asyncio
 import json
 import logging
 import math
+from decimal import Decimal
 
 import pandas as pd
 from sqlalchemy import select
@@ -23,15 +24,28 @@ def _apply_slippage(price: float, action: str, slippage_bps: float) -> float:
 
     ``action`` is the execution direction: "BUY" pays more, "SELL" receives less.
     ``slippage_bps=0`` is a no-op (byte-identical to no slippage modeling).
+
+    Computed in Decimal (converting back to float at the return boundary) so
+    this money math doesn't accumulate binary-float rounding error — the
+    function still takes/returns plain floats since the rest of the
+    simulation loop is float-based (see the module-level note on scope).
     """
-    factor = slippage_bps / 10_000.0
-    return price * (1 + factor) if action == "BUY" else price * (1 - factor)
+    price_d = Decimal(str(price))
+    factor = Decimal(str(slippage_bps)) / Decimal(10_000)
+    result = price_d * (Decimal(1) + factor) if action == "BUY" else price_d * (Decimal(1) - factor)
+    return float(result)
 
 
 def _trade_pnl(side: str, entry_price: float, exit_price: float, size: float, rate: float) -> float:
-    """Realized P&L for closing ``size`` units, charging commission on both legs."""
-    gross = (exit_price - entry_price) * size if side == "long" else (entry_price - exit_price) * size
-    return gross - (exit_price * size * rate) - (entry_price * size * rate)
+    """Realized P&L for closing ``size`` units, charging commission on both legs.
+
+    Computed in Decimal, matching ``_apply_slippage``'s float-in/float-out
+    boundary convention.
+    """
+    entry_d, exit_d, size_d, rate_d = (Decimal(str(v)) for v in (entry_price, exit_price, size, rate))
+    gross = (exit_d - entry_d) * size_d if side == "long" else (entry_d - exit_d) * size_d
+    pnl = gross - (exit_d * size_d * rate_d) - (entry_d * size_d * rate_d)
+    return float(pnl)
 
 
 def _close_position(
@@ -50,18 +64,20 @@ def _close_position(
     (its collateral was never deducted on entry).
     """
     pnl = _trade_pnl(side, entry_price, exit_price, size, rate)
-    cash_delta = (exit_price * size + pnl) if side == "long" else pnl
+    entry_d, exit_d, size_d, pnl_d = (Decimal(str(v)) for v in (entry_price, exit_price, size, pnl))
+    cash_delta_d = (exit_d * size_d + pnl_d) if side == "long" else pnl_d
+    return_pct_d = (pnl_d / (entry_d * size_d)) * 100
     trade = {
         "entry_date": entry_date,
         "exit_date": exit_date,
         "side": side,
         "entry_price": round(entry_price, 2),
         "exit_price": round(exit_price, 2),
-        "return_pct": round((pnl / (entry_price * size)) * 100, 2),
+        "return_pct": round(float(return_pct_d), 2),
         "pnl": round(pnl, 2),
         "reason": reason,
     }
-    return cash_delta, trade
+    return float(cash_delta_d), trade
 
 
 def _prepare_data(data: pd.DataFrame, strategy_type: str) -> pd.DataFrame:

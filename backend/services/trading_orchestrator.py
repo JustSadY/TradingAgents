@@ -13,7 +13,6 @@ from __future__ import annotations
 
 import logging
 import re
-
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -167,16 +166,33 @@ def _position_quantity(
     max_position_size_pct: float = 10.0,
     kelly_multiplier: float = 1.0,
 ) -> float:
-    risk_usd = (risk_per_trade_pct / 100.0) * capital
-    risk_usd *= max(0.0, min(1.0, kelly_multiplier))
+    """Position size from risk-per-trade sizing, capped by max allocation.
+
+    Computed in Decimal (converting back to float at the return boundary) so
+    this sizing formula's own chain of multiplies/divides doesn't accumulate
+    binary-float rounding error. The function still takes/returns plain
+    floats: its caller chain (``_apply_portfolio_risk_caps`` and onward) is
+    float-based, and converting that whole chain is a larger, separate
+    change (see docs/architecture — the Decimal boundary is at order
+    execution in mock_trading_service.py, which re-quantizes from a string
+    regardless of what this function returns).
+    """
+    risk_pct_d = Decimal(str(risk_per_trade_pct))
+    capital_d = Decimal(str(capital))
+    price_d = Decimal(str(price))
+    kelly_d = Decimal(str(max(0.0, min(1.0, kelly_multiplier))))
+
+    risk_usd = (risk_pct_d / Decimal(100)) * capital_d
+    risk_usd *= kelly_d
     if stop_loss and stop_loss > 0 and stop_loss != price:
-        risk_per_share = max(abs(price - stop_loss), 0.005 * price)
+        stop_loss_d = Decimal(str(stop_loss))
+        risk_per_share = max(abs(price_d - stop_loss_d), Decimal("0.005") * price_d)
         quantity = risk_usd / risk_per_share
     else:
-        quantity = risk_usd / price
-    max_alloc_usd = (max_position_size_pct / 100.0) * capital
-    max_qty = max_alloc_usd / price
-    return min(quantity, max_qty)
+        quantity = risk_usd / price_d
+    max_alloc_usd = (Decimal(str(max_position_size_pct)) / Decimal(100)) * capital_d
+    max_qty = max_alloc_usd / price_d
+    return float(min(quantity, max_qty))
 
 
 async def _existing_long_quantity(db, portfolio_id: int, ticker: str) -> float:
@@ -277,7 +293,7 @@ async def place_signal_order(
             _record_skip("quality_gate")
             return None
 
-    from backend.repositories.analysis import get_system_settings
+    from backend.repositories.system_settings import get_system_settings
 
     sys_settings = await get_system_settings(db)
     sys_mode = sys_settings.trading_mode if sys_settings else "simulation"

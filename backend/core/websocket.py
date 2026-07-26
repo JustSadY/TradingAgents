@@ -15,98 +15,139 @@ _BUFFER_SIZE = 10000
 _BUFFER_TTL = 30
 
 
+class _TaskLock:
+    """An asyncio.Lock plus a count of coroutines currently holding a
+    reference to it, so it's only safe to drop from the registry once no one
+    is using it anymore (see WebSocketManager._acquire/_release)."""
+
+    __slots__ = ("lock", "waiters")
+
+    def __init__(self) -> None:
+        self.lock = asyncio.Lock()
+        self.waiters = 0
+
+
 class WebSocketManager:
     """Manages WebSocket connections with per-task locking for race safety.
 
     Thread-/task-safe guards
     ---------------------------
-    - ``_task_locks``: each task_id has an ``asyncio.Lock`` so concurrent
-      ``connect``/``disconnect``/``send``/``close_task`` calls for the same
-      task_id are serialised.
+    - ``_task_locks``: each task_id has a ``_TaskLock`` (an ``asyncio.Lock``
+      plus a reference count) so concurrent ``connect``/``disconnect``/
+      ``send``/``close_task`` calls for the same task_id are serialised.
     - Buffer, connection-list, and cleanup-handle mutations always happen
       under the per-task lock.
-    - The lock is lazily created and pruned from the dict when the task
-      no longer has connections.
+    - The registry entry is only dropped once its reference count reaches
+      zero (via ``_acquire``/``_release``), so a coroutine already waiting on
+      or holding the lock can never have it swapped out from under it by a
+      concurrent caller creating a *different* lock for the same task_id.
     """
 
     def __init__(self):
         self._connections: dict[str, list[WebSocket]] = {}
         self._buffers: dict[str, deque] = {}
         self._cleanup_handles: dict[str, asyncio.TimerHandle] = {}
-        self._task_locks: dict[str, asyncio.Lock] = {}
+        self._task_locks: dict[str, _TaskLock] = {}
 
-    def _get_lock(self, task_id: str) -> asyncio.Lock:
-        if task_id not in self._task_locks:
-            self._task_locks[task_id] = asyncio.Lock()
-        return self._task_locks[task_id]
+    def _acquire(self, task_id: str) -> _TaskLock:
+        """Get (creating if needed) the lock entry for *task_id* and mark it
+        in-use. Must be paired with a later ``_release`` call. Synchronous —
+        no ``await`` here, so this can't race with a concurrent caller."""
+        entry = self._task_locks.get(task_id)
+        if entry is None:
+            entry = _TaskLock()
+            self._task_locks[task_id] = entry
+        entry.waiters += 1
+        return entry
 
-    def _prune_lock(self, task_id: str) -> None:
-        self._task_locks.pop(task_id, None)
+    def _release(self, task_id: str, entry: _TaskLock) -> None:
+        """Mark *entry* no longer in-use; drop it from the registry once
+        nothing else references it. Synchronous for the same reason as
+        ``_acquire``."""
+        entry.waiters -= 1
+        if entry.waiters <= 0 and self._task_locks.get(task_id) is entry:
+            del self._task_locks[task_id]
 
     def _refresh_connection_gauge(self):
         WS_CONNECTIONS.set(sum(len(conns) for conns in self._connections.values()))
 
     async def connect(self, task_id: str, ws: WebSocket):
         await ws.accept()
-        buffered: list = []
-        async with self._get_lock(task_id):
-            self._connections.setdefault(task_id, []).append(ws)
-            self._refresh_connection_gauge()
-            buffered = list(self._buffers.get(task_id, []))
-        _logger.debug("WS connected: task=%s", task_id)
-        if buffered:
-            _logger.debug("Replaying %d buffered events for task=%s", len(buffered), task_id)
-            for event in buffered:
-                try:
-                    await ws.send_text(json.dumps(event, ensure_ascii=False))
-                except Exception:
-                    break
+        entry = self._acquire(task_id)
+        try:
+            async with entry.lock:
+                self._connections.setdefault(task_id, []).append(ws)
+                self._refresh_connection_gauge()
+                buffered = list(self._buffers.get(task_id, []))
+                _logger.debug("WS connected: task=%s", task_id)
+                if buffered:
+                    # Replay happens *inside* the lock so a concurrent send()
+                    # for this task can't slip a live event to this same
+                    # socket before the historical replay finishes — that
+                    # would otherwise deliver events out of order.
+                    _logger.debug("Replaying %d buffered events for task=%s", len(buffered), task_id)
+                    for event in buffered:
+                        try:
+                            await ws.send_text(json.dumps(event, ensure_ascii=False))
+                        except Exception:
+                            break
+        finally:
+            self._release(task_id, entry)
 
     async def disconnect(self, task_id: str, ws: WebSocket):
-        async with self._get_lock(task_id):
-            conns = self._connections.get(task_id, [])
-            if ws in conns:
-                conns.remove(ws)
-            if not conns:
-                self._connections.pop(task_id, None)
-                self._prune_lock(task_id)
-            self._refresh_connection_gauge()
-
-    async def send(self, task_id: str, event: dict[str, Any]):
-        async with self._get_lock(task_id):
-            buf = self._buffers.setdefault(task_id, deque(maxlen=_BUFFER_SIZE))
-            buf.append(event)
-            self._schedule_buffer_cleanup(task_id, ttl=600)
-            text = json.dumps(event, ensure_ascii=False)
-            active_conns = list(self._connections.get(task_id, []))
-            if not active_conns:
-                return
-            dead: list[WebSocket] = []
-            results = await asyncio.gather(*[ws.send_text(text) for ws in active_conns], return_exceptions=True)
-            for i, res in enumerate(results):
-                if isinstance(res, Exception):
-                    dead.append(active_conns[i])
-                    _logger.debug("WS send failed for task=%s, marking as dead: %s", task_id, res)
-            for ws in dead:
+        entry = self._acquire(task_id)
+        try:
+            async with entry.lock:
                 conns = self._connections.get(task_id, [])
                 if ws in conns:
                     conns.remove(ws)
-            if not self._connections.get(task_id):
-                self._connections.pop(task_id, None)
-                self._prune_lock(task_id)
-            self._refresh_connection_gauge()
+                if not conns:
+                    self._connections.pop(task_id, None)
+                self._refresh_connection_gauge()
+        finally:
+            self._release(task_id, entry)
+
+    async def send(self, task_id: str, event: dict[str, Any]):
+        entry = self._acquire(task_id)
+        try:
+            async with entry.lock:
+                buf = self._buffers.setdefault(task_id, deque(maxlen=_BUFFER_SIZE))
+                buf.append(event)
+                self._schedule_buffer_cleanup(task_id, ttl=600)
+                text = json.dumps(event, ensure_ascii=False)
+                active_conns = list(self._connections.get(task_id, []))
+                if not active_conns:
+                    return
+                dead: list[WebSocket] = []
+                results = await asyncio.gather(*[ws.send_text(text) for ws in active_conns], return_exceptions=True)
+                for i, res in enumerate(results):
+                    if isinstance(res, Exception):
+                        dead.append(active_conns[i])
+                        _logger.debug("WS send failed for task=%s, marking as dead: %s", task_id, res)
+                for ws in dead:
+                    conns = self._connections.get(task_id, [])
+                    if ws in conns:
+                        conns.remove(ws)
+                if not self._connections.get(task_id):
+                    self._connections.pop(task_id, None)
+                self._refresh_connection_gauge()
+        finally:
+            self._release(task_id, entry)
 
     async def close_task(self, task_id: str):
-        async with self._get_lock(task_id):
-            for ws in list(self._connections.get(task_id, [])):
-                try:
-                    await ws.close()
-                except Exception:
-                    _logger.debug("WS close failed for task=%s (cleanup)", task_id)
-            self._connections.pop(task_id, None)
-            self._prune_lock(task_id)
-            self._refresh_connection_gauge()
-            self._schedule_buffer_cleanup(task_id, ttl=_BUFFER_TTL)
+        entry = self._acquire(task_id)
+        try:
+            async with entry.lock:
+                for ws in list(self._connections.get(task_id, [])):
+                    try:
+                        await ws.close()
+                    except Exception:
+                        _logger.debug("WS close failed for task=%s (cleanup)", task_id)
+                self._connections.pop(task_id, None)
+                self._refresh_connection_gauge()
+                self._schedule_buffer_cleanup(task_id, ttl=_BUFFER_TTL)
+        finally:
+            self._release(task_id, entry)
 
     def _schedule_buffer_cleanup(self, task_id: str, ttl: int = _BUFFER_TTL):
         existing = self._cleanup_handles.pop(task_id, None)
@@ -120,17 +161,17 @@ class WebSocketManager:
         self._cleanup_handles[task_id] = handle
 
     def _cleanup_buffer(self, task_id: str):
-        lock = self._task_locks.get(task_id)
-        if lock and lock.locked():
+        if task_id in self._task_locks:
+            # Someone is currently connecting/sending/disconnecting/closing
+            # for this task — retry shortly rather than mutating state out
+            # from under them.
             _logger.debug("Skipping buffer cleanup for task=%s — lock in use, will retry", task_id)
             handle = asyncio.get_running_loop().call_later(1.0, self._cleanup_buffer, task_id)
             self._cleanup_handles[task_id] = handle
             return
-        # Lock is free; proceed — caller is the event loop, not a concurrent coroutine.
         self._buffers.pop(task_id, None)
         self._cleanup_handles.pop(task_id, None)
         conns = self._connections.pop(task_id, None)
-        self._prune_lock(task_id)
         self._refresh_connection_gauge()
         if conns:
             _logger.debug("Closing %d lingering WS connections for task=%s during buffer cleanup", len(conns), task_id)

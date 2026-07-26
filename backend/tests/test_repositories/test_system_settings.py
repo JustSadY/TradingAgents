@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.system_settings import SystemSettings
 from backend.repositories.system_settings import (
     create_system_settings,
     get_system_settings_by_id,

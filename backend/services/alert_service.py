@@ -146,7 +146,7 @@ async def check_price_alerts() -> None:
         if not alerts:
             return
 
-        from backend.repositories.analysis import get_system_settings
+        from backend.repositories.system_settings import get_system_settings
 
         settings = await get_system_settings(db)
 

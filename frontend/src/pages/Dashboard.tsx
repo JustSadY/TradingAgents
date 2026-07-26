@@ -50,7 +50,7 @@ export default function Dashboard() {
   useEffect(() => {
     Promise.all([
       api.get('/api/analysis/history?limit=8').then(r => r.data).catch(() => []),
-      api.get('/api/settings').then(r => r.data.watchlist || []).catch(() => []),
+      api.get('/api/watchlist').then(r => r.data || []).catch(() => []),
       api.get('/api/analysis/performance-attribution').then(r => r.data).catch(() => ({ attribution: [] })),
     ]).then(([a, w, attr]) => {
       setRecentAnalysis(Array.isArray(a) ? a : [])

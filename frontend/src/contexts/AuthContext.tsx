@@ -9,6 +9,16 @@ export function getAccessToken() {
   return localStorage.getItem(TOKEN_KEY)
 }
 
+// The response interceptor below is registered once at module scope (axios
+// has no per-component interceptor concept), so it has no direct access to
+// the mounted AuthProvider's React state. When a refresh fails, it clears
+// localStorage but — without this bridge — the UI still renders as logged in
+// until a manual reload re-runs initAuth(). AuthProvider registers a listener
+// here on mount; the interceptor calls it to clear React state immediately,
+// which lets App.tsx's existing `isAuthenticated ? ... : <Navigate to="/login">`
+// take over right away.
+let _onForceLogout: (() => void) | null = null
+
 interface JwtPayload {
   sub: string
   role?: string
@@ -76,6 +86,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setRole(payload?.role ?? 'user')
   }, [])
 
+  const clearLocalAuthState = useCallback(() => {
+    localStorage.removeItem(TOKEN_KEY)
+    localStorage.removeItem(REFRESH_KEY)
+    setUser(null)
+    setRole(null)
+  }, [])
+
   const logout = useCallback(() => {
     // Revoke server-side first (bumps token_version, invalidating every
     // outstanding access/refresh token), then clear local state. Fire-and-forget:
@@ -84,11 +101,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (token) {
       axios.post('/auth/logout').catch(() => {})
     }
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(REFRESH_KEY)
-    setUser(null)
-    setRole(null)
-  }, [])
+    clearLocalAuthState()
+  }, [clearLocalAuthState])
+
+  // Let the module-level response interceptor force this instance's auth
+  // state to clear (e.g. when a token refresh fails) without a page reload.
+  useEffect(() => {
+    _onForceLogout = clearLocalAuthState
+    return () => {
+      if (_onForceLogout === clearLocalAuthState) _onForceLogout = null
+    }
+  }, [clearLocalAuthState])
 
   const value = {
     user,
@@ -180,6 +203,7 @@ axios.interceptors.response.use(
       _queue = []
       localStorage.removeItem(TOKEN_KEY)
       localStorage.removeItem(REFRESH_KEY)
+      _onForceLogout?.()
       throw err
     } finally {
       _refreshing = false

@@ -5,6 +5,7 @@ from backend.api.deps import get_current_user
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.schemas.portfolio import HoldingRead, OrderRead, PortfolioRead
+from backend.services import portfolio_service
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
@@ -14,9 +15,7 @@ async def list_portfolios(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from backend.repositories.portfolio import list_portfolios as _repo_list
-
-    return await _repo_list(db, user=current_user)
+    return await portfolio_service.list_user_portfolios(db, current_user)
 
 
 @router.get("/holdings", response_model=list[HoldingRead])
@@ -25,9 +24,7 @@ async def list_holdings(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from backend.repositories.portfolio import list_holdings as _repo_list
-
-    return await _repo_list(db, user=current_user, mode=mode)
+    return await portfolio_service.list_user_holdings(db, current_user, mode)
 
 
 @router.get("/orders", response_model=list[OrderRead])
@@ -39,6 +36,6 @@ async def list_orders(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    from backend.repositories.portfolio import list_orders as _repo_list
-
-    return await _repo_list(db, user=current_user, mode=mode, ticker=ticker, limit=limit, offset=offset)
+    return await portfolio_service.list_user_orders(
+        db, current_user, mode=mode, ticker=ticker, limit=limit, offset=offset
+    )

@@ -16,10 +16,15 @@ Each regular user starts with access to **no pages** (except Preferences and Acc
 | `watchlist` | Watchlist |
 | `orders` | Orders |
 | `performance` | Performance |
+| `backtest` | Backtest |
 | `alerts` | Alerts |
 | `ab-testing` | A/B Testing |
 | `logs` | System Logs |
+| `profile` | Profile |
 | `settings` | Settings (always allowed) |
+| `screener` | Stock Screener |
+| `sector-rotation` | Sector Rotation Map |
+| `earnings` | Earnings Calendar |
 
 Admin and Owner users implicitly have access to all pages plus `/admin`.
 

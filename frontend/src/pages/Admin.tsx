@@ -21,14 +21,16 @@ interface UserRecord {
 
 const FALLBACK_PAGE_KEYS = [
   'dashboard', 'analysis', 'chart', 'trading', 'portfolio',
-  'watchlist', 'orders', 'performance', 'backtest', 'alerts', 'ab-testing', 'logs', 'profile'
+  'watchlist', 'orders', 'performance', 'backtest', 'alerts', 'ab-testing', 'logs', 'profile',
+  'screener', 'sector-rotation', 'earnings'
 ]
 
 const FALLBACK_PAGE_LABELS: Record<string, string> = {
   dashboard: 'Dashboard', analysis: 'Analysis', chart: 'Charts',
   trading: 'Simulation', portfolio: 'Portfolio', watchlist: 'Watchlist',
   orders: 'Orders', performance: 'Performance', alerts: 'Alerts',
-  'ab-testing': 'A/B Testing', logs: 'Logs', profile: 'Profile'
+  'ab-testing': 'A/B Testing', logs: 'Logs', profile: 'Profile',
+  screener: 'Screener', 'sector-rotation': 'Sector Rotation', earnings: 'Earnings Calendar'
 }
 
 const Input = "w-full glass-input rounded-xl px-3 py-2 text-xs outline-none"

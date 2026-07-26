@@ -41,18 +41,37 @@ MODEL_COSTS: dict[str, dict[str, tuple[float, float]]] = {
 DEFAULT_COST = (2.0, 8.0)
 
 
+def _rates_for(provider: str | None, model: str | None) -> tuple[float, float]:
+    prov = (provider or "").lower()
+    mod = (model or "").lower()
+    rates = MODEL_COSTS.get(prov, {})
+    for key, val in rates.items():
+        if key in mod:
+            return val
+    return DEFAULT_COST
+
+
 def estimate_cost(provider: str | None, model: str | None, tokens_in: int, tokens_out: int) -> float:
     prov = (provider or "").lower()
     if prov == "ollama":
         return 0.0
-    mod = (model or "").lower()
-    rates = MODEL_COSTS.get(prov, {})
-    rate_in, rate_out = DEFAULT_COST
-    for key, val in rates.items():
-        if key in mod:
-            rate_in, rate_out = val
-            break
+    rate_in, rate_out = _rates_for(provider, model)
     return round((tokens_in * rate_in + tokens_out * rate_out) / 1_000_000, 6)
+
+
+def get_blended_rate_per_1k(model: str | None, default_per_1k: float) -> float:
+    """Blended (in+out)/2 USD-per-1K-tokens rate for *model*, for callers that
+    only have a rough token estimate and no provider (e.g. a pre-run cost
+    estimate). Matches by model-id substring across all providers — this is
+    the same ``MODEL_COSTS`` table ``estimate_cost`` uses, so the pre-run
+    estimate and the actual post-run cost can no longer drift apart.
+    """
+    mod = (model or "").lower()
+    for rates in MODEL_COSTS.values():
+        for key, (rate_in, rate_out) in rates.items():
+            if key in mod:
+                return (rate_in + rate_out) / 2 / 1000
+    return default_per_1k
 
 
 async def get_token_analytics(db: AsyncSession, user_id: int) -> dict[str, Any]:

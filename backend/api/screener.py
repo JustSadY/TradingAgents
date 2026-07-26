@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, get_db
+from backend.api.deps import get_db, require_page
 from backend.core.limiter import limiter
 from backend.core.utils import safe_ticker_component
 from backend.models.user import User
@@ -32,7 +32,7 @@ class ScreenRequest(BaseModel):
 async def scan(
     request: Request,
     body: ScreenRequest,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("screener")),
 ):
     """Score a ticker universe and return the strongest candidates."""
     return ScreenResponse(results=await run_screen(universe=body.tickers, top_n=body.top_n))
@@ -43,7 +43,7 @@ async def scan(
 async def scan_watchlist(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("screener")),
 ):
     """Score the caller's saved watchlist tickers."""
     from backend.services.settings_service import get_or_create_settings
