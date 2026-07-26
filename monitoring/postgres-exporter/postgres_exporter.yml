@@ -1,0 +1,5 @@
+# No custom auth modules or collector settings are needed.  Keeping this as an
+# explicit empty mapping makes postgres-exporter skip its misleading
+# "postgres_exporter.yml: no such file" startup warning while retaining all
+# built-in collectors.
+{}

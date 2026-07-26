@@ -192,8 +192,14 @@ services:
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     restart: unless-stopped
+    # The exporter looks for this optional file by default. Supply an explicit
+    # empty configuration so its built-in collectors remain enabled without a
+    # misleading missing-file warning at startup.
+    command: ["--config.file=/etc/postgres-exporter/postgres_exporter.yml"]
     environment:
       DATA_SOURCE_NAME: "postgresql://${DB_USER:-tradingagents}:${DB_PASSWORD:-tradingagents}@postgres:5432/${DB_NAME:-tradingagents}?sslmode=disable"
+    volumes:
+      - ./monitoring/postgres-exporter:/etc/postgres-exporter:ro
     ports:
       - "127.0.0.1:9187:9187"
     depends_on:
