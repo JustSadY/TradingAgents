@@ -21,8 +21,17 @@ class AnalysisEmitter:
         """Send an event safely from outside the main async loop."""
         asyncio.run_coroutine_threadsafe(self.emit(event), self.loop)
 
-    async def emit_status(self, agent: str, status: str = "starting") -> None:
-        await self.emit({"type": "status", "status": status, "agent": agent})
+    async def emit_status(self, agent: str, status: str = "starting", message: str | None = None) -> None:
+        """Emit a structured status update.
+
+        ``agent`` is the producer identifier, while ``status`` is a compact
+        lifecycle state.  Human-readable progress belongs in ``message`` so
+        consumers do not have to overload the agent field to display it.
+        """
+        event: dict[str, Any] = {"type": "status", "status": status, "agent": agent}
+        if message:
+            event["message"] = message
+        await self.emit(event)
 
     async def emit_progress(self, label: str, stage: str, node: str) -> None:
         await self.emit({"type": "progress", "label": label, "stage": stage, "node": node})

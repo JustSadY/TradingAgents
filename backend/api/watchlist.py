@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user
+from backend.api.deps import require_page
 from backend.core.database import get_db
 from backend.core.utils import safe_ticker_component
 from backend.models.user import User
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 @router.get("", response_model=list[str])
 async def get_watchlist(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("watchlist")),
 ):
     settings = await get_or_create_settings(db, current_user)
     return settings.watchlist
@@ -27,7 +27,7 @@ async def get_watchlist(
 @router.get("/prices", response_model=dict[str, dict[str, float]])
 async def get_watchlist_prices(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("watchlist")),
 ):
     settings = await get_or_create_settings(db, current_user)
     if not settings.watchlist:
@@ -39,7 +39,7 @@ async def get_watchlist_prices(
 async def add_to_watchlist(
     ticker: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("watchlist")),
 ):
     try:
         safe_ticker_component(ticker)
@@ -53,6 +53,6 @@ async def add_to_watchlist(
 async def remove_from_watchlist(
     ticker: str,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("watchlist")),
 ):
     return await remove_ticker_from_watchlist(db, current_user, ticker.upper())

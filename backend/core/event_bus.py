@@ -102,14 +102,18 @@ _dedup = _DedupTracker()
 
 async def publish_event(task_id: str, event: dict[str, Any]) -> None:
     eid = _event_id(task_id, event, _next_seq(task_id))
-    if _dedup.seen(eid):
-        _logger.debug("Dedup: skipping duplicate send of event %s for task=%s", event.get("type"), task_id)
-        return
     if redis_enabled():
+        # Delivery happens through this process's pub/sub forwarder as well as
+        # the other web processes.  Do not mark the id as seen here: doing so
+        # makes the local forwarder discard every event that this process
+        # published (the normal Redis + inline-queue configuration).
         redis = get_redis()
         await redis.publish(
             EVENTS_CHANNEL, json.dumps({"task_id": task_id, "event": event, "_eid": eid}, ensure_ascii=False)
         )
+        return
+    if _dedup.seen(eid):
+        _logger.debug("Dedup: skipping duplicate send of event %s for task=%s", event.get("type"), task_id)
         return
     await ws_manager.send(task_id, event)
 
@@ -120,14 +124,14 @@ async def publish_close(task_id: str) -> None:
     # sequence counter so _seq_counters doesn't grow for the server's entire
     # lifetime.
     _seq_counters.pop(task_id, None)
-    if _dedup.seen(eid):
-        return
     if redis_enabled():
         redis = get_redis()
         await redis.publish(
             EVENTS_CHANNEL,
             json.dumps({"task_id": task_id, "event": {"type": _CLOSE_TYPE}, "_eid": eid}, ensure_ascii=False),
         )
+        return
+    if _dedup.seen(eid):
         return
     await ws_manager.close_task(task_id)
 

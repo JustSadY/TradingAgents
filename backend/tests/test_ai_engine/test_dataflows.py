@@ -14,10 +14,10 @@ from backend.trading_agents.dataflows import config as dataflow_config
 from backend.trading_agents.dataflows.cache import APICache
 from backend.trading_agents.dataflows.config import get_config, set_config
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
+
 
 @pytest.fixture(autouse=True)
 def _patch_cache_path(tmp_path):
@@ -34,9 +34,7 @@ def _patch_cache_path(tmp_path):
 def _reset_config():
     """Ensure each test starts with a pristine config."""
     dataflow_config._config = None
-    dataflow_config._run_config = dataflow_config.contextvars.ContextVar(
-        "trading_agents_run_config", default=None
-    )
+    dataflow_config._run_config = dataflow_config.contextvars.ContextVar("trading_agents_run_config", default=None)
     dataflow_config.initialize_config()
 
 
@@ -232,10 +230,12 @@ def test_alpha_vantage_rate_limiter_configured():
     )
 
     reset_state()
-    set_config({
-        "alpha_vantage_rate_limit_calls": 10,
-        "alpha_vantage_rate_limit_window": 30.0,
-    })
+    set_config(
+        {
+            "alpha_vantage_rate_limit_calls": 10,
+            "alpha_vantage_rate_limit_window": 30.0,
+        }
+    )
     limiter = _load_rate_limiter()
     assert limiter.max_tokens == 10
     assert limiter.window_seconds == 30.0
@@ -287,10 +287,12 @@ async def test_route_to_vendor_all_fail(mocker):
     from backend.trading_agents.dataflows.interface import VENDOR_METHODS, route_to_vendor
 
     reset_state()
-    set_config({
-        "alpha_vantage_api_key": "test-key",
-        "tool_vendors": {"get_stock_data": "alpha_vantage,yfinance"},
-    })
+    set_config(
+        {
+            "alpha_vantage_api_key": "test-key",
+            "tool_vendors": {"get_stock_data": "alpha_vantage,yfinance"},
+        }
+    )
 
     # Replace the vendor implementations in VENDOR_METHODS so the fallback chain
     # iterates over mocked functions that always raise.
@@ -355,11 +357,13 @@ def test_dataflow_config_driven_retry():
     from backend.trading_agents.dataflows.alpha_vantage_common import reset_state
 
     reset_state()
-    set_config({
-        "alpha_vantage_api_key": "test",
-        "alpha_vantage_retry_attempts": 5,
-        "alpha_vantage_retry_delay": 3.0,
-    })
+    set_config(
+        {
+            "alpha_vantage_api_key": "test",
+            "alpha_vantage_retry_attempts": 5,
+            "alpha_vantage_retry_delay": 3.0,
+        }
+    )
     # The _make_api_request reads these from config; verify by checking
     # that the retry params in the non-existing-key path would use them.
     cfg = get_config()

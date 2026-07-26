@@ -21,6 +21,7 @@ class TestAuthAPI:
 
         # Verify user is in DB
         from backend.repositories.users import get_user_by_username
+
         found = await get_user_by_username(db, "logintest")
         print(f"DEBUG found user: {found}")
         print(f"DEBUG db session id: {id(db)}")
@@ -28,6 +29,7 @@ class TestAuthAPI:
         # Check password verification
         if found:
             from backend.core.security import verify_password
+
             pw_ok = verify_password("correctpass", found.hashed_password)
             print(f"DEBUG password ok: {pw_ok}")
 

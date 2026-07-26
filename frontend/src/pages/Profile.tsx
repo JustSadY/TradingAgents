@@ -94,11 +94,6 @@ function ApiKeyRow({ providerKey, label, hasKey, onSave, onDelete }: {
           </button>
         </div>
       </div>
-      {providerKey === 'ollama' && (
-        <p className="text-[10px] text-slate-500 italic leading-relaxed">
-          No API key needed — leave empty for localhost. To use a remote Ollama server, enter its base URL (e.g. <span className="font-mono text-slate-400">http://192.168.1.5:11434</span>).
-        </p>
-      )}
       {editing && (
         <div className="flex gap-2 mt-1 animate-in slide-in-from-top-1 duration-150">
           <div className="relative flex-1">
@@ -146,10 +141,14 @@ export default function Profile() {
   const providerLabels = meta?.provider_labels
   const providers = useMemo(() => {
     if (!providerLabels) return []
-    return Object.entries(providerLabels).map(([key, label]) => ({
-      key,
-      label: label as string,
-    }))
+    return Object.entries(providerLabels)
+      // Ollama uses the server-managed OLLAMA_BASE_URL and has no tenant API
+      // key. Do not render the legacy URL-like input for it.
+      .filter(([key]) => key !== 'ollama')
+      .map(([key, label]) => ({
+        key,
+        label: label as string,
+      }))
   }, [providerLabels])
 
   const load = async () => {

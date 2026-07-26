@@ -36,12 +36,22 @@ class Settings(BaseSettings):
     # "inline" runs analyses in the web process (default). "worker" enqueues
     # them onto arq (requires REDIS_URL and a running `arq backend.worker.WorkerSettings`).
     ANALYSIS_QUEUE_MODE: str = "inline"
+    # Ollama is a server-managed integration.  It deliberately cannot be
+    # overridden by a user's encrypted API-key value: that value is otherwise
+    # an authenticated SSRF primitive.  The operator may point this at a
+    # trusted local/reverse-proxied Ollama endpoint.
+    OLLAMA_BASE_URL: str = "http://localhost:11434"
     # Off by default: request.client.host is the only trustworthy source of the
     # caller's IP for rate-limiting unless this app sits behind a reverse proxy
     # that YOU control and that overwrites (not appends to) X-Forwarded-For.
     # Turning this on without such a proxy lets any client forge the header and
     # get its own private rate-limit bucket (or blame another IP for its abuse).
     TRUST_PROXY_HEADERS: bool = False
+    # Real-money broker orders are an operator-controlled capability.  They
+    # remain disabled unless the server environment explicitly opts in; a
+    # database setting or a compromised administrator account must not be
+    # enough to activate a live brokerage account on its own.
+    ENABLE_LIVE_TRADING: bool = False
 
     @model_validator(mode="after")
     def _validate_queue_mode(self) -> "Settings":
@@ -101,3 +111,8 @@ class Settings(BaseSettings):
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
+
+def is_live_trading_enabled() -> bool:
+    """Whether this server has explicitly opted in to real-money orders."""
+    return get_settings().ENABLE_LIVE_TRADING

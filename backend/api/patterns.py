@@ -2,7 +2,7 @@ import re
 
 from fastapi import APIRouter, Depends, HTTPException, Query
 
-from backend.api.deps import get_current_user
+from backend.api.deps import require_page
 from backend.models.user import User
 from backend.schemas.market import PatternsResponse
 from backend.services.pattern_detection_service import detect_patterns
@@ -17,7 +17,7 @@ _VALID_PERIODS = {"3m", "6m", "1y", "2y"}
 async def get_patterns(
     ticker: str,
     period: str = Query("1y"),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("chart")),
 ):
     ticker = ticker.strip().upper()
     if not _TICKER_RE.match(ticker):

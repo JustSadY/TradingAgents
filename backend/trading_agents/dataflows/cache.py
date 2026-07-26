@@ -106,9 +106,20 @@ class APICache:
             return 1800.0
         return 3600.0
 
+    @staticmethod
+    def _cache_key(method: str, args: tuple, kwargs: dict, cache_scope: str | None) -> str:
+        """Build a stable key, optionally partitioned by a data-source scope.
+
+        The same method/ticker can legitimately yield a different payload for
+        different vendor selections.  Keeping that selection outside the key
+        made one user's configured provider silently override another's.
+        """
+        scope = cache_scope or "default"
+        return f"{scope}:{method}:{json.dumps(args, sort_keys=True)}:{json.dumps(kwargs, sort_keys=True)}"
+
     @classmethod
-    def get(cls, method: str, *args, **kwargs):
-        key = f"{method}:{json.dumps(args, sort_keys=True)}:{json.dumps(kwargs, sort_keys=True)}"
+    def get(cls, method: str, *args, cache_scope: str | None = None, **kwargs):
+        key = cls._cache_key(method, args, kwargs, cache_scope)
         ttl = cls.get_ttl(method)
         now = time.time()
         conn = cls._connect()
@@ -129,8 +140,8 @@ class APICache:
             conn.close()
 
     @classmethod
-    def set(cls, method: str, data, *args, **kwargs) -> None:
-        key = f"{method}:{json.dumps(args, sort_keys=True)}:{json.dumps(kwargs, sort_keys=True)}"
+    def set(cls, method: str, data, *args, cache_scope: str | None = None, **kwargs) -> None:
+        key = cls._cache_key(method, args, kwargs, cache_scope)
         now = time.time()
         conn = cls._connect()
         try:

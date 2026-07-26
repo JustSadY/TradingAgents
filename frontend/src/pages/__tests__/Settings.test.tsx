@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
+import axios from 'axios'
 import Settings from '../Settings'
 
 vi.mock('axios', () => ({
@@ -76,5 +77,32 @@ describe('Settings', () => {
   it('renders loading state initially', () => {
     render(<Settings />)
     expect(screen.getByText('Loading settings...')).toBeInTheDocument()
+  })
+
+  it('uses the provider model catalog while retaining a custom-model escape hatch', async () => {
+    vi.mocked(axios.get).mockImplementation((url: string) => {
+      if (url === '/api/settings') {
+        return Promise.resolve({ data: {
+          output_language: 'English', investor_persona: 'conservative', benchmark_ticker: null,
+          news_article_limit: 20, global_news_article_limit: 10, global_news_lookback_days: 7,
+          llm_provider: 'openai', llm_model: 'gpt-4o-mini',
+          fallback_llm_provider: null, fallback_llm_model: null,
+          openai_reasoning_effort: null, anthropic_effort: null, google_thinking_level: null,
+          max_recur_limit: 1000,
+        } })
+      }
+      if (url === '/api/presets') return Promise.resolve({ data: [] })
+      if (url === '/api/users/me/setting-permissions') return Promise.resolve({ data: { allowed_settings: ['general', 'llm'] } })
+      if (url === '/api/cron/status') return Promise.resolve({ data: null })
+      if (url === '/api/settings/llm-catalog') {
+        return Promise.resolve({ data: { openai: { label: 'OpenAI', models: [{ value: 'gpt-4o-mini', label: 'GPT-4o mini' }] } } })
+      }
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<Settings />)
+
+    expect(await screen.findByRole('option', { name: 'GPT-4o mini' })).toBeInTheDocument()
+    expect(screen.getByRole('option', { name: 'settings.custom_model_option' })).toBeInTheDocument()
   })
 })

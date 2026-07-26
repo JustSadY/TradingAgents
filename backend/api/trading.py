@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, get_db, require_page
+from backend.api.deps import get_db, require_page
 from backend.core.utils import safe_ticker_component
 from backend.models.user import User
 from backend.schemas.trading import (
@@ -71,7 +71,7 @@ class BacktestRequest(BaseModel):
 @router.get("/portfolio", response_model=PortfolioResponse)
 async def get_portfolio(
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_user),
+    _=Depends(require_page("trading")),
 ):
     return await svc.get_portfolio_with_live_prices(db, user=_, read_only=True)
 
@@ -99,7 +99,7 @@ async def create_order(
 @router.get("/performance", response_model=PerformanceResponse)
 async def get_performance(
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_user),
+    _=Depends(require_page("trading")),
 ):
     return await svc.get_performance(db, user=_)
 
@@ -108,7 +108,7 @@ async def get_performance(
 async def reset_portfolio(
     req: ResetRequest,
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_user),
+    _=Depends(require_page("trading")),
 ):
     result = await svc.reset_portfolio(db, initial_capital=req.initial_capital, user=_)
     return result
@@ -120,7 +120,7 @@ async def reset_portfolio(
 async def run_backtest(
     req: BacktestRequest,
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_user),
+    _=Depends(require_page("backtest")),
 ):
     benchmark_ticker = req.benchmark_ticker
     if not benchmark_ticker:
@@ -148,7 +148,7 @@ async def run_backtest(
 @router.get("/portfolio-stats", response_model=PortfolioStatsResponse)
 async def get_portfolio_stats(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page("performance")),
 ):
     from backend.services.portfolio_stats_service import get_portfolio_stats
 
@@ -158,7 +158,7 @@ async def get_portfolio_stats(
 @router.get("/risk-dashboard", response_model=RiskDashboardResponse)
 async def get_risk_dashboard(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page("portfolio")),
 ):
     from backend.services.risk_dashboard_service import get_risk_dashboard
 
@@ -168,7 +168,7 @@ async def get_risk_dashboard(
 @router.post("/rebalance", response_model=RebalanceResponse)
 async def rebalance_portfolio(
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page("portfolio")),
 ):
     from backend.services.portfolio_rebalance_service import get_rebalance_suggestions
 
@@ -184,7 +184,7 @@ async def save_trade_note(
     order_id: int,
     req: JournalNoteRequest,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page("orders")),
 ):
     try:
         return await trade_journal_service.save_note(db, _, order_id, req.note)
@@ -196,7 +196,7 @@ async def save_trade_note(
 async def get_trade_note(
     order_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page("orders")),
 ):
     result = await trade_journal_service.get_note(db, _, order_id)
     return result or {"order_id": order_id, "note": "", "ai_debrief": None, "has_debrief": False}
@@ -206,7 +206,7 @@ async def get_trade_note(
 async def generate_trade_debrief(
     order_id: int,
     db: AsyncSession = Depends(get_db),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page("orders")),
 ):
     try:
         return await trade_journal_service.generate_debrief(db, _, order_id)

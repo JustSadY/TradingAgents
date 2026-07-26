@@ -176,10 +176,15 @@ async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
     return {"attribution": attribution_list, "total_evaluated_runs": total_runs_evaluated}
 
 
-async def get_analyst_performance_context(db) -> str:
-    """Return a Markdown summary of analyst performance weights for AI injection."""
+async def get_analyst_performance_context(db, user_id: int | None = None) -> str:
+    """Return a tenant-scoped Markdown summary for AI prompt injection.
+
+    ``AnalysisResult`` data belongs to individual users.  The analysis graph
+    must never tune one user's analyst weights using another user's history.
+    ``None`` remains available for explicitly global/admin maintenance uses.
+    """
     try:
-        attribution_data = await get_analyst_attribution_stats(db)
+        attribution_data = await get_analyst_attribution_stats(db, user_id=user_id)
         if not attribution_data.get("attribution"):
             return ""
         md = "=== ANALYST PERFORMANCE ATTRIBUTION & WEIGHTS ===\n"

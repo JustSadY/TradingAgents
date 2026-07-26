@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, require_admin, require_page
+from backend.api.deps import require_admin, require_any_page, require_page
 from backend.core.database import get_db
 from backend.core.limiter import limiter
 from backend.core.utils import safe_ticker_component
@@ -71,7 +71,7 @@ async def run_analysis(
 
 @router.get("/active", response_model=list[ActiveTaskRead])
 async def get_active_tasks(
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("analysis")),
 ):
     from backend.services.analysis_service import get_active_tasks_for_user
 
@@ -81,7 +81,7 @@ async def get_active_tasks(
 @router.get("/latest", response_model=AnalysisResultRead, responses={404: {"description": "No completed analyses"}})
 async def get_latest_analysis(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("analysis")),
 ):
     from backend.repositories.analysis import get_latest_analysis as _repo_latest
 
@@ -102,7 +102,7 @@ async def list_analysis(
     limit: int = Query(default=20, ge=1, le=200),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any_page("analysis", "chart", "performance", "dashboard")),
 ):
     from backend.repositories.analysis import list_analyses as _repo_list
 
@@ -112,7 +112,7 @@ async def list_analysis(
 @router.post("/{task_id}/cancel", response_model=CancelTaskResponse, responses={404: {"description": "Task not found"}})
 async def cancel_analysis(
     task_id: str,
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("analysis")),
 ):
     from backend.services.analysis_service import cancel_analysis as _cancel
     from backend.services.analysis_service import is_task_owner
@@ -125,7 +125,7 @@ async def cancel_analysis(
 
 @router.get("/cost-estimate", response_model=CostEstimateResponse)
 async def cost_estimate(
-    user: User = Depends(get_current_user),
+    user: User = Depends(require_page("analysis")),
     db: AsyncSession = Depends(get_db),
 ):
     from backend.services.agent_settings_service import get_user_agent_settings
@@ -144,7 +144,7 @@ async def cost_estimate(
     analysts_str = ",".join(enabled_analysts)
     debate_rounds = settings.max_debate_rounds or 1
     model = settings.llm_model or "gpt-4o"
-    return _est(analysts_str, debate_rounds, model)
+    return _est(analysts_str, debate_rounds, model, settings.llm_provider)
 
 
 @router.get("/ab-comparison", response_model=list[ABComparisonItem])
@@ -161,7 +161,7 @@ async def get_ab_comparison(
 async def get_performance(
     ticker: str | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("performance")),
 ):
     from backend.services.analysis_stats_service import get_signal_performance as _perf
 
@@ -171,7 +171,7 @@ async def get_performance(
 @router.get("/performance-attribution", response_model=PerformanceAttributionResponse)
 async def get_performance_attribution(
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_any_page("performance", "dashboard")),
 ):
     from backend.services.performance_service import get_analyst_attribution_stats as _attr
 
@@ -216,7 +216,7 @@ async def list_portfolio_analyses(
     limit: int = Query(default=20, ge=1, le=100),
     offset: int = Query(default=0, ge=0),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("analysis")),
 ):
     from backend.repositories.analysis import list_multi_ticker_analyses as _repo_list
 
@@ -242,7 +242,7 @@ async def list_portfolio_analyses(
 async def get_portfolio_analysis(
     portfolio_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("analysis")),
 ):
     from backend.repositories.analysis import get_multi_ticker_analysis_by_id as _repo_get
 
@@ -265,7 +265,7 @@ async def get_portfolio_analysis(
 async def get_analysis(
     analysis_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("analysis")),
 ):
     from backend.repositories.analysis import get_analysis_by_id as _repo_get
 
@@ -284,7 +284,7 @@ async def get_analysis(
 async def get_analysis_chat(
     analysis_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("analysis")),
 ):
     from backend.services.report_chat_service import get_chat_history
 
@@ -296,7 +296,7 @@ async def ask_analysis_report(
     analysis_id: int,
     body: ChatMessageCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("analysis")),
 ):
     from backend.services.report_chat_service import answer_report_question
 
@@ -311,11 +311,11 @@ async def ask_analysis_report(
 async def list_checkpoints(
     analysis_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("analysis")),
 ):
     from backend.services.analysis_service import list_analysis_checkpoints
 
-    result = await list_analysis_checkpoints(db, analysis_id, current_user)
+    result = await list_analysis_checkpoints(analysis_id, db, current_user)
     if result is None:
         raise HTTPException(status_code=404, detail=_ANALYSIS_NOT_FOUND)
     return result
@@ -330,7 +330,7 @@ async def time_travel_resume(
     analysis_id: int,
     body: TimeTravelRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("analysis")),
 ):
     import uuid
 

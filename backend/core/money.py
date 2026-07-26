@@ -1,9 +1,8 @@
 from __future__ import annotations
 
-from decimal import Decimal, InvalidOperation, ROUND_HALF_UP
-from typing import Union
+from decimal import ROUND_HALF_UP, Decimal, InvalidOperation
 
-MoneyValue = Union[Decimal, float, str, int, None]
+MoneyValue = Decimal | float | str | int | None
 
 MONEY_PRECISION = Decimal("0.0001")
 STD_PRECISION = Decimal("0.01")

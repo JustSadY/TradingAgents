@@ -1,6 +1,6 @@
 import pytest
 
-from backend.trading_agents.dataflows.retry import retry_sync, retry_async
+from backend.trading_agents.dataflows.retry import retry_async, retry_sync
 
 
 class _RetryableError(ValueError):

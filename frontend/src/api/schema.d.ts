@@ -454,6 +454,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/settings/llm-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Llm Catalog
+         * @description Per-provider model dropdown options, sourced from llm_clients/registry.py.
+         */
+        get: operations["get_llm_catalog_api_settings_llm_catalog_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/settings": {
         parameters: {
             query?: never;
@@ -1043,10 +1063,7 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /**
-         * Apply Preset
-         * @description Apply a preset's settings to the target user's AppSettings row.
-         */
+        /** Apply Preset */
         post: operations["apply_preset_api_presets__preset_id__apply_post"];
         delete?: never;
         options?: never;
@@ -1177,6 +1194,23 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/users/me/setting-permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Setting Permissions */
+        get: operations["get_my_setting_permissions_api_users_me_setting_permissions_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/users": {
         parameters: {
             query?: never;
@@ -1261,23 +1295,6 @@ export interface paths {
         post?: never;
         /** Delete User Api Key Endpoint */
         delete: operations["delete_user_api_key_endpoint_api_users__user_id__api_keys__provider__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/me/setting-permissions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get My Setting Permissions */
-        get: operations["get_my_setting_permissions_api_users_me_setting_permissions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -2351,6 +2368,10 @@ export interface components {
             estimated_cost_usd: number;
             /** Estimated Duration Min */
             estimated_duration_min: number;
+            /** Pricing Source */
+            pricing_source: string;
+            /** Pricing Is Fallback */
+            pricing_is_fallback: boolean;
         };
         /** DailySummaryResponse */
         DailySummaryResponse: {
@@ -2530,6 +2551,20 @@ export interface components {
             note: string;
             /** Has Debrief */
             has_debrief: boolean;
+        };
+        /** LLMModelOption */
+        LLMModelOption: {
+            /** Value */
+            value: string;
+            /** Label */
+            label: string;
+        };
+        /** LLMProviderCatalogEntry */
+        LLMProviderCatalogEntry: {
+            /** Label */
+            label: string;
+            /** Models */
+            models: components["schemas"]["LLMModelOption"][];
         };
         /** LogRead */
         LogRead: {
@@ -3068,6 +3103,20 @@ export interface components {
             /** Weight Pct */
             weight_pct: number;
         };
+        /** SentimentHistoryPoint */
+        SentimentHistoryPoint: {
+            /** Time */
+            time: string;
+            /** Value */
+            value: number;
+        };
+        /** SentimentHistoryResponse */
+        SentimentHistoryResponse: {
+            /** Ticker */
+            ticker: string;
+            /** History */
+            history: components["schemas"]["SentimentHistoryPoint"][];
+        };
         /** SettingPermissionsResponse */
         SettingPermissionsResponse: {
             /** Allowed Settings */
@@ -3158,6 +3207,21 @@ export interface components {
              * @default 2
              */
             max_risk_per_trade_pct: number;
+            /**
+             * Allow Short Selling
+             * @default false
+             */
+            allow_short_selling: boolean;
+            /**
+             * Max Concentration Pct
+             * @default 25
+             */
+            max_concentration_pct: number;
+            /**
+             * Max Gross Exposure
+             * @default 3
+             */
+            max_gross_exposure: number;
             /**
              * Strict Stop Loss Mode
              * @default false
@@ -3382,6 +3446,12 @@ export interface components {
             max_position_size_pct?: number | null;
             /** Max Risk Per Trade Pct */
             max_risk_per_trade_pct?: number | null;
+            /** Allow Short Selling */
+            allow_short_selling?: boolean | null;
+            /** Max Concentration Pct */
+            max_concentration_pct?: number | null;
+            /** Max Gross Exposure */
+            max_gross_exposure?: number | null;
             /** Strict Stop Loss Mode */
             strict_stop_loss_mode?: boolean | null;
             /** Correlation Risk Enabled */
@@ -3611,9 +3681,9 @@ export interface components {
         /** SystemSettingsUpdate */
         SystemSettingsUpdate: {
             /** Trading Mode */
-            trading_mode?: string | null;
+            trading_mode?: ("simulation" | "live") | null;
             /** Active Broker */
-            active_broker?: string | null;
+            active_broker?: ("simulation" | "alpaca") | null;
             /** Active Data Vendor */
             active_data_vendor?: string | null;
             /** Data Vendor Core Stock */
@@ -4753,6 +4823,28 @@ export interface operations {
             };
         };
     };
+    get_llm_catalog_api_settings_llm_catalog_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: components["schemas"]["LLMProviderCatalogEntry"];
+                    };
+                };
+            };
+        };
+    };
     get_settings_api_settings_get: {
         parameters: {
             query?: never;
@@ -5885,9 +5977,7 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
+                    "application/json": components["schemas"]["SentimentHistoryResponse"];
                 };
             };
             /** @description Validation Error */
@@ -5992,14 +6082,12 @@ export interface operations {
                 };
                 content?: never;
             };
-            /** @description Validation Error */
+            /** @description Invalid preset settings */
             422: {
                 headers: {
                     [name: string]: unknown;
                 };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
+                content?: never;
             };
         };
     };
@@ -6434,6 +6522,26 @@ export interface operations {
             };
         };
     };
+    get_my_setting_permissions_api_users_me_setting_permissions_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingPermissionsResponse"];
+                };
+            };
+        };
+    };
     list_users_run_api_users_get: {
         parameters: {
             query?: never;
@@ -6788,26 +6896,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_my_setting_permissions_api_users_me_setting_permissions_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettingPermissionsResponse"];
                 };
             };
         };

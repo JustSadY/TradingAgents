@@ -118,11 +118,16 @@ async def validate_webhook_url(url: str) -> None:
     parsed = urlparse(url)
     if parsed.scheme not in ("http", "https"):
         raise ValueError("Webhook URL must use http or https")
+    if parsed.username or parsed.password:
+        raise ValueError("Webhook URL must not contain credentials")
     host = parsed.hostname
     if not host:
         raise ValueError("Webhook URL is missing a host")
 
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    try:
+        port = parsed.port or (443 if parsed.scheme == "https" else 80)
+    except ValueError as exc:
+        raise ValueError("Webhook URL has an invalid port") from exc
 
     def _resolve():
         return socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
@@ -133,18 +138,18 @@ async def validate_webhook_url(url: str) -> None:
     try:
         infos = await loop.run_in_executor(None, _resolve)
     except socket.gaierror:
-        raise ValueError("Webhook host could not be resolved")
+        raise ValueError("Webhook host could not be resolved") from None
 
     for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-            or ip.is_unspecified
-        ):
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+        except ValueError as exc:
+            raise ValueError("Webhook host resolved to an invalid address") from exc
+        # ``is_global`` excludes every local/private/special-use range,
+        # including shared carrier-grade NAT addresses that ``is_private``
+        # alone would miss.  Webhooks are outbound Internet integrations, so
+        # private network destinations are never valid here.
+        if not ip.is_global:
             raise ValueError("Webhook URL resolves to a disallowed internal address")
 
 
@@ -156,12 +161,13 @@ async def test_webhook_url(url: str) -> bool:
         "content": "TradingAgents webhook testi başarılı! ✓",
     }
     try:
+        await validate_webhook_url(url)
         async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
             r = await client.post(url, json=payload)
             if r.status_code >= 400:
                 return False
             return True
-    except httpx.RequestError:
+    except (httpx.RequestError, ValueError):
         return False
 
 
@@ -180,8 +186,12 @@ async def send_webhook(
     try:
         import httpx
 
+        # Validate at delivery time as well as at save time.  This protects
+        # against legacy/manual DB values and re-checks DNS immediately before
+        # an outbound request rather than trusting a past validation result.
+        await validate_webhook_url(url)
         payload = _build_payload(url, event, data)
-        async with httpx.AsyncClient(timeout=10.0) as client:
+        async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
             for attempt in range(retries + 1):
                 try:
                     r = await client.post(url, json=payload)

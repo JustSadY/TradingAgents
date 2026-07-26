@@ -3,7 +3,7 @@ from __future__ import annotations
 from unittest.mock import patch
 
 import pytest
-from cryptography.fernet import Fernet
+from cryptography.fernet import Fernet, InvalidToken
 
 from backend.models.user import User
 from backend.services.user_service import (
@@ -30,7 +30,7 @@ class TestUserService:
         assert decrypted == self.test_keys
 
     def test_decrypt_invalid_data_raises(self):
-        with pytest.raises(Exception):
+        with pytest.raises(InvalidToken):
             decrypt_api_keys("invalid-data", self.fernet)
 
     def test_get_user_api_key(self):
@@ -120,7 +120,7 @@ class TestUserService:
         encrypted = encrypt_api_keys({"openai": "sk-resolve"}, self.fernet)
         user = User(api_keys_enc=encrypted)
 
-        with patch("backend.services.user_service.get_settings") as mock_settings:
+        with patch("backend.core.config.get_settings") as mock_settings:
             mock_settings.return_value.get_fernet.return_value = self.fernet
             from backend.services.user_service import resolve_user_api_key
 

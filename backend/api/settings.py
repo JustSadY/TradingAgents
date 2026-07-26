@@ -2,7 +2,12 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import enforce_tool_settings_permission, get_current_user, require_admin
+from backend.api.deps import (
+    enforce_setting_section_permission,
+    enforce_tool_settings_permission,
+    get_current_user,
+    require_admin,
+)
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.repositories.permissions import list_allowed_setting_sections
@@ -80,20 +85,29 @@ async def _check_section_permissions(db: AsyncSession, user: User, body: Setting
 
     allowed_sections = await list_allowed_setting_sections(db, user.id)
     attempted = body.model_dump(exclude_unset=True)
+    advanced_fields = {"max_recur_limit"}
+    if any(f in attempted for f in advanced_fields):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Advanced engine settings can only be modified by administrators.",
+        )
+
+    mapped_fields = {field for fields in SECTION_FIELDS.values() for field in fields}
+    unmapped = set(attempted) - mapped_fields
+    if unmapped:
+        # New settings must be assigned to an explicit permission section
+        # before a non-admin can write them.  Silent allow-by-omission was an
+        # authorization bypass whenever SettingsUpdate gained a new field.
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"No permission section is configured for settings: {', '.join(sorted(unmapped))}",
+        )
     for section, fields in SECTION_FIELDS.items():
         if any(f in attempted for f in fields) and section not in allowed_sections:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail=f"You do not have permission to modify settings in section: {section}",
             )
-    advanced_fields = [
-        "max_recur_limit",
-    ]
-    if any(f in attempted for f in advanced_fields):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Advanced engine settings can only be modified by administrators.",
-        )
 
 
 async def _validate_webhook_url_if_present(body: SettingsUpdate) -> None:
@@ -136,7 +150,12 @@ class WebhookTestRequest(BaseModel):
     response_model=OkResponse,
     responses={400: {"description": "Invalid webhook URL or delivery failed"}},
 )
-async def test_webhook(body: WebhookTestRequest, _: User = Depends(get_current_user)):
+async def test_webhook(
+    body: WebhookTestRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    await enforce_setting_section_permission(db, current_user, "webhooks")
     try:
         await validate_webhook_url(body.url)
     except ValueError as e:
@@ -276,6 +295,7 @@ async def update_user_agents(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await enforce_setting_section_permission(db, current_user, "agents")
     from backend.services.agent_settings_service import apply_agent_settings_update
 
     return await apply_agent_settings_update(db, current_user, body)

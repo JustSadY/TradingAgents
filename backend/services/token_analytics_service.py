@@ -2,76 +2,17 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.model_pricing import estimate_token_cost, resolve_model_pricing
 from backend.repositories import token_analytics as repo
-
-MODEL_COSTS: dict[str, dict[str, tuple[float, float]]] = {
-    "openai": {
-        "gpt-4o": (5.0, 15.0),
-        "gpt-4o-mini": (0.15, 0.60),
-        "gpt-4-turbo": (10.0, 30.0),
-        "gpt-3.5-turbo": (0.50, 1.50),
-        "o1": (15.0, 60.0),
-        "o1-mini": (3.0, 12.0),
-        "o3-mini": (1.10, 4.40),
-        "o4-mini": (1.10, 4.40),
-    },
-    "anthropic": {
-        "claude-3-5-sonnet": (3.0, 15.0),
-        "claude-3-5-haiku": (0.80, 4.0),
-        "claude-3-opus": (15.0, 75.0),
-        "claude-sonnet-4": (3.0, 15.0),
-        "claude-haiku-4": (0.80, 4.0),
-        "claude-opus-4": (15.0, 75.0),
-    },
-    "google": {
-        "gemini-1.5-pro": (3.50, 10.50),
-        "gemini-1.5-flash": (0.075, 0.30),
-        "gemini-2.0-flash": (0.075, 0.30),
-        "gemini-2.5-pro": (7.0, 21.0),
-        "gemini-2.5-flash": (0.15, 0.60),
-    },
-    "nvidia": {
-        "llama-3.1-70b": (0.35, 0.35),
-        "llama-3.1-405b": (2.00, 2.00),
-        "llama-3.3-70b": (0.35, 0.35),
-    },
-    "ollama": {},
-}
-
-DEFAULT_COST = (2.0, 8.0)
-
-
-def _rates_for(provider: str | None, model: str | None) -> tuple[float, float]:
-    prov = (provider or "").lower()
-    mod = (model or "").lower()
-    rates = MODEL_COSTS.get(prov, {})
-    for key, val in rates.items():
-        if key in mod:
-            return val
-    return DEFAULT_COST
 
 
 def estimate_cost(provider: str | None, model: str | None, tokens_in: int, tokens_out: int) -> float:
-    prov = (provider or "").lower()
-    if prov == "ollama":
-        return 0.0
-    rate_in, rate_out = _rates_for(provider, model)
-    return round((tokens_in * rate_in + tokens_out * rate_out) / 1_000_000, 6)
+    """Estimate from the canonical pricing catalogue.
 
-
-def get_blended_rate_per_1k(model: str | None, default_per_1k: float) -> float:
-    """Blended (in+out)/2 USD-per-1K-tokens rate for *model*, for callers that
-    only have a rough token estimate and no provider (e.g. a pre-run cost
-    estimate). Matches by model-id substring across all providers — this is
-    the same ``MODEL_COSTS`` table ``estimate_cost`` uses, so the pre-run
-    estimate and the actual post-run cost can no longer drift apart.
+    Keep this small wrapper for existing callers while the actual model price
+    resolution lives in ``backend.core.model_pricing``.
     """
-    mod = (model or "").lower()
-    for rates in MODEL_COSTS.values():
-        for key, (rate_in, rate_out) in rates.items():
-            if key in mod:
-                return (rate_in + rate_out) / 2 / 1000
-    return default_per_1k
+    return estimate_token_cost(provider, model, tokens_in, tokens_out)
 
 
 async def get_token_analytics(db: AsyncSession, user_id: int) -> dict[str, Any]:
@@ -81,6 +22,7 @@ async def get_token_analytics(db: AsyncSession, user_id: int) -> dict[str, Any]:
     for row in rows:
         ti = int(row.tokens_in or 0)
         to = int(row.tokens_out or 0)
+        pricing = resolve_model_pricing(row.llm_provider, row.llm_model)
         cost = estimate_cost(row.llm_provider, row.llm_model, ti, to)
         breakdown.append(
             {
@@ -90,6 +32,8 @@ async def get_token_analytics(db: AsyncSession, user_id: int) -> dict[str, Any]:
                 "tokens_out": to,
                 "analyses": int(row.analyses),
                 "estimated_cost_usd": cost,
+                "pricing_source": pricing.source,
+                "pricing_is_fallback": pricing.is_fallback,
             }
         )
         total_in += ti

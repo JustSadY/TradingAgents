@@ -294,7 +294,7 @@ async def rollback_and_resume_analysis(
     from backend.repositories.system_settings import get_system_settings
     from backend.services.analysis.config_builder import build_analysis_config, prepare_graph_config
     from backend.services.settings_service import get_or_create_settings
-    from backend.trading_agents.graph.checkpointer import get_async_checkpointer, thread_id
+    from backend.trading_agents.graph.checkpointer import checkpoint_scope, get_async_checkpointer, thread_id
     from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
 
     analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
@@ -306,12 +306,18 @@ async def rollback_and_resume_analysis(
     config = build_analysis_config(settings, user=current_user, sys_settings=sys_settings)
     permitted_analysts = await prepare_graph_config(db, current_user.id if current_user else None, config)
 
+    # Checkpoints are tied to the owned analysis row, not merely ticker/date.
+    # An administrator may resume another user's analysis, so use the row's
+    # owner rather than the caller's id.
+    checkpoint_namespace = checkpoint_scope(analysis.user_id, analysis.id)
+    config["checkpoint_scope"] = checkpoint_namespace
+
     ta = TradingAgentsGraph(selected_analysts=permitted_analysts, config=config)
-    tid = thread_id(analysis.ticker, analysis.trade_date)
+    tid = thread_id(analysis.ticker, analysis.trade_date, checkpoint_namespace)
     node_name = "START"
     config_param = {"configurable": {"thread_id": tid}}
 
-    async with get_async_checkpointer(config["data_cache_dir"], analysis.ticker) as saver:
+    async with get_async_checkpointer(config["data_cache_dir"], analysis.ticker, checkpoint_namespace) as saver:
         async for cp in saver.alist(config_param):
             if cp.config["configurable"]["checkpoint_id"] == checkpoint_id:
                 metadata = cp.metadata or {}
@@ -319,7 +325,7 @@ async def rollback_and_resume_analysis(
                 node_name = next(iter(writes.keys()), "START") if writes else "START"
                 break
 
-    async with get_async_checkpointer(config["data_cache_dir"], analysis.ticker) as saver:
+    async with get_async_checkpointer(config["data_cache_dir"], analysis.ticker, checkpoint_namespace) as saver:
         graph = ta.workflow.compile(checkpointer=saver)
         update_config = {"configurable": {"thread_id": tid, "checkpoint_id": checkpoint_id}}
         await graph.aupdate_state(update_config, update_state, as_node=node_name)
@@ -362,19 +368,13 @@ async def rollback_and_resume_analysis(
                         emitter,
                         triggered_by="time-travel",
                         user=current_user,
+                        checkpoint_namespace=checkpoint_namespace,
+                        result_owner_user_id=analysis.user_id,
                     )
-                    try:
-                        from backend.repositories.analysis import get_analysis_by_id as _get_row
-
-                        updated_row = await _get_row(session, analysis_id, user=current_user)
-                        if updated_row:
-                            await place_signal_order(
-                                session, ticker=analysis.ticker, row=updated_row, settings=settings, user=current_user
-                            )
-                            await session.commit()
-                    except Exception as order_exc:
-                        _logger.warning("Order execution skipped on time-travel resume: %s", order_exc)
-                        await session.rollback()
+                    # A time-travel replay is an exploratory edit of an old
+                    # analysis.  It must never place another paper/live order
+                    # as a side effect; execution requires an explicit new
+                    # order from the user after reviewing the result.
                 finally:
                     _RUNNING_TASKS.pop(task_id, None)
                     _TASK_REGISTRY.pop(task_id, None)
@@ -392,11 +392,16 @@ async def list_analysis_checkpoints(analysis_id: int, db: AsyncSession, current_
 
     from backend.repositories.analysis import get_analysis_by_id
     from backend.trading_agents.default_config import DEFAULT_CONFIG
-    from backend.trading_agents.graph.checkpointer import list_checkpoints_for_thread
+    from backend.trading_agents.graph.checkpointer import checkpoint_scope, list_checkpoints_for_thread
 
     analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
     if not analysis:
         return None
 
     data_cache_dir = os.environ.get("TRADINGAGENTS_DATA_CACHE_DIR", DEFAULT_CONFIG["data_cache_dir"])
-    return await list_checkpoints_for_thread(data_cache_dir, analysis.ticker, analysis.trade_date)
+    return await list_checkpoints_for_thread(
+        data_cache_dir,
+        analysis.ticker,
+        analysis.trade_date,
+        checkpoint_scope(analysis.user_id, analysis.id),
+    )

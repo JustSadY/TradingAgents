@@ -23,9 +23,7 @@ async def search_web(
         try:
             return await asyncio.to_thread(fetch_searxng_results, query, searxng_url)
         except Exception as exc:
-            _logger.warning(
-                "SearXNG query failed (%s); falling back to news proxy: %s", searxng_url, exc
-            )
+            _logger.warning("SearXNG query failed (%s); falling back to news proxy: %s", searxng_url, exc)
 
     # No SearXNG configured, or it just failed: fall back to yfinance news as
     # a proxy for web-search results. The window ends at the analysis date

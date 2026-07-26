@@ -228,7 +228,8 @@ def _build_sector_weights(holdings: list[dict], sector_map: dict[str, str], tota
         sector_values[s] = sector_values.get(s, Decimal("0")) + h["_market_value"]
 
     sector_weights = [
-        {"sector": s, "weight_pct": round(float(mv / total_equity * Decimal("100")), 4)} for s, mv in sector_values.items()
+        {"sector": s, "weight_pct": round(float(mv / total_equity * Decimal("100")), 4)}
+        for s, mv in sector_values.items()
     ]
     sector_weights.sort(key=lambda x: x["weight_pct"], reverse=True)
     return sector_weights
@@ -303,6 +304,9 @@ async def correlated_notional(ticker: str, holdings: list[dict], threshold: floa
             corr = float(base.loc[common].corr(r.loc[common]))
         except Exception:
             _logger.debug("Correlation calc failed for %s vs %s", ticker, h.get("ticker"), exc_info=True)
+            # Do not reuse a previous holding's correlation (or reference an
+            # unbound local on the first failure).
+            continue
         if corr > threshold:
             total += corr * float(safe_decimal(h.get("market_value")))
     return total

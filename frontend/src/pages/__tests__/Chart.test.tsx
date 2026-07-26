@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import Chart from '../Chart'
+import api from '../../utils/api'
 
 vi.mock('react-router-dom', () => ({
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
@@ -45,9 +47,19 @@ vi.mock('../../utils/signalTone', () => ({
 }))
 
 vi.mock('../../components/ErrorBoundary', () => ({ ErrorBoundary: ({ children }: any) => children }))
-vi.mock('../../components/chart/ChartSearch', () => ({ ChartSearch: () => <div>ChartSearch</div> }))
+vi.mock('../../components/chart/ChartSearch', () => ({
+  ChartSearch: ({ tickerInput, setTickerInput, handleSearch }: any) => (
+    <div>
+      <div>ChartSearch</div>
+      <input aria-label="ticker" value={tickerInput} onChange={e => setTickerInput(e.target.value)} />
+      <button onClick={handleSearch}>Search</button>
+    </div>
+  ),
+}))
 vi.mock('../../components/chart/TechnicalControls', () => ({ TechnicalControls: () => <div>TechnicalControls</div> }))
-vi.mock('../../components/chart/CustomIndicatorPane', () => ({ CustomIndicatorPane: () => <div>CustomIndicatorPane</div> }))
+vi.mock('../../components/chart/CustomIndicatorPane', () => ({
+  CustomIndicatorPane: ({ sentimentChartData }: any) => <div>Sentiment points: {sentimentChartData.length}</div>,
+}))
 vi.mock('../../components/chart/AnalysisDetailSidebar', () => ({ AnalysisDetailSidebar: () => <div>AnalysisDetailSidebar</div> }))
 
 vi.mock('lucide-react', () => ({
@@ -70,5 +82,41 @@ describe('Chart', () => {
       expect(screen.getByText('ChartSearch')).toBeInTheDocument()
       expect(screen.getByText('TechnicalControls')).toBeInTheDocument()
     })
+  })
+
+  it('uses the sentiment-history object response and clears old candles on a failed symbol load', async () => {
+    const get = vi.mocked(api.get)
+    get.mockImplementation((url, config) => {
+      const ticker = (config as any)?.params?.ticker
+      if (ticker === 'AAPL' && url === '/api/market/ohlcv') {
+        return Promise.resolve({ data: { candles: [{ time: '2026-07-18', open: 99, high: 101, low: 98, close: 100, volume: 1000 }] } }) as any
+      }
+      if (ticker === 'AAPL' && url === '/api/analysis/history') return Promise.resolve({ data: [] }) as any
+      if (ticker === 'AAPL' && url === '/api/market/sentiment-history') {
+        return Promise.resolve({ data: { ticker: 'AAPL', history: [{ time: '2026-07-18', value: 0.5 }] } }) as any
+      }
+      if (ticker === 'MSFT' && url === '/api/market/ohlcv') {
+        return Promise.reject({ response: { data: { detail: 'No data found' } } })
+      }
+      return Promise.resolve({ data: [] }) as any
+    })
+
+    const user = userEvent.setup()
+    render(<Chart />)
+    const input = screen.getByLabelText('ticker')
+
+    await user.type(input, 'AAPL')
+    await user.click(screen.getByRole('button', { name: 'Search' }))
+    await waitFor(() => {
+      expect(screen.getByText('$100.00')).toBeInTheDocument()
+      expect(screen.getByText('Sentiment points: 1')).toBeInTheDocument()
+    })
+
+    await user.clear(input)
+    await user.type(input, 'MSFT')
+    await user.click(screen.getByRole('button', { name: 'Search' }))
+
+    await waitFor(() => expect(screen.getByText('No data found')).toBeInTheDocument())
+    expect(screen.queryByText('$100.00')).not.toBeInTheDocument()
   })
 })

@@ -24,7 +24,9 @@ class NewsAnalysisCache(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     # Nullable for system-triggered runs with no owning user; lookups treat
     # NULL as its own bucket so those runs never share cache with real users.
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     ticker: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     articles_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     # Fingerprint of provider/model/persona/language — lets the stale-data
@@ -41,14 +43,14 @@ class NewsAnalysisCache(Base):
 
 class AnalystReportCache(Base):
     __tablename__ = "analyst_report_cache"
-    __table_args__ = (
-        Index("ix_analyst_report_cache_lookup", "user_id", "analyst_key", "ticker", "data_hash"),
-    )
+    __table_args__ = (Index("ix_analyst_report_cache_lookup", "user_id", "analyst_key", "ticker", "data_hash"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     # Nullable for system-triggered runs with no owning user; lookups treat
     # NULL as its own bucket so those runs never share cache with real users.
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     analyst_key: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     ticker: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     data_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)

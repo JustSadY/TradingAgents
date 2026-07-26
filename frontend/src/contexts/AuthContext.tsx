@@ -1,12 +1,33 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import axios from 'axios'
+import { clearMetaCache } from '../hooks/useMeta'
 import { formatErrorDetail, notify } from '../utils/notify'
 
 const TOKEN_KEY = 'ta_access'
 const REFRESH_KEY = 'ta_refresh'
+const USER_SCOPE_KEY = 'ta_user_scope'
+const USER_SCOPED_STORAGE_KEYS = ['ta_last_run', 'ta_task_running']
 
 export function getAccessToken() {
   return localStorage.getItem(TOKEN_KEY)
+}
+
+function clearUserScopedBrowserState() {
+  USER_SCOPED_STORAGE_KEYS.forEach(key => localStorage.removeItem(key))
+  localStorage.removeItem(USER_SCOPE_KEY)
+  clearMetaCache()
+}
+
+/**
+ * Keep browser state that contains reports or user-specific metadata tied to
+ * the account that created it. Older installs have no owner marker, so their
+ * persisted state is deliberately discarded on first authenticated load.
+ */
+function activateUserScope(username: string) {
+  if (localStorage.getItem(USER_SCOPE_KEY) !== username) {
+    clearUserScopedBrowserState()
+    localStorage.setItem(USER_SCOPE_KEY, username)
+  }
 }
 
 // The response interceptor below is registered once at module scope (axios
@@ -61,12 +82,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const t = localStorage.getItem(TOKEN_KEY)
     if (t) {
       const payload = decodeToken(t)
-      if (payload && payload.exp * 1000 > Date.now()) {
+      if (payload?.sub && payload.exp * 1000 > Date.now()) {
+        activateUserScope(payload.sub)
         setUser(payload.sub)
         setRole(payload.role || 'user')
       } else {
         localStorage.removeItem(TOKEN_KEY)
         localStorage.removeItem(REFRESH_KEY)
+        clearUserScopedBrowserState()
       }
     }
     setLoading(false)
@@ -79,16 +102,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = useCallback(async (username: string, password: string) => {
     const res = await axios.post('/auth/login', { username, password })
     const { access_token, refresh_token } = res.data
+    const payload = decodeToken(access_token)
+    const authenticatedUser = payload?.sub ?? username
+    activateUserScope(authenticatedUser)
     localStorage.setItem(TOKEN_KEY, access_token)
     localStorage.setItem(REFRESH_KEY, refresh_token)
-    const payload = decodeToken(access_token)
-    setUser(payload?.sub ?? username)
+    setUser(authenticatedUser)
     setRole(payload?.role ?? 'user')
   }, [])
 
   const clearLocalAuthState = useCallback(() => {
     localStorage.removeItem(TOKEN_KEY)
     localStorage.removeItem(REFRESH_KEY)
+    clearUserScopedBrowserState()
     setUser(null)
     setRole(null)
   }, [])

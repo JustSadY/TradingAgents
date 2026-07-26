@@ -394,12 +394,24 @@ async def monitor_open_positions(db: AsyncSession) -> list[dict]:
     return closed
 
 
+def _performance_start_date(portfolio: Portfolio, now: datetime | None = None) -> str:
+    """Return the portfolio inception date in UTC for benchmark comparison."""
+    now = now or datetime.now(UTC)
+    created_at = getattr(portfolio, "created_at", None) or now
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=UTC)
+    if created_at > now:
+        created_at = now
+    return created_at.date().isoformat()
+
+
 async def get_performance(db: AsyncSession, user=None) -> dict:
-    portfolio_data = await get_portfolio_with_live_prices(db, user=user)
+    portfolio = await get_or_create_sim_portfolio(db, user=user)
+    portfolio_data = await get_portfolio_with_live_prices(db, user=user, portfolio_id=portfolio.id)
 
     from backend.services.market_data_service import get_benchmark_return
 
-    spy_return_pct = await get_benchmark_return("SPY", period="1y")
+    spy_return_pct = await get_benchmark_return("SPY", start_date=_performance_start_date(portfolio))
 
     return {
         **portfolio_data,

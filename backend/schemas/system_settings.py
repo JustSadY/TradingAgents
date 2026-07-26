@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
@@ -19,8 +20,8 @@ class SystemSettingsRead(BaseModel):
 
 
 class SystemSettingsUpdate(BaseModel):
-    trading_mode: str | None = None
-    active_broker: str | None = None
+    trading_mode: Literal["simulation", "live"] | None = None
+    active_broker: Literal["simulation", "alpaca"] | None = None
     active_data_vendor: str | None = None
     data_vendor_core_stock: str | None = None
     data_vendor_technicals: str | None = None

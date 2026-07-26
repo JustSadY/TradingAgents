@@ -1,22 +1,53 @@
 import logging
+from contextlib import asynccontextmanager
 from datetime import date
 from typing import Optional
 
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
-from sqlalchemy import select
+from sqlalchemy import select, text
 
-from backend.core.database import AsyncSessionLocal
+from backend.core.database import AsyncSessionLocal, engine
 from backend.models.settings import AppSettings
 from backend.models.user import User
 from backend.services.alert_service import check_price_alerts
 from backend.services.analysis_service import run_analysis
 from backend.services.performance_service import backfill_returns
-from backend.services.trading_orchestrator import place_signal_order
+from backend.services.trading_orchestrator import is_actionable, place_signal_order
 
 _logger = logging.getLogger(__name__)
 _cron_service: Optional["CronService"] = None
+
+
+@asynccontextmanager
+async def _job_lock(job_name: str):
+    """Acquire a PostgreSQL advisory lock for a scheduler job.
+
+    Every web process owns its own APScheduler instance.  A database-scoped
+    lock keeps interval and per-user cron jobs singleton when the application
+    is deployed with multiple workers or replicas.  SQLite remains a
+    single-process development fallback.
+    """
+    if engine.dialect.name != "postgresql":
+        yield True
+        return
+
+    import hashlib
+
+    lock_key = int.from_bytes(hashlib.sha256(job_name.encode("utf-8")).digest()[:8], "big", signed=True)
+    async with engine.connect() as conn:
+        acquired = bool(
+            (await conn.execute(text("SELECT pg_try_advisory_lock(:lock_key)"), {"lock_key": lock_key})).scalar()
+        )
+        if not acquired:
+            _logger.debug("Skipping duplicate scheduled job: %s", job_name)
+            yield False
+            return
+        try:
+            yield True
+        finally:
+            await conn.execute(text("SELECT pg_advisory_unlock(:lock_key)"), {"lock_key": lock_key})
 
 
 class CronService:
@@ -95,6 +126,12 @@ class CronService:
                 _logger.exception("Failed to configure user cron job for user=%s", username)
 
     async def _run_user_watchlist_scan(self, user_id: int):
+        async with _job_lock(f"watchlist_scan_user_{user_id}") as acquired:
+            if not acquired:
+                return
+            await self._run_user_watchlist_scan_once(user_id)
+
+    async def _run_user_watchlist_scan_once(self, user_id: int):
         from backend.core.log_handler import current_user_id
 
         current_user_id.set(user_id)
@@ -124,9 +161,13 @@ class CronService:
                         triggered_by="cron",
                     )
                     await db.commit()
-                    if row.signal in ("Buy", "Overweight", "Sell", "Underweight"):
-                        await place_signal_order(db, ticker=ticker, row=row, settings=app_settings, user=user)
-                        await db.commit()
+                    await _place_actionable_signal_order(
+                        db,
+                        ticker=ticker,
+                        row=row,
+                        settings=app_settings,
+                        user=user,
+                    )
                 except Exception:
                     _logger.exception("User cron scan failed for user=%s, ticker=%s", user.username, ticker)
                     await db.rollback()
@@ -144,17 +185,31 @@ class CronService:
         }
 
 
+async def _place_actionable_signal_order(db, *, ticker: str, row, settings, user) -> bool:
+    """Place cron orders through the orchestrator's single signal mapping."""
+    if not is_actionable(getattr(row, "signal", None)):
+        return False
+    await place_signal_order(db, ticker=ticker, row=row, settings=settings, user=user)
+    await db.commit()
+    return True
+
+
 async def _run_alert_checker():
     try:
-        await check_price_alerts()
+        async with _job_lock("alert_checker") as acquired:
+            if acquired:
+                await check_price_alerts()
     except Exception:
         _logger.exception("Alert checker error")
 
 
 async def _run_performance_backfill():
     try:
-        async with AsyncSessionLocal() as db:
-            await backfill_returns(db)
+        async with _job_lock("perf_backfill") as acquired:
+            if not acquired:
+                return
+            async with AsyncSessionLocal() as db:
+                await backfill_returns(db)
     except Exception:
         _logger.exception("Performance backfill error")
 
@@ -162,13 +217,16 @@ async def _run_performance_backfill():
 async def _run_position_monitor():
     """Periodically enforce stop-loss / take-profit / liquidation on open positions."""
     try:
-        from backend.services.mock_trading_service import monitor_open_positions
+        async with _job_lock("position_monitor") as acquired:
+            if not acquired:
+                return
+            from backend.services.mock_trading_service import monitor_open_positions
 
-        async with AsyncSessionLocal() as db:
-            closed = await monitor_open_positions(db)
-            await db.commit()
-            if closed:
-                _logger.info("Position monitor auto-closed %d position(s): %s", len(closed), closed)
+            async with AsyncSessionLocal() as db:
+                closed = await monitor_open_positions(db)
+                await db.commit()
+                if closed:
+                    _logger.info("Position monitor auto-closed %d position(s): %s", len(closed), closed)
     except Exception:
         _logger.exception("Position monitor error")
 

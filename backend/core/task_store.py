@@ -15,12 +15,19 @@ from __future__ import annotations
 import json
 import logging
 
+from redis.exceptions import RedisError
+
 from backend.core.redis_bus import CONTROL_CHANNEL, get_redis, redis_enabled, subscribe_loop
 
 _logger = logging.getLogger(__name__)
 
 # Analyses run minutes; entries outliving this are leftovers from a crash.
 _TTL_SECONDS = 2 * 60 * 60
+
+
+def _log_redis_failure(operation: str, exc: RedisError) -> None:
+    """Keep Redis an optional cross-process enhancement, never an API SPOF."""
+    _logger.warning("Analysis task store %s skipped because Redis is unavailable: %s", operation, exc)
 
 
 def _owner_key(task_id: str) -> str:
@@ -38,14 +45,21 @@ def _user_tasks_key(user_id: int) -> str:
 async def set_owner(task_id: str, user_id: int | None) -> None:
     if not redis_enabled():
         return
-    await get_redis().set(_owner_key(task_id), "" if user_id is None else str(user_id), ex=_TTL_SECONDS)
+    try:
+        await get_redis().set(_owner_key(task_id), "" if user_id is None else str(user_id), ex=_TTL_SECONDS)
+    except RedisError as exc:
+        _log_redis_failure("set_owner", exc)
 
 
 async def get_owner(task_id: str) -> int | None:
     """Owner user id, or ``None`` when unknown or system-owned."""
     if not redis_enabled():
         return None
-    raw = await get_redis().get(_owner_key(task_id))
+    try:
+        raw = await get_redis().get(_owner_key(task_id))
+    except RedisError as exc:
+        _log_redis_failure("get_owner", exc)
+        return None
     if not raw:
         return None
     try:
@@ -58,14 +72,21 @@ async def get_owner(task_id: str) -> int | None:
 async def clear_owner(task_id: str) -> None:
     if not redis_enabled():
         return
-    await get_redis().delete(_owner_key(task_id))
+    try:
+        await get_redis().delete(_owner_key(task_id))
+    except RedisError as exc:
+        _log_redis_failure("clear_owner", exc)
 
 
 async def get_meta(task_id: str) -> dict | None:
     """Return task meta dict, or None when unknown."""
     if not redis_enabled():
         return None
-    raw = await get_redis().get(_meta_key(task_id))
+    try:
+        raw = await get_redis().get(_meta_key(task_id))
+    except RedisError as exc:
+        _log_redis_failure("get_meta", exc)
+        return None
     if raw is None:
         return None
     try:
@@ -77,36 +98,54 @@ async def get_meta(task_id: str) -> dict | None:
 async def set_meta(task_id: str, meta: dict) -> None:
     if not redis_enabled():
         return
-    redis = get_redis()
-    await redis.set(_meta_key(task_id), json.dumps(meta), ex=_TTL_SECONDS)
-    user_id = meta.get("user_id")
-    if user_id is not None:
-        key = _user_tasks_key(user_id)
-        await redis.sadd(key, task_id)
-        await redis.expire(key, _TTL_SECONDS)
+    try:
+        redis = get_redis()
+        await redis.set(_meta_key(task_id), json.dumps(meta), ex=_TTL_SECONDS)
+        user_id = meta.get("user_id")
+        if user_id is not None:
+            key = _user_tasks_key(user_id)
+            await redis.sadd(key, task_id)
+            await redis.expire(key, _TTL_SECONDS)
+    except RedisError as exc:
+        _log_redis_failure("set_meta", exc)
 
 
 async def clear_meta(task_id: str, user_id: int | None = None) -> None:
     if not redis_enabled():
         return
-    redis = get_redis()
-    await redis.delete(_meta_key(task_id))
-    if user_id is not None:
-        await redis.srem(_user_tasks_key(user_id), task_id)
+    try:
+        redis = get_redis()
+        await redis.delete(_meta_key(task_id))
+        if user_id is not None:
+            await redis.srem(_user_tasks_key(user_id), task_id)
+    except RedisError as exc:
+        _log_redis_failure("clear_meta", exc)
 
 
 async def list_tasks_for_user(user_id: int) -> list[dict]:
     """Active tasks for ``user_id`` as ``{"task_id": ..., **meta}`` dicts."""
     if not redis_enabled():
         return []
-    redis = get_redis()
-    task_ids = await redis.smembers(_user_tasks_key(user_id))
+    try:
+        redis = get_redis()
+        task_ids = await redis.smembers(_user_tasks_key(user_id))
+    except RedisError as exc:
+        _log_redis_failure("list_tasks_for_user", exc)
+        return []
     tasks: list[dict] = []
     for task_id in task_ids:
-        raw = await redis.get(_meta_key(task_id))
+        try:
+            raw = await redis.get(_meta_key(task_id))
+        except RedisError as exc:
+            _log_redis_failure("list_tasks_for_user", exc)
+            return tasks
         if raw is None:
             # Meta expired or cleaned up; drop the stale index entry.
-            await redis.srem(_user_tasks_key(user_id), task_id)
+            try:
+                await redis.srem(_user_tasks_key(user_id), task_id)
+            except RedisError as exc:
+                _log_redis_failure("list_tasks_for_user", exc)
+                return tasks
             continue
         try:
             tasks.append({"task_id": task_id, **json.loads(raw)})
@@ -119,7 +158,10 @@ async def publish_cancel(task_id: str) -> None:
     """Ask whichever process is running ``task_id`` to cancel it."""
     if not redis_enabled():
         return
-    await get_redis().publish(CONTROL_CHANNEL, json.dumps({"action": "cancel", "task_id": task_id}))
+    try:
+        await get_redis().publish(CONTROL_CHANNEL, json.dumps({"action": "cancel", "task_id": task_id}))
+    except RedisError as exc:
+        _log_redis_failure("publish_cancel", exc)
 
 
 async def control_listener(cancel_local) -> None:

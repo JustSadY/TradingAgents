@@ -34,15 +34,21 @@ class TestSettingsAPI:
         resp = await async_client.get("/api/settings")
         assert resp.status_code == 401
 
-    async def test_get_meta(self, async_client: AsyncClient):
-        resp = await async_client.get("/api/meta")
+    async def test_get_meta(self, auth_client: AsyncClient):
+        resp = await auth_client.get("/api/meta")
         assert resp.status_code == 200
         data = resp.json()
         assert "investor_personas" in data
-        assert "tool_categories" in data
+        assert "tools" in data
+        assert "trading_modes" in data
+        assert "brokers" in data
 
-    async def test_get_llm_catalog(self, async_client: AsyncClient):
-        resp = await async_client.get("/api/settings/llm-catalog")
+    async def test_get_llm_catalog(self, auth_client: AsyncClient):
+        resp = await auth_client.get("/api/settings/llm-catalog")
         assert resp.status_code == 200
         data = resp.json()
-        assert isinstance(data, list)
+        assert isinstance(data, dict)
+        assert data
+        assert all(
+            isinstance(entry.get("label"), str) and isinstance(entry.get("models"), list) for entry in data.values()
+        )

@@ -124,9 +124,9 @@ Your final report MUST follow this structure:
 
             server_tool_settings = get_config().get("runtime_tool_context", {}).get("server_settings", {})
             lookback_days = int(
-                server_tool_settings.get("technical_indicators", {}).get("settings", {}).get(
-                    "default_lookback_days", 30
-                )
+                server_tool_settings.get("technical_indicators", {})
+                .get("settings", {})
+                .get("default_lookback_days", 30)
                 or 30
             )
 

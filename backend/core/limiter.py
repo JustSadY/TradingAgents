@@ -1,3 +1,5 @@
+from ipaddress import ip_address
+
 from fastapi import Request
 from slowapi import Limiter
 from slowapi.util import get_remote_address
@@ -19,8 +21,13 @@ def _client_ip(request: Request) -> str:
         forwarded = request.headers.get("x-forwarded-for")
         if forwarded:
             client_ip = forwarded.split(",")[0].strip()
-            if client_ip:
-                return client_ip
+            try:
+                # Do not use arbitrary header text as a limiter key.  Aside
+                # from keeping the key space bounded, this makes a malformed
+                # proxy header fail closed to the directly connected proxy.
+                return str(ip_address(client_ip))
+            except ValueError:
+                pass
     return get_remote_address(request)
 
 

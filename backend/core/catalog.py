@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from backend.core.config import is_live_trading_enabled
 from backend.core.constants import PAGE_KEYS, SETTING_KEYS
 from backend.trading_agents.agent_catalog import label_for
 from backend.trading_agents.agent_catalog import list_analysts as _engine_analysts
@@ -134,6 +135,28 @@ WEBHOOK_EVENTS: list[str] = [
     "risk_breach",
 ]
 
+
+def trading_options_for_user(user=None) -> tuple[list[dict], list[dict]]:
+    """Return only brokerage choices the requesting user may safely configure.
+
+    Paper Alpaca remains an owner-only option.  The real-money mode is omitted
+    until the server operator explicitly enables it; non-owner administrators
+    never receive either Alpaca or Live choices from the metadata API.
+    """
+    simulation_modes = [TRADING_MODES[0].copy()]
+    simulation_brokers = [BROKERS[0].copy()]
+    if user is None or not getattr(user, "is_owner", False):
+        return simulation_modes, simulation_brokers
+
+    if is_live_trading_enabled():
+        return [choice.copy() for choice in TRADING_MODES], [choice.copy() for choice in BROKERS]
+
+    return simulation_modes, [
+        simulation_brokers[0],
+        {"value": "alpaca", "label": "Alpaca (Paper)"},
+    ]
+
+
 MEMORY_STORES: list[dict] = [
     {"value": "pinecone", "label": "Pinecone"},
     {"value": "pgvector", "label": "pgvector (PostgreSQL)"},
@@ -258,6 +281,7 @@ async def build_meta(db=None, user=None) -> dict:
 
             filtered_tools.append(t)
         tools_list = filtered_tools
+    trading_modes, brokers = trading_options_for_user(user)
     return {
         "analysts": await available_analysts(db, user),
         "tools": tools_list,
@@ -267,8 +291,8 @@ async def build_meta(db=None, user=None) -> dict:
         "asset_types": ASSET_TYPES,
         "languages": LANGUAGES,
         "data_vendors": DATA_VENDORS,
-        "trading_modes": TRADING_MODES,
-        "brokers": BROKERS,
+        "trading_modes": trading_modes,
+        "brokers": brokers,
         "provider_labels": PROVIDER_LABELS,
         "investor_personas": await investor_personas(db, user),
         "effort_options": EFFORT_OPTIONS,

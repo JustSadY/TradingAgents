@@ -1,8 +1,8 @@
 from backend.trading_agents.llm_clients.base_client import (
+    classify_error,
     is_quota_exhausted,
     is_rate_limited,
     normalize_content,
-    classify_error,
 )
 
 
@@ -25,9 +25,7 @@ def test_normalize_content_aimessage():
 
 
 def test_normalize_content_list_of_text_blocks():
-    result = normalize_content(_FakeResponse(
-        [{"type": "text", "text": "block1"}, {"type": "text", "text": "block2"}]
-    ))
+    result = normalize_content(_FakeResponse([{"type": "text", "text": "block1"}, {"type": "text", "text": "block2"}]))
     assert result.content == "block1\nblock2"
 
 

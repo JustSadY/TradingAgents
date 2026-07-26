@@ -48,7 +48,6 @@ from backend.api.users import router as users_router
 from backend.api.watchlist import router as watchlist_router
 from backend.core.config import get_settings
 from backend.core.database import create_all_tables
-from backend.core.security import decode_token_payload
 from backend.core.websocket import ws_manager
 from backend.services.cron_service import init_cron_service
 
@@ -320,26 +319,21 @@ async def websocket_analysis(
     task_id: str,
     token: str = Query(..., description="JWT access token"),
 ):
-    try:
-        payload = decode_token_payload(token, expected_type="access")
-    except ValueError:
-        await websocket.close(code=4001, reason="Unauthorized")
-        return
-
+    from backend.api.deps import get_user_from_access_token, has_page_access
     from backend.core.database import AsyncSessionLocal
-    from backend.repositories.users import get_user_by_username
     from backend.services.analysis_service import is_task_owner
 
     async with AsyncSessionLocal() as db:
-        user = await get_user_by_username(db, payload["sub"])
-    if user is None or not user.is_active:
-        await websocket.close(code=4001, reason="Unauthorized")
-        return
-    # Reject tokens minted before the user's current version, mirroring
-    # get_current_user — otherwise a logged-out access token keeps streaming
-    # analysis events until it naturally expires.
-    if payload.get("ver", 0) != getattr(user, "token_version", 0):
-        await websocket.close(code=4001, reason="Unauthorized")
+        try:
+            user = await get_user_from_access_token(token, db)
+        except HTTPException:
+            # The helper includes active-user and token-version checks, which
+            # makes logout revoke WebSocket credentials immediately as well.
+            await websocket.close(code=4001, reason="Unauthorized")
+            return
+        page_allowed = await has_page_access(db, user, "analysis")
+    if not page_allowed:
+        await websocket.close(code=4003, reason="Forbidden")
         return
     # Only the user who started the run (or an admin) may stream its events;
     # otherwise any authenticated user could read another user's analysis.
@@ -372,10 +366,11 @@ if os.path.isdir(_static_dir):
     # endpoint — it must 404, not silently fall through to index.html (which
     # previously masked bugs like a frontend calling the wrong API path).
     _NOT_FOUND_PREFIXES = ("api/", "auth/", "ws/")
+    _NOT_FOUND_ROOTS = {"api", "auth", "ws"}
 
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
-        if full_path.startswith(_NOT_FOUND_PREFIXES):
+        if full_path in _NOT_FOUND_ROOTS or full_path.startswith(_NOT_FOUND_PREFIXES):
             raise HTTPException(status_code=404)
         # Serve real static files (manifest.json, favicon.svg, icons.svg, ...)
         # literally instead of masking them with the SPA shell. Resolve and
@@ -383,11 +378,7 @@ if os.path.isdir(_static_dir):
         # attacker-controlled and must not be able to escape via "..".
         static_root = os.path.realpath(_static_dir)
         candidate = os.path.realpath(os.path.join(static_root, full_path))
-        if (
-            full_path
-            and os.path.commonpath([static_root, candidate]) == static_root
-            and os.path.isfile(candidate)
-        ):
+        if full_path and os.path.commonpath([static_root, candidate]) == static_root and os.path.isfile(candidate):
             return FileResponse(candidate)
         index = os.path.join(_static_dir, "index.html")
         return FileResponse(index)

@@ -51,7 +51,7 @@ Guidelines:
 
 
 async def get_assistant_history(db: AsyncSession, user) -> list[dict]:
-    messages = await assistant_repo.get_messages(db, user, limit=50)
+    messages = await assistant_repo.get_messages(db, user.id, limit=50)
     return [
         {
             "id": m.id,
@@ -64,7 +64,7 @@ async def get_assistant_history(db: AsyncSession, user) -> list[dict]:
 
 
 async def clear_assistant_history(db: AsyncSession, user) -> None:
-    await assistant_repo.clear_messages(db, user)
+    await assistant_repo.clear_messages(db, user.id)
     await db.commit()
 
 
@@ -101,8 +101,8 @@ async def chat(db: AsyncSession, user: User, message: str) -> dict:
 
     final_content = await _run_tool_loop(llm_with_tools, lc_messages, tool_map)
 
-    await assistant_repo.add_message(db, user, "user", message)
-    assistant_msg = await assistant_repo.add_message(db, user, "assistant", final_content)
+    await assistant_repo.add_message(db, user.id, "user", message)
+    assistant_msg = await assistant_repo.add_message(db, user.id, "assistant", final_content)
     await db.commit()
 
     return {
@@ -122,7 +122,7 @@ async def _get_allowed_pages(db: AsyncSession, user: User) -> set[str]:
 async def _prepare_lc_messages(db: AsyncSession, user: User, message: str, settings) -> list:
     from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-    history = await assistant_repo.get_messages(db, user, limit=_HISTORY_LIMIT)
+    history = await assistant_repo.get_messages(db, user.id, limit=_HISTORY_LIMIT)
     lang = (settings.output_language or "English").strip()
     lang_inst = "" if lang.lower() == "english" else f" Write your entire response in {lang}."
 
@@ -169,32 +169,32 @@ def _make_tools(db: AsyncSession, user: User, allowed_pages: set[str]) -> list:
     @tool
     async def get_portfolio_summary() -> str:
         """Get the user's current paper trading portfolio: cash balance, open holdings with quantity/P&L, and total value."""
-        return await _tool_get_portfolio_summary(db, user)
+        return await _tool_get_portfolio_summary(db, user, allowed_pages)
 
     @tool
     async def get_analysis_history(ticker: str = "", limit: int = 5) -> str:
         """Get the user's past AI stock analysis results. Optionally filter by ticker (e.g. 'NVDA'). Returns signal, date, and summary for each."""
-        return await _tool_get_analysis_history(db, user, ticker, limit)
+        return await _tool_get_analysis_history(db, user, allowed_pages, ticker, limit)
 
     @tool
     async def get_analysis_report(analysis_id: int) -> str:
         """Get the full AI analysis report for a specific analysis ID. Use get_analysis_history first to find IDs."""
-        return await _tool_get_analysis_report(db, user, analysis_id)
+        return await _tool_get_analysis_report(db, user, allowed_pages, analysis_id)
 
     @tool
     async def get_live_price(ticker: str) -> str:
         """Get the current live market price for a stock ticker symbol (e.g. 'AAPL', 'NVDA')."""
-        return await _tool_get_live_price(ticker)
+        return await _tool_get_live_price(user, allowed_pages, ticker)
 
     @tool
     async def get_watchlist() -> str:
         """Get the user's current watchlist tickers with live prices."""
-        return await _tool_get_watchlist(db, user)
+        return await _tool_get_watchlist(db, user, allowed_pages)
 
     @tool
     async def get_alerts() -> str:
         """Get the user's active price alerts."""
-        return await _tool_get_alerts(db, user)
+        return await _tool_get_alerts(db, user, allowed_pages)
 
     @tool
     async def create_price_alert(ticker: str, condition: str, target_price: float) -> str:
@@ -211,20 +211,37 @@ def _make_tools(db: AsyncSession, user: User, allowed_pages: set[str]) -> list:
         """Place a paper trading order. action must be 'BUY' or 'SELL'. quantity is number of shares (can be fractional)."""
         return await _tool_place_paper_order(user, allowed_pages, ticker, action, quantity)
 
-    return [
-        get_portfolio_summary,
-        get_analysis_history,
-        get_analysis_report,
-        get_live_price,
-        get_watchlist,
-        get_alerts,
-        create_price_alert,
-        run_stock_analysis,
-        place_paper_order,
+    tool_pages = [
+        (get_portfolio_summary, "portfolio"),
+        (get_analysis_history, "analysis"),
+        (get_analysis_report, "analysis"),
+        (get_live_price, "chart"),
+        (get_watchlist, "watchlist"),
+        (get_alerts, "alerts"),
+        (create_price_alert, "alerts"),
+        (run_stock_analysis, "analysis"),
+        (place_paper_order, "trading"),
     ]
+    # Do not expose an unavailable tool to the LLM at all.  Each underlying
+    # helper also enforces this condition as a defence-in-depth guard should a
+    # future call site bypass the list construction.
+    return [tool_def for tool_def, page_key in tool_pages if _has_page_access(user, allowed_pages, page_key)]
 
 
-async def _tool_get_portfolio_summary(db: AsyncSession, user: User) -> str:
+def _has_page_access(user: User, allowed_pages: set[str], page_key: str) -> bool:
+    return bool(getattr(user, "is_admin", False)) or page_key in allowed_pages
+
+
+def _page_denied(user: User, allowed_pages: set[str], page_key: str, label: str) -> str | None:
+    if _has_page_access(user, allowed_pages, page_key):
+        return None
+    return f"Permission denied: you do not have access to the {label} page."
+
+
+async def _tool_get_portfolio_summary(db: AsyncSession, user: User, allowed_pages: set[str]) -> str:
+    denied = _page_denied(user, allowed_pages, "portfolio", "Portfolio")
+    if denied:
+        return denied
     try:
         from backend.repositories.portfolio import get_simulation_portfolio
         from backend.services.market_data_service import get_live_prices_batch
@@ -257,7 +274,12 @@ async def _tool_get_portfolio_summary(db: AsyncSession, user: User) -> str:
         return f"Could not fetch portfolio: {e}"
 
 
-async def _tool_get_analysis_history(db: AsyncSession, user: User, ticker: str, limit: int) -> str:
+async def _tool_get_analysis_history(
+    db: AsyncSession, user: User, allowed_pages: set[str], ticker: str, limit: int
+) -> str:
+    denied = _page_denied(user, allowed_pages, "analysis", "Analysis")
+    if denied:
+        return denied
     try:
         from sqlalchemy import select
 
@@ -297,7 +319,10 @@ async def _tool_get_analysis_history(db: AsyncSession, user: User, ticker: str, 
         return f"Could not fetch analysis history: {e}"
 
 
-async def _tool_get_analysis_report(db: AsyncSession, user: User, analysis_id: int) -> str:
+async def _tool_get_analysis_report(db: AsyncSession, user: User, allowed_pages: set[str], analysis_id: int) -> str:
+    denied = _page_denied(user, allowed_pages, "analysis", "Analysis")
+    if denied:
+        return denied
     try:
         from sqlalchemy import select
 
@@ -330,7 +355,10 @@ async def _tool_get_analysis_report(db: AsyncSession, user: User, analysis_id: i
         return f"Could not fetch report: {e}"
 
 
-async def _tool_get_live_price(ticker: str) -> str:
+async def _tool_get_live_price(user: User, allowed_pages: set[str], ticker: str) -> str:
+    denied = _page_denied(user, allowed_pages, "chart", "Chart")
+    if denied:
+        return denied
     try:
         from backend.services.market_data_service import get_live_price as _get_price
 
@@ -342,7 +370,10 @@ async def _tool_get_live_price(ticker: str) -> str:
         return f"Price lookup failed: {e}"
 
 
-async def _tool_get_watchlist(db: AsyncSession, user: User) -> str:
+async def _tool_get_watchlist(db: AsyncSession, user: User, allowed_pages: set[str]) -> str:
+    denied = _page_denied(user, allowed_pages, "watchlist", "Watchlist")
+    if denied:
+        return denied
     try:
         from backend.services.market_data_service import get_live_prices_batch
         from backend.services.settings_service import get_or_create_settings as _get_settings
@@ -358,7 +389,10 @@ async def _tool_get_watchlist(db: AsyncSession, user: User) -> str:
         return f"Could not fetch watchlist: {e}"
 
 
-async def _tool_get_alerts(db: AsyncSession, user: User) -> str:
+async def _tool_get_alerts(db: AsyncSession, user: User, allowed_pages: set[str]) -> str:
+    denied = _page_denied(user, allowed_pages, "alerts", "Alerts")
+    if denied:
+        return denied
     try:
         from backend.repositories.alerts import list_alerts
 
@@ -377,8 +411,9 @@ async def _tool_get_alerts(db: AsyncSession, user: User) -> str:
 async def _tool_create_price_alert(
     user: User, allowed_pages: set[str], ticker: str, condition: str, target_price: float
 ) -> str:
-    if "alerts" not in allowed_pages and not user.is_admin:
-        return "Permission denied: you do not have access to the Alerts page."
+    denied = _page_denied(user, allowed_pages, "alerts", "Alerts")
+    if denied:
+        return denied
     cond = condition.lower().strip()
     if cond not in ("above", "below"):
         return "condition must be 'above' or 'below'."
@@ -402,8 +437,9 @@ async def _tool_create_price_alert(
 
 
 async def _tool_run_stock_analysis(user: User, allowed_pages: set[str], ticker: str) -> str:
-    if "analysis" not in allowed_pages and not user.is_admin:
-        return "Permission denied: you do not have access to the Analysis page."
+    denied = _page_denied(user, allowed_pages, "analysis", "Analysis")
+    if denied:
+        return denied
     clean_ticker = ticker.strip().upper()
     task_id = str(uuid.uuid4())
     trade_date = datetime.now(UTC).strftime("%Y-%m-%d")
@@ -431,8 +467,9 @@ async def _tool_run_stock_analysis(user: User, allowed_pages: set[str], ticker: 
 async def _tool_place_paper_order(
     user: User, allowed_pages: set[str], ticker: str, action: str, quantity: float
 ) -> str:
-    if "trading" not in allowed_pages and not user.is_admin:
-        return "Permission denied: you do not have access to the Trading page."
+    denied = _page_denied(user, allowed_pages, "trading", "Trading")
+    if denied:
+        return denied
     act = action.strip().upper()
     if act not in ("BUY", "SELL"):
         return "action must be 'BUY' or 'SELL'."
@@ -447,8 +484,11 @@ async def _tool_place_paper_order(
                 order_db, ticker=ticker.strip().upper(), action=act, quantity=quantity, user=user
             )
             await order_db.commit()
-        filled = result.get("filled_quantity", quantity)
-        price = result.get("price_per_share", 0)
+        # ``execute_order`` returns the transport-neutral execution keys
+        # ``quantity`` and ``price``.  Do not use ORM field names here: doing
+        # so silently rendered every successful assistant order as $0.00.
+        filled = result.get("quantity", quantity)
+        price = result.get("price", 0)
         return f"Order placed: {act} {filled:.4f} shares of {ticker.upper()} @ ${float(price):,.2f}. Total: ${float(filled) * float(price):,.2f}."
     except ValueError as e:
         return f"Order rejected: {e}"

@@ -60,13 +60,10 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
             openai_embed_model = getattr(row, "memory_openai_embed_model", None) or "text-embedding-3-small"
             ollama_embed_model = getattr(row, "memory_ollama_embed_model", None) or "nomic-embed-text"
 
-            # Resolve Ollama base URL: stored in the "ollama" api_key slot.
-            # If the value starts with "http" it's a custom host; otherwise use localhost.
-            raw_ollama_key = get_user_api_key(user, "ollama", fernet) if embedder_kind == "ollama" else None
-            if raw_ollama_key and raw_ollama_key.startswith("http"):
-                ollama_base_url = raw_ollama_key.rstrip("/")
-            else:
-                ollama_base_url = "http://localhost:11434"
+            # The Ollama endpoint is server-managed.  A user-controlled API
+            # key must never become a network destination (SSRF); legacy URL
+            # values stored in that slot are intentionally ignored.
+            ollama_base_url = get_settings().OLLAMA_BASE_URL.rstrip("/")
 
             if store_kind == "pgvector":
                 if embedder_kind == "ollama":

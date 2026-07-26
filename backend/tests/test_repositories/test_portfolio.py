@@ -110,7 +110,7 @@ class TestPortfolioRepository:
         assert len(user_portfolios) == 1
 
         admin_portfolios = await list_portfolios(db, user=admin_user)
-        assert len(admin_portfolios) == 1
+        assert len(admin_portfolios) == 2
 
     async def test_list_holdings(self, db: AsyncSession, test_user: User):
         portfolio = await self._create_portfolio(db, test_user.id)

@@ -41,9 +41,8 @@ HOLD_SIGNALS: set[str] = {"Hold"}
 DEFAULT_HOLDING_DAYS: int = 5
 TOKENS_PER_ANALYST: int = 8000
 
-# Model pricing lives in services/token_analytics_service.py::MODEL_COSTS (the
-# single source of truth for both post-run actual cost and the pre-run
-# estimate in analysis_stats_service.py — see get_blended_rate_per_1k).
+# Model pricing lives in core/model_pricing.py.  It is shared by post-run token
+# analytics and pre-run/AB estimates so cost paths cannot drift apart.
 
 # Sentiment values for charting and analytics
 SIGNAL_SENTIMENT_VALUES = {

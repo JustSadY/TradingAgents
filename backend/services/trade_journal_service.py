@@ -3,9 +3,11 @@
 from __future__ import annotations
 
 import logging
+from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.money import safe_decimal
 from backend.models.user import User
 from backend.repositories import portfolio as portfolio_repo
 from backend.repositories import trade_note as repo
@@ -21,6 +23,34 @@ class TradeJournalError(Exception):
     def __init__(self, message: str, status_code: int = 400):
         super().__init__(message)
         self.status_code = status_code
+
+
+def _realized_cost_basis(order) -> Decimal:
+    """Derive a closing trade's entry notional from its recorded exit and P&L.
+
+    Orders retain the closing fill, not the original entry fill.  For longs,
+    ``pnl = exit - entry - exit_commission``; for shorts,
+    ``pnl = entry - exit - exit_commission``.  Using the exit notional directly
+    makes winning and losing return percentages systematically inconsistent.
+    """
+    exit_notional = safe_decimal(getattr(order, "total_value", None))
+    if exit_notional <= 0:
+        exit_notional = safe_decimal(getattr(order, "quantity_filled", None)) * safe_decimal(
+            getattr(order, "price_per_share", None)
+        )
+
+    pnl = safe_decimal(getattr(order, "realized_pnl", None))
+    exit_commission = safe_decimal(getattr(order, "commission", None))
+    if (getattr(order, "side", "long") or "long").lower() == "short":
+        return exit_notional + pnl + exit_commission
+    return exit_notional - pnl - exit_commission
+
+
+def _realized_pnl_pct(order) -> float:
+    cost_basis = _realized_cost_basis(order)
+    if cost_basis <= 0:
+        return 0.0
+    return float(safe_decimal(getattr(order, "realized_pnl", None)) / cost_basis * Decimal("100"))
 
 
 async def save_note(db: AsyncSession, user: User, order_id: int, note: str) -> dict:
@@ -62,8 +92,7 @@ async def generate_debrief(db: AsyncSession, user: User, order_id: int) -> dict:
     qty = float(order.quantity_filled or 0)
     price = float(order.price_per_share or 0)
     pnl = float(order.realized_pnl or 0)
-    cost_basis = qty * price
-    pnl_pct = (pnl / cost_basis * 100) if cost_basis else 0.0
+    pnl_pct = _realized_pnl_pct(order)
     reasoning = order.ai_reasoning or ""
 
     prompt = f"""You are a trading coach. Analyze this completed trade and provide a brief debrief (3-5 sentences):

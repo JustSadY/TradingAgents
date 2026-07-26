@@ -17,8 +17,11 @@ from backend.repositories.shared_report import (
 class TestSharedReportRepository:
     async def test_create_shared_report(self, db: AsyncSession, test_user):
         analysis = AnalysisResult(
-            user_id=test_user.id, ticker="AAPL",
-            trade_date="2026-07-18", signal="buy", status="completed",
+            user_id=test_user.id,
+            ticker="AAPL",
+            trade_date="2026-07-18",
+            signal="buy",
+            status="completed",
         )
         db.add(analysis)
         await db.flush()
@@ -31,8 +34,11 @@ class TestSharedReportRepository:
 
     async def test_get_active_shared_report_by_analysis(self, db: AsyncSession, test_user):
         analysis = AnalysisResult(
-            user_id=test_user.id, ticker="AAPL",
-            trade_date="2026-07-18", signal="buy", status="completed",
+            user_id=test_user.id,
+            ticker="AAPL",
+            trade_date="2026-07-18",
+            signal="buy",
+            status="completed",
         )
         db.add(analysis)
         await db.flush()
@@ -46,8 +52,11 @@ class TestSharedReportRepository:
 
     async def test_get_active_shared_report_expired(self, db: AsyncSession, test_user):
         analysis = AnalysisResult(
-            user_id=test_user.id, ticker="AAPL",
-            trade_date="2026-07-18", signal="buy", status="completed",
+            user_id=test_user.id,
+            ticker="AAPL",
+            trade_date="2026-07-18",
+            signal="buy",
+            status="completed",
         )
         db.add(analysis)
         await db.flush()
@@ -62,8 +71,11 @@ class TestSharedReportRepository:
 
     async def test_get_shared_report_by_token(self, db: AsyncSession, test_user):
         analysis = AnalysisResult(
-            user_id=test_user.id, ticker="AAPL",
-            trade_date="2026-07-18", signal="buy", status="completed",
+            user_id=test_user.id,
+            ticker="AAPL",
+            trade_date="2026-07-18",
+            signal="buy",
+            status="completed",
         )
         db.add(analysis)
         await db.flush()
@@ -80,8 +92,11 @@ class TestSharedReportRepository:
 
     async def test_get_user_analysis_by_id(self, db: AsyncSession, test_user):
         analysis = AnalysisResult(
-            user_id=test_user.id, ticker="AAPL",
-            trade_date="2026-07-18", signal="buy", status="completed",
+            user_id=test_user.id,
+            ticker="AAPL",
+            trade_date="2026-07-18",
+            signal="buy",
+            status="completed",
         )
         db.add(analysis)
         await db.flush()
@@ -92,8 +107,11 @@ class TestSharedReportRepository:
 
     async def test_get_user_analysis_by_id_scoped(self, db: AsyncSession, test_user):
         analysis = AnalysisResult(
-            user_id=test_user.id, ticker="AAPL",
-            trade_date="2026-07-18", signal="buy", status="completed",
+            user_id=test_user.id,
+            ticker="AAPL",
+            trade_date="2026-07-18",
+            signal="buy",
+            status="completed",
         )
         db.add(analysis)
         await db.flush()
@@ -103,8 +121,11 @@ class TestSharedReportRepository:
 
     async def test_get_analysis_by_id_public(self, db: AsyncSession, test_user):
         analysis = AnalysisResult(
-            user_id=test_user.id, ticker="AAPL",
-            trade_date="2026-07-18", signal="buy", status="completed",
+            user_id=test_user.id,
+            ticker="AAPL",
+            trade_date="2026-07-18",
+            signal="buy",
+            status="completed",
         )
         db.add(analysis)
         await db.flush()

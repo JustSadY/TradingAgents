@@ -252,12 +252,29 @@ async def calculate_returns(
     return await asyncio.to_thread(_fetch)
 
 
-async def get_benchmark_return(benchmark: str = "SPY", period: str = "1y") -> float | None:
-    """Calculate simple return for a benchmark over a period."""
+async def get_benchmark_return(
+    benchmark: str = "SPY",
+    period: str = "1y",
+    *,
+    start_date: str | None = None,
+    end_date: str | None = None,
+) -> float | None:
+    """Calculate a simple benchmark return for a relative or explicit period.
+
+    ``period`` remains available for existing callers.  An explicit start date
+    is needed when comparing a portfolio's lifetime return with its benchmark;
+    a fixed ``1y`` return is not comparable to a portfolio opened at another
+    time.
+    """
 
     def _fetch():
         try:
-            spy = yf.Ticker(benchmark).history(period=period)
+            history_args = {"period": period}
+            if start_date:
+                history_args = {"start": start_date}
+                if end_date:
+                    history_args["end"] = end_date
+            spy = yf.Ticker(benchmark).history(**history_args)
             if not spy.empty:
                 # Drop NaNs to prevent returning NaN if last/current day has NaN values
                 close_series = spy["Close"].dropna()
@@ -269,7 +286,14 @@ async def get_benchmark_return(benchmark: str = "SPY", period: str = "1y") -> fl
                         return ret
             return None
         except Exception as exc:
-            _logger.warning("Benchmark return fetch failed for %s (period=%s): %s", benchmark, period, exc)
+            _logger.warning(
+                "Benchmark return fetch failed for %s (start=%s, end=%s, period=%s): %s",
+                benchmark,
+                start_date,
+                end_date,
+                period,
+                exc,
+            )
             return None
 
     return await asyncio.to_thread(_fetch)

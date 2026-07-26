@@ -12,6 +12,42 @@ from backend.models.portfolio import Portfolio
 from backend.models.user import User
 from backend.repositories.portfolio import get_simulation_portfolio
 
+_CLOSING_STATUSES = frozenset({"FILLED", "STOP_LOSS", "TAKE_PROFIT", "LIQUIDATED"})
+
+
+def _is_closing_order(order: Order) -> bool:
+    """Whether an order represents a completed position exit.
+
+    ``action`` alone is insufficient: a SELL opens a short while a BUY closes
+    it.  Auto-closes retain the same action/side pairing but use a terminal
+    status such as ``STOP_LOSS`` instead of ``FILLED``.
+    """
+    if order.status not in _CLOSING_STATUSES:
+        return False
+    side = (order.side or "long").lower()
+    action = (order.action or "").upper()
+    return (side == "long" and action == "SELL") or (side == "short" and action == "BUY")
+
+
+def _closing_orders(orders: list[Order]) -> list[Order]:
+    """Keep only terminal orders that actually close a long or short."""
+    return [order for order in orders if _is_closing_order(order)]
+
+
+def _closing_cost_basis(order: Order, pnl: Decimal) -> Decimal:
+    """Derive entry notional from a closing order's fill and realized P&L.
+
+    Simulation closing orders store exit notional and exit-leg commission.  A
+    long has ``pnl = exit - entry - commission``; a short has
+    ``pnl = entry - exit - commission``.  This keeps return percentages
+    directionally correct without counting a short cover as a new sale.
+    """
+    exit_notional = safe_decimal(order.total_value)
+    exit_commission = safe_decimal(order.commission)
+    if (order.side or "long").lower() == "short":
+        return exit_notional + pnl + exit_commission
+    return exit_notional - pnl - exit_commission
+
 
 async def get_portfolio_stats(db: AsyncSession, user: User) -> dict:
     portfolio: Portfolio | None = await get_simulation_portfolio(db, user_id=user.id)
@@ -34,12 +70,11 @@ async def get_portfolio_stats(db: AsyncSession, user: User) -> dict:
         select(Order)
         .where(
             Order.portfolio_id == portfolio.id,
-            Order.status == "FILLED",
-            Order.action == "SELL",
+            Order.status.in_(_CLOSING_STATUSES),
         )
         .order_by(asc(Order.created_at))
     )
-    orders: list[Order] = list(result.scalars().all())
+    orders: list[Order] = _closing_orders(list(result.scalars().all()))
 
     total_trades = len(orders)
 
@@ -58,15 +93,14 @@ async def get_portfolio_stats(db: AsyncSession, user: User) -> dict:
         }
 
     winning_trades = sum(1 for o in orders if (o.realized_pnl or Decimal("0")) > 0)
-    win_rate = winning_trades / total_trades
+    win_rate = winning_trades / total_trades * 100
 
     returns_pct: list[float] = []
     trade_data: list[dict] = []
 
     for o in orders:
         pnl = safe_decimal(o.realized_pnl)
-        tv = safe_decimal(o.total_value)
-        cost_basis = tv - pnl
+        cost_basis = _closing_cost_basis(o, pnl)
         if abs(cost_basis) > Decimal("1e-9"):
             ret_pct = float(pnl / cost_basis * Decimal("100"))
             returns_pct.append(ret_pct)

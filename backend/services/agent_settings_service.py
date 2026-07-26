@@ -136,8 +136,13 @@ def build_agent_runtime_state(
             user_enabled = user_row.enabled
         user_settings.update(user_row.settings)
 
+    # Server enablement is a hard policy ceiling.  A user may disable an
+    # agent that the server allows, but must not be able to revive an agent
+    # the server has disabled by saving any user-level setting row.
+    effective_enabled = server_enabled if user_row is None else bool(server_enabled) and bool(user_enabled)
+
     return {
-        "enabled": user_enabled if user_row else server_enabled,
+        "enabled": effective_enabled,
         "settings": user_settings if user_row else server_settings,
     }
 

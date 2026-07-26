@@ -153,14 +153,50 @@ export function usePriceChart(
   }, [containerRef])
 
   useEffect(() => {
-    if (!candleSeriesRef.current || !volSeriesRef.current || candles.length === 0) return
+    if (!candleSeriesRef.current || !volSeriesRef.current) return
+
+    const clearOverlays = () => {
+      priceLineRefs.current.forEach(pl => {
+        try { candleSeriesRef.current?.removePriceLine(pl) } catch { /* overlay already gone */ }
+      })
+      priceLineRefs.current = []
+      trendlineSeriesRefs.current.forEach(ts => {
+        try { chartRef.current?.removeSeries(ts) } catch { /* overlay already gone */ }
+      })
+      trendlineSeriesRefs.current = []
+      overlaySeriesRefs.current.forEach(os => {
+        try { chartRef.current?.removeSeries(os) } catch { /* overlay already gone */ }
+      })
+      overlaySeriesRefs.current = []
+    }
+
+    const clearSeriesData = () => {
+      candleSeriesRef.current?.setData([])
+      volSeriesRef.current?.setData([])
+      smaSeriesRef.current?.setData([])
+      emaSeriesRef.current?.setData([])
+      try { markersApiRef.current?.setMarkers([]) } catch { /* marker API already disposed */ }
+    }
+
+    // An empty dataset is a real state transition (for example, when a new
+    // ticker request fails), not a no-op. Clear the chart so stale candles and
+    // annotations from the prior symbol cannot remain on screen.
+    if (candles.length === 0) {
+      clearSeriesData()
+      clearOverlays()
+      return
+    }
 
     const sortedCandles = [...candles]
       .filter(c => c && c.time)
       .sort((a, b) => a.time.localeCompare(b.time))
       .filter((c, i, arr) => i === 0 || c.time !== arr[i - 1].time)
 
-    if (sortedCandles.length === 0) return
+    if (sortedCandles.length === 0) {
+      clearSeriesData()
+      clearOverlays()
+      return
+    }
 
     candleSeriesRef.current.setData(sortedCandles.map(c => ({
       time: c.time as Time,
@@ -184,12 +220,7 @@ export function usePriceChart(
         emaSeriesRef.current.setData(showEMA ? sortedCandles.filter(c => c.ema != null).map(c => ({ time: c.time as Time, value: c.ema! })) : [])
     }
 
-    priceLineRefs.current.forEach(pl => { try { candleSeriesRef.current?.removePriceLine(pl) } catch { /* overlay already gone */ } })
-    priceLineRefs.current = []
-    trendlineSeriesRefs.current.forEach(ts => { try { chartRef.current?.removeSeries(ts) } catch { /* overlay already gone */ } })
-    trendlineSeriesRefs.current = []
-    overlaySeriesRefs.current.forEach(os => { try { chartRef.current?.removeSeries(os) } catch { /* overlay already gone */ } })
-    overlaySeriesRefs.current = []
+    clearOverlays()
 
     const tradeDatesInRange = new Set(candles.map(c => c.time))
 

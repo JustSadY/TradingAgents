@@ -186,12 +186,16 @@ async def route_to_vendor(method: str, *args, **kwargs):
     if method in _TICKER_FIRST_METHODS and args:
         safe_ticker_component(args[0])
 
-    cached_val = APICache.get(method, *args, **kwargs)
+    category = get_category_for_method(method)
+    vendor_config = get_vendor(category, method)
+    # A cache hit must come from the same requested vendor/fallback policy.
+    # Resolve this before cache lookup rather than allowing the first caller's
+    # provider preference to become a process-wide result for the TTL.
+    cache_scope = f"vendors:{vendor_config}"
+    cached_val = APICache.get(method, *args, cache_scope=cache_scope, **kwargs)
     if cached_val is not None:
         return cached_val
 
-    category = get_category_for_method(method)
-    vendor_config = get_vendor(category, method)
     primary_vendors = [v.strip() for v in vendor_config.split(",")]
 
     if method not in VENDOR_METHODS:
@@ -220,12 +224,10 @@ async def route_to_vendor(method: str, *args, **kwargs):
                     timeout=_VENDOR_CALL_TIMEOUT,
                 )
 
-            APICache.set(method, val, *args, **kwargs)
+            APICache.set(method, val, *args, cache_scope=cache_scope, **kwargs)
             return val
         except TimeoutError as exc:
-            _logger.warning(
-                "Vendor '%s' timed out for method '%s' (timeout=%ss)", vendor, method, _VENDOR_CALL_TIMEOUT
-            )
+            _logger.warning("Vendor '%s' timed out for method '%s' (timeout=%ss)", vendor, method, _VENDOR_CALL_TIMEOUT)
             last_error = exc
             continue
         except Exception as exc:  # noqa: BLE001 — any vendor failure should fall through to the next

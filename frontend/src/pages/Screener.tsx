@@ -6,16 +6,12 @@ import { useTranslation } from '../contexts/LanguageContext'
 
 interface ScreenResult {
   ticker: string
-  score: number | null
-  momentum: number | null
-  trend: number | null
-  volume_surge: number | null
-  rsi_position: number | null
-  rsi: number | null
-  price: number | null
-  change_pct: number | null
-  volume_ratio: number | null
-  verdict: string
+  score: number
+  momentum_1m_pct: number
+  trend: 'above_sma50' | 'below_sma50' | string
+  volume_surge: number
+  rsi_14: number
+  signals: string[]
 }
 
 const VERDICT_STYLES: Record<string, string> = {
@@ -25,6 +21,7 @@ const VERDICT_STYLES: Record<string, string> = {
 }
 
 const POPULAR = ['AAPL', 'MSFT', 'NVDA', 'GOOGL', 'AMZN', 'META', 'TSLA', 'AMD', 'JPM', 'V']
+const MAX_SCORE = 90
 
 export default function Screener() {
   const { t } = useTranslation()
@@ -73,10 +70,13 @@ export default function Screener() {
 
   const scoreColor = (score: number | null | undefined) => {
     const s = score ?? 0
-    return s >= 0.6 ? 'text-emerald-400' : s >= 0.4 ? 'text-amber-400' : 'text-rose-400'
+    return s >= 60 ? 'text-emerald-400' : s >= 30 ? 'text-amber-400' : 'text-rose-400'
   }
 
-  const scoreBar = (val: number | null | undefined) => Math.max(0, Math.min(100, (val ?? 0) * 100))
+  const scoreBar = (score: number | null | undefined) => Math.max(0, Math.min(100, ((score ?? 0) / MAX_SCORE) * 100))
+  const scoreVerdict = (score: number) => score >= 60 ? 'Strong' : score < 20 ? 'Weak' : 'Neutral'
+  const momentumBar = (momentum: number) => Math.min(100, Math.abs(momentum) / 25 * 100)
+  const volumeBar = (ratio: number) => Math.min(100, Math.max(0, ratio / 3 * 100))
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
@@ -189,44 +189,57 @@ export default function Screener() {
                     <td className="px-5 py-3">
                       <div className="flex items-center gap-2">
                         <span className="font-mono font-bold text-white text-sm">{r.ticker}</span>
-                        {typeof r.price === 'number' && <span className="text-slate-500 font-mono text-[10px]">${r.price.toFixed(2)}</span>}
-                        {typeof r.change_pct === 'number' && (
-                          <span className={`text-[9px] font-bold ${r.change_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                            {r.change_pct >= 0 ? '+' : ''}{r.change_pct.toFixed(1)}%
-                          </span>
-                        )}
                       </div>
                     </td>
                     <td className="px-5 py-3 text-center">
                       <div className="flex flex-col items-center gap-1">
-                        <span className={`font-mono font-bold text-sm ${scoreColor(r.score ?? 0)}`}>{typeof r.score === 'number' ? (r.score * 100).toFixed(0) : '—'}</span>
+                        <span className={`font-mono font-bold text-sm ${scoreColor(r.score)}`}>{r.score.toFixed(0)}</span>
                         <div className="w-16 h-1 rounded-full bg-white/[0.04]">
-                          <div className={`h-full rounded-full ${(r.score ?? 0) >= 0.6 ? 'bg-emerald-500' : (r.score ?? 0) >= 0.4 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${scoreBar(r.score ?? 0)}%` }} />
+                          <div className={`h-full rounded-full ${r.score >= 60 ? 'bg-emerald-500' : r.score >= 30 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${scoreBar(r.score)}%` }} />
                         </div>
                       </div>
                     </td>
-                    {[r.momentum, r.trend, r.volume_surge].map((v, j) => {
-                      const val = v ?? 0
-                      return (
-                        <td key={j} className="px-5 py-3 text-center">
-                          <div className="w-12 h-1 rounded-full bg-white/[0.04] mx-auto">
-                            <div className={`h-full rounded-full ${val >= 0.6 ? 'bg-emerald-500' : val >= 0.4 ? 'bg-amber-500' : 'bg-rose-500'}`} style={{ width: `${scoreBar(val)}%` }} />
-                          </div>
-                          <span className={`text-[9px] font-mono ${scoreColor(val)}`}>{typeof v === 'number' ? (v * 100).toFixed(0) : '—'}</span>
-                        </td>
-                      )
-                    })}
-                    <td className="px-5 py-3 text-right font-mono text-slate-300">
-                      {typeof r.rsi === 'number' ? (
-                        <span className={r.rsi < 30 ? 'text-emerald-400 font-bold' : r.rsi > 70 ? 'text-rose-400 font-bold' : 'text-slate-300'}>
-                          {r.rsi.toFixed(0)}
+                    <td className="px-5 py-3 text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="w-12 h-1 rounded-full bg-white/[0.04] mx-auto">
+                          <div className={`h-full rounded-full ${r.momentum_1m_pct >= 0 ? 'bg-emerald-500' : 'bg-rose-500'}`} style={{ width: `${momentumBar(r.momentum_1m_pct)}%` }} />
+                        </div>
+                        <span className={`text-[9px] font-mono ${r.momentum_1m_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                          {r.momentum_1m_pct >= 0 ? '+' : ''}{r.momentum_1m_pct.toFixed(1)}%
                         </span>
-                      ) : '—'}
+                      </div>
                     </td>
                     <td className="px-5 py-3 text-center">
-                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${VERDICT_STYLES[r.verdict] || VERDICT_STYLES.Neutral}`}>
-                        {r.verdict}
+                      <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${
+                        r.trend === 'above_sma50'
+                          ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/20'
+                          : 'bg-rose-500/10 text-rose-400 border-rose-500/20'
+                      }`}>
+                        {t(r.trend === 'above_sma50' ? 'screener.trend_above_sma50' : 'screener.trend_below_sma50')}
                       </span>
+                    </td>
+                    <td className="px-5 py-3 text-center">
+                      <div className="flex flex-col items-center gap-1">
+                        <div className="w-12 h-1 rounded-full bg-white/[0.04] mx-auto">
+                          <div className={`h-full rounded-full ${r.volume_surge >= 1.5 ? 'bg-emerald-500' : 'bg-slate-500'}`} style={{ width: `${volumeBar(r.volume_surge)}%` }} />
+                        </div>
+                        <span className="text-[9px] font-mono text-slate-300">{r.volume_surge.toFixed(2)}×</span>
+                      </div>
+                    </td>
+                    <td className="px-5 py-3 text-right font-mono text-slate-300">
+                      <span className={r.rsi_14 < 30 ? 'text-emerald-400 font-bold' : r.rsi_14 > 70 ? 'text-rose-400 font-bold' : 'text-slate-300'}>
+                        {r.rsi_14.toFixed(0)}
+                      </span>
+                    </td>
+                    <td className="px-5 py-3 text-center">
+                      {(() => {
+                        const verdict = scoreVerdict(r.score)
+                        return (
+                          <span className={`text-[9px] font-bold px-2 py-0.5 rounded-full border ${VERDICT_STYLES[verdict]}`}>
+                            {t(`screener.verdict_${verdict.toLowerCase()}`)}
+                          </span>
+                        )
+                      })()}
                     </td>
                     <td className="px-5 py-3 text-center">
                       <div className="flex items-center justify-center gap-1.5">

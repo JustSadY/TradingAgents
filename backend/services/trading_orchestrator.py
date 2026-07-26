@@ -11,12 +11,15 @@ capital in two of them). It now lives here.
 
 from __future__ import annotations
 
+import json
 import logging
+import math
 import re
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.config import is_live_trading_enabled
 from backend.core.constants import SIGNAL_TO_ACTION
 from backend.core.money import safe_decimal
 from backend.services.execution.base import OrderRequest, OrderResult
@@ -46,9 +49,10 @@ def _safe_float(raw) -> float | None:
     if raw is None:
         return None
     try:
-        return float(raw)
+        value = float(raw)
     except (TypeError, ValueError):
         return None
+    return value if math.isfinite(value) else None
 
 
 def _annotations(row) -> dict:
@@ -134,7 +138,7 @@ def _extract_price_level(text: str, label: str, row=None) -> float | None:
 def _extract_kelly_ceiling_pct(row, *, confidence_score: float | None, current_price: float) -> float | None:
     for key in ("kelly_recommendation_pct", "kelly_position_size_pct", "kelly_pct"):
         parsed = _safe_float(_annotations(row).get(key))
-        if parsed is not None and parsed > 0:
+        if parsed is not None and parsed >= 0:
             return min(parsed, 100.0)
 
     final_decision = getattr(row, "final_decision", "") or ""
@@ -144,7 +148,7 @@ def _extract_kelly_ceiling_pct(row, *, confidence_score: float | None, current_p
         flags=re.IGNORECASE,
     )
     parsed = _safe_float(match.group(1)) if match else None
-    if parsed is not None and parsed > 0:
+    if parsed is not None and parsed >= 0:
         return min(parsed, 100.0)
 
     trader_plan = getattr(row, "trader_plan", "") or ""
@@ -195,14 +199,48 @@ def _position_quantity(
     return float(min(quantity, max_qty))
 
 
-async def _existing_long_quantity(db, portfolio_id: int, ticker: str) -> float:
-    """Current long quantity held in ``ticker`` (0 if none / short / absent)."""
-    from backend.repositories.portfolio import get_holding
+def _classify_order_intent(action: str, existing_side: str | None, allow_short: bool) -> str | None:
+    """Classify an auto-order without confusing a close for new exposure.
 
-    holding = await get_holding(db, portfolio_id, ticker)
-    if holding is None or getattr(holding, "side", "long") != "long":
-        return 0.0
-    return float(holding.quantity)
+    Returns ``None`` when a SELL would open a new short while short selling is
+    disabled.  Existing positions can always be closed after the setting is
+    disabled, which is essential for risk reduction.
+    """
+    side = (existing_side or "").lower()
+    if action == "BUY":
+        return "close_short" if side == "short" else "open_long"
+    if action == "SELL":
+        if side == "long":
+            return "close_long"
+        return "open_short" if allow_short else None
+    return None
+
+
+def _directional_exit_levels(
+    side: str,
+    entry_price: float,
+    raw_stop_loss,
+    raw_take_profit,
+) -> tuple[float | None, float | None]:
+    """Keep only stop/target levels valid for ``side`` at ``entry_price``."""
+    stop_loss = _safe_float(raw_stop_loss)
+    take_profit = _safe_float(raw_take_profit)
+    if side == "short":
+        return (
+            stop_loss if stop_loss is not None and stop_loss > entry_price else None,
+            take_profit if take_profit is not None and take_profit < entry_price else None,
+        )
+    return (
+        stop_loss if stop_loss is not None and stop_loss < entry_price else None,
+        take_profit if take_profit is not None and take_profit > entry_price else None,
+    )
+
+
+def _default_exit_levels(side: str, entry_price: float) -> tuple[float, float]:
+    """Conservative fallback exits used when strict stop-loss mode is off."""
+    if side == "short":
+        return entry_price * 1.05, entry_price * 0.90
+    return entry_price * 0.95, entry_price * 1.10
 
 
 async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, settings) -> float:
@@ -217,7 +255,7 @@ async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, 
     )
 
     try:
-        snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id)
+        snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id, read_only=True)
     except Exception as exc:  # noqa: BLE001 — never block trading on the risk snapshot
         _logger.warning("Risk snapshot failed for %s (allowing order): %s", ticker, exc)
         return quantity
@@ -240,13 +278,19 @@ async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, 
             _logger.warning("Correlation risk calc failed for %s (ignoring): %s", ticker, exc)
             correlated = 0.0
 
+    max_concentration_pct = _safe_float(getattr(settings, "max_concentration_pct", None))
+    max_gross_exposure = _safe_float(getattr(settings, "max_gross_exposure", None))
     assessment = cap_order_notional(
         equity=equity,
         proposed_notional=proposed_notional,
         existing_ticker_notional=existing_ticker,
         existing_gross_notional=existing_gross,
-        max_concentration_pct=getattr(settings, "max_concentration_pct", DEFAULT_MAX_CONCENTRATION_PCT),
-        max_gross_exposure=getattr(settings, "max_gross_exposure", DEFAULT_MAX_GROSS_EXPOSURE),
+        max_concentration_pct=max_concentration_pct
+        if max_concentration_pct is not None and max_concentration_pct > 0
+        else DEFAULT_MAX_CONCENTRATION_PCT,
+        max_gross_exposure=max_gross_exposure
+        if max_gross_exposure is not None and max_gross_exposure > 0
+        else DEFAULT_MAX_GROSS_EXPOSURE,
         correlated_notional=correlated,
     )
     if assessment.capped:
@@ -299,6 +343,25 @@ async def place_signal_order(
     sys_mode = sys_settings.trading_mode if sys_settings else "simulation"
     sys_broker = sys_settings.active_broker if sys_settings else "simulation"
 
+    if sys_mode not in {"simulation", "live"} or sys_broker not in {"simulation", "alpaca"}:
+        _logger.error(
+            "Invalid server trading configuration (mode=%s, broker=%s); skipping order execution",
+            sys_mode,
+            sys_broker,
+        )
+        _record_skip("invalid_trading_configuration")
+        return None
+
+    if sys_mode == "live":
+        if sys_broker != "alpaca":
+            _logger.error("Live mode requires the Alpaca broker; skipping order execution")
+            _record_skip("invalid_live_broker")
+            return None
+        if not is_live_trading_enabled():
+            _logger.warning("Live order skipped because ENABLE_LIVE_TRADING is disabled")
+            _record_skip("live_trading_disabled")
+            return None
+
     if sys_broker == "alpaca":
         if not user or not getattr(user, "is_owner", False):
             _logger.warning("Alpaca broker can only be used by the owner user; skipping order execution")
@@ -306,16 +369,31 @@ async def place_signal_order(
 
     portfolio = await get_or_create_sim_portfolio(db, user=user)
 
+    # Work out whether the signal reduces risk or opens/adds exposure before
+    # applying any breaker or sizing rule.  A BUY against an existing short and
+    # a SELL against an existing long must close the full held quantity.
+    from backend.repositories.portfolio import get_holding
+
+    holding = await get_holding(db, portfolio.id, ticker)
+    allow_short = bool(getattr(settings, "allow_short_selling", False))
+    intent = _classify_order_intent(action, getattr(holding, "side", None), allow_short)
+    if intent is None:
+        _logger.info("Short selling is disabled; skipping new short signal for %s", ticker)
+        _record_skip("short_disabled")
+        return None
+    opening_exposure = intent in {"open_long", "open_short"}
+    position_side = "short" if intent in {"open_short", "close_short"} else "long"
+
     # Drawdown circuit breaker (opt-in): halt new auto-orders once the portfolio
     # has fallen more than the configured % below its starting capital. Existing
     # positions are untouched — this only blocks opening/adding new exposure.
-    if getattr(settings, "drawdown_breaker_enabled", False):
+    if opening_exposure and getattr(settings, "drawdown_breaker_enabled", False):
         try:
             initial_capital = float(safe_decimal(portfolio.initial_capital))
             if initial_capital > 0:
                 from backend.services.mock_trading_service import get_portfolio_with_live_prices
 
-                snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id)
+                snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id, read_only=True)
                 current_equity = float(safe_decimal(snapshot.get("total_value"), default=Decimal(str(initial_capital))))
                 drawdown_pct = max(0.0, (initial_capital - current_equity) / initial_capital * 100.0)
                 max_drawdown_pct = float(getattr(settings, "max_portfolio_drawdown_pct", 20.0))
@@ -343,12 +421,8 @@ async def place_signal_order(
         _logger.warning("No price available for %s; skipping order execution", ticker)
         return None
 
-    capital = float(safe_decimal(portfolio.cash_available if portfolio.cash_available > 0 else portfolio.initial_capital))
-
-    import json
-
-    stop_loss = None
-    take_profit = None
+    raw_stop_loss = None
+    raw_take_profit = None
     if hasattr(row, "chart_annotations") and row.chart_annotations:
         try:
             if isinstance(row.chart_annotations, str):
@@ -356,49 +430,80 @@ async def place_signal_order(
             else:
                 ann = row.chart_annotations
             if isinstance(ann, dict):
-                stop_loss = ann.get("stop_loss")
-                take_profit = ann.get("target_price")
+                raw_stop_loss = ann.get("stop_loss")
+                raw_take_profit = ann.get("target_price")
         except Exception as exc:
             _logger.warning("Could not parse chart annotations for SL/TP on analysis %s: %s", row.id, exc)
 
-    max_position_size_pct = getattr(settings, "max_position_size_pct", 10.0)
-    confidence_score = _extract_confidence_score(row)
-    kelly_ceiling_pct = _extract_kelly_ceiling_pct(
-        row,
-        confidence_score=confidence_score,
-        current_price=price,
-    )
-    base_risk_pct = float(settings.max_risk_per_trade_pct)
-    effective_risk_pct = base_risk_pct
-    if kelly_ceiling_pct is not None:
-        effective_risk_pct = min(base_risk_pct, kelly_ceiling_pct)
-    kelly_multiplier = (effective_risk_pct / base_risk_pct) if base_risk_pct > 0 else 0.0
-    strict_stop_loss_mode = getattr(settings, "strict_stop_loss_mode", False)
-    if strict_stop_loss_mode and (stop_loss is None or stop_loss <= 0 or stop_loss == price):
-        _logger.warning(
-            "Strict stop-loss mode enabled and no valid stop-loss found for %s; skipping order execution",
-            ticker,
-        )
-        return None
-    quantity = _position_quantity(
-        base_risk_pct,
-        capital,
-        price,
-        stop_loss=stop_loss,
-        max_position_size_pct=max_position_size_pct,
-        kelly_multiplier=kelly_multiplier,
-    )
-    allow_short = bool(getattr(settings, "allow_short_selling", True))
-    existing_long_qty = await _existing_long_quantity(db, portfolio.id, ticker)
-    opening_exposure = action == "BUY" or (action == "SELL" and allow_short and existing_long_qty <= 0)
-    leverage = _extract_leverage(row) if opening_exposure else 1.0
     if opening_exposure:
+        stop_loss, take_profit = _directional_exit_levels(position_side, price, raw_stop_loss, raw_take_profit)
+        strict_stop_loss_mode = bool(getattr(settings, "strict_stop_loss_mode", False))
+        if strict_stop_loss_mode and stop_loss is None:
+            _logger.warning(
+                "Strict stop-loss mode enabled and no valid %s stop-loss found for %s; skipping order execution",
+                position_side,
+                ticker,
+            )
+            _record_skip("invalid_stop_loss")
+            return None
+        if not strict_stop_loss_mode:
+            default_stop, default_target = _default_exit_levels(position_side, price)
+            stop_loss = stop_loss if stop_loss is not None else default_stop
+            take_profit = take_profit if take_profit is not None else default_target
+
+        capital = float(
+            safe_decimal(portfolio.cash_available if portfolio.cash_available > 0 else portfolio.initial_capital)
+        )
+        base_risk_pct = _safe_float(getattr(settings, "max_risk_per_trade_pct", None))
+        max_position_size_pct = _safe_float(getattr(settings, "max_position_size_pct", None))
+        if base_risk_pct is None or base_risk_pct <= 0 or max_position_size_pct is None or max_position_size_pct <= 0:
+            _logger.warning("Invalid risk sizing configuration; skipping auto-order for %s", ticker)
+            _record_skip("invalid_risk_settings")
+            return None
+
+        # Kelly is a cap on position allocation, not a risk-per-trade
+        # percentage.  Keeping the units separate prevents a 20% Kelly size
+        # from being compared to, and silently neutralised by, a 2% risk cap.
+        confidence_score = _extract_confidence_score(row)
+        kelly_ceiling_pct = _extract_kelly_ceiling_pct(
+            row,
+            confidence_score=confidence_score,
+            current_price=price,
+        )
+        if kelly_ceiling_pct is not None:
+            max_position_size_pct = min(max_position_size_pct, kelly_ceiling_pct)
+
+        quantity = _position_quantity(
+            base_risk_pct,
+            capital,
+            price,
+            stop_loss=stop_loss,
+            max_position_size_pct=max_position_size_pct,
+        )
+        if quantity <= 0:
+            _logger.info("Risk sizing left no room for %s; skipping order", ticker)
+            _record_skip("position_size_zero")
+            return None
         quantity = await _apply_portfolio_risk_caps(
             db, portfolio=portfolio, ticker=ticker, price=price, quantity=quantity, settings=settings
         )
         if quantity <= 0:
             _logger.info("Portfolio risk caps left no room for %s; skipping order", ticker)
             return None
+        leverage = _extract_leverage(row)
+    else:
+        # Exit exactly what is held.  Never re-run a risk sizing formula for a
+        # close: it can produce zero or an amount larger than the position.
+        if holding is None:
+            _logger.warning("No existing %s position found to close for %s", position_side, ticker)
+            return None
+        quantity = float(safe_decimal(holding.quantity))
+        if quantity <= 0:
+            _logger.warning("Existing %s position for %s has no quantity to close", position_side, ticker)
+            return None
+        stop_loss = None
+        take_profit = None
+        leverage = 1.0
 
     request = OrderRequest(
         ticker=ticker,

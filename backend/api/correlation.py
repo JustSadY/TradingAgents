@@ -3,7 +3,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user
+from backend.api.deps import require_page
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.schemas.portfolio import CorrelationResponse
@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api/trading", tags=["trading"])
 async def get_correlation(
     period: str = Query(default="90d", pattern=r"^(30d|90d|180d|1y)$", description="Data period: 30d, 90d, 180d, 1y"),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("portfolio")),
 ) -> dict[str, Any]:
     """Compute pairwise correlation matrix for the user's current holdings."""
     portfolio = await get_user_simulation_portfolio(db, current_user.id)

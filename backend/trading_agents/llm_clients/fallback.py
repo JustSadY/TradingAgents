@@ -80,6 +80,18 @@ class FallbackLLM:
             )
         return self.primary.with_fallbacks(fallback_list)
 
+    def _fallbacks_combined(self):
+        """Return a chain that starts *after* the primary model.
+
+        ``invoke``/``ainvoke`` optimistically call the primary themselves so
+        permanent failures can be classified before failover.  Retrying via
+        ``_combined`` would put that same primary at the head of the chain and
+        send the failed request a second time before reaching a fallback.
+        """
+        if not self.fallbacks:
+            return None
+        return self.fallbacks[0].with_fallbacks(self.fallbacks[1:])
+
     def bind_tools(self, tools, **kwargs):
         bound_fallbacks = []
         for fb in self.fallbacks:
@@ -118,7 +130,10 @@ class FallbackLLM:
         except Exception as exc:
             if _is_permanent_failure(exc):
                 raise
-            return self._combined().invoke(*args, **kwargs)
+            fallback_chain = self._fallbacks_combined()
+            if fallback_chain is None:
+                raise
+            return fallback_chain.invoke(*args, **kwargs)
 
     async def ainvoke(self, *args, **kwargs):
         try:
@@ -126,7 +141,10 @@ class FallbackLLM:
         except Exception as exc:
             if _is_permanent_failure(exc):
                 raise
-            return await self._combined().ainvoke(*args, **kwargs)
+            fallback_chain = self._fallbacks_combined()
+            if fallback_chain is None:
+                raise
+            return await fallback_chain.ainvoke(*args, **kwargs)
 
     def stream(self, *args, **kwargs):
         return self._combined().stream(*args, **kwargs)

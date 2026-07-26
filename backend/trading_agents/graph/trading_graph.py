@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+import uuid
 from collections.abc import Awaitable, Callable
 from pathlib import Path
 from typing import Any
@@ -79,7 +80,15 @@ class TradingAgentsGraph:
         if selected_analysts is None:
             selected_analysts = ["market", "social", "news", "fundamentals"]
         self.debug = debug
-        self.config = config or DEFAULT_CONFIG
+        # Keep a graph-local top-level config.  In particular, a missing
+        # checkpoint scope must not be written into the module-level default
+        # dict and then accidentally shared by later graph instances.
+        self.config = dict(config or DEFAULT_CONFIG)
+        # Production analysis runs receive a stable user+analysis scope from
+        # the orchestrator.  Direct/library callers without a persisted row
+        # get an ephemeral namespace instead of falling back to the old shared
+        # ticker/date checkpoint identity.
+        self.config.setdefault("checkpoint_scope", f"ephemeral:{uuid.uuid4()}")
         self.callbacks = callbacks or []
         set_config(self.config)
         os.makedirs(self.config["data_cache_dir"], exist_ok=True)
@@ -120,6 +129,12 @@ class TradingAgentsGraph:
         self.workflow = self.graph_setup.setup_graph(_effective_analysts)
         self.graph = self.workflow.compile()
         self._checkpointer_ctx = None
+
+    def _checkpoint_scope(self) -> str:
+        scope = self.config.get("checkpoint_scope")
+        if not isinstance(scope, str) or not scope:
+            raise ValueError("checkpoint_scope is required for graph execution")
+        return scope
 
     def _init_llms(self, runtime_agent_ctx: dict):
         # Resolve the Master (Portfolio Manager) LLM to use as thinking_llm
@@ -262,9 +277,7 @@ class TradingAgentsGraph:
 
         return filtered
 
-    def _should_include_tool(
-        self, analyst_key: str, tool_key: str | None, _tool_func: Any, runtime_ctx: dict
-    ) -> bool:
+    def _should_include_tool(self, analyst_key: str, tool_key: str | None, _tool_func: Any, runtime_ctx: dict) -> bool:
         """Helper to determine if a tool should be included for an analyst."""
         if tool_key is None:
             return True
@@ -305,10 +318,21 @@ class TradingAgentsGraph:
         return self._is_tool_enabled(tool_key, agent_tool, runtime_ctx)
 
     def _is_tool_enabled(self, tool_key: str, agent_tool: Any, runtime_ctx: dict) -> bool:
-        """Check user/server/default enablement for a tool."""
+        """Check effective tool enablement.
+
+        Server settings are a policy ceiling, not merely a fallback.  In
+        particular, a server-side ``enabled=False`` must not be re-enabled by
+        an otherwise-default user setting.  User settings can still opt out
+        of a server-enabled tool.
+        """
         user_state = runtime_ctx.get("user_settings", {}).get(tool_key, {})
         server_state = runtime_ctx.get("server_settings", {}).get(tool_key, {})
 
+        # A global disable is an explicit kill-switch.  ``user_state`` is
+        # populated with defaults even when the user has no persisted row, so
+        # it must not be consulted before this guard.
+        if server_state and server_state.get("enabled") is False:
+            return False
         if user_state and user_state.get("enabled") is not None:
             return bool(user_state["enabled"])
         if server_state and server_state.get("enabled") is not None:
@@ -353,10 +377,11 @@ class TradingAgentsGraph:
                 "user_id": self.config.get("user_id"),
             }
         )
-        self._checkpointer_ctx = get_checkpointer(self.config["data_cache_dir"], company_name)
+        checkpoint_scope = self._checkpoint_scope()
+        self._checkpointer_ctx = get_checkpointer(self.config["data_cache_dir"], company_name, checkpoint_scope)
         saver = self._checkpointer_ctx.__enter__()
         self.graph = self.workflow.compile(checkpointer=saver)
-        step = checkpoint_step(self.config["data_cache_dir"], company_name, str(trade_date))
+        step = checkpoint_step(self.config["data_cache_dir"], company_name, str(trade_date), checkpoint_scope)
         if step is not None:
             logger.info("Resuming from step %d for %s on %s", step, company_name, trade_date)
         else:
@@ -376,10 +401,11 @@ class TradingAgentsGraph:
             company_name, trade_date, asset_type=asset_type, past_context=past_context
         )
         args = self.propagator.get_graph_args()
-        tid = thread_id(company_name, str(trade_date))
+        checkpoint_scope = self._checkpoint_scope()
+        tid = thread_id(company_name, str(trade_date), checkpoint_scope)
         args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = tid
 
-        step = checkpoint_step(self.config["data_cache_dir"], company_name, str(trade_date))
+        step = checkpoint_step(self.config["data_cache_dir"], company_name, str(trade_date), checkpoint_scope)
         state_input = None if step is not None else init_agent_state
 
         if self.debug:
@@ -397,7 +423,7 @@ class TradingAgentsGraph:
         self._log_state(trade_date, final_state)
 
         if not self.config.get("keep_checkpoints", True):
-            clear_checkpoint(self.config["data_cache_dir"], company_name, str(trade_date))
+            clear_checkpoint(self.config["data_cache_dir"], company_name, str(trade_date), checkpoint_scope)
 
         return final_state, self._resolve_final_signal(final_state)
 
@@ -480,9 +506,12 @@ class TradingAgentsGraph:
         )
 
         try:
-            async with get_async_checkpointer(self.config["data_cache_dir"], company_name) as saver:
+            checkpoint_scope = self._checkpoint_scope()
+            async with get_async_checkpointer(self.config["data_cache_dir"], company_name, checkpoint_scope) as saver:
                 self.graph = self.workflow.compile(checkpointer=saver)
-                step = await async_checkpoint_step(self.config["data_cache_dir"], company_name, str(trade_date))
+                step = await async_checkpoint_step(
+                    self.config["data_cache_dir"], company_name, str(trade_date), checkpoint_scope
+                )
                 if step is not None:
                     logger.info("Resuming from step %d for %s on %s", step, company_name, trade_date)
                 else:
@@ -509,9 +538,12 @@ class TradingAgentsGraph:
             company_name, trade_date, asset_type=asset_type, past_context=past_context
         )
         args = self.propagator.get_graph_args()
-        tid = thread_id(company_name, str(trade_date))
+        checkpoint_scope = self._checkpoint_scope()
+        tid = thread_id(company_name, str(trade_date), checkpoint_scope)
         args.setdefault("config", {}).setdefault("configurable", {})["thread_id"] = tid
-        step = await async_checkpoint_step(self.config["data_cache_dir"], company_name, str(trade_date))
+        step = await async_checkpoint_step(
+            self.config["data_cache_dir"], company_name, str(trade_date), checkpoint_scope
+        )
         state_input = None if step is not None else init_state
 
         if stream_observer is None:
@@ -539,7 +571,7 @@ class TradingAgentsGraph:
         await asyncio.to_thread(self._log_state, trade_date, final_state)
 
         if not self.config.get("keep_checkpoints", True):
-            clear_checkpoint(self.config["data_cache_dir"], company_name, str(trade_date))
+            clear_checkpoint(self.config["data_cache_dir"], company_name, str(trade_date), checkpoint_scope)
 
         return final_state, self._resolve_final_signal(final_state)
 

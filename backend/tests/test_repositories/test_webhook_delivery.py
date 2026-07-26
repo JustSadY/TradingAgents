@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.webhook_delivery import WebhookDelivery
@@ -9,17 +8,17 @@ from backend.repositories.webhook_delivery import list_webhook_deliveries
 
 class TestWebhookDeliveryRepository:
     async def _create_delivery(
-        self, db: AsyncSession, user_id: int, event: str = "analysis_complete",
-        success: bool = True, **overrides
+        self, db: AsyncSession, user_id: int, event: str = "analysis_complete", success: bool = True, **overrides
     ) -> WebhookDelivery:
-        delivery = WebhookDelivery(
-            user_id=user_id,
-            event=event,
-            url="https://hooks.example.com/test",
-            success=success,
-            status_code=200,
-            **overrides,
-        )
+        fields = {
+            "user_id": user_id,
+            "event": event,
+            "url": "https://hooks.example.com/test",
+            "success": success,
+            "status_code": 200,
+        }
+        fields.update(overrides)
+        delivery = WebhookDelivery(**fields)
         db.add(delivery)
         await db.flush()
         return delivery

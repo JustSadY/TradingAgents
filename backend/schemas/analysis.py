@@ -7,6 +7,31 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 logger = logging.getLogger(__name__)
 
+_CANONICAL_SIGNALS = {
+    "buy": "Buy",
+    "overweight": "Overweight",
+    "hold": "Hold",
+    "underweight": "Underweight",
+    "sell": "Sell",
+}
+
+
+def _canonical_signal(value: object) -> str | None:
+    """Translate legacy signal casing into the one API representation.
+
+    Older rows stored lower-case values (for example ``"buy"``), while the
+    frontend catalog uses title-case labels.  Normalize only the known enum
+    values so arbitrary historical text is still safely rejected.
+    """
+    if value is None:
+        return None
+    if isinstance(value, str):
+        canonical = _CANONICAL_SIGNALS.get(value.strip().casefold())
+        if canonical is not None:
+            return canonical
+    logger.warning("Analysis signal: unexpected value %r — coercing to None", value)
+    return None
+
 
 class AnalysisRunRequest(BaseModel):
     ticker: str
@@ -76,12 +101,8 @@ class AnalysisResultRead(BaseModel):
 
     @field_validator("signal", mode="before")
     @classmethod
-    def validate_signal(cls, v: object) -> object:
-        _VALID = {"Buy", "Overweight", "Hold", "Underweight", "Sell", None}
-        if v in _VALID:
-            return v
-        logger.warning("AnalysisResultRead.signal: unexpected value %r — coercing to None", v)
-        return None
+    def validate_signal(cls, v: object) -> str | None:
+        return _canonical_signal(v)
 
     @field_validator("failed_agents", mode="before")
     @classmethod
@@ -111,6 +132,11 @@ class AnalysisListItem(BaseModel):
     llm_provider: str | None = None
     llm_model: str | None = None
     preset_name: str | None = None
+
+    @field_validator("signal", mode="before")
+    @classmethod
+    def validate_signal(cls, v: object) -> str | None:
+        return _canonical_signal(v)
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -148,6 +174,8 @@ class CostEstimateResponse(BaseModel):
     estimated_tokens: int
     estimated_cost_usd: float
     estimated_duration_min: float
+    pricing_source: str
+    pricing_is_fallback: bool
 
 
 class ABComparisonItem(BaseModel):

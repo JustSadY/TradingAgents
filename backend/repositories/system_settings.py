@@ -3,6 +3,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.system_settings import SystemSettings
 
+_SYSTEM_SETTINGS_FIELDS = frozenset(SystemSettings.__table__.columns.keys())
+
 
 async def get_system_settings_by_id(db: AsyncSession, ss_id: int = 1) -> SystemSettings | None:
     result = await db.execute(select(SystemSettings).where(SystemSettings.id == ss_id))
@@ -23,6 +25,9 @@ async def create_system_settings(db: AsyncSession, ss_id: int = 1) -> SystemSett
 
 
 async def update_system_settings_fields(db: AsyncSession, ss: SystemSettings, **fields) -> SystemSettings:
+    unknown = set(fields) - _SYSTEM_SETTINGS_FIELDS
+    if unknown:
+        raise ValueError(f"Unknown system-settings fields: {', '.join(sorted(unknown))}")
     for field, value in fields.items():
         setattr(ss, field, value)
     await db.flush()

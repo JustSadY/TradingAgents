@@ -83,9 +83,7 @@ class TestUserRepository:
         assert admin_user.username in usernames
 
     async def test_update_user_profile(self, db: AsyncSession, test_user: User):
-        updated = await update_user_profile(
-            db, test_user, email="updated@example.com", display_name="Updated Name"
-        )
+        updated = await update_user_profile(db, test_user, email="updated@example.com", display_name="Updated Name")
         assert updated.email == "updated@example.com"
         assert updated.display_name == "Updated Name"
 
@@ -107,15 +105,11 @@ class TestUserRepository:
         )
         from sqlalchemy import select
 
-        page_perms = await db.execute(
-            select(UserPagePermission).where(UserPagePermission.user_id == user.id)
-        )
+        page_perms = await db.execute(select(UserPagePermission).where(UserPagePermission.user_id == user.id))
         pages = page_perms.scalars().all()
         page_keys = [p.page_key for p in pages]
         assert "dashboard" in page_keys
         assert "portfolio" in page_keys
 
-        setting_perms = await db.execute(
-            select(UserSettingPermission).where(UserSettingPermission.user_id == user.id)
-        )
+        setting_perms = await db.execute(select(UserSettingPermission).where(UserSettingPermission.user_id == user.id))
         assert len(setting_perms.scalars().all()) > 0

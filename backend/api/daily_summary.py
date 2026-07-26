@@ -3,7 +3,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user
+from backend.api.deps import require_page
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.schemas.daily_summary import DailySummaryResponse
@@ -14,7 +14,7 @@ router = APIRouter(prefix="/api/market", tags=["daily-summary"])
 
 @router.get("/daily-summary", response_model=DailySummaryResponse)
 async def fetch_daily_summary(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_page("dashboard"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     summary = await get_latest_summary(db, current_user.id)
@@ -30,7 +30,7 @@ async def fetch_daily_summary(
     },
 )
 async def trigger_daily_summary(
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_page("dashboard"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     try:

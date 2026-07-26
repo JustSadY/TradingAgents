@@ -14,11 +14,11 @@ if TYPE_CHECKING:
 
 class Order(Base):
     __tablename__ = "orders"
-    __table_args__ = (
-        Index("ix_orders_portfolio_ticker", "portfolio_id", "ticker"),
-    )
+    __table_args__ = (Index("ix_orders_portfolio_ticker", "portfolio_id", "ticker"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    portfolio_id: Mapped[int] = mapped_column(Integer, ForeignKey("portfolios.id", ondelete="CASCADE"), nullable=False, index=True)
+    portfolio_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("portfolios.id", ondelete="CASCADE"), nullable=False, index=True
+    )
     broker: Mapped[str] = mapped_column(String(50), nullable=False)
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     action: Mapped[str] = mapped_column(String(10), nullable=False)
@@ -34,10 +34,14 @@ class Order(Base):
     leverage: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("1.0"))
     side: Mapped[str] = mapped_column(String(5), default="long")
     realized_pnl: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
-    analysis_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("analysis_results.id", ondelete="SET NULL"), nullable=True, index=True)
+    analysis_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("analysis_results.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     ai_signal: Mapped[str] = mapped_column(String(50), default="")
     ai_reasoning: Mapped[str] = mapped_column(Text, default="")
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True)
     executed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     portfolio: Mapped["Portfolio"] = relationship("Portfolio", back_populates="orders")
-    trade_notes: Mapped[list["TradeNote"]] = relationship("TradeNote", back_populates="order", cascade="all, delete-orphan")
+    trade_notes: Mapped[list["TradeNote"]] = relationship(
+        "TradeNote", back_populates="order", cascade="all, delete-orphan"
+    )

@@ -63,12 +63,21 @@ async def get_sector_rotation() -> list[dict[str, Any]]:
             raw = await loop.run_in_executor(None, _fetch)
             if raw is not None and not getattr(raw, "empty", False):
                 break
+            # Empty upstream payloads are transient just like exceptions. Do
+            # not spin through all attempts immediately and then cache an
+            # outage as a valid empty sector ranking.
+            if attempt < max_retries - 1:
+                await asyncio.sleep(delay)
+                delay *= 2
         except Exception:
             if attempt < max_retries - 1:
                 await asyncio.sleep(delay)
                 delay *= 2
             else:
                 raise
+
+    if raw is None or getattr(raw, "empty", False):
+        return []
 
     results: list[dict[str, Any]] = []
     for ticker, name in SECTORS.items():
@@ -113,5 +122,8 @@ async def get_sector_rotation() -> list[dict[str, Any]]:
             continue
 
     results.sort(key=lambda x: x["momentum_score"], reverse=True)
-    _cache["sector_rotation"] = {"ts": now, "data": results}
+    # A valid but empty result is possible in principle, but cache only a
+    # populated response so a vendor outage cannot hide data for 30 minutes.
+    if results:
+        _cache["sector_rotation"] = {"ts": now, "data": results}
     return results

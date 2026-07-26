@@ -15,7 +15,9 @@ class Portfolio(Base):
     __tablename__ = "portfolios"
     __table_args__ = (UniqueConstraint("user_id", "mode", name="uq_portfolio_user_mode"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     mode: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     broker: Mapped[str] = mapped_column(String(50), nullable=False)
     initial_capital: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
@@ -29,7 +31,9 @@ class Portfolio(Base):
         default=lambda: datetime.now(UTC),
         onupdate=lambda: datetime.now(UTC),
     )
-    holdings: Mapped[list["Holding"]] = relationship("Holding", back_populates="portfolio", cascade="all, delete-orphan")
+    holdings: Mapped[list["Holding"]] = relationship(
+        "Holding", back_populates="portfolio", cascade="all, delete-orphan"
+    )
     orders: Mapped[list["Order"]] = relationship("Order", back_populates="portfolio", cascade="all, delete-orphan")
 
 

@@ -30,6 +30,55 @@ from .persistence import (
 
 _logger = logging.getLogger(__name__)
 
+_OWNER_UNSET = object()
+
+
+async def _emit_system_status(emitter: AnalysisEmitter, message: str, status: str = "starting") -> None:
+    """Emit a lifecycle message without treating the message as an agent name."""
+    await emitter.emit_status(agent="system", status=status, message=message)
+
+
+async def _heartbeat_monitor(
+    emitter: AnalysisEmitter,
+    last_event_at,
+    stall_timeout: float,
+    *,
+    sleep=asyncio.sleep,
+    now=time.time,
+) -> None:
+    """Keep clients informed while an analysis is running, including during a stall.
+
+    A single stall warning is emitted per silent period.  The monitor then
+    continues to send ``stalled`` heartbeats until the graph produces a new
+    event, rather than exiting and leaving the client with no liveness signal.
+    """
+    heartbeat_interval = min(30, max(10, stall_timeout / 4))
+    stall_warning_sent = False
+    while True:
+        await sleep(heartbeat_interval)
+        elapsed = now() - last_event_at()
+        if elapsed > stall_timeout:
+            if not stall_warning_sent:
+                await emitter.emit(
+                    {
+                        "type": "stall_warning",
+                        "seconds_since_last_event": round(elapsed, 1),
+                        "threshold": stall_timeout,
+                    }
+                )
+                _logger.warning(
+                    "Stall detected task=%s — no event for %.0fs (threshold %ds)",
+                    emitter.task_id,
+                    elapsed,
+                    stall_timeout,
+                )
+                stall_warning_sent = True
+            await emitter.emit_progress("heartbeat", "stalled", "system")
+            continue
+
+        stall_warning_sent = False
+        await emitter.emit_progress("heartbeat", "running", "system")
+
 
 REPORT_FIELDS = (
     "market_report",
@@ -66,6 +115,8 @@ async def run_individual_analysis(
     emitter: AnalysisEmitter,
     triggered_by: str = "manual",
     user=None,
+    checkpoint_namespace: str | None = None,
+    result_owner_user_id: int | None | object = _OWNER_UNSET,
 ):
     """Orchestrates a single analysis run with incremental persistence and real-time updates."""
 
@@ -74,17 +125,37 @@ async def run_individual_analysis(
     username = user.username if user else "system"
 
     user_id = user.id if user else None
+    # A privileged user may time-travel another user's analysis.  Persist the
+    # result under its original owner in that case; the caller's identity is
+    # still used for authorization and runtime configuration below.
+    persisted_user_id = user_id if result_owner_user_id is _OWNER_UNSET else result_owner_user_id
 
-    row = await create_skeleton_result(db, emitter.task_id, ticker, trade_date, asset_type, triggered_by, user_id)
+    row = await create_skeleton_result(
+        db,
+        emitter.task_id,
+        ticker,
+        trade_date,
+        asset_type,
+        triggered_by,
+        persisted_user_id,
+    )
 
-    await emitter.emit_status("Initializing")
+    await _emit_system_status(emitter, "Initializing")
 
     try:
         sys_settings = await get_system_settings(db)
 
-        await emitter.emit_status("Preparing engine...")
+        await _emit_system_status(emitter, "Preparing engine...")
 
         config = build_analysis_config(settings, user=user, sys_settings=sys_settings)
+
+        # LangGraph checkpoints contain full report/tool state.  Bind every
+        # normal run to its persisted AnalysisResult row; a time-travel resume
+        # supplies the original row's namespace explicitly so it can only
+        # resume that analysis, never another user's same ticker/date run.
+        from backend.trading_agents.graph.checkpointer import checkpoint_scope
+
+        config["checkpoint_scope"] = checkpoint_namespace or checkpoint_scope(row.user_id, row.id)
 
         persona_key = config.get("investor_persona")
 
@@ -108,7 +179,7 @@ async def run_individual_analysis(
         from backend.services.performance_service import get_analyst_performance_context
         from backend.services.signal_backtest_service import get_signal_replay_context
 
-        attribution_md = await get_analyst_performance_context(db)
+        attribution_md = await get_analyst_performance_context(db, user_id=user_id)
 
         market_pulse_md = await get_market_pulse()
 
@@ -133,7 +204,11 @@ async def run_individual_analysis(
             )
 
             if dropped:
-                await emitter.emit_status(f"Pre-screened out underperforming analysts: {', '.join(dropped)}")
+                await _emit_system_status(
+                    emitter,
+                    f"Pre-screened out underperforming analysts: {', '.join(dropped)}",
+                    status="running",
+                )
 
         from backend.trading_agents.agents.runtime.resilience import get_report_card, init_report_card
 
@@ -172,29 +247,6 @@ async def run_individual_analysis(
         last_node = None
 
         last_event_time = time.time()
-
-        async def _heartbeat_monitor():
-            stall_timeout = config.get("stall_timeout_seconds", 120)
-            heartbeat_interval = min(30, max(10, stall_timeout / 4))
-            while True:
-                await asyncio.sleep(heartbeat_interval)
-                elapsed = time.time() - last_event_time
-                if elapsed > stall_timeout:
-                    await emitter.emit(
-                        {
-                            "type": "stall_warning",
-                            "seconds_since_last_event": round(elapsed, 1),
-                            "threshold": stall_timeout,
-                        }
-                    )
-                    _logger.warning(
-                        "Stall detected task=%s — no event for %.0fs (threshold %ds)",
-                        emitter.task_id,
-                        elapsed,
-                        stall_timeout,
-                    )
-                    break
-                await emitter.emit_progress("heartbeat", "running", "system")
 
         async def _stream_observer(mode: str, chunk: dict) -> None:
 
@@ -264,7 +316,13 @@ async def run_individual_analysis(
 
                     prev_state[key] = value
 
-        heartbeat_task = asyncio.create_task(_heartbeat_monitor())
+        heartbeat_task = asyncio.create_task(
+            _heartbeat_monitor(
+                emitter,
+                lambda: last_event_time,
+                float(config.get("stall_timeout_seconds", 120) or 120),
+            )
+        )
         try:
             final_state, signal = await ta.async_propagate(
                 ticker, trade_date, asset_type, stream_observer=_stream_observer

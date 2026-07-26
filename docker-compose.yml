@@ -131,7 +131,10 @@ services:
       - --web.console.templates=/etc/prometheus/consoles
       - --web.enable-lifecycle
     ports:
-      - "9090:9090"
+      # Monitoring UIs are operator-only.  Put a reverse proxy/VPN in front of
+      # them if remote access is required; never publish them on every host
+      # interface by default.
+      - "127.0.0.1:9090:9090"
     volumes:
       - ./monitoring/prometheus:/etc/prometheus
       - prometheus_data:/prometheus
@@ -153,11 +156,11 @@ services:
     restart: unless-stopped
     environment:
       - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:-admin}
+      - "GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}"
       - GF_INSTALL_PLUGINS=
       - GF_AUTH_ANONYMOUS_ENABLED=false
     ports:
-      - "3001:3000"
+      - "127.0.0.1:3001:3000"
     volumes:
       - grafana_data:/var/lib/grafana
       - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
@@ -179,7 +182,7 @@ services:
     environment:
       DATA_SOURCE_NAME: "postgresql://${DB_USER:-tradingagents}:${DB_PASSWORD:-tradingagents}@postgres:5432/${DB_NAME:-tradingagents}?sslmode=disable"
     ports:
-      - "9187:9187"
+      - "127.0.0.1:9187:9187"
     depends_on:
       postgres:
         condition: service_healthy
@@ -197,7 +200,7 @@ services:
     environment:
       REDIS_ADDR: redis://redis:6379/0
     ports:
-      - "9121:9121"
+      - "127.0.0.1:9121:9121"
     depends_on:
       redis:
         condition: service_healthy

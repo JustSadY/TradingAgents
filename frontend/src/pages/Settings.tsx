@@ -28,6 +28,32 @@ import type { AgentSettingsPanelHandle } from '../components/settings/AgentSetti
 import type { WebhookDeliveryRead, SettingsRead, PresetRead } from '../api/types'
 
 type Settings = SettingsRead
+type LlmModelOption = { value: string; label: string }
+type LlmCatalog = Record<string, { label: string; models: LlmModelOption[] }>
+
+function normalizeLlmCatalog(value: unknown): LlmCatalog {
+  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
+  const catalog: LlmCatalog = {}
+  for (const [provider, entry] of Object.entries(value)) {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
+    const rawModels = (entry as Record<string, unknown>).models
+    if (!Array.isArray(rawModels)) continue
+    const models = rawModels.flatMap(model => {
+      if (typeof model !== 'object' || model === null || Array.isArray(model)) return []
+      const option = model as Record<string, unknown>
+      return typeof option.value === 'string' && typeof option.label === 'string'
+        ? [{ value: option.value, label: option.label }]
+        : []
+    })
+    catalog[provider] = {
+      label: typeof (entry as Record<string, unknown>).label === 'string'
+        ? (entry as Record<string, unknown>).label as string
+        : provider,
+      models,
+    }
+  }
+  return catalog
+}
 
 const Input = "w-full glass-input rounded-xl px-3 py-2 text-xs outline-none"
 
@@ -84,6 +110,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   }
   const [allowedSettings, setAllowedSettings] = useState<string[]>([])
   const [cronStatus, setCronStatus] = useState<{ running: boolean; job_configured: boolean; next_run_time: string | null } | null>(null)
+  const [llmCatalog, setLlmCatalog] = useState<LlmCatalog>({})
   const meta = useMeta()
   
   const toolPanelRef = useRef<ToolSettingsPanelHandle>(null)
@@ -98,11 +125,13 @@ export default function Settings({ userId }: { userId?: number } = {}) {
       axios.get(presetsUrl).then(r => r.data).catch(e => { console.error('Failed to load presets', e); return [] }),
       axios.get(permUrl).then(r => r.data.allowed_settings || r.data.permissions || []).catch(e => { console.error('Failed to load permissions', e); return [] }),
       axios.get('/api/cron/status').then(r => r.data).catch(e => { console.error('Failed to load cron status', e); return null }),
-    ]).then(([settings, presetList, allowedSet, cStatus]) => {
+      axios.get<unknown>('/api/settings/llm-catalog').then(r => normalizeLlmCatalog(r.data)).catch(e => { console.error('Failed to load LLM catalog', e); return {} }),
+    ]).then(([settings, presetList, allowedSet, cStatus, catalog]) => {
       setS(settings)
       setPresets(presetList)
       setAllowedSettings(userId ? ['general', 'agents', 'tools', 'risk', 'webhooks', 'cron', 'memory', 'presets', 'personas'] : allowedSet)
       setCronStatus(cStatus)
+      setLlmCatalog(catalog)
       loadMemoryStatus()
 
       const defaultTabs = ['general', 'agents', 'tools', 'risk', 'webhooks', 'cron']
@@ -190,6 +219,14 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   if (!s) return <div className="p-8 text-slate-500 text-xs font-semibold">{t('settings.loading')}</div>
 
   const update = (k: keyof Settings, v: any) => setS(prev => prev ? { ...prev, [k]: v } : prev)
+  const primaryModels = llmCatalog[s.llm_provider]?.models ?? []
+  const primaryUsesCustomModel = !primaryModels.some(model => model.value === s.llm_model)
+  const fallbackModels = s.fallback_llm_provider ? llmCatalog[s.fallback_llm_provider]?.models ?? [] : []
+  const fallbackUsesCustomModel = !fallbackModels.some(model => model.value === s.fallback_llm_model)
+  const metaProviders = Object.entries(meta?.provider_labels ?? {})
+  const providerOptions = metaProviders.length > 0
+    ? metaProviders
+    : Object.entries(llmCatalog).map(([key, entry]) => [key, entry.label] as [string, string])
 
   const savePineconeKey = async () => {
     if (!pineconeKey.trim()) return
@@ -211,14 +248,14 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
   const TABS = [
     { key: 'general',  label: t('settings.general') || 'Preferences',      icon: <SettingsIcon size={14} /> },
-    { key: 'agents',   label: 'AI Configuration',                          icon: <Brain size={14} /> },
+    { key: 'agents',   label: t('settings.tab_agents'),                    icon: <Brain size={14} /> },
     { key: 'tools',    label: t('settings.section_tools') || 'Agent Tools', icon: <Wrench size={14} /> },
     { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety', icon: <ShieldAlert size={14} /> },
     { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={14} /> },
     { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={14} /> },
-    { key: 'memory',   label: 'Memory',                          icon: <Database size={14} /> },
+    { key: 'memory',   label: t('settings.tab_memory'),                    icon: <Database size={14} /> },
     { key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={14} /> },
-    { key: 'personas', label: 'Personas',                        icon: <UserCircle size={14} /> },
+    { key: 'personas', label: t('settings.tab_personas'),                  icon: <UserCircle size={14} /> },
   ].filter(tab => isAdmin || allowedSettings.includes(tab.key))
 
   return (
@@ -286,14 +323,14 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   </Row>
                 </Section>
 
-                <Section title="News & Sentiment Limits">
-                  <Row label="News Article Limit">
+                <Section title={t('settings.section_news_sentiment')}>
+                  <Row label={t('settings.row_news_article_limit')}>
                     <input type="number" min={1} max={100} className={Input} value={s.news_article_limit ?? 20} onChange={e => update('news_article_limit', parseInt(e.target.value) || 20)} />
                   </Row>
-                  <Row label="Global News Limit">
+                  <Row label={t('settings.row_global_news_limit')}>
                     <input type="number" min={1} max={100} className={Input} value={s.global_news_article_limit ?? 10} onChange={e => update('global_news_article_limit', parseInt(e.target.value) || 10)} />
                   </Row>
-                  <Row label="Global News Lookback (Days)">
+                  <Row label={t('settings.row_global_news_lookback')}>
                     <input type="number" min={1} max={90} className={Input} value={s.global_news_lookback_days ?? 7} onChange={e => update('global_news_lookback_days', parseInt(e.target.value) || 7)} />
                   </Row>
                 </Section>
@@ -313,18 +350,30 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                           update('llm_model', '')
                         }}
                       >
-                        {Object.entries(meta?.provider_labels ?? {}).map(([key, label]) => (
+                        {providerOptions.map(([key, label]) => (
                           <option key={key} value={key}>{label}</option>
                         ))}
                       </select>
                     </Row>
                     <Row label={t('settings.row_llm_model') || 'LLM Model'}>
-                      <input
-                        className={Input}
-                        value={s.llm_model}
-                        onChange={e => update('llm_model', e.target.value)}
-                        placeholder={t('settings.llm_model_placeholder') || 'e.g. gpt-4o-mini'}
-                      />
+                      <div className="space-y-2">
+                        <select
+                          className={Input}
+                          value={primaryUsesCustomModel ? '__custom__' : s.llm_model}
+                          onChange={e => update('llm_model', e.target.value === '__custom__' ? '' : e.target.value)}
+                        >
+                          {primaryModels.map(model => <option key={model.value} value={model.value}>{model.label}</option>)}
+                          <option value="__custom__">{t('settings.custom_model_option')}</option>
+                        </select>
+                        {primaryUsesCustomModel && (
+                          <input
+                            className={Input}
+                            value={s.llm_model}
+                            onChange={e => update('llm_model', e.target.value)}
+                            placeholder={t('settings.custom_model_placeholder')}
+                          />
+                        )}
+                      </div>
                     </Row>
 
                     <Row label={t('settings.row_fallback_provider')}>
@@ -338,7 +387,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                         }}
                       >
                         <option value="">{t('settings.fallback_disabled')}</option>
-                        {Object.entries(meta?.provider_labels ?? {}).map(([key, label]) => (
+                        {providerOptions.map(([key, label]) => (
                           <option key={key} value={key}>{label}</option>
                         ))}
                       </select>
@@ -346,12 +395,24 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     {s.fallback_llm_provider && (
                       <>
                         <Row label={t('settings.row_fallback_model')}>
-                          <input
-                            className={Input}
-                            value={s.fallback_llm_model || ''}
-                            onChange={e => update('fallback_llm_model', e.target.value || null)}
-                            placeholder={t('settings.fallback_model_placeholder')}
-                          />
+                          <div className="space-y-2">
+                            <select
+                              className={Input}
+                              value={fallbackUsesCustomModel ? '__custom__' : s.fallback_llm_model || ''}
+                              onChange={e => update('fallback_llm_model', e.target.value === '__custom__' ? null : e.target.value || null)}
+                            >
+                              {fallbackModels.map(model => <option key={model.value} value={model.value}>{model.label}</option>)}
+                              <option value="__custom__">{t('settings.custom_model_option')}</option>
+                            </select>
+                            {fallbackUsesCustomModel && (
+                              <input
+                                className={Input}
+                                value={s.fallback_llm_model || ''}
+                                onChange={e => update('fallback_llm_model', e.target.value || null)}
+                                placeholder={t('settings.custom_model_placeholder')}
+                              />
+                            )}
+                          </div>
                         </Row>
                         <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed">
                           {t('settings.fallback_hint')}
@@ -359,7 +420,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       </>
                     )}
 
-                    <Row label="Reasoning Effort">
+                    <Row label={t('settings.row_reasoning_effort')}>
                       <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>
                         <option value="">{t('settings.effort_default')}</option>
                         {(meta?.effort_options?.openai ?? [
@@ -372,7 +433,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       </select>
                     </Row>
                     
-                    <Row label="Thinking Effort">
+                    <Row label={t('settings.row_thinking_effort')}>
                       <select className={Input} value={s.anthropic_effort || ''} onChange={e => update('anthropic_effort', e.target.value || null)}>
                         <option value="">{t('settings.effort_default')}</option>
                         {(meta?.effort_options?.anthropic ?? [
@@ -385,13 +446,13 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       </select>
                     </Row>
                     
-                    <Row label="Thinking Level">
+                    <Row label={t('settings.row_thinking_level')}>
                       <select className={Input} value={s.google_thinking_level || ''} onChange={e => update('google_thinking_level', e.target.value || null)}>
                         <option value="">{t('settings.effort_default')}</option>
                         {(meta?.effort_options?.google ?? [
                           { value: 'minimal', label: t('settings.effort_minimal_fastest') },
-                          { value: 'low', label: 'Low' },
-                          { value: 'medium', label: 'Medium' },
+                          { value: 'low', label: t('settings.effort_low_fast') },
+                          { value: 'medium', label: t('settings.effort_medium_balanced') },
                           { value: 'high', label: t('settings.effort_high_deepest') },
                         ]).map(o => (
                           <option key={o.value} value={o.value}>{o.label}</option>
@@ -425,6 +486,16 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 <Row label={t('settings.row_max_position_size')}>
                   <input type="number" step="1" min="1" max="100" className={Input} value={s.max_position_size_pct} onChange={e => update('max_position_size_pct', Number.parseFloat(e.target.value))} />
                 </Row>
+                <Row label={t('settings.row_max_concentration')}>
+                  <input type="number" step="1" min="1" max="100" className={Input} value={s.max_concentration_pct} onChange={e => update('max_concentration_pct', Number.parseFloat(e.target.value))} />
+                </Row>
+                <Row label={t('settings.row_max_gross_exposure')}>
+                  <input type="number" step="0.1" min="1" max="10" className={Input} value={s.max_gross_exposure} onChange={e => update('max_gross_exposure', Number.parseFloat(e.target.value))} />
+                </Row>
+                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_allow_short_selling')}</span>
+                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.allow_short_selling} onChange={e => update('allow_short_selling', e.target.checked)} />
+                </label>
                 <Row label={t('settings.row_debate_rounds')}>
                   <input type="number" min="1" max="10" className={Input} value={s.max_debate_rounds} onChange={e => update('max_debate_rounds', Number.parseInt(e.target.value))} />
                 </Row>
@@ -439,7 +510,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 </Row>
 
                 <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
-                  <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Agent Run Resilience</h4>
+                  <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">{t('settings.section_agent_resilience')}</h4>
                   <Row label={t('settings.row_node_retry_attempts') || 'Node Retry Attempts'}>
                     <input type="number" min="1" max="10" className={Input} value={s.node_retry_attempts ?? 2} onChange={e => update('node_retry_attempts', Number.parseInt(e.target.value))} />
                   </Row>
@@ -456,7 +527,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 </div>
 
                 <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
-                  <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Circuit Breaker & Stall Detection</h4>
+                  <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">{t('settings.section_circuit_stall')}</h4>
                   <Row label={t('settings.row_circuit_breaker_threshold') || 'Circuit Breaker Threshold'}>
                     <input type="number" min="1" max="20" className={Input} value={s.circuit_breaker_threshold ?? 3} onChange={e => update('circuit_breaker_threshold', Number.parseInt(e.target.value))} />
                   </Row>
@@ -512,7 +583,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 </div>
 
                 <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
-                  <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">Institutional Features</h4>
+                  <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">{t('settings.section_institutional_features')}</h4>
 
                   <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
                     <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_strict_stop_loss')}</span>
@@ -549,7 +620,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 <div className="flex flex-col gap-1">
                   <input
                     className={Input}
-                    placeholder="https://hooks.slack.com/..."
+                    placeholder={t('settings.webhook_url_placeholder')}
                     value={s.webhook_url || ''}
                     onChange={e => update('webhook_url', e.target.value || null)}
                   />
@@ -572,7 +643,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       disabled={webhookTesting}
                       className="text-[10px] bg-white/5 hover:bg-white/10 text-slate-300 px-2.5 py-1.5 rounded-lg transition cursor-pointer font-bold"
                     >
-                      {webhookTesting ? '...' : t('settings.webhook_test_button')}
+                      {webhookTesting ? t('settings.webhook_testing') : t('settings.webhook_test_button')}
                     </button>
                   )}
                   {webhookTestResult && (
@@ -619,12 +690,12 @@ export default function Settings({ userId }: { userId?: number } = {}) {
               {/* Delivery History */}
               <div className="mt-2 pt-4 border-t border-white/[0.04] space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Recent Deliveries</span>
+                  <span className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('settings.webhook_recent_deliveries')}</span>
                   <button
                     onClick={loadDeliveries}
                     disabled={loadingDeliveries}
                     className="p-1 rounded text-slate-600 hover:text-violet-400 transition cursor-pointer"
-                    title="Refresh delivery log"
+                    title={t('settings.webhook_refresh_delivery_log')}
                   >
                     <RefreshCw size={12} className={loadingDeliveries ? 'animate-spin' : ''} />
                   </button>
@@ -704,17 +775,17 @@ export default function Settings({ userId }: { userId?: number } = {}) {
             <Section title={t('settings.section_cron') || 'Cron Scheduler'}>
               <div className="flex items-center justify-between bg-white/[0.02] border border-white/[0.04] p-3 rounded-xl mb-2">
                 <div className="flex flex-col">
-                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Engine Status</span>
+                  <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('settings.cron_engine_status')}</span>
                   <div className="flex items-center gap-2 mt-1">
                     <div className={`w-2 h-2 rounded-full ${cronStatus?.running ? 'bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]' : 'bg-rose-500'}`} />
                     <span className="text-xs font-bold text-slate-200">
-                      {cronStatus?.running ? 'Scheduler Core Online' : 'Scheduler Core Offline'}
+                      {cronStatus?.running ? t('settings.cron_online') : t('settings.cron_offline')}
                     </span>
                   </div>
                 </div>
                 {cronStatus?.job_configured && (
                   <div className="text-right">
-                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">Next Run (UTC)</span>
+                    <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('settings.cron_next_run_utc')}</span>
                     <div className="text-xs font-mono text-violet-300 mt-1">
                       {cronStatus.next_run_time ? new Date(cronStatus.next_run_time).toLocaleString() : '—'}
                     </div>
@@ -722,7 +793,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 )}
               </div>
 
-              <Row label="Active">
+              <Row label={t('settings.row_active')}>
                 <div className="flex items-center gap-3">
                   <input
                     type="checkbox"
@@ -731,20 +802,20 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     onChange={e => update('cron_enabled', e.target.checked)}
                   />
                   <span className={`text-[10px] font-bold uppercase tracking-widest ${s.cron_enabled ? 'text-emerald-400' : 'text-slate-500'}`}>
-                    {s.cron_enabled ? 'Enabled' : 'Disabled'}
+                    {s.cron_enabled ? t('settings.cron_enabled') : t('settings.cron_disabled')}
                   </span>
                 </div>
               </Row>
-              <Row label="Schedule (Cron)">
+              <Row label={t('settings.row_schedule')}>
                 <input
                   className={Input}
                   value={s.cron_schedule}
                   onChange={e => update('cron_schedule', e.target.value)}
-                  placeholder="e.g. 0 9 * * 1-5"
+                  placeholder={t('settings.cron_schedule_placeholder')}
                 />
                 <p className="text-[10px] text-slate-500 mt-1.5 font-medium leading-relaxed">
-                  Standard 5-field cron schedule format (UTC time). <br/>
-                  Example: <code className="text-violet-400">0 9 * * 1-5</code> runs every weekday at 09:00 UTC.
+                  {t('settings.cron_schedule_help')} <br/>
+                  <span>{t('settings.cron_schedule_example')}</span>
                 </p>
               </Row>
             </Section>
@@ -753,7 +824,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
           {activeTab === 'memory' && (
             <ErrorBoundary name="SettingsMemory">
-            <Section title="Vector Memory">
+            <Section title={t('settings.section_vector_memory')}>
               <Row label={t('settings.row_memory_store')}>
                 <select className={Input} value={s.memory_store} onChange={e => update('memory_store', e.target.value)}>
                   {(meta?.memory_stores ?? [{ value: 'pinecone', label: t('settings.memory_store_pinecone') }, { value: 'pgvector', label: t('settings.memory_store_pgvector') }]).map(o => (
@@ -761,9 +832,9 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   ))}
                 </select>
               </Row>
-              <Row label="Status">
+              <Row label={t('settings.row_status')}>
                 {memoryStatus?.enabled ? (
-                  <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">ENABLED</span>
+                  <span className="px-2 py-0.5 rounded-lg bg-emerald-500/10 text-emerald-400 text-[10px] font-bold border border-emerald-500/20">{t('settings.memory_enabled')}</span>
                 ) : (
                   <span className="px-2 py-0.5 rounded-lg bg-slate-700/40 text-slate-400 text-[10px] font-bold border border-white/[0.06]">
                     {s.memory_store === 'pgvector' ? t('settings.memory_disabled_pgvector') : t('settings.memory_disabled_pinecone')}
@@ -772,49 +843,49 @@ export default function Settings({ userId }: { userId?: number } = {}) {
               </Row>
               {s.memory_store === 'pgvector' ? (
                 <>
-                  <Row label="OpenAI Embed Model"><input className={Input} value={s.memory_openai_embed_model} onChange={e => update('memory_openai_embed_model', e.target.value)} /></Row>
+                  <Row label={t('settings.row_openai_embed_model')}><input className={Input} value={s.memory_openai_embed_model} onChange={e => update('memory_openai_embed_model', e.target.value)} /></Row>
                   <Row label="">
                     <p className="text-[10px] text-slate-600 leading-relaxed">{t('settings.pgvector_hint')}</p>
                   </Row>
                 </>
               ) : (
                 <>
-                  <Row label="Pinecone API Key">
+                  <Row label={t('settings.row_pinecone_api_key')}>
                     {memoryStatus?.enabled ? (
                       <button onClick={deletePineconeKey} className="flex items-center gap-1.5 text-xs font-semibold text-rose-400 hover:text-rose-300">
-                        <Trash2 size={13} /> Remove key
+                        <Trash2 size={13} /> {t('settings.memory_remove_key')}
                       </button>
                     ) : (
                       <div className="flex gap-2 items-center">
                         <input type="password" className={Input} value={pineconeKey} onChange={e => setPineconeKey(e.target.value)} placeholder="pcsk_..." />
-                        <button onClick={savePineconeKey} disabled={pineconeSaving || !pineconeKey.trim()} className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-violet-600 hover:bg-violet-500 disabled:opacity-40">Save</button>
+                        <button onClick={savePineconeKey} disabled={pineconeSaving || !pineconeKey.trim()} className="px-4 py-2 rounded-xl text-xs font-semibold text-white bg-violet-600 hover:bg-violet-500 disabled:opacity-40">{t('settings.memory_save_key')}</button>
                       </div>
                     )}
                   </Row>
-                  <Row label="Index Name"><input className={Input} value={s.pinecone_index} onChange={e => update('pinecone_index', e.target.value)} /></Row>
-                  <Row label="Cloud"><input className={Input} value={s.pinecone_cloud} onChange={e => update('pinecone_cloud', e.target.value)} placeholder="aws" /></Row>
-                  <Row label="Region"><input className={Input} value={s.pinecone_region} onChange={e => update('pinecone_region', e.target.value)} placeholder="us-east-1" /></Row>
-                  <Row label="Embedder">
+                  <Row label={t('settings.row_index_name')}><input className={Input} value={s.pinecone_index} onChange={e => update('pinecone_index', e.target.value)} /></Row>
+                  <Row label={t('settings.row_cloud')}><input className={Input} value={s.pinecone_cloud} onChange={e => update('pinecone_cloud', e.target.value)} placeholder="aws" /></Row>
+                  <Row label={t('settings.row_region')}><input className={Input} value={s.pinecone_region} onChange={e => update('pinecone_region', e.target.value)} placeholder="us-east-1" /></Row>
+                  <Row label={t('settings.row_embedder')}>
                     <select className={Input} value={s.memory_embedder} onChange={e => update('memory_embedder', e.target.value)}>
-                      {(meta?.embedders ?? [{ value: 'pinecone', label: 'Pinecone hosted (no extra key)' }, { value: 'openai', label: 'OpenAI (uses your OpenAI key)' }, { value: 'ollama', label: 'Ollama (local, free)' }]).map(o => (
+                      {(meta?.embedders ?? [{ value: 'pinecone', label: t('settings.memory_embedder_pinecone') }, { value: 'openai', label: t('settings.memory_embedder_openai') }, { value: 'ollama', label: t('settings.memory_embedder_ollama') }]).map(o => (
                         <option key={o.value} value={o.value}>{o.label}</option>
                       ))}
                     </select>
                   </Row>
                   {s.memory_embedder === 'openai' && (
-                    <Row label="OpenAI Embed Model"><input className={Input} value={s.memory_openai_embed_model} onChange={e => update('memory_openai_embed_model', e.target.value)} /></Row>
+                    <Row label={t('settings.row_openai_embed_model')}><input className={Input} value={s.memory_openai_embed_model} onChange={e => update('memory_openai_embed_model', e.target.value)} /></Row>
                   )}
                   {s.memory_embedder === 'ollama' && (
-                    <Row label="Ollama Embed Model">
+                    <Row label={t('settings.row_ollama_embed_model')}>
                       <input className={Input} value={s.memory_ollama_embed_model} onChange={e => update('memory_ollama_embed_model', e.target.value)} placeholder="nomic-embed-text" />
                     </Row>
                   )}
                   {s.memory_embedder === 'pinecone' && (
-                    <Row label="Embed Model"><input className={Input} value={s.pinecone_embed_model} onChange={e => update('pinecone_embed_model', e.target.value)} /></Row>
+                    <Row label={t('settings.row_embed_model')}><input className={Input} value={s.pinecone_embed_model} onChange={e => update('pinecone_embed_model', e.target.value)} /></Row>
                   )}
                   <Row label="">
                     <p className="text-[10px] text-slate-600 leading-relaxed">
-                      Use the Save button above to persist the index/embedder settings. Memory stays off until a Pinecone API key is added, and each user's memory is isolated. The OpenAI embedder reuses your OpenAI key from Profile. The Ollama embedder uses your local Ollama instance (configure host in Profile → Ollama).
+                      {t('settings.memory_help')}
                     </p>
                   </Row>
                 </>
@@ -828,7 +899,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                   <span className="text-xs font-semibold">{t('settings.agent_qa_description')}</span>
                 </label>
               </Row>
-              <Row label="Memory Recall Count">
+              <Row label={t('settings.row_memory_recall_count')}>
                 <input type="number" min={1} max={50} className={Input} value={s.memory_recall_count ?? 5} onChange={e => update('memory_recall_count', parseInt(e.target.value) || 5)} />
               </Row>
             </Section>
@@ -892,21 +963,21 @@ function PersonaEditor({ userId }: { userId?: number } = {}) {
   const openEdit = (p: PersonaItem) => { setForm({ key: p.key, label: p.label, description: p.description, instructions: p.instructions }); setEditKey(p.key); setShowForm(true); setError(null) }
 
   const save = async () => {
-    if (!form.label.trim()) { setError('Label is required'); return }
+    if (!form.label.trim()) { setError(t('settings.persona_label_required')); return }
     setSaving(true); setError(null)
     try {
       if (editKey) {
         const url = userId ? `/api/personas/${editKey}?user_id=${userId}` : `/api/personas/${editKey}`
         await axios.put(url, { label: form.label, description: form.description, instructions: form.instructions })
       } else {
-        if (!form.key.trim()) { setError('Key is required'); setSaving(false); return }
+        if (!form.key.trim()) { setError(t('settings.persona_key_required')); setSaving(false); return }
         const url = userId ? `/api/personas?user_id=${userId}` : '/api/personas'
         await axios.post(url, form)
       }
       setShowForm(false); await load()
     } catch (e: unknown) {
       const msg = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-      setError(msg || 'Failed to save persona')
+      setError(msg || t('settings.persona_save_failed'))
     } finally { setSaving(false) }
   }
 
@@ -937,29 +1008,29 @@ function PersonaEditor({ userId }: { userId?: number } = {}) {
           <p className="text-xs font-bold text-violet-300">{editKey ? t('settings.persona_edit') : t('settings.persona_new')}</p>
           {!editKey && (
             <div>
-              <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Key (a-z, 0-9, _)</label>
-              <input className="w-full glass-input rounded-xl px-3 py-2 text-xs outline-none mt-1 font-mono" placeholder="my_persona" value={form.key} onChange={e => setForm(f => ({ ...f, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))} />
+              <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{t('settings.persona_key_label')}</label>
+              <input className="w-full glass-input rounded-xl px-3 py-2 text-xs outline-none mt-1 font-mono" placeholder={t('settings.persona_key_placeholder')} value={form.key} onChange={e => setForm(f => ({ ...f, key: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') }))} />
             </div>
           )}
           <div>
-            <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Display Label</label>
-            <input className="w-full glass-input rounded-xl px-3 py-2 text-xs outline-none mt-1" placeholder="Momentum Trader" value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} />
+            <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{t('settings.persona_display_label')}</label>
+            <input className="w-full glass-input rounded-xl px-3 py-2 text-xs outline-none mt-1" placeholder={t('settings.persona_display_placeholder')} value={form.label} onChange={e => setForm(f => ({ ...f, label: e.target.value }))} />
           </div>
           <div>
-            <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Description (short)</label>
-            <input className="w-full glass-input rounded-xl px-3 py-2 text-xs outline-none mt-1" placeholder="Focuses on momentum and technical breakouts" value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
+            <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{t('settings.persona_description_label')}</label>
+            <input className="w-full glass-input rounded-xl px-3 py-2 text-xs outline-none mt-1" placeholder={t('settings.persona_description_placeholder')} value={form.description} onChange={e => setForm(f => ({ ...f, description: e.target.value }))} />
           </div>
           <div>
-            <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">Instructions (injected into Portfolio Manager)</label>
-            <textarea rows={5} className="w-full glass-input rounded-xl px-3 py-2 text-xs outline-none mt-1 resize-y font-mono" placeholder={'Focus on:\n- High momentum stocks with strong relative strength\n- Technical breakouts above key resistance\n- Tight stop-losses at 5-8%'} value={form.instructions} onChange={e => setForm(f => ({ ...f, instructions: e.target.value }))} />
+            <label className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider">{t('settings.persona_instructions_label')}</label>
+            <textarea rows={5} className="w-full glass-input rounded-xl px-3 py-2 text-xs outline-none mt-1 resize-y font-mono" placeholder={t('settings.persona_instructions_placeholder')} value={form.instructions} onChange={e => setForm(f => ({ ...f, instructions: e.target.value }))} />
           </div>
           {error && <p className="text-rose-400 text-[10px] font-semibold">{error}</p>}
           <div className="flex gap-2">
             <button onClick={save} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold transition cursor-pointer disabled:opacity-40">
-              {saving ? 'Saving…' : 'Save'}
+              {saving ? t('settings.persona_saving') : t('settings.persona_save')}
             </button>
             <button onClick={() => setShowForm(false)} className="px-4 py-2 rounded-xl bg-white/5 hover:bg-white/10 text-slate-400 hover:text-white text-xs font-semibold transition cursor-pointer">
-              Cancel
+              {t('settings.persona_cancel')}
             </button>
           </div>
         </div>
@@ -974,17 +1045,17 @@ function PersonaEditor({ userId }: { userId?: number } = {}) {
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 mb-0.5">
                   <span className="text-xs font-bold text-white truncate">{p.label}</span>
-                  {p.is_builtin && <span className="text-[8px] font-bold uppercase tracking-wider text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded-full border border-violet-500/20">Built-in</span>}
+                  {p.is_builtin && <span className="text-[8px] font-bold uppercase tracking-wider text-violet-400 bg-violet-500/10 px-1.5 py-0.5 rounded-full border border-violet-500/20">{t('settings.persona_builtin')}</span>}
                   <span className="text-[9px] font-mono text-slate-600">{p.key}</span>
                 </div>
                 <p className="text-[10px] text-slate-500 truncate">{p.description || '—'}</p>
               </div>
               {!p.is_builtin && (
                 <div className="flex items-center gap-1.5 shrink-0">
-                  <button onClick={() => openEdit(p)} className="p-1.5 rounded-lg text-slate-500 hover:text-violet-400 hover:bg-violet-500/10 transition cursor-pointer" title="Edit">
+                  <button onClick={() => openEdit(p)} className="p-1.5 rounded-lg text-slate-500 hover:text-violet-400 hover:bg-violet-500/10 transition cursor-pointer" title={t('settings.persona_edit_title')}>
                     <Pencil size={12} />
                   </button>
-                  <button onClick={() => del(p.key)} className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer" title="Delete">
+                  <button onClick={() => del(p.key)} className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition cursor-pointer" title={t('settings.persona_delete_title')}>
                     <XCircle size={12} />
                   </button>
                 </div>

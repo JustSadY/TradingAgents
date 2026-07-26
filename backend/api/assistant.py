@@ -20,7 +20,7 @@ async def get_history(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    return await svc.get_assistant_history(db, current_user.id)
+    return await svc.get_assistant_history(db, current_user)
 
 
 @router.post("/chat", response_model=AssistantChatResponse)
@@ -37,4 +37,4 @@ async def clear_history(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    await svc.clear_assistant_history(db, current_user.id)
+    await svc.clear_assistant_history(db, current_user)

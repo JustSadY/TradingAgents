@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { renderHook, waitFor } from '@testing-library/react'
-import { useMeta, triggerMetaRefetch, type Meta } from '../useMeta'
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { clearMetaCache, useMeta, triggerMetaRefetch, type Meta } from '../useMeta'
 
 const mockMeta = vi.hoisted((): Meta => ({
   analysts: [{ key: 'market', label: 'Market Analyst', description: 'Analyzes market', default: true }],
@@ -37,6 +37,7 @@ vi.mock('axios', async () => {
 describe('useMeta', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    clearMetaCache()
   })
 
   it('returns null initially', () => {
@@ -75,5 +76,16 @@ describe('useMeta', () => {
     await waitFor(() => {
       expect(getSpy).toHaveBeenCalledWith('/api/meta')
     })
+  })
+
+  it('clears cached metadata for an account change', async () => {
+    const { result } = renderHook(() => useMeta())
+    await waitFor(() => {
+      expect(result.current).not.toBeNull()
+    })
+
+    act(() => clearMetaCache())
+
+    expect(result.current).toBeNull()
   })
 })

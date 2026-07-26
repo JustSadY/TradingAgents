@@ -42,6 +42,9 @@ class SettingsBase(BaseModel):
     max_risk_rounds: int = 1
     max_position_size_pct: float = 10.0
     max_risk_per_trade_pct: float = 2.0
+    allow_short_selling: bool = False
+    max_concentration_pct: float = 25.0
+    max_gross_exposure: float = 3.0
     strict_stop_loss_mode: bool = False
     correlation_risk_enabled: bool = False
     quality_gate_enabled: bool = False
@@ -133,6 +136,9 @@ class SettingsUpdate(BaseModel):
     max_risk_rounds: int | None = Field(default=None, ge=1, le=10)
     max_position_size_pct: float | None = Field(default=None, ge=1, le=100)
     max_risk_per_trade_pct: float | None = Field(default=None, ge=0.1, le=50)
+    allow_short_selling: bool | None = None
+    max_concentration_pct: float | None = Field(default=None, ge=1, le=100)
+    max_gross_exposure: float | None = Field(default=None, ge=1, le=10)
     strict_stop_loss_mode: bool | None = None
     correlation_risk_enabled: bool | None = None
     quality_gate_enabled: bool | None = None

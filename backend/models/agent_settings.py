@@ -11,7 +11,9 @@ class AgentSetting(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     scope: Mapped[str] = mapped_column(String(20), default="user", nullable=False, index=True)
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     agent_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     settings: Mapped[dict] = mapped_column("settings_json", JSON, default=dict)

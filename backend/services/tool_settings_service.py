@@ -147,9 +147,7 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
 
         if not user.is_admin:
             tool_field_access = field_access_map.get(tool.key, {})
-            settings = {
-                k: v for k, v in settings.items() if tool_field_access.get(k, {}).get("can_view", True)
-            }
+            settings = {k: v for k, v in settings.items() if tool_field_access.get(k, {}).get("can_view", True)}
 
         tools_map[tool.key] = ToolSettingValue(enabled=enabled, settings=settings)
 

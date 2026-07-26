@@ -56,13 +56,16 @@ class TestToolSettingsRepository:
         results = await get_user_tool_settings(db, 99999)
         assert len(results) == 0
 
-    async def test_get_user_tool_settings_multiple(
-        self, db: AsyncSession, test_user):
+    async def test_get_user_tool_settings_multiple(self, db: AsyncSession, test_user):
         for tool in ["tool_a", "tool_b", "tool_c"]:
-            db.add(AgentToolSetting(
-                scope="user", user_id=test_user.id,
-                tool_key=tool, enabled=True,
-            ))
+            db.add(
+                AgentToolSetting(
+                    scope="user",
+                    user_id=test_user.id,
+                    tool_key=tool,
+                    enabled=True,
+                )
+            )
         await db.flush()
 
         results = await get_user_tool_settings(db, test_user.id)
@@ -71,6 +74,7 @@ class TestToolSettingsRepository:
         assert keys == {"tool_a", "tool_b", "tool_c"}
 
     async def test_get_user_tool_settings_does_not_include_server(
-        self, db: AsyncSession, server_tool_setting: AgentToolSetting, test_user):
+        self, db: AsyncSession, server_tool_setting: AgentToolSetting, test_user
+    ):
         results = await get_user_tool_settings(db, test_user.id)
         assert len(results) == 0

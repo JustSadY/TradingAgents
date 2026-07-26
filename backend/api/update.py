@@ -3,7 +3,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from backend.api.deps import get_current_user, require_admin
+from backend.api.deps import require_admin
 from backend.models.user import User
 from backend.services import update_service
 
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/api/update", tags=["update"])
 
 
 @router.get("/status", response_model=dict[str, Any])
-async def update_status(_: User = Depends(get_current_user)):
+async def update_status(_: User = Depends(require_admin)):
     return await asyncio.to_thread(update_service.get_status)
 
 

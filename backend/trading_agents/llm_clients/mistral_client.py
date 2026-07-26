@@ -70,10 +70,7 @@ class MistralClient(BaseLLMClient):
 
         api_key = self.kwargs.get("api_key")
         if not api_key:
-            raise ValueError(
-                "API key for Mistral AI is not set. "
-                "Please provide it in your Profile or Settings."
-            )
+            raise ValueError("API key for Mistral AI is not set. Please provide it in your Profile or Settings.")
         llm_kwargs["mistral_api_key"] = api_key
 
         if self.base_url:

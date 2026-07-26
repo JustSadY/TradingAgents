@@ -15,20 +15,43 @@ from backend.core.utils import safe_ticker_component
 _logger = logging.getLogger(__name__)
 
 
-def _db_path(data_dir: str | Path, ticker: str) -> Path:
+def checkpoint_scope(user_id: int | None, analysis_id: int | str) -> str:
+    """Return the stable namespace for one persisted analysis run.
+
+    Checkpoints contain the complete LangGraph state, including reports and
+    tool outputs.  A ticker/date is therefore not a sufficient identity: two
+    users (or two independent runs by the same user) can legitimately analyse
+    the same asset on the same day.  Keep the owner and persisted analysis row
+    in every checkpoint identity so those runs can never resume each other.
+    """
+    if analysis_id is None or str(analysis_id) == "":
+        raise ValueError("analysis_id is required for a checkpoint scope")
+    owner = "system" if user_id is None else str(user_id)
+    return f"user:{owner}:analysis:{analysis_id}"
+
+
+def _scope_component(scope: str) -> str:
+    if not isinstance(scope, str) or not scope:
+        raise ValueError("checkpoint scope is required")
+    # Do not put tenant or analysis identifiers directly in a filesystem path.
+    return hashlib.sha256(scope.encode()).hexdigest()[:24]
+
+
+def _db_path(data_dir: str | Path, ticker: str, scope: str) -> Path:
     safe = safe_ticker_component(ticker).upper()
-    p = Path(data_dir) / "checkpoints"
+    p = Path(data_dir) / "checkpoints" / _scope_component(scope)
     p.mkdir(parents=True, exist_ok=True)
     return p / f"{safe}.db"
 
 
-def thread_id(ticker: str, date: str) -> str:
-    return hashlib.sha256(f"{ticker.upper()}:{date}".encode()).hexdigest()[:16]
+def thread_id(ticker: str, date: str, scope: str) -> str:
+    """Return a LangGraph thread id isolated to one persisted analysis."""
+    return hashlib.sha256(f"{scope}:{ticker.upper()}:{date}".encode()).hexdigest()[:24]
 
 
 @contextmanager
-def get_checkpointer(data_dir: str | Path, ticker: str) -> Generator[SqliteSaver, None, None]:
-    db = _db_path(data_dir, ticker)
+def get_checkpointer(data_dir: str | Path, ticker: str, scope: str) -> Generator[SqliteSaver, None, None]:
+    db = _db_path(data_dir, ticker, scope)
     conn = sqlite3.connect(str(db), check_same_thread=False)
     try:
         saver = SqliteSaver(conn)
@@ -39,19 +62,21 @@ def get_checkpointer(data_dir: str | Path, ticker: str) -> Generator[SqliteSaver
 
 
 @asynccontextmanager
-async def get_async_checkpointer(data_dir: str | Path, ticker: str) -> AsyncGenerator[AsyncSqliteSaver, None]:
-    db = _db_path(data_dir, ticker)
+async def get_async_checkpointer(
+    data_dir: str | Path, ticker: str, scope: str
+) -> AsyncGenerator[AsyncSqliteSaver, None]:
+    db = _db_path(data_dir, ticker, scope)
     async with AsyncSqliteSaver.from_conn_string(str(db)) as saver:
         await saver.setup()
         yield saver
 
 
-def checkpoint_step(data_dir: str | Path, ticker: str, date: str) -> int | None:
-    db = _db_path(data_dir, ticker)
+def checkpoint_step(data_dir: str | Path, ticker: str, date: str, scope: str) -> int | None:
+    db = _db_path(data_dir, ticker, scope)
     if not db.exists():
         return None
-    tid = thread_id(ticker, date)
-    with get_checkpointer(data_dir, ticker) as saver:
+    tid = thread_id(ticker, date, scope)
+    with get_checkpointer(data_dir, ticker, scope) as saver:
         config = {"configurable": {"thread_id": tid}}
         cp = saver.get_tuple(config)
         if cp is None:
@@ -59,12 +84,12 @@ def checkpoint_step(data_dir: str | Path, ticker: str, date: str) -> int | None:
         return cp.metadata.get("step")
 
 
-async def async_checkpoint_step(data_dir: str | Path, ticker: str, date: str) -> int | None:
-    db = _db_path(data_dir, ticker)
+async def async_checkpoint_step(data_dir: str | Path, ticker: str, date: str, scope: str) -> int | None:
+    db = _db_path(data_dir, ticker, scope)
     if not db.exists():
         return None
-    tid = thread_id(ticker, date)
-    async with get_async_checkpointer(data_dir, ticker) as saver:
+    tid = thread_id(ticker, date, scope)
+    async with get_async_checkpointer(data_dir, ticker, scope) as saver:
         config = {"configurable": {"thread_id": tid}}
         cp = await saver.aget_tuple(config)
         if cp is None:
@@ -72,11 +97,11 @@ async def async_checkpoint_step(data_dir: str | Path, ticker: str, date: str) ->
         return cp.metadata.get("step")
 
 
-def clear_checkpoint(data_dir: str | Path, ticker: str, date: str) -> None:
-    db = _db_path(data_dir, ticker)
+def clear_checkpoint(data_dir: str | Path, ticker: str, date: str, scope: str) -> None:
+    db = _db_path(data_dir, ticker, scope)
     if not db.exists():
         return
-    tid = thread_id(ticker, date)
+    tid = thread_id(ticker, date, scope)
     conn = sqlite3.connect(str(db))
     try:
         for table in ("writes", "checkpoints"):
@@ -89,17 +114,17 @@ def clear_checkpoint(data_dir: str | Path, ticker: str, date: str) -> None:
         conn.close()
 
 
-async def list_checkpoints_for_thread(data_dir: str | Path, ticker: str, date: str) -> list[dict]:
+async def list_checkpoints_for_thread(data_dir: str | Path, ticker: str, date: str, scope: str) -> list[dict]:
     """Retrieve all checkpoints for a thread from the saver database, ordered by step."""
-    db = _db_path(data_dir, ticker)
+    db = _db_path(data_dir, ticker, scope)
     if not db.exists():
         return []
 
-    tid = thread_id(ticker, date)
+    tid = thread_id(ticker, date, scope)
     config = {"configurable": {"thread_id": tid}}
 
     checkpoints = []
-    async with get_async_checkpointer(data_dir, ticker) as saver:
+    async with get_async_checkpointer(data_dir, ticker, scope) as saver:
         async for cp in saver.alist(config):
             metadata = cp.metadata or {}
             step = metadata.get("step", -1)

@@ -18,9 +18,12 @@ async def list_historical_analyses(
     limit: int,
 ) -> list[AnalysisResult]:
     q = scope_to_user(select(AnalysisResult), AnalysisResult, user)
-    q = q.where(AnalysisResult.ticker == ticker).where(
-        AnalysisResult.trade_date < before_trade_date
-    ).order_by(_desc(AnalysisResult.created_at)).limit(limit)
+    q = (
+        q.where(AnalysisResult.ticker == ticker)
+        .where(AnalysisResult.trade_date < before_trade_date)
+        .order_by(_desc(AnalysisResult.created_at))
+        .limit(limit)
+    )
     result = await db.execute(q)
     return list(result.scalars().all())
 
@@ -57,12 +60,16 @@ async def get_previous_signal(db: AsyncSession, *, user_id: int | None, ticker: 
     """Signal of the most recent completed analysis for this ticker, before ``exclude_id``.
 
     Scoped to ``user_id`` so one user's history never leaks into another's.
+    An analysis run creates its row before the work completes, so merely
+    excluding that row could select a newer, concurrent run as its
+    "previous" signal.  The monotonic primary key gives the run's creation
+    order and keeps flip notifications causal.
     """
     q = (
         select(AnalysisResult.signal)
         .where(
             AnalysisResult.ticker == ticker.upper(),
-            AnalysisResult.id != exclude_id,
+            AnalysisResult.id < exclude_id,
             AnalysisResult.status == "completed",
         )
         .order_by(_desc(AnalysisResult.created_at))

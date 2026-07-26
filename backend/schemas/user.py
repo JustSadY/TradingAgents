@@ -1,6 +1,6 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 class UserCreate(BaseModel):
@@ -53,6 +53,21 @@ class UserAdminUpdate(BaseModel):
 class ApiKeySet(BaseModel):
     provider: str
     api_key: str
+
+    @model_validator(mode="after")
+    def reject_user_controlled_ollama_url(self) -> "ApiKeySet":
+        """Ollama is configured by the server operator, never by a tenant.
+
+        Older versions overloaded this field as a custom Ollama base URL,
+        allowing an authenticated user to make the backend call arbitrary
+        internal addresses.  Keep accepting the endpoint shape for other API
+        keys, but reject URL values for Ollama explicitly and clearly.
+        """
+        if self.provider.strip().lower() == "ollama" and self.api_key.strip().lower().startswith(
+            ("http://", "https://")
+        ):
+            raise ValueError("Ollama endpoint is configured by the server administrator, not via an API key")
+        return self
 
 
 class PagePermissionsUpdate(BaseModel):

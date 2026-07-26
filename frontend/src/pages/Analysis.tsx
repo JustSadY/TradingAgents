@@ -76,30 +76,97 @@ function QualityBadge({ quality }: { quality: RunQuality }) {
   )
 }
 
-const EMPTY_RUN = {
-  ticker: '', date: new Date().toISOString().slice(0, 10), assetType: 'stock',
-  runStatus: 'idle' as 'idle' | 'running' | 'done' | 'error',
-  signal: null as string | null, reports: {} as Record<string, string>,
-  log: [] as string[], activeSection: null as string | null,
-  analysisId: null as number | null,
-  liveDebate: [] as { sender: string; content: string; type: string }[],
+type RunStatus = 'idle' | 'running' | 'done' | 'error'
+type LiveDebateMessage = { sender: string; content: string; type: string }
+type SavedRun = {
+  ticker: string
+  date: string
+  assetType: string
+  runStatus: RunStatus
+  signal: string | null
+  reports: Record<string, string>
+  log: string[]
+  activeSection: string | null
+  analysisId: number | null
+  liveDebate: LiveDebateMessage[]
 }
 
-function loadRunState() {
+function emptyRun(): SavedRun {
+  return {
+    ticker: '', date: new Date().toISOString().slice(0, 10), assetType: 'stock',
+    runStatus: 'idle', signal: null, reports: {}, log: [], activeSection: null,
+    analysisId: null, liveDebate: [],
+  }
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function stringRecord(value: unknown): Record<string, string> {
+  if (!isRecord(value)) return {}
+  const reports: Record<string, string> = {}
+  for (const [section, report] of Object.entries(value)) {
+    if (typeof report === 'string') reports[section] = report
+  }
+  return reports
+}
+
+function liveDebateMessages(value: unknown): LiveDebateMessage[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap(item => {
+    if (!isRecord(item) || typeof item.sender !== 'string' || typeof item.content !== 'string' || typeof item.type !== 'string') return []
+    return [{ sender: item.sender, content: item.content, type: item.type }]
+  })
+}
+
+function hasValidRunningTask(): boolean {
+  const raw = localStorage.getItem(TASK_KEY)
+  if (!raw) return false
   try {
+    const task = JSON.parse(raw)
+    if (isRecord(task) && typeof task.taskId === 'string' && task.taskId.trim()) return true
+  } catch {
+    // Fall through and remove the bad task marker below.
+  }
+  localStorage.removeItem(TASK_KEY)
+  return false
+}
+
+function loadRunState(): SavedRun {
+  const fallback = emptyRun()
+  try {
+    const hasRunningTask = hasValidRunningTask()
     const raw = localStorage.getItem(STORAGE_KEY)
-    const hasRunningTask = !!localStorage.getItem(TASK_KEY)
-    if (!raw) return EMPTY_RUN
-    const parsed = JSON.parse(raw)
-    const merged = hasRunningTask
-      ? { ...EMPTY_RUN, ...parsed, runStatus: 'running' as const }
-      : { ...EMPTY_RUN, ...parsed, runStatus: parsed.runStatus === 'running' ? 'idle' as const : parsed.runStatus }
-    // Saved state may be partial or corrupted (e.g. a stray `"ticker": null`);
-    // guard the fields every downstream `.trim()`/`.toUpperCase()` call relies on.
-    if (typeof merged.ticker !== 'string') merged.ticker = EMPTY_RUN.ticker
-    if (typeof merged.date !== 'string') merged.date = EMPTY_RUN.date
-    return merged
-  } catch { return EMPTY_RUN }
+    if (!raw) return hasRunningTask ? { ...fallback, runStatus: 'running' } : fallback
+    const parsed: unknown = JSON.parse(raw)
+    if (!isRecord(parsed)) return fallback
+
+    const savedStatus = parsed.runStatus
+    const runStatus: RunStatus = hasRunningTask
+      ? 'running'
+      : savedStatus === 'idle' || savedStatus === 'done' || savedStatus === 'error'
+        ? savedStatus
+        // A persisted running state without a task cannot be resumed.
+        : 'idle'
+
+    return {
+      ticker: typeof parsed.ticker === 'string' ? parsed.ticker : fallback.ticker,
+      date: typeof parsed.date === 'string' ? parsed.date : fallback.date,
+      assetType: typeof parsed.assetType === 'string' && parsed.assetType.trim() ? parsed.assetType : fallback.assetType,
+      runStatus,
+      signal: typeof parsed.signal === 'string' ? parsed.signal : null,
+      reports: stringRecord(parsed.reports),
+      log: Array.isArray(parsed.log) ? parsed.log.filter((line): line is string => typeof line === 'string') : [],
+      activeSection: typeof parsed.activeSection === 'string' ? parsed.activeSection : null,
+      analysisId: typeof parsed.analysisId === 'number' && Number.isSafeInteger(parsed.analysisId) && parsed.analysisId > 0
+        ? parsed.analysisId
+        : null,
+      liveDebate: liveDebateMessages(parsed.liveDebate),
+    }
+  } catch {
+    return fallback
+  }
 }
 
 // Safely render the Kelly card from a (possibly malformed/partial) JSON string.
@@ -286,7 +353,10 @@ function RunTab() {
       let ev: WsEvent
       try { ev = JSON.parse(e.data) } catch { return }
       if (ev.type === 'status') {
-        appendLog(`${ev.agent}`)
+        // Newer emitters send a stable technical agent key plus a human
+        // status message. Keep compatibility with older agent-only events.
+        const statusText = ev.message ?? ev.status ?? ev.agent
+        if (statusText) appendLog(statusText)
       } else if (ev.type === 'progress') {
         setCurrentStep(prev => prev?.label === ev.label && prev?.stage === ev.stage ? prev : { label: ev.label || '', stage: ev.stage || '' })
         appendLog(`Progress: ${ev.label}`)
@@ -1007,11 +1077,29 @@ function MultiTab() {
   const [error, setError] = useState<string | null>(null)
   const [progress, setProgress] = useState<string>('')
   const wsRef = useRef<WebSocket | null>(null)
+  const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const shouldReconnectRef = useRef(false)
   const meta = useMeta()
   const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Stock' }, { value: 'crypto', label: 'Crypto' }]
 
+  const closeCurrentSocket = useCallback(() => {
+    shouldReconnectRef.current = false
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
+    const ws = wsRef.current
+    wsRef.current = null
+    if (!ws) return
+    // Closing a terminal/unmounted socket must not enter its reconnect path.
+    ws.onmessage = null
+    ws.onerror = null
+    ws.onclose = null
+    try { ws.close() } catch { /* noop */ }
+  }, [])
+
   // Close the live-progress socket if the tab unmounts mid-run.
-  useEffect(() => () => { try { wsRef.current?.close() } catch { /* noop */ } }, [])
+  useEffect(() => closeCurrentSocket, [closeCurrentSocket])
 
   const addTicker = () => {
     const tk = input.trim().toUpperCase()
@@ -1021,10 +1109,34 @@ function MultiTab() {
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTicker() } }
 
   const connectWs = useCallback(function connectWs(taskId: string, retries = 0) {
-    try { wsRef.current?.close() } catch { /* noop */ }
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
+    const previous = wsRef.current
+    if (previous) {
+      previous.onmessage = null
+      previous.onerror = null
+      previous.onclose = null
+      try { previous.close() } catch { /* noop */ }
+    }
     const token = getAccessToken()
     const ws = new WebSocket(analysisWsUrl(taskId, token))
     wsRef.current = ws
+    shouldReconnectRef.current = true
+    let terminal = false
+    let reconnectScheduled = false
+
+    const stopReconnecting = () => {
+      terminal = true
+      shouldReconnectRef.current = false
+      if (wsRef.current === ws) wsRef.current = null
+      ws.onmessage = null
+      ws.onerror = null
+      ws.onclose = null
+      try { ws.close() } catch { /* noop */ }
+    }
+
     ws.onmessage = (e) => {
       let ev: any
       try { ev = JSON.parse(e.data) } catch { return }
@@ -1032,23 +1144,35 @@ function MultiTab() {
         setProgress(ev.label || '')
       } else if (ev.type === 'complete') {
         setDone(true); setRunning(false)
-        try { ws.close() } catch { /* noop */ }
+        stopReconnecting()
       } else if (ev.type === 'error') {
         setError(ev.message || t('analysis.multi.error_default')); setRunning(false)
-        try { ws.close() } catch { /* noop */ }
+        stopReconnecting()
       }
     }
     const reconnect = () => {
+      if (terminal || reconnectScheduled || !shouldReconnectRef.current || wsRef.current !== ws) return
+      reconnectScheduled = true
       if (retries < 3) {
         const delay = Math.min(1000 * Math.pow(2, retries), 8000)
-        setTimeout(() => connectWs(taskId, retries + 1), delay)
+        wsRef.current = null
+        reconnectTimeoutRef.current = setTimeout(() => connectWs(taskId, retries + 1), delay)
       } else {
+        shouldReconnectRef.current = false
+        if (wsRef.current === ws) wsRef.current = null
         setError(t('analysis.ws.conn_closed') || 'Connection lost')
         setRunning(false)
       }
     }
     ws.onclose = reconnect
-    ws.onerror = reconnect
+    // A WebSocket error is followed by close in browsers. Let that single
+    // terminal event own retry scheduling so error + close cannot create two
+    // concurrent sockets.
+    ws.onerror = () => {
+      if (!terminal) {
+        try { ws.close() } catch { /* noop */ }
+      }
+    }
   }, [t])
 
   const handleRun = async () => {

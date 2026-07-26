@@ -89,19 +89,45 @@ export interface Meta {
 
 
 let _cache: Meta | null = null
-let _inflight: Promise<any> | null = null
+let _inflight: Promise<Meta> | null = null
 const _listeners = new Set<(m: Meta | null) => void>()
+// Meta is user-scoped (custom personas and tool/agent visibility are filtered
+// by the API).  A generation token keeps a response started for a previous
+// account from repopulating the cache after logout/login.
+let _generation = 0
 
-export function triggerMetaRefetch() {
-  _cache = null
-  _inflight = axios.get('/api/meta').then(r => {
-    _cache = r.data as Meta
-    _listeners.forEach(l => l(_cache))
-    return _cache
+function notifyListeners(meta: Meta | null) {
+  _listeners.forEach(listener => listener(meta))
+}
+
+function fetchMeta(): Promise<Meta> {
+  const generation = _generation
+  const request = axios.get('/api/meta').then(r => {
+    const meta = r.data as Meta
+    if (_generation === generation) {
+      _cache = meta
+      notifyListeners(meta)
+    }
+    return meta
   }).catch(err => {
-    _inflight = null
+    if (_generation === generation) _inflight = null
     throw err
   })
+  _inflight = request
+  return request
+}
+
+/** Clear all in-memory metadata associated with the authenticated account. */
+export function clearMetaCache() {
+  _generation += 1
+  _cache = null
+  _inflight = null
+  notifyListeners(null)
+}
+
+export function triggerMetaRefetch() {
+  clearMetaCache()
+  return fetchMeta()
 }
 
 export function useMeta(): Meta | null {
@@ -112,13 +138,9 @@ export function useMeta(): Meta | null {
     if (_cache) {
       setMeta(_cache)
     } else if (!_inflight) {
-      _inflight = axios.get('/api/meta').then(r => {
-        _cache = r.data as Meta
-        _listeners.forEach(l => l(_cache))
-        return _cache
-      }).catch(() => {
-        _inflight = null
-      })
+      // Consumers surface their own loading state; a failed metadata fetch
+      // should not create an unhandled rejection in a render effect.
+      void fetchMeta().catch(() => {})
     }
     return () => {
       _listeners.delete(setMeta)
@@ -127,4 +149,3 @@ export function useMeta(): Meta | null {
 
   return meta
 }
-

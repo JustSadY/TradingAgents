@@ -13,7 +13,9 @@ class AnalysisResult(Base):
         Index("ix_analysis_results_trade_date", "trade_date"),
     )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     trade_date: Mapped[str] = mapped_column(String(20), nullable=False)
     asset_type: Mapped[str] = mapped_column(String(20), default="stock")

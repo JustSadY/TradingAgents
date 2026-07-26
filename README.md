@@ -36,7 +36,7 @@ The platform features a dynamic, database-driven modular agent tool system that 
 
 ## 🛠️ Tech Stack
 
-*   **Backend:** Python 3.10+, FastAPI, SQLAlchemy (Asyncio / asyncpg), PostgreSQL, APScheduler, LangGraph, LangChain Core. Optional Redis + arq for horizontal scaling.
+*   **Backend:** Python 3.10–3.13, FastAPI, SQLAlchemy (Asyncio / asyncpg), PostgreSQL, APScheduler, LangGraph, LangChain Core. Optional Redis + arq for horizontal scaling.
 *   **Frontend:** React 19, Vite 8, TailwindCSS 4 (custom dark glassmorphism theme), Recharts (interactive charts).
 *   **Data Providers:** yFinance, Alpha Vantage, Reddit API, SearXNG search engine.
 

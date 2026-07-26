@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db, require_admin
@@ -21,10 +21,19 @@ async def get_system_settings(
 @router.put("", response_model=SystemSettingsRead)
 async def update_system_settings(
     body: SystemSettingsUpdate,
-    _: User = Depends(require_admin),
+    current_user: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
-    return await system_settings_service.update_system_settings(db, body.model_dump(exclude_unset=True))
+    fields = body.model_dump(exclude_unset=True)
+    if {"trading_mode", "active_broker"}.intersection(fields) and not current_user.is_owner:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Only the Server Owner can configure a brokerage execution mode.",
+        )
+    try:
+        return await system_settings_service.update_system_settings(db, fields)
+    except system_settings_service.InvalidTradingConfiguration as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.get("/tools", response_model=ToolSettingsRead)

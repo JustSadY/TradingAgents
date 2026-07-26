@@ -77,7 +77,12 @@ export default function ChartPage() {
   const load = useCallback(async (ticker: string, p: string) => {
     if (!ticker) return
     const reqId = ++loadReqId.current
-    setLoading(true); setError(null); setSelected(null); setCustomIndicators([]); setUserIndicatorData([]); setUserIndicatorLabel('')
+    // Never leave a prior symbol's price/analysis data visible while a new
+    // request is in flight (or after it fails). In a trading UI that is much
+    // safer than displaying AAPL candles under an MSFT heading.
+    setLoading(true); setError(null); setSelected(null)
+    setCandles([]); setAnalyses([]); setSentimentHistory([]); setPatterns([])
+    setCustomIndicators([]); setUserIndicatorData([]); setUserIndicatorLabel('')
     try {
       const [ohlcvRes, histRes, sentRes] = await Promise.all([
         api.get('/api/market/ohlcv', { params: { ticker, period: p } }),

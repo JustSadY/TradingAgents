@@ -4,11 +4,11 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user
+from backend.api.deps import require_page
 from backend.core.database import get_db
 from backend.core.limiter import limiter
 from backend.models.user import User
-from backend.schemas.market import FormulaAssistResponse
+from backend.schemas.market import FormulaAssistResponse, SentimentHistoryResponse
 from backend.services.market_service import (
     MarketDataError,
     get_custom_indicator_series,
@@ -31,7 +31,7 @@ async def ohlcv(
     start_date: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD"),
     end_date: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD"),
     period: str = Query("1y", description="1m|3m|6m|1y|2y|5y — ignored when start_date provided"),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page("chart")),
 ):
     try:
         return await get_ohlcv(ticker, period, start_date, end_date)
@@ -46,7 +46,7 @@ async def custom_indicator(
     period: str = Query("1y", description="1m|3m|6m|1y|2y|5y"),
     start_date: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD"),
     end_date: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD"),
-    _: User = Depends(get_current_user),
+    _: User = Depends(require_page("chart")),
 ):
     try:
         return await get_custom_indicator_series(ticker, formula, period, start_date, end_date)
@@ -60,7 +60,7 @@ async def formula_assist(
     request: Request,
     body: FormulaAssistRequest,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("chart")),
 ):
     """Generate a custom-indicator formula from a plain-language description.
 
@@ -73,11 +73,11 @@ async def formula_assist(
     return {"formula": formula}
 
 
-@router.get("/sentiment-history", response_model=list[dict[str, Any]])
+@router.get("/sentiment-history", response_model=SentimentHistoryResponse)
 async def sentiment_history(
     ticker: str = Query(..., description=_TICKER_DESCRIPTION),
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("chart")),
 ):
     try:
         return await get_sentiment_history(db, ticker, user=current_user)

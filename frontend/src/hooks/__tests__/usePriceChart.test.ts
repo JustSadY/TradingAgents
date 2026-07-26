@@ -149,6 +149,21 @@ describe('usePriceChart', () => {
     expect(volData[1].color).toContain('ef4444')
   })
 
+  it('clears rendered data when the active ticker has no candles', () => {
+    const ref = createMockRef()
+    const { rerender } = renderHook(
+      ({ chartCandles }: { chartCandles: ChartCandle[] }) => usePriceChart(ref, chartCandles, [], false, false),
+      { initialProps: { chartCandles: [candle('2026-07-18')] } },
+    )
+
+    rerender({ chartCandles: [] })
+
+    expect(mockCandleSeries.setData).toHaveBeenLastCalledWith([])
+    expect(mockVolSeries.setData).toHaveBeenLastCalledWith([])
+    expect(mockSmaSeries.setData).toHaveBeenLastCalledWith([])
+    expect(mockEmaSeries.setData).toHaveBeenLastCalledWith([])
+  })
+
   it('sets SMA data when showSMA is true', () => {
     const ref = createMockRef()
     const candles = [candle('2026-07-18', { sma: 101 })]
@@ -255,7 +270,7 @@ describe('usePriceChart', () => {
   it('handles empty candles gracefully', () => {
     const ref = createMockRef()
     renderHook(() => usePriceChart(ref, [], [], false, false))
-    expect(mockCandleSeries.setData).not.toHaveBeenCalled()
+    expect(mockCandleSeries.setData).toHaveBeenCalledWith([])
   })
 
   it('cleans up on unmount', () => {

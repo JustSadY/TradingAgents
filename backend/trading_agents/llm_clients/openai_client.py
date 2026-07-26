@@ -144,14 +144,20 @@ _PASSTHROUGH_KWARGS = (
 _PROVIDER_BASE_URL = {
     "nvidia": "https://integrate.api.nvidia.com/v1",
     "deepseek": "https://api.deepseek.com/v1",
-    "ollama": "http://localhost:11434/v1",
 }
 
 # Providers that work without an API key (use a dummy value so the OpenAI
-# client doesn't reject the request). Users may also store a custom base URL
-# (e.g. "http://192.168.1.5:11434") in the "api_key" field to point at a
-# remote Ollama server — if the value looks like a URL it is used as base_url.
+# client doesn't reject the request).  Ollama's endpoint is server-managed;
+# allowing a user's stored API-key value to become a base URL turns every LLM
+# request into an authenticated SSRF primitive.
 _NO_KEY_PROVIDERS = {"ollama"}
+
+
+def _server_ollama_base_url() -> str:
+    from backend.core.config import get_settings
+
+    base_url = get_settings().OLLAMA_BASE_URL.rstrip("/")
+    return base_url if base_url.endswith("/v1") else f"{base_url}/v1"
 
 
 class OpenAIClient(BaseLLMClient):
@@ -172,29 +178,33 @@ class OpenAIClient(BaseLLMClient):
         # token counters silently stay at zero.
         llm_kwargs = {"model": self.model, "streaming": True, "stream_usage": True}
 
-        # Determine base URL
+        # Determine base URL.  Only server configuration may choose the
+        # Ollama endpoint; a user API key is never interpreted as a URL.
         api_key = self.kwargs.get("api_key")
-
-        # If the "api_key" field looks like a URL (Ollama custom host), treat it
-        # as a base_url override rather than an actual credential.
-        key_is_url = isinstance(api_key, str) and api_key.startswith("http")
-        custom_base_url = api_key if key_is_url else None
-        resolved_base_url = self.base_url or custom_base_url or _PROVIDER_BASE_URL.get(self.provider)
+        resolved_base_url = (
+            _server_ollama_base_url()
+            if self.provider == "ollama"
+            else self.base_url or _PROVIDER_BASE_URL.get(self.provider)
+        )
         if resolved_base_url:
             llm_kwargs["base_url"] = resolved_base_url
 
         # Determine API Key (NO .env lookups)
-        if key_is_url or not api_key:
-            if self.provider in _NO_KEY_PROVIDERS:
-                llm_kwargs["api_key"] = "ollama"  # Ollama ignores the key
-            else:
-                raise ValueError(
-                    f"API key for provider '{self.provider}' is not set. Please provide it in your Profile or Settings."
-                )
+        if self.provider in _NO_KEY_PROVIDERS:
+            llm_kwargs["api_key"] = "ollama"  # Ollama ignores the key
+        elif not api_key:
+            raise ValueError(
+                f"API key for provider '{self.provider}' is not set. Please provide it in your Profile or Settings."
+            )
         else:
             llm_kwargs["api_key"] = api_key
 
         for key in _PASSTHROUGH_KWARGS:
+            # ``api_key`` was resolved above.  Letting the generic passthrough
+            # overwrite it reintroduced a legacy Ollama URL stored as a user
+            # key, defeating the server-managed endpoint/SSRF boundary.
+            if key == "api_key":
+                continue
             if key not in self.kwargs:
                 continue
             value = self.kwargs[key]

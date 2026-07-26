@@ -54,13 +54,28 @@ _TRANSIENT_HINTS = (
 )
 
 # ---- Circuit breaker state ----
-# Maps node/agent name → {"failures": int, "open_since": float | None}
-# Module-level so it persists for the lifetime of the process.
+# Maps a tenant/provider-scoped node key → {"failures": int,
+# "open_since": float | None}.  The breaker stays process-local, but one
+# user's bad credential/rate limit must not force another user's run into a
+# fallback path.
 _circuit_state: dict[str, dict] = {}
 
 
 def _circuit_key(name: str, kind: str) -> str:
-    return f"{kind}:{name}"
+    try:
+        from backend.trading_agents.agents.data.chart_tools import active_run_context
+
+        ctx = active_run_context.get(None) or {}
+        user_id = ctx.get("user_id")
+        graph = ctx.get("graph")
+        provider = getattr(graph, "llm_provider", None) if graph is not None else None
+        if not provider and graph is not None:
+            provider = (getattr(graph, "config", {}) or {}).get("llm_provider")
+        return f"{kind}:{name}:user={user_id if user_id is not None else 'system'}:provider={provider or 'default'}"
+    except Exception:
+        # Resilience must remain usable during isolated imports/tests where no
+        # graph context has been installed.
+        return f"{kind}:{name}:user=unknown:provider=default"
 
 
 # ---- Per-run report card ----

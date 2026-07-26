@@ -1,5 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { act, render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import Analysis from '../Analysis'
 
 vi.mock('react-router-dom', () => ({
@@ -103,6 +104,12 @@ vi.mock('../../components/ErrorBoundary', () => ({ ErrorBoundary: ({ children }:
 describe('Analysis', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.clear()
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.useRealTimers()
   })
 
   it('renders analysis tabs', async () => {
@@ -112,5 +119,77 @@ describe('Analysis', () => {
     })
     expect(screen.getByText('Multi')).toBeInTheDocument()
     expect(screen.getByText('History')).toBeInTheDocument()
+  })
+
+  it('ignores malformed persisted run state instead of crashing the run tab', async () => {
+    localStorage.setItem('ta_last_run', JSON.stringify({
+      ticker: null,
+      date: 42,
+      assetType: { unexpected: true },
+      runStatus: 'not-a-status',
+      reports: null,
+      log: { line: 'not an array' },
+      activeSection: ['not a string'],
+      analysisId: 'not a number',
+      liveDebate: { malformed: true },
+    }))
+    localStorage.setItem('ta_task_running', '{malformed')
+
+    render(<Analysis />)
+
+    await waitFor(() => expect(screen.getByText('Run')).toBeInTheDocument())
+    expect(localStorage.getItem('ta_task_running')).toBeNull()
+  })
+
+  it('does not reconnect the multi-ticker WebSocket after a terminal completion event', async () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+      url: string
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onclose: ((event: CloseEvent) => void) | null = null
+      onerror: ((event: Event) => void) | null = null
+
+      constructor(url: string) {
+        this.url = url
+        MockWebSocket.instances.push(this)
+      }
+
+      close() {
+        this.onclose?.(new CloseEvent('close'))
+      }
+
+      emit(event: Record<string, unknown>) {
+        this.onmessage?.({ data: JSON.stringify(event) } as MessageEvent)
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket)
+
+    const axios = await import('axios')
+    vi.mocked(axios.default.get).mockResolvedValue({ data: [] })
+    vi.mocked(axios.default.post).mockImplementation((url: string) => {
+      if (url === '/api/analysis/run-portfolio') return Promise.resolve({ data: { task_id: 'portfolio-task' } })
+      return Promise.resolve({ data: {} })
+    })
+
+    const user = userEvent.setup()
+    localStorage.setItem('ta_access', 'test-token')
+    render(<Analysis />)
+    await user.click(screen.getByText('Multi').closest('button')!)
+
+    const input = screen.getByPlaceholderText('AAPL, Enter')
+    await user.type(input, 'AAPL{enter}')
+    await user.type(input, 'MSFT{enter}')
+    await user.click(screen.getByText('analysis.multi.btn_start').closest('button')!)
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+    expect(MockWebSocket.instances[0].url).toBe(`ws://${window.location.host}/ws/analysis/portfolio-task?token=test-token`)
+
+    vi.useFakeTimers()
+    act(() => {
+      MockWebSocket.instances[0].emit({ type: 'complete' })
+      vi.advanceTimersByTime(10_000)
+    })
+
+    expect(MockWebSocket.instances).toHaveLength(1)
   })
 })

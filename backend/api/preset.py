@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user
+from backend.api.deps import enforce_setting_section_permission, get_current_user
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.schemas.preset import PresetApplyResponse, PresetCreate, PresetDeleteResponse, PresetRead
@@ -26,7 +26,11 @@ async def list_presets_run(
 @router.post(
     "",
     response_model=PresetRead,
-    responses={403: {"description": "Permission denied"}, 409: {"description": "Conflict"}},
+    responses={
+        403: {"description": "Permission denied"},
+        409: {"description": "Conflict"},
+        422: {"description": "Invalid preset settings"},
+    },
 )
 async def create_preset_run(
     body: PresetCreate,
@@ -34,6 +38,7 @@ async def create_preset_run(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await enforce_setting_section_permission(db, current_user, "presets")
     try:
         return await preset_service.create_user_preset(
             db, user_id, current_user, name=body.name, description=body.description, settings_json=body.settings_json
@@ -53,6 +58,7 @@ async def delete_preset(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await enforce_setting_section_permission(db, current_user, "presets")
     try:
         await preset_service.delete_user_preset(db, user_id, current_user, preset_id)
     except PresetError as exc:
@@ -75,6 +81,7 @@ async def apply_preset(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
+    await enforce_setting_section_permission(db, current_user, "presets")
     try:
         preset_name = await preset_service.apply_user_preset(db, user_id, current_user, preset_id)
     except PresetError as exc:

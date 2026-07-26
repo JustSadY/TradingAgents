@@ -1,12 +1,10 @@
-"""Lightweight, idempotent column migrations.
+"""Lightweight, idempotent SQLite schema compatibility helpers.
 
-The project does not use Alembic; instead, on every startup we ensure that
-newly added model columns exist on the live database. This is intentionally
-simple (``ADD COLUMN IF NOT EXISTS``) and additive only — it never drops or
-alters existing columns. Table names are validated against an allow-list so the
-hand-built DDL strings can never reference an unexpected table.
-
-If this project ever adopts Alembic, this module is the single place to retire.
+Production PostgreSQL databases are migrated by Alembic.  These additive
+helpers remain for SQLite development/test databases, where ``create_all`` is
+used to keep the local setup lightweight. Table names are validated against an
+allow-list so the hand-built DDL strings can never reference an unexpected
+table.
 """
 
 from __future__ import annotations
@@ -62,6 +60,9 @@ _ALLOWED_COLUMNS = {
         "max_risk_rounds",
         "max_position_size_pct",
         "max_risk_per_trade_pct",
+        "allow_short_selling",
+        "max_concentration_pct",
+        "max_gross_exposure",
         "strict_stop_loss_mode",
         "correlation_risk_enabled",
         "quality_gate_enabled",
@@ -328,6 +329,9 @@ _NEW_COLUMNS += [
     ("app_settings", "max_risk_rounds", _TYPE_INTEGER_DEFAULT_1),
     ("app_settings", "max_position_size_pct", "FLOAT DEFAULT 10.0"),
     ("app_settings", "max_risk_per_trade_pct", "FLOAT DEFAULT 2.0"),
+    ("app_settings", "allow_short_selling", _TYPE_BOOLEAN_DEFAULT_FALSE),
+    ("app_settings", "max_concentration_pct", "FLOAT DEFAULT 25.0"),
+    ("app_settings", "max_gross_exposure", "FLOAT DEFAULT 3.0"),
     ("app_settings", "strict_stop_loss_mode", _TYPE_BOOLEAN_DEFAULT_FALSE),
     ("app_settings", "node_retry_attempts", "INTEGER DEFAULT 2"),
     ("app_settings", "node_retry_base_delay", "FLOAT DEFAULT 1.0"),

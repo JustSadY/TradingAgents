@@ -4,6 +4,7 @@ import logging
 import httpx
 
 import backend.bootstrap  # noqa: F401
+from backend.core.config import is_live_trading_enabled
 from backend.core.database import AsyncSessionLocal
 from backend.core.money import safe_decimal
 from backend.services.market_data_service import get_live_price as _get_price
@@ -76,6 +77,18 @@ class AlpacaTrader(BaseTraderInterface):
         return await _get_price(ticker)
 
     async def place_order(self, request: OrderRequest) -> OrderResult:
+        # Never trust only the database/UI trading-mode choice for a real
+        # brokerage order.  This check deliberately sits at the executor
+        # boundary too, so a future caller cannot bypass the orchestrator.
+        if self._mode == "live" and not is_live_trading_enabled():
+            _logger.warning("Blocked live Alpaca order because ENABLE_LIVE_TRADING is disabled")
+            return OrderResult(
+                order_id="",
+                status="REJECTED",
+                filled_price=None,
+                filled_quantity=None,
+                message="Live Alpaca trading is disabled by server configuration.",
+            )
         try:
             headers = await self._get_headers()
         except ValueError as exc:
@@ -184,6 +197,9 @@ class AlpacaTrader(BaseTraderInterface):
             )
 
     async def cancel_order(self, order_id: str) -> bool:
+        if self._mode == "live" and not is_live_trading_enabled():
+            _logger.warning("Blocked live Alpaca order cancellation because ENABLE_LIVE_TRADING is disabled")
+            return False
         try:
             headers = await self._get_headers()
             url = f"{self.base_url}/v2/orders/{order_id}"

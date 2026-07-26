@@ -26,6 +26,19 @@ async def run_analysis_job(ctx, ticker: str, trade_date: str, asset_type: str, u
 
     async with AsyncSessionLocal() as db:
         user = await db.get(User, user_id) if user_id is not None else None
+        if user_id is not None and user is None:
+            # A queued user-owned run must never silently fall back to the
+            # global settings/portfolio after that user has been deleted.
+            _logger.warning("Dropping analysis task=%s: owner user_id=%s no longer exists", task_id, user_id)
+            from backend.core import task_store
+            from backend.services.analysis.emitter import AnalysisEmitter
+
+            emitter = AnalysisEmitter(task_id)
+            await emitter.emit_error("Analysis owner no longer exists")
+            await emitter.close()
+            await task_store.clear_meta(task_id, user_id)
+            await task_store.clear_owner(task_id)
+            return
         settings = await get_or_create_settings(db, user)
         await db.commit()
 
@@ -42,6 +55,17 @@ async def run_portfolio_job(
 
     async with AsyncSessionLocal() as db:
         user = await db.get(User, user_id) if user_id is not None else None
+        if user_id is not None and user is None:
+            _logger.warning("Dropping portfolio task=%s: owner user_id=%s no longer exists", task_id, user_id)
+            from backend.core import task_store
+            from backend.services.analysis.emitter import AnalysisEmitter
+
+            emitter = AnalysisEmitter(task_id)
+            await emitter.emit_error("Analysis owner no longer exists")
+            await emitter.close()
+            await task_store.clear_meta(task_id, user_id)
+            await task_store.clear_owner(task_id)
+            return
         settings = await get_or_create_settings(db, user)
         await db.commit()
 

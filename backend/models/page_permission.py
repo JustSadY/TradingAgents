@@ -9,9 +9,15 @@ ALWAYS_ALLOWED = {"settings"}
 ALL_SETTING_KEYS = SETTING_KEYS
 SECTION_FIELDS = {
     "general": [
+        "watchlist",
         "output_language",
         "investor_persona",
         "benchmark_ticker",
+        "price_tolerance_pct",
+        "summary_only_mode",
+        "news_article_limit",
+        "global_news_article_limit",
+        "global_news_lookback_days",
     ],
     "llm": [
         "llm_provider",
@@ -21,6 +27,7 @@ SECTION_FIELDS = {
         "openai_reasoning_effort",
         "anthropic_effort",
         "google_thinking_level",
+        "anthropic_prompt_caching",
     ],
     "risk": [
         "max_risk_per_trade_pct",
@@ -28,8 +35,29 @@ SECTION_FIELDS = {
         "max_debate_rounds",
         "max_risk_rounds",
         "analyst_concurrency_limit",
+        "strict_stop_loss_mode",
+        "correlation_risk_enabled",
+        "quality_gate_enabled",
+        "drawdown_breaker_enabled",
+        "max_portfolio_drawdown_pct",
         "node_retry_attempts",
         "node_retry_base_delay",
+        "node_timeout_seconds",
+        "tool_timeout_seconds",
+        "circuit_breaker_threshold",
+        "circuit_breaker_cooldown",
+        "stall_timeout_seconds",
+        "max_report_chars_in_prompts",
+        "max_debate_history_chars",
+        "max_tool_output_chars",
+        "analyst_prefilter_enabled",
+        "analyst_prefilter_min_samples",
+        "analyst_prefilter_max_win_rate",
+        # Kept here until the dedicated risk settings schema is loaded; this
+        # makes permission checks deny-by-default during rolling upgrades.
+        "allow_short_selling",
+        "max_concentration_pct",
+        "max_gross_exposure",
     ],
     "webhooks": [
         "webhook_url",
@@ -40,6 +68,21 @@ SECTION_FIELDS = {
         "cron_enabled",
         "cron_schedule",
     ],
+    "memory": [
+        "memory_store",
+        "pinecone_index",
+        "pinecone_cloud",
+        "pinecone_region",
+        "memory_embedder",
+        "pinecone_embed_model",
+        "memory_openai_embed_model",
+        "memory_ollama_embed_model",
+        "agent_qa_enabled",
+        "memory_recall_count",
+    ],
+    "presets": ["active_preset_name"],
+    # Agent and tool settings live in their own endpoints and schemas.  They
+    # intentionally have no AppSettings field mapping.
 }
 
 

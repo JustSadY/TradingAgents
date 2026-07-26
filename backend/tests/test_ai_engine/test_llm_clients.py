@@ -113,7 +113,8 @@ class TestTokenUsageTracker:
 
 class TestErrorClassification:
     @pytest.mark.parametrize(
-        "msg", ["ResourceExhausted", "insufficient_quota", "rate_limit_exceeded", "429 Too Many Requests", "quota exceeded"]
+        "msg",
+        ["ResourceExhausted", "insufficient_quota", "rate_limit_exceeded", "429 Too Many Requests", "quota exceeded"],
     )
     def test_is_quota_exhausted_true(self, msg):
         assert is_quota_exhausted(Exception(msg)) is True
@@ -199,7 +200,7 @@ class _BoundStub:
     def with_fallbacks(self, fallbacks):
         extracted = []
         for fb in fallbacks:
-            extracted.append(fb._llm if hasattr(fb, '_llm') else fb)
+            extracted.append(fb._llm if hasattr(fb, "_llm") else fb)
         return _FallbackRunnable(self._llm, extracted)
 
 

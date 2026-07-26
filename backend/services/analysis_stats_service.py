@@ -13,38 +13,29 @@ import logging
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.constants import (
-    BUY_SIGNALS as _BUY_SIGNALS,
-)
-from backend.core.constants import (
-    SELL_SIGNALS as _SELL_SIGNALS,
-)
-from backend.core.constants import (
-    TOKENS_PER_ANALYST as _TOKENS_PER_ANALYST,
-)
+from backend.core.constants import BUY_SIGNALS as _BUY_SIGNALS
+from backend.core.constants import SELL_SIGNALS as _SELL_SIGNALS
+from backend.core.constants import TOKENS_PER_ANALYST as _TOKENS_PER_ANALYST
+from backend.core.model_pricing import estimate_token_cost, estimate_total_token_cost, resolve_model_pricing
 from backend.models.analysis import AnalysisResult
-from backend.services.token_analytics_service import get_blended_rate_per_1k
 
 _logger = logging.getLogger(__name__)
 
 
-def _rate_for_model(model: str, default: float) -> float:
-    # Delegates to token_analytics_service's MODEL_COSTS table — the single
-    # source of truth for model pricing, so this pre-run estimate can't drift
-    # from the actual post-run cost calculation.
-    return get_blended_rate_per_1k(model, default)
-
-
-def estimate_cost(analysts: str, debate_rounds: int, model: str) -> dict:
+def estimate_cost(analysts: str, debate_rounds: int, model: str, provider: str | None = None) -> dict:
+    """Return a pre-run cost estimate from the canonical model-price catalogue."""
     analyst_list = [a.strip() for a in analysts.split(",") if a.strip()]
     n = len(analyst_list)
     tokens = n * _TOKENS_PER_ANALYST * debate_rounds + 5_000
-    cost = tokens / 1000 * _rate_for_model(model, default=0.005)
+    pricing = resolve_model_pricing(provider, model)
+    cost = estimate_total_token_cost(provider, model, tokens)
     return {
         "analyst_count": n,
         "estimated_tokens": tokens,
         "estimated_cost_usd": round(cost, 4),
         "estimated_duration_min": round(n * 0.8 * debate_rounds + 1, 1),
+        "pricing_source": pricing.source,
+        "pricing_is_fallback": pricing.is_fallback,
     }
 
 
@@ -130,7 +121,12 @@ def _calc_base(runs: list[AnalysisResult]) -> dict:
     durations = [r.duration_seconds for r in runs if (r.duration_seconds or 0.0) > 0]
     tokens = [((r.tokens_in or 0) + (r.tokens_out or 0)) for r in runs]
     costs = [
-        ((r.tokens_in or 0) + (r.tokens_out or 0)) / 1000 * _rate_for_model(r.llm_model or "gpt-4o", 0.002)
+        estimate_token_cost(
+            r.llm_provider,
+            r.llm_model,
+            int(r.tokens_in or 0),
+            int(r.tokens_out or 0),
+        )
         for r in runs
     ]
     graded = [r for r in runs if r.raw_return is not None and r.signal in (_BUY_SIGNALS | _SELL_SIGNALS)]

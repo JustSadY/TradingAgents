@@ -66,7 +66,7 @@ END
 
 ### Prerequisites
 
-- **Python 3.10+** (backend)
+- **Python 3.10–3.13** (backend; SQLite/aiosqlite paths are not supported on Python 3.14 yet)
 - **Node.js 20+** (frontend)
 - **PostgreSQL 12+** (auto-created on Linux; manual on Windows/macOS)
 

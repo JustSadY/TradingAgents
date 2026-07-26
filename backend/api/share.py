@@ -5,7 +5,7 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, get_db
+from backend.api.deps import get_db, require_page
 from backend.models.user import User
 from backend.schemas.share import ShareCreateResponse, SharedReportResponse
 from backend.services import share_service
@@ -21,7 +21,7 @@ router = APIRouter(tags=["share"])
 async def create_share(
     analysis_id: int,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("analysis")),
 ):
     analysis = await share_service.get_user_analysis(db, analysis_id, current_user.id)
     if not analysis:

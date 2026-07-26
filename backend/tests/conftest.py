@@ -1,4 +1,3 @@
-import asyncio
 import os
 import tempfile
 from collections.abc import AsyncGenerator
@@ -18,15 +17,16 @@ os.environ["SECRET_KEY"] = "test-secret-key-not-for-production"
 os.environ["METRICS_TOKEN"] = "test-metrics-token"
 os.environ["ADMIN_USERNAME"] = "admin"
 os.environ["ADMIN_PASSWORD_HASH"] = ""
+# Tests must never inherit a developer's Redis/worker configuration.  Besides
+# making the suite depend on an external service, a configured but unavailable
+# Redis instance turns otherwise local API tests into connection failures.
+os.environ["REDIS_URL"] = ""
+os.environ["ANALYSIS_QUEUE_MODE"] = "inline"
 
 _TEST_DB_FD, _TEST_DB_PATH = tempfile.mkstemp(suffix=".db")
 os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_TEST_DB_PATH}"
 
 import backend.bootstrap  # noqa: F401, E402
-from backend.core.database import Base, get_db  # noqa: E402
-from backend.core.security import create_access_token, hash_password  # noqa: E402
-from backend.main import app  # noqa: E402
-
 import backend.models.agent_settings  # noqa: F401, E402
 import backend.models.alert  # noqa: F401, E402
 import backend.models.analysis  # noqa: F401, E402
@@ -47,16 +47,15 @@ import backend.models.tool_settings  # noqa: F401, E402
 import backend.models.trade_note  # noqa: F401, E402
 import backend.models.user  # noqa: F401, E402
 import backend.models.webhook_delivery  # noqa: F401, E402
+from backend.core.database import Base, get_db  # noqa: E402
+from backend.core.security import create_access_token, hash_password  # noqa: E402
+from backend.main import app  # noqa: E402
 from backend.models.user import User  # noqa: E402
 
 
-@pytest.fixture(scope="session")
-def event_loop():
-    loop = asyncio.new_event_loop()
-    yield loop
-    loop.close()
-
-
+# The engine is session-scoped for fast metadata setup.  ``NullPool`` keeps
+# each test transaction on its own SQLite connection; the ``db`` fixture below
+# makes all fixtures in a test share that one transaction.
 @pytest_asyncio.fixture(scope="session")
 async def test_engine():
     engine = create_async_engine(
@@ -94,7 +93,18 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, Any]:
     await connection.close()
 
 
-db = db_session
+@pytest_asyncio.fixture
+async def db(db_session: AsyncSession) -> AsyncGenerator[AsyncSession, None]:
+    """Compatibility alias that shares the canonical per-test transaction.
+
+    Assigning ``db = db_session`` registers two independent pytest fixtures.
+    A test that requests ``db`` while ``test_user`` requests ``db_session``
+    then opens two uncommitted SQLite write transactions, producing a
+    non-deterministic ``database is locked`` failure.  Make the alias depend
+    on ``db_session`` so pytest's fixture cache gives every dependent fixture
+    the exact same session/transaction.
+    """
+    yield db_session
 
 
 @pytest_asyncio.fixture
@@ -166,8 +176,27 @@ def admin_headers(admin_token: str) -> dict[str, str]:
 
 @pytest_asyncio.fixture
 async def authenticated_client(
-    async_client: AsyncClient, auth_headers: dict[str, str]
+    async_client: AsyncClient,
+    auth_headers: dict[str, str],
+    db_session: AsyncSession,
+    test_user: User,
 ) -> AsyncClient:
+    """Authenticated client with the same broad access legacy API tests assumed.
+
+    Page/section permissions are deny-by-default in production.  Most older
+    API tests exercise endpoint behaviour rather than RBAC, so grant this
+    dedicated convenience fixture every page and settings section.  Security
+    tests should deliberately use ``async_client`` + ``auth_headers`` instead
+    to start from a user with no entitlement rows.
+    """
+    from backend.core.constants import PAGE_KEYS, SETTING_KEYS
+    from backend.models.page_permission import UserPagePermission, UserSettingPermission
+
+    db_session.add_all(
+        [UserPagePermission(user_id=test_user.id, page_key=key, allowed=True) for key in PAGE_KEYS if key != "settings"]
+        + [UserSettingPermission(user_id=test_user.id, setting_key=key, allowed=True) for key in SETTING_KEYS]
+    )
+    await db_session.flush()
     async_client.headers.update(auth_headers)
     return async_client
 

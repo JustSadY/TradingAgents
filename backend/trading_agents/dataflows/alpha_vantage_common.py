@@ -1,6 +1,8 @@
+import hashlib
 import json
 import logging
 import os
+import threading
 from datetime import datetime
 from io import StringIO
 
@@ -14,28 +16,42 @@ from backend.trading_agents.dataflows.retry import retry_sync
 _logger = logging.getLogger(__name__)
 API_BASE_URL = "https://www.alphavantage.co/query"
 
-_AV_RATE_LIMITER: TokenBucketRateLimiter | None = None
-_AV_KEY_INDEX = 0
+# Rate limits and key rotation belong to a provider credential/configuration,
+# not to the most recently constructed graph.  A process-wide reset on every
+# analysis let concurrent runs refill each other's token buckets.
+_AV_RATE_LIMITERS: dict[tuple[str, int, float], TokenBucketRateLimiter] = {}
+_AV_KEY_INDICES: dict[str, int] = {}
+_AV_STATE_LOCK = threading.Lock()
 
 
 def reset_state() -> None:
-    """Clear cached rate limiter and key index so the next call re-reads config.
+    """Clear cached rate limiters and key indices (primarily test support).
 
     Called by tests and when the global config is re-initialized between runs.
     """
-    global _AV_RATE_LIMITER, _AV_KEY_INDEX
-    _AV_RATE_LIMITER = None
-    _AV_KEY_INDEX = 0
+    with _AV_STATE_LOCK:
+        _AV_RATE_LIMITERS.clear()
+        _AV_KEY_INDICES.clear()
+
+
+def _credential_scope() -> str:
+    raw = get_config().get("alpha_vantage_api_key") or os.getenv("ALPHA_VANTAGE_API_KEY", "")
+    # Keep the actual credential out of map keys/debuggers while retaining a
+    # stable identity across concurrent runs configured with the same keys.
+    return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 
 def _load_rate_limiter() -> TokenBucketRateLimiter:
-    global _AV_RATE_LIMITER
-    if _AV_RATE_LIMITER is None:
-        cfg = get_config()
-        calls = int(cfg.get("alpha_vantage_rate_limit_calls", 5))
-        window = float(cfg.get("alpha_vantage_rate_limit_window", 60.0))
-        _AV_RATE_LIMITER = TokenBucketRateLimiter(calls=calls, window_seconds=window, name="Alpha Vantage")
-    return _AV_RATE_LIMITER
+    cfg = get_config()
+    calls = int(cfg.get("alpha_vantage_rate_limit_calls", 5))
+    window = float(cfg.get("alpha_vantage_rate_limit_window", 60.0))
+    key = (_credential_scope(), calls, window)
+    with _AV_STATE_LOCK:
+        limiter = _AV_RATE_LIMITERS.get(key)
+        if limiter is None:
+            limiter = TokenBucketRateLimiter(calls=calls, window_seconds=window, name="Alpha Vantage")
+            _AV_RATE_LIMITERS[key] = limiter
+        return limiter
 
 
 def _read_api_keys() -> list[str]:
@@ -46,23 +62,26 @@ def _read_api_keys() -> list[str]:
 
 
 def _rotate_api_key() -> str | None:
-    global _AV_KEY_INDEX
     keys = _read_api_keys()
     if len(keys) < 2:
         return None
-    _AV_KEY_INDEX = (_AV_KEY_INDEX + 1) % len(keys)
-    _logger.info("Rotated to Alpha Vantage API key %d/%d", _AV_KEY_INDEX + 1, len(keys))
-    return keys[_AV_KEY_INDEX]
+    scope = _credential_scope()
+    with _AV_STATE_LOCK:
+        index = (_AV_KEY_INDICES.get(scope, 0) + 1) % len(keys)
+        _AV_KEY_INDICES[scope] = index
+    _logger.info("Rotated to Alpha Vantage API key %d/%d", index + 1, len(keys))
+    return keys[index]
 
 
 def get_api_key() -> str:
     keys = _read_api_keys()
     if not keys:
         raise ValueError(
-            "ALPHA_VANTAGE_API_KEY environment variable is not set. "
-            "Set a single key or a comma-separated list of keys."
+            "ALPHA_VANTAGE_API_KEY environment variable is not set. Set a single key or a comma-separated list of keys."
         )
-    return keys[_AV_KEY_INDEX % len(keys)]
+    with _AV_STATE_LOCK:
+        index = _AV_KEY_INDICES.get(_credential_scope(), 0)
+    return keys[index % len(keys)]
 
 
 def format_datetime_for_api(date_input) -> str:

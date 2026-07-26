@@ -6,7 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user
+from backend.api.deps import enforce_setting_section_permission, get_current_user
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.repositories.users import get_user_by_id
@@ -91,6 +91,7 @@ async def create_persona(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
+    await enforce_setting_section_permission(db, current_user, "personas")
     _builtin_list()
     target_user = await _resolve_target_user(user_id, current_user, db)
     if body.key in _BUILTIN_KEYS:
@@ -126,6 +127,7 @@ async def update_persona(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> dict[str, Any]:
+    await enforce_setting_section_permission(db, current_user, "personas")
     _builtin_list()
     target_user = await _resolve_target_user(user_id, current_user, db)
     if key in _BUILTIN_KEYS:
@@ -160,6 +162,7 @@ async def delete_persona(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> None:
+    await enforce_setting_section_permission(db, current_user, "personas")
     _builtin_list()
     target_user = await _resolve_target_user(user_id, current_user, db)
     if key in _BUILTIN_KEYS:

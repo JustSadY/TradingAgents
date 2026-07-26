@@ -21,14 +21,14 @@ class TestAnalysisRepository:
     async def _create_analysis(
         self, db: AsyncSession, user_id: int, ticker: str = "AAPL", status: str = "completed", **overrides
     ) -> AnalysisResult:
-        kwargs = dict(
-            user_id=user_id,
-            ticker=ticker,
-            trade_date="2026-07-18",
-            signal="buy",
-            status=status,
-            market_report="test report",
-        )
+        kwargs = {
+            "user_id": user_id,
+            "ticker": ticker,
+            "trade_date": "2026-07-18",
+            "signal": "buy",
+            "status": status,
+            "market_report": "test report",
+        }
         kwargs.update(overrides)
         return await create_analysis_result(db, **kwargs)
 
@@ -75,8 +75,9 @@ class TestAnalysisRepository:
         assert user_results[0].ticker == "AAPL"
 
         admin_results = await list_analyses(db, user=admin_user)
-        assert len(admin_results) == 1
-        assert admin_results[0].ticker == "GOOGL"
+        # Administrators deliberately have cross-user visibility; ordinary
+        # users above remain scoped to their own records.
+        assert {result.ticker for result in admin_results} == {"AAPL", "GOOGL"}
 
     async def test_list_analyses_filter_by_ticker(self, db: AsyncSession, test_user: User):
         await self._create_analysis(db, test_user.id, ticker="AAPL")

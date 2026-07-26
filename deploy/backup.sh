@@ -31,15 +31,18 @@ require_root() {
 
 parse_db_url() {
     local url="$1"
-    python3 -c "
-import sys, urllib.parse as u
-p = u.urlsplit('$url')
-print(p.username or '')
-print(p.password or '')
-print(p.hostname or '')
-print(p.port or 5432)
-print((p.path or '/').lstrip('/'))
-" 2>/dev/null || return 1
+    # Pass the URL on stdin rather than interpolating it into Python source.
+    # Besides preserving special characters in credentials, this avoids a
+    # project-local .env value being interpreted as Python when this script is
+    # invoked through sudo.
+    printf '%s' "$url" | python3 -c '
+import sys
+import urllib.parse as u
+
+p = u.urlsplit(sys.stdin.read().strip())
+for value in (p.username or "", p.password or "", p.hostname or "", p.port or 5432, (p.path or "/").lstrip("/")):
+    print(u.unquote(str(value)))
+' 2>/dev/null || return 1
 }
 
 read_db_config() {
@@ -48,7 +51,16 @@ read_db_config() {
     local raw
     raw=$(grep -E '^DATABASE_URL=' "$ENV_FILE" | sed "s/^DATABASE_URL=//; s/^'//; s/'$//" 2>/dev/null || true)
     [ -n "$raw" ] || die "DATABASE_URL not found in .env"
-    read -r DB_USER DB_PASS DB_HOST DB_PORT DB_NAME <<< "$(parse_db_url "$raw")" || die "Failed to parse DATABASE_URL"
+    # ``read`` consumes only one line; parse_db_url intentionally emits one
+    # value per line so credentials containing spaces remain intact.
+    local -a db_parts=()
+    mapfile -t db_parts < <(parse_db_url "$raw") || die "Failed to parse DATABASE_URL"
+    [ "${#db_parts[@]}" -eq 5 ] || die "Could not parse DATABASE_URL"
+    DB_USER="${db_parts[0]}"
+    DB_PASS="${db_parts[1]}"
+    DB_HOST="${db_parts[2]}"
+    DB_PORT="${db_parts[3]}"
+    DB_NAME="${db_parts[4]}"
     [ -n "$DB_NAME" ] || die "Could not extract database name from DATABASE_URL"
 }
 

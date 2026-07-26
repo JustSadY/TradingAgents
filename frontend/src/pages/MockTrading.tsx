@@ -10,6 +10,50 @@ import type { components } from '../api/schema'
 
 type PortfolioData = components['schemas']['backend__schemas__trading__PerformanceResponse']
 
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function hasFiniteNumbers(value: Record<string, unknown>, fields: string[]): boolean {
+  return fields.every(field => isFiniteNumber(value[field]))
+}
+
+function isHolding(value: unknown): boolean {
+  if (!isRecord(value) || typeof value.ticker !== 'string' || typeof value.side !== 'string') return false
+  return hasFiniteNumbers(value, [
+    'quantity', 'avg_buy_price', 'current_price', 'leverage', 'market_value',
+    'liquidation_price', 'stop_loss', 'take_profit', 'unrealized_pnl', 'pnl_pct',
+  ])
+}
+
+function isNullableNumber(value: unknown): boolean {
+  return value === undefined || value === null || isFiniteNumber(value)
+}
+
+/**
+ * Axios generic parameters only describe the response TypeScript expects; they
+ * do not validate a malformed response at runtime. Every numeric field below
+ * is rendered with `.toFixed()` or `.toLocaleString()`, so reject bad payloads
+ * at the boundary instead of letting the whole trading page throw.
+ */
+function isPortfolioData(value: unknown): value is PortfolioData {
+  if (!isRecord(value) || !Array.isArray(value.holdings)) return false
+  if (!hasFiniteNumbers(value, ['cash_available', 'total_value', 'total_pnl', 'total_pnl_pct'])) return false
+  if (typeof value.benchmark_ticker !== 'undefined' && value.benchmark_ticker !== null && typeof value.benchmark_ticker !== 'string') return false
+  return isNullableNumber(value.benchmark_return_pct)
+    && isNullableNumber(value.alpha_pct)
+    && value.holdings.every(isHolding)
+}
+
+function isOrderResponse(value: unknown): value is OrderResponse {
+  if (!isRecord(value) || typeof value.action !== 'string' || typeof value.ticker !== 'string') return false
+  return hasFiniteNumbers(value, ['quantity', 'price', 'total_value'])
+}
+
 function StatCard({
   icon, label, value, sub, positive,
 }: {
@@ -55,7 +99,8 @@ export default function MockTrading() {
     if (!silent) setLoading(true)
     else setRefreshing(true)
     try {
-      const { data } = await axios.get<PortfolioData>('/api/trading/performance')
+      const { data } = await axios.get<unknown>('/api/trading/performance')
+      if (!isPortfolioData(data)) throw new Error('Invalid portfolio response')
       setPortfolio(data)
       setFetchError(false)
     } catch {
@@ -74,7 +119,7 @@ export default function MockTrading() {
     setSubmitting(true)
     setOrderResult(null)
     try {
-      const { data } = await axios.post<OrderResponse>('/api/trading/order', {
+      const { data } = await axios.post<unknown>('/api/trading/order', {
         ticker: ticker.toUpperCase(),
         action,
         quantity: Number.parseFloat(quantity),
@@ -82,6 +127,7 @@ export default function MockTrading() {
         // A SELL with no existing long opens a short; closing a long ignores this.
         allow_short: action === 'SELL',
       })
+      if (!isOrderResponse(data)) throw new Error('Invalid order response')
       const levTag = leverage > 1 ? ` (${leverage}x)` : ''
       setOrderResult({
         ok: true,

@@ -50,15 +50,6 @@ def set_config(config):
     _merge_into(run_config, incoming)
     _run_config.set(run_config)
 
-    # Reset module-level caches that depend on config (e.g. Alpha Vantage rate
-    # limiter, key rotation index). They will be re-initialized lazily on next use.
-    try:
-        from .alpha_vantage_common import reset_state as _av_reset
-
-        _av_reset()
-    except ImportError:
-        pass
-
     # Keep the process-global updated as a fallback for out-of-run readers
     # (last-writer-wins, matching the previous behaviour). Merge a fresh copy:
     # reusing ``incoming`` would alias the same nested dicts into both the

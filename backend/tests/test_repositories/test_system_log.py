@@ -8,8 +8,12 @@ from backend.repositories.system_log import list_all_logs, list_user_logs
 
 class TestSystemLogRepository:
     async def _create_log(
-        self, db: AsyncSession, user_id: int | None = None,
-        level: str = "INFO", source: str = "test", message: str = "Test log entry",
+        self,
+        db: AsyncSession,
+        user_id: int | None = None,
+        level: str = "INFO",
+        source: str = "test",
+        message: str = "Test log entry",
     ) -> SystemLog:
         log = SystemLog(
             level=level,
@@ -75,9 +79,9 @@ class TestSystemLogRepository:
         logs = await list_user_logs(db, user=test_user)
         assert len(logs) == 0
 
-    async def test_list_all_logs(self, db: AsyncSession, test_user):
+    async def test_list_all_logs(self, db: AsyncSession, test_user, admin_user):
         await self._create_log(db, user_id=test_user.id, message="Entry 1")
-        await self._create_log(db, user_id=1, message="Entry 2")
+        await self._create_log(db, user_id=admin_user.id, message="Entry 2")
 
         logs = await list_all_logs(db)
         assert len(logs) == 2
@@ -98,9 +102,9 @@ class TestSystemLogRepository:
         assert len(api_logs) == 1
         assert api_logs[0].source == "api"
 
-    async def test_list_all_logs_filter_user_id(self, db: AsyncSession, test_user):
+    async def test_list_all_logs_filter_user_id(self, db: AsyncSession, test_user, admin_user):
         await self._create_log(db, user_id=test_user.id, message="User log")
-        await self._create_log(db, user_id=999, message="Other log")
+        await self._create_log(db, user_id=admin_user.id, message="Other log")
 
         user_logs = await list_all_logs(db, user_id=test_user.id)
         assert len(user_logs) == 1

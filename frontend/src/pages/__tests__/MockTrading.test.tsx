@@ -1,5 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import axios from 'axios'
 import MockTrading from '../MockTrading'
 
 vi.mock('axios', () => ({
@@ -54,7 +56,21 @@ vi.mock('lucide-react', () => ({
 }))
 
 describe('MockTrading', () => {
-  beforeEach(() => { vi.clearAllMocks() })
+  const validPortfolio = {
+    cash_available: 100_000,
+    total_value: 100_000,
+    total_pnl: 0,
+    total_pnl_pct: 0,
+    holdings: [],
+    benchmark_ticker: null,
+    benchmark_return_pct: null,
+    alpha_pct: null,
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks()
+    vi.mocked(axios.get).mockResolvedValue({ data: validPortfolio })
+  })
 
   it('renders loading state initially', () => {
     render(<MockTrading />)
@@ -66,5 +82,30 @@ describe('MockTrading', () => {
     await waitFor(() => {
       expect(screen.getByText('Paper Trading')).toBeInTheDocument()
     })
+  })
+
+  it('shows a recoverable error instead of rendering a malformed portfolio payload', async () => {
+    vi.mocked(axios.get).mockResolvedValue({ data: {} })
+
+    render(<MockTrading />)
+
+    await waitFor(() => {
+      expect(screen.getByText('Error Loading Portfolio')).toBeInTheDocument()
+    })
+    expect(screen.getByText('Unable to connect to trading engine')).toBeInTheDocument()
+  })
+
+  it('handles a malformed order response without crashing the page', async () => {
+    vi.mocked(axios.post).mockResolvedValue({ data: {} })
+    const user = userEvent.setup()
+    render(<MockTrading />)
+
+    await screen.findByText('Paper Trading')
+    await user.type(screen.getByPlaceholderText('mocktrading.order_symbol_placeholder'), 'AAPL')
+    await user.type(screen.getByPlaceholderText('mocktrading.order_quantity_placeholder'), '1')
+    await user.click(screen.getByRole('button', { name: 'mocktrading.order_submit_buy' }))
+
+    await waitFor(() => expect(screen.getByText('Order failed')).toBeInTheDocument())
+    expect(screen.getByText('Paper Trading')).toBeInTheDocument()
   })
 })

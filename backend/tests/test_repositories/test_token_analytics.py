@@ -10,9 +10,13 @@ from backend.repositories.token_analytics import get_daily_token_usage_rows, get
 
 class TestTokenAnalyticsRepository:
     async def _create_analysis(
-        self, db: AsyncSession, user_id: int,
-        tokens_in: int = 100, tokens_out: int = 50,
-        provider: str = "openai", model: str = "gpt-4",
+        self,
+        db: AsyncSession,
+        user_id: int,
+        tokens_in: int = 100,
+        tokens_out: int = 50,
+        provider: str = "openai",
+        model: str = "gpt-4",
         status: str = "completed",
         days_ago: int = 0,
     ) -> AnalysisResult:
@@ -34,7 +38,9 @@ class TestTokenAnalyticsRepository:
 
     async def test_get_token_usage_rows(self, db: AsyncSession, test_user):
         await self._create_analysis(db, test_user.id, tokens_in=1000, tokens_out=500, provider="openai", model="gpt-4")
-        await self._create_analysis(db, test_user.id, tokens_in=200, tokens_out=100, provider="anthropic", model="claude-3")
+        await self._create_analysis(
+            db, test_user.id, tokens_in=200, tokens_out=100, provider="anthropic", model="claude-3"
+        )
 
         rows = await get_token_usage_rows(db, test_user.id)
         assert len(rows) == 2

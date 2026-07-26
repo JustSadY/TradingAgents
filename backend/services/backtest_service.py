@@ -60,12 +60,21 @@ def _close_position(
 ) -> tuple[float, dict]:
     """Close a position: return ``(cash_delta, trade_record)``.
 
-    A long returns its notional plus P&L to cash; a short returns only P&L
-    (its collateral was never deducted on entry).
+    Entry commission is already deducted when a position is opened.  The cash
+    movement here must therefore include *only* the exit-leg commission:
+
+    - a long receives its sale proceeds less exit commission;
+    - a short realizes gross P&L less exit commission (the simulation keeps
+      short-sale proceeds out of cash while the position is open).
+
+    ``pnl`` in the trade record still includes both commissions, which makes
+    it the correct all-in trade P&L without double-counting it in cash.
     """
     pnl = _trade_pnl(side, entry_price, exit_price, size, rate)
-    entry_d, exit_d, size_d, pnl_d = (Decimal(str(v)) for v in (entry_price, exit_price, size, pnl))
-    cash_delta_d = (exit_d * size_d + pnl_d) if side == "long" else pnl_d
+    entry_d, exit_d, size_d, rate_d, pnl_d = (Decimal(str(v)) for v in (entry_price, exit_price, size, rate, pnl))
+    gross_pnl_d = (exit_d - entry_d) * size_d if side == "long" else (entry_d - exit_d) * size_d
+    exit_commission_d = exit_d * size_d * rate_d
+    cash_delta_d = (exit_d * size_d - exit_commission_d) if side == "long" else (gross_pnl_d - exit_commission_d)
     return_pct_d = (pnl_d / (entry_d * size_d)) * 100
     trade = {
         "entry_date": entry_date,
@@ -95,7 +104,14 @@ def _prepare_data(data: pd.DataFrame, strategy_type: str) -> pd.DataFrame:
     return data
 
 
-def _generate_signal(data: pd.DataFrame, row, strategy_type: str, analyses_map: dict):
+def _generate_signal(
+    data: pd.DataFrame,
+    row,
+    strategy_type: str,
+    analyses_map: dict,
+    *,
+    consensus_signal_date: str | None = None,
+):
     """Return ``(signal, rec_stop_loss, rec_take_profit)`` for the current day."""
     signal = None
     rec_stop_loss = None
@@ -122,7 +138,11 @@ def _generate_signal(data: pd.DataFrame, row, strategy_type: str, analyses_map: 
             elif curr_rsi > 70 and prev_rsi <= 70:
                 signal = "SELL"
     elif strategy_type == "consensus":
-        analysis = analyses_map.get(row["Date"].strftime("%Y-%m-%d"))
+        # A consensus report generated for a trading day cannot be filled at
+        # that day's close: the report may itself use that close/that day's
+        # full OHLCV data.  The caller supplies the preceding trading date so
+        # this bar only acts on information known before its open.
+        analysis = analyses_map.get(consensus_signal_date) if consensus_signal_date else None
         if analysis:
             sig = (analysis.signal or "").strip().lower()
             if sig in ("buy", "overweight"):
@@ -142,6 +162,38 @@ def _generate_signal(data: pd.DataFrame, row, strategy_type: str, analyses_map: 
                 rec_take_profit = ann.get("target_price")
 
     return signal, rec_stop_loss, rec_take_profit
+
+
+def _normalise_exit_levels(
+    side: str,
+    entry_price: float,
+    recommended_stop_loss,
+    recommended_take_profit,
+) -> tuple[float, float]:
+    """Return directionally valid stop/target levels for a simulated entry.
+
+    Analyst annotations are sometimes written as a long plan even when the
+    consensus action is ``SELL``.  Invalid levels must not immediately close a
+    new short (or make its stop/target impossible); use conservative defaults
+    instead.
+    """
+
+    def _positive_finite(value) -> float | None:
+        try:
+            parsed = float(value)
+        except (TypeError, ValueError):
+            return None
+        return parsed if math.isfinite(parsed) and parsed > 0 else None
+
+    stop = _positive_finite(recommended_stop_loss)
+    target = _positive_finite(recommended_take_profit)
+    if side == "short":
+        valid_stop = stop if stop is not None and stop > entry_price else entry_price * 1.05
+        valid_target = target if target is not None and target < entry_price else entry_price * 0.90
+    else:
+        valid_stop = stop if stop is not None and stop < entry_price else entry_price * 0.95
+        valid_target = target if target is not None and target > entry_price else entry_price * 1.10
+    return valid_stop, valid_target
 
 
 def _exit_reason_and_price(
@@ -239,18 +291,39 @@ async def _benchmark_return(benchmark_ticker: str | None, start_date: str, end_d
 
 
 async def _load_consensus_analyses(db, ticker: str, start_date: str, end_date: str, user) -> dict:
-    """Map trade_date -> AnalysisResult for the consensus strategy (user-scoped)."""
+    """Map usable trade-date reports for the user-scoped consensus strategy.
+
+    A historical re-run must not let an analysis created *after* its stated
+    trade date influence that past bar.  The simulation consumes each report
+    on the next trading bar, so reports are keyed by their own trade date here.
+    """
     analyses_map: dict = {}
     if not user:
         return analyses_map
-    stmt = select(AnalysisResult).where(
-        AnalysisResult.ticker == ticker.upper(),
-        AnalysisResult.trade_date >= start_date,
-        AnalysisResult.trade_date <= end_date,
-        AnalysisResult.user_id == user.id,
+    # Include a short calendar buffer so a Friday report can be consumed on
+    # the first Monday inside the requested range.
+    query_start = (pd.Timestamp(start_date) - pd.Timedelta(days=7)).strftime("%Y-%m-%d")
+    stmt = (
+        select(AnalysisResult)
+        .where(
+            AnalysisResult.ticker == ticker.upper(),
+            AnalysisResult.trade_date >= query_start,
+            AnalysisResult.trade_date <= end_date,
+            AnalysisResult.user_id == user.id,
+            AnalysisResult.status == "completed",
+        )
+        .order_by(AnalysisResult.created_at.asc())
     )
     res = await db.execute(stmt)
     for row in res.scalars().all():
+        # ``trade_date`` is stored as ISO text.  Treat a missing timestamp as
+        # unavailable rather than silently granting a future-data exception.
+        try:
+            created_at = getattr(row, "created_at", None)
+            if created_at is None or pd.Timestamp(created_at).date() > pd.Timestamp(row.trade_date).date():
+                continue
+        except (TypeError, ValueError):
+            continue
         analyses_map[row.trade_date] = row
     return analyses_map
 
@@ -296,6 +369,15 @@ async def run_backtest_simulation(
         equity_curve = []
         daily_values = []
 
+        # Signals are evaluated only after a bar is complete and are filled on
+        # the following bar's open.  Seed the first requested bar from the
+        # preceding market bar when the data source provides one, so a Friday
+        # signal may be acted on at Monday's open without peeking at Monday.
+        preceding_data = data[data["Date"] < start_dt]
+        previous_row = preceding_data.iloc[-1] if not preceding_data.empty else None
+        previous_trade_date: str | None = (
+            previous_row["Date"].strftime("%Y-%m-%d") if previous_row is not None else None
+        )
         for _idx, row in backtest_data.iterrows():
             date_str = row["Date"].strftime("%Y-%m-%d")
             close_price = float(row["Close"])
@@ -331,11 +413,24 @@ async def run_backtest_simulation(
                     exited = True
 
             if not exited:
-                signal, rec_stop_loss, rec_take_profit = _generate_signal(data, row, strategy_type, analyses_map)
+                if previous_row is None:
+                    signal, rec_stop_loss, rec_take_profit = None, None, None
+                else:
+                    signal, rec_stop_loss, rec_take_profit = _generate_signal(
+                        data,
+                        previous_row if strategy_type != "consensus" else row,
+                        strategy_type,
+                        analyses_map,
+                        consensus_signal_date=previous_trade_date,
+                    )
+                # Every strategy consumes information from a completed prior
+                # bar and fills at this bar's open.  Trading at the same close
+                # that generated MACD/RSI/consensus input is look-ahead bias.
+                execution_price = open_price if open_price > 0 else close_price
 
                 if signal == "BUY" and position_side != "long":
                     if position_side == "short":
-                        cover_price = _apply_slippage(close_price, "BUY", slippage_bps)
+                        cover_price = _apply_slippage(execution_price, "BUY", slippage_bps)
                         cash_delta, trade = _close_position(
                             "short",
                             entry_price,
@@ -351,7 +446,7 @@ async def run_backtest_simulation(
                         position_side = None
                         position_size = 0.0
 
-                    fill_price = _apply_slippage(close_price, "BUY", slippage_bps)
+                    fill_price = _apply_slippage(execution_price, "BUY", slippage_bps)
                     allocated = cash * _ALLOCATION_PCT
                     position_size = allocated / fill_price
                     commission = allocated * _COMMISSION_RATE
@@ -360,12 +455,11 @@ async def run_backtest_simulation(
                     entry_date = date_str
                     position_side = "long"
                     holding_days = 0
-                    stop_loss = float(rec_stop_loss) if rec_stop_loss else fill_price * 0.95
-                    take_profit = float(rec_take_profit) if rec_take_profit else fill_price * 1.10
+                    stop_loss, take_profit = _normalise_exit_levels("long", fill_price, rec_stop_loss, rec_take_profit)
 
                 elif signal == "SELL" and position_side != "short":
                     if position_side == "long":
-                        sell_price = _apply_slippage(close_price, "SELL", slippage_bps)
+                        sell_price = _apply_slippage(execution_price, "SELL", slippage_bps)
                         cash_delta, trade = _close_position(
                             "long",
                             entry_price,
@@ -381,7 +475,7 @@ async def run_backtest_simulation(
                         position_side = None
                         position_size = 0.0
 
-                    fill_price = _apply_slippage(close_price, "SELL", slippage_bps)
+                    fill_price = _apply_slippage(execution_price, "SELL", slippage_bps)
                     allocated = cash * _ALLOCATION_PCT
                     position_size = allocated / fill_price
                     commission = allocated * _COMMISSION_RATE
@@ -390,8 +484,7 @@ async def run_backtest_simulation(
                     entry_date = date_str
                     position_side = "short"
                     holding_days = 0
-                    stop_loss = float(rec_stop_loss) if rec_stop_loss else fill_price * 1.05
-                    take_profit = float(rec_take_profit) if rec_take_profit else fill_price * 0.90
+                    stop_loss, take_profit = _normalise_exit_levels("short", fill_price, rec_stop_loss, rec_take_profit)
 
             holdings_value = 0.0
             if position_side == "long":
@@ -409,6 +502,8 @@ async def run_backtest_simulation(
                     "holdings_value": round(holdings_value, 2),
                 }
             )
+            previous_row = row
+            previous_trade_date = date_str
 
         if position_side is not None:
             last_day = backtest_data.iloc[-1]

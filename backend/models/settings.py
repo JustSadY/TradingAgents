@@ -1,7 +1,7 @@
 import json
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
@@ -9,8 +9,14 @@ from backend.core.database import Base
 
 class AppSettings(Base):
     __tablename__ = "app_settings"
+    # One row per user, plus one optional system row.  A regular UNIQUE(user_id)
+    # does not constrain multiple NULLs in PostgreSQL, so use a functional
+    # index to make the global row part of the same invariant.
+    __table_args__ = (Index("uq_app_settings_owner", text("COALESCE(user_id, 0)"), unique=True),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     cron_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     cron_schedule: Mapped[str] = mapped_column(String(100), default="0 9 * * 1-5")
     price_tolerance_pct: Mapped[float] = mapped_column(Float, default=0.5)
@@ -32,6 +38,9 @@ class AppSettings(Base):
     max_risk_rounds: Mapped[int] = mapped_column(Integer, default=1)
     max_position_size_pct: Mapped[float] = mapped_column(Float, default=10.0)
     max_risk_per_trade_pct: Mapped[float] = mapped_column(Float, default=2.0)
+    allow_short_selling: Mapped[bool] = mapped_column(Boolean, default=False)
+    max_concentration_pct: Mapped[float] = mapped_column(Float, default=25.0)
+    max_gross_exposure: Mapped[float] = mapped_column(Float, default=3.0)
     strict_stop_loss_mode: Mapped[bool] = mapped_column(Boolean, default=False)
     correlation_risk_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     quality_gate_enabled: Mapped[bool] = mapped_column(Boolean, default=False)

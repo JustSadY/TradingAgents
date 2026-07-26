@@ -106,6 +106,9 @@ describe('AuthContext', () => {
     const payload = { sub: 'alice', role: 'user', exp: Math.floor(Date.now() / 1000) + 3600 }
     localStorage.setItem('ta_access', `header.${btoa(JSON.stringify(payload))}.signature`)
     localStorage.setItem('ta_refresh', 'refresh_token')
+    localStorage.setItem('ta_user_scope', 'alice')
+    localStorage.setItem('ta_last_run', JSON.stringify({ ticker: 'AAPL', reports: { market_report: 'private report' } }))
+    localStorage.setItem('ta_task_running', JSON.stringify({ taskId: 'alice-task' }))
     const axios = await import('axios')
     vi.mocked(axios.default.post).mockResolvedValue({ data: {} })
     renderWithAuth(<TestConsumer />)
@@ -115,6 +118,31 @@ describe('AuthContext', () => {
       expect(screen.getByTestId('user')).toHaveTextContent('null')
     })
     expect(localStorage.getItem('ta_access')).toBeNull()
+    expect(localStorage.getItem('ta_last_run')).toBeNull()
+    expect(localStorage.getItem('ta_task_running')).toBeNull()
+    expect(localStorage.getItem('ta_user_scope')).toBeNull()
+  })
+
+  it('discards another account\'s persisted analysis state on login', async () => {
+    localStorage.setItem('ta_user_scope', 'alice')
+    localStorage.setItem('ta_last_run', JSON.stringify({ ticker: 'AAPL', reports: { market_report: 'alice only' } }))
+    localStorage.setItem('ta_task_running', JSON.stringify({ taskId: 'alice-task' }))
+    const payload = { sub: 'bob', role: 'user', exp: Math.floor(Date.now() / 1000) + 3600 }
+
+    const axios = await import('axios')
+    vi.mocked(axios.default.post).mockResolvedValue({
+      data: { access_token: `header.${btoa(JSON.stringify(payload))}.signature`, refresh_token: 'bob-refresh' },
+    })
+
+    renderWithAuth(<TestConsumer />)
+    await userEvent.click(screen.getByTestId('login'))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('user')).toHaveTextContent('bob')
+    })
+    expect(localStorage.getItem('ta_last_run')).toBeNull()
+    expect(localStorage.getItem('ta_task_running')).toBeNull()
+    expect(localStorage.getItem('ta_user_scope')).toBe('bob')
   })
 
   it('getAccessToken returns token from localStorage', () => {

@@ -94,17 +94,21 @@ else
 fi
 ok "Sistem paketleri hazır."
 
-# ── Python 3.10+ seç ────────────────────────────────────────────────────────────
+# ── Python 3.10–3.13 seç ────────────────────────────────────────────────────────
 pick_python() {
     local c v
     for c in python3.13 python3.12 python3.11 python3.10 python3; do
         command -v "$c" >/dev/null || continue
         v=$("$c" -c 'import sys;print(sys.version_info[0]*100+sys.version_info[1])' 2>/dev/null || echo 0)
-        if [ "$v" -ge 310 ]; then echo "$c"; return 0; fi
+        # aiosqlite is used by the local development/test and LangGraph
+        # checkpoint paths.  Python 3.14 currently deadlocks that driver when
+        # SQLite connections cross its worker thread, so choose a verified
+        # interpreter rather than silently creating an unusable environment.
+        if [ "$v" -ge 310 ] && [ "$v" -lt 314 ]; then echo "$c"; return 0; fi
     done
     return 1
 }
-PYTHON="$(pick_python)" || die "Python 3.10+ bulunamadı. Lütfen python3.10+ kurun."
+PYTHON="$(pick_python)" || die "Desteklenen Python 3.10–3.13 bulunamadı. Lütfen python3.10–3.13 kurun."
 info "Python: $PYTHON ($("$PYTHON" --version 2>&1))"
 
 # ── 2. Node 20 (Vite 8 için gerekli) ───────────────────────────────────────────

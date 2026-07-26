@@ -15,7 +15,9 @@ class PriceAlert(Base):
         Index("ix_price_alerts_user_enabled", "user_id", "enabled"),
     )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     # "price"/"support"/"resistance": condition compares target_price to live price.
     # "rsi": condition (above/below) compares target_price (RSI threshold, e.g. 30/70)

@@ -9,7 +9,7 @@
 # ana servisi yeniden başlat (root). Çekilen kod RUN_USER olarak build
 # edildiği için ayrıcalık yükseltmesi yoktur; yalnızca restart root'tur.
 #
-set -uo pipefail
+set -euo pipefail
 
 CONF="${TRADINGAGENTS_UPDATE_CONF:-/etc/tradingagents/update.env}"
 # shellcheck disable=SC1090
@@ -61,6 +61,11 @@ asuser git -C "$PROJECT_ROOT" pull --ff-only >>"$LOG" 2>&1 || fail "git pull --f
 # 2. Backend bağımlılıkları (requirements değiştiyse)
 run "$VENV/bin/pip" install -q -r "$PROJECT_ROOT/backend/requirements.txt"
 
+# 2a. Migrations are part of a deploy, not an optional startup side effect.
+# Run them before the new process is restarted so a failed schema change keeps
+# the currently running service alive and the updater reports a failure.
+run bash -c "cd '$PROJECT_ROOT' && '$VENV/bin/alembic' -c backend/alembic.ini upgrade head"
+
 # 3. Frontend build (değiştiyse)
 if [ -d "$PROJECT_ROOT/frontend" ]; then
     run bash -c "cd '$PROJECT_ROOT/frontend' && { npm ci || npm install; } && npm run build"
@@ -68,9 +73,14 @@ fi
 
 TO="$(asuser git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo '?')"
 log "Build tamam: $FROM -> $TO. Servis yeniden başlatılıyor."
-write_status done
 
 # 4. Ana servisi yeniden başlat (root — bu updater ayrı bir cgroup'ta olduğu
 #    için restart bu süreci öldürmez)
-systemctl restart "$SERVICE_NAME"
+if ! systemctl restart "$SERVICE_NAME"; then
+    fail "systemctl restart başarısız: $SERVICE_NAME"
+fi
+if ! systemctl is-active --quiet "$SERVICE_NAME"; then
+    fail "Servis restart sonrası aktif değil: $SERVICE_NAME"
+fi
+write_status done
 log "=== Güncelleme tamamlandı ($TO) ==="
