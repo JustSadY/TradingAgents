@@ -133,6 +133,21 @@ function hasValidRunningTask(): boolean {
   return false
 }
 
+// A late start response must never remove a newer task marker.  Only discard
+// the marker when it belongs to the response we are deliberately abandoning.
+function clearTaskMarkerFor(taskId: string): void {
+  const raw = localStorage.getItem(TASK_KEY)
+  if (!raw) return
+  try {
+    const task = JSON.parse(raw)
+    if (!isRecord(task) || task.taskId === taskId) {
+      localStorage.removeItem(TASK_KEY)
+    }
+  } catch {
+    localStorage.removeItem(TASK_KEY)
+  }
+}
+
 function loadRunState(): SavedRun {
   const fallback = emptyRun()
   try {
@@ -182,7 +197,10 @@ function KellyPositioningFromJson({ json }: { json?: string | null }) {
 
 function RunTab() {
   const { t } = useTranslation()
-  const saved = loadRunState()
+  // Loading from localStorage returns new object/array references. Keep the
+  // initial snapshot stable for this mount so a streamed state update does not
+  // retrigger the task-resume effect and replace the live WebSocket.
+  const [saved] = useState<SavedRun>(() => loadRunState())
   const [ticker, setTicker] = useState(saved.ticker)
   const [date, setDate] = useState(saved.date)
   const [assetType, setAssetType] = useState(saved.assetType)
@@ -203,9 +221,20 @@ function RunTab() {
 
   const wsRef = useRef<WebSocket | null>(null)
   const taskIdRef = useRef<string | null>(null)
+  // A persisted task should be resumed once per mount. In particular, don't
+  // let a language/context rerender or a delayed API response replace an
+  // already-live socket for the same task.
+  const resumingTaskIdRef = useRef<string | null>(null)
   const preRefreshLogRef = useRef<string[] | null>(null)
   const seenLogRef = useRef<Set<string>>(new Set())
   const stoppedByUserRef = useRef(false)
+  // Invalidate a pending POST /run when Stop is clicked before it resolves.
+  // The backend may already have created the task, so the late response still
+  // needs a best-effort cancel request, but it must never revive this UI.
+  const runRequestRef = useRef(0)
+  // `/api/analysis/latest` is only bootstrap data.  Once this mount has taken
+  // ownership of an active/new run, a delayed bootstrap response is stale.
+  const runStartedRef = useRef(saved.runStatus === 'running')
   // Always-current ticker for use inside the WS handler, so attachWs doesn't
   // need `ticker` in its deps (which recreated the socket on every keystroke)
   // and the completion toast never shows a stale/empty symbol.
@@ -250,8 +279,12 @@ function RunTab() {
 
   // Cross-device: mount'ta idle durumdaysak en son tamamlanmış analizi yükle
   useEffect(() => {
+    if (runStartedRef.current || runStatus !== 'idle' || analysisId) return
     if (runStatus === 'idle' && !analysisId) {
       axios.get('/api/analysis/latest').then(r => {
+        // A user action, active-task sync, or persisted-task resume may have
+        // started while this bootstrap request was in flight.
+        if (runStartedRef.current) return
         const a = r.data
         // A malformed/empty payload (e.g. transient backend issue) must not
         // stomp `ticker` with undefined — every other effect assumes it's a
@@ -295,12 +328,20 @@ function RunTab() {
     if (!v) {
       localStorage.removeItem(TASK_KEY)
       taskIdRef.current = null
+      resumingTaskIdRef.current = null
     }
   }
 
   const maxReconnectRetries = 3
 
   const attachWs = useCallback((taskId: string, reconnectAttempt = 0) => {
+    // Stop may race a queued reconnect timer or a persisted-task probe.  Do
+    // not create a new socket after the user has explicitly stopped the run.
+    if (stoppedByUserRef.current) return
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
     if (wsRef.current) {
       try {
         wsRef.current.onmessage = null
@@ -318,12 +359,18 @@ function RunTab() {
     let finished = false
 
     const scheduleReconnect = () => {
-      if (stoppedByUserRef.current) return
+      // Only the socket that is still current may schedule a reconnect.  This
+      // prevents an old timer from replacing the socket for a newer task.
+      if (stoppedByUserRef.current || taskIdRef.current !== taskId || wsRef.current !== ws) return
       const nextAttempt = reconnectAttempt + 1
       if (nextAttempt <= maxReconnectRetries) {
         const delay = Math.min(1000 * Math.pow(2, nextAttempt - 1), 8000)
         appendLog(`🔄 Reconnecting... (attempt ${nextAttempt}/${maxReconnectRetries})`)
-        reconnectTimeoutRef.current = setTimeout(() => attachWs(taskId, nextAttempt), delay)
+        reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = null
+          if (stoppedByUserRef.current || taskIdRef.current !== taskId || wsRef.current !== ws) return
+          attachWs(taskId, nextAttempt)
+        }, delay)
       } else {
         setRunStatus('error')
         setRunning_(false)
@@ -380,7 +427,9 @@ function RunTab() {
           const prevContent = r[reportKey] || ''
           return { ...r, [reportKey]: prevContent + ev.token }
         })
-        setActiveSection(prev => prev === reportKey ? prev : reportKey)
+        // Keep the first (or user-selected/persisted) report in view instead
+        // of jumping the UI to every agent as tokens arrive.
+        setActiveSection(prev => prev ?? reportKey)
       } else if (ev.type === 'stats') {
         setStats(prev => {
           const next = { llmCalls: ev.llm_calls || 0, tokensIn: ev.tokens_in || 0, tokensOut: ev.tokens_out || 0 }
@@ -389,7 +438,7 @@ function RunTab() {
         })
       } else if (ev.type === 'report' && ev.section && ev.content) {
         setReports(r => ({ ...r, [ev.section!]: ev.content! }))
-        setActiveSection(prev => prev === ev.section ? prev : ev.section!)
+        setActiveSection(prev => prev ?? ev.section!)
         appendLog(`Completed: ${sectionLabelsRef.current[ev.section!] || ev.section}`)
       } else if (ev.type === 'mental_model' && ev.agent && ev.thought) {
         setMentalModel({ agent: ev.agent, thought: ev.thought })
@@ -457,23 +506,25 @@ function RunTab() {
 
   // Effect to sync with active tasks from the server (Cross-device fix)
   useEffect(() => {
-    if (activeTasks.length > 0 && !running) {
-        // If there's an active task on the server but we are 'idle' here, sync it.
-        const task = activeTasks[0]
-        setTicker(task.ticker)
-        setDate(task.trade_date)
-        setAssetType(task.asset_type)
-        setRunning(true)
-        setRunStatus('running')
-        setLog([])
-        seenLogRef.current = new Set()
-        setReports({})
-        setSignal(null)
-        setAnalysisId(null)
-        setDetail(null)
-        localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: task.ticker, taskId: task.task_id, startedAt: new Date(task.started_at * 1000).toISOString() }))
-        attachWs(task.task_id, 1)
-    }
+    if (stoppedByUserRef.current || activeTasks.length === 0 || running) return
+
+    // If there's an active task on the server but we are 'idle' here, sync it.
+    const task = activeTasks[0]
+    if (taskIdRef.current === task.task_id) return
+    runStartedRef.current = true
+    setTicker(task.ticker)
+    setDate(task.trade_date)
+    setAssetType(task.asset_type)
+    setRunning(true)
+    setRunStatus('running')
+    setLog([])
+    seenLogRef.current = new Set()
+    setReports({})
+    setSignal(null)
+    setAnalysisId(null)
+    setDetail(null)
+    localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: task.ticker, taskId: task.task_id, startedAt: new Date(task.started_at * 1000).toISOString() }))
+    attachWs(task.task_id, 1)
   }, [activeTasks, running, attachWs])
 
   useEffect(() => {
@@ -483,29 +534,39 @@ function RunTab() {
     try {
       const { taskId, ticker: runTicker } = JSON.parse(raw)
       if (!taskId) return
+      if (resumingTaskIdRef.current === taskId || taskIdRef.current === taskId) return
+
+      const resume = () => {
+        if (cancelled || stoppedByUserRef.current || resumingTaskIdRef.current === taskId || taskIdRef.current === taskId) return
+        resumingTaskIdRef.current = taskId
+        runStartedRef.current = true
+        preRefreshLogRef.current = [...saved.log]
+        setRunning(true)
+        setRunStatus('running')
+        if (runTicker) setTicker(runTicker)
+        attachWs(taskId, 1)
+      }
+
       // Verify task is still active before reconnecting
       axios.get('/api/analysis/active').then(r => {
         if (cancelled) return
         const activeTasks: { task_id: string }[] = r.data
         if (!activeTasks.some(t => t.task_id === taskId)) {
           localStorage.removeItem(TASK_KEY)
+          resumingTaskIdRef.current = null
+          setRunning(false)
+          setRunStatus('idle')
           return
         }
-        preRefreshLogRef.current = [...saved.log]
-        setRunning(true)
-        setRunStatus('running')
-        if (runTicker) setTicker(runTicker)
-        attachWs(taskId, 1)
+        resume()
       }).catch(() => {
         // API unavailable — attempt reconnect anyway
-        if (cancelled) return
-        preRefreshLogRef.current = [...saved.log]
-        setRunning(true)
-        setRunStatus('running')
-        if (runTicker) setTicker(runTicker)
-        attachWs(taskId, 1)
+        resume()
       })
-    } catch { localStorage.removeItem(TASK_KEY) }
+    } catch {
+      localStorage.removeItem(TASK_KEY)
+      resumingTaskIdRef.current = null
+    }
     return () => { cancelled = true }
   }, [attachWs, saved.log])
 
@@ -549,7 +610,13 @@ function RunTab() {
   const handleStop = async () => {
     const tid = taskIdRef.current
     setLog(l => [...l, 'Cancelling...'])
+    // Invalidate any in-flight /run request before awaiting its response.
+    runRequestRef.current += 1
     stoppedByUserRef.current = true
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
     if (tid) {
       try { await axios.post(`/api/analysis/${tid}/cancel`) } catch { /* best-effort cancel */ }
     }
@@ -566,8 +633,14 @@ function RunTab() {
   }
 
   const doRun = async () => {
+    const requestId = ++runRequestRef.current
     setShowRerunModal(false)
     stoppedByUserRef.current = false
+    runStartedRef.current = true
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current)
+      reconnectTimeoutRef.current = null
+    }
     setRunning(true)
     setRunStatus('running')
     setSignal(null)
@@ -587,9 +660,22 @@ function RunTab() {
         ticker: ticker.toUpperCase(), trade_date: date, asset_type: assetType,
       })
       const taskId = data.task_id
+      if (typeof taskId !== 'string' || !taskId) throw new Error('Analysis start response did not include a task ID')
+
+      // The user may have clicked Stop while the start request was pending.
+      // Do not persist/attach the returned task; cancel it server-side so a
+      // queued job cannot keep running invisibly in the background.
+      if (requestId !== runRequestRef.current || stoppedByUserRef.current) {
+        clearTaskMarkerFor(taskId)
+        try { await axios.post(`/api/analysis/${taskId}/cancel`) } catch { /* best-effort cancel */ }
+        return
+      }
       localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: ticker.toUpperCase(), taskId, startedAt: new Date().toISOString() }))
       attachWs(taskId, 0)
     } catch (err: any) {
+      // A rejected start request after Stop is expected to leave the UI idle,
+      // not replace the stopped state with an error message.
+      if (requestId !== runRequestRef.current || stoppedByUserRef.current) return
       setRunStatus('error')
       setRunning_(false)
       setLog(l => [...l, `Error: ${err.response?.data?.detail || t('analysis.ws.failed_to_start')}`])
@@ -608,6 +694,8 @@ function RunTab() {
   }
 
   const handleRollbackStart = (taskId: string) => {
+    stoppedByUserRef.current = false
+    runStartedRef.current = true
     setRunning(true)
     setRunStatus('running')
     setSignal(null)

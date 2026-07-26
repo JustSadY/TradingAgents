@@ -8,6 +8,7 @@ Keys (all with a sliding TTL so crashed processes cannot leak entries):
 - ``analysis:owner:{task_id}``  -> user id ("" for system-triggered runs)
 - ``analysis:meta:{task_id}``   -> JSON task metadata for the active-task list
 - ``analysis:user_tasks:{uid}`` -> set of that user's active task ids
+- ``analysis:cancel:{task_id}`` -> durable cancellation intent for queued runs
 """
 
 from __future__ import annotations
@@ -23,6 +24,11 @@ _logger = logging.getLogger(__name__)
 
 # Analyses run minutes; entries outliving this are leftovers from a crash.
 _TTL_SECONDS = 2 * 60 * 60
+
+# Redis is optional for single-process deployments.  Keep cancellation intent
+# in-process in that mode so a request that lands just before a BackgroundTask
+# starts cannot be lost between the HTTP handler and task registration.
+_LOCAL_CANCEL_REQUESTS: set[str] = set()
 
 
 def _log_redis_failure(operation: str, exc: RedisError) -> None:
@@ -40,6 +46,10 @@ def _meta_key(task_id: str) -> str:
 
 def _user_tasks_key(user_id: int) -> str:
     return f"analysis:user_tasks:{user_id}"
+
+
+def _cancel_key(task_id: str) -> str:
+    return f"analysis:cancel:{task_id}"
 
 
 async def set_owner(task_id: str, user_id: int | None) -> None:
@@ -120,6 +130,51 @@ async def clear_meta(task_id: str, user_id: int | None = None) -> None:
             await redis.srem(_user_tasks_key(user_id), task_id)
     except RedisError as exc:
         _log_redis_failure("clear_meta", exc)
+
+
+async def request_cancel(task_id: str) -> None:
+    """Persist a cancellation request before publishing the transient signal.
+
+    Redis pub/sub messages are intentionally ephemeral: a worker can receive
+    no message when the job has not started yet.  This small TTL-bound marker
+    lets the runner observe that intent when it eventually starts.  Without
+    Redis, the same invariant is preserved by the local set above.
+    """
+    if not redis_enabled():
+        _LOCAL_CANCEL_REQUESTS.add(task_id)
+        return
+    try:
+        await get_redis().set(_cancel_key(task_id), "1", ex=_TTL_SECONDS)
+    except RedisError as exc:
+        # Local cancellation remains useful if a Redis outage happens after a
+        # task was accepted by this process.  Cross-process cancellation will
+        # recover once Redis is available again rather than crashing the API.
+        _LOCAL_CANCEL_REQUESTS.add(task_id)
+        _log_redis_failure("request_cancel", exc)
+
+
+async def is_cancel_requested(task_id: str) -> bool:
+    """Return whether a runner must terminate before doing more work."""
+    if task_id in _LOCAL_CANCEL_REQUESTS:
+        return True
+    if not redis_enabled():
+        return False
+    try:
+        return bool(await get_redis().get(_cancel_key(task_id)))
+    except RedisError as exc:
+        _log_redis_failure("is_cancel_requested", exc)
+        return False
+
+
+async def clear_cancel_request(task_id: str) -> None:
+    """Acknowledge terminal handling of a cancellation request."""
+    _LOCAL_CANCEL_REQUESTS.discard(task_id)
+    if not redis_enabled():
+        return
+    try:
+        await get_redis().delete(_cancel_key(task_id))
+    except RedisError as exc:
+        _log_redis_failure("clear_cancel_request", exc)
 
 
 async def list_tasks_for_user(user_id: int) -> list[dict]:

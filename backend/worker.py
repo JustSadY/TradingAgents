@@ -24,25 +24,33 @@ async def run_analysis_job(ctx, ticker: str, trade_date: str, asset_type: str, u
     from backend.services.analysis_service import run_analysis_task
     from backend.services.settings_service import get_or_create_settings
 
-    async with AsyncSessionLocal() as db:
-        user = await db.get(User, user_id) if user_id is not None else None
-        if user_id is not None and user is None:
-            # A queued user-owned run must never silently fall back to the
-            # global settings/portfolio after that user has been deleted.
-            _logger.warning("Dropping analysis task=%s: owner user_id=%s no longer exists", task_id, user_id)
-            from backend.core import task_store
-            from backend.services.analysis.emitter import AnalysisEmitter
+    try:
+        async with AsyncSessionLocal() as db:
+            user = await db.get(User, user_id) if user_id is not None else None
+            if user_id is not None and user is None:
+                # A queued user-owned run must never silently fall back to the
+                # global settings/portfolio after that user has been deleted.
+                _logger.warning("Dropping analysis task=%s: owner user_id=%s no longer exists", task_id, user_id)
+                from backend.core import task_store
+                from backend.services.analysis.emitter import AnalysisEmitter
 
-            emitter = AnalysisEmitter(task_id)
-            await emitter.emit_error("Analysis owner no longer exists")
-            await emitter.close()
-            await task_store.clear_meta(task_id, user_id)
-            await task_store.clear_owner(task_id)
-            return
-        settings = await get_or_create_settings(db, user)
-        await db.commit()
+                emitter = AnalysisEmitter(task_id)
+                await emitter.emit_error("Analysis owner no longer exists")
+                await emitter.close()
+                await task_store.clear_meta(task_id, user_id)
+                await task_store.clear_owner(task_id)
+                await task_store.clear_cancel_request(task_id)
+                return
+            settings = await get_or_create_settings(db, user)
+            await db.commit()
 
-    await run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user)
+        await run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user)
+    except asyncio.CancelledError:
+        # Application-level retry is handled by ``_maybe_retry_analysis``.
+        # ARQ otherwise requeues CancelledError by default, which turns a
+        # user's Stop request into a fresh analysis run.
+        _logger.info("Analysis worker job cancelled task=%s", task_id)
+        return
 
 
 async def run_portfolio_job(
@@ -53,23 +61,28 @@ async def run_portfolio_job(
     from backend.services.analysis_service import run_portfolio_task
     from backend.services.settings_service import get_or_create_settings
 
-    async with AsyncSessionLocal() as db:
-        user = await db.get(User, user_id) if user_id is not None else None
-        if user_id is not None and user is None:
-            _logger.warning("Dropping portfolio task=%s: owner user_id=%s no longer exists", task_id, user_id)
-            from backend.core import task_store
-            from backend.services.analysis.emitter import AnalysisEmitter
+    try:
+        async with AsyncSessionLocal() as db:
+            user = await db.get(User, user_id) if user_id is not None else None
+            if user_id is not None and user is None:
+                _logger.warning("Dropping portfolio task=%s: owner user_id=%s no longer exists", task_id, user_id)
+                from backend.core import task_store
+                from backend.services.analysis.emitter import AnalysisEmitter
 
-            emitter = AnalysisEmitter(task_id)
-            await emitter.emit_error("Analysis owner no longer exists")
-            await emitter.close()
-            await task_store.clear_meta(task_id, user_id)
-            await task_store.clear_owner(task_id)
-            return
-        settings = await get_or_create_settings(db, user)
-        await db.commit()
+                emitter = AnalysisEmitter(task_id)
+                await emitter.emit_error("Analysis owner no longer exists")
+                await emitter.close()
+                await task_store.clear_meta(task_id, user_id)
+                await task_store.clear_owner(task_id)
+                await task_store.clear_cancel_request(task_id)
+                return
+            settings = await get_or_create_settings(db, user)
+            await db.commit()
 
-    await run_portfolio_task(tickers, trade_date, asset_type, settings, user, task_id)
+        await run_portfolio_task(tickers, trade_date, asset_type, settings, user, task_id)
+    except asyncio.CancelledError:
+        _logger.info("Portfolio worker job cancelled task=%s", task_id)
+        return
 
 
 async def startup(ctx):  # NOSONAR

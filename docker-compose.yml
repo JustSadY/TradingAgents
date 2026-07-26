@@ -60,6 +60,9 @@ services:
       REDIS_URL: redis://redis:6379/0
       ANALYSIS_QUEUE_MODE: worker
       METRICS_TOKEN: ${METRICS_TOKEN}
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     ports:
       - "8000:8000"
     volumes:
@@ -90,6 +93,9 @@ services:
       DATABASE_URL: ${DATABASE_URL}
       REDIS_URL: redis://redis:6379/0
       ANALYSIS_QUEUE_MODE: worker
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     volumes:
       - tradingagents_data:/root/.tradingagents
     networks:

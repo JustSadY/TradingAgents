@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -70,11 +71,10 @@ async def is_task_owner(task_id: str, user_id: int | None, is_admin: bool = Fals
 
 async def cancel_local_task(task_id: str) -> bool:
     """Cancel ``task_id`` if it is running in THIS process."""
-    task = _RUNNING_TASKS.pop(task_id, None)
-    meta = _TASK_REGISTRY.pop(task_id, None)
-    _TASK_OWNERS.pop(task_id, None)
-    await task_store.clear_meta(task_id, (meta or {}).get("user_id"))
-    await task_store.clear_owner(task_id)
+    # Do not clear the distributed task record here.  A cancellation can race
+    # with a queued job starting, and the runner is the only component that
+    # can acknowledge terminal cancellation after it has stopped its work.
+    task = _RUNNING_TASKS.get(task_id)
     if task and not task.done():
         task.cancel()
         return True
@@ -84,14 +84,16 @@ async def cancel_local_task(task_id: str) -> bool:
 async def cancel_analysis(task_id: str) -> bool:
     """Cancel a run wherever it is executing.
 
-    Cancels locally when the task lives in this process; otherwise broadcasts a
-    cancel request on the control channel for the owning process to act on.
+    Persist intent before the best-effort local/pub-sub signals.  Pub/sub is
+    transient, so a worker that has not started yet must be able to observe
+    the request when it begins.
     """
-    ran_here = task_id in _RUNNING_TASKS
-    cancelled = await cancel_local_task(task_id)
-    if not ran_here:
-        await task_store.publish_cancel(task_id)
-    return cancelled
+    await task_store.request_cancel(task_id)
+    await cancel_local_task(task_id)
+    await task_store.publish_cancel(task_id)
+    # The caller has already verified ownership.  A queued task is therefore
+    # accepted for cancellation even though no local coroutine exists yet.
+    return True
 
 
 async def get_active_tasks_for_user(user_id: int | None) -> list[dict]:
@@ -101,6 +103,52 @@ async def get_active_tasks_for_user(user_id: int | None) -> list[dict]:
         seen = {t["task_id"] for t in tasks}
         tasks.extend(t for t in await task_store.list_tasks_for_user(user_id) if t["task_id"] not in seen)
     return tasks
+
+
+async def _track_running_task(
+    task_id: str,
+    *,
+    ticker: str,
+    trade_date: str,
+    asset_type: str,
+    user_id: int | None,
+) -> None:
+    """Register the current coroutine after its cancellation gate passed."""
+    current = asyncio.current_task()
+    if current is None:
+        return
+    existing = await task_store.get_meta(task_id) or {}
+    meta = {
+        "ticker": ticker,
+        "trade_date": trade_date,
+        "asset_type": asset_type,
+        "user_id": user_id,
+        "started_at": time.time(),
+        "status": "running",
+        "retry_count": existing.get("retry_count", 0),
+    }
+    _RUNNING_TASKS[task_id] = current
+    _TASK_REGISTRY[task_id] = meta
+    await task_store.set_meta(task_id, meta)
+    await register_task_owner(task_id, user_id)
+
+
+async def _clear_terminal_task_state(task_id: str, user_id: int | None) -> None:
+    """Remove tracking only after the runner reached a terminal state."""
+    _RUNNING_TASKS.pop(task_id, None)
+    _TASK_REGISTRY.pop(task_id, None)
+    await task_store.clear_meta(task_id, user_id)
+    await clear_task_owner(task_id)
+    await task_store.clear_cancel_request(task_id)
+
+
+async def _emit_cancelled_task(task_id: str) -> None:
+    """Tell subscribers about a pre-start or portfolio cancellation."""
+    emitter = AnalysisEmitter(task_id)
+    try:
+        await emitter.emit_error("Analysis cancelled.")
+    finally:
+        await emitter.close()
 
 
 async def run_analysis(
@@ -114,32 +162,32 @@ async def run_analysis(
     user=None,
 ):
     """Facade for individual analysis orchestration."""
-    import time
     import uuid
 
     if task_id is None:
         task_id = str(uuid.uuid4())
 
     user_id = user.id if user else None
-    current = asyncio.current_task()
-    if current:
-        existing = await task_store.get_meta(task_id) or {}
-        meta = {
-            "ticker": ticker,
-            "trade_date": trade_date,
-            "asset_type": asset_type,
-            "user_id": user_id,
-            "started_at": time.time(),
-            "status": "running",
-            "retry_count": existing.get("retry_count", 0),
-        }
-        _RUNNING_TASKS[task_id] = current
-        _TASK_REGISTRY[task_id] = meta
-        await task_store.set_meta(task_id, meta)
-        await register_task_owner(task_id, user_id)
-
     emitter = AnalysisEmitter(task_id)
     try:
+        # A Stop request can arrive while an inline BackgroundTask/ARQ job is
+        # still queued.  Never enter the graph when its durable marker exists.
+        if await task_store.is_cancel_requested(task_id):
+            await emitter.emit_error("Analysis cancelled.")
+            raise asyncio.CancelledError
+
+        await _track_running_task(
+            task_id,
+            ticker=ticker,
+            trade_date=trade_date,
+            asset_type=asset_type,
+            user_id=user_id,
+        )
+        # Cover the narrow window between the first check and registration.
+        if await task_store.is_cancel_requested(task_id):
+            await emitter.emit_error("Analysis cancelled.")
+            raise asyncio.CancelledError
+
         return await run_individual_analysis(ticker, trade_date, asset_type, settings, db, emitter, triggered_by, user)
     finally:
         _RUNNING_TASKS.pop(task_id, None)
@@ -178,17 +226,36 @@ async def run_analysis_task(
                 user=user,
             )
             await db.commit()
-            # Analysis success — clear task metadata
-            await task_store.clear_meta(task_id, user.id if user else None)
             # Signal-based paper trading (separate txn — analysis already committed)
+            if await task_store.is_cancel_requested(task_id):
+                _logger.info("Skipping signal order for cancelled analysis task=%s", task_id)
+            else:
+                try:
+                    await place_signal_order(db, ticker=ticker, row=row, settings=settings, user=user)
+                    await db.commit()
+                except Exception as exc:
+                    await db.rollback()
+                    _logger.warning("Order execution skipped for %s: %s", ticker, exc)
+            await _clear_terminal_task_state(task_id, user.id if user else None)
+        except asyncio.CancelledError:
+            _logger.info("Background analysis cancelled task=%s", task_id)
+            # ``run_individual_analysis`` has marked its row cancelled.  Its
+            # session changes must be committed before the worker acknowledges
+            # cancellation to ARQ (or exits an inline BackgroundTask).
             try:
-                await place_signal_order(db, ticker=ticker, row=row, settings=settings, user=user)
                 await db.commit()
-            except Exception as exc:
+            except Exception:
                 await db.rollback()
-                _logger.warning("Order execution skipped for %s: %s", ticker, exc)
+                _logger.exception("Could not persist cancelled analysis task=%s", task_id)
+            await _clear_terminal_task_state(task_id, user.id if user else None)
+            raise
         except Exception:
             _logger.exception("Background analysis failed")
+            if await task_store.is_cancel_requested(task_id):
+                await db.rollback()
+                await _emit_cancelled_task(task_id)
+                await _clear_terminal_task_state(task_id, user.id if user else None)
+                return
             try:
                 await _maybe_retry_analysis(ticker, trade_date, asset_type, settings, task_id, user)
             except Exception:
@@ -211,14 +278,22 @@ async def _maybe_retry_analysis(
     """
     from backend.core.task_store import set_meta as _redis_set_meta
 
+    if await task_store.is_cancel_requested(task_id):
+        _logger.info("Not retrying cancelled analysis task=%s", task_id)
+        await _clear_terminal_task_state(task_id, user.id if user else None)
+        return
+
     meta = await task_store.get_meta(task_id) or {}
     retry_count = meta.get("retry_count", 0)
     if retry_count >= _ANALYSIS_RETRY_MAX:
         _logger.warning("Analysis dead-letter task=%s ticker=%s (retried %d times)", task_id, ticker, retry_count)
-        await task_store.clear_meta(task_id, user.id if user else None)
+        await _clear_terminal_task_state(task_id, user.id if user else None)
         return
     meta["retry_count"] = retry_count + 1
     await _redis_set_meta(task_id, meta)
+    # ``run_analysis`` clears the owner when the failed attempt exits; restore
+    # it while the retry is waiting so the user can still observe or stop it.
+    await register_task_owner(task_id, user.id if user else None)
     _logger.info(
         "Re-enqueuing analysis task=%s ticker=%s (retry %d/%d)", task_id, ticker, retry_count + 1, _ANALYSIS_RETRY_MAX
     )
@@ -249,8 +324,23 @@ async def run_portfolio_task(
         from backend.core.log_handler import current_user_id
 
         current_user_id.set(user.id)
-    async with AsyncSessionLocal() as db:
-        try:
+    user_id = user.id if user else None
+    try:
+        if task_id:
+            if await task_store.is_cancel_requested(task_id):
+                await _emit_cancelled_task(task_id)
+                return
+            await _track_running_task(
+                task_id,
+                ticker=", ".join(tickers),
+                trade_date=trade_date,
+                asset_type=asset_type,
+                user_id=user_id,
+            )
+            if await task_store.is_cancel_requested(task_id):
+                raise asyncio.CancelledError
+
+        async with AsyncSessionLocal() as db:
             await run_portfolio_analysis(
                 tickers,
                 trade_date,
@@ -262,20 +352,22 @@ async def run_portfolio_task(
                 task_id=task_id,
             )
             await db.commit()
-        except Exception:
-            _logger.exception("Portfolio analysis failed")
-            await db.rollback()
-            if task_id:
-                # Surface the failure on the WebSocket channel so a subscribed
-                # client stops waiting instead of hanging on an open socket.
-                from backend.services.analysis.emitter import AnalysisEmitter
-
-                emitter = AnalysisEmitter(task_id)
-                await emitter.emit_error("Portfolio analysis failed")
-                await emitter.close()
-        finally:
-            if task_id:
-                await clear_task_owner(task_id)
+    except asyncio.CancelledError:
+        _logger.info("Portfolio analysis cancelled task=%s", task_id)
+        if task_id:
+            await _emit_cancelled_task(task_id)
+        raise
+    except Exception:
+        _logger.exception("Portfolio analysis failed")
+        if task_id:
+            # Surface the failure on the WebSocket channel so a subscribed
+            # client stops waiting instead of hanging on an open socket.
+            emitter = AnalysisEmitter(task_id)
+            await emitter.emit_error("Portfolio analysis failed")
+            await emitter.close()
+    finally:
+        if task_id:
+            await _clear_terminal_task_state(task_id, user_id)
 
 
 async def rollback_and_resume_analysis(
