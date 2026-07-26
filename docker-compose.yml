@@ -128,14 +128,21 @@ services:
   prometheus:
     image: prom/prometheus:v2.54.1
     restart: unless-stopped
+    # Prometheus does not support --config.expand-env.  Write the optional
+    # scrape credential to a container-local file instead of interpolating it
+    # into the mounted config (and therefore never persist it in the repo).
+    entrypoint: ["/bin/sh", "-ec"]
     command:
-      - --config.file=/etc/prometheus/prometheus.yml
-      - --config.expand-env
-      - --storage.tsdb.path=/prometheus
-      - --storage.tsdb.retention.time=30d
-      - --web.console.libraries=/etc/prometheus/console_libraries
-      - --web.console.templates=/etc/prometheus/consoles
-      - --web.enable-lifecycle
+      - |
+        umask 077
+        printf '%s' "$${METRICS_TOKEN:-}" > /tmp/prometheus-metrics-token
+        exec /bin/prometheus \
+          --config.file=/etc/prometheus/prometheus.yml \
+          --storage.tsdb.path=/prometheus \
+          --storage.tsdb.retention.time=30d \
+          --web.console.libraries=/etc/prometheus/console_libraries \
+          --web.console.templates=/etc/prometheus/consoles \
+          --web.enable-lifecycle
     ports:
       # Monitoring UIs are operator-only.  Put a reverse proxy/VPN in front of
       # them if remote access is required; never publish them on every host
