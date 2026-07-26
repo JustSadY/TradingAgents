@@ -3,7 +3,7 @@ import logging
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user
+from backend.api.deps import get_current_user, require_page
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.schemas.alert import AlertCreate, AlertRead, AlertUpdate
@@ -27,7 +27,7 @@ async def list_alerts_run(
 async def create_alert_run(
     body: AlertCreate,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("alerts")),
 ):
     from backend.repositories.alerts import create_alert as _repo_create
 

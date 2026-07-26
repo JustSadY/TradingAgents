@@ -4,7 +4,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -48,7 +48,7 @@ from backend.api.users import router as users_router
 from backend.api.watchlist import router as watchlist_router
 from backend.core.config import get_settings
 from backend.core.database import create_all_tables
-from backend.core.security import decode_token
+from backend.core.security import decode_token_payload
 from backend.core.websocket import ws_manager
 from backend.services.cron_service import init_cron_service
 
@@ -280,7 +280,7 @@ async def websocket_analysis(
     token: str = Query(..., description="JWT access token"),
 ):
     try:
-        username = decode_token(token, expected_type="access")
+        payload = decode_token_payload(token, expected_type="access")
     except ValueError:
         await websocket.close(code=4001, reason="Unauthorized")
         return
@@ -290,8 +290,14 @@ async def websocket_analysis(
     from backend.services.analysis_service import is_task_owner
 
     async with AsyncSessionLocal() as db:
-        user = await get_user_by_username(db, username)
+        user = await get_user_by_username(db, payload["sub"])
     if user is None or not user.is_active:
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+    # Reject tokens minted before the user's current version, mirroring
+    # get_current_user — otherwise a logged-out access token keeps streaming
+    # analysis events until it naturally expires.
+    if payload.get("ver", 0) != getattr(user, "token_version", 0):
         await websocket.close(code=4001, reason="Unauthorized")
         return
     # Only the user who started the run (or an admin) may stream its events;
@@ -320,7 +326,27 @@ _static_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.isdir(_static_dir):
     app.mount("/assets", StaticFiles(directory=os.path.join(_static_dir, "assets")), name="assets")
 
+    # Paths under these prefixes are always backend routes. If none of the
+    # routers above matched, the request is a genuinely unknown/misspelled
+    # endpoint — it must 404, not silently fall through to index.html (which
+    # previously masked bugs like a frontend calling the wrong API path).
+    _NOT_FOUND_PREFIXES = ("api/", "auth/", "ws/")
+
     @app.get("/{full_path:path}", include_in_schema=False)
     async def serve_spa(full_path: str):
+        if full_path.startswith(_NOT_FOUND_PREFIXES):
+            raise HTTPException(status_code=404)
+        # Serve real static files (manifest.json, favicon.svg, icons.svg, ...)
+        # literally instead of masking them with the SPA shell. Resolve and
+        # confirm the path stays inside _static_dir first — full_path is
+        # attacker-controlled and must not be able to escape via "..".
+        static_root = os.path.realpath(_static_dir)
+        candidate = os.path.realpath(os.path.join(static_root, full_path))
+        if (
+            full_path
+            and os.path.commonpath([static_root, candidate]) == static_root
+            and os.path.isfile(candidate)
+        ):
+            return FileResponse(candidate)
         index = os.path.join(_static_dir, "index.html")
         return FileResponse(index)

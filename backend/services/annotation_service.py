@@ -58,7 +58,7 @@ async def extract_chart_annotations(
         data = json.loads(raw)
         return _validate_annotations(data)
     except Exception as exc:
-        _logger.debug("Annotation extraction failed (non-fatal): %s", exc)
+        _logger.warning("Annotation extraction failed (non-fatal): %s", exc)
         return {}
 
 

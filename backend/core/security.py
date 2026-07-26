@@ -8,6 +8,21 @@ from .config import get_settings
 settings = get_settings()
 
 
+def encrypt_secret(value: str) -> str:
+    """Fernet-encrypt an arbitrary secret string (e.g. a tool credential)."""
+    return settings.get_fernet().encrypt(value.encode()).decode()
+
+
+def decrypt_secret(value: str) -> str:
+    """Decrypt a value produced by :func:`encrypt_secret`.
+
+    Raises ``cryptography.fernet.InvalidToken`` for anything that isn't valid
+    ciphertext under the current key — callers that might see pre-migration
+    plaintext values should catch that and fall back to the raw value.
+    """
+    return settings.get_fernet().decrypt(value.encode()).decode()
+
+
 def hash_password(password: str) -> str:
     return _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
 

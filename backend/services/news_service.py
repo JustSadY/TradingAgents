@@ -21,7 +21,7 @@ def _fetch_news_sync(ticker: str) -> list[dict]:
     try:
         return yf.Ticker(ticker).news or []
     except Exception as exc:
-        _logger.debug("News fetch failed %s: %s", ticker, exc)
+        _logger.warning("News fetch failed %s: %s", ticker, exc)
         return []
 
 

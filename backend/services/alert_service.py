@@ -63,7 +63,7 @@ async def _fetch_alert_market_summary(ticker: str) -> str:
 
         return " | ".join(parts) if parts else ""
     except Exception as exc:
-        _logger.debug("Market summary fetch failed for %s: %s", ticker, exc)
+        _logger.warning("Market summary fetch failed for %s: %s", ticker, exc)
         return ""
 
 
@@ -74,7 +74,7 @@ async def _fetch_close_series(ticker: str, period: str = "6mo"):
 
         return await asyncio.to_thread(lambda: yf.Ticker(ticker).history(period=period)["Close"])
     except Exception as exc:  # noqa: BLE001 — never block the alert loop on one bad ticker
-        _logger.debug("Indicator alert history fetch failed for %s: %s", ticker, exc)
+        _logger.warning("Indicator alert history fetch failed for %s: %s", ticker, exc)
         return None
 
 

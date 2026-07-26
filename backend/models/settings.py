@@ -10,7 +10,7 @@ from backend.core.database import Base
 class AppSettings(Base):
     __tablename__ = "app_settings"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True)
     cron_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     cron_schedule: Mapped[str] = mapped_column(String(100), default="0 9 * * 1-5")
     price_tolerance_pct: Mapped[float] = mapped_column(Float, default=0.5)

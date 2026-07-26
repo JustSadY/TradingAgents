@@ -1,10 +1,11 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { MemoryRouter } from 'react-router-dom'
 import Login from '../Login'
 
-const mockLogin = vi.fn()
-const mockNavigate = vi.fn()
+const mockLogin = vi.hoisted(() => vi.fn())
+const mockNavigate = vi.hoisted(() => vi.fn())
 
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => ({
@@ -19,8 +20,8 @@ vi.mock('../../contexts/AuthContext', () => ({
   }),
 }))
 
-vi.mock('react-router-dom', async (importOriginal) => {
-  const actual = await importOriginal()
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual('react-router-dom')
   return { ...actual, useNavigate: () => mockNavigate }
 })
 

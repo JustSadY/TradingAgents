@@ -218,7 +218,7 @@ async def _benchmark_return(benchmark_ticker: str | None, start_date: str, end_d
             "return_pct": round((last_close - first_close) / first_close * 100, 2),
         }
     except Exception as exc:  # noqa: BLE001 — benchmark comparison is best-effort
-        _logger.debug("Benchmark fetch failed for %s: %s", benchmark_ticker, exc)
+        _logger.warning("Benchmark fetch failed for %s: %s", benchmark_ticker, exc)
         return None
 
 

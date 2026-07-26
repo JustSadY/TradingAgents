@@ -50,8 +50,8 @@ Guidelines:
 """
 
 
-async def get_assistant_history(db: AsyncSession, user_id: int) -> list[dict]:
-    messages = await assistant_repo.get_messages(db, user_id, limit=50)
+async def get_assistant_history(db: AsyncSession, user) -> list[dict]:
+    messages = await assistant_repo.get_messages(db, user, limit=50)
     return [
         {
             "id": m.id,
@@ -63,8 +63,8 @@ async def get_assistant_history(db: AsyncSession, user_id: int) -> list[dict]:
     ]
 
 
-async def clear_assistant_history(db: AsyncSession, user_id: int) -> None:
-    await assistant_repo.clear_messages(db, user_id)
+async def clear_assistant_history(db: AsyncSession, user) -> None:
+    await assistant_repo.clear_messages(db, user)
     await db.commit()
 
 
@@ -101,8 +101,8 @@ async def chat(db: AsyncSession, user: User, message: str) -> dict:
 
     final_content = await _run_tool_loop(llm_with_tools, lc_messages, tool_map)
 
-    await assistant_repo.add_message(db, user.id, "user", message)
-    assistant_msg = await assistant_repo.add_message(db, user.id, "assistant", final_content)
+    await assistant_repo.add_message(db, user, "user", message)
+    assistant_msg = await assistant_repo.add_message(db, user, "assistant", final_content)
     await db.commit()
 
     return {
@@ -122,7 +122,7 @@ async def _get_allowed_pages(db: AsyncSession, user: User) -> set[str]:
 async def _prepare_lc_messages(db: AsyncSession, user: User, message: str, settings) -> list:
     from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
 
-    history = await assistant_repo.get_messages(db, user.id, limit=_HISTORY_LIMIT)
+    history = await assistant_repo.get_messages(db, user, limit=_HISTORY_LIMIT)
     lang = (settings.output_language or "English").strip()
     lang_inst = "" if lang.lower() == "english" else f" Write your entire response in {lang}."
 

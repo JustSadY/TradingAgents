@@ -39,7 +39,7 @@ def _record_skip(reason: str) -> None:
 
         AUTO_ORDER_SKIPPED.labels(reason=reason).inc()
     except Exception:  # noqa: BLE001 — metrics are optional, never block trading
-        pass
+        _logger.debug("Metrics skip counter unavailable (non-fatal)")
 
 
 def _safe_float(raw) -> float | None:
@@ -203,13 +203,13 @@ async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, 
     try:
         snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id)
     except Exception as exc:  # noqa: BLE001 — never block trading on the risk snapshot
-        _logger.debug("Risk snapshot failed for %s (allowing order): %s", ticker, exc)
+        _logger.warning("Risk snapshot failed for %s (allowing order): %s", ticker, exc)
         return quantity
 
-    equity = float(snapshot.get("total_value") or 0.0)
+    equity = float(safe_decimal(snapshot.get("total_value")))
     holdings = snapshot.get("holdings", [])
-    existing_gross = sum(float(h.get("market_value") or 0.0) for h in holdings)
-    existing_ticker = sum(float(h.get("market_value") or 0.0) for h in holdings if h.get("ticker") == ticker)
+    existing_gross = sum(float(safe_decimal(h.get("market_value"))) for h in holdings)
+    existing_ticker = sum(float(safe_decimal(h.get("market_value"))) for h in holdings if h.get("ticker") == ticker)
     proposed_notional = price * quantity
 
     # Correlation-aware sizing is opt-in: it fetches price history for every
@@ -221,7 +221,7 @@ async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, 
 
             correlated = await correlated_notional(ticker, holdings)
         except Exception as exc:  # noqa: BLE001 — never block trading on the correlation calc
-            _logger.debug("Correlation risk calc failed for %s (ignoring): %s", ticker, exc)
+            _logger.warning("Correlation risk calc failed for %s (ignoring): %s", ticker, exc)
             correlated = 0.0
 
     assessment = cap_order_notional(
@@ -295,12 +295,12 @@ async def place_signal_order(
     # positions are untouched — this only blocks opening/adding new exposure.
     if getattr(settings, "drawdown_breaker_enabled", False):
         try:
-            initial_capital = float(portfolio.initial_capital)
+            initial_capital = float(safe_decimal(portfolio.initial_capital))
             if initial_capital > 0:
                 from backend.services.mock_trading_service import get_portfolio_with_live_prices
 
                 snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id)
-                current_equity = float(snapshot.get("total_value") or initial_capital)
+                current_equity = float(safe_decimal(snapshot.get("total_value"), default=Decimal(str(initial_capital))))
                 drawdown_pct = max(0.0, (initial_capital - current_equity) / initial_capital * 100.0)
                 max_drawdown_pct = float(getattr(settings, "max_portfolio_drawdown_pct", 20.0))
                 if drawdown_pct > max_drawdown_pct:
@@ -313,21 +313,21 @@ async def place_signal_order(
                     _record_skip("drawdown_breaker")
                     return None
         except Exception as exc:  # noqa: BLE001 — never block trading on the breaker calc itself
-            _logger.debug("Drawdown breaker check failed for %s (allowing order): %s", ticker, exc)
+            _logger.warning("Drawdown breaker check failed for %s (allowing order): %s", ticker, exc)
 
     trader = get_trader(
         mode=sys_mode,
         broker=sys_broker,
         portfolio_id=portfolio.id,
-        initial_capital=float(portfolio.initial_capital),
+        initial_capital=float(safe_decimal(portfolio.initial_capital)),
         db=db,
     )
-    price = await trader.get_current_price(ticker) or 0.0
+    price = float(safe_decimal(await trader.get_current_price(ticker)))
     if price <= 0:
         _logger.warning("No price available for %s; skipping order execution", ticker)
         return None
 
-    capital = float(portfolio.cash_available) if portfolio.cash_available > 0 else float(portfolio.initial_capital)
+    capital = float(safe_decimal(portfolio.cash_available if portfolio.cash_available > 0 else portfolio.initial_capital))
 
     import json
 
@@ -404,6 +404,6 @@ async def place_signal_order(
 
             await notify_trade_executed(ticker, action, result.filled_quantity, result.filled_price, settings)
         except Exception as exc:
-            _logger.debug("trade_executed webhook failed (non-fatal): %s", exc)
+            _logger.warning("trade_executed webhook failed (non-fatal): %s", exc)
 
     return result

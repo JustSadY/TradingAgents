@@ -13,7 +13,7 @@ class AgentToolSetting(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     scope: Mapped[str] = mapped_column(String(20), default="user", nullable=False, index=True)
-    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey(_USERS_ID_FK), nullable=True, index=True)
+    user_id: Mapped[int | None] = mapped_column(Integer, ForeignKey(_USERS_ID_FK, ondelete="CASCADE"), nullable=True, index=True)
     tool_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     enabled: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     settings: Mapped[dict] = mapped_column("settings_json", JSON, default=dict)
@@ -31,7 +31,7 @@ class UserAgentAccess(Base):
     __tablename__ = "user_agent_access"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey(_USERS_ID_FK), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey(_USERS_ID_FK, ondelete="CASCADE"), nullable=False, index=True)
     agent_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     can_run: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))
@@ -48,7 +48,7 @@ class UserToolAccess(Base):
     __tablename__ = "user_tool_access"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey(_USERS_ID_FK), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey(_USERS_ID_FK, ondelete="CASCADE"), nullable=False, index=True)
     tool_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     can_view: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
     can_use: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
@@ -68,7 +68,7 @@ class UserToolFieldAccess(Base):
     __tablename__ = "user_tool_field_access"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey(_USERS_ID_FK), nullable=False, index=True)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey(_USERS_ID_FK, ondelete="CASCADE"), nullable=False, index=True)
 
     tool_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)
     field_key: Mapped[str] = mapped_column(String(100), nullable=False, index=True)

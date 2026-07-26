@@ -1,10 +1,9 @@
 import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, require_admin
+from backend.api.deps import get_current_user, require_admin, require_page
 from backend.core.database import get_db
 from backend.core.limiter import limiter
 from backend.core.utils import safe_ticker_component
@@ -23,6 +22,7 @@ from backend.schemas.analysis import (
     CostEstimateResponse,
     PerformanceAttributionResponse,
     PerformanceResponse,
+    TimeTravelRequest,
     TimeTravelResponse,
 )
 from backend.schemas.portfolio_analysis import (
@@ -45,12 +45,12 @@ async def run_analysis(
     body: AnalysisRunRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("analysis")),
 ):
     try:
         safe_ticker_component(body.ticker)
     except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
+        raise HTTPException(status_code=400, detail=str(e)) from e
     settings = await get_or_create_settings(db, current_user)
     task_id = str(uuid.uuid4())
     from backend.services.analysis_queue import dispatch_analysis
@@ -185,7 +185,7 @@ async def run_portfolio_run(
     body: MultiTickerRunRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(require_page("analysis")),
 ):
     tickers = [t.upper() for t in body.tickers]
     for ticker in tickers:
@@ -303,11 +303,6 @@ async def ask_analysis_report(
     return await answer_report_question(db, analysis_id, body.message, current_user)
 
 
-class TimeTravelRequest(BaseModel):
-    checkpoint_id: str
-    update_state: dict
-
-
 @router.get(
     "/{analysis_id}/checkpoints",
     response_model=list[CheckpointItem],
@@ -318,19 +313,12 @@ async def list_checkpoints(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ):
-    import os
+    from backend.services.analysis_service import list_analysis_checkpoints
 
-    from backend.repositories.analysis import get_analysis_by_id
-    from backend.trading_agents.default_config import DEFAULT_CONFIG
-    from backend.trading_agents.graph.checkpointer import list_checkpoints_for_thread
-
-    analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
-    if not analysis:
+    result = await list_analysis_checkpoints(db, analysis_id, current_user)
+    if result is None:
         raise HTTPException(status_code=404, detail=_ANALYSIS_NOT_FOUND)
-
-    data_cache_dir = os.environ.get("TRADINGAGENTS_DATA_CACHE_DIR", DEFAULT_CONFIG["data_cache_dir"])
-    checkpoints = await list_checkpoints_for_thread(data_cache_dir, analysis.ticker, analysis.trade_date)
-    return checkpoints
+    return result
 
 
 @router.post(

@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import select
 
@@ -31,34 +32,77 @@ from backend.core.database import AsyncSessionLocal
 
 _logger = logging.getLogger(__name__)
 
+# Default TTL: if no exact hash match is found but a cache entry exists for
+# this analyst+ticker, fall back to the most recent entry if it is younger
+# than this threshold.  This provides resilience against transient data-fetch
+# failures that would otherwise produce a different hash and force a costly
+# re-generation.
+_CACHE_STALE_DAYS = 7
+
+
+def _current_run_context() -> dict | None:
+    try:
+        from backend.trading_agents.agents.data.chart_tools import active_run_context
+
+        return active_run_context.get(None)
+    except Exception:
+        return None
+
+
+def _current_user_id() -> int | None:
+    """The requesting user's id for the active run, or ``None`` for a
+    system-triggered run with no owner. Cache lookups/writes always scope on
+    this — never fall through to an unscoped query, which would let one
+    user's cached report (and the report content it was built from) leak to
+    another user."""
+    ctx = _current_run_context()
+    return ctx.get("user_id") if ctx else None
+
+
+def _config_meta(analyst_key: str) -> dict:
+    config_meta: dict = {}
+    ctx = _current_run_context()
+    if ctx and "graph" in ctx:
+        graph = ctx["graph"]
+        config_meta["global_provider"] = getattr(graph, "llm_provider", "") or ""
+        config_meta["global_model"] = getattr(graph, "llm_model", "") or ""
+        if hasattr(graph, "config") and isinstance(graph.config, dict):
+            config_meta["persona"] = graph.config.get("investor_persona", "") or ""
+            config_meta["language"] = graph.config.get("output_language", "") or ""
+
+            runtime_agent_ctx = graph.config.get("runtime_agent_context", {})
+            if isinstance(runtime_agent_ctx, dict):
+                agent_ctx = runtime_agent_ctx.get(analyst_key, {})
+                if isinstance(agent_ctx, dict):
+                    agent_settings = agent_ctx.get("settings", {})
+                    if isinstance(agent_settings, dict):
+                        config_meta["agent_settings"] = agent_settings
+    return config_meta
+
+
+def _compute_config_fingerprint(analyst_key: str) -> str:
+    """SHA-256 of just the provider/model/persona/language/agent-settings
+    slice of the config — independent of the fetched data. Stored alongside
+    each cache entry so the stale-data fallback (which ignores the full data
+    hash by design) can still refuse to serve a report generated under a
+    different model/persona/language."""
+    import json
+
+    try:
+        config_meta = _config_meta(analyst_key)
+    except Exception:
+        config_meta = {}
+    return hashlib.sha256(json.dumps(config_meta, sort_keys=True).encode("utf-8")).hexdigest()
+
 
 def compute_data_hash(analyst_key: str, ticker: str, trade_date: str, *data_blocks: str) -> str:
     """Build a SHA-256 digest from the analyst key, ticker, trade date, and
     all fetched data blocks.  Any change in the underlying data produces a
     different hash, so the cached report is automatically invalidated."""
-    config_meta = {}
     try:
-        from backend.trading_agents.agents.data.chart_tools import active_run_context
-
-        ctx = active_run_context.get(None)
-        if ctx and "graph" in ctx:
-            graph = ctx["graph"]
-            config_meta["global_provider"] = getattr(graph, "llm_provider", "") or ""
-            config_meta["global_model"] = getattr(graph, "llm_model", "") or ""
-            if hasattr(graph, "config") and isinstance(graph.config, dict):
-                config_meta["persona"] = graph.config.get("investor_persona", "") or ""
-                config_meta["language"] = graph.config.get("output_language", "") or ""
-
-                # Capture agent-specific settings overrides (custom LLM, prompt, temperature, etc.)
-                runtime_agent_ctx = graph.config.get("runtime_agent_context", {})
-                if isinstance(runtime_agent_ctx, dict):
-                    agent_ctx = runtime_agent_ctx.get(analyst_key, {})
-                    if isinstance(agent_ctx, dict):
-                        agent_settings = agent_ctx.get("settings", {})
-                        if isinstance(agent_settings, dict):
-                            config_meta["agent_settings"] = agent_settings
+        config_meta = _config_meta(analyst_key)
     except Exception:
-        pass
+        config_meta = {}
 
     import json
 
@@ -67,18 +111,38 @@ def compute_data_hash(analyst_key: str, ticker: str, trade_date: str, *data_bloc
     return hashlib.sha256(combined.encode("utf-8")).hexdigest()
 
 
-async def check_analyst_cache(analyst_key: str, ticker: str, data_hash: str) -> str | None:
-    """Return the cached report text if a matching entry exists, else ``None``."""
+async def check_analyst_cache(
+    analyst_key: str,
+    ticker: str,
+    data_hash: str,
+    *,
+    fallback_to_stale: bool = True,
+) -> str | None:
+    """Return the cached report text if a matching entry exists.
+
+    When *fallback_to_stale* is ``True`` (default) and no exact hash match is
+    found, the most recent cache entry for this analyst+ticker is returned if
+    it is younger than ``_CACHE_STALE_DAYS``.  This protects against transient
+    data-fetch failures that change the hash but leave the underlying data
+    effectively unchanged.
+    """
     from backend.models.news_cache import AnalystReportCache, NewsAnalysisCache
+
+    user_id = _current_user_id()
+
+    def _user_filter(col):
+        return col.is_(None) if user_id is None else col == user_id
 
     async with AsyncSessionLocal() as db:
         if analyst_key == "news":
             stmt = select(NewsAnalysisCache).where(
+                _user_filter(NewsAnalysisCache.user_id),
                 NewsAnalysisCache.ticker == ticker,
                 NewsAnalysisCache.articles_hash == data_hash,
             )
         else:
             stmt = select(AnalystReportCache).where(
+                _user_filter(AnalystReportCache.user_id),
                 AnalystReportCache.analyst_key == analyst_key,
                 AnalystReportCache.ticker == ticker,
                 AnalystReportCache.data_hash == data_hash,
@@ -87,6 +151,52 @@ async def check_analyst_cache(analyst_key: str, ticker: str, data_hash: str) -> 
         entry = res.scalar_one_or_none()
         if entry:
             return entry.analysis_result
+
+        if not fallback_to_stale:
+            return None
+
+        # The stale fallback intentionally ignores the *data* hash (that's the
+        # point — it's a resilience net for transient fetch failures), but it
+        # must still match the same user and the same provider/model/persona/
+        # language, or it could hand back a report generated for a different
+        # tenant or config.
+        config_fingerprint = _compute_config_fingerprint(analyst_key)
+        cutoff = datetime.now(UTC) - timedelta(days=_CACHE_STALE_DAYS)
+        if analyst_key == "news":
+            stmt = (
+                select(NewsAnalysisCache)
+                .where(
+                    _user_filter(NewsAnalysisCache.user_id),
+                    NewsAnalysisCache.ticker == ticker,
+                    NewsAnalysisCache.config_fingerprint == config_fingerprint,
+                    NewsAnalysisCache.created_at >= cutoff,
+                )
+                .order_by(NewsAnalysisCache.created_at.desc())
+                .limit(1)
+            )
+        else:
+            stmt = (
+                select(AnalystReportCache)
+                .where(
+                    _user_filter(AnalystReportCache.user_id),
+                    AnalystReportCache.analyst_key == analyst_key,
+                    AnalystReportCache.ticker == ticker,
+                    AnalystReportCache.config_fingerprint == config_fingerprint,
+                    AnalystReportCache.created_at >= cutoff,
+                )
+                .order_by(AnalystReportCache.created_at.desc())
+                .limit(1)
+            )
+        res = await db.execute(stmt)
+        fallback = res.scalar_one_or_none()
+        if fallback:
+            _logger.info(
+                "Stale-cache fallback for %s/%s (no exact hash match, using entry from %s)",
+                analyst_key,
+                ticker,
+                fallback.created_at,
+            )
+            return fallback.analysis_result
     return None
 
 
@@ -95,18 +205,25 @@ async def store_analyst_cache(analyst_key: str, ticker: str, data_hash: str, rep
     the LLM call."""
     from backend.models.news_cache import AnalystReportCache, NewsAnalysisCache
 
+    user_id = _current_user_id()
+    config_fingerprint = _compute_config_fingerprint(analyst_key)
+
     async with AsyncSessionLocal() as db:
         if analyst_key == "news":
             entry = NewsAnalysisCache(
+                user_id=user_id,
                 ticker=ticker,
                 articles_hash=data_hash,
+                config_fingerprint=config_fingerprint,
                 analysis_result=report_text,
             )
         else:
             entry = AnalystReportCache(
+                user_id=user_id,
                 analyst_key=analyst_key,
                 ticker=ticker,
                 data_hash=data_hash,
+                config_fingerprint=config_fingerprint,
                 analysis_result=report_text,
             )
         db.add(entry)

@@ -7,11 +7,27 @@ import os
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import get_settings as _cfg
+from backend.core.security import decrypt_secret
 from backend.models.settings import AppSettings
 from backend.services.user_service import decrypt_api_keys, get_user_api_key
 from backend.trading_agents.default_config import DEFAULT_CONFIG
 
 _logger = logging.getLogger(__name__)
+
+
+def _decrypt_tool_secret(value: str | None) -> str | None:
+    """Decrypt a tool-settings secret field for actual use.
+
+    Falls back to the raw value on failure so credentials saved before this
+    field started being encrypted (plaintext, not a valid Fernet token) keep
+    working until the user next re-saves them.
+    """
+    if not value:
+        return value
+    try:
+        return decrypt_secret(value)
+    except Exception:
+        return value
 
 
 def inject_tool_credentials(config: dict) -> None:
@@ -23,14 +39,14 @@ def inject_tool_credentials(config: dict) -> None:
 
     reddit_user = user_settings.get("reddit_sentiment", {}).get("settings", {})
     config["reddit_client_id"] = reddit_user.get("reddit_client_id")
-    config["reddit_client_secret"] = reddit_user.get("reddit_client_secret")
+    config["reddit_client_secret"] = _decrypt_tool_secret(reddit_user.get("reddit_client_secret"))
     config["reddit_user_agent"] = reddit_user.get("reddit_user_agent")
 
     search_user = user_settings.get("search_web", {}).get("settings", {})
     config["searxng_url"] = search_user.get("searxng_url")
 
     stock_server = server_settings.get("core_stock_data", {}).get("settings", {})
-    config["alpha_vantage_api_key"] = stock_server.get("alpha_vantage_api_key")
+    config["alpha_vantage_api_key"] = _decrypt_tool_secret(stock_server.get("alpha_vantage_api_key"))
 
 
 def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -> dict:

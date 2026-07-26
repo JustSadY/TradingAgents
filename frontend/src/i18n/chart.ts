@@ -42,6 +42,7 @@ const chart = {
     'chart.ai_formula_placeholder': "Describe an indicator in plain language (e.g. 'distance from the 50 day average')",
     'chart.ai_generate': 'AI Formula',
     'chart.ai_generating': 'Generating…',
+    'chart.patterns': 'Patterns',
   },
   tr: {
     'chart.title': 'Trading Grafik',
@@ -86,6 +87,7 @@ const chart = {
     'chart.ai_formula_placeholder': "İstediğiniz göstergeyi yazın (örn. '50 günlük ortalamadan uzaklık')",
     'chart.ai_generate': 'AI Formül',
     'chart.ai_generating': 'Üretiliyor…',
+    'chart.patterns': 'Formasyonlar',
   },
 }
 

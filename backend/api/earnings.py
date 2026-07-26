@@ -16,6 +16,7 @@ async def earnings_calendar(
     request: Request,
     tickers: str | None = Query(
         default=None,
+        pattern=r"^[A-Za-z,]+$",
         description="Comma-separated tickers. Defaults to user's watchlist.",
     ),
     db: AsyncSession = Depends(get_db),

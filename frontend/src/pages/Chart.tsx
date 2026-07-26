@@ -81,7 +81,7 @@ export default function ChartPage() {
     try {
       const [ohlcvRes, histRes, sentRes] = await Promise.all([
         api.get('/api/market/ohlcv', { params: { ticker, period: p } }),
-        api.get('/api/market/analysis/history', { params: { ticker, limit: 200 } }),
+        api.get('/api/analysis/history', { params: { ticker, limit: 200 } }),
         api.get('/api/market/sentiment-history', { params: { ticker } }),
       ])
       if (reqId !== loadReqId.current) return

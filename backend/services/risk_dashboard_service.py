@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import logging
 import math
 from decimal import Decimal
 from typing import Any
@@ -10,6 +11,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.money import safe_decimal
 from backend.models.user import User
 from backend.services.indicator_service import fetch_sector
+
+_logger = logging.getLogger(__name__)
 
 _BETA_THRESHOLD = 1.5  # portfolio beta above this is flagged
 _VOL_THRESHOLD = 0.40  # annualized volatility above this (40%) is flagged
@@ -72,6 +75,7 @@ async def _fetch_close_history(ticker: str, period: str = "3mo"):
 
         return await asyncio.to_thread(lambda t=ticker: yf.Ticker(t).history(period=period)["Close"])
     except Exception:
+        _logger.warning("Failed to fetch close history for %s", ticker, exc_info=True)
         return None
 
 
@@ -84,6 +88,7 @@ def _spy_returns(spy_hist_raw: Any):
         if len(spy_ret) >= 10:
             return spy_ret
     except Exception:
+        _logger.debug("Failed to compute SPY returns", exc_info=True)
         return None
     return None
 
@@ -158,6 +163,7 @@ def _holding_vol_beta(hist: Any, spy_returns: Any) -> tuple[Any, float | None, f
     try:
         daily_ret = hist.pct_change().dropna()
     except Exception:
+        _logger.debug("Failed to compute daily returns", exc_info=True)
         return None, None, None
     if len(daily_ret) < 2:
         return None, None, None
@@ -169,7 +175,7 @@ def _holding_vol_beta(hist: Any, spy_returns: Any) -> tuple[Any, float | None, f
         vol_annual = round(std_daily * math.sqrt(252), 4)
         beta = _beta_vs_spy(daily_ret, spy_returns)
     except Exception:
-        pass
+        _logger.debug("Failed to compute vol/beta for holding", exc_info=True)
     return daily_ret, vol_annual, beta
 
 
@@ -246,7 +252,7 @@ def _build_correlation_matrix(ticker_returns: dict[str, Any]) -> list[dict]:
                 if not math.isnan(corr):
                     correlation.append({"ticker_a": ta, "ticker_b": tb, "correlation": round(corr, 3)})
             except Exception:
-                pass
+                _logger.debug("Correlation calc failed for %s / %s", ta, tb, exc_info=True)
     return correlation
 
 
@@ -262,7 +268,7 @@ async def _fetch_returns(tickers: list[str]) -> dict[str, Any]:
             if len(r) >= 2:
                 out[ticker] = r
         except Exception:
-            continue
+            _logger.debug("Failed to compute returns for %s", ticker, exc_info=True)
     return out
 
 
@@ -279,6 +285,7 @@ async def correlated_notional(ticker: str, holdings: list[dict], threshold: floa
     try:
         returns = await _fetch_returns([ticker] + [h["ticker"] for h in others])
     except Exception:
+        _logger.warning("Failed to fetch returns for correlated_notional", exc_info=True)
         return 0.0
     base = returns.get(ticker)
     if base is None:
@@ -295,7 +302,7 @@ async def correlated_notional(ticker: str, holdings: list[dict], threshold: floa
         try:
             corr = float(base.loc[common].corr(r.loc[common]))
         except Exception:
-            continue
+            _logger.debug("Correlation calc failed for %s vs %s", ticker, h.get("ticker"), exc_info=True)
         if corr > threshold:
             total += corr * float(safe_decimal(h.get("market_value")))
     return total

@@ -13,9 +13,24 @@ async def search_web(
     query: Annotated[str, "Search query"],
 ) -> str:
     """Perform a live search on the web for news, transcripts, or specific financial events."""
-    # Currently routes to yfinance news as a proxy for web search results. The
-    # window ends at the analysis date (not a hardcoded year) so results stay
-    # relevant for back-dated runs, with a one-year lookback.
+    import asyncio
+
+    from backend.trading_agents.dataflows.config import get_config
+    from backend.trading_agents.dataflows.searxng import fetch_searxng_results
+
+    searxng_url = (get_config().get("searxng_url") or "").strip()
+    if searxng_url:
+        try:
+            return await asyncio.to_thread(fetch_searxng_results, query, searxng_url)
+        except Exception as exc:
+            _logger.warning(
+                "SearXNG query failed (%s); falling back to news proxy: %s", searxng_url, exc
+            )
+
+    # No SearXNG configured, or it just failed: fall back to yfinance news as
+    # a proxy for web-search results. The window ends at the analysis date
+    # (not a hardcoded year) so results stay relevant for back-dated runs,
+    # with a one-year lookback.
     from datetime import UTC, datetime, timedelta
 
     try:
@@ -41,4 +56,8 @@ async def search_web(
 @tool
 async def get_crypto_fear_and_greed_index() -> str:
     """Retrieve the current Crypto Fear and Greed Index to gauge market sentiment."""
-    return "Fear and Greed Index: 45 (Neutral)"
+    import asyncio
+
+    from backend.trading_agents.dataflows.crypto_fear_greed import fetch_crypto_fear_greed_index
+
+    return await asyncio.to_thread(fetch_crypto_fear_greed_index)

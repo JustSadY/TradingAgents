@@ -1,13 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import UpdateBanner from '../UpdateBanner'
 import axios from 'axios'
 
-const mockUseAuth = vi.fn()
+const mockUseAuth = vi.hoisted(() => vi.fn())
+const mockAxiosGet = vi.hoisted(() => vi.fn())
 
 vi.mock('../../contexts/AuthContext', () => ({
   useAuth: () => mockUseAuth(),
 }))
+
+vi.mock('axios', async () => {
+  const actual = await vi.importActual('axios')
+  return {
+    ...actual,
+    default: {
+      ...(actual as any).default,
+      get: mockAxiosGet,
+    },
+    get: mockAxiosGet,
+  }
+})
 
 const defaultStatus = {
   git: true,
@@ -23,28 +36,28 @@ const defaultStatus = {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  vi.useFakeTimers()
-  vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultStatus })
+  mockAxiosGet.mockResolvedValue({ data: defaultStatus })
 })
 
 describe('UpdateBanner', () => {
-  it('renders nothing when update_supported is false', () => {
+  it('renders nothing when update_supported is false', async () => {
     mockUseAuth.mockReturnValue({ isOwner: true })
-    vi.spyOn(axios, 'get').mockResolvedValue({ data: { ...defaultStatus, update_supported: false } })
+    mockAxiosGet.mockResolvedValue({ data: { ...defaultStatus, update_supported: false } })
     const { container } = render(<UpdateBanner />)
+    await waitFor(() => { expect(mockAxiosGet).toHaveBeenCalled() })
     expect(container.innerHTML).toBe('')
   })
 
-  it('renders nothing for non-owner when update is available', () => {
+  it('renders nothing for non-owner when update is available', async () => {
     mockUseAuth.mockReturnValue({ isOwner: false })
     render(<UpdateBanner />)
+    await waitFor(() => { expect(mockAxiosGet).toHaveBeenCalled() })
     expect(screen.queryByText(/Yeni sürüm/)).not.toBeInTheDocument()
   })
 
   it('shows update available banner for owner', async () => {
     mockUseAuth.mockReturnValue({ isOwner: true })
     render(<UpdateBanner />)
-    await act(async () => { vi.advanceTimersByTime(100) })
     expect(await screen.findByText(/Yeni sürüm/)).toBeInTheDocument()
     expect(screen.getByText(/3 commit geride/)).toBeInTheDocument()
     expect(screen.getByText(/Güncelle/)).toBeInTheDocument()
@@ -52,18 +65,19 @@ describe('UpdateBanner', () => {
 
   it('shows updating state when busy', async () => {
     mockUseAuth.mockReturnValue({ isOwner: true })
-    vi.spyOn(axios, 'get').mockResolvedValue({ data: { ...defaultStatus, updating: true } })
+    mockAxiosGet.mockResolvedValue({ data: { ...defaultStatus, updating: true } })
     render(<UpdateBanner />)
-    await act(async () => { vi.advanceTimersByTime(100) })
     expect(await screen.findByText(/Güncelleniyor/)).toBeInTheDocument()
   })
 
   it('dismisses when close button is clicked', async () => {
     mockUseAuth.mockReturnValue({ isOwner: true })
     render(<UpdateBanner />)
-    await act(async () => { vi.advanceTimersByTime(100) })
-    const closeBtn = await screen.findByTitle('Gizle')
-    await act(async () => { closeBtn.click() })
-    expect(screen.queryByText(/Yeni sürüm/)).not.toBeInTheDocument()
+    expect(await screen.findByText(/Güncelle/)).toBeInTheDocument()
+    const closeBtn = screen.getByTitle('Gizle')
+    closeBtn.click()
+    await waitFor(() => {
+      expect(screen.queryByText(/Yeni sürüm/)).not.toBeInTheDocument()
+    })
   })
 })

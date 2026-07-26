@@ -83,11 +83,14 @@ function loadRunState() {
     const hasRunningTask = !!localStorage.getItem(TASK_KEY)
     if (!raw) return EMPTY_RUN
     const parsed = JSON.parse(raw)
-    if (hasRunningTask) {
-      return { ...EMPTY_RUN, ...parsed, runStatus: 'running' }
-    }
-    const status = parsed.runStatus === 'running' ? 'idle' : parsed.runStatus
-    return { ...EMPTY_RUN, ...parsed, runStatus: status }
+    const merged = hasRunningTask
+      ? { ...EMPTY_RUN, ...parsed, runStatus: 'running' as const }
+      : { ...EMPTY_RUN, ...parsed, runStatus: parsed.runStatus === 'running' ? 'idle' as const : parsed.runStatus }
+    // Saved state may be partial or corrupted (e.g. a stray `"ticker": null`);
+    // guard the fields every downstream `.trim()`/`.toUpperCase()` call relies on.
+    if (typeof merged.ticker !== 'string') merged.ticker = EMPTY_RUN.ticker
+    if (typeof merged.date !== 'string') merged.date = EMPTY_RUN.date
+    return merged
   } catch { return EMPTY_RUN }
 }
 
@@ -175,6 +178,10 @@ function RunTab() {
     if (runStatus === 'idle' && !analysisId) {
       axios.get('/api/analysis/latest').then(r => {
         const a = r.data
+        // A malformed/empty payload (e.g. transient backend issue) must not
+        // stomp `ticker` with undefined — every other effect assumes it's a
+        // string and calls .trim()/.toUpperCase() on it unconditionally.
+        if (!a || !a.ticker) return
         setTicker(a.ticker)
         setDate(a.trade_date)
         setSignal(a.signal)

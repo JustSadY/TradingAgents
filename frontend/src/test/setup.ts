@@ -2,6 +2,17 @@ import '@testing-library/jest-dom/vitest'
 import { cleanup } from '@testing-library/react'
 import { afterEach, vi, beforeEach } from 'vitest'
 
+class MockResizeObserver {
+  observe = vi.fn()
+  unobserve = vi.fn()
+  disconnect = vi.fn()
+}
+
+window.ResizeObserver = MockResizeObserver as any
+
+Element.prototype.scrollTo = vi.fn() as any
+Element.prototype.scrollIntoView = vi.fn() as any
+
 const localStorageMock = (() => {
   let store: Record<string, string> = {}
   return {
@@ -42,6 +53,14 @@ Object.defineProperty(window, 'matchMedia', {
   })),
 })
 
+class ResizeObserverMock {
+  observe() {}
+  unobserve() {}
+  disconnect() {}
+}
+
+vi.stubGlobal('ResizeObserver', ResizeObserverMock)
+
 // Use Object.defineProperty for read-only globalThis.crypto
 Object.defineProperty(globalThis, 'crypto', {
   value: {
@@ -66,3 +85,4 @@ vi.mock('axios', () => {
   }
   return { default: mockAxios, ...mockAxios }
 })
+

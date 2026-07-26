@@ -21,8 +21,26 @@ async def get_past_performance_data(ticker: str, curr_date: str | None = None) -
         from backend.core.database import AsyncSessionLocal
         from backend.repositories.analysis import list_historical_analyses
 
+        # Scope strictly to the run's own user — this must never see another
+        # user's analyses/trader_plan, so no admin-sees-all bypass here (unlike
+        # scope_to_user's normal semantics for an authenticated API request).
+        from backend.trading_agents.agents.data.chart_tools import active_run_context
+
+        ctx = active_run_context.get(None)
+        run_user_id = ctx.get("user_id") if ctx else None
+
+        if run_user_id is None:
+            # Unknown run owner (e.g. a system-triggered run with no
+            # associated user) — never fall through to an unscoped query,
+            # which would leak every user's history. Just report none found.
+            return "No past analysis data found for this ticker."
+
+        scope_user = type("_RunUser", (), {"id": run_user_id, "is_admin": False})()
+
         async with AsyncSessionLocal() as db:
-            past_analyses = await list_historical_analyses(db, ticker=ticker, before_trade_date=curr_date, limit=1)
+            past_analyses = await list_historical_analyses(
+                db, user=scope_user, ticker=ticker, before_trade_date=curr_date, limit=1
+            )
             if past_analyses:
                 latest = past_analyses[0]
                 past_report = latest.trader_plan

@@ -62,6 +62,11 @@ class APICache:
         return cache_dir / "api_cache.sqlite3"
 
     @classmethod
+    def get_max_entries(cls) -> int:
+        config = get_config()
+        return int(config.get("api_cache_max_entries", 5000))
+
+    @classmethod
     def _ensure_schema(cls, conn, path: str) -> None:
         with cls._init_lock:
             if path in cls._initialized_paths:
@@ -75,6 +80,7 @@ class APICache:
                 )
             """)
             conn.execute("CREATE INDEX IF NOT EXISTS idx_api_cache_method ON api_cache(method)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_api_cache_ts ON api_cache(ts)")
             cls._initialized_paths.add(path)
 
     @classmethod
@@ -141,5 +147,59 @@ class APICache:
                     (key, method, now, json.dumps(data)),
                 )
                 conn.execute("DELETE FROM api_cache WHERE ? - ts > 86400.0", (now,))
+                cls._evict_if_oversized(conn)
+        finally:
+            conn.close()
+
+    @classmethod
+    def _evict_if_oversized(cls, conn) -> None:
+        """Delete oldest entries when the cache exceeds ``get_max_entries()``."""
+        max_entries = cls.get_max_entries()
+        count_row = conn.execute("SELECT COUNT(*) FROM api_cache").fetchone()
+        if count_row and count_row[0] > max_entries:
+            excess = count_row[0] - max_entries
+            conn.execute(
+                """
+                DELETE FROM api_cache WHERE cache_key IN (
+                    SELECT cache_key FROM api_cache ORDER BY ts ASC LIMIT ?
+                )
+                """,
+                (excess,),
+            )
+
+    @classmethod
+    def clear_method_cache(cls, method: str) -> None:
+        conn = cls._connect()
+        try:
+            with conn:
+                conn.execute("DELETE FROM api_cache WHERE method = ?", (method,))
+        finally:
+            conn.close()
+
+    @classmethod
+    def clear_category_cache(cls, category: str) -> None:
+        try:
+            methods = TOOLS_CATEGORIES[category]["tools"]
+        except KeyError:
+            return
+        conn = cls._connect()
+        try:
+            placeholders = ",".join("?" * len(methods))
+            with conn:
+                conn.execute(f"DELETE FROM api_cache WHERE method IN ({placeholders})", methods)
+        finally:
+            conn.close()
+
+    @classmethod
+    def evict_stale(cls, max_age: float | None = None) -> int:
+        if max_age is None:
+            max_age = 86400.0
+        now = time.time()
+        cutoff = now - max_age
+        conn = cls._connect()
+        try:
+            with conn:
+                result = conn.execute("DELETE FROM api_cache WHERE ts < ?", (cutoff,))
+                return result.rowcount
         finally:
             conn.close()

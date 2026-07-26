@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, get_db
+from backend.api.deps import get_current_user, get_db, require_page
 from backend.core.utils import safe_ticker_component
 from backend.models.user import User
 from backend.schemas.trading import (
@@ -80,7 +80,7 @@ async def get_portfolio(
 async def create_order(
     req: APIOrderRequest,
     db: AsyncSession = Depends(get_db),
-    _=Depends(get_current_user),
+    _=Depends(require_page("trading")),
 ):
 
     result = await svc.execute_order(

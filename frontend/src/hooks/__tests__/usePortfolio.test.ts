@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
 import { usePortfolio } from '../usePortfolio'
 
-const mockGet = vi.fn()
+const mockGet = vi.hoisted(() => vi.fn())
 
 vi.mock('../../utils/api', () => ({
   default: {

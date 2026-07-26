@@ -1,4 +1,5 @@
 import json
+from datetime import UTC, datetime
 
 from .alpha_vantage_common import _make_api_request
 
@@ -33,11 +34,24 @@ def _filter_reports_by_date(result, curr_date: str):
 
 
 def get_fundamentals(ticker: str, curr_date: str = None) -> str:
-    _ = curr_date
     params = {
         "symbol": ticker,
     }
-    return _make_api_request("OVERVIEW", params)
+    result = _make_api_request("OVERVIEW", params)
+
+    # Alpha Vantage's OVERVIEW endpoint is always a live snapshot — unlike
+    # the statement endpoints below, it has no historical/point-in-time
+    # variant to filter by curr_date. Flag that explicitly for backdated
+    # runs instead of silently presenting today's ratios as historical.
+    today = datetime.now(UTC).strftime("%Y-%m-%d")
+    if curr_date and curr_date != today:
+        warning = (
+            f"# WARNING: the OVERVIEW data below is TODAY'S ({today}) live snapshot, not a "
+            f"historical one as of {curr_date}. Alpha Vantage has no point-in-time OVERVIEW API — "
+            "do not treat P/E, market cap, or other ratios as what they were on the analysis date.\n\n"
+        )
+        return warning + (result if isinstance(result, str) else json.dumps(result))
+    return result
 
 
 def get_balance_sheet(ticker: str, freq: str = "quarterly", curr_date: str = None):

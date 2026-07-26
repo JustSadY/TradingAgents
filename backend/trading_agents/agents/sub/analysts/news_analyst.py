@@ -105,7 +105,17 @@ Your final report MUST follow this structure:
         crypto_data = ""
 
         if asset_type == "crypto":
-            crypto_data = "Fear and Greed Index: 45 (Neutral)"
+            try:
+                import asyncio
+
+                from backend.trading_agents.dataflows.crypto_fear_greed import (
+                    fetch_crypto_fear_greed_index,
+                )
+
+                crypto_data = await asyncio.to_thread(fetch_crypto_fear_greed_index)
+
+            except Exception:
+                crypto_data = ""
 
         articles_hash = compute_data_hash(
             "news", ticker, trade_date, news_data, global_news_data, insider_data, crypto_data
@@ -132,7 +142,7 @@ Your final report MUST follow this structure:
 
         report_text = res.get("news_report", "")
 
-        if report_text and not report_text.startswith("News analysis unavailable"):
+        if report_text and "unavailable" not in report_text[:50].lower():
             await store_analyst_cache("news", ticker, articles_hash, report_text)
 
         return res

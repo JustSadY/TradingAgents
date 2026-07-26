@@ -14,15 +14,55 @@ from backend.trading_agents.dataflows.retry import retry_sync
 _logger = logging.getLogger(__name__)
 API_BASE_URL = "https://www.alphavantage.co/query"
 
-# Alpha Vantage free tier: 5 calls per minute.
-_AV_RATE_LIMITER = TokenBucketRateLimiter(calls=5, window_seconds=60.0, name="Alpha Vantage")
+_AV_RATE_LIMITER: TokenBucketRateLimiter | None = None
+_AV_KEY_INDEX = 0
+
+
+def reset_state() -> None:
+    """Clear cached rate limiter and key index so the next call re-reads config.
+
+    Called by tests and when the global config is re-initialized between runs.
+    """
+    global _AV_RATE_LIMITER, _AV_KEY_INDEX
+    _AV_RATE_LIMITER = None
+    _AV_KEY_INDEX = 0
+
+
+def _load_rate_limiter() -> TokenBucketRateLimiter:
+    global _AV_RATE_LIMITER
+    if _AV_RATE_LIMITER is None:
+        cfg = get_config()
+        calls = int(cfg.get("alpha_vantage_rate_limit_calls", 5))
+        window = float(cfg.get("alpha_vantage_rate_limit_window", 60.0))
+        _AV_RATE_LIMITER = TokenBucketRateLimiter(calls=calls, window_seconds=window, name="Alpha Vantage")
+    return _AV_RATE_LIMITER
+
+
+def _read_api_keys() -> list[str]:
+    raw = get_config().get("alpha_vantage_api_key") or os.getenv("ALPHA_VANTAGE_API_KEY", "")
+    if not raw:
+        return []
+    return [k.strip() for k in raw.split(",") if k.strip()]
+
+
+def _rotate_api_key() -> str | None:
+    global _AV_KEY_INDEX
+    keys = _read_api_keys()
+    if len(keys) < 2:
+        return None
+    _AV_KEY_INDEX = (_AV_KEY_INDEX + 1) % len(keys)
+    _logger.info("Rotated to Alpha Vantage API key %d/%d", _AV_KEY_INDEX + 1, len(keys))
+    return keys[_AV_KEY_INDEX]
 
 
 def get_api_key() -> str:
-    api_key = get_config().get("alpha_vantage_api_key") or os.getenv("ALPHA_VANTAGE_API_KEY")
-    if not api_key:
-        raise ValueError("ALPHA_VANTAGE_API_KEY environment variable is not set.")
-    return api_key
+    keys = _read_api_keys()
+    if not keys:
+        raise ValueError(
+            "ALPHA_VANTAGE_API_KEY environment variable is not set. "
+            "Set a single key or a comma-separated list of keys."
+        )
+    return keys[_AV_KEY_INDEX % len(keys)]
 
 
 def format_datetime_for_api(date_input) -> str:
@@ -48,8 +88,11 @@ class AlphaVantageRateLimitError(Exception):
     pass
 
 
+_REQUEST_TIMEOUT = 30
+
+
 def _make_api_request(function_name: str, params: dict) -> dict | str:
-    _AV_RATE_LIMITER.acquire_sync()
+    _load_rate_limiter().acquire_sync()
 
     def _do_request() -> str:
         api_params = params.copy()
@@ -60,7 +103,7 @@ def _make_api_request(function_name: str, params: dict) -> dict | str:
                 "source": "trading_agents",
             }
         )
-        response = requests.get(API_BASE_URL, params=api_params)
+        response = requests.get(API_BASE_URL, params=api_params, timeout=_REQUEST_TIMEOUT)
         response.raise_for_status()
         response_text = response.text
         try:
@@ -68,15 +111,19 @@ def _make_api_request(function_name: str, params: dict) -> dict | str:
             if "Information" in response_json:
                 info_message = response_json["Information"]
                 if "rate limit" in info_message.lower() or "api key" in info_message.lower():
+                    _rotate_api_key()
                     raise AlphaVantageRateLimitError(f"Alpha Vantage rate limit exceeded: {info_message}")
+                if "Invalid API call" in info_message or "invalid" in info_message.lower():
+                    _rotate_api_key()
         except json.JSONDecodeError:
             pass
         return response_text
 
+    cfg = get_config()
     return retry_sync(
         _do_request,
-        max_retries=3,
-        base_delay=2.0,
+        max_retries=cfg.get("alpha_vantage_retry_attempts", 3),
+        base_delay=cfg.get("alpha_vantage_retry_delay", 2.0),
         retryable_exceptions=(requests.RequestException, AlphaVantageRateLimitError, ConnectionError),
     )
 

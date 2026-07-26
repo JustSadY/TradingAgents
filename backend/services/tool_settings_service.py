@@ -7,12 +7,39 @@ from pydantic import create_model
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.security import encrypt_secret
 from backend.models.tool_settings import AgentToolSetting, UserAgentAccess, UserToolAccess, UserToolFieldAccess
 from backend.models.user import User
 from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate, ToolSettingValue
-from backend.services.tool_access_service import get_user_tool_access
+from backend.services.tool_access_service import get_user_tool_access, get_user_tool_field_access
 from backend.trading_agents.agents.tools.base import BaseAgentTool
 from backend.trading_agents.agents.tools.registry import registry
+
+# Sentinel returned in place of a configured secret's real value in API
+# responses (never expose reddit_client_secret / alpha_vantage_api_key etc.
+# in plaintext, matching the policy already applied to per-user LLM keys).
+# The frontend round-trips the whole settings object on every save, so this
+# same sentinel doubles as the "field untouched" signal on write: only a
+# value that differs from it is treated as a real secret update.
+SECRET_UNCHANGED_SENTINEL = "__SECRET_UNCHANGED__"
+
+
+def _secret_field_keys(tool: BaseAgentTool) -> set[str]:
+    return {f.key for f in tool.settings_schema if f.type == "secret"}
+
+
+def _mask_secrets(tool: BaseAgentTool, settings: dict[str, Any]) -> dict[str, Any]:
+    """Replace configured secret values with a sentinel before they leave the
+    service layer — the encrypted ciphertext must never reach an API response
+    (and the plaintext never existed in ``settings`` in the first place)."""
+    secret_keys = _secret_field_keys(tool)
+    if not secret_keys:
+        return settings
+    masked = dict(settings)
+    for key in secret_keys & masked.keys():
+        if masked[key]:
+            masked[key] = SECRET_UNCHANGED_SENTINEL
+    return masked
 
 
 def _get_pydantic_type(field_type: str) -> Any:
@@ -94,8 +121,9 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
     user_rows_list = await _repo_get_user(db, user.id)
     user_rows = {row.tool_key: row for row in user_rows_list}
 
-    # Also load tool access
+    # Also load tool access and field-level access
     tool_access_map = await get_user_tool_access(db, user.id)
+    field_access_map = {} if user.is_admin else await get_user_tool_field_access(db, user.id)
 
     # 2. Build map of all registered tools
     tools_map = {}
@@ -115,6 +143,13 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
         settings = default_settings.copy()
         if row and row.settings:
             settings.update(row.settings)
+        settings = _mask_secrets(tool, settings)
+
+        if not user.is_admin:
+            tool_field_access = field_access_map.get(tool.key, {})
+            settings = {
+                k: v for k, v in settings.items() if tool_field_access.get(k, {}).get("can_view", True)
+            }
 
         tools_map[tool.key] = ToolSettingValue(enabled=enabled, settings=settings)
 
@@ -137,6 +172,7 @@ async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
         settings = default_settings.copy()
         if row and row.settings:
             settings.update(row.settings)
+        settings = _mask_secrets(tool, settings)
 
         tools_map[tool.key] = ToolSettingValue(enabled=enabled, settings=settings)
 
@@ -197,6 +233,19 @@ def _apply_tool_setting_row_update(row: AgentToolSetting, update: Any, tool: Bas
                 current_settings[k] = default_settings.get(k)
     elif update.settings is not None:
         validated = validate_tool_settings(tool, update.settings)
+
+        secret_keys = _secret_field_keys(tool)
+        for key in secret_keys & validated.keys():
+            value = validated[key]
+            if value == SECRET_UNCHANGED_SENTINEL:
+                # Frontend round-trips the whole settings object on every
+                # save; this means "the user never touched this field" —
+                # keep whatever is already encrypted in the DB.
+                validated.pop(key)
+            elif value:
+                validated[key] = encrypt_secret(value)
+            # else: falsy/empty value is an explicit clear — store as-is.
+
         current_settings.update(validated)
 
     row.settings = current_settings

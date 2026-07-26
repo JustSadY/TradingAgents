@@ -9,7 +9,7 @@ company_news_tool = FunctionToolAdapter(
     label_key="tools.company_news.label",
     description_key="tools.company_news.description",
     func=get_news,
-    allowed_analysts=["news", "sentiment"],
+    allowed_analysts=["news", "social"],
     default_enabled=True,
     settings_schema=[
         ToolSettingField(

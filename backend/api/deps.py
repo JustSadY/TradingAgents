@@ -8,7 +8,7 @@ from backend.models.user import User
 from backend.repositories.permissions import get_user_page_permission
 from backend.repositories.users import get_user_by_username
 from backend.schemas.tool_settings import ToolSettingsUpdate
-from backend.services.tool_access_service import get_user_tool_access
+from backend.services.tool_access_service import get_user_tool_access, get_user_tool_field_access
 from backend.trading_agents.agents.tools.registry import registry
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
@@ -84,6 +84,7 @@ async def enforce_tool_settings_permission(
         return
 
     tool_access_map = await get_user_tool_access(db, user.id)
+    field_access_map = await get_user_tool_field_access(db, user.id)
 
     for tool_key, update in body.tools.items():
         tool = registry.get(tool_key)
@@ -105,3 +106,15 @@ async def enforce_tool_settings_permission(
                 raise HTTPException(
                     status_code=403, detail=f"You do not have permission to modify settings for tool '{tool_key}'."
                 )
+
+            # Tool-level can_edit only says the user may edit *something* on
+            # this tool — an admin can still lock/hide individual fields
+            # (UserToolFieldAccess), which the check above never consulted.
+            tool_field_access = field_access_map.get(tool_key, {})
+            changed_fields = set(update.settings or {}) | set(update.reset_settings or [])
+            for field_key in changed_fields:
+                if not tool_field_access.get(field_key, {}).get("can_edit", True):
+                    raise HTTPException(
+                        status_code=403,
+                        detail=f"You do not have permission to modify field '{field_key}' on tool '{tool_key}'.",
+                    )

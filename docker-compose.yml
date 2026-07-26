@@ -124,6 +124,7 @@ services:
     restart: unless-stopped
     command:
       - --config.file=/etc/prometheus/prometheus.yml
+      - --config.expand-env
       - --storage.tsdb.path=/prometheus
       - --storage.tsdb.retention.time=30d
       - --web.console.libraries=/etc/prometheus/console_libraries

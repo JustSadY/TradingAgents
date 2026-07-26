@@ -245,7 +245,7 @@ class TradingAgentsGraph:
             kwargs["api_key"] = self.config["api_key"]
         return kwargs
 
-    def _filter_tools_for_analyst(self, _analyst_key: str, raw_tools: list) -> list:
+    def _filter_tools_for_analyst(self, analyst_key: str, raw_tools: list) -> list:
         runtime_ctx = self.config.get("runtime_tool_context")
         if not runtime_ctx:
             return raw_tools
@@ -257,12 +257,14 @@ class TradingAgentsGraph:
             tool_name = tool_func.name if hasattr(tool_func, "name") else tool_func.__name__
             agent_tool_key = registry.get_agent_tool_key_for_langchain_tool(tool_name)
 
-            if self._should_include_tool(agent_tool_key, tool_func, runtime_ctx):
+            if self._should_include_tool(analyst_key, agent_tool_key, tool_func, runtime_ctx):
                 filtered.append(tool_func)
 
         return filtered
 
-    def _should_include_tool(self, tool_key: str | None, _tool_func: Any, runtime_ctx: dict) -> bool:
+    def _should_include_tool(
+        self, analyst_key: str, tool_key: str | None, _tool_func: Any, runtime_ctx: dict
+    ) -> bool:
         """Helper to determine if a tool should be included for an analyst."""
         if tool_key is None:
             return True
@@ -272,6 +274,24 @@ class TradingAgentsGraph:
         agent_tool = registry.get(tool_key)
         if not agent_tool:
             return True
+
+        # Membership gate: a tool statically wired into an analyst's own tool
+        # list (via @register_analyst) must also declare that analyst in its
+        # registry metadata. Without this, the two sources of truth can drift
+        # (an analyst keeps using a tool nobody updated the registry for), and
+        # the hierarchy gate below ends up reachability-checking the wrong set
+        # of analysts entirely — silently granting or revoking access based on
+        # unrelated agents' kill-switches.
+        if agent_tool.allowed_analysts and analyst_key not in agent_tool.allowed_analysts:
+            logger.warning(
+                "Tool '%s' is wired into analyst '%s' but its registry allowed_analysts=%s doesn't "
+                "include it — excluding. Add '%s' to the tool's allowed_analysts.",
+                tool_key,
+                analyst_key,
+                agent_tool.allowed_analysts,
+                analyst_key,
+            )
+            return False
 
         # Hierarchy gate: if every agent permitted to use this tool sits on a
         # disabled branch, the tool is unreachable and is stripped entirely.
@@ -316,13 +336,21 @@ class TradingAgentsGraph:
         self.visual_annotations = []
         self.support_levels = []
         self.resistance_levels = []
+        # Merge onto whatever the caller (e.g. analysis orchestrator) already
+        # set — it may carry "emitter" for WS progress events. Overwriting the
+        # dict outright (as this used to) silently drops that key, along with
+        # trade_date/user_id, for the rest of the run.
+        existing_ctx = active_run_context.get({})
         token = active_run_context.set(
             {
+                **existing_ctx,
                 "graph": self,
                 "custom_indicators": self.custom_indicators,
                 "visual_annotations": self.visual_annotations,
                 "support_levels": self.support_levels,
                 "resistance_levels": self.resistance_levels,
+                "trade_date": str(trade_date),
+                "user_id": self.config.get("user_id"),
             }
         )
         self._checkpointer_ctx = get_checkpointer(self.config["data_cache_dir"], company_name)
@@ -433,13 +461,21 @@ class TradingAgentsGraph:
         self.visual_annotations = []
         self.support_levels = []
         self.resistance_levels = []
+        # Merge onto whatever the caller (e.g. analysis orchestrator) already
+        # set — it may carry "emitter" for WS progress events. Overwriting the
+        # dict outright (as this used to) silently drops that key, along with
+        # trade_date/user_id, for the rest of the run.
+        existing_ctx = active_run_context.get({})
         token = active_run_context.set(
             {
+                **existing_ctx,
                 "graph": self,
                 "custom_indicators": self.custom_indicators,
                 "visual_annotations": self.visual_annotations,
                 "support_levels": self.support_levels,
                 "resistance_levels": self.resistance_levels,
+                "trade_date": str(trade_date),
+                "user_id": self.config.get("user_id"),
             }
         )
 

@@ -96,7 +96,7 @@ export default function Watchlist() {
 
       {/* Add Ticker Section */}
       <div className="glass-panel rounded-2xl p-5 space-y-4">
-        <h3 className="text-xs font-bold text-violet-400 uppercase tracking-widest">{t('watchlist.add') || 'Add New Asset'}</h3>
+        <h3 className="text-xs font-bold text-violet-400 uppercase tracking-widest">{t('watchlist.add_title') || 'Add New Asset'}</h3>
         <div className="flex flex-col sm:flex-row gap-3">
           <input
             className="flex-1 glass-input rounded-xl px-4 py-2.5 text-sm uppercase font-mono font-bold tracking-wider outline-none"

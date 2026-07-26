@@ -5,6 +5,8 @@ import os
 import re
 import traceback
 
+_logger = logging.getLogger(__name__)
+
 _MASK = "***REDACTED***"
 _SENSITIVE_ENV_VARS = (
     "SECRET_KEY",
@@ -76,7 +78,7 @@ class RedactionFilter(logging.Filter):
             elif record.exc_text:
                 record.exc_text = redact_text(record.exc_text)
         except Exception:
-            pass
+            _logger.debug("Log redaction failed (non-fatal)")
         return True
 
 

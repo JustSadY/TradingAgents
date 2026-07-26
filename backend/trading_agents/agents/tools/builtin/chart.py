@@ -13,7 +13,7 @@ chart_annotation_tool = FunctionToolAdapter(
     label_key="tools.chart_annotation.label",
     description_key="tools.chart_annotation.description",
     func=add_chart_annotation,
-    allowed_analysts=["market"],
+    allowed_analysts=["market", "quant"],
     default_enabled=True,
 )
 
@@ -23,7 +23,7 @@ custom_indicator_tool = FunctionToolAdapter(
     label_key="tools.custom_indicator.label",
     description_key="tools.custom_indicator.description",
     func=add_custom_indicator,
-    allowed_analysts=["market"],
+    allowed_analysts=["market", "quant"],
     default_enabled=True,
 )
 
@@ -33,7 +33,7 @@ vision_chart_tool = FunctionToolAdapter(
     label_key="tools.vision_chart_analysis.label",
     description_key="tools.vision_chart_analysis.description",
     func=get_vision_chart_analysis,
-    allowed_analysts=["market"],
+    allowed_analysts=["market", "quant"],
     default_enabled=True,
 )
 
@@ -43,7 +43,7 @@ mtf_trend_tool = FunctionToolAdapter(
     label_key="tools.mtf_trend.label",
     description_key="tools.mtf_trend.description",
     func=get_mtf_trend,
-    allowed_analysts=["market"],
+    allowed_analysts=["market", "quant"],
     default_enabled=True,
 )
 

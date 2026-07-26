@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator
+from pathlib import Path
 
 from sqlalchemy import Numeric, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
@@ -10,11 +11,6 @@ settings = get_settings()
 engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 
-# Exact fixed-precision column type for monetary / price / quantity values.
-# Stored as PostgreSQL NUMERIC(20, 8) (exact) instead of lossy double precision.
-# `asdecimal=True` maps Python-side values to `Decimal` type to avoid
-# rounding/accumulative floating-point errors. Arithmetic in the trading
-# services uses Python `Decimal` end-to-end.
 MONEY = Numeric(20, 8, asdecimal=True)
 
 
@@ -42,7 +38,24 @@ async def _has_alembic_version(conn) -> bool:
     return row is not None
 
 
+async def _stamp_alembic_head(conn) -> None:
+    _alembic_cfg = None
+    try:
+        from alembic.config import Config
+        from alembic import command
+        ini_path = Path(__file__).resolve().parent.parent / "alembic.ini"
+        _alembic_cfg = Config(str(ini_path))
+        _alembic_cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+        command.stamp(_alembic_cfg, "head")
+    except Exception:
+        pass
+
+
+_ALEMBIC_STAMPED: bool = False
+
+
 async def create_all_tables():
+    global _ALEMBIC_STAMPED
     async with engine.begin() as conn:
         if conn.dialect.name == "postgresql":
             await conn.execute(text("SET LOCAL statement_timeout = 0"))
@@ -54,3 +67,8 @@ async def create_all_tables():
 
         await apply_column_migrations(conn)
         await apply_type_migrations(conn)
+    if not _ALEMBIC_STAMPED:
+        async with engine.begin() as conn:
+            if not await _has_alembic_version(conn):
+                await _stamp_alembic_head(conn)
+            _ALEMBIC_STAMPED = True

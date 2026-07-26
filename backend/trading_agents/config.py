@@ -37,6 +37,11 @@ class TradingAgentsConfig(BaseModel):
     circuit_breaker_threshold: int = Field(default=3, ge=1)
     circuit_breaker_cooldown: int = Field(default=60, ge=10)
     stall_timeout_seconds: int = Field(default=120, ge=30)
+    alpha_vantage_rate_limit_calls: int = Field(default=5, ge=1)
+    alpha_vantage_rate_limit_window: float = Field(default=60.0, ge=1.0)
+    alpha_vantage_retry_attempts: int = Field(default=3, ge=0)
+    alpha_vantage_retry_delay: float = Field(default=2.0, ge=0.0)
+    api_cache_max_entries: int = Field(default=5000, ge=100)
     memory_recall_count: int = Field(default=5, ge=1)
     summary_only_mode: bool = False
     max_report_chars_in_prompts: int = Field(default=6000, ge=500)

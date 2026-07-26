@@ -25,6 +25,16 @@ def yf_retry(func, max_retries=3, base_delay=2.0):
                 time.sleep(delay)
             else:
                 raise
+        except (ConnectionError, TimeoutError, OSError) as exc:
+            if attempt < max_retries:
+                delay = base_delay * (2**attempt)
+                logger.warning(
+                    f"Yahoo Finance connection error, retrying in {delay:.0f}s "
+                    f"(attempt {attempt + 1}/{max_retries}): {exc}"
+                )
+                time.sleep(delay)
+            else:
+                raise
 
 
 def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:

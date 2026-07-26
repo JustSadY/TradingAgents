@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import pytest
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -20,8 +19,21 @@ class TestAuthAPI:
         db.add(user)
         await db.flush()
 
+        # Verify user is in DB
+        from backend.repositories.users import get_user_by_username
+        found = await get_user_by_username(db, "logintest")
+        print(f"DEBUG found user: {found}")
+        print(f"DEBUG db session id: {id(db)}")
+
+        # Check password verification
+        if found:
+            from backend.core.security import verify_password
+            pw_ok = verify_password("correctpass", found.hashed_password)
+            print(f"DEBUG password ok: {pw_ok}")
+
         resp = await async_client.post("/auth/login", json={"username": "logintest", "password": "correctpass"})
-        assert resp.status_code == 200
+        print(f"DEBUG login status={resp.status_code} body={resp.text[:500]}")
+        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text[:500]}"
         data = resp.json()
         assert "access_token" in data
         assert "refresh_token" in data
@@ -98,7 +110,7 @@ class TestAuthAPI:
         assert resp.status_code == 401
 
     async def test_logout(self, auth_client: AsyncClient, db: AsyncSession, test_user: User):
-        resp = await async_client.post("/auth/logout")
+        resp = await auth_client.post("/auth/logout")
         assert resp.status_code == 204
 
     async def test_protected_endpoint_no_auth(self, async_client: AsyncClient):

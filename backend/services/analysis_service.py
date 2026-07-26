@@ -384,3 +384,18 @@ async def rollback_and_resume_analysis(
 
     task = asyncio.create_task(run_resume())
     _RUNNING_TASKS[task_id] = task
+
+
+async def list_analysis_checkpoints(analysis_id: int, db: AsyncSession, current_user) -> list[dict] | None:
+    import os
+
+    from backend.repositories.analysis import get_analysis_by_id
+    from backend.trading_agents.default_config import DEFAULT_CONFIG
+    from backend.trading_agents.graph.checkpointer import list_checkpoints_for_thread
+
+    analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
+    if not analysis:
+        return None
+
+    data_cache_dir = os.environ.get("TRADINGAGENTS_DATA_CACHE_DIR", DEFAULT_CONFIG["data_cache_dir"])
+    return await list_checkpoints_for_thread(data_cache_dir, analysis.ticker, analysis.trade_date)

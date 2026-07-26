@@ -140,7 +140,7 @@ export default function MockTrading() {
   }
 
   const p = portfolio
-  const pnlPositive = p.total_pnl >= 0
+  const pnlPositive = (p.total_pnl ?? 0) >= 0
   const alphaPositive = (p.alpha_pct ?? 0) >= 0
   const locale = language === 'tr' ? 'tr-TR' : 'en-US'
 
@@ -177,19 +177,19 @@ export default function MockTrading() {
         <StatCard
           icon={<DollarSign size={16} />}
           label={t('mocktrading.stat_total_value')}
-          value={`$${p.total_value.toLocaleString(locale, { minimumFractionDigits: 2 })}`}
+          value={`$${(p.total_value ?? 0).toLocaleString(locale, { minimumFractionDigits: 2 })}`}
         />
         <StatCard
           icon={pnlPositive ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
           label={t('mocktrading.stat_total_pnl')}
-          value={`${pnlPositive ? '+' : ''}$${p.total_pnl.toLocaleString(locale, { minimumFractionDigits: 2 })}`}
+          value={`${pnlPositive ? '+' : ''}$${(p.total_pnl ?? 0).toLocaleString(locale, { minimumFractionDigits: 2 })}`}
           sub={`${pnlPositive ? '+' : ''}${(p.total_pnl_pct ?? 0).toFixed(2)}%`}
           positive={pnlPositive}
         />
         <StatCard
           icon={<DollarSign size={16} />}
           label={t('mocktrading.stat_cash')}
-          value={`$${p.cash_available.toLocaleString(locale, { minimumFractionDigits: 2 })}`}
+          value={`$${(p.cash_available ?? 0).toLocaleString(locale, { minimumFractionDigits: 2 })}`}
         />
         <StatCard
           icon={<BarChart2 size={16} />}
@@ -323,7 +323,7 @@ export default function MockTrading() {
         {/* Holdings List Card */}
         <div className="lg:col-span-2 glass-panel rounded-2xl p-5">
           <h3 className="text-sm font-display font-semibold text-slate-200 mb-4">{t('mocktrading.positions_title')}</h3>
-          {p.holdings.length === 0 ? (
+          {(p.holdings ?? []).length === 0 ? (
             <p className="text-slate-500 text-xs py-8 text-center">{t('mocktrading.positions_empty')}</p>
           ) : (
             <div className="overflow-x-auto">
@@ -344,7 +344,7 @@ export default function MockTrading() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/[0.02]">
-                  {p.holdings.map(h => (
+                  {(p.holdings ?? []).map(h => (
                     <tr key={h.ticker} className="hover:bg-white/[0.01] transition-colors">
                       <td className="px-3 py-3 font-mono font-bold text-white text-sm">
                         <span className="inline-flex items-center gap-1.5">
@@ -381,8 +381,8 @@ export default function MockTrading() {
                       <td className={`px-3 py-3 text-right font-mono font-semibold ${(h.unrealized_pnl ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
                         {(h.unrealized_pnl ?? 0) >= 0 ? '+' : ''}${(h.unrealized_pnl ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
                       </td>
-                      <td className={`px-3 py-3 text-right font-mono font-semibold ${h.pnl_pct >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
-                        {h.pnl_pct >= 0 ? '+' : ''}{(h.pnl_pct ?? 0).toFixed(2)}%
+                      <td className={`px-3 py-3 text-right font-mono font-semibold ${(h.pnl_pct ?? 0) >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>
+                        {(h.pnl_pct ?? 0) >= 0 ? '+' : ''}{(h.pnl_pct ?? 0).toFixed(2)}%
                       </td>
                     </tr>
                   ))}

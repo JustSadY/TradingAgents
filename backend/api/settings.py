@@ -1,8 +1,3 @@
-import ipaddress
-import socket
-from urllib.parse import urlparse
-
-import httpx
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -17,6 +12,7 @@ from backend.schemas.common import OkResponse
 from backend.schemas.settings import MemoryStatusResponse, SettingsRead, SettingsUpdate
 from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate
 from backend.schemas.webhook import WebhookDeliveryRead
+from backend.services.notification_service import test_webhook_url, validate_webhook_url
 from backend.services.settings_service import (
     apply_settings_update,
     get_or_create_settings,
@@ -92,6 +88,23 @@ async def _check_section_permissions(db: AsyncSession, user: User, body: Setting
         )
 
 
+async def _validate_webhook_url_if_present(body: SettingsUpdate) -> None:
+    """Reject webhook URLs that resolve to a private/internal address.
+
+    The Pydantic field validator only checks the URL is well-formed http(s);
+    it can't do the DNS resolution needed to catch SSRF targets (localhost,
+    169.254.169.254, RFC1918 ranges, ...). This is the actual save path, so it
+    must run the same check that /api/settings/test-webhook already does —
+    otherwise that endpoint's guard is easily bypassed by saving directly.
+    """
+    url = body.model_dump(exclude_unset=True).get("webhook_url")
+    if url:
+        try:
+            await validate_webhook_url(url)
+        except ValueError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+
 @router.put("", response_model=SettingsRead, responses={403: {"description": "Permission denied"}})
 async def update_settings(
     body: SettingsUpdate,
@@ -101,6 +114,7 @@ async def update_settings(
     settings = await get_or_create_settings(db, current_user)
     if not current_user.is_admin:
         await _check_section_permissions(db, current_user, body)
+    await _validate_webhook_url_if_present(body)
     settings = await apply_settings_update(db, settings, body)
     return settings_to_read(settings)
 
@@ -109,58 +123,20 @@ class WebhookTestRequest(BaseModel):
     url: str
 
 
-def _validate_webhook_url(url: str) -> None:
-    """Reject non-http(s) schemes and URLs whose host resolves to a private,
-    loopback, link-local, or otherwise non-public address.
-
-    Without this guard the server can be coerced into making requests to
-    internal services or the cloud metadata endpoint (SSRF) on behalf of any
-    user who can reach this endpoint.
-    """
-    parsed = urlparse(url)
-    if parsed.scheme not in ("http", "https"):
-        raise HTTPException(status_code=400, detail="Webhook URL must use http or https")
-    host = parsed.hostname
-    if not host:
-        raise HTTPException(status_code=400, detail="Webhook URL is missing a host")
-
-    port = parsed.port or (443 if parsed.scheme == "https" else 80)
-    try:
-        infos = socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
-    except socket.gaierror:
-        raise HTTPException(status_code=400, detail="Webhook host could not be resolved") from None
-
-    for info in infos:
-        ip = ipaddress.ip_address(info[4][0])
-        if (
-            ip.is_private
-            or ip.is_loopback
-            or ip.is_link_local
-            or ip.is_reserved
-            or ip.is_multicast
-            or ip.is_unspecified
-        ):
-            raise HTTPException(status_code=400, detail="Webhook URL resolves to a disallowed internal address")
-
-
 @router.post(
     "/test-webhook",
     response_model=OkResponse,
     responses={400: {"description": "Invalid webhook URL or delivery failed"}},
 )
 async def test_webhook(body: WebhookTestRequest, _: User = Depends(get_current_user)):
-    _validate_webhook_url(body.url)
-    payload = {
-        "text": "TradingAgents webhook testi başarılı! ✓",
-        "content": "TradingAgents webhook testi başarılı! ✓",
-    }
     try:
-        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
-            r = await client.post(body.url, json=payload)
-            if r.status_code >= 400:
-                raise HTTPException(status_code=400, detail=f"Webhook yanıtı: {r.status_code}")
-    except httpx.RequestError as e:
+        await validate_webhook_url(body.url)
+    except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
+
+    ok = await test_webhook_url(body.url)
+    if not ok:
+        raise HTTPException(status_code=400, detail="Webhook delivery failed")
     return {"ok": True}
 
 
@@ -220,6 +196,7 @@ async def update_user_settings_by_id(
 ):
     target_user = await _require_target_user(db, user_id)
     settings = await get_or_create_settings(db, target_user)
+    await _validate_webhook_url_if_present(body)
     settings = await apply_settings_update(db, settings, body)
     return settings_to_read(settings)
 

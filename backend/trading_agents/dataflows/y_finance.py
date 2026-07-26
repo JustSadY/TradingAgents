@@ -101,7 +101,6 @@ def get_fundamentals(
     ticker: Annotated[str, "ticker symbol of the company"],
     curr_date: Annotated[str, "current date (not used for yfinance)"] = None,
 ):
-    _ = curr_date
     try:
         ticker_obj = yf.Ticker(ticker.upper())
         info = yf_retry(lambda: ticker_obj.info)
@@ -141,8 +140,16 @@ def get_fundamentals(
         for label, value in fields:
             if value is not None:
                 lines.append(f"{label}: {value}")
+        today = datetime.now().strftime("%Y-%m-%d")
         header = f"# Company Fundamentals for {ticker.upper()}\n"
-        header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        header += f"# Data retrieved on: {today} {datetime.now().strftime('%H:%M:%S')}\n"
+        if curr_date and curr_date != today:
+            header += (
+                f"# WARNING: these are TODAY'S live metrics, not a historical snapshot as of {curr_date}. "
+                "yfinance has no point-in-time fundamentals API — do not treat P/E, market cap, or other "
+                "ratios below as what they were on the analysis date.\n"
+            )
+        header += "\n"
         return header + "\n".join(lines)
     except Exception:
         # Re-raise so route_to_vendor can fall back to another vendor instead of

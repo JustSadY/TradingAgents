@@ -28,8 +28,8 @@ class FormulaAssistRequest(BaseModel):
 @router.get("/ohlcv", response_model=dict[str, Any])
 async def ohlcv(
     ticker: str = Query(..., description=_TICKER_DESCRIPTION),
-    start_date: str = Query(None, description="YYYY-MM-DD"),
-    end_date: str = Query(None, description="YYYY-MM-DD"),
+    start_date: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD"),
+    end_date: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD"),
     period: str = Query("1y", description="1m|3m|6m|1y|2y|5y — ignored when start_date provided"),
     _: User = Depends(get_current_user),
 ):
@@ -44,8 +44,8 @@ async def custom_indicator(
     ticker: str = Query(..., description=_TICKER_DESCRIPTION),
     formula: str = Query(..., description="Mathematical formula, e.g. (Close - SMA(20)) / STD(20)"),
     period: str = Query("1y", description="1m|3m|6m|1y|2y|5y"),
-    start_date: str = Query(None, description="YYYY-MM-DD"),
-    end_date: str = Query(None, description="YYYY-MM-DD"),
+    start_date: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD"),
+    end_date: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD"),
     _: User = Depends(get_current_user),
 ):
     try:

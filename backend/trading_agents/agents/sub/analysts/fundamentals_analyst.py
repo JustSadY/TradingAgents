@@ -61,6 +61,10 @@ def create_fundamentals_analyst(llm):
 - Use `get_sec_filings` to find 10-K/10-Q reports for management discussion and analysis (MD&A).
 - Prioritize high-volume insider buying as a strong positive signal.
 - **IMPORTANT:** NEVER output a Buy/Sell/Hold rating. Fundamental analysis only.
+- **IMPORTANT:** If `get_fundamentals` output starts with a WARNING that the ratios are today's live
+  snapshot rather than historical (this happens on backdated analysis dates, since no vendor exposes
+  point-in-time overview data), state that caveat explicitly and lower your confidence on any
+  valuation-ratio-based conclusion accordingly.
 - Assign a confidence level (HIGH/MEDIUM/LOW) to each key observation.
 
 ### Output Format:
@@ -137,7 +141,7 @@ Your final report MUST follow this structure:
 
         report_text = res.get("fundamentals_report", "")
 
-        if report_text and not report_text.startswith("Fundamentals analysis unavailable"):
+        if report_text and "unavailable" not in report_text[:50].lower():
             await store_analyst_cache("fundamentals", ticker, data_hash, report_text)
 
         return res

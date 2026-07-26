@@ -63,6 +63,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
 
     'watchlist.title': 'Watchlist',
     'watchlist.add': 'Add',
+    'watchlist.add_title': 'Add New Asset',
     'watchlist.loading': 'Loading...',
     'watchlist.empty': 'Watchlist is empty.',
     'watchlist.placeholder': 'Enter symbol (e.g. AAPL)',
@@ -147,6 +148,7 @@ const TRANSLATIONS: Record<Language, Record<string, string>> = {
 
     'watchlist.title': 'İzleme Listesi',
     'watchlist.add': 'Ekle',
+    'watchlist.add_title': 'Yeni Varlık Ekle',
     'watchlist.loading': 'Yükleniyor...',
     'watchlist.empty': 'İzleme listesi boş.',
     'watchlist.placeholder': 'Sembol girin (örn. AAPL)',

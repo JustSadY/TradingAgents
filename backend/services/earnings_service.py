@@ -65,7 +65,7 @@ def _earnings_date_from_calendar(ticker_obj: Any) -> date | None:
         if isinstance(raw, str):
             return datetime.fromisoformat(raw).date()
     except Exception as e:
-        _logger.debug("calendar lookup failed: %s", e)
+        _logger.warning("Calendar lookup failed: %s", e)
     return None
 
 
@@ -112,7 +112,7 @@ def _eps_from_earnings_dates(
         if eps_estimate is None and reported_eps is None and not df.empty:
             eps_estimate, reported_eps, surprise_pct = _eps_row_values(df.iloc[0])
     except Exception as e:
-        _logger.debug("get_earnings_dates failed: %s", e)
+        _logger.warning("get_earnings_dates failed: %s", e)
 
     return earnings_date_val, eps_estimate, reported_eps, surprise_pct
 

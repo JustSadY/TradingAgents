@@ -49,13 +49,24 @@ def create_sentiment_analyst(llm):
 
         news_block = await route_to_vendor("get_news", ticker, start_date, end_date)
 
+        # Tool settings (limit) are configurable per user/server but were
+        # previously never read here — fetch them so the saved value actually
+        # changes behavior instead of just sitting in the settings UI.
+        from backend.trading_agents.dataflows.config import get_config
+
+        user_tool_settings = get_config().get("runtime_tool_context", {}).get("user_settings", {})
+        reddit_limit = int(user_tool_settings.get("reddit_sentiment", {}).get("settings", {}).get("limit", 5) or 5)
+        stocktwits_limit = int(
+            user_tool_settings.get("stocktwits_sentiment", {}).get("settings", {}).get("limit", 30) or 30
+        )
+
         if reddit_enabled:
-            reddit_block = await route_to_vendor("fetch_reddit_posts", ticker)
+            reddit_block = await route_to_vendor("fetch_reddit_posts", ticker, limit_per_sub=reddit_limit)
         else:
             reddit_block = "Reddit sentiment data source is disabled by user or server settings."
 
         if stocktwits_enabled:
-            stocktwits_block = await route_to_vendor("fetch_stocktwits_messages", ticker, limit=30)
+            stocktwits_block = await route_to_vendor("fetch_stocktwits_messages", ticker, limit=stocktwits_limit)
         else:
             stocktwits_block = "StockTwits sentiment data source is disabled by user or server settings."
 

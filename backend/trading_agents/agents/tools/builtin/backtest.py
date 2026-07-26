@@ -21,7 +21,7 @@ search_web_tool = FunctionToolAdapter(
     label_key="tools.search_web.label",
     description_key="tools.search_web.description",
     func=search_web,
-    allowed_analysts=["market", "news", "macro"],
+    allowed_analysts=["market", "news", "macro", "earnings"],
     default_enabled=True,
     settings_schema=[
         ToolSettingField(
@@ -40,7 +40,7 @@ crypto_fear_greed_tool = FunctionToolAdapter(
     label_key="tools.crypto_fear_greed.label",
     description_key="tools.crypto_fear_greed.description",
     func=get_crypto_fear_and_greed_index,
-    allowed_analysts=["social", "sentiment"],
+    allowed_analysts=["social", "news"],
     default_enabled=True,
 )
 

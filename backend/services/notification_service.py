@@ -110,6 +110,61 @@ def _format_text(event: str, data: dict) -> str:
     return json.dumps(data)[:500]
 
 
+async def validate_webhook_url(url: str) -> None:
+    import ipaddress
+    import socket
+    from urllib.parse import urlparse
+
+    parsed = urlparse(url)
+    if parsed.scheme not in ("http", "https"):
+        raise ValueError("Webhook URL must use http or https")
+    host = parsed.hostname
+    if not host:
+        raise ValueError("Webhook URL is missing a host")
+
+    port = parsed.port or (443 if parsed.scheme == "https" else 80)
+
+    def _resolve():
+        return socket.getaddrinfo(host, port, proto=socket.IPPROTO_TCP)
+
+    import asyncio
+
+    loop = asyncio.get_event_loop()
+    try:
+        infos = await loop.run_in_executor(None, _resolve)
+    except socket.gaierror:
+        raise ValueError("Webhook host could not be resolved")
+
+    for info in infos:
+        ip = ipaddress.ip_address(info[4][0])
+        if (
+            ip.is_private
+            or ip.is_loopback
+            or ip.is_link_local
+            or ip.is_reserved
+            or ip.is_multicast
+            or ip.is_unspecified
+        ):
+            raise ValueError("Webhook URL resolves to a disallowed internal address")
+
+
+async def test_webhook_url(url: str) -> bool:
+    import httpx
+
+    payload = {
+        "text": "TradingAgents webhook testi başarılı! ✓",
+        "content": "TradingAgents webhook testi başarılı! ✓",
+    }
+    try:
+        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
+            r = await client.post(url, json=payload)
+            if r.status_code >= 400:
+                return False
+            return True
+    except httpx.RequestError:
+        return False
+
+
 async def send_webhook(
     url: str,
     event: str,
@@ -141,7 +196,7 @@ async def send_webhook(
                     if attempt < retries:
                         await asyncio.sleep(2**attempt)
     except Exception as exc:
-        _logger.debug("Webhook failed: %s", exc)
+        _logger.warning("Webhook failed: %s", exc)
         last_error = str(exc)
 
     if user_id is not None:

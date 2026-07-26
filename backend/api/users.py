@@ -27,6 +27,7 @@ from backend.schemas.user import (
     UserRead,
 )
 from backend.services.user_service import (
+    delete_user_and_emit,
     delete_user_api_key,
     list_user_api_key_providers,
     set_user_api_key,
@@ -54,7 +55,6 @@ async def update_me(
 
     from backend.repositories.users import update_user_profile
 
-    # Changing the password revokes all existing tokens (force re-login).
     if body.password:
         current_user.token_version = (getattr(current_user, "token_version", 0) or 0) + 1
 
@@ -116,6 +116,19 @@ async def get_my_permissions(
     if "settings" not in allowed:
         allowed.append("settings")
     return PagePermissionsRead(allowed_pages=allowed)
+
+
+@router.get("/me/setting-permissions", response_model=SettingPermissionsResponse)
+async def get_my_setting_permissions(
+    current_user: Annotated[User, Depends(get_current_user)],
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    from backend.core.constants import SETTING_KEYS
+
+    if current_user.is_admin:
+        return {"allowed_settings": SETTING_KEYS}
+    allowed = sorted(await list_allowed_setting_sections(db, current_user.id))
+    return {"allowed_settings": allowed}
 
 
 @router.get("", response_model=list[UserRead])
@@ -225,11 +238,7 @@ async def delete_user(
             detail="The Server Owner account cannot be deleted.",
         )
 
-    from backend.core.events import emit
-
-    await db.delete(user)
-    await db.commit()
-    await emit("user_deleted", user_id=user_id)
+    await delete_user_and_emit(db, user)
 
 
 @router.get("/{user_id}/permissions", response_model=UserPermissionsResponse)
@@ -321,19 +330,6 @@ async def delete_user_api_key_endpoint(
         raise HTTPException(status_code=404, detail=f"No key found for provider '{provider}'")
     await db.flush()
     return {"detail": f"API key for '{provider}' deleted for user {user.username}"}
-
-
-@router.get("/me/setting-permissions", response_model=SettingPermissionsResponse)
-async def get_my_setting_permissions(
-    current_user: Annotated[User, Depends(get_current_user)],
-    db: Annotated[AsyncSession, Depends(get_db)],
-):
-    from backend.core.constants import SETTING_KEYS
-
-    if current_user.is_admin:
-        return {"allowed_settings": SETTING_KEYS}
-    allowed = sorted(await list_allowed_setting_sections(db, current_user.id))
-    return {"allowed_settings": allowed}
 
 
 @router.get(

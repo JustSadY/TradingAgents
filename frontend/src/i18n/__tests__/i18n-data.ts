@@ -1,5 +1,22 @@
-// Extracted translation data from LanguageContext.tsx for i18n validation
-// This file mirrors the TRANSLATIONS object from LanguageContext for test accessibility
+import adminTranslations from '../admin'
+import alertsTranslations from '../alerts'
+import analysisTranslations from '../analysis'
+import backtestTranslations from '../backtest'
+import chartTranslations from '../chart'
+import dashboardTranslations from '../dashboard'
+import earningsCalendarTranslations from '../earnings_calendar'
+import loginTranslations from '../login'
+import logsTranslations from '../logs'
+import mocktradingTranslations from '../mocktrading'
+import ordersTranslations from '../orders'
+import performanceTranslations from '../performance'
+import portfolioTranslations from '../portfolio'
+import profileTranslations from '../profile'
+import screenerTranslations from '../screener'
+import sectorRotationTranslations from '../sector_rotation'
+import settingsTranslations from '../settings'
+import sharedReportTranslations from '../shared_report'
+import toolsTranslations from '../tools'
 
 const CORE_EN: Record<string, string> = {
   'nav.dashboard': 'Dashboard',
@@ -149,12 +166,35 @@ const CORE_TR: Record<string, string> = {
   'logs.no_logs': 'Log yok.',
 }
 
-// Merge with page-specific i18n files to test full coverage
+const PAGE_MODULES: { en: Record<string, string>; tr: Record<string, string> }[] = [
+  adminTranslations,
+  alertsTranslations,
+  analysisTranslations,
+  backtestTranslations,
+  chartTranslations,
+  dashboardTranslations,
+  earningsCalendarTranslations,
+  loginTranslations,
+  logsTranslations,
+  mocktradingTranslations,
+  ordersTranslations,
+  performanceTranslations,
+  portfolioTranslations,
+  profileTranslations,
+  screenerTranslations,
+  sectorRotationTranslations,
+  settingsTranslations,
+  sharedReportTranslations,
+  toolsTranslations,
+]
+
 function loadAll(): { en: Record<string, string>; tr: Record<string, string> } {
-  const en = { ...CORE_EN }
-  const tr = { ...CORE_TR }
-  // In the real app, LanguageContext merges page i18n files via import.meta.glob
-  // We mirror the keys from the i18n directory files here
+  const en: Record<string, string> = { ...CORE_EN }
+  const tr: Record<string, string> = { ...CORE_TR }
+  for (const mod of PAGE_MODULES) {
+    Object.assign(en, mod.en || {})
+    Object.assign(tr, mod.tr || {})
+  }
   return { en, tr }
 }
 

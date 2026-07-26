@@ -176,6 +176,12 @@ def get_vendor(category: str, method: str = None) -> str:
     return config.get("data_vendors", {}).get(category, "default")
 
 
+# Default timeout for synchronous vendor calls dispatched via ``asyncio.to_thread``.
+# Each vendor implementation is expected to have its own per-call timeout, but this
+# acts as a safety net so a hung thread cannot stall the event loop indefinitely.
+_VENDOR_CALL_TIMEOUT = 60
+
+
 async def route_to_vendor(method: str, *args, **kwargs):
     if method in _TICKER_FIRST_METHODS and args:
         safe_ticker_component(args[0])
@@ -209,15 +215,20 @@ async def route_to_vendor(method: str, *args, **kwargs):
             if inspect.iscoroutinefunction(impl_func):
                 val = await impl_func(*args, **kwargs)
             else:
-                # Wrap synchronous vendor calls in a thread to keep the event loop responsive
-                val = await asyncio.to_thread(impl_func, *args, **kwargs)
+                val = await asyncio.wait_for(
+                    asyncio.to_thread(impl_func, *args, **kwargs),
+                    timeout=_VENDOR_CALL_TIMEOUT,
+                )
 
             APICache.set(method, val, *args, **kwargs)
             return val
+        except TimeoutError as exc:
+            _logger.warning(
+                "Vendor '%s' timed out for method '%s' (timeout=%ss)", vendor, method, _VENDOR_CALL_TIMEOUT
+            )
+            last_error = exc
+            continue
         except Exception as exc:  # noqa: BLE001 — any vendor failure should fall through to the next
-            # Previously only AlphaVantageRateLimitError fell back, so a network
-            # error / missing key / yfinance hiccup on the primary vendor would
-            # abort instead of trying the configured fallback vendor.
             if not isinstance(exc, AlphaVantageRateLimitError):
                 _logger.warning("Vendor '%s' failed for method '%s': %s", vendor, method, exc)
             last_error = exc

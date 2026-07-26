@@ -2,6 +2,7 @@ import json
 import logging
 
 from cryptography.fernet import Fernet
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.user import User
 
@@ -89,3 +90,11 @@ def list_user_api_key_providers(user: User, fernet: Fernet) -> list[str]:
             e,
         )
         return []
+
+
+async def delete_user_and_emit(db: AsyncSession, user: User) -> None:
+    from backend.core.events import emit
+
+    await db.delete(user)
+    await db.commit()
+    await emit("user_deleted", user_id=user.id)

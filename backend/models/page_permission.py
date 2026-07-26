@@ -46,7 +46,7 @@ SECTION_FIELDS = {
 class UserPagePermission(Base):
     __tablename__ = "user_page_permissions"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     page_key: Mapped[str] = mapped_column(String(50), nullable=False)
     allowed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     __table_args__ = (UniqueConstraint("user_id", "page_key", name="uq_user_page"),)
@@ -55,7 +55,7 @@ class UserPagePermission(Base):
 class UserSettingPermission(Base):
     __tablename__ = "user_setting_permissions"
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id"), nullable=False)
+    user_id: Mapped[int] = mapped_column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
     setting_key: Mapped[str] = mapped_column(String(50), nullable=False)
     allowed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     __table_args__ = (UniqueConstraint("user_id", "setting_key", name="uq_user_setting"),)

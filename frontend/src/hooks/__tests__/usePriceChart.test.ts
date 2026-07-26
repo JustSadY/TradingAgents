@@ -2,45 +2,97 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook } from '@testing-library/react'
 import { usePriceChart, type ChartCandle, type ChartAnalysis } from '../usePriceChart'
 
-const mockCreateChart = vi.fn()
-const mockCandlestickSeries = Symbol('CandlestickSeries')
-const mockHistogramSeries = Symbol('HistogramSeries')
-const mockLineSeries = Symbol('LineSeries')
+const {
+  mockCreateChart, mockCandlestickSeries, mockHistogramSeries, mockLineSeries,
+  mockCreateSeriesMarkers, mockSetMarkers,
+  mockCandleSetData, mockVolSetData, mockSmaSetData, mockEmaSetData,
+  mockRemovePriceLine, mockCreatePriceLine,
+  mockCandleSeries, mockVolSeries, mockSmaSeries, mockEmaSeries,
+  mockPriceScale, mockTimeScale, mockRemoveSeries, mockApplyOptions, mockChart,
+  resetSeriesCounter,
+} = vi.hoisted(() => {
+  const _candleSetData = vi.fn()
+  const _volSetData = vi.fn()
+  const _smaSetData = vi.fn()
+  const _emaSetData = vi.fn()
 
-const mockSetData = vi.fn()
-const mockRemovePriceLine = vi.fn()
-const mockCreatePriceLine = vi.fn(() => ({ remove: vi.fn() }))
-const mockSeries = {
-  setData: mockSetData,
-  createPriceLine: mockCreatePriceLine,
-  removePriceLine: mockRemovePriceLine,
-}
-const mockCandleSeries = { ...mockSeries }
-const mockVolSeries = { ...mockSeries }
-const mockSmaSeries = { ...mockSeries }
-const mockEmaSeries = { ...mockSeries }
+  const _removePriceLine = vi.fn()
+  const _createPriceLine = vi.fn(() => ({ remove: vi.fn() }))
 
-const mockPriceScale = vi.fn(() => ({ applyOptions: vi.fn() }))
-const mockTimeScale = { fitContent: vi.fn() }
-const mockRemoveSeries = vi.fn()
-const mockApplyOptions = vi.fn()
-const mockChart = {
-  addSeries: vi.fn((seriesType, _opts) => {
-    if (seriesType === mockCandlestickSeries) return mockCandleSeries
-    if (seriesType === mockHistogramSeries) return mockVolSeries
-    if (seriesType === mockLineSeries) return mockSmaSeries
-    return { ...mockSeries }
-  }),
-  priceScale: mockPriceScale,
-  timeScale: () => mockTimeScale,
-  remove: vi.fn(),
-  applyOptions: mockApplyOptions,
-  removeSeries: mockRemoveSeries,
-}
-mockCreateChart.mockReturnValue(mockChart)
+  const _seriesProto = {
+    createPriceLine: _createPriceLine,
+    removePriceLine: _removePriceLine,
+  }
+  const _candleSeries = { ..._seriesProto, setData: _candleSetData }
+  const _volSeries = { ..._seriesProto, setData: _volSetData }
+  const _smaSeries = { ..._seriesProto, setData: _smaSetData }
+  const _emaSeries = { ..._seriesProto, setData: _emaSetData }
 
-const mockSetMarkers = vi.fn()
-const mockCreateSeriesMarkers = vi.fn(() => ({ setMarkers: mockSetMarkers }))
+  const _priceScale = vi.fn(() => ({ applyOptions: vi.fn() }))
+  const _timeScale = { fitContent: vi.fn() }
+  const _removeSeries = vi.fn()
+  const _applyOptions = vi.fn()
+
+  const _candlestickSeries = Symbol('CandlestickSeries')
+  const _histogramSeries = Symbol('HistogramSeries')
+  const _lineSeries = Symbol('LineSeries')
+
+  // Track which LineSeries call we're on (first = SMA, second = EMA)
+  let _lineSeriesCallCount = 0
+
+  const _createChart = vi.fn()
+  const _chart = {
+    addSeries: vi.fn((seriesType, _opts) => {
+      if (seriesType === _candlestickSeries) return _candleSeries
+      if (seriesType === _histogramSeries) return _volSeries
+      if (seriesType === _lineSeries) {
+        // First LineSeries call returns SMA, second returns EMA
+        const series = _lineSeriesCallCount === 0 ? _smaSeries : _emaSeries
+        _lineSeriesCallCount++
+        return series
+      }
+      return { ..._seriesProto, setData: vi.fn() }
+    }),
+    priceScale: _priceScale,
+    timeScale: () => _timeScale,
+    remove: vi.fn(),
+    applyOptions: _applyOptions,
+    removeSeries: _removeSeries,
+  }
+  _createChart.mockReturnValue(_chart)
+
+  const _setMarkers = vi.fn()
+  // Forward markers to _setMarkers so first-call assertions work
+  const _createSeriesMarkers = vi.fn((_series, markers) => {
+    _setMarkers(markers)
+    return { setMarkers: _setMarkers }
+  })
+
+  return {
+    mockCreateChart: _createChart,
+    mockCandlestickSeries: _candlestickSeries,
+    mockHistogramSeries: _histogramSeries,
+    mockLineSeries: _lineSeries,
+    mockCreateSeriesMarkers: _createSeriesMarkers,
+    mockSetMarkers: _setMarkers,
+    mockCandleSetData: _candleSetData,
+    mockVolSetData: _volSetData,
+    mockSmaSetData: _smaSetData,
+    mockEmaSetData: _emaSetData,
+    mockRemovePriceLine: _removePriceLine,
+    mockCreatePriceLine: _createPriceLine,
+    mockCandleSeries: _candleSeries,
+    mockVolSeries: _volSeries,
+    mockSmaSeries: _smaSeries,
+    mockEmaSeries: _emaSeries,
+    mockPriceScale: _priceScale,
+    mockTimeScale: _timeScale,
+    mockRemoveSeries: _removeSeries,
+    mockApplyOptions: _applyOptions,
+    mockChart: _chart,
+    resetSeriesCounter: () => { _lineSeriesCallCount = 0 },
+  }
+})
 
 vi.mock('lightweight-charts', () => ({
   createChart: (...args: any[]) => mockCreateChart(...args),
@@ -70,6 +122,7 @@ function analysis(id: number, overrides: Partial<ChartAnalysis> = {}): ChartAnal
 
 beforeEach(() => {
   vi.clearAllMocks()
+  resetSeriesCounter()
 })
 
 afterEach(() => {

@@ -96,7 +96,7 @@ async def _fetch_yahoo_quotes_rest(unique_tickers: list[str]) -> dict[str, float
                         if math.isfinite(val) and val > 0:
                             prices[symbol] = val
     except Exception as exc:
-        _logger.debug("Direct batch query failed for %s: %s", unique_tickers, exc)
+        _logger.warning("Direct batch query failed for %s: %s", unique_tickers, exc)
     return prices
 
 
@@ -118,7 +118,7 @@ async def _fetch_yfinance_download_fallback(missing: list[str]) -> dict[str, flo
                 if not getattr(close, "empty", False):
                     fallback_prices.update(_parse_yfinance_batch_data(close, missing))
         except Exception as exc:
-            _logger.debug("Batch fallback download failed (%s): %s", missing, exc)
+            _logger.warning("Batch fallback download failed (%s): %s", missing, exc)
         return fallback_prices
 
     try:
@@ -246,7 +246,7 @@ async def calculate_returns(
 
             return round(raw, 4), round(raw - bench_r, 4), actual
         except Exception as e:
-            _logger.debug("Return calculation failed for %s on %s: %s", ticker, start_date, e)
+            _logger.warning("Return calculation failed for %s on %s: %s", ticker, start_date, e)
             return None, None, None
 
     return await asyncio.to_thread(_fetch)
@@ -302,7 +302,7 @@ async def get_live_prices_details_batch(tickers: list[str]) -> dict[str, dict[st
                             "change_percent": float(change_percent),
                         }
     except Exception as exc:
-        _logger.debug("Direct batch details query failed for %s: %s", unique, exc)
+        _logger.warning("Direct batch details query failed for %s: %s", unique, exc)
 
     # Fallback to standard price batch helper for any missing tickers
     missing = [symbol for symbol in unique if symbol not in details]

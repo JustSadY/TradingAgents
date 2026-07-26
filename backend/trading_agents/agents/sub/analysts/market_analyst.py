@@ -120,12 +120,22 @@ Your final report MUST follow this structure:
             stock_data = ""
 
         try:
+            from backend.trading_agents.dataflows.config import get_config
+
+            server_tool_settings = get_config().get("runtime_tool_context", {}).get("server_settings", {})
+            lookback_days = int(
+                server_tool_settings.get("technical_indicators", {}).get("settings", {}).get(
+                    "default_lookback_days", 30
+                )
+                or 30
+            )
+
             indicators_data = await route_to_vendor(
                 "get_indicators",
                 ticker,
                 "close_50_sma,close_200_sma,close_10_ema,macd,macds,macdh,rsi,boll,boll_ub,boll_lb,atr,vwma",
                 trade_date,
-                30,
+                lookback_days,
             )
 
         except Exception:
@@ -154,7 +164,7 @@ Your final report MUST follow this structure:
 
         report_text = res.get("market_report", "")
 
-        if report_text and not report_text.startswith("Market analysis unavailable"):
+        if report_text and "unavailable" not in report_text[:50].lower():
             await store_analyst_cache("market", ticker, data_hash, report_text)
 
         return res

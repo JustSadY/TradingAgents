@@ -140,16 +140,20 @@ _ALLOWED_COLUMNS = {
     },
     "news_analysis_cache": {
         "id",
+        "user_id",
         "ticker",
         "articles_hash",
+        "config_fingerprint",
         "analysis_result",
         "created_at",
     },
     "analyst_report_cache": {
         "id",
+        "user_id",
         "analyst_key",
         "ticker",
         "data_hash",
+        "config_fingerprint",
         "analysis_result",
         "created_at",
     },
@@ -276,6 +280,10 @@ _NEW_COLUMNS += [
     ("config_presets", "user_id", _USER_REF),
     ("price_alerts", "user_id", _USER_REF),
     ("multi_ticker_analyses", "user_id", _USER_REF),
+    ("news_analysis_cache", "user_id", _USER_REF),
+    ("news_analysis_cache", "config_fingerprint", "VARCHAR(64)"),
+    ("analyst_report_cache", "user_id", _USER_REF),
+    ("analyst_report_cache", "config_fingerprint", "VARCHAR(64)"),
 ]
 
 _NEW_COLUMNS += [

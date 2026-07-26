@@ -202,6 +202,11 @@ class CheckpointItem(BaseModel):
     ts: str
 
 
+class TimeTravelRequest(BaseModel):
+    checkpoint_id: str
+    update_state: dict
+
+
 class TimeTravelResponse(BaseModel):
     task_id: str
     ticker: str

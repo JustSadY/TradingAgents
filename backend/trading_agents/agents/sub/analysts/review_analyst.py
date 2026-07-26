@@ -1,8 +1,14 @@
-from langchain_core.messages import SystemMessage
+from langchain_core.messages import AIMessage, SystemMessage
 
 from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.data.review_tools import get_past_performance_data
 from backend.trading_agents.agents.runtime.agent_states import AgentState
+from backend.trading_agents.agents.runtime.analyst_cache import (
+    check_analyst_cache,
+    compute_data_hash,
+    emit_cache_hit,
+    store_analyst_cache,
+)
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_general_settings_block,
@@ -28,6 +34,14 @@ def create_review_analyst(llm):
         asset_type = state.get("asset_type", "stock")
         context_str = build_instrument_context(ticker, asset_type)
         curr_date = state.get("trade_date")
+
+        performance_data = await get_past_performance_data.ainvoke({"ticker": ticker, "curr_date": curr_date})
+        data_hash = compute_data_hash("review", ticker, curr_date, performance_data)
+
+        cached_report = await check_analyst_cache("review", ticker, data_hash)
+        if cached_report:
+            await emit_cache_hit("review", ticker)
+            return {"messages": [AIMessage(content=cached_report)], "review_report": cached_report}
 
         override = get_system_instruction_override("review")
         if override:
@@ -65,6 +79,9 @@ def create_review_analyst(llm):
         ]
 
         response = await llm_with_tools.ainvoke(messages)
-        return {"messages": [response], "review_report": response.content}
+        report_text = response.content
+        if "unavailable" not in report_text[:50].lower():
+            await store_analyst_cache("review", ticker, data_hash, report_text)
+        return {"messages": [response], "review_report": report_text}
 
     return review_analyst

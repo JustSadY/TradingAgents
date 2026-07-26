@@ -75,7 +75,7 @@ describe('Layout', () => {
         <Layout />
       </MemoryRouter>
     )
-    expect(screen.getByText('TradingAgents')).toBeInTheDocument()
+    expect(screen.getAllByText('TradingAgents')[0]).toBeInTheDocument()
   })
 
   it('shows user avatar and name', () => {

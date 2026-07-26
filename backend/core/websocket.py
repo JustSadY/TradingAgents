@@ -114,7 +114,7 @@ class WebSocketManager:
             try:
                 existing.cancel()
             except Exception:
-                pass
+                _logger.debug("Cleanup handle cancel failed for task=%s", task_id)
         loop = asyncio.get_running_loop()
         handle = loop.call_later(ttl, self._cleanup_buffer, task_id)
         self._cleanup_handles[task_id] = handle
@@ -140,7 +140,7 @@ class WebSocketManager:
                     _BACKGROUND_TASKS.add(task)
                     task.add_done_callback(_BACKGROUND_TASKS.discard)
                 except Exception:
-                    pass
+                    _logger.debug("Lingering WS close task creation failed for task=%s", task_id)
         _logger.debug("Buffer cleaned up for task=%s", task_id)
 
 
