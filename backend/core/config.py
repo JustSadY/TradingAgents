@@ -1,3 +1,4 @@
+import logging
 import threading
 from functools import lru_cache
 from pathlib import Path
@@ -11,6 +12,17 @@ _DEFAULT_SECRET_KEY = "change-me-in-production-use-a-long-random-string"
 _TEMP_KEY = None
 _TEMP_FERNET = None
 _TEMP_KEY_LOCK = threading.Lock()
+
+# Sync SQLAlchemy schemes an operator may reasonably write in .env, mapped onto
+# the async drivers this app actually ships (asyncpg / aiosqlite).
+_ASYNC_DB_DRIVERS = {
+    "postgres": "postgresql+asyncpg",
+    "postgresql": "postgresql+asyncpg",
+    "postgresql+psycopg2": "postgresql+asyncpg",
+    "postgresql+psycopg": "postgresql+asyncpg",
+    "sqlite": "sqlite+aiosqlite",
+    "sqlite+pysqlite": "sqlite+aiosqlite",
+}
 
 
 class Settings(BaseSettings):
@@ -52,6 +64,29 @@ class Settings(BaseSettings):
     # database setting or a compromised administrator account must not be
     # enough to activate a live brokerage account on its own.
     ENABLE_LIVE_TRADING: bool = False
+
+    @model_validator(mode="after")
+    def _force_async_db_driver(self) -> "Settings":
+        """Rewrite a sync DATABASE_URL onto the matching async driver.
+
+        Every database access in this app goes through ``create_async_engine``.
+        A plain ``postgresql://…`` URL makes SQLAlchemy select psycopg2, which
+        is not a dependency, so the process dies at import time with
+        ``ModuleNotFoundError: No module named 'psycopg2'`` instead of anything
+        that points at the .env. Operators (and most Postgres docs) write the
+        driverless form, so normalise it rather than fail.
+        """
+        url = self.DATABASE_URL.strip()
+        scheme, sep, rest = url.partition("://")
+        driver = _ASYNC_DB_DRIVERS.get(scheme.lower()) if sep else None
+        if driver:
+            logging.getLogger(__name__).warning(
+                "DATABASE_URL uses the synchronous '%s' driver; connecting with '%s' instead.", scheme, driver
+            )
+            url = f"{driver}://{rest}"
+        if url != self.DATABASE_URL:
+            self.DATABASE_URL = url
+        return self
 
     @model_validator(mode="after")
     def _validate_queue_mode(self) -> "Settings":
