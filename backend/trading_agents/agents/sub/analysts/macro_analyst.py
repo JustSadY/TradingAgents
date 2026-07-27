@@ -1,11 +1,12 @@
 from backend.trading_agents.agents.analyst_registry import register_analyst
+from backend.trading_agents.agents.data.search_tools import search_web
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_macro_data,
 )
 
-_MACRO_TOOLS = [get_macro_data]
+_MACRO_TOOLS = [get_macro_data, search_web]
 
 
 @register_analyst(

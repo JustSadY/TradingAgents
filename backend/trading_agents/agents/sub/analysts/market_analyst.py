@@ -1,10 +1,12 @@
 from backend.trading_agents.agents.analyst_registry import register_analyst
+from backend.trading_agents.agents.data.backtest_tools import run_strategy_backtest
 from backend.trading_agents.agents.data.chart_tools import (
     add_chart_annotation,
     add_custom_indicator,
     get_mtf_trend,
     get_vision_chart_analysis,
 )
+from backend.trading_agents.agents.data.search_tools import search_web
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
@@ -19,6 +21,8 @@ _MARKET_TOOLS = [
     add_custom_indicator,
     get_vision_chart_analysis,
     get_mtf_trend,
+    run_strategy_backtest,
+    search_web,
 ]
 
 

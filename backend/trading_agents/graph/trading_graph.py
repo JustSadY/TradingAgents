@@ -123,7 +123,6 @@ class TradingAgentsGraph:
         )
         self.propagator = Propagator(max_recur_limit=self.config.get("max_recur_limit", 100))
         self.signal_processor = SignalProcessor(self.thinking_llm)
-        self.curr_state = None
         self.ticker = None
         self.log_states_dict = {}
         self.workflow = self.graph_setup.setup_graph(_effective_analysts)
@@ -467,13 +466,15 @@ class TradingAgentsGraph:
             "final_trade_decision": final_state["final_trade_decision"],
         }
         if self.config.get("skip_disk_log", True):
+            logger.debug("skip_disk_log is enabled; skipping full state log disk write.")
             return
         safe_ticker = safe_ticker_component(self.ticker)
         directory = Path(self.config["results_dir"]) / safe_ticker / "TradingAgentsStrategy_logs"
         directory.mkdir(parents=True, exist_ok=True)
         log_path = directory / f"full_states_log_{trade_date}.json"
+        log_data = self.log_states_dict.get(str(trade_date), self.log_states_dict)
         with open(log_path, "w", encoding="utf-8") as f:
-            json.dump(self.log_states_dict[str(trade_date)], f, indent=4)
+            json.dump(log_data, f, indent=4)
 
     async def async_propagate(
         self,

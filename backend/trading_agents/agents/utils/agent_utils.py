@@ -107,10 +107,6 @@ def get_general_settings_block() -> str:
     return "".join(parts)
 
 
-def get_language_instruction() -> str:
-    return get_general_settings_block()
-
-
 def build_instrument_context(ticker: str, asset_type: str = "stock") -> str:
     instrument_label = "asset" if asset_type == "crypto" else "instrument"
     extra_hint = (

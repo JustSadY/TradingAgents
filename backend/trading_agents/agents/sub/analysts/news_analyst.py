@@ -1,5 +1,5 @@
 from backend.trading_agents.agents.analyst_registry import register_analyst
-from backend.trading_agents.agents.data.search_tools import get_crypto_fear_and_greed_index
+from backend.trading_agents.agents.data.search_tools import get_crypto_fear_and_greed_index, search_web
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
@@ -8,7 +8,7 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_news,
 )
 
-_NEWS_TOOLS = [get_news, get_global_news, get_insider_transactions, get_crypto_fear_and_greed_index]
+_NEWS_TOOLS = [get_news, get_global_news, get_insider_transactions, get_crypto_fear_and_greed_index, search_web]
 
 
 @register_analyst(

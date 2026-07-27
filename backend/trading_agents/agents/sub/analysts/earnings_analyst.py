@@ -1,6 +1,7 @@
 from datetime import datetime, timedelta
 
 from backend.trading_agents.agents.analyst_registry import register_analyst
+from backend.trading_agents.agents.data.backtest_tools import run_strategy_backtest
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
@@ -8,7 +9,7 @@ from backend.trading_agents.agents.utils.agent_utils import (
     search_web,
 )
 
-_EARNINGS_TOOLS = [search_web, get_catalyst_calendar]
+_EARNINGS_TOOLS = [search_web, get_catalyst_calendar, run_strategy_backtest]
 
 
 @register_analyst(

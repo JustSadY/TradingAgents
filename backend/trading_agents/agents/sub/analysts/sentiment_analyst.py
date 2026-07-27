@@ -4,6 +4,7 @@ from langchain_core.messages import AIMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from backend.trading_agents.agents.analyst_registry import register_analyst
+from backend.trading_agents.agents.data.search_tools import get_crypto_fear_and_greed_index
 from backend.trading_agents.agents.runtime.analyst_cache import (
     check_analyst_cache,
     compute_data_hash,
@@ -28,7 +29,7 @@ def _seven_days_back(trade_date: str) -> str:
     clear_node="Msg Clear Sentiment",
     tool_node="tools_social",
     report_key="sentiment_report",
-    tools=[],
+    tools=[get_crypto_fear_and_greed_index],
 )
 def create_sentiment_analyst(llm):
     async def sentiment_analyst_node(state):

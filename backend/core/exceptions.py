@@ -24,13 +24,20 @@ class ServiceError(Exception):
     status_code: int = 500
     detail: str = "Service error"
 
+    def __init__(self, detail: str | None = None, status_code: int | None = None) -> None:
+        if detail is not None:
+            self.detail = detail
+        if status_code is not None:
+            self.status_code = status_code
+        super().__init__(self.detail)
+
 
 class NotFoundError(ServiceError):
     status_code: int = 404
     detail: str = "Resource not found"
 
 
-class ValidationError(ServiceError):
+class ValidationError(ServiceError, ValueError):
     status_code: int = 400
     detail: str = "Validation error"
 

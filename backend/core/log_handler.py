@@ -102,8 +102,10 @@ class DatabaseLogHandler(logging.Handler):
                             )
                         )
                     await db.commit()
-            except Exception:
-                pass
+            except Exception as exc:
+                import sys
+
+                sys.stderr.write(f"DatabaseLogHandler flush failed: {exc}\n")
 
         while True:
             try:

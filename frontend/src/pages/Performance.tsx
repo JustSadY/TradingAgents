@@ -436,7 +436,7 @@ export default function Performance() {
                           ))}
                         </Pie>
                         <Tooltip
-                          formatter={((v: unknown) => [`$${Number(v ?? 0).toFixed(4)}`, 'Est. Cost']) as unknown as undefined}
+                          formatter={(v: any) => [`$${Number(v ?? 0).toFixed(4)}`, 'Est. Cost']}
                           contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '10px', fontSize: '10px' }}
                         />
                         <Legend iconType="circle" wrapperStyle={{ fontSize: '10px' }} />
@@ -459,7 +459,7 @@ export default function Performance() {
                           tickFormatter={v => v >= 1000 ? `${(v / 1000).toFixed(0)}k` : String(v)} />
                         <Tooltip
                           contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '10px', fontSize: '10px' }}
-                          formatter={((v: unknown, name: unknown) => [Number(v ?? 0).toLocaleString(), name === 'tokens_in' ? 'Input' : 'Output']) as unknown as undefined}
+                          formatter={(v: any, name: any) => [Number(v ?? 0).toLocaleString(), name === 'tokens_in' ? 'Input' : 'Output']}
                         />
                         <Bar dataKey="tokens_in" fill="#38bdf8" stackId="a" radius={[0, 0, 0, 0]} />
                         <Bar dataKey="tokens_out" fill="#8b5cf6" stackId="a" radius={[3, 3, 0, 0]} />

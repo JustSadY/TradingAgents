@@ -1,6 +1,7 @@
 from langchain_core.messages import AIMessage, SystemMessage
 
 from backend.trading_agents.agents.analyst_registry import register_analyst
+from backend.trading_agents.agents.data.backtest_tools import run_strategy_backtest
 from backend.trading_agents.agents.data.review_tools import get_past_performance_data
 from backend.trading_agents.agents.runtime.agent_states import AgentState
 from backend.trading_agents.agents.runtime.analyst_cache import (
@@ -15,7 +16,7 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_system_instruction_override,
 )
 
-_REVIEW_TOOLS = [get_past_performance_data]
+_REVIEW_TOOLS = [get_past_performance_data, run_strategy_backtest]
 
 
 @register_analyst(
