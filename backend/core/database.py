@@ -46,7 +46,11 @@ def _alembic_config():
 
     ini_path = Path(__file__).resolve().parent.parent / "alembic.ini"
     cfg = Config(str(ini_path))
-    cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL)
+    # Alembic stores options in a configparser that performs %-interpolation, so
+    # a percent sign in the URL (a percent-encoded password, typically) is read
+    # as a broken placeholder.  Doubling it is how configparser escapes a literal
+    # percent; get_main_option() hands the original URL back.
+    cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
     return cfg
 
 

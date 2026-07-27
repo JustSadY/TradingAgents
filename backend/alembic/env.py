@@ -31,7 +31,9 @@ if config.config_file_name is not None:
     fileConfig(config.config_file_name)
 
 # Single source of truth for the URL: the app settings, not a duplicate in alembic.ini.
-config.set_main_option("sqlalchemy.url", get_settings().DATABASE_URL)
+# ``%`` is doubled because configparser would otherwise treat a percent-encoded
+# password as interpolation syntax and raise on set_main_option().
+config.set_main_option("sqlalchemy.url", get_settings().DATABASE_URL.replace("%", "%%"))
 
 target_metadata = Base.metadata
 
