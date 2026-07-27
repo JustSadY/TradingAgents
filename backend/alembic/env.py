@@ -8,6 +8,7 @@ Reads the app's DATABASE_URL from settings and uses the project's
 from __future__ import annotations
 
 import asyncio
+import logging
 import pathlib
 import sys
 from logging.config import fileConfig
@@ -27,7 +28,19 @@ from backend.core.database import Base  # noqa: E402
 
 config = context.config
 
-if config.config_file_name is not None:
+# ``fileConfig`` unconditionally replaces the root logger's handler list with
+# whatever alembic.ini's own ``[handler_console]`` defines — regardless of
+# ``disable_existing_loggers``. The web app runs migrations in-process on
+# every startup (``core/database.py::create_all_tables``), after it has
+# already attached its own handlers (console, rotating file, and notably
+# ``DatabaseLogHandler``, which persists system logs to the DB for the
+# Logs page). Calling fileConfig there silently detaches all of them —
+# journalctl keeps working because alembic's replacement handler still
+# writes to stderr, but system_logs stops receiving rows forever, with no
+# error anywhere. Only apply alembic.ini's logging config for a standalone
+# ``alembic`` CLI invocation, where the root logger has nothing configured
+# yet.
+if config.config_file_name is not None and not logging.getLogger().handlers:
     fileConfig(config.config_file_name)
 
 # Single source of truth for the URL: the app settings, not a duplicate in alembic.ini.
