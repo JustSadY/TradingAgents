@@ -2,8 +2,7 @@ from pydantic import BaseModel
 
 
 class MessageResponse(BaseModel):
-    status: str
-    message: str
+    detail: str
 
 
 class IdResponse(BaseModel):
