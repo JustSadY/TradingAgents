@@ -313,6 +313,18 @@ app.include_router(correlation_router)
 app.include_router(personas_api_router)
 
 
+async def _reject_websocket(websocket: WebSocket, *, code: int, reason: str) -> None:
+    """Send a close frame the browser can diagnose after a rejected handshake.
+
+    Calling ``close`` before ``accept`` turns into an HTTP rejection in most
+    ASGI servers, which the browser exposes only as opaque close code 1006.
+    Accepting and immediately closing sends our application code (4001/4003)
+    without registering the socket or allowing it to read any task events.
+    """
+    await websocket.accept()
+    await websocket.close(code=code, reason=reason)
+
+
 @app.websocket("/ws/analysis/{task_id}")
 async def websocket_analysis(
     websocket: WebSocket,
@@ -331,7 +343,7 @@ async def websocket_analysis(
         query_token=token,
     )
     if not access_token:
-        await websocket.close(code=4001, reason="Unauthorized")
+        await _reject_websocket(websocket, code=4001, reason="Unauthorized")
         return
 
     async with AsyncSessionLocal() as db:
@@ -340,16 +352,16 @@ async def websocket_analysis(
         except HTTPException:
             # The helper includes active-user and token-version checks, which
             # makes logout revoke WebSocket credentials immediately as well.
-            await websocket.close(code=4001, reason="Unauthorized")
+            await _reject_websocket(websocket, code=4001, reason="Unauthorized")
             return
         page_allowed = await has_page_access(db, user, "analysis")
     if not page_allowed:
-        await websocket.close(code=4003, reason="Forbidden")
+        await _reject_websocket(websocket, code=4003, reason="Forbidden")
         return
     # Only the user who started the run (or an admin) may stream its events;
     # otherwise any authenticated user could read another user's analysis.
     if not await is_task_owner(task_id, user.id, user.is_admin):
-        await websocket.close(code=4003, reason="Forbidden")
+        await _reject_websocket(websocket, code=4003, reason="Forbidden")
         return
 
     await ws_manager.connect(task_id, websocket)

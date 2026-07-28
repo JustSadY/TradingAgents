@@ -132,6 +132,8 @@ function activeTaskState(value: unknown, taskId: string): boolean | null {
   return value.some(task => isRecord(task) && task.task_id === taskId)
 }
 
+type ActiveTaskProbeState = 'active' | 'inactive' | 'unauthorized' | 'forbidden' | 'unavailable'
+
 function tickerSuggestions(value: unknown): TickerSuggestion[] {
   if (!Array.isArray(value)) return []
   return value.flatMap(item => {
@@ -448,22 +450,26 @@ function RunTab() {
       setLog(l => [...l, line])
     }
 
-    const markConnectionAsTerminalFailure = () => {
+    const markConnectionAsTerminalFailure = (message = t('analysis.ws.conn_closed')) => {
       // The task may have finished while its terminal event was being
       // persisted.  Do not let a close/reconnect loop leave the page in a
       // false "Running" state after the server has removed that task.
       finished = true
       terminalTaskIdRef.current = taskId
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
       if (wsRef.current === ws) wsRef.current = null
       setRunStatus('error')
       setRunning_(false)
       setCurrentStep(null)
       setMentalModel(null)
-      appendLog(t('analysis.ws.conn_closed'))
-      notify('error', t('analysis.ws.conn_closed'), t('analysis.ws.analysis_interrupted'))
+      appendLog(message)
+      notify('error', message, t('analysis.ws.analysis_interrupted'))
     }
 
-    const scheduleRetry = () => {
+    const scheduleRetry = (closeCode: number, taskProbeUnavailable: boolean) => {
       // Only the socket that is still current may schedule a reconnect.  This
       // prevents an old timer from replacing the socket for a newer task.
       if (stoppedByUserRef.current || finished || taskIdRef.current !== taskId || wsRef.current !== ws) return
@@ -477,11 +483,16 @@ function RunTab() {
           attachWsRef.current(taskId, nextAttempt)
         }, delay)
       } else {
-        markConnectionAsTerminalFailure()
+        const message = taskProbeUnavailable
+          ? t('analysis.ws.task_status_unavailable')
+          : closeCode && closeCode !== 1000
+            ? t('analysis.ws.conn_closed_code').replace('{code}', String(closeCode))
+            : t('analysis.ws.conn_closed')
+        markConnectionAsTerminalFailure(message)
       }
     }
 
-    const scheduleReconnect = () => {
+    const scheduleReconnect = (closeCode: number) => {
       if (
         terminalProbePending || stoppedByUserRef.current || finished ||
         taskIdRef.current !== taskId || wsRef.current !== ws
@@ -491,26 +502,36 @@ function RunTab() {
       // A normal worker shutdown closes the socket after publishing a
       // terminal event.  If that publish itself fails, blindly reconnecting
       // only creates noisy attempts and leaves the UI running.  Probe the
-      // active-task registry first; a failed/unreachable probe deliberately
-      // falls back to the bounded retry path.
-      const probeTaskState = async (): Promise<boolean | null> => {
+      // active-task registry first. A transient/unusable probe keeps the
+      // bounded retry path, while a definitive auth/permission failure does
+      // not retry the same doomed WebSocket handshake.
+      const probeTaskState = async (): Promise<ActiveTaskProbeState> => {
         try {
           const { data } = await axios.get('/api/analysis/active', { timeout: 2_000 })
-          return activeTaskState(data, taskId)
-        } catch {
-          return null
+          const state = activeTaskState(data, taskId)
+          if (state === true) return 'active'
+          if (state === false) return 'inactive'
+          return 'unavailable'
+        } catch (error) {
+          // Axios has already tried its normal token refresh here. A final
+          // 401/403 is not a recoverable socket transport hiccup, so retrying
+          // the same WebSocket handshake only creates misleading noise.
+          const status = (error as { response?: { status?: number } }).response?.status
+          if (status === 401) return 'unauthorized'
+          if (status === 403) return 'forbidden'
+          return 'unavailable'
         }
       }
 
       void (async () => {
-        let isActive = await probeTaskState()
-        if (isActive === false) {
+        let taskState = await probeTaskState()
+        if (taskState === 'inactive') {
           // A failed inline run can briefly disappear from the local registry
           // while its one allowed retry is being queued. Confirm the absence
           // once before declaring the run terminal, without emitting a noisy
           // reconnect entry in the meantime.
           await new Promise<void>(resolve => setTimeout(resolve, TERMINAL_TASK_CONFIRMATION_DELAY_MS))
-          isActive = await probeTaskState()
+          taskState = await probeTaskState()
         }
 
         terminalProbePending = false
@@ -518,11 +539,19 @@ function RunTab() {
           stoppedByUserRef.current || finished || taskIdRef.current !== taskId ||
           wsRef.current !== ws
         ) return
-        if (isActive === false) {
-          markConnectionAsTerminalFailure()
+        if (taskState === 'unauthorized') {
+          markConnectionAsTerminalFailure(t('analysis.ws.auth_required'))
           return
         }
-        scheduleRetry()
+        if (taskState === 'forbidden') {
+          markConnectionAsTerminalFailure(t('analysis.ws.access_denied'))
+          return
+        }
+        if (taskState === 'inactive') {
+          markConnectionAsTerminalFailure(t('analysis.ws.task_not_active'))
+          return
+        }
+        scheduleRetry(closeCode, taskState === 'unavailable')
       })()
     }
 
@@ -627,9 +656,19 @@ function RunTab() {
         // onclose will handle reconnect; don't set error here
       }
     }
-    ws.onclose = () => {
+    ws.onclose = (event) => {
       if (!finished) {
-        scheduleReconnect()
+        // These are application close codes sent after an accepted handshake.
+        // They cannot be fixed by reconnecting with the same credentials.
+        if (event.code === 4001) {
+          markConnectionAsTerminalFailure(t('analysis.ws.auth_required'))
+          return
+        }
+        if (event.code === 4003) {
+          markConnectionAsTerminalFailure(t('analysis.ws.access_denied'))
+          return
+        }
+        scheduleReconnect(event.code)
       }
     }
     // ticker is intentionally read via tickerRef (not a dep) so the socket

@@ -596,6 +596,87 @@ describe('Analysis', () => {
     expect(localStorage.getItem('ta_task_running')).toBeNull()
   })
 
+  it('does not retry an explicitly unauthorized WebSocket close', async () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onclose: ((event: CloseEvent) => void) | null = null
+      onerror: ((event: Event) => void) | null = null
+
+      constructor() {
+        MockWebSocket.instances.push(this)
+      }
+
+      close(code = 1000) {
+        this.onclose?.(new CloseEvent('close', { code }))
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket)
+
+    const task = {
+      task_id: 'unauthorized-task', ticker: 'NVDA', trade_date: '2026-07-28', asset_type: 'stock', started_at: 0,
+      status: 'running',
+    }
+    localStorage.setItem('test_active_tasks', JSON.stringify([task]))
+    localStorage.setItem('ta_task_running', JSON.stringify({
+      ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
+    }))
+    render(<Analysis />)
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+    act(() => MockWebSocket.instances[0].close(4001))
+
+    await waitFor(() => {
+      expect(screen.getByTestId('run-state')).toHaveTextContent('idle')
+      expect(screen.getByTestId('run-status')).toHaveTextContent('error')
+      expect(screen.getByText('analysis.ws.auth_required')).toBeInTheDocument()
+    })
+    expect(MockWebSocket.instances).toHaveLength(1)
+  })
+
+  it('stops reconnecting when the close-time task probe confirms authentication failed', async () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onclose: ((event: CloseEvent) => void) | null = null
+      onerror: ((event: Event) => void) | null = null
+
+      constructor() {
+        MockWebSocket.instances.push(this)
+      }
+
+      close() {
+        this.onclose?.(new CloseEvent('close', { code: 1000 }))
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket)
+
+    const task = {
+      task_id: 'expired-probe-task', ticker: 'NVDA', trade_date: '2026-07-28', asset_type: 'stock', started_at: 0,
+      status: 'running',
+    }
+    const axios = await import('axios')
+    vi.mocked(axios.default.get).mockImplementation((url: string) => {
+      if (url === '/api/analysis/active') return Promise.reject({ response: { status: 401 } })
+      return Promise.resolve({ data: {} })
+    })
+    localStorage.setItem('test_active_tasks', JSON.stringify([task]))
+    localStorage.setItem('ta_task_running', JSON.stringify({
+      ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
+    }))
+    render(<Analysis />)
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+    act(() => MockWebSocket.instances[0].close())
+
+    await waitFor(() => {
+      expect(screen.getByTestId('run-state')).toHaveTextContent('idle')
+      expect(screen.getByTestId('run-status')).toHaveTextContent('error')
+      expect(screen.getByText('analysis.ws.auth_required')).toBeInTheDocument()
+    })
+    expect(MockWebSocket.instances).toHaveLength(1)
+  })
+
   it('keeps reconnecting when the close-time task probe confirms the analysis is still active', async () => {
     class MockWebSocket {
       static instances: MockWebSocket[] = []
