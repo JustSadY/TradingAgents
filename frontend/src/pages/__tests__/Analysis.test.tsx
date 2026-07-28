@@ -276,6 +276,56 @@ describe('Analysis', () => {
     expect(MockWebSocket.instances).toHaveLength(1)
   })
 
+  it('defers a connecting socket close until it can send an explicit normal close code', async () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+      static CONNECTING = 0
+      static OPEN = 1
+      static CLOSING = 2
+      static CLOSED = 3
+      readyState = MockWebSocket.CONNECTING
+      closeCalls: Array<[number | undefined, string | undefined]> = []
+      onopen: ((event: Event) => void) | null = null
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onclose: ((event: CloseEvent) => void) | null = null
+      onerror: ((event: Event) => void) | null = null
+
+      constructor() {
+        MockWebSocket.instances.push(this)
+      }
+
+      close(code?: number, reason?: string) {
+        this.closeCalls.push([code, reason])
+        this.readyState = MockWebSocket.CLOSING
+        this.onclose?.(new CloseEvent('close', { code }))
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket)
+
+    const task = {
+      task_id: 'connecting-stop-task', ticker: 'AAPL', trade_date: '2026-07-28', asset_type: 'stock', started_at: 0, status: 'running',
+    }
+    localStorage.setItem('test_active_tasks', JSON.stringify([task]))
+    localStorage.setItem('ta_task_running', JSON.stringify({
+      ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
+    }))
+    render(<Analysis />)
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Stop analysis' }))
+    await waitFor(() => expect(screen.getByTestId('run-state')).toHaveTextContent('idle'))
+
+    // Calling close while CONNECTING cancels the handshake and yields an
+    // abnormal 1005/1006 pair. The implementation waits for the handshake.
+    expect(MockWebSocket.instances[0].closeCalls).toEqual([])
+    act(() => {
+      MockWebSocket.instances[0].readyState = MockWebSocket.OPEN
+      MockWebSocket.instances[0].onopen?.(new Event('open'))
+    })
+    expect(MockWebSocket.instances[0].closeCalls).toEqual([[1000, 'Analysis stopped by user']])
+  })
+
   it('resumes a persisted task after Strict Mode restarts its effect', async () => {
     class MockWebSocket {
       static instances: MockWebSocket[] = []

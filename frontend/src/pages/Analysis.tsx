@@ -43,6 +43,7 @@ const TASK_KEY = 'ta_task_running'
 const TERMINAL_TASK_CONFIRMATION_DELAY_MS = 250
 const WS_KEEPALIVE_INTERVAL_MS = 20_000
 const WS_KEEPALIVE_MESSAGE = '__tradingagents_keepalive__'
+const WS_NORMAL_CLOSE_CODE = 1000
 
 // Build an absolute ws(s)://host URL rather than a bare relative path —
 // `new WebSocket('/path')` (protocol-relative-by-omission) is only reliably
@@ -65,6 +66,43 @@ function openAnalysisWebSocket(taskId: string, token: string | null): WebSocket 
   const protocols = [WS_APPLICATION_SUBPROTOCOL]
   if (token) protocols.push(`${WS_TOKEN_SUBPROTOCOL_PREFIX}${token}`)
   return new WebSocket(url, protocols)
+}
+
+/**
+ * Retire a client-owned socket without turning an intentional UI change into
+ * an abnormal server-side disconnect.  `WebSocket.close()` without a status
+ * code is observed by the peer as 1005, and closing while CONNECTING aborts
+ * the handshake before either peer can exchange a close frame.  In the latter
+ * case wait for `open` and then perform a normal 1000 close.
+ */
+function closeAnalysisWebSocket(socket: WebSocket, reason: string): void {
+  socket.onmessage = null
+  socket.onerror = null
+  socket.onclose = null
+
+  const closeNormally = () => {
+    const readyState = socket.readyState
+    if (
+      typeof readyState === 'number' &&
+      (readyState === WebSocket.CLOSING || readyState === WebSocket.CLOSED)
+    ) return
+    try {
+      socket.close(WS_NORMAL_CLOSE_CODE, reason)
+    } catch {
+      // The browser owns the final close event and reconnect decision.
+    }
+  }
+
+  // Test doubles and older non-browser implementations sometimes omit
+  // readyState. Treat those as already-open so existing call sites still
+  // receive a normal explicit close request.
+  if (typeof socket.readyState === 'number' && socket.readyState === WebSocket.CONNECTING) {
+    socket.onopen = closeNormally
+    return
+  }
+
+  socket.onopen = null
+  closeNormally()
 }
 
 interface QualityFields {
@@ -432,15 +470,7 @@ function RunTab() {
     }
     clearWsKeepalive()
     if (wsRef.current) {
-      try {
-        wsRef.current.onopen = null
-        wsRef.current.onmessage = null
-        wsRef.current.onerror = null
-        wsRef.current.onclose = null
-        wsRef.current.close()
-      } catch (e) {
-        console.error("Error closing existing ws:", e)
-      }
+      closeAnalysisWebSocket(wsRef.current, 'Replaced by a newer analysis connection')
     }
     taskIdRef.current = taskId
     const ws = openAnalysisWebSocket(taskId, getAccessToken())
@@ -793,13 +823,7 @@ function RunTab() {
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
       clearWsKeepalive()
       if (wsRef.current) {
-        try {
-          wsRef.current.onopen = null
-          wsRef.current.onmessage = null
-          wsRef.current.onerror = null
-          wsRef.current.onclose = null
-          wsRef.current.close()
-        } catch { /* ws already closed */ }
+        closeAnalysisWebSocket(wsRef.current, 'Analysis page unmounted')
       }
     }
   }, [])
@@ -843,11 +867,7 @@ function RunTab() {
       try { await axios.post(`/api/analysis/${tid}/cancel`) } catch { /* best-effort cancel */ }
     }
     if (wsRef.current) {
-      wsRef.current.onopen = null
-      wsRef.current.onmessage = null
-      wsRef.current.onerror = null
-      wsRef.current.onclose = null
-      wsRef.current.close()
+      closeAnalysisWebSocket(wsRef.current, 'Analysis stopped by user')
       wsRef.current = null
     }
     setRunStatus('idle')
@@ -1411,10 +1431,7 @@ function MultiTab() {
     wsRef.current = null
     if (!ws) return
     // Closing a terminal/unmounted socket must not enter its reconnect path.
-    ws.onmessage = null
-    ws.onerror = null
-    ws.onclose = null
-    try { ws.close() } catch { /* noop */ }
+    closeAnalysisWebSocket(ws, 'Portfolio analysis connection closed')
   }, [])
 
   // Close the live-progress socket if the tab unmounts mid-run.
@@ -1434,10 +1451,7 @@ function MultiTab() {
     }
     const previous = wsRef.current
     if (previous) {
-      previous.onmessage = null
-      previous.onerror = null
-      previous.onclose = null
-      try { previous.close() } catch { /* noop */ }
+      closeAnalysisWebSocket(previous, 'Replaced by a newer portfolio connection')
     }
     const ws = openAnalysisWebSocket(taskId, getAccessToken())
     wsRef.current = ws
@@ -1449,10 +1463,7 @@ function MultiTab() {
       terminal = true
       shouldReconnectRef.current = false
       if (wsRef.current === ws) wsRef.current = null
-      ws.onmessage = null
-      ws.onerror = null
-      ws.onclose = null
-      try { ws.close() } catch { /* noop */ }
+      closeAnalysisWebSocket(ws, 'Portfolio analysis completed')
     }
 
     ws.onmessage = (e) => {
@@ -1487,9 +1498,9 @@ function MultiTab() {
     // terminal event own retry scheduling so error + close cannot create two
     // concurrent sockets.
     ws.onerror = () => {
-      if (!terminal) {
-        try { ws.close() } catch { /* noop */ }
-      }
+      // Browsers always follow an error with `close`. Calling close() here can
+      // abort a CONNECTING handshake and makes the peer report code 1005.
+      // The single onclose handler above owns retry scheduling.
     }
   }, [t])
 
