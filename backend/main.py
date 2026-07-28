@@ -317,15 +317,26 @@ app.include_router(personas_api_router)
 async def websocket_analysis(
     websocket: WebSocket,
     task_id: str,
-    token: str = Query(..., description="JWT access token"),
+    token: str | None = Query(None, description="Legacy JWT access-token query parameter"),
 ):
-    from backend.api.deps import get_user_from_access_token, has_page_access
+    from backend.api.deps import get_user_from_access_token, get_websocket_access_token, has_page_access
     from backend.core.database import AsyncSessionLocal
     from backend.services.analysis_service import is_task_owner
 
+    # Prefer the private WebSocket subprotocol over the legacy query string.
+    # Browser WebSockets cannot send an Authorization header, and query-string
+    # credentials would otherwise appear in common proxy and Uvicorn logs.
+    access_token = get_websocket_access_token(
+        websocket.headers.get("sec-websocket-protocol"),
+        query_token=token,
+    )
+    if not access_token:
+        await websocket.close(code=4001, reason="Unauthorized")
+        return
+
     async with AsyncSessionLocal() as db:
         try:
-            user = await get_user_from_access_token(token, db)
+            user = await get_user_from_access_token(access_token, db)
         except HTTPException:
             # The helper includes active-user and token-version checks, which
             # makes logout revoke WebSocket credentials immediately as well.

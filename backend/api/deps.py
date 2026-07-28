@@ -13,6 +13,33 @@ from backend.trading_agents.agents.tools.registry import registry
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
+# Native browser WebSockets cannot attach an Authorization header.  New
+# clients therefore offer the access JWT in a private WebSocket subprotocol
+# instead of putting it in the URL, where normal proxy/access logs would
+# retain it.  The prefix makes the credential distinguishable from any future
+# real application subprotocols and is valid under the WebSocket token grammar.
+WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX = "tradingagents.jwt."
+
+
+def get_websocket_access_token(
+    offered_subprotocols: str | None,
+    query_token: str | None = None,
+) -> str | None:
+    """Return a JWT supplied through the WebSocket handshake.
+
+    Prefer the private ``Sec-WebSocket-Protocol`` value used by current
+    browser clients.  ``query_token`` remains a temporary compatibility path
+    for an already-cached frontend.  All candidates still pass the normal JWT validation in
+    :func:`get_user_from_access_token`.
+    """
+    for protocol in (offered_subprotocols or "").split(","):
+        protocol = protocol.strip()
+        if protocol.startswith(WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX):
+            token = protocol.removeprefix(WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX)
+            if token:
+                return token
+    return query_token
+
 
 def _credentials_exception() -> HTTPException:
     return HTTPException(

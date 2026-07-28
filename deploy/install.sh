@@ -249,7 +249,9 @@ Environment=TRADINGAGENTS_SYSTEMCTL=$SYSTEMCTL_BIN
 EnvironmentFile=$ENV_FILE
 # TEK PROCESS ZORUNLU: in-memory WebSocket yöneticisi + APScheduler cron birden
 # çok worker ile çoğaltılır (çift analiz / bozuk WS). --workers EKLEMEYİN.
-ExecStart=$VENV/bin/uvicorn backend.main:app --host $APP_HOST --port $APP_PORT
+# The WebSocket implementation emits its own Date header. Disable Uvicorn's
+# generic Date header so a reverse proxy never receives duplicate headers.
+ExecStart=$VENV/bin/uvicorn backend.main:app --host $APP_HOST --port $APP_PORT --no-date-header
 Restart=on-failure
 RestartSec=5
 # Düşük portlara (örn. 80) bağlanabilmek için

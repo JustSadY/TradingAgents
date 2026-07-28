@@ -35,6 +35,7 @@ vi.mock('../../hooks/useActiveTasks', () => ({
   useActiveTasks: () => ({
     activeTasks: JSON.parse(localStorage.getItem('test_active_tasks') || '[]'),
     loading: false,
+    unavailable: false,
     refreshActiveTasks: vi.fn(),
   }),
 }))
@@ -165,12 +166,14 @@ describe('Analysis', () => {
     class MockWebSocket {
       static instances: MockWebSocket[] = []
       url: string
+      protocols: string | string[] | undefined
       onmessage: ((event: MessageEvent) => void) | null = null
       onclose: ((event: CloseEvent) => void) | null = null
       onerror: ((event: Event) => void) | null = null
 
-      constructor(url: string) {
+      constructor(url: string, protocols?: string | string[]) {
         this.url = url
+        this.protocols = protocols
         MockWebSocket.instances.push(this)
       }
 
@@ -202,7 +205,8 @@ describe('Analysis', () => {
     await user.click(screen.getByText('analysis.multi.btn_start').closest('button')!)
 
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
-    expect(MockWebSocket.instances[0].url).toBe(`ws://${window.location.host}/ws/analysis/portfolio-task?token=test-token`)
+    expect(MockWebSocket.instances[0].url).toBe(`ws://${window.location.host}/ws/analysis/portfolio-task`)
+    expect(MockWebSocket.instances[0].protocols).toEqual(['tradingagents.jwt.test-token'])
 
     vi.useFakeTimers()
     act(() => {
@@ -236,17 +240,10 @@ describe('Analysis', () => {
     }
     vi.stubGlobal('WebSocket', MockWebSocket)
 
-    const axios = await import('axios')
-    let activeTaskRequests = 0
-    vi.mocked(axios.default.get).mockImplementation((url: string) => {
-      if (url === '/api/analysis/active') {
-        activeTaskRequests += 1
-        return Promise.resolve({ data: [{ task_id: 'resume-task' }] })
-      }
-      return Promise.resolve({ data: {} })
-    })
-
     localStorage.setItem('ta_access', 'test-token')
+    localStorage.setItem('test_active_tasks', JSON.stringify([{
+      task_id: 'resume-task', ticker: 'AAPL', trade_date: '2026-07-26', asset_type: 'stock', started_at: 0, status: 'running',
+    }]))
     localStorage.setItem('ta_task_running', JSON.stringify({
       ticker: 'AAPL', taskId: 'resume-task', startedAt: new Date().toISOString(),
     }))
@@ -259,7 +256,6 @@ describe('Analysis', () => {
       await new Promise(resolve => setTimeout(resolve, 20))
     })
 
-    expect(activeTaskRequests).toBe(1)
     expect(MockWebSocket.instances).toHaveLength(1)
   })
 
@@ -282,13 +278,10 @@ describe('Analysis', () => {
     }
     vi.stubGlobal('WebSocket', MockWebSocket)
 
-    const axios = await import('axios')
-    vi.mocked(axios.default.get).mockImplementation((url: string) => {
-      if (url === '/api/analysis/active') return Promise.resolve({ data: [{ task_id: 'strict-task' }] })
-      return Promise.resolve({ data: {} })
-    })
-
     localStorage.setItem('ta_access', 'test-token')
+    localStorage.setItem('test_active_tasks', JSON.stringify([{
+      task_id: 'strict-task', ticker: 'AAPL', trade_date: '2026-07-26', asset_type: 'stock', started_at: 0, status: 'running',
+    }]))
     localStorage.setItem('ta_task_running', JSON.stringify({
       ticker: 'AAPL', taskId: 'strict-task', startedAt: new Date().toISOString(),
     }))
@@ -437,7 +430,7 @@ describe('Analysis', () => {
     expect(screen.getByTestId('run-status')).toHaveTextContent('running')
   })
 
-  it('does not resume an in-flight persisted-task probe after the user stops it', async () => {
+  it('does not resume a persisted task that is absent from the shared active-task result', async () => {
     class MockWebSocket {
       static instances: MockWebSocket[] = []
 
@@ -449,29 +442,14 @@ describe('Analysis', () => {
     }
     vi.stubGlobal('WebSocket', MockWebSocket)
 
-    let resolveActive!: (value: { data: { task_id: string }[] }) => void
-    const pendingActive = new Promise<{ data: { task_id: string }[] }>(resolve => { resolveActive = resolve })
-    const axios = await import('axios')
-    vi.mocked(axios.default.get).mockImplementation((url: string) => {
-      if (url === '/api/analysis/active') return pendingActive
-      return Promise.resolve({ data: {} })
-    })
     localStorage.setItem('ta_task_running', JSON.stringify({
       ticker: 'AAPL', taskId: 'probe-task', startedAt: new Date().toISOString(),
     }))
     render(<Analysis />)
 
-    const user = userEvent.setup()
-    await user.click(screen.getByRole('button', { name: 'Stop analysis' }))
-    await waitFor(() => expect(screen.getByTestId('run-state')).toHaveTextContent('idle'))
-
-    await act(async () => {
-      resolveActive({ data: [{ task_id: 'probe-task' }] })
-      await Promise.resolve()
-    })
-
     expect(MockWebSocket.instances).toHaveLength(0)
     expect(screen.getByTestId('run-state')).toHaveTextContent('idle')
+    expect(localStorage.getItem('ta_task_running')).toBeNull()
   })
 
   it('keeps the first streamed report selected instead of jumping to every agent', async () => {
@@ -537,11 +515,9 @@ describe('Analysis', () => {
     }
     vi.stubGlobal('WebSocket', MockWebSocket)
 
-    const axios = await import('axios')
-    vi.mocked(axios.default.get).mockImplementation((url: string) => {
-      if (url === '/api/analysis/active') return Promise.resolve({ data: [{ task_id: 'retry-task' }] })
-      return Promise.resolve({ data: {} })
-    })
+    localStorage.setItem('test_active_tasks', JSON.stringify([{
+      task_id: 'retry-task', ticker: 'AAPL', trade_date: '2026-07-26', asset_type: 'stock', started_at: 0, status: 'running',
+    }]))
     localStorage.setItem('ta_task_running', JSON.stringify({
       ticker: 'AAPL', taskId: 'retry-task', startedAt: new Date().toISOString(),
     }))

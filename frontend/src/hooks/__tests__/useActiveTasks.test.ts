@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+import { StrictMode } from 'react'
 import { renderHook, waitFor } from '@testing-library/react'
 import { useActiveTasks } from '../useActiveTasks'
+import axios from 'axios'
 
 const mockTasks = vi.hoisted(() => [
   { task_id: 'abc-123', ticker: 'AAPL', trade_date: '2026-07-18', asset_type: 'stock', started_at: Date.now(), status: 'running' },
@@ -24,6 +26,7 @@ vi.mock('axios', async () => {
 describe('useActiveTasks', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(axios.get).mockResolvedValue({ data: mockTasks } as any)
   })
 
   it('fetches active tasks on mount', async () => {
@@ -43,12 +46,28 @@ describe('useActiveTasks', () => {
   })
 
   it('handles API error gracefully', async () => {
-    const axios = await import('axios')
-    vi.mocked(axios.default.get).mockRejectedValue(new Error('Network error'))
+    vi.mocked(axios.get).mockRejectedValue(new Error('Network error'))
     const { result } = renderHook(() => useActiveTasks())
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
     })
     expect(result.current.activeTasks).toEqual([])
+    expect(result.current.unavailable).toBe(true)
+  })
+
+  it('shares the initial request across StrictMode effect replay', async () => {
+    const { result } = renderHook(() => useActiveTasks(), { wrapper: StrictMode })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(axios.get).toHaveBeenCalledTimes(1)
+  })
+
+  it('treats a non-array response as unavailable instead of propagating it to consumers', async () => {
+    vi.mocked(axios.get).mockResolvedValue({ data: { unexpected: true } } as any)
+    const { result } = renderHook(() => useActiveTasks())
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(result.current.activeTasks).toEqual([])
+    expect(result.current.unavailable).toBe(true)
   })
 })

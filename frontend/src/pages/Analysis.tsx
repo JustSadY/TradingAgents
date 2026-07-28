@@ -44,9 +44,22 @@ const TASK_KEY = 'ta_task_running'
 // Build an absolute ws(s)://host URL rather than a bare relative path —
 // `new WebSocket('/path')` (protocol-relative-by-omission) is only reliably
 // supported by fairly recent browsers; older ones throw a SyntaxError.
-function analysisWsUrl(taskId: string, token: string): string {
+function analysisWsUrl(taskId: string): string {
   const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws/analysis/${taskId}?token=${token}`
+  return `${protocol}//${window.location.host}/ws/analysis/${taskId}`
+}
+
+// Native browser WebSockets cannot set Authorization.  Carry the JWT in a
+// private handshake subprotocol instead of the URL so proxy/access logs never
+// receive a bearer token in their request line.  The backend deliberately
+// does not echo this protocol in its 101 response.
+const WS_TOKEN_SUBPROTOCOL_PREFIX = 'tradingagents.jwt.'
+
+function openAnalysisWebSocket(taskId: string, token: string | null): WebSocket {
+  const url = analysisWsUrl(taskId)
+  return token
+    ? new WebSocket(url, [`${WS_TOKEN_SUBPROTOCOL_PREFIX}${token}`])
+    : new WebSocket(url)
 }
 
 interface QualityFields {
@@ -254,7 +267,11 @@ function RunTab() {
   const [existingId, setExistingId] = useState<number | null>(null)
   const [showRerunModal, setShowRerunModal] = useState(false)
 
-  const { activeTasks } = useActiveTasks()
+  const {
+    activeTasks,
+    loading: activeTasksLoading,
+    unavailable: activeTasksUnavailable,
+  } = useActiveTasks()
 
   useEffect(() => {
     const now = Date.now()
@@ -353,8 +370,7 @@ function RunTab() {
       }
     }
     taskIdRef.current = taskId
-    const token = getAccessToken()
-    const ws = new WebSocket(analysisWsUrl(taskId, token))
+    const ws = openAnalysisWebSocket(taskId, getAccessToken())
     wsRef.current = ws
     let finished = false
 
@@ -528,6 +544,12 @@ function RunTab() {
   }, [activeTasks, running, attachWs])
 
   useEffect(() => {
+    // `useActiveTasks` owns the only active-task request for this mount.  A
+    // second probe here used to race it and, in the old implementation, was
+    // retriggered after every streamed render.  Wait for that shared result
+    // before deciding whether the persisted task can be resumed.
+    if (activeTasksLoading) return
+
     const raw = localStorage.getItem(TASK_KEY)
     if (!raw) return
     let cancelled = false
@@ -547,28 +569,25 @@ function RunTab() {
         attachWs(taskId, 1)
       }
 
-      // Verify task is still active before reconnecting
-      axios.get('/api/analysis/active').then(r => {
-        if (cancelled) return
-        const activeTasks: { task_id: string }[] = r.data
-        if (!activeTasks.some(t => t.task_id === taskId)) {
-          localStorage.removeItem(TASK_KEY)
-          resumingTaskIdRef.current = null
-          setRunning(false)
-          setRunStatus('idle')
-          return
-        }
+      if (activeTasks.some(task => task.task_id === taskId)) {
         resume()
-      }).catch(() => {
-        // API unavailable — attempt reconnect anyway
+      } else if (activeTasksUnavailable) {
+        // Preserve the former offline behavior: an unavailable API should not
+        // make an in-progress analysis disappear from the UI.  The bounded WS
+        // reconnect logic will surface a real connection failure.
         resume()
-      })
+      } else {
+        clearTaskMarkerFor(taskId)
+        resumingTaskIdRef.current = null
+        setRunning(false)
+        setRunStatus('idle')
+      }
     } catch {
       localStorage.removeItem(TASK_KEY)
       resumingTaskIdRef.current = null
     }
     return () => { cancelled = true }
-  }, [attachWs, saved.log])
+  }, [activeTasks, activeTasksLoading, activeTasksUnavailable, attachWs, saved.log])
 
   useEffect(() => {
     return () => {
@@ -1208,8 +1227,7 @@ function MultiTab() {
       previous.onclose = null
       try { previous.close() } catch { /* noop */ }
     }
-    const token = getAccessToken()
-    const ws = new WebSocket(analysisWsUrl(taskId, token))
+    const ws = openAnalysisWebSocket(taskId, getAccessToken())
     wsRef.current = ws
     shouldReconnectRef.current = true
     let terminal = false
