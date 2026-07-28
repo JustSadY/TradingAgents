@@ -35,7 +35,8 @@ from .alpha_vantage_common import AlphaVantageRateLimitError
 from .cache import APICache, get_category_for_method
 from .config import get_config
 from .reddit import fetch_reddit_posts
-from .stocktwits import fetch_stocktwits_messages
+from .stockstats_utils import YFinanceTickerUnavailableError
+from .stocktwits import StockTwitsUnavailable, fetch_stocktwits_messages
 from .y_finance import (
     get_analyst_ratings as get_yfinance_analyst_ratings,
 )
@@ -224,10 +225,24 @@ async def route_to_vendor(method: str, *args, **kwargs):
                     timeout=_VENDOR_CALL_TIMEOUT,
                 )
 
+            # A provider-declared unavailable result is intentionally visible
+            # to the caller, but it is not market data and must not outlive its
+            # short provider cooldown in the regular API cache.
+            if isinstance(val, StockTwitsUnavailable):
+                return val
             APICache.set(method, val, *args, cache_scope=cache_scope, **kwargs)
             return val
         except TimeoutError as exc:
             _logger.warning("Vendor '%s' timed out for method '%s' (timeout=%ss)", vendor, method, _VENDOR_CALL_TIMEOUT)
+            last_error = exc
+            continue
+        except YFinanceTickerUnavailableError as exc:
+            # The first missing-ticker response is visible at warning level;
+            # later calls during the short process-local cooldown are expected
+            # and still fall through to any alternate vendor without flooding
+            # the run/system logs.
+            log = _logger.debug if exc.from_cooldown else _logger.warning
+            log("Vendor '%s' cannot serve ticker for method '%s': %s", vendor, method, exc)
             last_error = exc
             continue
         except Exception as exc:  # noqa: BLE001 — any vendor failure should fall through to the next

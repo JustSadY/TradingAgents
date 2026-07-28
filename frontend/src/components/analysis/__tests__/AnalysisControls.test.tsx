@@ -20,6 +20,10 @@ const t = (k: string) => {
     'analysis.btn.start': 'Start',
     'analysis.btn.stop': 'Stop',
     'analysis.existing_analysis': 'Existing analysis found',
+    'analysis.ticker_error.unknown': 'We could not find the symbol "{ticker}".',
+    'analysis.ticker_error.unavailable': 'Symbol verification unavailable.',
+    'analysis.ticker_error.suggestions': 'Possible symbols:',
+    'analysis.ticker_error.use': 'Use {ticker}',
   }
   return map[k] || k
 }
@@ -188,5 +192,42 @@ describe('AnalysisControls', () => {
       />
     )
     expect(screen.getByText('Existing analysis found')).toBeInTheDocument()
+  })
+
+  it('shows an unknown-symbol suggestion without changing the ticker until the user chooses it', () => {
+    const selectSuggestion = vi.fn()
+    render(
+      <AnalysisControls
+        ticker="NVDIA"
+        setTicker={vi.fn()}
+        date=""
+        setDate={vi.fn()}
+        assetType="stock"
+        setAssetType={vi.fn()}
+        assetTypes={assetTypes}
+        running={false}
+        runStatus="error"
+        handleRun={vi.fn()}
+        handleStop={vi.fn()}
+        handleClear={vi.fn()}
+        signal={null}
+        costEstimate={null}
+        existingId={null}
+        startError={{
+          code: 'unknown_ticker',
+          message: 'Unknown symbol: NVDIA',
+          ticker: 'NVDIA',
+          suggestions: [{ symbol: 'NVDA', name: 'NVIDIA Corporation', quote_type: 'EQUITY' }],
+        }}
+        onSelectTickerSuggestion={selectSuggestion}
+        t={t}
+      />
+    )
+
+    expect(screen.getByRole('alert')).toHaveTextContent('We could not find the symbol "NVDIA".')
+    expect(selectSuggestion).not.toHaveBeenCalled()
+    fireEvent.click(screen.getByRole('button', { name: 'Use NVDA' }))
+    expect(selectSuggestion).toHaveBeenCalledOnce()
+    expect(selectSuggestion).toHaveBeenCalledWith('NVDA')
   })
 })

@@ -100,14 +100,28 @@ vi.mock('../../components/analysis/ReportCard', () => ({
   ),
 }))
 vi.mock('../../components/analysis/AnalysisControls', () => ({
-  AnalysisControls: ({ handleRun, handleStop, running, runStatus }: {
+  AnalysisControls: ({ handleRun, handleStop, running, runStatus, ticker, setTicker, startError, onSelectTickerSuggestion }: {
     handleRun: () => void; handleStop: () => void; running: boolean; runStatus: string
+    ticker: string; setTicker: (ticker: string) => void
+    startError?: { message: string; suggestions: { symbol: string }[] } | null
+    onSelectTickerSuggestion?: (ticker: string) => void
   }) => (
     <div>
+      <input aria-label="Ticker" value={ticker} onChange={event => setTicker(event.target.value)} />
       <button onClick={handleRun}>Start analysis</button>
       <button onClick={handleStop}>Stop analysis</button>
       <span data-testid="run-state">{running ? 'running' : 'idle'}</span>
       <span data-testid="run-status">{runStatus}</span>
+      {startError && (
+        <div role="alert">
+          {startError.message}
+          {startError.suggestions.map(suggestion => (
+            <button key={suggestion.symbol} onClick={() => onSelectTickerSuggestion?.(suggestion.symbol)}>
+              Use {suggestion.symbol}
+            </button>
+          ))}
+        </div>
+      )}
     </div>
   ),
 }))
@@ -534,5 +548,41 @@ describe('Analysis', () => {
 
     expect(MockWebSocket.instances).toHaveLength(1)
     expect(screen.getByTestId('run-state')).toHaveTextContent('idle')
+  })
+
+  it('shows structured unknown-symbol API errors and only applies a suggestion after an explicit click', async () => {
+    const axios = await import('axios')
+    vi.mocked(axios.default.get).mockResolvedValue({ data: {} })
+    vi.mocked(axios.default.post).mockImplementation((url: string) => {
+      if (url === '/api/analysis/run') {
+        return Promise.reject({
+          response: {
+            data: {
+              detail: {
+                code: 'unknown_ticker',
+                message: "'NVDIA' is not a recognized Yahoo Finance symbol.",
+                ticker: 'NVDIA',
+                suggestions: [{ symbol: 'NVDA', name: 'NVIDIA Corporation', quote_type: 'EQUITY' }],
+              },
+            },
+          },
+        })
+      }
+      return Promise.resolve({ data: {} })
+    })
+    render(<Analysis />)
+
+    const user = userEvent.setup()
+    const tickerInput = screen.getByRole('textbox', { name: 'Ticker' })
+    await user.clear(tickerInput)
+    await user.type(tickerInput, 'NVDIA')
+    await user.click(screen.getByRole('button', { name: 'Start analysis' }))
+
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent("'NVDIA' is not a recognized Yahoo Finance symbol."))
+    expect(screen.getByRole('alert')).not.toHaveTextContent('[object Object]')
+    expect(tickerInput).toHaveValue('NVDIA')
+
+    await user.click(screen.getByRole('button', { name: 'Use NVDA' }))
+    expect(tickerInput).toHaveValue('NVDA')
   })
 })

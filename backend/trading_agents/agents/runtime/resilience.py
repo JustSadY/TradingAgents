@@ -159,6 +159,76 @@ def _touch_activity() -> None:
         return
 
 
+def _message_type(message: Any) -> str:
+    """Return a LangChain message type without requiring a concrete class.
+
+    LangGraph keeps messages as ``BaseMessage`` instances in production, while
+    isolated graph tests and older checkpoints can contain plain dictionaries.
+    Lifecycle logging must be able to inspect both without making the graph
+    depend on a particular LangChain release.
+    """
+    if isinstance(message, dict):
+        value = message.get("type")
+    else:
+        value = getattr(message, "type", None)
+    return str(value or "").lower()
+
+
+def _message_has_tool_calls(message: Any) -> bool:
+    """Whether *message* is an assistant request that opened a tool round."""
+    if isinstance(message, dict):
+        calls = message.get("tool_calls")
+    else:
+        calls = getattr(message, "tool_calls", None)
+    return bool(calls)
+
+
+def _analyst_turn_fields(state: Any, kind: str) -> dict[str, Any]:
+    """Describe one analyst invocation without altering its execution.
+
+    An analyst subgraph deliberately has an ``agent -> ToolNode -> agent``
+    loop.  The second and later agent calls are real LLM continuation turns:
+    the model is reading tool results, not starting duplicate analysts.  The
+    old lifecycle logs gave every turn the identical ``Start`` label, which
+    made a normal multi-tool analysis appear to run the same analyst multiple
+    times.
+
+    Keep the stable ``node_start``/``node_end`` event names for consumers and
+    Prometheus lifecycle metrics, but attach a small, bounded description for
+    the UI.  Only a count is recorded; raw tool outputs never enter the run
+    log through this path.
+    """
+    if kind != "analyst" or not isinstance(state, dict):
+        return {}
+
+    messages = state.get("messages")
+    if not isinstance(messages, (list, tuple)) or not messages:
+        return {"phase": "initial", "turn": 1}
+
+    # A ToolNode writes one ToolMessage per completed tool call.  When an
+    # analyst is scheduled immediately afterwards, those trailing messages
+    # identify a post-tool continuation unambiguously.
+    tool_results = 0
+    for message in reversed(messages):
+        if _message_type(message) != "tool":
+            break
+        tool_results += 1
+
+    if not tool_results:
+        return {"phase": "initial", "turn": 1}
+
+    # Every preceding assistant message with tool calls marks one completed
+    # tool round.  ``turn`` includes the original analyst request, so the
+    # first continuation is turn 2.  The count is deliberately scalar and
+    # independent of message/tool-output size.
+    completed_rounds = sum(1 for message in messages if _message_has_tool_calls(message))
+    return {
+        "phase": "continuation",
+        "turn": max(2, completed_rounds + 1),
+        "tool_results": tool_results,
+    }
+
+
 def _is_timeout_error(exc: BaseException) -> bool:
     # ``asyncio.TimeoutError`` is an alias of the built-in exception on modern
     # Python, but keeping both makes the intent clear for all supported runtimes.
@@ -365,7 +435,8 @@ def guard_node(
     async def wrapped(state, *args, **kwargs):
         start = time.time()
         _touch_activity()
-        log_event("node_start", node=name, kind=kind)
+        turn_fields = _analyst_turn_fields(state, kind)
+        log_event("node_start", node=name, kind=kind, **turn_fields)
 
         runtime_config = _active_runtime_config()
         ck = _circuit_key(name, kind)
@@ -417,10 +488,10 @@ def guard_node(
                     runtime_config=runtime_config,
                 )
             _circuit_state.pop(ck, None)
-            _log_node_success(name, kind, start)
+            _log_node_success(name, kind, start, **turn_fields)
             return result
         except Exception as exc:  # noqa: BLE001
-            await _log_node_error(name, kind, exc)
+            await _log_node_error(name, kind, exc, **turn_fields)
             entry = _circuit_state.setdefault(ck, {"failures": 0, "open_since": None})
             entry["failures"] += 1
             if entry["failures"] >= cb_threshold:
@@ -435,20 +506,21 @@ def guard_node(
     return wrapped
 
 
-def _log_node_success(name: str, kind: str, start_time: float):
+def _log_node_success(name: str, kind: str, start_time: float, **turn_fields: Any):
     ms = int((time.time() - start_time) * 1000)
-    log_event("node_end", node=name, kind=kind, ms=ms)
+    log_event("node_end", node=name, kind=kind, ms=ms, **turn_fields)
     m = _metrics()
     if m:
         m.NODE_DURATION.labels(node=name, kind=kind).observe(time.time() - start_time)
 
 
-async def _log_node_error(name: str, kind: str, exc: Exception):
+async def _log_node_error(name: str, kind: str, exc: Exception, **turn_fields: Any):
     log_event(
         "node_error",
         level=logging.ERROR,
         node=name,
         kind=kind,
+        **turn_fields,
         error=str(exc)[:300],
         traceback=traceback.format_exc()[-700:],
     )

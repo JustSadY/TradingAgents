@@ -1,9 +1,10 @@
 import logging
+import threading
 import time
 
 import pandas as pd
 import yfinance as yf
-from yfinance.exceptions import YFRateLimitError
+from yfinance.exceptions import YFPricesMissingError, YFRateLimitError, YFTickerMissingError
 
 from backend.core.utils import safe_ticker_component
 
@@ -11,11 +12,90 @@ from .cache import APICache
 
 logger = logging.getLogger(__name__)
 
+_MISSING_TICKER_COOLDOWN_SECONDS = 300.0
+_missing_ticker_lock = threading.Lock()
+_missing_tickers: dict[str, tuple[float, str]] = {}
 
-def yf_retry(func, max_retries=3, base_delay=2.0):
+
+class YFinanceTickerUnavailableError(RuntimeError):
+    """Yahoo reported a ticker as unavailable, or its short cooldown is active."""
+
+    def __init__(self, ticker: str, reason: str, retry_after: float, *, from_cooldown: bool):
+        self.ticker = ticker
+        self.reason = reason
+        self.retry_after = max(0.0, retry_after)
+        self.from_cooldown = from_cooldown
+        source = "cached unavailable response" if from_cooldown else "unavailable response"
+        super().__init__(
+            f"Yahoo Finance {source} for '{ticker}' ({reason}); retry after roughly {self.retry_after:.0f}s."
+        )
+
+
+def _ticker_key(ticker: str | None) -> str | None:
+    if not isinstance(ticker, str):
+        return None
+    normalized = ticker.strip().upper()
+    return normalized or None
+
+
+def _get_missing_ticker_cooldown(ticker: str) -> tuple[float, str] | None:
+    now = time.monotonic()
+    with _missing_ticker_lock:
+        entry = _missing_tickers.get(ticker)
+        if entry is None:
+            return None
+        expires_at, reason = entry
+        if expires_at <= now:
+            _missing_tickers.pop(ticker, None)
+            return None
+        return expires_at - now, reason
+
+
+def _remember_missing_ticker(ticker: str, reason: str) -> None:
+    with _missing_ticker_lock:
+        _missing_tickers[ticker] = (time.monotonic() + _MISSING_TICKER_COOLDOWN_SECONDS, reason)
+
+
+def reset_yfinance_ticker_cooldowns() -> None:
+    """Clear process-local unavailable-ticker state (primarily useful in tests)."""
+    with _missing_ticker_lock:
+        _missing_tickers.clear()
+
+
+def yf_retry(func, max_retries=3, base_delay=2.0, *, ticker: str | None = None):
+    """Run a Yahoo request with transient retries and ticker-missing cooldown.
+
+    ``yf.download`` often logs an invalid symbol internally and returns an
+    empty frame, while ``Ticker.history(..., raise_errors=True)`` gives us a
+    typed missing-ticker error.  Once that error is observed, skip repeat
+    Yahoo requests for the same ticker briefly.  The error still propagates so
+    ``route_to_vendor`` can try an alternate vendor; it is never cached as
+    market data.
+    """
+    ticker_key = _ticker_key(ticker)
+    if ticker_key is not None:
+        cached = _get_missing_ticker_cooldown(ticker_key)
+        if cached is not None:
+            retry_after, reason = cached
+            raise YFinanceTickerUnavailableError(ticker_key, reason, retry_after, from_cooldown=True)
+
     for attempt in range(max_retries + 1):
         try:
             return func()
+        except YFTickerMissingError as exc:
+            # Price-range gaps are not evidence that the symbol itself is
+            # invalid (for example, a valid IPO may lack backtest-era prices),
+            # so only cache timezone/ticker-missing responses.
+            if ticker_key is None or isinstance(exc, YFPricesMissingError):
+                raise
+            reason = str(exc)
+            _remember_missing_ticker(ticker_key, reason)
+            raise YFinanceTickerUnavailableError(
+                ticker_key,
+                reason,
+                _MISSING_TICKER_COOLDOWN_SECONDS,
+                from_cooldown=False,
+            ) from exc
         except YFRateLimitError:
             if attempt < max_retries:
                 delay = base_delay * (2**attempt)
@@ -60,14 +140,14 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     end_date = curr_date_dt + pd.DateOffset(days=1)
     end_str = end_date.strftime("%Y-%m-%d")
     data = yf_retry(
-        lambda: yf.download(
-            symbol,
+        lambda: yf.Ticker(symbol.upper()).history(
             start=start_str,
             end=end_str,
-            multi_level_index=False,
-            progress=False,
             auto_adjust=True,
-        )
+            actions=False,
+            raise_errors=True,
+        ),
+        ticker=symbol,
     )
     if "Date" not in data.columns:
         if data.index.name != "Date":

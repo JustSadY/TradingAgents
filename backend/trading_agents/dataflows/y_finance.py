@@ -20,7 +20,10 @@ def get_yfin_data_online(
     datetime.strptime(start_date, "%Y-%m-%d")
     datetime.strptime(end_date, "%Y-%m-%d")
     ticker = yf.Ticker(symbol.upper())
-    data = yf_retry(lambda: ticker.history(start=start_date, end=end_date))
+    data = yf_retry(
+        lambda: ticker.history(start=start_date, end=end_date, raise_errors=True),
+        ticker=symbol,
+    )
     if data.empty:
         return f"No data found for symbol '{symbol}' between {start_date} and {end_date}"
     if data.index.tz is not None:
@@ -103,7 +106,7 @@ def get_fundamentals(
 ):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
-        info = yf_retry(lambda: ticker_obj.info)
+        info = yf_retry(lambda: ticker_obj.info, ticker=ticker)
         if not info:
             return f"No fundamentals data found for symbol '{ticker}'"
         fields = [
@@ -165,9 +168,9 @@ def get_balance_sheet(
     try:
         ticker_obj = yf.Ticker(ticker.upper())
         if freq.lower() == "quarterly":
-            data = yf_retry(lambda: ticker_obj.quarterly_balance_sheet)
+            data = yf_retry(lambda: ticker_obj.quarterly_balance_sheet, ticker=ticker)
         else:
-            data = yf_retry(lambda: ticker_obj.balance_sheet)
+            data = yf_retry(lambda: ticker_obj.balance_sheet, ticker=ticker)
         data = filter_financials_by_date(data, curr_date)
         if data.empty:
             return f"No balance sheet data found for symbol '{ticker}'"
@@ -187,9 +190,9 @@ def get_cashflow(
     try:
         ticker_obj = yf.Ticker(ticker.upper())
         if freq.lower() == "quarterly":
-            data = yf_retry(lambda: ticker_obj.quarterly_cashflow)
+            data = yf_retry(lambda: ticker_obj.quarterly_cashflow, ticker=ticker)
         else:
-            data = yf_retry(lambda: ticker_obj.cashflow)
+            data = yf_retry(lambda: ticker_obj.cashflow, ticker=ticker)
         data = filter_financials_by_date(data, curr_date)
         if data.empty:
             return f"No cash flow data found for symbol '{ticker}'"
@@ -209,9 +212,9 @@ def get_income_statement(
     try:
         ticker_obj = yf.Ticker(ticker.upper())
         if freq.lower() == "quarterly":
-            data = yf_retry(lambda: ticker_obj.quarterly_income_stmt)
+            data = yf_retry(lambda: ticker_obj.quarterly_income_stmt, ticker=ticker)
         else:
-            data = yf_retry(lambda: ticker_obj.income_stmt)
+            data = yf_retry(lambda: ticker_obj.income_stmt, ticker=ticker)
         data = filter_financials_by_date(data, curr_date)
         if data.empty:
             return f"No income statement data found for symbol '{ticker}'"
@@ -226,7 +229,7 @@ def get_income_statement(
 def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the company"]):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
-        data = yf_retry(lambda: ticker_obj.insider_transactions)
+        data = yf_retry(lambda: ticker_obj.insider_transactions, ticker=ticker)
         if data is None or data.empty:
             return f"No insider transactions data found for symbol '{ticker}'"
         # Keep only the most recent rows; older Form 4 filings add tokens without
@@ -244,7 +247,7 @@ def get_short_interest(ticker: Annotated[str, "ticker symbol of the company"]):
     short % of float — the ingredients of a squeeze setup."""
     try:
         ticker_obj = yf.Ticker(ticker.upper())
-        info = yf_retry(lambda: ticker_obj.info) or {}
+        info = yf_retry(lambda: ticker_obj.info, ticker=ticker) or {}
         fields = {
             "Shares Short": info.get("sharesShort"),
             "Shares Short (Prior Month)": info.get("sharesShortPriorMonth"),
@@ -315,7 +318,7 @@ def get_valuation_comparison(ticker: Annotated[str, "ticker symbol of the compan
     """Compare a stock's valuation multiples against its sector ETF as a peer proxy."""
     try:
         ticker_upper = ticker.upper()
-        info = yf_retry(lambda: yf.Ticker(ticker_upper).info) or {}
+        info = yf_retry(lambda: yf.Ticker(ticker_upper).info, ticker=ticker_upper) or {}
         sector = info.get("sector")
 
         parts = [f"# Valuation Comparison for {ticker_upper}"]
@@ -328,7 +331,7 @@ def get_valuation_comparison(ticker: Annotated[str, "ticker symbol of the compan
 
         etf = _sector_etf_for(sector)
         if etf:
-            etf_info = yf_retry(lambda: yf.Ticker(etf).info) or {}
+            etf_info = yf_retry(lambda: yf.Ticker(etf).info, ticker=etf) or {}
             etf_lines = _valuation_lines(etf_info)
             if etf_lines:
                 parts.append(f"\n## Sector Benchmark ({etf} — proxy for {sector} peers)")
@@ -346,13 +349,13 @@ def get_analyst_ratings(ticker: Annotated[str, "ticker symbol of the company"]):
         parts: list[str] = [f"# Analyst Ratings & Price Targets for {ticker.upper()}"]
         parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
-        targets = yf_retry(lambda: ticker_obj.analyst_price_targets)
+        targets = yf_retry(lambda: ticker_obj.analyst_price_targets, ticker=ticker)
         if isinstance(targets, dict) and targets:
             parts.append("## Price Targets")
             for key, value in targets.items():
                 parts.append(f"- {key}: {value}")
 
-        recommendations = yf_retry(lambda: ticker_obj.recommendations)
+        recommendations = yf_retry(lambda: ticker_obj.recommendations, ticker=ticker)
         if recommendations is not None and not recommendations.empty:
             parts.append("\n## Recommendation Trend (analyst counts by period)")
             parts.append(recommendations.to_csv(index=False))
@@ -372,14 +375,14 @@ def get_catalyst_calendar(ticker: Annotated[str, "ticker symbol of the company"]
         parts: list[str] = [f"# Upcoming Catalysts for {ticker.upper()}"]
         parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
-        calendar = yf_retry(lambda: ticker_obj.calendar)
+        calendar = yf_retry(lambda: ticker_obj.calendar, ticker=ticker)
         if isinstance(calendar, dict) and calendar:
             parts.append("## Scheduled Events")
             for key, value in calendar.items():
                 parts.append(f"- {key}: {value}")
 
         try:
-            earnings_dates = yf_retry(lambda: ticker_obj.get_earnings_dates(limit=8))
+            earnings_dates = yf_retry(lambda: ticker_obj.get_earnings_dates(limit=8), ticker=ticker)
         except Exception:
             earnings_dates = None
         if earnings_dates is not None and not earnings_dates.empty:
@@ -400,17 +403,17 @@ def get_institutional_holdings(ticker: Annotated[str, "ticker symbol of the comp
         parts: list[str] = [f"# Institutional & Major Holders for {ticker.upper()}"]
         parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
-        major = yf_retry(lambda: ticker_obj.major_holders)
+        major = yf_retry(lambda: ticker_obj.major_holders, ticker=ticker)
         if major is not None and not major.empty:
             parts.append("## Major Holders Breakdown")
             parts.append(major.to_csv())
 
-        inst = yf_retry(lambda: ticker_obj.institutional_holders)
+        inst = yf_retry(lambda: ticker_obj.institutional_holders, ticker=ticker)
         if inst is not None and not inst.empty:
             parts.append("## Top Institutional Holders (13F)")
             parts.append(inst.head(15).to_csv(index=False))
 
-        funds = yf_retry(lambda: ticker_obj.mutualfund_holders)
+        funds = yf_retry(lambda: ticker_obj.mutualfund_holders, ticker=ticker)
         if funds is not None and not funds.empty:
             parts.append("## Top Mutual Fund Holders")
             parts.append(funds.head(15).to_csv(index=False))
@@ -425,7 +428,7 @@ def get_institutional_holdings(ticker: Annotated[str, "ticker symbol of the comp
 def get_sec_filings(ticker: Annotated[str, "ticker symbol of the company"]):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
-        data = yf_retry(lambda: getattr(ticker_obj, "sec_filings", None))
+        data = yf_retry(lambda: getattr(ticker_obj, "sec_filings", None), ticker=ticker)
         if data is None or len(data) == 0:
             return f"No SEC filings data found for symbol '{ticker}'"
 

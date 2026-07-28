@@ -55,6 +55,10 @@ const analysis = {
     'analysis.ws.analysis_interrupted': 'Analysis Interrupted',
     'analysis.ws.analysis_complete_notif': 'analysis completed',
     'analysis.ws.signal_label': 'Signal:',
+    'analysis.ticker_error.unknown': 'We could not find the symbol "{ticker}".',
+    'analysis.ticker_error.unavailable': 'Symbol verification is temporarily unavailable. Please try again shortly.',
+    'analysis.ticker_error.suggestions': 'Possible symbols:',
+    'analysis.ticker_error.use': 'Use {ticker}',
 
 
     'analysis.multi.description': 'At least 2, at most 10 stocks. SuperPortfolioManager analyzes all stocks and recommends portfolio allocation.',
@@ -195,6 +199,10 @@ const analysis = {
     'analysis.ws.analysis_interrupted': 'Analiz Kesildi',
     'analysis.ws.analysis_complete_notif': 'analizi tamamlandı',
     'analysis.ws.signal_label': 'Sinyal:',
+    'analysis.ticker_error.unknown': '"{ticker}" sembolünü bulamadık.',
+    'analysis.ticker_error.unavailable': 'Sembol doğrulama geçici olarak kullanılamıyor. Lütfen kısa süre sonra tekrar deneyin.',
+    'analysis.ticker_error.suggestions': 'Olası semboller:',
+    'analysis.ticker_error.use': '{ticker} kullan',
 
 
     'analysis.multi.description': 'En az 2, en fazla 10 hisse. SuperPortfolioManager tüm hisseleri analiz edip portföy dağılımı önerir.',
@@ -282,4 +290,3 @@ const analysis = {
 }
 
 export default analysis
-

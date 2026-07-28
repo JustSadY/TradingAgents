@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.deps import require_admin, require_any_page, require_page
 from backend.core.database import get_db
 from backend.core.limiter import limiter
-from backend.core.utils import safe_ticker_component
 from backend.models.user import User
 from backend.schemas.analysis import (
     ABComparisonItem,
@@ -32,13 +31,59 @@ from backend.schemas.portfolio_analysis import (
     MultiTickerRunResponse,
 )
 from backend.services.settings_service import get_or_create_settings
+from backend.services.ticker_validation_service import (
+    TickerNotFoundError,
+    TickerValidationUnavailableError,
+    validate_analysis_ticker,
+    validate_analysis_tickers,
+)
 
 router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
 _ANALYSIS_NOT_FOUND = "Analysis not found"
 
 
-@router.post("/run", response_model=AnalysisRunResponse, responses={422: {"description": "Invalid ticker format"}})
+def _unknown_ticker_detail(error: TickerNotFoundError) -> dict:
+    """Return a stable, UI-friendly 422 payload without choosing a symbol."""
+    suggestions = [suggestion.as_dict() for suggestion in error.suggestions]
+    message = f"'{error.ticker}' is not a recognized Yahoo Finance symbol."
+    if suggestions:
+        message += " Choose one of the suggested symbols only if it is the instrument you intended."
+    return {
+        "code": "unknown_ticker",
+        "message": message,
+        "ticker": error.ticker,
+        "suggestions": suggestions,
+    }
+
+
+async def _preflight_ticker(ticker: str, asset_type: str) -> str:
+    """Validate semantic ticker existence and map service failures to HTTP."""
+    try:
+        result = await validate_analysis_ticker(ticker, asset_type=asset_type)
+    except TickerNotFoundError as exc:
+        raise HTTPException(status_code=422, detail=_unknown_ticker_detail(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except TickerValidationUnavailableError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "ticker_validation_unavailable",
+                "message": "Could not verify the symbol right now. Please try again shortly.",
+            },
+        ) from exc
+    return result.ticker
+
+
+@router.post(
+    "/run",
+    response_model=AnalysisRunResponse,
+    responses={
+        422: {"description": "Invalid or unknown ticker"},
+        503: {"description": "Ticker validation unavailable"},
+    },
+)
 @limiter.limit("5/minute")
 async def run_analysis(
     request: Request,
@@ -47,10 +92,7 @@ async def run_analysis(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_page("analysis")),
 ):
-    try:
-        safe_ticker_component(body.ticker)
-    except ValueError as e:
-        raise HTTPException(status_code=422, detail=str(e)) from e
+    ticker = await _preflight_ticker(body.ticker, body.asset_type)
     settings = await get_or_create_settings(db, current_user)
     task_id = str(uuid.uuid4())
     from backend.services.analysis_queue import dispatch_analysis
@@ -59,14 +101,14 @@ async def run_analysis(
     await register_task_owner(task_id, current_user.id)
     await dispatch_analysis(
         background_tasks,
-        ticker=body.ticker,
+        ticker=ticker,
         trade_date=body.trade_date,
         asset_type=body.asset_type,
         settings=settings,
         task_id=task_id,
         user=current_user,
     )
-    return AnalysisRunResponse(task_id=task_id, ticker=body.ticker, trade_date=body.trade_date)
+    return AnalysisRunResponse(task_id=task_id, ticker=ticker, trade_date=body.trade_date)
 
 
 @router.get("/active", response_model=list[ActiveTaskRead])
@@ -179,7 +221,12 @@ async def get_performance_attribution(
 
 
 @router.post(
-    "/run-portfolio", response_model=MultiTickerRunResponse, responses={422: {"description": "Invalid ticker format"}}
+    "/run-portfolio",
+    response_model=MultiTickerRunResponse,
+    responses={
+        422: {"description": "Invalid or unknown ticker"},
+        503: {"description": "Ticker validation unavailable"},
+    },
 )
 async def run_portfolio_run(
     body: MultiTickerRunRequest,
@@ -187,12 +234,21 @@ async def run_portfolio_run(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_page("analysis")),
 ):
-    tickers = [t.upper() for t in body.tickers]
-    for ticker in tickers:
-        try:
-            safe_ticker_component(ticker)
-        except ValueError as e:
-            raise HTTPException(status_code=422, detail=f"Invalid ticker {ticker}: {e}") from e
+    try:
+        validated = await validate_analysis_tickers(body.tickers, asset_type=body.asset_type)
+    except TickerNotFoundError as exc:
+        raise HTTPException(status_code=422, detail=_unknown_ticker_detail(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+    except TickerValidationUnavailableError as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "code": "ticker_validation_unavailable",
+                "message": "Could not verify the symbols right now. Please try again shortly.",
+            },
+        ) from exc
+    tickers = [result.ticker for result in validated]
     settings = await get_or_create_settings(db, current_user)
     task_id = str(uuid.uuid4())
     from backend.services.analysis_queue import dispatch_portfolio_analysis

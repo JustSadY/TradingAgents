@@ -25,6 +25,9 @@ interface RunEventPayload {
   event: string
   node?: string
   kind?: string
+  phase?: string
+  turn?: number
+  tool_results?: number
   label?: string
   tool?: string
   tools?: string[]
@@ -49,6 +52,9 @@ function parseRunEvent(message: string): RunEventPayload | null {
     const eventMatch = rawPayload.match(/"event":\s*"([^"]+)"/) || rawPayload.match(/'event':\s*'([^']+)'/)
     const nodeMatch = rawPayload.match(/"node":\s*"([^"]+)"/) || rawPayload.match(/'node':\s*'([^']+)'/)
     const kindMatch = rawPayload.match(/"kind":\s*"([^"]+)"/) || rawPayload.match(/'kind':\s*'([^']+)'/)
+    const phaseMatch = rawPayload.match(/"phase":\s*"([^"]+)"/) || rawPayload.match(/'phase':\s*'([^']+)'/)
+    const turnMatch = rawPayload.match(/"turn":\s*([0-9]+)/) || rawPayload.match(/'turn':\s*([0-9]+)/)
+    const toolResultsMatch = rawPayload.match(/"tool_results":\s*([0-9]+)/) || rawPayload.match(/'tool_results':\s*([0-9]+)/)
     const labelMatch = rawPayload.match(/"label":\s*"([^"]+)"/) || rawPayload.match(/'label':\s*'([^']+)'/)
     const toolMatch = rawPayload.match(/"tool":\s*"([^"]+)"/) || rawPayload.match(/'tool':\s*'([^']+)'/)
     const toolsMatch = rawPayload.match(/"tools":\s*\[([^\]]*)\]/) || rawPayload.match(/'tools':\s*\[([^\]]*)\]/)
@@ -70,6 +76,9 @@ function parseRunEvent(message: string): RunEventPayload | null {
         event: eventMatch[1],
         node: nodeMatch ? nodeMatch[1] : undefined,
         kind: kindMatch ? kindMatch[1] : undefined,
+        phase: phaseMatch ? phaseMatch[1] : undefined,
+        turn: turnMatch ? Number.parseInt(turnMatch[1]) : undefined,
+        tool_results: toolResultsMatch ? Number.parseInt(toolResultsMatch[1]) : undefined,
         label: labelMatch ? labelMatch[1] : undefined,
         tool: toolMatch ? toolMatch[1] : undefined,
         tools: tools && tools.length > 0 ? tools : undefined,
@@ -92,22 +101,30 @@ function renderLogMessage(l: Log) {
   if (l.source === 'tradingagents.run') {
     const payload = parseRunEvent(l.message)
     if (payload) {
-      const { event, node, kind, label, tool, tools, analyst, error, error_type, action, attempt, attempts, ms, delay, timeout_seconds } = payload
+      const { event, node, kind, phase, turn, tool_results, label, tool, tools, analyst, error, error_type, action, attempt, attempts, ms, delay, timeout_seconds } = payload
+      const isAnalystContinuation = kind === 'analyst' && phase === 'continuation'
+      const continuationDetail = isAnalystContinuation && (
+        <span className="text-slate-400 font-mono text-[10px] bg-white/[0.04] px-2 py-0.5 rounded border border-white/[0.04] shrink-0">
+          turn {turn ?? 2}{tool_results !== undefined ? ` · after ${tool_results} tool result${tool_results === 1 ? '' : 's'}` : ''}
+        </span>
+      )
       switch (event) {
         case 'node_start':
           return (
-            <span className="flex items-center gap-2">
-              <span className="text-violet-400 font-bold shrink-0">Start</span>
+            <span className="flex items-center gap-2 flex-wrap">
+              <span className="text-violet-400 font-bold shrink-0">{isAnalystContinuation ? 'Continue after tools' : 'Start'}</span>
               <span className="text-slate-400 capitalize shrink-0">{kind}:</span>
               <span className="text-white font-semibold font-mono break-all">{node}</span>
+              {continuationDetail}
             </span>
           )
         case 'node_end':
           return (
             <span className="flex items-center gap-2 flex-wrap">
-              <span className="text-emerald-400 font-bold shrink-0">Success</span>
+              <span className="text-emerald-400 font-bold shrink-0">{isAnalystContinuation ? 'Continuation complete' : 'Success'}</span>
               <span className="text-slate-400 capitalize shrink-0">{kind}:</span>
               <span className="text-white font-semibold font-mono break-all">{node}</span>
+              {continuationDetail}
               <span className="text-emerald-400 font-bold font-mono text-xs bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/15 shrink-0">{ms}ms</span>
             </span>
           )

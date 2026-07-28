@@ -2,6 +2,19 @@ import React from 'react'
 import { Zap, Square, X, CheckCircle, AlertCircle } from 'lucide-react'
 import { SignalBadge } from './SignalBadge'
 
+export type TickerSuggestion = {
+  symbol: string
+  name?: string | null
+  quote_type?: string | null
+}
+
+export type AnalysisStartError = {
+  code?: string
+  message: string
+  ticker?: string
+  suggestions: TickerSuggestion[]
+}
+
 interface AnalysisControlsProps {
   ticker: string
   setTicker: (v: string) => void
@@ -18,14 +31,22 @@ interface AnalysisControlsProps {
   signal: string | null
   costEstimate: { estimated_cost_usd: number; estimated_tokens: number; estimated_duration_min: number; analyst_count: number } | null
   existingId: number | null
+  startError?: AnalysisStartError | null
+  onSelectTickerSuggestion?: (ticker: string) => void
   t: any
 }
 
 export const AnalysisControls: React.FC<AnalysisControlsProps> = ({
   ticker, setTicker, date, setDate, assetType, setAssetType, assetTypes,
   running, runStatus, handleRun, handleStop, handleClear, signal,
-  costEstimate, existingId, t
+  costEstimate, existingId, startError, onSelectTickerSuggestion, t
 }) => {
+  const startErrorMessage = startError?.code === 'unknown_ticker'
+    ? t('analysis.ticker_error.unknown').replace('{ticker}', startError.ticker || ticker)
+    : startError?.code === 'ticker_validation_unavailable'
+      ? t('analysis.ticker_error.unavailable')
+      : startError?.message
+
   return (
     <div className="glass-panel rounded-2xl p-4 md:p-5">
       <div className="flex flex-wrap gap-4 items-end">
@@ -100,6 +121,28 @@ export const AnalysisControls: React.FC<AnalysisControlsProps> = ({
           )}
           {existingId && (
             <span className="text-[10px] text-amber-500 font-semibold bg-amber-500/10 border border-amber-500/20 px-2 py-0.5 rounded-lg">{t('analysis.existing_analysis')}</span>
+          )}
+        </div>
+      )}
+
+      {startError && (
+        <div role="alert" className="mt-3 border-t border-rose-500/20 pt-3 text-xs">
+          <p className="text-rose-300 font-medium">{startErrorMessage}</p>
+          {startError.suggestions.length > 0 && onSelectTickerSuggestion && (
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <span className="text-[10px] text-slate-500">{t('analysis.ticker_error.suggestions')}</span>
+              {startError.suggestions.map(suggestion => (
+                <button
+                  key={suggestion.symbol}
+                  type="button"
+                  onClick={() => onSelectTickerSuggestion(suggestion.symbol)}
+                  className="rounded-lg border border-amber-400/25 bg-amber-400/10 px-2 py-1 font-mono text-[11px] font-bold text-amber-200 transition hover:bg-amber-400/20"
+                  title={suggestion.name || suggestion.symbol}
+                >
+                  {t('analysis.ticker_error.use').replace('{ticker}', suggestion.symbol)}
+                </button>
+              ))}
+            </div>
           )}
         </div>
       )}

@@ -88,3 +88,63 @@ async def test_guard_node_remains_the_single_analyst_lifecycle_source(monkeypatc
         ("node_start", "Fundamentals Analyst"),
         ("node_end", "Fundamentals Analyst"),
     ]
+    start = next(fields for event, fields in events if event == "node_start")
+    assert start["phase"] == "initial"
+    assert start["turn"] == 1
+
+
+@pytest.mark.asyncio
+async def test_guard_node_marks_post_tool_analyst_invocations_as_continuations(monkeypatch):
+    """ToolNode loops are real LLM turns, but must not look like duplicate starts."""
+    from backend.trading_agents.agents.runtime import resilience
+
+    events = []
+
+    def capture(event, **fields):
+        events.append((event, fields))
+
+    async def call_once(fn, **_kwargs):
+        return await fn()
+
+    async def analyst_node(_state):
+        return {"market_report": "final report"}
+
+    # Use lightweight message-shaped objects so the test remains independent
+    # of LangChain's concrete message implementation.
+    assistant_tool_request = SimpleNamespace(type="ai", tool_calls=[{"name": "get_stock_data"}])
+    tool_result_one = SimpleNamespace(type="tool")
+    tool_result_two = SimpleNamespace(type="tool")
+    state = {
+        "messages": [
+            SimpleNamespace(type="human"),
+            assistant_tool_request,
+            tool_result_one,
+            tool_result_two,
+        ]
+    }
+
+    monkeypatch.setattr(resilience, "log_event", capture)
+    monkeypatch.setattr(resilience, "retry_call", call_once)
+    resilience._circuit_state.clear()
+
+    result = await resilience.guard_node(
+        analyst_node,
+        name="Market Analyst",
+        kind="analyst",
+    )(state)
+
+    assert result == {"market_report": "final report"}
+    starts = [fields for event, fields in events if event == "node_start"]
+    ends = [fields for event, fields in events if event == "node_end"]
+    assert starts == [
+        {
+            "node": "Market Analyst",
+            "kind": "analyst",
+            "phase": "continuation",
+            "turn": 2,
+            "tool_results": 2,
+        }
+    ]
+    assert ends[0]["phase"] == "continuation"
+    assert ends[0]["turn"] == 2
+    assert ends[0]["tool_results"] == 2

@@ -104,4 +104,26 @@ describe('Logs', () => {
     expect(screen.getByText('get_fundamentals, get_cashflow')).toBeInTheDocument()
     expect(screen.getByText("provider's request timed out")).toBeInTheDocument()
   })
+
+  it('labels a post-tool analyst turn as a continuation instead of a duplicate start', async () => {
+    const axios = await import('axios')
+    vi.mocked(axios.default.get).mockResolvedValueOnce({
+      data: [{
+        id: 44,
+        level: 'INFO',
+        source: 'tradingagents.run',
+        message: 'run_event {"event":"node_start","node":"Market Analyst","kind":"analyst","phase":"continuation","turn":2,"tool_results":3}',
+        details: null,
+        user_id: 1,
+        created_at: '2026-07-28T09:17:49Z',
+      }],
+    })
+
+    render(<Logs />)
+
+    expect(await screen.findByText('Continue after tools')).toBeInTheDocument()
+    expect(screen.getByText('Market Analyst')).toBeInTheDocument()
+    expect(screen.getByText('turn 2 · after 3 tool results')).toBeInTheDocument()
+    expect(screen.queryByText('Start')).not.toBeInTheDocument()
+  })
 })

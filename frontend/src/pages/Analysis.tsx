@@ -18,7 +18,7 @@ import {
 import type { AnalysisListItem, AnalysisResultRead, MultiTickerListItem, MultiTickerResultRead } from '../api/types'
 import { SignalBadge } from '../components/analysis/SignalBadge'
 import { ReportCard } from '../components/analysis/ReportCard'
-import { AnalysisControls } from '../components/analysis/AnalysisControls'
+import { AnalysisControls, type AnalysisStartError, type TickerSuggestion } from '../components/analysis/AnalysisControls'
 
 import { DebateHistoryWidget, parseDebateMessage, getSenderStyles } from '../components/analysis/DebateHistoryWidget'
 import { AnalysisChatWidget } from '../components/analysis/AnalysisChatWidget'
@@ -114,6 +114,35 @@ function emptyRun(): SavedRun {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+function tickerSuggestions(value: unknown): TickerSuggestion[] {
+  if (!Array.isArray(value)) return []
+  return value.flatMap(item => {
+    if (!isRecord(item) || typeof item.symbol !== 'string' || !item.symbol.trim()) return []
+    return [{
+      symbol: item.symbol.trim().toUpperCase(),
+      name: typeof item.name === 'string' ? item.name : null,
+      quote_type: typeof item.quote_type === 'string' ? item.quote_type : null,
+    }]
+  })
+}
+
+function analysisStartError(error: unknown, fallback: string): AnalysisStartError {
+  const response = error as { response?: { data?: { detail?: unknown } } }
+  const detail = response.response?.data?.detail
+  if (isRecord(detail)) {
+    return {
+      code: typeof detail.code === 'string' ? detail.code : undefined,
+      message: typeof detail.message === 'string' && detail.message.trim() ? detail.message : fallback,
+      ticker: typeof detail.ticker === 'string' ? detail.ticker : undefined,
+      suggestions: tickerSuggestions(detail.suggestions),
+    }
+  }
+  return {
+    message: typeof detail === 'string' && detail.trim() ? detail : fallback,
+    suggestions: [],
+  }
 }
 
 function stringRecord(value: unknown): Record<string, string> {
@@ -266,6 +295,12 @@ function RunTab() {
   const [costEstimate, setCostEstimate] = useState<{ estimated_cost_usd: number; estimated_tokens: number; estimated_duration_min: number; analyst_count: number } | null>(null)
   const [existingId, setExistingId] = useState<number | null>(null)
   const [showRerunModal, setShowRerunModal] = useState(false)
+  const [startError, setStartError] = useState<AnalysisStartError | null>(null)
+
+  const handleTickerChange = useCallback((nextTicker: string) => {
+    setTicker(nextTicker)
+    setStartError(null)
+  }, [])
 
   const {
     activeTasks,
@@ -671,6 +706,7 @@ function RunTab() {
     setActiveSection(null)
     setCurrentStep(null)
     setStats(null)
+    setStartError(null)
     preRefreshLogRef.current = null
     seenLogRef.current = new Set()
 
@@ -695,9 +731,11 @@ function RunTab() {
       // A rejected start request after Stop is expected to leave the UI idle,
       // not replace the stopped state with an error message.
       if (requestId !== runRequestRef.current || stoppedByUserRef.current) return
+      const error = analysisStartError(err, t('analysis.ws.failed_to_start'))
       setRunStatus('error')
       setRunning_(false)
-      setLog(l => [...l, `Error: ${err.response?.data?.detail || t('analysis.ws.failed_to_start')}`])
+      setStartError(error)
+      setLog(l => [...l, `Error: ${error.message}`])
     }
   }
 
@@ -709,7 +747,7 @@ function RunTab() {
 
   const handleClear = () => {
     setRunStatus('idle'); setSignal(null); setReports({}); setLog([]); setActiveSection(null); setCurrentStep(null)
-    setAnalysisId(null); setDetail(null); setLiveDebate([]); setStats(null)
+    setAnalysisId(null); setDetail(null); setLiveDebate([]); setStats(null); setStartError(null)
   }
 
   const handleRollbackStart = (taskId: string) => {
@@ -738,13 +776,15 @@ function RunTab() {
   return (
     <div className="space-y-6">
       <AnalysisControls
-        ticker={ticker} setTicker={setTicker}
+        ticker={ticker} setTicker={handleTickerChange}
         date={date} setDate={setDate}
         assetType={assetType} setAssetType={setAssetType}
         assetTypes={assetTypes}
         running={running} runStatus={runStatus}
         handleRun={handleRun} handleStop={handleStop} handleClear={handleClear}
         signal={signal} costEstimate={costEstimate} existingId={existingId}
+        startError={startError}
+        onSelectTickerSuggestion={handleTickerChange}
         t={t}
       />
 
@@ -1182,6 +1222,7 @@ function MultiTab() {
   const [running, setRunning] = useState(false)
   const [done, setDone] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [startError, setStartError] = useState<AnalysisStartError | null>(null)
   const [progress, setProgress] = useState<string>('')
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -1283,17 +1324,35 @@ function MultiTab() {
 
   const handleRun = async () => {
     if (tickers.length < 2) return
-    setRunning(true); setDone(false); setError(null); setProgress('')
+    setRunning(true); setDone(false); setError(null); setStartError(null); setProgress('')
     try {
       const { data } = await axios.post('/api/analysis/run-portfolio', { tickers, trade_date: date, asset_type: assetType })
       const taskId = data.task_id
       if (!taskId) { setDone(true); setRunning(false); return }
       connectWs(taskId, 0)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('analysis.multi.error_default'))
+    } catch (err: unknown) {
+      const requestError = analysisStartError(err, t('analysis.multi.error_default'))
+      setStartError(requestError)
+      setError(requestError.message)
       setRunning(false)
     }
   }
+
+  const selectTickerSuggestion = (suggestion: string) => {
+    const rejectedTicker = startError?.ticker
+    if (!rejectedTicker) return
+    // A suggestion is only applied after this explicit click; it must never
+    // silently replace an instrument in a portfolio request.
+    setTickers(previous => [...new Set(previous.map(ticker => ticker === rejectedTicker ? suggestion : ticker))])
+    setError(null)
+    setStartError(null)
+  }
+
+  const displayedError = startError?.code === 'unknown_ticker'
+    ? t('analysis.ticker_error.unknown').replace('{ticker}', startError.ticker || '')
+    : startError?.code === 'ticker_validation_unavailable'
+      ? t('analysis.ticker_error.unavailable')
+      : error
 
   return (
     <div className="space-y-6">
@@ -1306,7 +1365,7 @@ function MultiTab() {
             {tickers.map(tk => (
               <span key={tk} className="flex items-center gap-1.5 bg-violet-500/10 border border-violet-500/20 text-violet-300 text-xs font-mono font-bold px-2 py-0.5 rounded-lg">
                 {tk}
-                <button onClick={() => setTickers(p => p.filter(x => x !== tk))} className="text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"><X size={10} /></button>
+                <button onClick={() => { setTickers(p => p.filter(x => x !== tk)); setError(null); setStartError(null) }} className="text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"><X size={10} /></button>
               </span>
             ))}
             {tickers.length < 10 && (
@@ -1345,7 +1404,27 @@ function MultiTab() {
 
         {running && progress && <div className="flex items-center gap-2 text-violet-300 text-xs font-semibold"><Loader2 size={14} className="animate-spin" /> {progress}</div>}
         {done && <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold"><CheckCircle size={14} /> {t('analysis.multi.started')}</div>}
-        {error && <div className="flex items-center gap-2 text-rose-400 text-xs font-semibold"><AlertCircle size={14} /> {error}</div>}
+        {error && (
+          <div role="alert" className="space-y-2 text-xs font-semibold text-rose-400">
+            <div className="flex items-center gap-2"><AlertCircle size={14} /> {displayedError}</div>
+            {startError && startError.suggestions.length > 0 && (
+              <div className="flex flex-wrap items-center gap-2 pl-5 text-[11px]">
+                <span className="text-slate-500">{t('analysis.ticker_error.suggestions')}</span>
+                {startError.suggestions.map(suggestion => (
+                  <button
+                    key={suggestion.symbol}
+                    type="button"
+                    onClick={() => selectTickerSuggestion(suggestion.symbol)}
+                    className="rounded-lg border border-amber-400/25 bg-amber-400/10 px-2 py-1 font-mono font-bold text-amber-200 transition hover:bg-amber-400/20"
+                    title={suggestion.name || suggestion.symbol}
+                  >
+                    {t('analysis.ticker_error.use').replace('{ticker}', suggestion.symbol)}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
       </div>
       <PortfolioHistorySection />
     </div>
