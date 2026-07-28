@@ -36,18 +36,26 @@ async def _job_lock(job_name: str):
     import hashlib
 
     lock_key = int.from_bytes(hashlib.sha256(job_name.encode("utf-8")).digest()[:8], "big", signed=True)
-    async with engine.connect() as conn:
-        acquired = bool(
-            (await conn.execute(text("SELECT pg_try_advisory_lock(:lock_key)"), {"lock_key": lock_key})).scalar()
-        )
-        if not acquired:
-            _logger.debug("Skipping duplicate scheduled job: %s", job_name)
-            yield False
-            return
-        try:
-            yield True
-        finally:
-            await conn.execute(text("SELECT pg_advisory_unlock(:lock_key)"), {"lock_key": lock_key})
+    try:
+        async with engine.connect() as conn:
+            await conn.execute(text("SET statement_timeout = 0"))
+            acquired = bool(
+                (await conn.execute(text("SELECT pg_try_advisory_lock(:lock_key)"), {"lock_key": lock_key})).scalar()
+            )
+            if not acquired:
+                _logger.debug("Skipping duplicate scheduled job: %s", job_name)
+                yield False
+                return
+            try:
+                yield True
+            finally:
+                try:
+                    await conn.execute(text("SELECT pg_advisory_unlock(:lock_key)"), {"lock_key": lock_key})
+                except Exception as exc:
+                    _logger.warning("Failed to release advisory lock for %s: %s", job_name, exc)
+    except Exception as exc:
+        _logger.warning("Advisory lock execution error for %s: %s", job_name, exc)
+        yield False
 
 
 class CronService:

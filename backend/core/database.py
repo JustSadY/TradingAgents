@@ -10,7 +10,15 @@ from sqlalchemy.orm import DeclarativeBase
 from .config import get_settings
 
 settings = get_settings()
-engine = create_async_engine(settings.DATABASE_URL, echo=False, pool_pre_ping=True)
+engine_kwargs = {"echo": False, "pool_pre_ping": True}
+if "sqlite" not in settings.DATABASE_URL:
+    engine_kwargs.update({
+        "pool_size": 20,
+        "max_overflow": 20,
+        "pool_timeout": 30,
+        "pool_recycle": 1800,
+    })
+engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 _logger = logging.getLogger(__name__)
 
