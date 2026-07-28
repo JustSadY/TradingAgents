@@ -40,6 +40,7 @@ interface WsEvent {
 }
 const STORAGE_KEY = 'ta_last_run'
 const TASK_KEY = 'ta_task_running'
+const TERMINAL_TASK_CONFIRMATION_DELAY_MS = 250
 
 // Build an absolute ws(s)://host URL rather than a bare relative path —
 // `new WebSocket('/path')` (protocol-relative-by-omission) is only reliably
@@ -114,6 +115,21 @@ function emptyRun(): SavedRun {
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * ``/api/analysis/active`` is the authoritative live-task registry.  A
+ * WebSocket can close after the worker has already reached a terminal state
+ * (for example if it could not flush its final event), so its close alone is
+ * not enough evidence that the browser should keep reconnecting.
+ *
+ * ``null`` means the probe itself was unusable.  In that case callers retain
+ * the bounded reconnect behaviour rather than treating a transient API
+ * failure as a failed analysis.
+ */
+function activeTaskState(value: unknown, taskId: string): boolean | null {
+  if (!Array.isArray(value)) return null
+  return value.some(task => isRecord(task) && task.task_id === taskId)
 }
 
 function tickerSuggestions(value: unknown): TickerSuggestion[] {
@@ -263,6 +279,13 @@ function RunTab() {
 
   const wsRef = useRef<WebSocket | null>(null)
   const taskIdRef = useRef<string | null>(null)
+  // Timers need to invoke the latest attach callback without making the
+  // callback recursively reference its own initializer.
+  const attachWsRef = useRef<(taskId: string, reconnectAttempt?: number) => void>(() => {})
+  // `useActiveTasks` is intentionally polled, so it can briefly contain an
+  // already-terminal task after the WebSocket delivered (or inferred) its
+  // terminal state. Do not let that stale snapshot attach the task again.
+  const terminalTaskIdRef = useRef<string | null>(null)
   // A persisted task should be resumed once per mount. In particular, don't
   // let a language/context rerender or a delayed API response replace an
   // already-live socket for the same task.
@@ -408,29 +431,7 @@ function RunTab() {
     const ws = openAnalysisWebSocket(taskId, getAccessToken())
     wsRef.current = ws
     let finished = false
-
-    const scheduleReconnect = () => {
-      // Only the socket that is still current may schedule a reconnect.  This
-      // prevents an old timer from replacing the socket for a newer task.
-      if (stoppedByUserRef.current || taskIdRef.current !== taskId || wsRef.current !== ws) return
-      const nextAttempt = reconnectAttempt + 1
-      if (nextAttempt <= maxReconnectRetries) {
-        const delay = Math.min(1000 * Math.pow(2, nextAttempt - 1), 8000)
-        appendLog(`🔄 Reconnecting... (attempt ${nextAttempt}/${maxReconnectRetries})`)
-        reconnectTimeoutRef.current = setTimeout(() => {
-          reconnectTimeoutRef.current = null
-          if (stoppedByUserRef.current || taskIdRef.current !== taskId || wsRef.current !== ws) return
-          attachWs(taskId, nextAttempt)
-        }, delay)
-      } else {
-        setRunStatus('error')
-        setRunning_(false)
-        appendLog(t('analysis.ws.conn_closed'))
-        if (reconnectAttempt > 0) {
-          notify('error', t('analysis.ws.conn_closed'), t('analysis.ws.analysis_interrupted'))
-        }
-      }
-    }
+    let terminalProbePending = false
 
     const appendLog = (line: string) => {
       if (preRefreshLogRef.current && preRefreshLogRef.current.length > 0) {
@@ -445,6 +446,84 @@ function RunTab() {
       if (seenLogRef.current.has(line)) return
       seenLogRef.current.add(line)
       setLog(l => [...l, line])
+    }
+
+    const markConnectionAsTerminalFailure = () => {
+      // The task may have finished while its terminal event was being
+      // persisted.  Do not let a close/reconnect loop leave the page in a
+      // false "Running" state after the server has removed that task.
+      finished = true
+      terminalTaskIdRef.current = taskId
+      if (wsRef.current === ws) wsRef.current = null
+      setRunStatus('error')
+      setRunning_(false)
+      setCurrentStep(null)
+      setMentalModel(null)
+      appendLog(t('analysis.ws.conn_closed'))
+      notify('error', t('analysis.ws.conn_closed'), t('analysis.ws.analysis_interrupted'))
+    }
+
+    const scheduleRetry = () => {
+      // Only the socket that is still current may schedule a reconnect.  This
+      // prevents an old timer from replacing the socket for a newer task.
+      if (stoppedByUserRef.current || finished || taskIdRef.current !== taskId || wsRef.current !== ws) return
+      const nextAttempt = reconnectAttempt + 1
+      if (nextAttempt <= maxReconnectRetries) {
+        const delay = Math.min(1000 * Math.pow(2, nextAttempt - 1), 8000)
+        appendLog(`🔄 Reconnecting... (attempt ${nextAttempt}/${maxReconnectRetries})`)
+        reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = null
+          if (stoppedByUserRef.current || finished || taskIdRef.current !== taskId || wsRef.current !== ws) return
+          attachWsRef.current(taskId, nextAttempt)
+        }, delay)
+      } else {
+        markConnectionAsTerminalFailure()
+      }
+    }
+
+    const scheduleReconnect = () => {
+      if (
+        terminalProbePending || stoppedByUserRef.current || finished ||
+        taskIdRef.current !== taskId || wsRef.current !== ws
+      ) return
+      terminalProbePending = true
+
+      // A normal worker shutdown closes the socket after publishing a
+      // terminal event.  If that publish itself fails, blindly reconnecting
+      // only creates noisy attempts and leaves the UI running.  Probe the
+      // active-task registry first; a failed/unreachable probe deliberately
+      // falls back to the bounded retry path.
+      const probeTaskState = async (): Promise<boolean | null> => {
+        try {
+          const { data } = await axios.get('/api/analysis/active', { timeout: 2_000 })
+          return activeTaskState(data, taskId)
+        } catch {
+          return null
+        }
+      }
+
+      void (async () => {
+        let isActive = await probeTaskState()
+        if (isActive === false) {
+          // A failed inline run can briefly disappear from the local registry
+          // while its one allowed retry is being queued. Confirm the absence
+          // once before declaring the run terminal, without emitting a noisy
+          // reconnect entry in the meantime.
+          await new Promise<void>(resolve => setTimeout(resolve, TERMINAL_TASK_CONFIRMATION_DELAY_MS))
+          isActive = await probeTaskState()
+        }
+
+        terminalProbePending = false
+        if (
+          stoppedByUserRef.current || finished || taskIdRef.current !== taskId ||
+          wsRef.current !== ws
+        ) return
+        if (isActive === false) {
+          markConnectionAsTerminalFailure()
+          return
+        }
+        scheduleRetry()
+      })()
     }
 
     ws.onmessage = (e) => {
@@ -510,6 +589,7 @@ function RunTab() {
         setSignal(ev.signal || null)
       } else if (ev.type === 'complete') {
         finished = true
+        terminalTaskIdRef.current = taskId
         setRunStatus('done')
         setRunning_(false)
         setCurrentStep(null)
@@ -526,6 +606,7 @@ function RunTab() {
         }
       } else if (ev.type === 'error') {
         finished = true
+        terminalTaskIdRef.current = taskId
         if (ev.message === "Analysis cancelled.") {
           setRunStatus('idle')
           setRunning_(false)
@@ -555,12 +636,17 @@ function RunTab() {
     // isn't torn down and recreated on every ticker keystroke.
   }, [t])
 
+  useEffect(() => {
+    attachWsRef.current = attachWs
+  }, [attachWs])
+
   // Effect to sync with active tasks from the server (Cross-device fix)
   useEffect(() => {
     if (stoppedByUserRef.current || activeTasks.length === 0 || running) return
 
     // If there's an active task on the server but we are 'idle' here, sync it.
     const task = activeTasks[0]
+    if (terminalTaskIdRef.current === task.task_id) return
     if (taskIdRef.current === task.task_id) return
     runStartedRef.current = true
     setTicker(task.ticker)
@@ -667,6 +753,7 @@ function RunTab() {
     // Invalidate any in-flight /run request before awaiting its response.
     runRequestRef.current += 1
     stoppedByUserRef.current = true
+    terminalTaskIdRef.current = tid
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = null
@@ -690,6 +777,7 @@ function RunTab() {
     const requestId = ++runRequestRef.current
     setShowRerunModal(false)
     stoppedByUserRef.current = false
+    terminalTaskIdRef.current = null
     runStartedRef.current = true
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
@@ -752,6 +840,7 @@ function RunTab() {
 
   const handleRollbackStart = (taskId: string) => {
     stoppedByUserRef.current = false
+    terminalTaskIdRef.current = null
     runStartedRef.current = true
     setRunning(true)
     setRunStatus('running')

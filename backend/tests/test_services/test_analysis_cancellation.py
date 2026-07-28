@@ -107,6 +107,108 @@ async def test_queued_analysis_never_enters_graph_after_cancel_marker(monkeypatc
     assert _Emitter.instances[0].closed is True
 
 
+async def test_cancelled_incremental_update_rolls_back_before_terminal_write(monkeypatch):
+    """Cancellation cleanup must not dereference an ORM row after a bad flush."""
+    from backend.services.analysis import orchestrator
+
+    class _Row:
+        def __init__(self):
+            self.id_accesses = 0
+
+        @property
+        def id(self) -> int:
+            self.id_accesses += 1
+            if self.id_accesses > 1:
+                raise AssertionError("Cancellation cleanup must use the captured row id")
+            return 42
+
+    class _Db:
+        def __init__(self):
+            self.events: list[str] = []
+
+        async def rollback(self) -> None:
+            self.events.append("rollback")
+
+    class _RunEmitter:
+        task_id = "cancelled-flush"
+
+        def __init__(self):
+            self.errors: list[str] = []
+
+        async def emit_status(self, **_kwargs) -> None:
+            return None
+
+        async def emit_error(self, message: str) -> None:
+            self.errors.append(message)
+
+    row = _Row()
+    db = _Db()
+    emitter = _RunEmitter()
+
+    async def skeleton(*_args, **_kwargs):
+        return row
+
+    async def cancelled_settings(_db):
+        raise asyncio.CancelledError
+
+    async def mark_cancelled(mark_db, row_id: int) -> None:
+        assert mark_db is db
+        assert row_id == 42
+        assert db.events == ["rollback"]
+        db.events.append("mark_cancelled")
+
+    monkeypatch.setattr(orchestrator, "create_skeleton_result", skeleton)
+    monkeypatch.setattr(orchestrator, "get_system_settings", cancelled_settings)
+    monkeypatch.setattr(orchestrator, "mark_as_cancelled", mark_cancelled)
+
+    with pytest.raises(asyncio.CancelledError):
+        await orchestrator.run_individual_analysis("NVDA", "2026-07-28", "stock", None, db, emitter)
+
+    assert row.id_accesses == 1
+    assert db.events == ["rollback", "mark_cancelled"]
+    assert emitter.errors == ["Analysis cancelled."]
+
+
+async def test_cancelled_status_cleanup_does_not_mask_cancellation(monkeypatch):
+    """A DB cleanup fault must propagate the original cancellation, not a failure."""
+    from backend.services.analysis import orchestrator
+
+    class _Row:
+        id = 73
+
+    class _Db:
+        async def rollback(self) -> None:
+            return None
+
+    class _RunEmitter:
+        task_id = "cancelled-cleanup-failure"
+
+        async def emit_status(self, **_kwargs) -> None:
+            return None
+
+        async def emit_error(self, _message: str) -> None:
+            return None
+
+    async def skeleton(*_args, **_kwargs):
+        return _Row()
+
+    async def cancelled_settings(_db):
+        raise asyncio.CancelledError
+
+    async def broken_mark(*_args, **_kwargs) -> None:
+        raise RuntimeError("database temporarily unavailable")
+
+    monkeypatch.setattr(orchestrator, "create_skeleton_result", skeleton)
+    monkeypatch.setattr(orchestrator, "get_system_settings", cancelled_settings)
+    monkeypatch.setattr(orchestrator, "mark_as_cancelled", broken_mark)
+
+    # The persistence helper is deliberately best effort, allowing the outer
+    # handler to re-raise its original CancelledError instead of entering the
+    # generic background-failure path.
+    with pytest.raises(asyncio.CancelledError):
+        await orchestrator.run_individual_analysis("NVDA", "2026-07-28", "stock", None, _Db(), _RunEmitter())
+
+
 async def test_portfolio_parent_is_registered_and_cancelled_with_children(monkeypatch):
     """Portfolio jobs need the same parent registry lifecycle as single runs."""
     task_id = "portfolio-cancel-regression"

@@ -550,6 +550,105 @@ describe('Analysis', () => {
     expect(screen.getByTestId('run-state')).toHaveTextContent('idle')
   })
 
+  it('marks a closed task as failed instead of retrying or reviving it from a stale active-task snapshot', async () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onclose: ((event: CloseEvent) => void) | null = null
+      onerror: ((event: Event) => void) | null = null
+
+      constructor() {
+        MockWebSocket.instances.push(this)
+      }
+
+      close() {
+        this.onclose?.(new CloseEvent('close'))
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket)
+
+    const task = {
+      task_id: 'terminal-task', ticker: 'NVDA', trade_date: '2026-07-28', asset_type: 'stock', started_at: 0,
+      status: 'running',
+    }
+    const axios = await import('axios')
+    vi.mocked(axios.default.get).mockImplementation((url: string) => {
+      // The hook deliberately still has this stale snapshot. The close-time
+      // probe is authoritative and says the worker already removed the task.
+      if (url === '/api/analysis/active') return Promise.resolve({ data: [] })
+      return Promise.resolve({ data: {} })
+    })
+
+    localStorage.setItem('test_active_tasks', JSON.stringify([task]))
+    localStorage.setItem('ta_task_running', JSON.stringify({
+      ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
+    }))
+    render(<Analysis />)
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+    act(() => MockWebSocket.instances[0].close())
+
+    await waitFor(() => {
+      expect(screen.getByTestId('run-state')).toHaveTextContent('idle')
+      expect(screen.getByTestId('run-status')).toHaveTextContent('error')
+    })
+    expect(MockWebSocket.instances).toHaveLength(1)
+    expect(localStorage.getItem('ta_task_running')).toBeNull()
+  })
+
+  it('keeps reconnecting when the close-time task probe confirms the analysis is still active', async () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onclose: ((event: CloseEvent) => void) | null = null
+      onerror: ((event: Event) => void) | null = null
+
+      constructor() {
+        MockWebSocket.instances.push(this)
+      }
+
+      close() {
+        this.onclose?.(new CloseEvent('close'))
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket)
+
+    const task = {
+      task_id: 'active-task', ticker: 'NVDA', trade_date: '2026-07-28', asset_type: 'stock', started_at: 0,
+      status: 'running',
+    }
+    const axios = await import('axios')
+    vi.mocked(axios.default.get).mockImplementation((url: string) => {
+      if (url === '/api/analysis/active') return Promise.resolve({ data: [task] })
+      return Promise.resolve({ data: {} })
+    })
+
+    localStorage.setItem('test_active_tasks', JSON.stringify([task]))
+    localStorage.setItem('ta_task_running', JSON.stringify({
+      ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
+    }))
+    render(<Analysis />)
+
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+    vi.useFakeTimers()
+    act(() => MockWebSocket.instances[0].close())
+    await act(async () => {
+      // Flush the async close-time `/active` probe before advancing its
+      // reconnect delay.  The mock resolves on a Promise microtask rather
+      // than a fake timer.
+      for (let index = 0; index < 6; index += 1) await Promise.resolve()
+    })
+    expect(axios.default.get).toHaveBeenCalledWith('/api/analysis/active', { timeout: 2_000 })
+    await act(async () => {
+      // Resumed tasks begin at reconnect attempt 1, so the next exponential
+      // delay is two seconds.
+      await vi.advanceTimersByTimeAsync(2_000)
+    })
+
+    expect(MockWebSocket.instances).toHaveLength(2)
+    expect(screen.getByTestId('run-state')).toHaveTextContent('running')
+  })
+
   it('shows structured unknown-symbol API errors and only applies a suggestion after an explicit click', async () => {
     const axios = await import('axios')
     vi.mocked(axios.default.get).mockResolvedValue({ data: {} })

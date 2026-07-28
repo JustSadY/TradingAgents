@@ -142,13 +142,20 @@ async def _clear_terminal_task_state(task_id: str, user_id: int | None) -> None:
     await task_store.clear_cancel_request(task_id)
 
 
-async def _emit_cancelled_task(task_id: str) -> None:
-    """Tell subscribers about a pre-start or portfolio cancellation."""
+async def _emit_cancelled_task(task_id: str, *, close: bool = True) -> None:
+    """Tell subscribers about a pre-start or portfolio cancellation.
+
+    ``run_analysis_task`` can defer the close while it is unwinding a
+    cancelled database operation.  That preserves the important wire order:
+    subscribers receive the terminal ``error`` event before the socket is
+    closed.  Other callers retain the one-shot emit-and-close behaviour.
+    """
     emitter = AnalysisEmitter(task_id)
     try:
         await emitter.emit_error("Analysis cancelled.")
     finally:
-        await emitter.close()
+        if close:
+            await emitter.close()
 
 
 async def run_analysis(
@@ -160,8 +167,17 @@ async def run_analysis(
     triggered_by: str = "manual",
     task_id: str | None = None,
     user=None,
+    *,
+    defer_terminal_cleanup: bool = False,
 ):
-    """Facade for individual analysis orchestration."""
+    """Facade for individual analysis orchestration.
+
+    A background runner has work after the graph returns (the final commit and
+    optional signal order).  It passes ``defer_terminal_cleanup=True`` so the
+    task stays cancellable and its WebSocket remains open until that outer
+    runner has emitted/handled the terminal outcome.  Direct callers keep the
+    historical self-contained lifecycle by default.
+    """
     import uuid
 
     if task_id is None:
@@ -187,14 +203,22 @@ async def run_analysis(
         if await task_store.is_cancel_requested(task_id):
             await emitter.emit_error("Analysis cancelled.")
             raise asyncio.CancelledError
-
         return await run_individual_analysis(ticker, trade_date, asset_type, settings, db, emitter, triggered_by, user)
+    except Exception as exc:
+        # The inner orchestrator normally emits an error before re-raising.
+        # Track the fact only after the event was actually published: errors
+        # before that point (for example while creating the skeleton record)
+        # may still use the bounded infrastructure retry.
+        if getattr(emitter, "terminal_event_emitted", False):
+            exc._analysis_terminal_event_emitted = True
+        raise
     finally:
-        _RUNNING_TASKS.pop(task_id, None)
-        _TASK_REGISTRY.pop(task_id, None)
-        _TASK_OWNERS.pop(task_id, None)
-        await task_store.clear_owner(task_id)
-        await emitter.close()
+        if not defer_terminal_cleanup:
+            _RUNNING_TASKS.pop(task_id, None)
+            _TASK_REGISTRY.pop(task_id, None)
+            _TASK_OWNERS.pop(task_id, None)
+            await task_store.clear_owner(task_id)
+            await emitter.close()
 
 
 _ANALYSIS_RETRY_MAX = 1
@@ -213,6 +237,11 @@ async def run_analysis_task(
         from backend.core.log_handler import current_user_id
 
         current_user_id.set(user.id)
+    # Keep the stream and distributed task ownership alive across a scheduled
+    # retry.  The retry uses the same task id, so closing it here would make a
+    # healthy retry look like a dead WebSocket to the client.
+    retry_scheduled = False
+    analysis_completed = False
     async with AsyncSessionLocal() as db:
         try:
             _, row = await run_analysis(
@@ -224,7 +253,12 @@ async def run_analysis_task(
                 "manual",
                 task_id=task_id,
                 user=user,
+                defer_terminal_cleanup=True,
             )
+            # ``run_individual_analysis`` emits ``complete`` before returning.
+            # A later final-commit/order failure must not resurrect that
+            # completed task as an invisible retry.
+            analysis_completed = True
             await db.commit()
             # Signal-based paper trading (separate txn — analysis already committed)
             if await task_store.is_cancel_requested(task_id):
@@ -249,17 +283,45 @@ async def run_analysis_task(
                 _logger.exception("Could not persist cancelled analysis task=%s", task_id)
             await _clear_terminal_task_state(task_id, user.id if user else None)
             raise
-        except Exception:
-            _logger.exception("Background analysis failed")
+        except Exception as exc:
+            # A cancellation can interrupt an awaited DB flush/commit.  In
+            # that case SQLAlchemy raises a non-cancellation follow-up error
+            # while the session is rolling back.  Prefer the durable Stop
+            # intent over reporting that expected race as a backend failure.
             if await task_store.is_cancel_requested(task_id):
+                _logger.info("Background analysis stopped during failure cleanup task=%s", task_id)
                 await db.rollback()
-                await _emit_cancelled_task(task_id)
+                await _emit_cancelled_task(task_id, close=False)
                 await _clear_terminal_task_state(task_id, user.id if user else None)
                 return
+            if analysis_completed or getattr(exc, "_analysis_terminal_event_emitted", False):
+                _logger.info("Not retrying analysis with an emitted terminal event task=%s", task_id)
+                await _clear_terminal_task_state(task_id, user.id if user else None)
+                return
+            _logger.exception("Background analysis failed")
             try:
-                await _maybe_retry_analysis(ticker, trade_date, asset_type, settings, task_id, user)
+                retry_scheduled = await _maybe_retry_analysis(ticker, trade_date, asset_type, settings, task_id, user)
             except Exception:
                 _logger.exception("Analysis retry failed for task=%s", task_id)
+            if not retry_scheduled:
+                # Do not leave an in-memory owner/registry entry behind when
+                # the retry budget is exhausted or enqueueing itself failed.
+                if await task_store.is_cancel_requested(task_id):
+                    await _emit_cancelled_task(task_id, close=False)
+                else:
+                    await AnalysisEmitter(task_id).emit_error("Analysis failed before completion. Please try again.")
+                await _clear_terminal_task_state(task_id, user.id if user else None)
+        finally:
+            # ``run_analysis`` deliberately leaves the event stream open for
+            # this background wrapper.  Closing only after the exception
+            # handlers run guarantees that a cancellation/failure terminal
+            # event is delivered before clients observe ``onclose`` and start
+            # reconnecting.
+            if not retry_scheduled:
+                try:
+                    await AnalysisEmitter(task_id).close()
+                except Exception:
+                    _logger.debug("Could not close analysis event stream task=%s", task_id, exc_info=True)
 
 
 async def _maybe_retry_analysis(
@@ -269,7 +331,7 @@ async def _maybe_retry_analysis(
     settings: AppSettings,
     task_id: str,
     user=None,
-) -> None:
+) -> bool:
     """Re-enqueue the analysis if it hasn't been retried too many times.
 
     The retry counter lives in ``task_store`` metadata so it survives across
@@ -280,19 +342,17 @@ async def _maybe_retry_analysis(
 
     if await task_store.is_cancel_requested(task_id):
         _logger.info("Not retrying cancelled analysis task=%s", task_id)
-        await _clear_terminal_task_state(task_id, user.id if user else None)
-        return
+        return False
 
     meta = await task_store.get_meta(task_id) or {}
     retry_count = meta.get("retry_count", 0)
     if retry_count >= _ANALYSIS_RETRY_MAX:
         _logger.warning("Analysis dead-letter task=%s ticker=%s (retried %d times)", task_id, ticker, retry_count)
-        await _clear_terminal_task_state(task_id, user.id if user else None)
-        return
+        return False
     meta["retry_count"] = retry_count + 1
     await _redis_set_meta(task_id, meta)
-    # ``run_analysis`` clears the owner when the failed attempt exits; restore
-    # it while the retry is waiting so the user can still observe or stop it.
+    # The active owner stays registered while this same task id is waiting for
+    # its retry, so a Stop request remains authorized and durable.
     await register_task_owner(task_id, user.id if user else None)
     _logger.info(
         "Re-enqueuing analysis task=%s ticker=%s (retry %d/%d)", task_id, ticker, retry_count + 1, _ANALYSIS_RETRY_MAX
@@ -309,6 +369,7 @@ async def _maybe_retry_analysis(
         task = asyncio.create_task(run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user))
         _BACKGROUND_TASKS.add(task)
         task.add_done_callback(_BACKGROUND_TASKS.discard)
+    return True
 
 
 async def run_portfolio_task(

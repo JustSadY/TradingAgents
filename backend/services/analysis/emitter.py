@@ -12,6 +12,11 @@ class AnalysisEmitter:
     def __init__(self, task_id: str, loop: asyncio.AbstractEventLoop | None = None):
         self.task_id = task_id
         self.loop = loop or asyncio.get_running_loop()
+        # This is deliberately local to one runner/emitter instance.  It lets
+        # the outer task wrapper distinguish an error that was already shown
+        # to the client from an early infrastructure failure that is still
+        # eligible for its bounded retry.
+        self.terminal_event_emitted = False
 
     async def emit(self, event: dict[str, Any]) -> None:
         """Send an event to the task's WebSocket subscribers (direct or via Redis)."""
@@ -67,9 +72,11 @@ class AnalysisEmitter:
                 "estimated_cost_usd": estimated_cost_usd,
             }
         )
+        self.terminal_event_emitted = True
 
     async def emit_error(self, message: str) -> None:
         await self.emit({"type": "error", "message": message})
+        self.terminal_event_emitted = True
 
     async def emit_retry(self, node: str, attempt: int, max_attempts: int, error: str) -> None:
         await self.emit(

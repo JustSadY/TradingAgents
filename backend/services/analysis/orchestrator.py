@@ -38,6 +38,31 @@ async def _emit_system_status(emitter: AnalysisEmitter, message: str, status: st
     await emitter.emit_status(agent="system", status=status, message=message)
 
 
+async def _persist_terminal_status(db: AsyncSession, row_id: int, *, status: str) -> None:
+    """Reset an interrupted transaction before writing a terminal state.
+
+    A cancellation can interrupt an asyncpg commit after SQLAlchemy has expired
+    ORM attributes but before the transaction is usable again.  This helper
+    intentionally accepts the already-captured scalar primary key so terminal
+    cleanup never dereferences an expired ``AnalysisResult`` instance.
+
+    Terminal persistence is best effort: its own failure must not turn an
+    external cancellation into a misleading "analysis failed" error.
+    """
+    try:
+        await db.rollback()
+        if status == "cancelled":
+            await mark_as_cancelled(db, row_id)
+        else:
+            await mark_as_failed(db, row_id)
+    except asyncio.CancelledError:
+        # A second cancellation is still cancellation, never an analysis
+        # failure.  Let the caller preserve that terminal signal.
+        raise
+    except Exception:
+        _logger.exception("Could not persist terminal analysis status=%s row_id=%s", status, row_id)
+
+
 async def _heartbeat_monitor(
     emitter: AnalysisEmitter,
     last_event_at,
@@ -139,10 +164,14 @@ async def run_individual_analysis(
         triggered_by,
         persisted_user_id,
     )
-
-    await _emit_system_status(emitter, "Initializing")
+    # Capture the scalar identifier while the initial transaction is healthy.
+    # A later cancelled commit can expire ``row`` and make ``row.id`` trigger
+    # a PendingRollbackError during cancellation cleanup.
+    row_id = row.id
 
     try:
+        await _emit_system_status(emitter, "Initializing")
+
         sys_settings = await get_system_settings(db)
 
         await _emit_system_status(emitter, "Preparing engine...")
@@ -533,9 +562,14 @@ async def run_individual_analysis(
 
         ANALYSIS_RUNS.labels(status="cancelled").inc()
 
-        await mark_as_cancelled(db, row.id)
+        await _persist_terminal_status(db, row_id, status="cancelled")
 
-        await emitter.emit_error("Analysis cancelled.")
+        try:
+            await emitter.emit_error("Analysis cancelled.")
+        except Exception:
+            # Losing a transport during Stop should not relabel the task as a
+            # background failure after it has already been cancelled.
+            _logger.warning("Could not emit cancellation event task=%s", emitter.task_id, exc_info=True)
 
         raise
 
@@ -544,7 +578,7 @@ async def run_individual_analysis(
 
         ANALYSIS_RUNS.labels(status="failed").inc()
 
-        await mark_as_failed(db, row.id)
+        await _persist_terminal_status(db, row_id, status="failed")
 
         exc_str = str(exc)
 

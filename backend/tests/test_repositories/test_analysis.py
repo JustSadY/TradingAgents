@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+import asyncio
+from types import SimpleNamespace
+
+import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.analysis import AnalysisResult
@@ -128,6 +132,58 @@ class TestAnalysisRepository:
         assert updated is not None
         assert updated.signal == "sell"
         assert updated.market_report == "updated report"
+
+    async def test_update_analysis_result_rolls_back_when_commit_is_cancelled(self):
+        """A cancelled asyncpg flush must not poison the caller's session."""
+
+        row = SimpleNamespace(signal="buy")
+
+        class _Result:
+            def scalar_one_or_none(self):
+                return row
+
+        class _Session:
+            def __init__(self):
+                self.calls: list[str] = []
+
+            async def execute(self, _statement):
+                self.calls.append("execute")
+                return _Result()
+
+            async def commit(self):
+                self.calls.append("commit")
+                raise asyncio.CancelledError
+
+            async def rollback(self):
+                self.calls.append("rollback")
+
+        session = _Session()
+
+        with pytest.raises(asyncio.CancelledError):
+            await update_analysis_result(session, 17, signal="sell")
+
+        assert row.signal == "sell"
+        assert session.calls == ["execute", "commit", "rollback"]
+
+    async def test_update_analysis_result_keeps_cancellation_when_rollback_fails(self):
+        """Rollback cleanup must not convert a Stop request into a DB failure."""
+
+        class _Result:
+            def scalar_one_or_none(self):
+                return SimpleNamespace(signal="buy")
+
+        class _Session:
+            async def execute(self, _statement):
+                return _Result()
+
+            async def commit(self):
+                raise asyncio.CancelledError
+
+            async def rollback(self):
+                raise RuntimeError("connection dropped during rollback")
+
+        with pytest.raises(asyncio.CancelledError):
+            await update_analysis_result(_Session(), 17, signal="sell")
 
     async def test_cleanup_stale_analyses(self, db: AsyncSession, test_user: User):
         await self._create_analysis(db, test_user.id, status="running")
