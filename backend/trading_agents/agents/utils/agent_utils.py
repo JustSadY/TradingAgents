@@ -51,7 +51,7 @@ __all__ = [
     "get_options_data",
     "get_quant_data",
     "run_strategy_backtest",
-    "get_language_instruction",
+    "_get_language_instruction",
     "get_general_settings_block",
     "get_system_instruction_override",
     "build_instrument_context",

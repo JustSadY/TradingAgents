@@ -16,8 +16,6 @@ import type { Notification } from '../utils/notify'
 import UpdateBanner from './UpdateBanner'
 import { PortfolioAssistant } from './assistant/PortfolioAssistant'
 
-interface RunningTask { ticker: string; taskId: string; startedAt: string }
-
 interface NavItem {
   to: string
   key: string
@@ -73,6 +71,8 @@ const NAV_SECTIONS: NavSection[] = [
   }
 ]
 
+import { useActiveTasks } from '../hooks/useActiveTasks'
+
 export default function Layout() {
   const { user, isAdmin, logout } = useAuth()
   const { canAccess } = usePermissions()
@@ -81,46 +81,14 @@ export default function Layout() {
   const { currency, setCurrency } = useCurrency()
   const [sidebarOpen, setSidebarOpen] = useState(false)
   const [cronStatus, setCronStatus] = useState<{ next_run_time: string | null }>({ next_run_time: null })
-  const [runningTask, setRunningTask] = useState<RunningTask | null>(() => {
-    try { return JSON.parse(localStorage.getItem('ta_task_running') || 'null') } catch { return null }
-  })
+  const { activeTasks } = useActiveTasks()
+  const activeTask = activeTasks[0] || null
 
   useEffect(() => {
     const fetch = () => axios.get('/api/cron/status').then(r => setCronStatus(r.data)).catch(() => {})
     fetch()
     const id = setInterval(fetch, 30_000)
     return () => clearInterval(id)
-  }, [])
-
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => {
-      if (e.key === 'ta_task_running') {
-        try { setRunningTask(e.newValue ? JSON.parse(e.newValue) : null) }
-        catch { setRunningTask(null) }
-      }
-    }
-    window.addEventListener('storage', onStorage)
-
-    const MAX_TASK_AGE_MS = 30 * 60 * 1000
-    const id = setInterval(() => {
-      try {
-        const raw = localStorage.getItem('ta_task_running')
-        let val: RunningTask | null = raw ? JSON.parse(raw) : null
-        if (val?.startedAt) {
-          const age = Date.now() - new Date(val.startedAt).getTime()
-          if (!Number.isNaN(age) && age > MAX_TASK_AGE_MS) {
-            localStorage.removeItem('ta_task_running')
-            val = null
-          }
-        }
-        setRunningTask(prev => {
-          const prevJson = JSON.stringify(prev)
-          const nextJson = JSON.stringify(val)
-          return prevJson === nextJson ? prev : val
-        })
-      } catch { /* malformed task json — ignore */ }
-    }, 1000)
-    return () => { window.removeEventListener('storage', onStorage); clearInterval(id) }
   }, [])
 
   const handleLogout = () => { logout(); navigate('/login') }
@@ -167,13 +135,13 @@ export default function Layout() {
           </div>
           <p className="text-white font-display font-bold text-sm tracking-tight">TradingAgents</p>
         </div>
-        {runningTask && (
+        {activeTask && (
           <div className="ml-auto flex items-center gap-1.5 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-lg">
             <span className="relative flex h-2 w-2">
               <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
               <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500" />
             </span>
-            <span className="text-emerald-400 text-[10px] font-mono font-bold uppercase">{runningTask.ticker}</span>
+            <span className="text-emerald-400 text-[10px] font-mono font-bold uppercase">{activeTask.ticker}</span>
           </div>
         )}
       </header>
@@ -272,7 +240,7 @@ export default function Layout() {
         </nav>
 
         {/* Background Task Indicator */}
-        {runningTask && (
+        {activeTask && (
           <div className="mx-3 mb-2 px-3 py-2.5 rounded-xl bg-emerald-500/5 border border-emerald-500/15">
             <div className="flex items-center gap-2">
               <span className="relative flex h-2 w-2 shrink-0">
@@ -281,7 +249,7 @@ export default function Layout() {
               </span>
               <Loader2 size={12} className="text-emerald-400 animate-spin shrink-0" />
               <div className="flex-1 min-w-0">
-                <p className="text-emerald-300 text-[10px] font-bold truncate leading-none mb-0.5">{runningTask.ticker} {t('nav.analyzing')}</p>
+                <p className="text-emerald-300 text-[10px] font-bold truncate leading-none mb-0.5">{activeTask.ticker} {t('nav.analyzing')}</p>
                 <p className="text-emerald-500/70 text-[9px] font-medium">{t('nav.running_in_bg')}</p>
               </div>
             </div>
