@@ -154,8 +154,9 @@ async def _answer_as_analyst(ctx: AgentRunContext, analyst_key: str, label: str,
     messages = [
         (
             "system",
-            f"You are the {label}. Answer a peer analyst's question using ONLY your own report and analysis. "
-            "Be concise (2-4 sentences), concede points your report cannot support, and do not invent new data."
+            f"You are the {label}. Answer a peer analyst's question constructively by integrating their perspective with your domain findings. "
+            "Explain how your domain outlook (e.g. technical levels, sentiment signals, or fundamentals) interacts with, adapts to, or mitigates the risk/opportunity they raised. "
+            "Be concise (2-4 sentences) and professional."
             + get_general_settings_block(),
         ),
         ("human", f"Your report:\n{report.strip()[:4000]}\n\nPeer's question: {question}"),

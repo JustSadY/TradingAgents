@@ -110,8 +110,8 @@ VENDOR_METHODS = {
         "yfinance": get_yfin_data_online,
     },
     "get_indicators": {
-        "alpha_vantage": get_alpha_vantage_indicator,
         "yfinance": get_stock_stats_indicators_window,
+        "alpha_vantage": get_alpha_vantage_indicator,
     },
     "get_fundamentals": {
         "alpha_vantage": get_alpha_vantage_fundamentals,
