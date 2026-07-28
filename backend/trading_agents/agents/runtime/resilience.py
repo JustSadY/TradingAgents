@@ -26,6 +26,8 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
+from backend.trading_agents.llm_clients.base_client import is_provider_function_degraded
+
 # Dedicated run-log stream. Filter logs by this logger name to get the
 # per-agent / per-tool execution trace.
 run_logger = logging.getLogger("tradingagents.run")
@@ -134,23 +136,59 @@ def log_event(event: str, *, level: int = logging.INFO, **fields) -> None:
     run_logger.log(level, "run_event %s", payload)
 
 
+def _active_runtime_config() -> dict | None:
+    """Read graph config from the current task instead of process-global state."""
+    try:
+        from backend.trading_agents.agents.data.chart_tools import active_run_context
+
+        ctx = active_run_context.get(None) or {}
+        graph = ctx.get("graph")
+        config = getattr(graph, "config", None)
+        return config if isinstance(config, dict) else None
+    except Exception:
+        return None
+
+
+def _touch_activity() -> None:
+    """Record node/retry/tool lifecycle activity for this task, best-effort."""
+    try:
+        from backend.services.analysis.activity import touch_current_analysis
+
+        touch_current_analysis()
+    except Exception:
+        return
+
+
+def _is_timeout_error(exc: BaseException) -> bool:
+    # ``asyncio.TimeoutError`` is an alias of the built-in exception on modern
+    # Python, but keeping both makes the intent clear for all supported runtimes.
+    return isinstance(exc, (TimeoutError, asyncio.TimeoutError))
+
+
 def is_transient(exc: BaseException) -> bool:
+    # ``asyncio.wait_for`` raises an empty ``TimeoutError``.  Looking only at
+    # message substrings classified it as a permanent bug and made timeout
+    # retry policy depend on the error text.
+    if _is_timeout_error(exc) or isinstance(exc, ConnectionError):
+        return True
     return any(hint in str(exc).lower() for hint in _TRANSIENT_HINTS)
 
 
 def classify_error(exc: BaseException) -> str:
     """Classify an exception into a high-level error category.
 
-    Returns one of ``"auth"``, ``"quota"``, ``"timeout"``, ``"transient"``,
-    or ``"bug"``. Used for Prometheus label cardinality and post-run
-    diagnostics.
+    Returns one of ``"auth"``, ``"quota"``, ``"timeout"``,
+    ``"provider_degraded"``, ``"transient"``, or ``"bug"``. Used for
+    Prometheus label cardinality and post-run diagnostics.
     """
     msg = str(exc).lower()
+    if is_provider_function_degraded(exc):
+        return "provider_degraded"
     if any(k in msg for k in ("401", "unauthorized", "invalid api key", "auth")):
         return "auth"
     if any(k in msg for k in ("429", "quota", "rate limit", "ratelimit", "rate_limit")):
         return "quota"
-    if any(k in msg for k in ("timeout", "timed out", "deadline")):
+    if _is_timeout_error(exc) or any(k in msg for k in ("timeout", "timed out", "deadline")):
         return "timeout"
     if is_transient(exc):
         return "transient"
@@ -176,37 +214,49 @@ async def retry_call(
     attempts: int | None = None,
     base_delay: float | None = None,
     timeout: float | None = None,
-    retry_all: bool = True,
+    timeout_multiplier: float = 1.0,
+    retry_all: bool = False,
+    retry_timeouts: bool = True,
     run_in_thread: bool = False,
     runtime_config: dict | None = None,
 ) -> Any:
     """Call ``fn`` with retries + exponential backoff.
 
     ``attempts`` is the total number of tries (default from config
-    ``node_retry_attempts`` = 1). By default every exception is retried; set
-    ``retry_all=False`` to only retry errors that look transient.
+    ``node_retry_attempts``).  By default only transient failures are retried;
+    set ``retry_all=True`` only for an explicitly idempotent operation.
 
     ``timeout`` wraps each invocation in ``asyncio.wait_for`` so a hung
-    provider can't stall the run. Timeouts are treated as transient errors
-    and feed into the retry path.
+    provider can't stall the run. ``timeout_multiplier`` lets a coordinator
+    own several bounded leaf calls without being cut off after the first one.
+    Timeouts are transient by default; coordinators can set
+    ``retry_timeouts=False`` so a partial multi-step run is not restarted.
 
-    Note: ``node_retry_attempts = 1`` (no retries) is the default because
-    the provider quota (32 requests) is tight — each retry burns a precious
-    request. The inner ``_retry_llm_call`` or ``retry_call`` at the
-    sub-agent level already provides a finer-grained retry for transient
-    LLM errors.
+    The inner ``_retry_llm_call`` or ``retry_call`` at the sub-agent level
+    provides a finer-grained retry for transient LLM errors.
     """
     attempts = int(attempts if attempts is not None else _cfg("node_retry_attempts", 1, runtime_config))
     base_delay = float(base_delay if base_delay is not None else _cfg("node_retry_base_delay", 1.0, runtime_config))
-    timeout = float(timeout) if timeout is not None else _cfg("node_timeout_seconds", 120, runtime_config)
+    timeout_seconds = (
+        float(timeout) if timeout is not None else float(_cfg("node_timeout_seconds", 120, runtime_config))
+    )
+    try:
+        multiplier = float(timeout_multiplier)
+    except (TypeError, ValueError):
+        multiplier = 1.0
+    timeout_seconds = max(0.0, timeout_seconds * max(0.0, multiplier))
+    effective_timeout = timeout_seconds if timeout_seconds > 0 else None
     attempts = max(1, attempts)
     last: BaseException | None = None
     import asyncio
 
     for i in range(attempts):
         try:
+            _touch_activity()
             coro = _execute_fn(fn, run_in_thread)
-            return await asyncio.wait_for(coro, timeout=timeout)
+            if effective_timeout is None:
+                return await coro
+            return await asyncio.wait_for(coro, timeout=effective_timeout)
         except Exception as exc:  # noqa: BLE001 — deliberately broad for resilience
             last = exc
             # Quota exhaustion is permanent — no point retrying.
@@ -214,6 +264,14 @@ async def retry_call(
             if "quota exhausted" in err_msg:
                 break
             if "resourceexhausted" in err_msg and ("total" in err_msg or "quota" in err_msg):
+                break
+            # A hosted model marked ``DEGRADED`` rejects every request until
+            # its provider recovers.  Do not retry the entire graph node and
+            # turn one outage into repeated calls; its configured/model-safe
+            # fallback can take over instead.
+            if is_provider_function_degraded(exc):
+                break
+            if _is_timeout_error(exc) and not retry_timeouts:
                 break
             if i + 1 >= attempts or (not retry_all and not is_transient(exc)):
                 break
@@ -278,16 +336,15 @@ async def _emit_retry_progress(label: str, i: int, attempts: int, exc: Exception
 
 
 def tool_error_handler(exc: Exception) -> str:
-    """``ToolNode`` error handler: log the failure and hand the LLM a message it
-    can act on, so a failing tool falls through to the next one."""
-    log_event("tool_error", level=logging.WARNING, error=str(exc)[:300])
-    m = _metrics()
-    if m:
-        m.TOOL_ERRORS.labels(tool_name="unknown", error_type=classify_error(exc)).inc()
-    return (
-        f"This tool failed ({exc}). Do not retry it; use a different tool or "
-        "continue your analysis with the data already gathered."
-    )
+    """Backward-compatible entry point for contextual tool telemetry.
+
+    New ToolNodes import the implementation directly so they can set a
+    per-call context. Retaining this name avoids silently regressing any
+    extension that still imports the old resilience helper.
+    """
+    from backend.trading_agents.agents.runtime.tool_telemetry import tool_error_handler as _contextual_handler
+
+    return _contextual_handler(exc)
 
 
 def guard_node(
@@ -296,6 +353,8 @@ def guard_node(
     name: str,
     kind: str = "agent",
     fallback: Callable[[dict, BaseException], dict] | None = None,
+    timeout_multiplier: float = 1.0,
+    retry_timeouts: bool = True,
 ) -> Callable:
     """Wrap a graph node so it retries on failure, logs start/end/error, and —
     if it still fails — returns ``fallback(state, exc)`` (a safe partial state
@@ -305,12 +364,14 @@ def guard_node(
 
     async def wrapped(state, *args, **kwargs):
         start = time.time()
+        _touch_activity()
         log_event("node_start", node=name, kind=kind)
 
+        runtime_config = _active_runtime_config()
         ck = _circuit_key(name, kind)
         cb = _circuit_state.get(ck)
-        cb_threshold = _cfg("circuit_breaker_threshold", 3)
-        cb_cooldown = _cfg("circuit_breaker_cooldown", 60)
+        cb_threshold = _cfg("circuit_breaker_threshold", 3, runtime_config)
+        cb_cooldown = _cfg("circuit_breaker_cooldown", 60, runtime_config)
 
         if cb and cb.get("open_since") is not None:
             elapsed = time.time() - cb["open_since"]
@@ -340,12 +401,20 @@ def guard_node(
                     lambda: fn(state, *args, **kwargs),
                     label=f"{kind}:{name}",
                     run_in_thread=False,
+                    timeout_multiplier=timeout_multiplier,
+                    retry_all=False,
+                    retry_timeouts=retry_timeouts,
+                    runtime_config=runtime_config,
                 )
             else:
                 result = await retry_call(
                     lambda: fn(state, *args, **kwargs),
                     label=f"{kind}:{name}",
                     run_in_thread=True,
+                    timeout_multiplier=timeout_multiplier,
+                    retry_all=False,
+                    retry_timeouts=retry_timeouts,
+                    runtime_config=runtime_config,
                 )
             _circuit_state.pop(ck, None)
             _log_node_success(name, kind, start)

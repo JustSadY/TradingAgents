@@ -26,11 +26,17 @@ interface RunEventPayload {
   node?: string
   kind?: string
   label?: string
+  tool?: string
+  tools?: string[]
+  analyst?: string
   error?: string
+  error_type?: string
+  action?: string
   attempt?: number
   attempts?: number
   ms?: number
   delay?: number
+  timeout_seconds?: number
 }
 
 function parseRunEvent(message: string): RunEventPayload | null {
@@ -44,11 +50,20 @@ function parseRunEvent(message: string): RunEventPayload | null {
     const nodeMatch = rawPayload.match(/"node":\s*"([^"]+)"/) || rawPayload.match(/'node':\s*'([^']+)'/)
     const kindMatch = rawPayload.match(/"kind":\s*"([^"]+)"/) || rawPayload.match(/'kind':\s*'([^']+)'/)
     const labelMatch = rawPayload.match(/"label":\s*"([^"]+)"/) || rawPayload.match(/'label':\s*'([^']+)'/)
-    const errorMatch = rawPayload.match(/"error":\s*"([^"]+)"/) || rawPayload.match(/'error':\s*'([^']+)'/)
+    const toolMatch = rawPayload.match(/"tool":\s*"([^"]+)"/) || rawPayload.match(/'tool':\s*'([^']+)'/)
+    const toolsMatch = rawPayload.match(/"tools":\s*\[([^\]]*)\]/) || rawPayload.match(/'tools':\s*\[([^\]]*)\]/)
+    const analystMatch = rawPayload.match(/"analyst":\s*"([^"]+)"/) || rawPayload.match(/'analyst':\s*'([^']+)'/)
+    const errorMatch = rawPayload.match(/["']error["']:\s*(["'])(.*?)\1/)
+    const errorTypeMatch = rawPayload.match(/"error_type":\s*"([^"]+)"/) || rawPayload.match(/'error_type':\s*'([^']+)'/)
+    const actionMatch = rawPayload.match(/"action":\s*"([^"]+)"/) || rawPayload.match(/'action':\s*'([^']+)'/)
     const attemptMatch = rawPayload.match(/"attempt":\s*([0-9]+)/) || rawPayload.match(/'attempt':\s*([0-9]+)/)
     const attemptsMatch = rawPayload.match(/"attempts":\s*([0-9]+)/) || rawPayload.match(/'attempts':\s*([0-9]+)/)
     const msMatch = rawPayload.match(/"ms":\s*([0-9]+)/) || rawPayload.match(/'ms':\s*([0-9]+)/)
     const delayMatch = rawPayload.match(/"delay":\s*([0-9.]+)/) || rawPayload.match(/'delay':\s*([0-9.]+)/)
+    const timeoutMatch = rawPayload.match(/"timeout_seconds":\s*([0-9.]+)/) || rawPayload.match(/'timeout_seconds':\s*([0-9.]+)/)
+    const tools = toolsMatch
+      ? Array.from(toolsMatch[1].matchAll(/["']([^"']+)["']/g), match => match[1]).filter(Boolean)
+      : undefined
 
     if (eventMatch) {
       return {
@@ -56,11 +71,17 @@ function parseRunEvent(message: string): RunEventPayload | null {
         node: nodeMatch ? nodeMatch[1] : undefined,
         kind: kindMatch ? kindMatch[1] : undefined,
         label: labelMatch ? labelMatch[1] : undefined,
-        error: errorMatch ? errorMatch[1] : undefined,
+        tool: toolMatch ? toolMatch[1] : undefined,
+        tools: tools && tools.length > 0 ? tools : undefined,
+        analyst: analystMatch ? analystMatch[1] : undefined,
+        error: errorMatch ? errorMatch[2] : undefined,
+        error_type: errorTypeMatch ? errorTypeMatch[1] : undefined,
+        action: actionMatch ? actionMatch[1] : undefined,
         attempt: attemptMatch ? Number.parseInt(attemptMatch[1]) : undefined,
         attempts: attemptsMatch ? Number.parseInt(attemptsMatch[1]) : undefined,
         ms: msMatch ? Number.parseInt(msMatch[1]) : undefined,
         delay: delayMatch ? Number.parseFloat(delayMatch[1]) : undefined,
+        timeout_seconds: timeoutMatch ? Number.parseFloat(timeoutMatch[1]) : undefined,
       }
     }
   }
@@ -71,7 +92,7 @@ function renderLogMessage(l: Log) {
   if (l.source === 'tradingagents.run') {
     const payload = parseRunEvent(l.message)
     if (payload) {
-      const { event, node, kind, label, error, attempt, attempts, ms, delay } = payload
+      const { event, node, kind, label, tool, tools, analyst, error, error_type, action, attempt, attempts, ms, delay, timeout_seconds } = payload
       switch (event) {
         case 'node_start':
           return (
@@ -123,10 +144,22 @@ function renderLogMessage(l: Log) {
             </span>
           )
         case 'tool_error':
+        case 'tool_timeout':
           return (
             <span className="flex flex-col gap-1 w-full">
-              <span className="text-rose-400 font-bold">Tool Failed</span>
+              <span className="flex items-center gap-2 flex-wrap">
+                <span className="text-rose-400 font-bold">{event === 'tool_timeout' ? 'Tool Timed Out' : 'Tool Failed'}</span>
+                {(tool || tools?.length) && (
+                  <span className="text-white font-semibold font-mono break-all">
+                    {tool || tools?.join(', ')}
+                  </span>
+                )}
+                {analyst && <span className="text-slate-400 text-xs">analyst: {analyst}</span>}
+                {error_type && <span className="text-amber-400 font-mono text-[10px] bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/15">{error_type}</span>}
+                {timeout_seconds !== undefined && <span className="text-slate-400 text-xs">after {timeout_seconds}s</span>}
+              </span>
               {error && <span className="text-[11px] text-rose-400/80 font-mono pl-2 border-l border-rose-500/20">{error}</span>}
+              {action === 'continue_without_tool' && <span className="text-[11px] text-slate-500 italic">Continuing with remaining tools and data; no blind retry was sent.</span>}
             </span>
           )
         case 'fallback_error':
@@ -313,5 +346,3 @@ export default function Logs() {
     </div>
   )
 }
-
-

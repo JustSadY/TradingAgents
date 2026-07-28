@@ -7,6 +7,7 @@ from uuid import UUID
 
 from langchain_core.callbacks import AsyncCallbackHandler
 
+from backend.services.analysis.activity import AnalysisActivityTracker
 from backend.services.analysis.emitter import AnalysisEmitter
 from backend.services.stats_handler import StatsCallbackHandler
 
@@ -16,8 +17,9 @@ _logger = logging.getLogger(__name__)
 class TokenStreamingCallbackHandler(AsyncCallbackHandler):
     """Callback handler that streams generated tokens, tool durations, and run stats to WebSocket."""
 
-    def __init__(self, emitter: AnalysisEmitter) -> None:
+    def __init__(self, emitter: AnalysisEmitter, activity_tracker: AnalysisActivityTracker | None = None) -> None:
         self.emitter = emitter
+        self._activity_tracker = activity_tracker
         self._tool_starts: dict[UUID, float] = {}
         self._stats_handler = StatsCallbackHandler()
 
@@ -46,6 +48,15 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         except Exception as e:
             _logger.debug("Failed to emit live stats: %s", e)
 
+    def _mark_activity(self) -> None:
+        """Refresh this run's liveness clock without letting telemetry fail it."""
+        if self._activity_tracker is None:
+            return
+        try:
+            self._activity_tracker.touch()
+        except Exception as exc:  # noqa: BLE001 — liveness telemetry is best-effort
+            _logger.debug("Failed to refresh analysis activity: %s", exc)
+
     async def on_chat_model_start(
         self,
         serialized: dict[str, Any],
@@ -57,6 +68,7 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
+        self._mark_activity()
         self._stats_handler.on_chat_model_start(
             serialized, messages, run_id=run_id, parent_run_id=parent_run_id, tags=tags, metadata=metadata, **kwargs
         )
@@ -73,6 +85,7 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
+        self._mark_activity()
         self._stats_handler.on_llm_start(
             serialized, prompts, run_id=run_id, parent_run_id=parent_run_id, tags=tags, metadata=metadata, **kwargs
         )
@@ -88,6 +101,7 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
+        self._mark_activity()
         self._stats_handler.on_llm_end(
             response, run_id=run_id, parent_run_id=parent_run_id, tags=tags, metadata=metadata, **kwargs
         )
@@ -104,6 +118,7 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         **kwargs: Any,
     ) -> None:
         """Stream token-by-token update via the WebSocket emitter."""
+        self._mark_activity()
         agent_name = None
         if metadata and "agent" in metadata:
             agent_name = metadata["agent"]
@@ -136,6 +151,7 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         **kwargs: Any,
     ) -> None:
         """Stream progress when a tool starts execution."""
+        self._mark_activity()
         self._tool_starts[run_id] = time.time()
         self._stats_handler.on_tool_start(
             serialized, input_str, run_id=run_id, parent_run_id=parent_run_id, tags=tags, metadata=metadata, **kwargs
@@ -166,6 +182,7 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         metadata: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> None:
+        self._mark_activity()
         self._tool_starts.pop(run_id, None)
         self._stats_handler.on_tool_error(
             error, run_id=run_id, parent_run_id=parent_run_id, tags=tags, metadata=metadata, **kwargs
@@ -182,6 +199,7 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         **kwargs: Any,
     ) -> None:
         """Stream progress when a tool completes execution, including duration."""
+        self._mark_activity()
         start_time = self._tool_starts.pop(run_id, None)
         duration_str = ""
         if start_time:

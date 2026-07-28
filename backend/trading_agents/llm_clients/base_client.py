@@ -108,13 +108,30 @@ def is_rate_limited(exc: Exception) -> bool:
     return any(signal in err_msg for signal in signals)
 
 
+def is_provider_function_degraded(exc: BaseException) -> bool:
+    """Return whether a hosted model deployment has been marked unavailable.
+
+    NVIDIA NIM exposes a model deployment as an NVCF ``Function``.  When its
+    health check marks that function ``DEGRADED``, the API answers with HTTP
+    400 even though this is a temporary provider-side outage, not a malformed
+    request.  Matching the complete error shape keeps an arbitrary user/model
+    response containing the word ``degraded`` from changing retry behaviour.
+    """
+    err_msg = str(exc).lower()
+    return "degraded function cannot be invoked" in err_msg or (
+        "function id" in err_msg and "degraded" in err_msg and "cannot be invoked" in err_msg
+    )
+
+
 def classify_error(exc: Exception) -> str:
     """Classify an LLM error into a category for structured handling.
 
     Returns one of ``quota_exhausted``, ``rate_limited``, ``auth``,
-    ``timeout``, or ``unknown``.
+    ``timeout``, ``provider_degraded``, or ``unknown``.
     """
     err_msg = str(exc).lower()
+    if is_provider_function_degraded(exc):
+        return "provider_degraded"
     if is_quota_exhausted(exc):
         return "quota_exhausted"
     if is_rate_limited(exc):
@@ -159,7 +176,8 @@ async def retry_with_exponential_backoff(
 
     Raises
     ------
-    The last exception encountered (quota/unknown errors are not retried).
+    The last exception encountered (quota, auth, unknown, and degraded-provider
+    errors are not retried).
     """
     last_exc = None
     for attempt in range(max_retries + 1):
@@ -168,9 +186,7 @@ async def retry_with_exponential_backoff(
         except Exception as exc:
             last_exc = exc
             category = classify_error(exc)
-            if category in ("quota_exhausted", "auth"):
-                raise
-            if category == "unknown":
+            if category in ("quota_exhausted", "auth", "provider_degraded", "unknown"):
                 raise
             # rate_limited or timeout — retry
             delay = min(base_delay * (2**attempt), max_delay)

@@ -212,12 +212,18 @@ async def run_individual_analysis(
 
         from backend.trading_agents.agents.runtime.resilience import get_report_card, init_report_card
 
+        from .activity import AnalysisActivityTracker
         from .streaming_handler import TokenStreamingCallbackHandler
 
         init_report_card()
         stats_handler = StatsCallbackHandler()
+        # A graph-state update is not the only sign of life: a model may be
+        # generating or a tool may be fetching data for a long time before the
+        # graph yields its next chunk.  Keep one tracker per task, never a
+        # module-global timestamp shared by concurrent users.
+        activity_tracker = AnalysisActivityTracker()
 
-        streaming_handler = TokenStreamingCallbackHandler(emitter)
+        streaming_handler = TokenStreamingCallbackHandler(emitter, activity_tracker=activity_tracker)
 
         ta = TradingAgentsGraph(
             selected_analysts=permitted_analysts,
@@ -235,6 +241,7 @@ async def run_individual_analysis(
                 "visual_annotations": [],
                 "support_levels": [],
                 "resistance_levels": [],
+                "activity_tracker": activity_tracker,
             }
         )
 
@@ -246,12 +253,10 @@ async def run_individual_analysis(
 
         last_node = None
 
-        last_event_time = time.time()
-
         async def _stream_observer(mode: str, chunk: dict) -> None:
 
-            nonlocal prev_inv_count, prev_risk_count, last_node, last_event_time
-            last_event_time = time.time()
+            nonlocal prev_inv_count, prev_risk_count, last_node
+            activity_tracker.touch()
 
             if mode == "updates":
                 for node_name in chunk or {}:
@@ -319,8 +324,9 @@ async def run_individual_analysis(
         heartbeat_task = asyncio.create_task(
             _heartbeat_monitor(
                 emitter,
-                lambda: last_event_time,
+                activity_tracker.last_activity_at,
                 float(config.get("stall_timeout_seconds", 120) or 120),
+                now=time.monotonic,
             )
         )
         try:

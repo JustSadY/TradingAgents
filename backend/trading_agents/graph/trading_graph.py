@@ -30,7 +30,7 @@ from .setup import GraphSetup
 from .signal_processing import SignalProcessor
 
 
-def _cap_tool_outputs(tool_node: ToolNode, max_chars: int):
+def _cap_tool_outputs(tool_node: ToolNode, max_chars: int, *, analyst_key: str):
     """Wrap a ToolNode so oversized tool results are middle-truncated before
     they enter the analyst's conversation, and a hard timeout prevents a hung
     external API from stalling the run.
@@ -43,27 +43,29 @@ def _cap_tool_outputs(tool_node: ToolNode, max_chars: int):
     async def _run(state, *args, **kwargs):
         import asyncio
 
+        from backend.services.analysis.activity import touch_current_analysis
         from backend.trading_agents.agents.runtime.report_aggregator import middle_truncate
         from backend.trading_agents.dataflows.config import get_config
 
         _cfg = get_config()
         timeout = _cfg.get("tool_timeout_seconds", 60)
+        touch_current_analysis()
         try:
             result = await asyncio.wait_for(tool_node.ainvoke(state, *args, **kwargs), timeout=timeout)
         except TimeoutError:
-            from backend.trading_agents.agents.runtime.resilience import log_event
+            from backend.trading_agents.agents.runtime.tool_telemetry import log_tool_timeout
 
-            log_event(
-                "tool_timeout",
-                level=logging.WARNING,
-                tool=tool_node.name if hasattr(tool_node, "name") else str(tool_node),
-            )
-            return {"messages": [{"role": "tool", "content": f"Tool timed out after {timeout}s. Try a simpler query."}]}
+            # A ToolNode can execute multiple calls concurrently.  Return an
+            # addressed error message for each call so the next LLM request
+            # remains valid, and keep the actual tool names in the run trace.
+            touch_current_analysis()
+            return {"messages": log_tool_timeout(state, analyst=analyst_key, timeout_seconds=timeout)}
         messages = result.get("messages", []) if isinstance(result, dict) else []
         for message in messages:
             content = getattr(message, "content", None)
             if isinstance(content, str) and len(content) > max_chars:
                 message.content = middle_truncate(content, max_chars)
+        touch_current_analysis()
         return result
 
     return _run
@@ -341,16 +343,37 @@ class TradingAgentsGraph:
 
     def _create_tool_nodes(self) -> dict[str, Any]:
         from backend.trading_agents.agents.analyst_registry import get_tools, list_analysts
-        from backend.trading_agents.agents.runtime.resilience import tool_error_handler
+        from backend.trading_agents.agents.runtime.tool_telemetry import (
+            make_async_tool_call_wrapper,
+            tool_error_handler,
+        )
 
         nodes: dict[str, ToolNode] = {}
         for key in list_analysts():
             tools = self._filter_tools_for_analyst(key, get_tools(key))
             try:
-                tool_node = ToolNode(tools, handle_tool_errors=tool_error_handler)
+                # ``handle_tool_errors`` deliberately remains responsible for
+                # turning tool failures into ToolMessages.  The async wrapper
+                # only supplies the otherwise-missing call identity to its
+                # telemetry callback; it does not change execution or retry.
+                tool_node = ToolNode(
+                    tools,
+                    handle_tool_errors=tool_error_handler,
+                    awrap_tool_call=make_async_tool_call_wrapper(key),
+                )
             except TypeError:
-                tool_node = ToolNode(tools)
-            nodes[key] = _cap_tool_outputs(tool_node, int(self.config.get("max_tool_output_chars", 12000)))
+                # Older LangGraph releases may not expose ``awrap_tool_call``.
+                # Keep graceful ToolNode error handling even when detailed
+                # tool identity is unavailable on that legacy runtime.
+                try:
+                    tool_node = ToolNode(tools, handle_tool_errors=tool_error_handler)
+                except TypeError:
+                    tool_node = ToolNode(tools)
+            nodes[key] = _cap_tool_outputs(
+                tool_node,
+                int(self.config.get("max_tool_output_chars", 12000)),
+                analyst_key=key,
+            )
         return nodes
 
     def propagate(self, company_name, trade_date, asset_type: str = "stock"):

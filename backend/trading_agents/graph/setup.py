@@ -49,6 +49,26 @@ _RISK_DEBATE = "Risk Debate"
 _PORTFOLIO_MANAGER = "Portfolio Manager"
 
 
+def _market_timeout_multiplier(selected_analysts: list[str] | set[str]) -> float:
+    """Return a bounded-by-work timeout multiplier for analyst orchestration.
+
+    ``node_timeout_seconds`` is an individual LLM/tool wall-clock limit.  The
+    Market Intelligence coordinator legitimately runs several of those nodes,
+    so applying that same limit to its *entire* subgraph cancels healthy work
+    halfway through.  The number stays tied to the configured per-node limit,
+    while preserving a full sequential-work upper bound.  Team composition
+    can be uneven, so dividing by the configured concurrency would be an
+    optimistic bound that can still cut a healthy long team short.
+    """
+    return float(max(2, len(selected_analysts)))
+
+
+def _research_timeout_multiplier(max_debate_rounds: int) -> float:
+    """Budget synthesis, each bull/bear turn, audit, and final judgement."""
+    rounds = max(1, int(max_debate_rounds or 1))
+    return float(max(2, 3 + (2 * rounds)))
+
+
 class GraphSetup:
     def __init__(
         self,
@@ -90,17 +110,26 @@ class GraphSetup:
             selected_analysts=list(selected_analysts),
         )
 
+        # Main nodes are coordinators, not a single provider call.  They keep
+        # a finite limit (derived from ``node_timeout_seconds``) to contain a
+        # genuinely hung direct sub-call, but must not be cut off after the
+        # first leaf's timeout.  Retrying a timed-out coordinator would rerun
+        # already-completed sub-agents, so only its leaf calls retry timeouts.
         market_intelligence = guard_node(
             create_market_intelligence_node(ctx),
             name=_MARKET_INTELLIGENCE,
             kind="main",
             fallback=lambda state, exc: {},
+            timeout_multiplier=_market_timeout_multiplier(selected_analysts),
+            retry_timeouts=False,
         )
         agent_qa = guard_node(
             create_agent_qa_node(ctx),
             name=_AGENT_QA,
             kind="main",
             fallback=lambda state, exc: {},
+            timeout_multiplier=2,
+            retry_timeouts=False,
         )
         research_manager = guard_node(
             create_research_manager_node(ctx),
@@ -110,6 +139,8 @@ class GraphSetup:
                 "investment_debate_state": neutral_invest_debate_state("Research branch error; degraded."),
                 "investment_plan": "Research manager unavailable; proceeding with available reports.",
             },
+            timeout_multiplier=_research_timeout_multiplier(self.config.get("max_debate_rounds", 1)),
+            retry_timeouts=False,
         )
         trader = guard_node(
             create_trader_node(ctx),
@@ -119,6 +150,8 @@ class GraphSetup:
                 "trader_investment_plan": "Trader agent unavailable; deferring to risk debate.",
                 "trader_proposal_json": "{}",
             },
+            timeout_multiplier=2,
+            retry_timeouts=False,
         )
         risk_debate = guard_node(
             create_risk_debate_node(ctx),
@@ -127,6 +160,7 @@ class GraphSetup:
             fallback=lambda state, exc: {
                 "risk_debate_state": neutral_risk_debate_state("Risk debate error; degraded."),
             },
+            retry_timeouts=False,
         )
         portfolio_manager = guard_node(
             create_portfolio_manager_node(ctx),
@@ -135,6 +169,8 @@ class GraphSetup:
             fallback=lambda state, exc: {
                 "final_trade_decision": "Hold — automated fallback: Portfolio Manager unavailable.",
             },
+            timeout_multiplier=2,
+            retry_timeouts=False,
         )
 
         workflow = StateGraph(AgentState)

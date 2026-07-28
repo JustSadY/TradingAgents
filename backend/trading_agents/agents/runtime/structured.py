@@ -8,6 +8,8 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
+from backend.trading_agents.llm_clients.base_client import is_provider_function_degraded
+
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
@@ -138,6 +140,16 @@ async def self_correct_structured(
         text = response.content if hasattr(response, "content") else str(response)
         return parse_and_validate(text, schema)
     except Exception as exc:
+        # A NIM ``DEGRADED function`` response is a provider-side deployment
+        # outage.  Trying the same model again cannot repair JSON and merely
+        # creates two more failing requests.  Let the caller retain the
+        # already-generated free text instead.
+        if is_provider_function_degraded(exc):
+            logger.warning(
+                "%s: provider function is degraded during self-correction; stopping further correction attempts.",
+                agent_name,
+            )
+            raise
         logger.warning(
             "%s: Self-correction attempt %d failed to validate: %s",
             agent_name,
@@ -195,6 +207,12 @@ async def _retry_llm_call(
             return await asyncio.wait_for(llm.ainvoke(prompt), timeout=timeout)
         except Exception as exc:
             last_exc = exc
+            # NVIDIA NIM reports an unhealthy hosted model deployment as a
+            # 400 ``DEGRADED function`` error.  It is neither a malformed
+            # prompt nor a recoverable same-model retry, so preserve it for a
+            # configured fallback chain or the graph-level safe fallback.
+            if is_provider_function_degraded(exc):
+                raise
             if _is_quota_exhausted(exc):
                 logger.warning(
                     "%s: quota exhausted (%s) — skipping retries, using fallback.",
@@ -238,6 +256,17 @@ async def ainvoke_structured_or_freetext(
                 return result
             return _coerce_structured_result(result, schema)
         except Exception as exc:
+            # ``structured_llm`` is already built with any configured model
+            # fallbacks.  If its invocation still surfaces a degraded hosted
+            # function, do not issue a plain-text request and then two JSON
+            # self-corrections against that same unavailable deployment.
+            # Re-raise so the graph can use its explicit safe fallback.
+            if is_provider_function_degraded(exc):
+                logger.warning(
+                    "%s: provider function is degraded; skipping same-model free-text and self-correction requests.",
+                    agent_name,
+                )
+                raise
             logger.warning(
                 "%s: structured-output ainvocation failed (%s); falling back to parsing free-text",
                 agent_name,
@@ -262,15 +291,24 @@ async def ainvoke_structured_or_freetext(
         validation_error = "Could not locate a valid JSON curly brace block in the text response."
 
     for attempt in range(1, 3):
-        corrected = await self_correct_structured(
-            plain_llm=plain_llm,
-            schema=schema,
-            original_prompt=prompt,
-            bad_output=raw_text,
-            validation_error=validation_error,
-            agent_name=agent_name,
-            attempt=attempt,
-        )
+        try:
+            corrected = await self_correct_structured(
+                plain_llm=plain_llm,
+                schema=schema,
+                original_prompt=prompt,
+                bad_output=raw_text,
+                validation_error=validation_error,
+                agent_name=agent_name,
+                attempt=attempt,
+            )
+        except Exception as exc:
+            if is_provider_function_degraded(exc):
+                logger.warning(
+                    "%s: provider became degraded after free-text generation; keeping that output without another correction request.",
+                    agent_name,
+                )
+                return raw_text
+            raise
         if corrected is not None:
             return corrected
 

@@ -87,15 +87,20 @@ async def run_tool_analyst(
     else:
         bound_llm = llm
 
-    import time as _time
-
     from langchain_core.messages import AIMessage
 
     from backend.trading_agents.agents.runtime.resilience import log_event, retry_call
 
     analyst = report_key.replace("_report", "")
-    _start = _time.time()
-    log_event("node_start", node=analyst, kind="analyst")
+
+    # The graph wraps every analyst node in ``guard_node``.  That wrapper is
+    # the single lifecycle telemetry source (node_start/node_end, timing,
+    # retry and circuit-breaker state).  Emitting the same lifecycle pair here
+    # used to make every LLM turn look like two analyst runs: one named by the
+    # graph node ("Fundamentals Analyst") and one named by this report key
+    # ("fundamentals").  Keep the local error/fallback events below because
+    # this function converts those failures into a safe state update before
+    # they reach the outer wrapper.
 
     if ctx and "emitter" in ctx:
         emitter = ctx["emitter"]
@@ -141,6 +146,5 @@ async def run_tool_analyst(
             "messages": [AIMessage(content="")],
             report_key: f"{analyst.title()} analysis unavailable (agent error: {exc}).",
         }
-    log_event("node_end", node=analyst, kind="analyst", ms=int((_time.time() - _start) * 1000))
     report = result.content if len(result.tool_calls) == 0 else ""
     return {"messages": [result], report_key: report}
