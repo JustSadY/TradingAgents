@@ -30,4 +30,4 @@ HEALTHCHECK --interval=30s --timeout=5s --start-period=60s --retries=3 \
 
 # The WebSocket implementation emits its own Date header. Disable Uvicorn's
 # generic Date header so a proxied 101 response never contains duplicates.
-CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-date-header"]
+CMD ["uvicorn", "backend.main:app", "--host", "0.0.0.0", "--port", "8000", "--no-date-header", "--ws-ping-interval", "20", "--ws-ping-timeout", "20"]

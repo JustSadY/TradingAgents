@@ -220,7 +220,10 @@ describe('Analysis', () => {
 
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
     expect(MockWebSocket.instances[0].url).toBe(`ws://${window.location.host}/ws/analysis/portfolio-task`)
-    expect(MockWebSocket.instances[0].protocols).toEqual(['tradingagents.jwt.test-token'])
+    expect(MockWebSocket.instances[0].protocols).toEqual([
+      'tradingagents.v1',
+      'tradingagents.jwt.test-token',
+    ])
 
     vi.useFakeTimers()
     act(() => {

@@ -71,8 +71,9 @@ class WebSocketManager:
     def _refresh_connection_gauge(self):
         WS_CONNECTIONS.set(sum(len(conns) for conns in self._connections.values()))
 
-    async def connect(self, task_id: str, ws: WebSocket):
-        await ws.accept()
+    async def connect(self, task_id: str, ws: WebSocket, *, subprotocol: str | None = None):
+        """Accept and register a task stream, optionally negotiating a safe protocol."""
+        await ws.accept(subprotocol=subprotocol)
         entry = self._acquire(task_id)
         try:
             async with entry.lock:

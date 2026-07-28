@@ -13,12 +13,27 @@ from backend.trading_agents.agents.tools.registry import registry
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-# Native browser WebSockets cannot attach an Authorization header.  New
-# clients therefore offer the access JWT in a private WebSocket subprotocol
-# instead of putting it in the URL, where normal proxy/access logs would
-# retain it.  The prefix makes the credential distinguishable from any future
-# real application subprotocols and is valid under the WebSocket token grammar.
+# Native browser WebSockets cannot attach an Authorization header. Clients
+# therefore offer the access JWT in a private WebSocket subprotocol instead of
+# putting it in the URL, where normal proxy/access logs would retain it. A
+# separate, non-secret protocol is negotiated in the response: echoing the
+# JWT-bearing offer would expose it in the response headers and some strict
+# clients abort a 101 response that selects no offered protocol at all.
+WEBSOCKET_APPLICATION_SUBPROTOCOL = "tradingagents.v1"
 WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX = "tradingagents.jwt."
+
+
+def get_websocket_application_subprotocol(offered_subprotocols: str | None) -> str | None:
+    """Return the safe response protocol when a current client offered it.
+
+    Legacy query-token clients do not offer an application protocol, so they
+    must still be accepted without selecting one. The private JWT protocol is
+    deliberately never returned here.
+    """
+    offered = {protocol.strip() for protocol in (offered_subprotocols or "").split(",")}
+    if WEBSOCKET_APPLICATION_SUBPROTOCOL in offered:
+        return WEBSOCKET_APPLICATION_SUBPROTOCOL
+    return None
 
 
 def get_websocket_access_token(

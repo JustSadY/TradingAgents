@@ -313,7 +313,16 @@ app.include_router(correlation_router)
 app.include_router(personas_api_router)
 
 
-async def _reject_websocket(websocket: WebSocket, *, code: int, reason: str) -> None:
+_WS_KEEPALIVE_MESSAGE = "__tradingagents_keepalive__"
+
+
+async def _reject_websocket(
+    websocket: WebSocket,
+    *,
+    code: int,
+    reason: str,
+    subprotocol: str | None = None,
+) -> None:
     """Send a close frame the browser can diagnose after a rejected handshake.
 
     Calling ``close`` before ``accept`` turns into an HTTP rejection in most
@@ -321,7 +330,7 @@ async def _reject_websocket(websocket: WebSocket, *, code: int, reason: str) -> 
     Accepting and immediately closing sends our application code (4001/4003)
     without registering the socket or allowing it to read any task events.
     """
-    await websocket.accept()
+    await websocket.accept(subprotocol=subprotocol)
     await websocket.close(code=code, reason=reason)
 
 
@@ -331,48 +340,107 @@ async def websocket_analysis(
     task_id: str,
     token: str | None = Query(None, description="Legacy JWT access-token query parameter"),
 ):
-    from backend.api.deps import get_user_from_access_token, get_websocket_access_token, has_page_access
+    from backend.api.deps import (
+        get_user_from_access_token,
+        get_websocket_access_token,
+        get_websocket_application_subprotocol,
+        has_page_access,
+    )
     from backend.core.database import AsyncSessionLocal
     from backend.services.analysis_service import is_task_owner
 
     # Prefer the private WebSocket subprotocol over the legacy query string.
     # Browser WebSockets cannot send an Authorization header, and query-string
     # credentials would otherwise appear in common proxy and Uvicorn logs.
-    access_token = get_websocket_access_token(
-        websocket.headers.get("sec-websocket-protocol"),
-        query_token=token,
-    )
+    offered_subprotocols = websocket.headers.get("sec-websocket-protocol")
+    selected_subprotocol = get_websocket_application_subprotocol(offered_subprotocols)
+    access_token = get_websocket_access_token(offered_subprotocols, query_token=token)
     if not access_token:
-        await _reject_websocket(websocket, code=4001, reason="Unauthorized")
+        await _reject_websocket(
+            websocket,
+            code=4001,
+            reason="Unauthorized",
+            subprotocol=selected_subprotocol,
+        )
         return
 
-    async with AsyncSessionLocal() as db:
-        try:
-            user = await get_user_from_access_token(access_token, db)
-        except HTTPException:
-            # The helper includes active-user and token-version checks, which
-            # makes logout revoke WebSocket credentials immediately as well.
-            await _reject_websocket(websocket, code=4001, reason="Unauthorized")
-            return
-        page_allowed = await has_page_access(db, user, "analysis")
-    if not page_allowed:
-        await _reject_websocket(websocket, code=4003, reason="Forbidden")
-        return
-    # Only the user who started the run (or an admin) may stream its events;
-    # otherwise any authenticated user could read another user's analysis.
-    if not await is_task_owner(task_id, user.id, user.is_admin):
-        await _reject_websocket(websocket, code=4003, reason="Forbidden")
-        return
-
-    await ws_manager.connect(task_id, websocket)
     try:
+        async with AsyncSessionLocal() as db:
+            try:
+                user = await get_user_from_access_token(access_token, db)
+            except HTTPException:
+                # The helper includes active-user and token-version checks,
+                # which makes logout revoke WebSocket credentials immediately.
+                await _reject_websocket(
+                    websocket,
+                    code=4001,
+                    reason="Unauthorized",
+                    subprotocol=selected_subprotocol,
+                )
+                return
+            page_allowed = await has_page_access(db, user, "analysis")
+        if not page_allowed:
+            await _reject_websocket(
+                websocket,
+                code=4003,
+                reason="Forbidden",
+                subprotocol=selected_subprotocol,
+            )
+            return
+        # Only the user who started the run (or an admin) may stream its
+        # events; otherwise any authenticated user could read another user's
+        # analysis.
+        if not await is_task_owner(task_id, user.id, user.is_admin):
+            await _reject_websocket(
+                websocket,
+                code=4003,
+                reason="Forbidden",
+                subprotocol=selected_subprotocol,
+            )
+            return
+    except Exception:
+        # A database/Redis failure before ``accept`` otherwise becomes an
+        # opaque browser 1006. Emit a diagnosable application close whenever
+        # the transport is still available, and preserve the traceback server
+        # side for the actual root cause.
+        _logger.exception("Analysis WebSocket initialization failed task=%s", task_id)
+        try:
+            await _reject_websocket(
+                websocket,
+                code=1011,
+                reason="Initialization failed",
+                subprotocol=selected_subprotocol,
+            )
+        except Exception:
+            _logger.debug("Could not send WebSocket initialization failure task=%s", task_id, exc_info=True)
+        return
+
+    try:
+        await ws_manager.connect(task_id, websocket, subprotocol=selected_subprotocol)
+        _logger.info(
+            "Analysis WebSocket connected task=%s user=%s protocol=%s",
+            task_id,
+            user.id,
+            selected_subprotocol or "legacy",
+        )
         while True:
-            await websocket.receive_text()
-    except WebSocketDisconnect:
+            message = await websocket.receive_text()
+            # Browser-side keepalives make the stream resilient to proxies
+            # that require bidirectional activity while a queued worker has
+            # not yet emitted graph progress.
+            if message == _WS_KEEPALIVE_MESSAGE:
+                continue
+    except WebSocketDisconnect as exc:
         await ws_manager.disconnect(task_id, websocket)
+        if exc.code not in {1000, 1001}:
+            _logger.warning("Analysis WebSocket disconnected abnormally task=%s code=%s", task_id, exc.code)
     except Exception:
         _logger.exception("WebSocket error for task=%s", task_id)
         await ws_manager.disconnect(task_id, websocket)
+        try:
+            await websocket.close(code=1011, reason="WebSocket error")
+        except Exception:
+            _logger.debug("Could not close failed WebSocket task=%s", task_id, exc_info=True)
 
 
 @app.get("/health")

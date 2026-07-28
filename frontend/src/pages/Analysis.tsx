@@ -41,6 +41,8 @@ interface WsEvent {
 const STORAGE_KEY = 'ta_last_run'
 const TASK_KEY = 'ta_task_running'
 const TERMINAL_TASK_CONFIRMATION_DELAY_MS = 250
+const WS_KEEPALIVE_INTERVAL_MS = 20_000
+const WS_KEEPALIVE_MESSAGE = '__tradingagents_keepalive__'
 
 // Build an absolute ws(s)://host URL rather than a bare relative path —
 // `new WebSocket('/path')` (protocol-relative-by-omission) is only reliably
@@ -50,17 +52,19 @@ function analysisWsUrl(taskId: string): string {
   return `${protocol}//${window.location.host}/ws/analysis/${taskId}`
 }
 
-// Native browser WebSockets cannot set Authorization.  Carry the JWT in a
+// Native browser WebSockets cannot set Authorization. Carry the JWT in a
 // private handshake subprotocol instead of the URL so proxy/access logs never
-// receive a bearer token in their request line.  The backend deliberately
-// does not echo this protocol in its 101 response.
+// receive a bearer token in their request line. The fixed application
+// protocol is the only value the backend selects in its 101 response; it
+// makes the handshake valid for strict WebSocket clients without echoing JWT.
+const WS_APPLICATION_SUBPROTOCOL = 'tradingagents.v1'
 const WS_TOKEN_SUBPROTOCOL_PREFIX = 'tradingagents.jwt.'
 
 function openAnalysisWebSocket(taskId: string, token: string | null): WebSocket {
   const url = analysisWsUrl(taskId)
-  return token
-    ? new WebSocket(url, [`${WS_TOKEN_SUBPROTOCOL_PREFIX}${token}`])
-    : new WebSocket(url)
+  const protocols = [WS_APPLICATION_SUBPROTOCOL]
+  if (token) protocols.push(`${WS_TOKEN_SUBPROTOCOL_PREFIX}${token}`)
+  return new WebSocket(url, protocols)
 }
 
 interface QualityFields {
@@ -309,6 +313,13 @@ function RunTab() {
   useEffect(() => { tickerRef.current = ticker }, [ticker])
   const lastPersistRef = useRef(0)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const wsKeepaliveRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  const clearWsKeepalive = useCallback(() => {
+    if (wsKeepaliveRef.current) {
+      clearInterval(wsKeepaliveRef.current)
+      wsKeepaliveRef.current = null
+    }
+  }, [])
 
   const meta = useMeta()
   const sectionLabels = meta?.section_labels ?? {}
@@ -419,8 +430,10 @@ function RunTab() {
       clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = null
     }
+    clearWsKeepalive()
     if (wsRef.current) {
       try {
+        wsRef.current.onopen = null
         wsRef.current.onmessage = null
         wsRef.current.onerror = null
         wsRef.current.onclose = null
@@ -460,6 +473,7 @@ function RunTab() {
         clearTimeout(reconnectTimeoutRef.current)
         reconnectTimeoutRef.current = null
       }
+      clearWsKeepalive()
       if (wsRef.current === ws) wsRef.current = null
       setRunStatus('error')
       setRunning_(false)
@@ -555,6 +569,24 @@ function RunTab() {
       })()
     }
 
+    const sendKeepalive = () => {
+      if (
+        finished || stoppedByUserRef.current || taskIdRef.current !== taskId ||
+        wsRef.current !== ws || ws.readyState !== WebSocket.OPEN
+      ) return
+      try {
+        ws.send(WS_KEEPALIVE_MESSAGE)
+      } catch {
+        // The close handler owns reconnect/terminal decisions.
+      }
+    }
+
+    ws.onopen = () => {
+      if (finished || stoppedByUserRef.current || taskIdRef.current !== taskId || wsRef.current !== ws) return
+      sendKeepalive()
+      wsKeepaliveRef.current = setInterval(sendKeepalive, WS_KEEPALIVE_INTERVAL_MS)
+    }
+
     ws.onmessage = (e) => {
       let ev: WsEvent
       try { ev = JSON.parse(e.data) } catch { return }
@@ -619,6 +651,7 @@ function RunTab() {
       } else if (ev.type === 'complete') {
         finished = true
         terminalTaskIdRef.current = taskId
+        clearWsKeepalive()
         setRunStatus('done')
         setRunning_(false)
         setCurrentStep(null)
@@ -636,6 +669,7 @@ function RunTab() {
       } else if (ev.type === 'error') {
         finished = true
         terminalTaskIdRef.current = taskId
+        clearWsKeepalive()
         if (ev.message === "Analysis cancelled.") {
           setRunStatus('idle')
           setRunning_(false)
@@ -658,6 +692,7 @@ function RunTab() {
     }
     ws.onclose = (event) => {
       if (!finished) {
+        if (wsRef.current === ws) clearWsKeepalive()
         // These are application close codes sent after an accepted handshake.
         // They cannot be fixed by reconnecting with the same credentials.
         if (event.code === 4001) {
@@ -668,12 +703,16 @@ function RunTab() {
           markConnectionAsTerminalFailure(t('analysis.ws.access_denied'))
           return
         }
+        if (event.code === 1011) {
+          markConnectionAsTerminalFailure(t('analysis.ws.initialization_failed'))
+          return
+        }
         scheduleReconnect(event.code)
       }
     }
     // ticker is intentionally read via tickerRef (not a dep) so the socket
     // isn't torn down and recreated on every ticker keystroke.
-  }, [t])
+  }, [t, clearWsKeepalive])
 
   useEffect(() => {
     attachWsRef.current = attachWs
@@ -752,8 +791,10 @@ function RunTab() {
   useEffect(() => {
     return () => {
       if (reconnectTimeoutRef.current) clearTimeout(reconnectTimeoutRef.current)
+      clearWsKeepalive()
       if (wsRef.current) {
         try {
+          wsRef.current.onopen = null
           wsRef.current.onmessage = null
           wsRef.current.onerror = null
           wsRef.current.onclose = null
@@ -797,10 +838,12 @@ function RunTab() {
       clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = null
     }
+    clearWsKeepalive()
     if (tid) {
       try { await axios.post(`/api/analysis/${tid}/cancel`) } catch { /* best-effort cancel */ }
     }
     if (wsRef.current) {
+      wsRef.current.onopen = null
       wsRef.current.onmessage = null
       wsRef.current.onerror = null
       wsRef.current.onclose = null
