@@ -260,12 +260,13 @@ function loadRunState(): SavedRun {
     if (!isRecord(parsed)) return fallback
 
     const savedStatus = parsed.runStatus
-    const runStatus: RunStatus = hasRunningTask
-      ? 'running'
-      : savedStatus === 'idle' || savedStatus === 'done' || savedStatus === 'error'
-        ? savedStatus
-        // A persisted running state without a task cannot be resumed.
-        : 'idle'
+    const runStatus: RunStatus = savedStatus === 'error'
+      ? 'error'
+      : hasRunningTask
+        ? 'running'
+        : savedStatus === 'idle' || savedStatus === 'done'
+          ? savedStatus
+          : 'idle'
 
     return {
       ticker: typeof parsed.ticker === 'string' ? parsed.ticker : fallback.ticker,
@@ -754,7 +755,7 @@ function RunTab() {
 
     // If there's an active task on the server but we are 'idle' here, sync it.
     const task = activeTasks[0]
-    if (terminalTaskIdRef.current === task.task_id) return
+    if (task.status === 'failed' || task.status === 'error' || terminalTaskIdRef.current === task.task_id) return
     if (taskIdRef.current === task.task_id) return
     runStartedRef.current = true
     setTicker(task.ticker)
