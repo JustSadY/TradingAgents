@@ -190,13 +190,13 @@ async def check_price_alerts() -> None:
         await db.commit()
 
 
-async def _throttled_analyze(ticker: str, trade_date: str, user_id: int, semaphore: asyncio.Semaphore) -> None:
+async def _throttled_analyze(ticker: str, trade_date: str, user_id: int | None, semaphore: asyncio.Semaphore) -> None:
     """Acquire *semaphore* before running ``_auto_analyze`` to cap concurrency."""
     async with semaphore:
         await _auto_analyze(ticker, trade_date, user_id)
 
 
-async def _auto_analyze(ticker: str, trade_date: str, user_id: int) -> None:
+async def _auto_analyze(ticker: str, trade_date: str, user_id: int | None) -> None:
     try:
         async with AsyncSessionLocal() as new_db:
             result = await new_db.execute(select(User).where(User.id == user_id))
@@ -222,24 +222,35 @@ async def check_and_recover_lost_alerts() -> None:
             .where(PriceAlert.auto_analyze.is_(True))
         )
         triggered_alerts = result.scalars().all()
-        missing: list[tuple[str, str, int]] = []
+        # A user can legitimately have more than one alert-driven analysis for
+        # the same ticker and date (for example after a retry).  Recovery only
+        # needs to know whether *any* such analysis was recorded, so do not use
+        # ``scalar_one_or_none()`` on the full result set here.
+        missing: list[tuple[str, str, int | None]] = []
+        missing_keys: set[tuple[str, str, int | None]] = set()
         for alert in triggered_alerts:
             trigger_date = alert.triggered_at.strftime("%Y-%m-%d")
             res_analysis = await db.execute(
-                select(AnalysisResult)
+                select(AnalysisResult.id)
                 .where(AnalysisResult.ticker == alert.ticker)
                 .where(AnalysisResult.trade_date == trigger_date)
                 .where(AnalysisResult.user_id == alert.user_id)
                 .where(AnalysisResult.triggered_by == "alert")
+                .limit(1)
             )
-            analysis = res_analysis.scalar_one_or_none()
-            if not analysis:
+            analysis_id = res_analysis.scalar_one_or_none()
+            if analysis_id is None:
                 _logger.warning(
                     "Recovering lost alert analysis task for %s (triggered at %s)",
                     alert.ticker,
                     trigger_date,
                 )
-                missing.append((alert.ticker, trigger_date, alert.user_id))
+                recovery_key = (alert.ticker, trigger_date, alert.user_id)
+                # Multiple alert rows can describe the same recovery target.
+                # Starting each one would duplicate LLM work on server boot.
+                if recovery_key not in missing_keys:
+                    missing_keys.add(recovery_key)
+                    missing.append(recovery_key)
 
         if not missing:
             return

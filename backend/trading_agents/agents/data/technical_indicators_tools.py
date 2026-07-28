@@ -8,6 +8,33 @@ from backend.trading_agents.dataflows.interface import route_to_vendor
 _logger = logging.getLogger(__name__)
 
 
+async def collect_indicators(
+    symbol: str,
+    indicators: str,
+    curr_date: str,
+    look_back_days: int = 30,
+) -> str:
+    """Fetch each requested technical indicator through the one-indicator vendor contract.
+
+    Data vendors accept one indicator identifier at a time.  Keeping this
+    fan-out outside the LangChain tool wrapper also lets the Market Analyst's
+    prefetch path use exactly the same semantics as an LLM tool invocation.
+    """
+    indicator_list = [indicator.strip() for indicator in indicators.split(",") if indicator.strip()]
+    if not indicator_list:
+        return "No technical indicators requested."
+
+    results = []
+    for indicator in indicator_list:
+        try:
+            value = await route_to_vendor("get_indicators", symbol, indicator, curr_date, look_back_days)
+            results.append(value)
+        except Exception as exc:  # noqa: BLE001 — a single indicator must not hide the rest
+            _logger.warning("Indicator %s failed for %s: %s", indicator, symbol, exc)
+            results.append(f"Error calculating {indicator}: {exc}")
+    return "\n\n".join(results)
+
+
 @tool
 async def get_indicators(
     symbol: Annotated[str, "ticker symbol of the company"],
@@ -19,13 +46,4 @@ async def get_indicators(
     look_back_days: Annotated[int, "How many days to look back for context"] = 30,
 ) -> str:
     """Calculate and retrieve specific technical indicators for a given stock symbol and time range."""
-    indicator_list = [i.strip() for i in indicators.split(",") if i.strip()]
-    results = []
-    for ind in indicator_list:
-        try:
-            val = await route_to_vendor("get_indicators", symbol, ind, curr_date, look_back_days)
-            results.append(val)
-        except Exception as e:
-            _logger.exception("Indicator %s failed for %s", ind, symbol)
-            results.append(f"Error calculating {ind}: {e}")
-    return "\n\n".join(results)
+    return await collect_indicators(symbol, indicators, curr_date, look_back_days)

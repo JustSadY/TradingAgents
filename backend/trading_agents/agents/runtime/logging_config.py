@@ -88,6 +88,11 @@ def setup_unified_logging():
     ]:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
+    # mplfinance asks for medium/semibold weights that Alpine's bundled fonts
+    # map to normal/bold. The fallback is harmless, but it otherwise floods
+    # persisted system logs once per chart render.
+    logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
+
     def handle_unhandled_exception(exc_type, exc_value, exc_traceback):
         if issubclass(exc_type, KeyboardInterrupt):
             sys.__excepthook__(exc_type, exc_value, exc_traceback)

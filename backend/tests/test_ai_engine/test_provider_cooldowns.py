@@ -144,6 +144,41 @@ def test_load_ohlcv_uses_single_ticker_history_with_typed_errors(monkeypatch):
     ]
 
 
+def test_load_ohlcv_normalizes_exchange_timezone_before_date_filter(monkeypatch):
+    """Fresh Yahoo history must compare safely with a date-only trade date."""
+    import backend.trading_agents.dataflows.stockstats_utils as stockstats_utils
+
+    index = pd.DatetimeIndex(
+        ["2024-01-08", "2024-01-09"],
+        tz="America/New_York",
+        name="Date",
+    )
+    history = pd.DataFrame(
+        {
+            "Open": [100.0, 101.0],
+            "High": [102.0, 103.0],
+            "Low": [99.0, 100.0],
+            "Close": [101.0, 102.0],
+            "Volume": [1000, 1200],
+        },
+        index=index,
+    )
+
+    class _Ticker:
+        def __init__(self, _symbol: str):
+            pass
+
+        def history(self, **_kwargs):
+            return history
+
+    monkeypatch.setattr(stockstats_utils.yf, "Ticker", _Ticker)
+
+    data = stockstats_utils.load_ohlcv("AAPL", "2024-01-10")
+
+    assert data["Date"].dt.tz is None
+    assert data["Date"].max() == pd.Timestamp("2024-01-09")
+
+
 def test_direct_yfinance_stock_data_uses_typed_history_errors(monkeypatch):
     import backend.trading_agents.dataflows.y_finance as y_finance
 

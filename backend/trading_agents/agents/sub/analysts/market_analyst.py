@@ -7,6 +7,7 @@ from backend.trading_agents.agents.data.chart_tools import (
     get_vision_chart_analysis,
 )
 from backend.trading_agents.agents.data.search_tools import search_web
+from backend.trading_agents.agents.data.technical_indicators_tools import collect_indicators
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
@@ -134,8 +135,7 @@ Your final report MUST follow this structure:
                 or 30
             )
 
-            indicators_data = await route_to_vendor(
-                "get_indicators",
+            indicators_data = await collect_indicators(
                 ticker,
                 "close_50_sma,close_200_sma,close_10_ema,macd,macds,macdh,rsi,boll,boll_ub,boll_lb,atr,vwma",
                 trade_date,

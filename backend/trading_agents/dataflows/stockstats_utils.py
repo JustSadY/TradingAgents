@@ -118,7 +118,14 @@ def yf_retry(func, max_retries=3, base_delay=2.0, *, ticker: str | None = None):
 
 
 def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
-    data["Date"] = pd.to_datetime(data["Date"], errors="coerce")
+    dates = pd.to_datetime(data["Date"], errors="coerce")
+    # Yahoo returns exchange-local, timezone-aware timestamps while cached
+    # rows and user-supplied trade dates are date-only/naive.  These OHLCV
+    # bars represent trading *dates*, so retain their local calendar value and
+    # make the column consistently timezone-naive before filtering/comparing.
+    if getattr(dates.dt, "tz", None) is not None:
+        dates = dates.dt.tz_localize(None)
+    data["Date"] = dates
     data = data.dropna(subset=["Date"])
     price_cols = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in data.columns]
     data[price_cols] = data[price_cols].apply(pd.to_numeric, errors="coerce")
@@ -134,7 +141,9 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
         cached_df = pd.DataFrame(cache_payload["rows"])
         if not cached_df.empty:
             return _clean_dataframe(cached_df)
-    curr_date_dt = pd.to_datetime(curr_date)
+    # Match the normalized, date-only OHLCV column below.  A timezone-aware
+    # Yahoo history frame cannot be compared to a naive Timestamp.
+    curr_date_dt = pd.Timestamp(curr_date).normalize()
     start_date = curr_date_dt - pd.DateOffset(years=5)
     start_str = start_date.strftime("%Y-%m-%d")
     end_date = curr_date_dt + pd.DateOffset(days=1)

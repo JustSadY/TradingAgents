@@ -45,7 +45,7 @@ def get_stock_stats_indicators_window(
     curr_date: Annotated[str, "The current trading date you are trading on, YYYY-mm-dd"],
     look_back_days: Annotated[int, "how many days to look back"],
 ) -> str:
-    from backend.services.indicator_service import calculate_ema, calculate_macd, calculate_rsi
+    from backend.services.indicator_service import calculate_atr, calculate_ema, calculate_macd, calculate_rsi
 
     data = load_ohlcv(symbol, curr_date)
     if data.empty:
@@ -60,9 +60,14 @@ def get_stock_stats_indicators_window(
 
     if indicator == "rsi":
         res_series = calculate_rsi(series)
-    elif indicator == "macd":
-        macd_line, _ = calculate_macd(series)
-        res_series = macd_line
+    elif indicator in {"macd", "macds", "macdh"}:
+        macd_line, signal_line = calculate_macd(series)
+        if indicator == "macd":
+            res_series = macd_line
+        elif indicator == "macds":
+            res_series = signal_line
+        else:
+            res_series = macd_line - signal_line
     elif "sma" in indicator:
         window = int(re.search(r"\d+", indicator).group())
         res_series = series.rolling(window=window).mean()
@@ -78,6 +83,11 @@ def get_stock_stats_indicators_window(
             res_series = sma20 + (std20 * 2)
         elif indicator == "boll_lb":
             res_series = sma20 - (std20 * 2)
+    elif indicator == "atr":
+        res_series = calculate_atr(data)
+    elif indicator == "vwma":
+        volume = data["Volume"].where(data["Volume"] != 0)
+        res_series = (series * volume).rolling(window=20).sum() / volume.rolling(window=20).sum()
 
     if res_series is None:
         return f"Indicator {indicator} not yet supported in centralized service"
