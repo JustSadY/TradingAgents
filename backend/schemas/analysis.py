@@ -7,28 +7,20 @@ from pydantic import BaseModel, ConfigDict, field_validator
 
 logger = logging.getLogger(__name__)
 
-_CANONICAL_SIGNALS = {
-    "buy": "Buy",
-    "overweight": "Overweight",
-    "hold": "Hold",
-    "underweight": "Underweight",
-    "sell": "Sell",
-}
+_CANONICAL_SIGNALS = frozenset({"Buy", "Overweight", "Hold", "Underweight", "Sell"})
 
 
-def _canonical_signal(value: object) -> str | None:
-    """Translate legacy signal casing into the one API representation.
+def _validated_signal(value: object) -> str | None:
+    """Expose only the canonical analysis signal enum through the API.
 
-    Older rows stored lower-case values (for example ``"buy"``), while the
-    frontend catalog uses title-case labels.  Normalize only the known enum
-    values so arbitrary historical text is still safely rejected.
+    Database migrations canonicalize known historical spellings.  Values
+    outside the enum remain hidden rather than leaking an invalid contract to
+    frontend consumers.
     """
     if value is None:
         return None
-    if isinstance(value, str):
-        canonical = _CANONICAL_SIGNALS.get(value.strip().casefold())
-        if canonical is not None:
-            return canonical
+    if isinstance(value, str) and value in _CANONICAL_SIGNALS:
+        return value
     logger.warning("Analysis signal: unexpected value %r — coercing to None", value)
     return None
 
@@ -102,7 +94,7 @@ class AnalysisResultRead(BaseModel):
     @field_validator("signal", mode="before")
     @classmethod
     def validate_signal(cls, v: object) -> str | None:
-        return _canonical_signal(v)
+        return _validated_signal(v)
 
     @field_validator("failed_agents", mode="before")
     @classmethod
@@ -136,7 +128,7 @@ class AnalysisListItem(BaseModel):
     @field_validator("signal", mode="before")
     @classmethod
     def validate_signal(cls, v: object) -> str | None:
-        return _canonical_signal(v)
+        return _validated_signal(v)
 
     model_config = ConfigDict(from_attributes=True)
 

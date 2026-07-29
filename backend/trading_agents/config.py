@@ -1,9 +1,56 @@
 import os
 from pathlib import Path
+from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 _HOME = Path.home() / ".tradingagents"
+MAX_FALLBACK_LLM_CHAIN_LENGTH = 3
+
+
+class FallbackLLMConfig(BaseModel):
+    """One ordered provider/model failover target for an analysis run."""
+
+    provider: str = Field(min_length=1, max_length=50)
+    model: str = Field(min_length=1, max_length=100)
+
+    model_config = ConfigDict(extra="forbid")
+
+    @field_validator("provider")
+    @classmethod
+    def normalise_provider(cls, value: str) -> str:
+        normalised = value.strip()
+        if not normalised:
+            raise ValueError("fallback provider must not be empty")
+        return normalised.lower()
+
+    @field_validator("model")
+    @classmethod
+    def normalise_model(cls, value: str) -> str:
+        normalised = value.strip()
+        if not normalised:
+            raise ValueError("fallback model must not be empty")
+        return normalised
+
+
+def normalize_fallback_llm_chain(value: Any) -> list[dict[str, str]]:
+    """Validate and canonicalize the ordered LLM failover contract.
+
+    Runtime callers pass plain dictionaries while :class:`TradingAgentsConfig`
+    uses typed entries.  Keeping the conversion here gives both paths one
+    strict representation and prevents stale single-provider settings from
+    being interpreted by the graph.
+    """
+    if value is None:
+        return []
+    if not isinstance(value, list):
+        raise ValueError("fallback_llm_chain must be a list of provider/model entries")
+    if len(value) > MAX_FALLBACK_LLM_CHAIN_LENGTH:
+        raise ValueError(f"fallback_llm_chain cannot contain more than {MAX_FALLBACK_LLM_CHAIN_LENGTH} entries")
+    return [
+        FallbackLLMConfig.model_validate(entry.model_dump() if isinstance(entry, BaseModel) else entry).model_dump()
+        for entry in value
+    ]
 
 
 class TradingAgentsConfig(BaseModel):
@@ -20,6 +67,10 @@ class TradingAgentsConfig(BaseModel):
     )
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
+    fallback_llm_chain: list[FallbackLLMConfig] = Field(
+        default_factory=list,
+        max_length=MAX_FALLBACK_LLM_CHAIN_LENGTH,
+    )
     google_thinking_level: str | None = None
     openai_reasoning_effort: str | None = None
     anthropic_effort: str | None = None
@@ -103,6 +154,11 @@ class TradingAgentsConfig(BaseModel):
     @classmethod
     def normalise_provider(cls, v: str) -> str:
         return v.strip().lower()
+
+    @field_validator("fallback_llm_chain", mode="before")
+    @classmethod
+    def normalise_fallback_chain(cls, value: Any) -> list[dict[str, str]]:
+        return normalize_fallback_llm_chain(value)
 
     @field_validator("anthropic_effort", "openai_reasoning_effort", mode="before")
     @classmethod

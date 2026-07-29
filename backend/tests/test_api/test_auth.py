@@ -23,18 +23,9 @@ class TestAuthAPI:
         from backend.repositories.users import get_user_by_username
 
         found = await get_user_by_username(db, "logintest")
-        print(f"DEBUG found user: {found}")
-        print(f"DEBUG db session id: {id(db)}")
-
-        # Check password verification
-        if found:
-            from backend.core.security import verify_password
-
-            pw_ok = verify_password("correctpass", found.hashed_password)
-            print(f"DEBUG password ok: {pw_ok}")
+        assert found is not None
 
         resp = await async_client.post("/auth/login", json={"username": "logintest", "password": "correctpass"})
-        print(f"DEBUG login status={resp.status_code} body={resp.text[:500]}")
         assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text[:500]}"
         data = resp.json()
         assert "access_token" in data

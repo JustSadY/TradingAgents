@@ -120,6 +120,7 @@ Give a direct, honest assessment."""
     from backend.services.settings_service import get_or_create_settings
     from backend.services.user_service import get_user_api_key
     from backend.trading_agents.llm_clients.factory import create_llm_client
+    from backend.trading_agents.llm_clients.registry import provider_requires_api_key
 
     settings = await get_or_create_settings(db, user)
     agent_ctx = await build_agent_runtime_context(db, user.id)
@@ -132,7 +133,7 @@ Give a direct, honest assessment."""
     except Exception:
         user_key = None
 
-    if not user_key and not user.is_admin:
+    if provider_requires_api_key(provider) and not user_key:
         raise TradeJournalError(
             f"No API key set for provider '{provider}'. Please add it in Settings.",
             status_code=400,

@@ -131,11 +131,12 @@ class TestAssistantTenantIsolation:
 
 
 class TestOllamaEndpointHardening:
-    def test_user_cannot_store_ollama_base_url(self):
-        with pytest.raises(ValidationError, match="Ollama endpoint"):
-            ApiKeySet(provider="ollama", api_key="http://169.254.169.254/latest/meta-data")
+    @pytest.mark.parametrize("api_key", ["http://169.254.169.254/latest/meta-data", "not-a-url-secret"])
+    def test_user_cannot_store_any_ollama_tenant_credential(self, api_key):
+        with pytest.raises(ValidationError, match="server administrator"):
+            ApiKeySet(provider="ollama", api_key=api_key)
 
-    def test_legacy_ollama_url_is_ignored_by_llm_client(self, monkeypatch):
+    def test_ollama_runtime_discards_tenant_url_and_uses_server_endpoint(self, monkeypatch):
         from backend.trading_agents.llm_clients import openai_client
 
         captured: dict = {}
@@ -145,7 +146,7 @@ class TestOllamaEndpointHardening:
                 captured.update(kwargs)
 
         monkeypatch.setattr(openai_client, "NormalizedChatOpenAI", FakeChatOpenAI)
-        monkeypatch.setattr(openai_client, "_server_ollama_base_url", lambda: "http://localhost:11434/v1")
+        monkeypatch.setattr(openai_client, "get_ollama_base_url", lambda: "http://localhost:11434/v1")
 
         client = openai_client.OpenAIClient(
             model="llama3.2",
@@ -156,6 +157,8 @@ class TestOllamaEndpointHardening:
 
         assert captured["base_url"] == "http://localhost:11434/v1"
         assert captured["api_key"] == "ollama"
+        assert client.base_url is None
+        assert "api_key" not in client.kwargs
 
 
 class TestPagePermissionEnforcement:
@@ -271,6 +274,48 @@ class TestTenantPerformanceContext:
 
         assert await performance_service.get_analyst_performance_context(object(), user_id=42) == ""
         assert captured == {"user_id": 42}
+
+    async def test_system_attribution_excludes_tenant_history(self, db: AsyncSession, test_user: User, monkeypatch):
+        from backend.services import performance_service
+        from backend.trading_agents.agents import analyst_registry
+
+        monkeypatch.setattr(analyst_registry, "get_report_fields", lambda: {"market_report": "Market Analyst"})
+        db.add_all(
+            [
+                AnalysisResult(
+                    user_id=None,
+                    ticker="AAPL",
+                    trade_date="2026-07-29",
+                    market_report="Rating: Buy",
+                    raw_return=0.05,
+                    status="completed",
+                ),
+                AnalysisResult(
+                    user_id=test_user.id,
+                    ticker="AAPL",
+                    trade_date="2026-07-29",
+                    market_report="Rating: Buy",
+                    raw_return=0.05,
+                    status="completed",
+                ),
+            ]
+        )
+        await db.flush()
+
+        result = await performance_service.get_analyst_attribution_stats(db, user_id=None)
+
+        assert result["total_evaluated_runs"] == 1
+        assert result["attribution"] == [
+            {
+                "key": "market",
+                "label": "Market Analyst",
+                "total_predictions": 1,
+                "correct_predictions": 1,
+                "win_rate": 100.0,
+                "weight": 100.0,
+                "chronic_underperformer": False,
+            }
+        ]
 
 
 class TestProxyAwareRateLimiting:

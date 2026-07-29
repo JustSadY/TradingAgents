@@ -78,8 +78,7 @@ def _context_for_exception(exc: BaseException) -> ToolCallContext:
         return context
 
     # LangGraph's ToolInvocationError carries the tool name for malformed
-    # tool arguments.  Use it even when a legacy ToolNode cannot use our
-    # wrapper.
+    # tool arguments when the wrapper has no active request context.
     return ToolCallContext(
         tool=_safe_identifier(getattr(exc, "tool_name", None)),
         analyst=None,

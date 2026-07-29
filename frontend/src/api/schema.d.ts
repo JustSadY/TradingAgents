@@ -2399,6 +2399,16 @@ export interface components {
             /** Results */
             results: unknown[];
         };
+        /**
+         * FallbackLLMConfig
+         * @description One ordered provider/model failover target for an analysis run.
+         */
+        FallbackLLMConfig: {
+            /** Provider */
+            provider: string;
+            /** Model */
+            model: string;
+        };
         /** FormulaAssistRequest */
         FormulaAssistRequest: {
             /**
@@ -2612,10 +2622,8 @@ export interface components {
         };
         /** MessageResponse */
         MessageResponse: {
-            /** Status */
-            status: string;
-            /** Message */
-            message: string;
+            /** Detail */
+            detail: string;
         };
         /** MultiTickerListItem */
         MultiTickerListItem: {
@@ -3166,10 +3174,8 @@ export interface components {
              * @default gpt-4o-mini
              */
             llm_model: string;
-            /** Fallback Llm Provider */
-            fallback_llm_provider?: string | null;
-            /** Fallback Llm Model */
-            fallback_llm_model?: string | null;
+            /** Fallback Llm Chain */
+            fallback_llm_chain?: components["schemas"]["FallbackLLMConfig"][];
             /**
              * Investor Persona
              * @default conservative
@@ -3295,11 +3301,8 @@ export interface components {
              * @default false
              */
             webhook_enabled: boolean;
-            /**
-             * Webhook Events
-             * @default ["analysis_complete"]
-             */
-            webhook_events: string;
+            /** Webhook Events */
+            webhook_events?: string[];
             /** Active Preset Name */
             active_preset_name?: string | null;
             /**
@@ -3426,10 +3429,8 @@ export interface components {
             llm_provider?: string | null;
             /** Llm Model */
             llm_model?: string | null;
-            /** Fallback Llm Provider */
-            fallback_llm_provider?: string | null;
-            /** Fallback Llm Model */
-            fallback_llm_model?: string | null;
+            /** Fallback Llm Chain */
+            fallback_llm_chain?: components["schemas"]["FallbackLLMConfig"][] | null;
             /** Investor Persona */
             investor_persona?: string | null;
             /** Analyst Concurrency Limit */
@@ -3487,9 +3488,7 @@ export interface components {
             /** Webhook Enabled */
             webhook_enabled?: boolean | null;
             /** Webhook Events */
-            webhook_events?: string | null;
-            /** Active Preset Name */
-            active_preset_name?: string | null;
+            webhook_events?: string[] | null;
             /** Memory Store */
             memory_store?: string | null;
             /** Pinecone Index */
@@ -3618,10 +3617,6 @@ export interface components {
              * @default []
              */
             failed_agents: string[];
-            /** Fundamental Report */
-            fundamental_report?: string | null;
-            /** Research Report */
-            research_report?: string | null;
             /** Duration Seconds */
             duration_seconds?: number | null;
             /** Llm Provider */
@@ -4093,8 +4088,15 @@ export interface operations {
                     "application/json": components["schemas"]["AnalysisRunResponse"];
                 };
             };
-            /** @description Invalid ticker format */
+            /** @description Invalid or unknown ticker */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Ticker validation unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -4333,8 +4335,15 @@ export interface operations {
                     "application/json": components["schemas"]["MultiTickerRunResponse"];
                 };
             };
-            /** @description Invalid ticker format */
+            /** @description Invalid or unknown ticker */
             422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Ticker validation unavailable */
+            503: {
                 headers: {
                     [name: string]: unknown;
                 };

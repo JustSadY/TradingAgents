@@ -1,7 +1,7 @@
 import json
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text, text
 from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
@@ -24,8 +24,10 @@ class AppSettings(Base):
     output_language: Mapped[str] = mapped_column(String(50), default="English")
     llm_provider: Mapped[str] = mapped_column(String(50), default="openai")
     llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini")
-    fallback_llm_provider: Mapped[str | None] = mapped_column(String(50), nullable=True)
-    fallback_llm_model: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    # JSON is deliberate: an ordered failover chain is part of the current
+    # settings contract.  The old provider/model column pair could represent
+    # only one fallback and forced compatibility branches throughout runtime.
+    fallback_llm_chain: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list, nullable=False)
     investor_persona: Mapped[str] = mapped_column(String(50), default="conservative")
     analyst_concurrency_limit: Mapped[int] = mapped_column(Integer, default=1)
     max_recur_limit: Mapped[int] = mapped_column(Integer, default=1000)
@@ -55,7 +57,10 @@ class AppSettings(Base):
     stall_timeout_seconds: Mapped[int] = mapped_column(Integer, default=120)
     webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     webhook_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    webhook_events: Mapped[str] = mapped_column(Text, default='["analysis_complete"]')
+    # Store event selection natively rather than as a JSON/comma-delimited
+    # string.  This mirrors ``watchlist`` while avoiding another parser at
+    # every notification call site.
+    webhook_events: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["analysis_complete"], nullable=False)
     active_preset_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
 
     memory_store: Mapped[str] = mapped_column(String(20), default="pinecone")

@@ -115,7 +115,12 @@ async def filter_analysts_by_history(
             .where(AnalysisResult.ticker == ticker.upper())
             .where(AnalysisResult.raw_return.is_not(None))
         )
-        if user_id is not None:
+        if user_id is None:
+            # System-owned runs form their own scope; using all tenant rows
+            # here would alter the active analyst set with another user's
+            # realized history.
+            q = q.where(AnalysisResult.user_id.is_(None))
+        else:
             q = q.where(AnalysisResult.user_id == user_id)
         rows = list((await db.execute(q)).scalars().all())
     except Exception as exc:  # noqa: BLE001 — pre-screening must never block a run

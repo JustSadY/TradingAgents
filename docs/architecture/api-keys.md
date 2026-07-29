@@ -33,12 +33,14 @@ Decrypted JSON structure:
 ## Injection Flow
 
 1. Analysis is triggered by a user (`POST /api/analysis/run`)
-2. `build_analysis_config(settings, user, ...)` in `services/analysis/config_builder.py` checks the user's key
-3. If found: `config["api_key"] = user_key`
-4. If not found and user is not admin: raises `ValueError` → HTTP 400
-5. If not found and user is admin: falls back to `os.environ` (`.env` key)
-6. `TradingGraph._get_provider_kwargs()` passes `api_key` from config to the LLM client
-7. LLM clients use `kwargs.get("api_key") or os.environ.get(api_key_env)`
+2. `build_analysis_config(settings, user, ...)` decrypts the selected cloud
+   provider's key and injects it into the per-run configuration.
+3. `TradingAgentsGraph._get_provider_kwargs()` passes that key only to
+   providers whose registry metadata says a tenant key is required.
+4. Cloud-provider calls without a key are rejected by the service/client
+   boundary for every role; there is no `.env` fallback.
+5. Server-managed providers such as Ollama receive neither a tenant key nor a
+   tenant-controlled base URL. Their endpoint comes only from server config.
 
 ## Supported Providers
 
@@ -46,10 +48,14 @@ The encrypted store accepts **any** provider name string (it is also used for
 `pinecone` in the memory settings). For LLM execution, the providers a user can
 actually select are the ones registered in
 `backend/trading_agents/llm_clients/registry.py` — currently `openai`,
-`anthropic`, `google`, `nvidia` — exposed via `GET /api/settings/llm-catalog`.
+`anthropic`, `google`, `mistral`, `groq`, `nvidia`, `deepseek`, and `ollama` —
+exposed via `GET /api/settings/llm-catalog`. Ollama is server-managed and does
+not accept or expose a per-user API key.
 
 ## Security
 
 - Keys are never returned in API responses — only the provider names are listed
+- Providers marked `requires_api_key=False` are omitted from the stored-key
+  listing; stale encrypted values are inert at runtime
 - Values are encrypted at rest with Fernet (AES-128-CBC + HMAC-SHA256)
 - The encryption key must be set in `.env` as `ENCRYPTION_KEY`

@@ -6,16 +6,6 @@ import {
   CheckCircle2, XCircle, RefreshCw, UserCircle, Plus, Pencil
 } from 'lucide-react'
 
-/** Parse webhook_events — accepts JSON array or legacy comma-separated */
-function parseWebhookEvents(raw: string): string[] {
-  if (!raw) return []
-  const s = raw.trim()
-  if (s.startsWith('[')) {
-    try { const r = JSON.parse(s); return Array.isArray(r) ? r : [] } catch { /* fall through */ }
-  }
-  return s.split(',').map(x => x.trim()).filter(Boolean)
-}
-
 import { useMeta, triggerMetaRefetch } from '../hooks/useMeta'
 import { useAuth } from '../contexts/AuthContext'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
@@ -30,6 +20,10 @@ import type { WebhookDeliveryRead, SettingsRead, PresetRead } from '../api/types
 type Settings = SettingsRead
 type LlmModelOption = { value: string; label: string }
 type LlmCatalog = Record<string, { label: string; models: LlmModelOption[] }>
+type FallbackLLMEntry = { provider: string; model: string }
+
+const DEFAULT_WEBHOOK_EVENTS = ['analysis_complete', 'trade_executed', 'alert_triggered', 'signal_flip']
+const MAX_FALLBACK_CHAIN_LENGTH = 3
 
 function normalizeLlmCatalog(value: unknown): LlmCatalog {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
@@ -154,7 +148,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     setPresetSaving(true)
     try {
       const url = userId ? `/api/presets?user_id=${userId}` : '/api/presets'
-      await axios.post(url, { name: presetName.trim(), settings_json: JSON.stringify(s) })
+      const presetSettings = { ...s }
+      delete presetSettings.updated_at
+      delete presetSettings.active_preset_name
+      await axios.post(url, { name: presetName.trim(), settings_json: JSON.stringify(presetSettings) })
       setPresetName('')
       await loadPresets()
     } finally { setPresetSaving(false) }
@@ -199,7 +196,13 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     setSaving(true)
     try {
       const url = userId ? `/api/settings/users/${userId}` : '/api/settings'
-      await axios.put(url, s)
+      const settingsUpdate = { ...s }
+      delete settingsUpdate.updated_at
+      // Preset selection belongs to the preset apply endpoint. Sending the
+      // read-only marker back with every full-form save would keep a stale
+      // preset selected after the user changes an individual setting.
+      delete settingsUpdate.active_preset_name
+      await axios.put(url, settingsUpdate)
       triggerMetaRefetch()
       if (activeTab === 'agents' && agentPanelRef.current) {
         await agentPanelRef.current.save()
@@ -221,12 +224,24 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const update = (k: keyof Settings, v: any) => setS(prev => prev ? { ...prev, [k]: v } : prev)
   const primaryModels = llmCatalog[s.llm_provider]?.models ?? []
   const primaryUsesCustomModel = !primaryModels.some(model => model.value === s.llm_model)
-  const fallbackModels = s.fallback_llm_provider ? llmCatalog[s.fallback_llm_provider]?.models ?? [] : []
-  const fallbackUsesCustomModel = !fallbackModels.some(model => model.value === s.fallback_llm_model)
+  const fallbackChain = s.fallback_llm_chain ?? []
+  const webhookEvents = s.webhook_events ?? []
   const metaProviders = Object.entries(meta?.provider_labels ?? {})
   const providerOptions = metaProviders.length > 0
     ? metaProviders
     : Object.entries(llmCatalog).map(([key, entry]) => [key, entry.label] as [string, string])
+
+  const updateFallbackEntry = (index: number, patch: Partial<FallbackLLMEntry>) => {
+    update('fallback_llm_chain', fallbackChain.map((entry, position) => (
+      position === index ? { ...entry, ...patch } : entry
+    )))
+  }
+
+  const addFallbackEntry = () => {
+    const provider = providerOptions[0]?.[0] ?? s.llm_provider
+    const model = llmCatalog[provider]?.models[0]?.value ?? s.llm_model
+    update('fallback_llm_chain', [...fallbackChain, { provider, model }])
+  }
 
   const savePineconeKey = async () => {
     if (!pineconeKey.trim()) return
@@ -376,49 +391,76 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       </div>
                     </Row>
 
-                    <Row label={t('settings.row_fallback_provider')}>
-                      <select
-                        className={Input}
-                        value={s.fallback_llm_provider || ''}
-                        onChange={e => {
-                          const v = e.target.value || null
-                          update('fallback_llm_provider', v)
-                          if (!v) update('fallback_llm_model', null)
-                        }}
-                      >
-                        <option value="">{t('settings.fallback_disabled')}</option>
-                        {providerOptions.map(([key, label]) => (
-                          <option key={key} value={key}>{label}</option>
-                        ))}
-                      </select>
-                    </Row>
-                    {s.fallback_llm_provider && (
-                      <>
-                        <Row label={t('settings.row_fallback_model')}>
-                          <div className="space-y-2">
-                            <select
-                              className={Input}
-                              value={fallbackUsesCustomModel ? '__custom__' : s.fallback_llm_model || ''}
-                              onChange={e => update('fallback_llm_model', e.target.value === '__custom__' ? null : e.target.value || null)}
-                            >
-                              {fallbackModels.map(model => <option key={model.value} value={model.value}>{model.label}</option>)}
-                              <option value="__custom__">{t('settings.custom_model_option')}</option>
-                            </select>
-                            {fallbackUsesCustomModel && (
-                              <input
+                    <Row label={t('settings.row_fallback_chain')}>
+                      <div className="space-y-2">
+                        {fallbackChain.length === 0 && (
+                          <p className="text-[10px] text-slate-500 leading-relaxed">{t('settings.fallback_disabled')}</p>
+                        )}
+                        {fallbackChain.map((entry, index) => {
+                          const models = llmCatalog[entry.provider]?.models ?? []
+                          const usesCustomModel = !models.some(model => model.value === entry.model)
+                          return (
+                            <div key={`${entry.provider}-${entry.model}-${index}`} className="space-y-2 rounded-xl border border-white/[0.05] bg-white/[0.015] p-2.5">
+                              <div className="flex items-center gap-2">
+                                <select
+                                  aria-label={`${t('settings.fallback_step_provider')} ${index + 1}`}
+                                  className={Input}
+                                  value={entry.provider}
+                                  onChange={e => {
+                                    const provider = e.target.value
+                                    const model = llmCatalog[provider]?.models[0]?.value ?? entry.model
+                                    updateFallbackEntry(index, { provider, model })
+                                  }}
+                                >
+                                  {providerOptions.map(([key, label]) => (
+                                    <option key={key} value={key}>{label}</option>
+                                  ))}
+                                </select>
+                                <button
+                                  type="button"
+                                  onClick={() => update('fallback_llm_chain', fallbackChain.filter((_, position) => position !== index))}
+                                  className="shrink-0 rounded-lg p-2 text-slate-500 hover:bg-rose-500/10 hover:text-rose-400 transition cursor-pointer"
+                                  title={t('settings.fallback_remove')}
+                                >
+                                  <Trash2 size={13} />
+                                </button>
+                              </div>
+                              <select
+                                aria-label={`${t('settings.fallback_step_model')} ${index + 1}`}
                                 className={Input}
-                                value={s.fallback_llm_model || ''}
-                                onChange={e => update('fallback_llm_model', e.target.value || null)}
-                                placeholder={t('settings.custom_model_placeholder')}
-                              />
-                            )}
-                          </div>
-                        </Row>
-                        <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed">
+                                value={usesCustomModel ? '__custom__' : entry.model}
+                                onChange={e => {
+                                  const model = e.target.value === '__custom__' ? '' : e.target.value
+                                  updateFallbackEntry(index, { model })
+                                }}
+                              >
+                                {models.map(model => <option key={model.value} value={model.value}>{model.label}</option>)}
+                                <option value="__custom__">{t('settings.custom_model_option')}</option>
+                              </select>
+                              {usesCustomModel && (
+                                <input
+                                  className={Input}
+                                  value={entry.model}
+                                  onChange={e => updateFallbackEntry(index, { model: e.target.value })}
+                                  placeholder={t('settings.custom_model_placeholder')}
+                                />
+                              )}
+                            </div>
+                          )
+                        })}
+                        <button
+                          type="button"
+                          onClick={addFallbackEntry}
+                          disabled={fallbackChain.length >= MAX_FALLBACK_CHAIN_LENGTH || providerOptions.length === 0}
+                          className="text-[10px] font-bold text-violet-300 hover:text-violet-200 disabled:cursor-not-allowed disabled:opacity-40 transition cursor-pointer"
+                        >
+                          + {t('settings.fallback_add')}
+                        </button>
+                        <p className="text-[10px] text-slate-500 leading-relaxed">
                           {t('settings.fallback_hint')}
                         </p>
-                      </>
-                    )}
+                      </div>
+                    </Row>
 
                     <Row label={t('settings.row_reasoning_effort')}>
                       <select className={Input} value={s.openai_reasoning_effort || ''} onChange={e => update('openai_reasoning_effort', e.target.value || null)}>
@@ -655,16 +697,17 @@ export default function Settings({ userId }: { userId?: number } = {}) {
               </Row>
               <Row label={t('settings.row_notification_events')}>
                 <div className="flex flex-col gap-2.5 pt-1">
-                  {(meta?.webhook_events ?? ['analysis_complete', 'alert_triggered', 'order_filled', 'risk_breach']).map(key => (
+                  {(meta?.webhook_events ?? DEFAULT_WEBHOOK_EVENTS).map(key => (
                     <label key={key} className="flex items-center gap-2 text-xs font-medium text-slate-400 cursor-pointer hover:text-slate-300 select-none">
                       <input
                         type="checkbox"
                         className="accent-violet-600 rounded w-4 h-4 cursor-pointer"
-                        checked={parseWebhookEvents(s.webhook_events).includes(key)}
+                        checked={webhookEvents.includes(key)}
                         onChange={e => {
-                          const events = parseWebhookEvents(s.webhook_events)
-                          const next = e.target.checked ? [...events, key] : events.filter(x => x !== key)
-                          update('webhook_events', JSON.stringify(next))
+                          const next = e.target.checked
+                            ? [...webhookEvents, key]
+                            : webhookEvents.filter(event => event !== key)
+                          update('webhook_events', next)
                         }}
                       />
                       {t(`settings.event_${key}`) || key}

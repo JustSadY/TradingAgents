@@ -99,9 +99,6 @@ async def get_shared_report(token: str, db: AsyncSession = Depends(get_db)):
         "quality": analysis.quality,
         "degraded": bool(analysis.degraded) if analysis.degraded is not None else False,
         "failed_agents": analysis.failed_agents or [],
-        # Backward-compatible aliases
-        "fundamental_report": analysis.fundamentals_report,
-        "research_report": analysis.investment_plan,
         # Metadata
         "duration_seconds": analysis.duration_seconds,
         "llm_provider": analysis.llm_provider,

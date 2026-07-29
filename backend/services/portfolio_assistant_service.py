@@ -71,6 +71,7 @@ async def clear_assistant_history(db: AsyncSession, user) -> None:
 async def chat(db: AsyncSession, user: User, message: str) -> dict:
     from backend.services.agent_settings_service import build_agent_runtime_context
     from backend.trading_agents.llm_clients.factory import create_llm_client
+    from backend.trading_agents.llm_clients.registry import provider_requires_api_key
 
     settings = await get_or_create_settings(db, user)
     allowed_pages = await _get_allowed_pages(db, user)
@@ -86,7 +87,7 @@ async def chat(db: AsyncSession, user: User, message: str) -> dict:
     model = pm_settings.get("llm_model") or settings.llm_model
 
     user_key = resolve_user_api_key(user, provider)
-    if not user_key and not user.is_admin:
+    if provider_requires_api_key(provider) and not user_key:
         raise HTTPException(
             status_code=400,
             detail=f"No API key set for provider '{provider}'. Please add your API key in Settings.",

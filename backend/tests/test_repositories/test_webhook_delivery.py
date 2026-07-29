@@ -25,7 +25,7 @@ class TestWebhookDeliveryRepository:
 
     async def test_list_webhook_deliveries(self, db: AsyncSession, test_user):
         await self._create_delivery(db, test_user.id, event="analysis_complete")
-        await self._create_delivery(db, test_user.id, event="order_filled")
+        await self._create_delivery(db, test_user.id, event="trade_executed")
 
         deliveries = await list_webhook_deliveries(db, test_user.id)
         assert len(deliveries) == 2

@@ -83,7 +83,11 @@ async def get_signal_replay_context(db: AsyncSession, ticker: str, user_id: int 
             .order_by(AnalysisResult.trade_date.desc())
             .limit(_MAX_ROWS)
         )
-        if user_id is not None:
+        if user_id is None:
+            # A system-owned run has its own global scope.  Do not inject
+            # every tenant's realized performance into an LLM prompt.
+            q = q.where(AnalysisResult.user_id.is_(None))
+        else:
             q = q.where(AnalysisResult.user_id == user_id)
         rows = list((await db.execute(q)).scalars().all())
         return render_signal_replay(ticker, rows)

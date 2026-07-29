@@ -4,6 +4,7 @@ import asyncio
 import logging
 import time
 
+from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.catalog import node_progress
@@ -419,12 +420,10 @@ async def run_individual_analysis(
 
         trader_obj = final_state.get("trader_investment_plan_obj")
 
-        if trader_obj:
-            if hasattr(trader_obj, "dict"):
-                structured_data["trader_proposal"] = trader_obj.dict()
-
-            elif isinstance(trader_obj, dict):
-                structured_data["trader_proposal"] = trader_obj
+        if isinstance(trader_obj, BaseModel):
+            structured_data["trader_proposal"] = trader_obj.model_dump()
+        elif isinstance(trader_obj, dict):
+            structured_data["trader_proposal"] = trader_obj
 
         _VALID_SIGNALS = {"Buy", "Overweight", "Hold", "Underweight", "Sell"}
         raw_signal = result.signal

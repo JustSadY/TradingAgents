@@ -176,6 +176,48 @@ describe('Analysis', () => {
     expect(localStorage.getItem('ta_task_running')).toBeNull()
   })
 
+  it('renders a status message instead of falling back to its technical agent key', async () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+      onmessage: ((event: MessageEvent) => void) | null = null
+
+      constructor() {
+        MockWebSocket.instances.push(this)
+      }
+
+      close() {}
+
+      emit(event: Record<string, unknown>) {
+        this.onmessage?.({ data: JSON.stringify(event) } as MessageEvent)
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket)
+
+    const axios = await import('axios')
+    vi.mocked(axios.default.post).mockImplementation((url: string) => {
+      if (url === '/api/analysis/run') return Promise.resolve({ data: { task_id: 'status-task' } })
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<Analysis />)
+    const user = userEvent.setup()
+    await user.type(screen.getByRole('textbox', { name: 'Ticker' }), 'AAPL')
+    await user.click(screen.getByRole('button', { name: 'Start analysis' }))
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+
+    await act(async () => {
+      MockWebSocket.instances[0].emit({
+        type: 'status',
+        agent: 'portfolio_manager',
+        status: 'running',
+        message: 'Preparing engine',
+      })
+    })
+
+    expect(screen.getAllByText('Preparing engine')).not.toHaveLength(0)
+    expect(screen.queryByText('portfolio_manager')).not.toBeInTheDocument()
+  })
+
   it('does not reconnect the multi-ticker WebSocket after a terminal completion event', async () => {
     class MockWebSocket {
       static instances: MockWebSocket[] = []

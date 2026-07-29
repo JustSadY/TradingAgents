@@ -18,6 +18,13 @@ def decrypt_api_keys(enc: str, fernet: Fernet) -> dict[str, str]:
 
 
 def get_user_api_key(user: User, provider: str, fernet: Fernet) -> str | None:
+    from backend.trading_agents.llm_clients.registry import provider_requires_api_key
+
+    # Local/server-managed providers do not consume a tenant credential. This
+    # also prevents stale values written by pre-contract releases from being
+    # carried into any LLM call path.
+    if not provider_requires_api_key(provider):
+        return None
     if not user.api_keys_enc:
         return None
     try:
@@ -47,6 +54,10 @@ def resolve_user_api_key(user: User, provider: str) -> str | None:
 
 
 def set_user_api_key(user: User, provider: str, api_key: str, fernet: Fernet) -> None:
+    from backend.trading_agents.llm_clients.registry import provider_requires_api_key
+
+    if not provider_requires_api_key(provider):
+        raise ValueError(f"Provider '{provider}' is server-managed and does not accept a tenant API key")
     existing: dict[str, str] = {}
     if user.api_keys_enc:
         try:
@@ -82,7 +93,9 @@ def list_user_api_key_providers(user: User, fernet: Fernet) -> list[str]:
         return []
     try:
         keys = decrypt_api_keys(user.api_keys_enc, fernet)
-        return list(keys.keys())
+        from backend.trading_agents.llm_clients.registry import provider_requires_api_key
+
+        return [provider for provider in keys if provider_requires_api_key(provider)]
     except Exception as e:
         _logger.warning(
             "Failed to list API key providers for user %s due to decryption failure: %s",

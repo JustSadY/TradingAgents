@@ -96,13 +96,14 @@ async def generate_formula(db: AsyncSession, prompt: str, user) -> str:
 
     from backend.services.user_service import resolve_user_api_key
     from backend.trading_agents.llm_clients.factory import create_llm_client
+    from backend.trading_agents.llm_clients.registry import provider_requires_api_key
 
     settings = await get_or_create_settings(db, user)
     provider = settings.llm_provider
     model = settings.llm_model
 
     api_key = resolve_user_api_key(user, provider)
-    if not api_key and not getattr(user, "is_admin", False):
+    if provider_requires_api_key(provider) and not api_key:
         raise ValueError(f"No API key set for provider '{provider}'. Please add your API key in Settings.")
 
     client = create_llm_client(provider=provider, model=model, api_key=api_key)

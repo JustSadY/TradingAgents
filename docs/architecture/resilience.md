@@ -80,7 +80,7 @@ Eight additional resilience features build on the foundation above:
 - **Source:** `resilience.py:guard_node`
 
 ### 4.3 Provider/model fallback chain
-- **Config:** `fallback_llm_chain` (list of `{"provider": ..., "model": ...}` dicts); legacy `fallback_llm_provider` / `fallback_llm_model` keys also supported
+- **Config:** `fallback_llm_chain` — an ordered list of `{"provider": ..., "model": ...}` entries.
 - **Mechanism:** `FallbackLLM` now accepts a list of fallbacks. `bind_tools`, `with_structured_output`, `invoke`, `ainvoke`, `stream`, `astream` all apply the full chain via LangChain `with_fallbacks`
 - Runtime provider failover on every LLM call — if the primary raises, the next fallback is tried in order
 - **Source:** `llm_clients/fallback.py`, `trading_graph.py:_with_fallback`

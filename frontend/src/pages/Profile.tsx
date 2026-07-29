@@ -143,7 +143,7 @@ export default function Profile() {
     if (!providerLabels) return []
     return Object.entries(providerLabels)
       // Ollama uses the server-managed OLLAMA_BASE_URL and has no tenant API
-      // key. Do not render the legacy URL-like input for it.
+      // key. Do not render a URL-like input for it.
       .filter(([key]) => key !== 'ollama')
       .map(([key, label]) => ({
         key,

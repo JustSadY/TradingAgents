@@ -86,7 +86,7 @@ describe('Settings', () => {
           output_language: 'English', investor_persona: 'conservative', benchmark_ticker: null,
           news_article_limit: 20, global_news_article_limit: 10, global_news_lookback_days: 7,
           llm_provider: 'openai', llm_model: 'gpt-4o-mini',
-          fallback_llm_provider: null, fallback_llm_model: null,
+          fallback_llm_chain: [],
           openai_reasoning_effort: null, anthropic_effort: null, google_thinking_level: null,
           max_recur_limit: 1000,
         } })

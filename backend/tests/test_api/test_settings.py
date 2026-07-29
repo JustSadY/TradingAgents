@@ -30,6 +30,38 @@ class TestSettingsAPI:
         assert data["llm_provider"] == "anthropic"
         assert data["llm_model"] == "claude-3-opus"
 
+    async def test_update_settings_uses_native_webhook_and_fallback_collections(self, auth_client: AsyncClient):
+        resp = await auth_client.put(
+            "/api/settings",
+            json={
+                "webhook_events": ["analysis_complete", "trade_executed"],
+                "fallback_llm_chain": [
+                    {"provider": " NVIDIA ", "model": " nvidia/nemotron "},
+                    {"provider": "openai", "model": "gpt-4o-mini"},
+                ],
+            },
+        )
+
+        assert resp.status_code == 200
+        assert resp.json()["webhook_events"] == ["analysis_complete", "trade_executed"]
+        assert resp.json()["fallback_llm_chain"] == [
+            {"provider": "nvidia", "model": "nvidia/nemotron"},
+            {"provider": "openai", "model": "gpt-4o-mini"},
+        ]
+
+    async def test_update_settings_rejects_retired_collection_fields(self, auth_client: AsyncClient):
+        comma_events = await auth_client.put(
+            "/api/settings",
+            json={"webhook_events": "analysis_complete,order_filled"},
+        )
+        old_fallback_pair = await auth_client.put(
+            "/api/settings",
+            json={"fallback_llm_provider": "openai", "fallback_llm_model": "gpt-4o-mini"},
+        )
+
+        assert comma_events.status_code == 422
+        assert old_fallback_pair.status_code == 422
+
     async def test_get_settings_unauthorized(self, async_client: AsyncClient):
         resp = await async_client.get("/api/settings")
         assert resp.status_code == 401

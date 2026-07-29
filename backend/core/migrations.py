@@ -9,7 +9,14 @@ table.
 
 from __future__ import annotations
 
+import json
+import logging
+
 from sqlalchemy import inspect, text
+
+from backend.core.constants import WEBHOOK_EVENTS
+
+_logger = logging.getLogger(__name__)
 
 _ALLOWED_TABLES = {
     "users",
@@ -42,8 +49,7 @@ _ALLOWED_COLUMNS = {
     "app_settings": {
         "user_id",
         "llm_model",
-        "fallback_llm_provider",
-        "fallback_llm_model",
+        "fallback_llm_chain",
         "openai_reasoning_effort",
         "anthropic_effort",
         "google_thinking_level",
@@ -242,8 +248,7 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("app_settings", "pinecone_embed_model", _TYPE_VARCHAR_60 + " DEFAULT 'llama-text-embed-v2'"),
     ("app_settings", "memory_openai_embed_model", _TYPE_VARCHAR_60 + " DEFAULT 'text-embedding-3-small'"),
     ("app_settings", "memory_ollama_embed_model", _TYPE_VARCHAR_60 + " DEFAULT 'nomic-embed-text'"),
-    ("app_settings", "fallback_llm_provider", _TYPE_VARCHAR_50),
-    ("app_settings", "fallback_llm_model", _TYPE_VARCHAR_100),
+    ("app_settings", "fallback_llm_chain", "JSON NOT NULL DEFAULT '[]'"),
     ("app_settings", "agent_qa_enabled", _TYPE_BOOLEAN_DEFAULT_TRUE),
     ("app_settings", "anthropic_prompt_caching", _TYPE_BOOLEAN_DEFAULT_TRUE),
     ("app_settings", "max_report_chars_in_prompts", "INTEGER DEFAULT 6000"),
@@ -312,7 +317,7 @@ _NEW_COLUMNS += [
     ("analysis_results", "reflection", _TYPE_TEXT_DEFAULT_EMPTY),
     ("app_settings", "webhook_url", _TYPE_VARCHAR_500),
     ("app_settings", "webhook_enabled", _TYPE_BOOLEAN_DEFAULT_FALSE),
-    ("app_settings", "webhook_events", _TYPE_TEXT_DEFAULT_EMPTY + " DEFAULT '[\"analysis_complete\"]'"),
+    ("app_settings", "webhook_events", "JSON NOT NULL DEFAULT '[\"analysis_complete\"]'"),
     ("app_settings", "active_preset_name", _TYPE_VARCHAR_100),
     ("analysis_results", "llm_provider", _TYPE_VARCHAR_50),
     ("analysis_results", "llm_model", _TYPE_VARCHAR_100),
@@ -373,6 +378,146 @@ _NUMERIC_COLUMNS: list[tuple[str, tuple[str, ...]]] = [
 _NUMERIC_PRECISION = "NUMERIC(20, 8)"
 
 
+# Values written before the analysis signal enum was made canonical.  Keep
+# this SQL deliberately narrow: recognised spellings are safe to rewrite,
+# while unexpected historical text is left untouched for operators to inspect.
+_NORMALIZE_ANALYSIS_SIGNALS_SQL = """
+    UPDATE analysis_results
+    SET signal = CASE lower(trim(signal))
+        WHEN 'buy' THEN 'Buy'
+        WHEN 'overweight' THEN 'Overweight'
+        WHEN 'hold' THEN 'Hold'
+        WHEN 'underweight' THEN 'Underweight'
+        WHEN 'sell' THEN 'Sell'
+    END
+    WHERE lower(trim(signal)) IN ('buy', 'overweight', 'hold', 'underweight', 'sell')
+"""
+
+_LEGACY_WEBHOOK_EVENT_ALIASES = {"order_filled": "trade_executed"}
+
+
+def _normalize_webhook_events_value(value: object) -> tuple[list[str], bool]:
+    """Convert a pre-JSON event value without guessing malformed JSON.
+
+    The bool tells the caller that a retired/unknown event was intentionally
+    discarded.  In particular, ``risk_breach`` was once shown in metadata but
+    never had an event producer, so retaining it would preserve a deceptive
+    configuration instead of a working notification selection.
+    """
+    candidates: object = value
+    if isinstance(value, str):
+        raw = value.strip()
+        if not raw:
+            candidates = []
+        elif raw.startswith("["):
+            try:
+                candidates = json.loads(raw)
+            except json.JSONDecodeError:
+                return [], True
+        else:
+            candidates = raw.split(",")
+
+    if not isinstance(candidates, list):
+        return [], value not in (None, "", [])
+
+    normalized: list[str] = []
+    discarded = False
+    for candidate in candidates:
+        if not isinstance(candidate, str):
+            discarded = True
+            continue
+        event = candidate.strip().lower()
+        event = _LEGACY_WEBHOOK_EVENT_ALIASES.get(event, event)
+        if event not in WEBHOOK_EVENTS:
+            discarded = True
+            continue
+        if event not in normalized:
+            normalized.append(event)
+    return normalized, discarded
+
+
+def _normalize_fallback_chain_value(
+    value: object,
+    legacy_provider: object = None,
+    legacy_model: object = None,
+) -> list[dict[str, str]]:
+    """Return the current ordered chain, or migrate the former field pair."""
+    candidates: object = value
+    if isinstance(value, str):
+        try:
+            candidates = json.loads(value)
+        except json.JSONDecodeError:
+            candidates = []
+
+    normalized: list[dict[str, str]] = []
+    if isinstance(candidates, list):
+        for candidate in candidates:
+            if not isinstance(candidate, dict):
+                continue
+            provider = candidate.get("provider")
+            model = candidate.get("model")
+            if not isinstance(provider, str) or not isinstance(model, str):
+                continue
+            provider, model = provider.strip().lower(), model.strip()
+            if provider and model and {"provider": provider, "model": model} not in normalized:
+                normalized.append({"provider": provider, "model": model})
+            if len(normalized) == 3:
+                return normalized
+
+    if normalized:
+        return normalized
+
+    provider = legacy_provider.strip().lower() if isinstance(legacy_provider, str) else ""
+    model = legacy_model.strip() if isinstance(legacy_model, str) else ""
+    return [{"provider": provider, "model": model}] if provider and model else []
+
+
+def _normalize_preset_settings_collections(settings_json: object) -> tuple[str | None, bool]:
+    """Upgrade known collection fields inside a stored preset JSON object.
+
+    Invalid whole presets remain untouched so this migration never destroys a
+    user-created template that needs manual repair for an unrelated reason.
+    """
+    if not isinstance(settings_json, str):
+        return None, False
+    try:
+        settings = json.loads(settings_json)
+    except json.JSONDecodeError:
+        return None, False
+    if not isinstance(settings, dict):
+        return None, False
+
+    changed = False
+    # Pre-contract settings pages stored a whole SettingsRead response in a
+    # preset.  These are response-only fields and the current strict preset
+    # parser correctly rejects them, so remove only the known app-generated
+    # metadata while preserving any other unexpected user data for review.
+    for read_only_field in ("updated_at", "active_preset_name"):
+        if read_only_field in settings:
+            settings.pop(read_only_field)
+            changed = True
+
+    if "webhook_events" in settings:
+        events, _ = _normalize_webhook_events_value(settings["webhook_events"])
+        if settings["webhook_events"] != events:
+            settings["webhook_events"] = events
+            changed = True
+
+    has_legacy_fallback = "fallback_llm_provider" in settings or "fallback_llm_model" in settings
+    if has_legacy_fallback:
+        chain = _normalize_fallback_chain_value(
+            settings.get("fallback_llm_chain"),
+            settings.get("fallback_llm_provider"),
+            settings.get("fallback_llm_model"),
+        )
+        settings["fallback_llm_chain"] = chain
+        settings.pop("fallback_llm_provider", None)
+        settings.pop("fallback_llm_model", None)
+        changed = True
+
+    return (json.dumps(settings, separators=(",", ":"), sort_keys=True), True) if changed else (None, False)
+
+
 async def apply_type_migrations(conn) -> None:
     """Convert legacy float money columns to exact NUMERIC on PostgreSQL."""
     if conn.dialect.name == "sqlite":
@@ -396,6 +541,76 @@ async def apply_type_migrations(conn) -> None:
                         f"TYPE {_NUMERIC_PRECISION} USING {column}::numeric(20, 8)"
                     )
                 )
+
+
+async def normalize_sqlite_analysis_signals(conn) -> None:
+    """Canonicalize known pre-enum signals in SQLite development databases.
+
+    PostgreSQL receives the equivalent one-time Alembic data migration.  Do
+    not erase unknown values here: the response DTO will continue to hide
+    invalid values rather than silently discarding historical information.
+    """
+    if conn.dialect.name == "sqlite":
+        await conn.execute(text(_NORMALIZE_ANALYSIS_SIGNALS_SQL))
+
+
+def _sqlite_table_columns(sync_conn, table: str) -> set[str]:
+    inspector = inspect(sync_conn)
+    if not inspector.has_table(table):
+        return set()
+    return {column["name"] for column in inspector.get_columns(table)}
+
+
+async def normalize_sqlite_settings_collections(conn) -> None:
+    """Upgrade legacy SQLite settings/presets after additive columns exist.
+
+    SQLite cannot safely drop the retired columns without rebuilding the table,
+    so they become inert after this one-time copy.  PostgreSQL removes them in
+    the corresponding Alembic revision.
+    """
+    if conn.dialect.name != "sqlite":
+        return
+
+    settings_columns = await conn.run_sync(_sqlite_table_columns, "app_settings")
+    if not {"id", "webhook_events", "fallback_llm_chain"}.issubset(settings_columns):
+        return
+
+    select_columns = ["id", "webhook_events", "fallback_llm_chain"]
+    for legacy_column in ("fallback_llm_provider", "fallback_llm_model"):
+        if legacy_column in settings_columns:
+            select_columns.append(legacy_column)
+    rows = (await conn.execute(text(f"SELECT {', '.join(select_columns)} FROM app_settings"))).mappings()
+
+    discarded_events = 0
+    for row in rows:
+        events, discarded = _normalize_webhook_events_value(row["webhook_events"])
+        chain = _normalize_fallback_chain_value(
+            row["fallback_llm_chain"],
+            row.get("fallback_llm_provider"),
+            row.get("fallback_llm_model"),
+        )
+        await conn.execute(
+            text("UPDATE app_settings SET webhook_events = :events, fallback_llm_chain = :chain WHERE id = :id"),
+            {"id": row["id"], "events": json.dumps(events), "chain": json.dumps(chain)},
+        )
+        discarded_events += int(discarded)
+
+    preset_columns = await conn.run_sync(_sqlite_table_columns, "config_presets")
+    if {"id", "settings_json"}.issubset(preset_columns):
+        preset_rows = (await conn.execute(text("SELECT id, settings_json FROM config_presets"))).mappings()
+        for row in preset_rows:
+            normalized, changed = _normalize_preset_settings_collections(row["settings_json"])
+            if changed and normalized is not None:
+                await conn.execute(
+                    text("UPDATE config_presets SET settings_json = :settings_json WHERE id = :id"),
+                    {"id": row["id"], "settings_json": normalized},
+                )
+
+    if discarded_events:
+        _logger.warning(
+            "Normalized SQLite webhook settings; removed %s retired or unsupported event selection(s)",
+            discarded_events,
+        )
 
 
 async def apply_column_migrations(conn) -> None:

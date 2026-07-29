@@ -19,7 +19,7 @@ Admin users bypass all user_id filters and see all data across the system.
 | Table | Isolation Column | Notes |
 |-------|-----------------|-------|
 | `users` | — | Central identity table |
-| `analysis_results` | `user_id` | nullable, legacy rows stay NULL |
+| `analysis_results` | `user_id` | nullable; `NULL` denotes a system-owned run |
 | `portfolios` | `user_id` | nullable |
 | `price_alerts` | `user_id` | nullable |
 | `app_settings` | `user_id` | per-user LLM/trading preferences |
@@ -29,11 +29,16 @@ Admin users bypass all user_id filters and see all data across the system.
 
 ## Data Migration
 
-Existing records keep `user_id = NULL` (legacy). New records are tagged with the
-creating user's ID. Admins see both.
+Historical records with no owner remain in the explicit system scope
+(`user_id IS NULL`); they are never automatically attributed to an arbitrary
+account. New user-initiated records carry the creating user's ID. User queries
+must filter by that ID, while system jobs must filter with `IS NULL`; neither
+may fall back to every tenant's records. Admin reporting can opt into an
+all-user view explicitly.
 
-The migration runs automatically at startup via `create_all_tables()` in
-`backend/core/database.py` using `ALTER TABLE ... ADD COLUMN IF NOT EXISTS`.
+PostgreSQL upgrades are versioned through Alembic. SQLite remains a local
+development/test path and applies the small, idempotent compatibility updates
+inside `create_all_tables()`.
 
 ## Deployment Notes
 

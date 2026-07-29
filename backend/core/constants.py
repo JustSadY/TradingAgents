@@ -23,6 +23,16 @@ PAGE_KEYS = [
 
 SETTING_KEYS = ["general", "llm", "agents", "tools", "risk", "webhooks", "cron", "presets", "memory", "personas"]
 
+# Notification events are an API/storage contract.  Keep this list beside the
+# rest of the public application constants so the settings schema, metadata
+# endpoint, and delivery service cannot drift into accepting different names.
+WEBHOOK_EVENTS: tuple[str, ...] = (
+    "analysis_complete",
+    "trade_executed",
+    "alert_triggered",
+    "signal_flip",
+)
+
 PERIOD_DELTAS = {
     "1m": timedelta(days=31),
     "3m": timedelta(days=92),

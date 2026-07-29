@@ -125,8 +125,10 @@ async def answer_report_question(
     active_provider = pm_settings.get("llm_provider") or settings.llm_provider
     active_model = pm_settings.get("llm_model") or settings.llm_model
 
+    from backend.trading_agents.llm_clients.registry import provider_requires_api_key
+
     user_key = resolve_user_api_key(user, active_provider)
-    if not user_key and not getattr(user, "is_admin", False):
+    if provider_requires_api_key(active_provider) and not user_key:
         raise HTTPException(
             status_code=400,
             detail=f"No API key set for provider '{active_provider}'. Please add your API key in Settings.",

@@ -6,7 +6,7 @@ logger, which the backend's DB log handler persists and surfaces under
 
 * a failing **tool** falls through — its error is logged and returned to the LLM
   as a message so the agent can try another tool or proceed (see
-  ``tool_error_handler``, wired into every ``ToolNode``);
+  ``agents.runtime.tool_telemetry``, wired into every ``ToolNode``);
 * a failing **agent/node** is retried with exponential backoff and, if it still
   fails, is skipped with a safe fallback instead of aborting the whole analysis
   (see ``retry_call`` and ``guard_node``).
@@ -403,18 +403,6 @@ async def _emit_retry_progress(label: str, i: int, attempts: int, exc: Exception
         await emitter.emit_retry(clean_label, i + 1, attempts, err_msg)
     except Exception:
         pass
-
-
-def tool_error_handler(exc: Exception) -> str:
-    """Backward-compatible entry point for contextual tool telemetry.
-
-    New ToolNodes import the implementation directly so they can set a
-    per-call context. Retaining this name avoids silently regressing any
-    extension that still imports the old resilience helper.
-    """
-    from backend.trading_agents.agents.runtime.tool_telemetry import tool_error_handler as _contextual_handler
-
-    return _contextual_handler(exc)
 
 
 def guard_node(

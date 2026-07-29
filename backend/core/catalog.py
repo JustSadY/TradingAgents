@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from backend.core.config import is_live_trading_enabled
-from backend.core.constants import PAGE_KEYS, SETTING_KEYS
+from backend.core.constants import PAGE_KEYS, SETTING_KEYS, WEBHOOK_EVENTS
 from backend.trading_agents.agent_catalog import label_for
 from backend.trading_agents.agent_catalog import list_analysts as _engine_analysts
 
@@ -127,13 +127,6 @@ LLM_CATALOG: dict[str, dict] = {
     }
     for p in llm_registry.list_providers()
 }
-
-WEBHOOK_EVENTS: list[str] = [
-    "analysis_complete",
-    "alert_triggered",
-    "order_filled",
-    "risk_breach",
-]
 
 
 def trading_options_for_user(user=None) -> tuple[list[dict], list[dict]]:

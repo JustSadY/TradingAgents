@@ -146,14 +146,11 @@ _PROVIDER_BASE_URL = {
     "deepseek": "https://api.deepseek.com/v1",
 }
 
-# Providers that work without an API key (use a dummy value so the OpenAI
-# client doesn't reject the request).  Ollama's endpoint is server-managed;
-# allowing a user's stored API-key value to become a base URL turns every LLM
-# request into an authenticated SSRF primitive.
-_NO_KEY_PROVIDERS = {"ollama"}
+_OLLAMA_PROVIDER = "ollama"
 
 
-def _server_ollama_base_url() -> str:
+def get_ollama_base_url() -> str:
+    """Return the server-owned OpenAI-compatible Ollama endpoint."""
     from backend.core.config import get_settings
 
     base_url = get_settings().OLLAMA_BASE_URL.rstrip("/")
@@ -168,8 +165,14 @@ class OpenAIClient(BaseLLMClient):
         provider: str = "openai",
         **kwargs,
     ):
-        super().__init__(model, base_url, **kwargs)
         self.provider = provider.lower()
+        if self.provider == _OLLAMA_PROVIDER:
+            # A local model endpoint is infrastructure configuration, not a
+            # tenant credential. Drop stale URL/key values before they can
+            # re-enter the LLM runtime through a direct library caller.
+            base_url = None
+            kwargs.pop("api_key", None)
+        super().__init__(model, base_url, **kwargs)
 
     def get_llm(self) -> Any:
         self.warn_if_unknown_model()
@@ -178,31 +181,25 @@ class OpenAIClient(BaseLLMClient):
         # token counters silently stay at zero.
         llm_kwargs = {"model": self.model, "streaming": True, "stream_usage": True}
 
-        # Determine base URL.  Only server configuration may choose the
-        # Ollama endpoint; a user API key is never interpreted as a URL.
-        api_key = self.kwargs.get("api_key")
-        resolved_base_url = (
-            _server_ollama_base_url()
-            if self.provider == "ollama"
-            else self.base_url or _PROVIDER_BASE_URL.get(self.provider)
-        )
-        if resolved_base_url:
-            llm_kwargs["base_url"] = resolved_base_url
-
-        # Determine API Key (NO .env lookups)
-        if self.provider in _NO_KEY_PROVIDERS:
-            llm_kwargs["api_key"] = "ollama"  # Ollama ignores the key
-        elif not api_key:
-            raise ValueError(
-                f"API key for provider '{self.provider}' is not set. Please provide it in your Profile or Settings."
-            )
+        if self.provider == _OLLAMA_PROVIDER:
+            # Ollama ignores this sentinel, but ChatOpenAI requires a value.
+            llm_kwargs["base_url"] = get_ollama_base_url()
+            llm_kwargs["api_key"] = _OLLAMA_PROVIDER
         else:
+            resolved_base_url = self.base_url or _PROVIDER_BASE_URL.get(self.provider)
+            if resolved_base_url:
+                llm_kwargs["base_url"] = resolved_base_url
+
+            api_key = self.kwargs.get("api_key")
+            if not api_key:
+                raise ValueError(
+                    f"API key for provider '{self.provider}' is not set. Please provide it in your Profile or Settings."
+                )
             llm_kwargs["api_key"] = api_key
 
         for key in _PASSTHROUGH_KWARGS:
-            # ``api_key`` was resolved above.  Letting the generic passthrough
-            # overwrite it reintroduced a legacy Ollama URL stored as a user
-            # key, defeating the server-managed endpoint/SSRF boundary.
+            # ``api_key`` is resolved by the provider contract above and must
+            # never be overwritten by the generic passthrough.
             if key == "api_key":
                 continue
             if key not in self.kwargs:

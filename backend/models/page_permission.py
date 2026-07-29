@@ -22,8 +22,7 @@ SECTION_FIELDS = {
     "llm": [
         "llm_provider",
         "llm_model",
-        "fallback_llm_provider",
-        "fallback_llm_model",
+        "fallback_llm_chain",
         "openai_reasoning_effort",
         "anthropic_effort",
         "google_thinking_level",
@@ -80,9 +79,10 @@ SECTION_FIELDS = {
         "agent_qa_enabled",
         "memory_recall_count",
     ],
-    "presets": ["active_preset_name"],
     # Agent and tool settings live in their own endpoints and schemas.  They
-    # intentionally have no AppSettings field mapping.
+    # intentionally have no AppSettings field mapping. Presets also have their
+    # own endpoints; ``active_preset_name`` is server-managed metadata, not a
+    # writable application setting.
 }
 
 

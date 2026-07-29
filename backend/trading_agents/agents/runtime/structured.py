@@ -49,21 +49,13 @@ def extract_json_block(text: str) -> str | None:
 
 
 def validate_schema(schema: type[T], parsed_dict: dict) -> T:
-    """Support both Pydantic v1 and v2 validation methods."""
-    if hasattr(schema, "model_validate"):
-        return schema.model_validate(parsed_dict)
-    if hasattr(schema, "parse_obj"):
-        return schema.parse_obj(parsed_dict)
-    return schema(**parsed_dict)
+    """Validate structured output with the project's Pydantic v2 contract."""
+    return schema.model_validate(parsed_dict)
 
 
 def get_json_schema(schema: type[T]) -> str:
-    """Support both Pydantic v1 and v2 schema export."""
-    if hasattr(schema, "model_json_schema"):
-        return json.dumps(schema.model_json_schema(), indent=2)
-    if hasattr(schema, "schema"):
-        return json.dumps(schema.schema(), indent=2)
-    return "{}"
+    """Export the Pydantic v2 JSON schema used for self-correction prompts."""
+    return json.dumps(schema.model_json_schema(), indent=2)
 
 
 def parse_and_validate(text: str, schema: type[T]) -> T:

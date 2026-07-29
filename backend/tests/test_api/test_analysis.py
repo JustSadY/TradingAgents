@@ -18,21 +18,22 @@ from backend.services.ticker_validation_service import (
 
 
 @pytest.mark.parametrize(
-    ("legacy_signal", "expected"),
+    ("signal", "expected"),
     [
-        ("buy", "Buy"),
-        ("  SELL  ", "Sell"),
+        ("Buy", "Buy"),
+        ("Sell", "Sell"),
+        ("buy", None),
         ("unexpected", None),
     ],
 )
-def test_analysis_list_signal_normalizes_legacy_values(legacy_signal: str, expected: str | None):
+def test_analysis_list_signal_exposes_only_canonical_values(signal: str, expected: str | None):
     item = AnalysisListItem.model_validate(
         {
             "id": 1,
             "ticker": "AAPL",
             "trade_date": "2026-07-18",
             "asset_type": "stock",
-            "signal": legacy_signal,
+            "signal": signal,
             "duration_seconds": 1.0,
             "triggered_by": "manual",
             "created_at": datetime.now(UTC),
@@ -58,7 +59,7 @@ class TestAnalysisAPI:
             user_id=test_user.id,
             ticker="AAPL",
             trade_date="2026-07-18",
-            signal="buy",
+            signal="Buy",
             status="completed",
             market_report="Test report",
         )
@@ -80,7 +81,7 @@ class TestAnalysisAPI:
             user_id=test_user.id,
             ticker="AAPL",
             trade_date="2026-07-18",
-            signal="buy",
+            signal="Buy",
             status="completed",
         )
         db.add(analysis)
@@ -97,7 +98,7 @@ class TestAnalysisAPI:
                     user_id=test_user.id,
                     ticker=ticker,
                     trade_date="2026-07-18",
-                    signal="buy",
+                    signal="Buy",
                     status="completed",
                     market_report="Test",
                 )
@@ -116,7 +117,7 @@ class TestAnalysisAPI:
                     user_id=test_user.id,
                     ticker=ticker,
                     trade_date="2026-07-18",
-                    signal="buy",
+                    signal="Buy",
                     status="completed",
                 )
             )
@@ -136,7 +137,7 @@ class TestAnalysisAPI:
                     user_id=test_user.id,
                     ticker=f"TICK{i}",
                     trade_date="2026-07-18",
-                    signal="buy",
+                    signal="Buy",
                     status="completed",
                 )
             )
@@ -152,7 +153,7 @@ class TestAnalysisAPI:
             user_id=test_user.id,
             ticker="AAPL",
             trade_date="2026-07-18",
-            signal="buy",
+            signal="Buy",
             status="completed",
             market_report="Detailed analysis",
         )
@@ -176,7 +177,7 @@ class TestAnalysisAPI:
             user_id=test_user.id,
             ticker="AAPL",
             trade_date="2026-07-18",
-            signal="buy",
+            signal="Buy",
             status="completed",
         )
         db.add(analysis)
@@ -191,7 +192,7 @@ class TestAnalysisAPI:
             user_id=test_user.id,
             ticker="AAPL",
             trade_date="2026-07-18",
-            signal="buy",
+            signal="Buy",
             status="completed",
         )
         db.add(analysis)

@@ -43,7 +43,7 @@ const translations = {
     'settings.memory_embedder_pinecone': 'Pinecone hosted (no extra key)',
     'settings.memory_embedder_openai': 'OpenAI (uses your OpenAI key)',
     'settings.memory_embedder_ollama': 'Ollama (local, free)',
-    'settings.memory_help': 'Use the Save button above to persist index and embedder settings. Memory stays off until a Pinecone API key is added, and each user\'s memory is isolated. The OpenAI embedder reuses your OpenAI key from Profile. The Ollama embedder uses your local Ollama instance (configure its host in Profile → Ollama).',
+    'settings.memory_help': 'Use the Save button above to persist index and embedder settings. Memory stays off until a Pinecone API key is added, and each user\'s memory is isolated. The OpenAI embedder reuses your OpenAI key from Profile. The Ollama embedder uses the server-managed Ollama instance.',
     'settings.row_memory_recall_count': 'Memory Recall Count',
     'settings.persona_label_required': 'Label is required',
     'settings.persona_key_required': 'Key is required',
@@ -116,11 +116,13 @@ const translations = {
     'settings.effort_high_deepest': 'High — Deepest',
 
 
-    'settings.row_fallback_provider': 'Fallback Provider',
-    'settings.row_fallback_model': 'Fallback Model',
+    'settings.row_fallback_chain': 'Fallback Chain',
+    'settings.fallback_step_provider': 'Fallback Provider',
+    'settings.fallback_step_model': 'Fallback Model',
     'settings.fallback_disabled': 'Disabled',
-    'settings.fallback_model_placeholder': 'e.g. gpt-4o-mini',
-    'settings.fallback_hint': 'Used when the primary provider fails mid-analysis. Requires an API key for the fallback provider.',
+    'settings.fallback_add': 'Add fallback',
+    'settings.fallback_remove': 'Remove fallback',
+    'settings.fallback_hint': 'Tried in order when the primary provider fails mid-analysis. Each cloud provider needs an API key in Profile.',
 
 
     'settings.row_memory_store': 'Memory Store',
@@ -266,7 +268,7 @@ const translations = {
     'settings.memory_embedder_pinecone': 'Pinecone barındırmalı (ek anahtar gerekmez)',
     'settings.memory_embedder_openai': 'OpenAI (OpenAI anahtarınızı kullanır)',
     'settings.memory_embedder_ollama': 'Ollama (yerel, ücretsiz)',
-    'settings.memory_help': 'İndeks ve embedding ayarlarını kalıcılaştırmak için yukarıdaki Kaydet düğmesini kullanın. Pinecone API anahtarı eklenene kadar bellek kapalı kalır ve her kullanıcının belleği yalıtılır. OpenAI embedding sağlayıcısı Profildeki OpenAI anahtarınızı yeniden kullanır. Ollama embedding sağlayıcısı yerel Ollama örneğinizi kullanır (ana makineyi Profil → Ollama bölümünden yapılandırın).',
+    'settings.memory_help': 'İndeks ve embedding ayarlarını kalıcılaştırmak için yukarıdaki Kaydet düğmesini kullanın. Pinecone API anahtarı eklenene kadar bellek kapalı kalır ve her kullanıcının belleği yalıtılır. OpenAI embedding sağlayıcısı Profildeki OpenAI anahtarınızı yeniden kullanır. Ollama embedding sağlayıcısı sunucu tarafından yönetilen Ollama örneğini kullanır.',
     'settings.row_memory_recall_count': 'Bellek Geri Çağırma Sayısı',
     'settings.persona_label_required': 'Etiket zorunludur',
     'settings.persona_key_required': 'Anahtar zorunludur',
@@ -339,11 +341,13 @@ const translations = {
     'settings.effort_high_deepest': 'High — En derin',
 
 
-    'settings.row_fallback_provider': 'Yedek Sağlayıcı',
-    'settings.row_fallback_model': 'Yedek Model',
+    'settings.row_fallback_chain': 'Yedek Zinciri',
+    'settings.fallback_step_provider': 'Yedek Sağlayıcı',
+    'settings.fallback_step_model': 'Yedek Model',
     'settings.fallback_disabled': 'Kapalı',
-    'settings.fallback_model_placeholder': 'örn. gpt-4o-mini',
-    'settings.fallback_hint': 'Birincil sağlayıcı analiz sırasında hata verdiğinde kullanılır. Yedek sağlayıcı için API anahtarı gerekir.',
+    'settings.fallback_add': 'Yedek ekle',
+    'settings.fallback_remove': 'Yedeği kaldır',
+    'settings.fallback_hint': 'Birincil sağlayıcı analiz sırasında hata verirse sırayla denenir. Her bulut sağlayıcısı için Profil bölümünde API anahtarı gerekir.',
 
 
     'settings.row_memory_store': 'Bellek Deposu',

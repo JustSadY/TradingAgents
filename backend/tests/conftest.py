@@ -181,7 +181,7 @@ async def authenticated_client(
     db_session: AsyncSession,
     test_user: User,
 ) -> AsyncClient:
-    """Authenticated client with the same broad access legacy API tests assumed.
+    """Authenticated client with the broad access endpoint-behaviour tests need.
 
     Page/section permissions are deny-by-default in production.  Most older
     API tests exercise endpoint behaviour rather than RBAC, so grant this

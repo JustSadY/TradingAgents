@@ -61,7 +61,7 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
             ollama_embed_model = getattr(row, "memory_ollama_embed_model", None) or "nomic-embed-text"
 
             # The Ollama endpoint is server-managed.  A user-controlled API
-            # key must never become a network destination (SSRF); legacy URL
+            # key must never become a network destination (SSRF); stale URL
             # values stored in that slot are intentionally ignored.
             ollama_base_url = get_settings().OLLAMA_BASE_URL.rstrip("/")
 

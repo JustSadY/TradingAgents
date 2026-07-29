@@ -22,11 +22,6 @@ from backend.schemas.settings import SettingsRead, SettingsUpdate
 
 _logger = logging.getLogger(__name__)
 
-# A preset is a snapshot of editable application settings, not an ORM object
-# dump.  In particular, ids/owners/timestamps and the active-preset marker may
-# never be restored from user-supplied JSON.
-_PRESET_EXCLUDED_FIELDS = frozenset({"active_preset_name"})
-
 
 def parse_preset_settings_json(settings_json: str) -> SettingsUpdate:
     """Parse a stored preset as a strict, validated ``SettingsUpdate``.
@@ -43,7 +38,7 @@ def parse_preset_settings_json(settings_json: str) -> SettingsUpdate:
     if not isinstance(data, dict):
         raise ValueError("Preset settings must be a JSON object")
 
-    allowed_fields = set(SettingsUpdate.model_fields) - _PRESET_EXCLUDED_FIELDS
+    allowed_fields = set(SettingsUpdate.model_fields)
     unknown = set(data) - allowed_fields
     if unknown:
         raise ValueError(f"Preset contains unsupported settings: {', '.join(sorted(unknown))}")
@@ -114,15 +109,11 @@ async def apply_settings_update(
         from backend.services.notification_service import validate_webhook_url
 
         await validate_webhook_url(webhook_url)
-    explicit_preset_name = "active_preset_name" in fields
     for field, value in fields.items():
-        if field == "active_preset_name":
-            settings.active_preset_name = value
-            continue
         if getattr(settings, field, None) != value:
             has_changes = True
         setattr(settings, field, value)
-    if has_changes and not explicit_preset_name:
+    if has_changes:
         settings.active_preset_name = None
 
     if settings.webhook_url:
@@ -173,11 +164,12 @@ async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
 
     settings = await get_or_create_settings(db, user)
     for key, value in fields.items():
-        # ``parse_preset_settings_json`` has already restricted this list to
-        # SettingsUpdate fields.  Keep the None skip from legacy behaviour so
-        # a nullable PATCH field cannot violate a non-null model column.
-        if value is not None:
-            setattr(settings, key, value)
+        # ``SettingsUpdate`` has already restricted this list to fields that
+        # exist on the model and rejects explicit null for non-null columns.
+        # Applying the remaining values verbatim lets a preset deliberately
+        # clear a nullable value (for example a benchmark or webhook URL),
+        # matching normal PATCH semantics.
+        setattr(settings, key, value)
     settings.active_preset_name = preset.name
     settings.updated_at = datetime.now(UTC)
 

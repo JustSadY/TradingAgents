@@ -295,9 +295,9 @@ Pure-numpy pattern recognition running on downloaded OHLCV history:
 ### Webhook / Notification System
 
 - Configurable webhook URL + event filter in Settings → Webhooks tab
-- Events: `analysis_complete`, `alert_triggered`, `order_filled`, `risk_breach`
+- Events: `analysis_complete`, `trade_executed`, `alert_triggered`, `signal_flip`
 - **Delivery log:** Each webhook call logged to `WebhookDelivery` model; visible in Settings
-- Dual-format `_parse_events`: handles both JSON array `["a","b"]` and legacy comma-separated `"a,b"`
+- Event selections are stored and sent as a validated JSON list; comma-separated legacy values are migrated at upgrade time
 - **Backend:** `backend/services/notification_service.py`, `backend/models/webhook_delivery.py`
 
 ### Daily AI Market Brief (Dashboard widget)
@@ -486,14 +486,20 @@ Admins can restrict which parts of Settings a user can modify:
 
 **Storage:**
 - `users.api_keys_enc` — Fernet-encrypted JSON blob
-- The store accepts any provider name (also used for `pinecone`); LLM-selectable providers come from `llm_clients/registry.py` (currently openai, anthropic, google, nvidia)
+- The store accepts non-LLM service credentials too (for example `pinecone`);
+  LLM-selectable providers come from `llm_clients/registry.py`. Providers
+  marked `requires_api_key=False` (currently server-managed Ollama) never use
+  a tenant credential.
 
 **Injection Flow:**
 1. User triggers analysis
-2. `_build_config(settings, user)` checks user's key
-3. If found: inject into config
-4. If not found & user is admin: fall back to `.env`
-5. LLM client uses injected key
+2. `build_analysis_config(settings, user)` injects the selected cloud
+   provider's per-user key when present
+3. `TradingAgentsGraph._get_provider_kwargs()` consults registry credential
+   metadata before passing a key to an LLM client
+4. Cloud providers without a key are rejected for every role; there is no
+   `.env` credential fallback
+5. Server-managed Ollama uses only `OLLAMA_BASE_URL`, never a tenant key or URL
 
 **Security:**
 - Keys never returned in API responses (only provider names listed)

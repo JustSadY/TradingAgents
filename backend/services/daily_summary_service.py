@@ -63,6 +63,7 @@ async def generate_daily_summary(db: AsyncSession, user: User) -> dict:
 
     from backend.services.agent_settings_service import build_agent_runtime_context
     from backend.trading_agents.llm_clients.factory import create_llm_client
+    from backend.trading_agents.llm_clients.registry import provider_requires_api_key
 
     agent_ctx = await build_agent_runtime_context(db, user.id)
     pm = agent_ctx.get("portfolio_manager", {}).get("settings", {})
@@ -70,7 +71,7 @@ async def generate_daily_summary(db: AsyncSession, user: User) -> dict:
     model = pm.get("llm_model") or settings.llm_model
 
     user_key = resolve_user_api_key(user, provider)
-    if not user_key and not user.is_admin:
+    if provider_requires_api_key(provider) and not user_key:
         raise ValueError(f"No API key configured for provider '{provider}'. Add it in Settings.")
 
     client = create_llm_client(provider=provider, model=model, api_key=user_key)

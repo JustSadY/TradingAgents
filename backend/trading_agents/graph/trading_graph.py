@@ -195,31 +195,21 @@ class TradingAgentsGraph:
         """Wrap *llm* with the user's opt-in fallback chain.
 
         Reads ``fallback_llm_chain`` (a list of ``{"provider": ..., "model":
-        ...}`` dicts) from config. Falls back to the legacy single
-        ``fallback_llm_provider`` / ``fallback_llm_model`` keys when the new
-        structured field is absent. Failure to build a fallback never blocks
-        the run — entries that fail are silently dropped, and if nothing can be
-        built the primary is returned unwrapped.
+        ...}`` dicts) from config. Failure to build a fallback never blocks the
+        run — unavailable entries are dropped, and if nothing can be built the
+        primary is returned unwrapped.
         """
+        from backend.trading_agents.config import normalize_fallback_llm_chain
         from backend.trading_agents.llm_clients.fallback import FallbackLLM
 
-        # Resolve the fallback list from config, supporting both the new
-        # structured chain and the legacy single-fallback keys.
-        chain: list[dict] = self.config.get("fallback_llm_chain", [])
+        chain = normalize_fallback_llm_chain(self.config.get("fallback_llm_chain"))
         if not chain:
-            fb_prov = (self.config.get("fallback_llm_provider") or "").strip().lower()
-            fb_model = (self.config.get("fallback_llm_model") or "").strip()
-            if fb_prov and fb_model:
-                chain = [{"provider": fb_prov, "model": fb_model}]
-            else:
-                return llm
+            return llm
 
         fallbacks = []
         for entry in chain:
-            prov = entry.get("provider", "").strip().lower()
-            mod = entry.get("model", "").strip()
-            if not prov or not mod:
-                continue
+            prov = entry["provider"]
+            mod = entry["model"]
             if prov == (provider or "").lower() and mod == model:
                 continue  # skip if same as primary to avoid pointless failover
             try:
@@ -253,6 +243,15 @@ class TradingAgentsGraph:
             if effort:
                 kwargs["effort"] = effort
             kwargs["prompt_caching"] = bool(self.config.get("anthropic_prompt_caching", True))
+
+        from backend.trading_agents.llm_clients.registry import provider_requires_api_key
+
+        # Server-managed providers have no tenant credential. In particular, a
+        # stale pre-contract value must not travel through the graph as an API
+        # key or be mistaken for a network endpoint later.
+        if not provider_requires_api_key(prov_lower):
+            return kwargs
+
         user_keys = self.config.get("user_api_keys") or {}
         user_key = user_keys.get(prov_lower)
         if user_key:
@@ -351,24 +350,15 @@ class TradingAgentsGraph:
         nodes: dict[str, ToolNode] = {}
         for key in list_analysts():
             tools = self._filter_tools_for_analyst(key, get_tools(key))
-            try:
-                # ``handle_tool_errors`` deliberately remains responsible for
-                # turning tool failures into ToolMessages.  The async wrapper
-                # only supplies the otherwise-missing call identity to its
-                # telemetry callback; it does not change execution or retry.
-                tool_node = ToolNode(
-                    tools,
-                    handle_tool_errors=tool_error_handler,
-                    awrap_tool_call=make_async_tool_call_wrapper(key),
-                )
-            except TypeError:
-                # Older LangGraph releases may not expose ``awrap_tool_call``.
-                # Keep graceful ToolNode error handling even when detailed
-                # tool identity is unavailable on that legacy runtime.
-                try:
-                    tool_node = ToolNode(tools, handle_tool_errors=tool_error_handler)
-                except TypeError:
-                    tool_node = ToolNode(tools)
+            # ``handle_tool_errors`` deliberately remains responsible for
+            # turning tool failures into ToolMessages.  The async wrapper only
+            # supplies the otherwise-missing call identity to its telemetry
+            # callback; it does not change execution or retry.
+            tool_node = ToolNode(
+                tools,
+                handle_tool_errors=tool_error_handler,
+                awrap_tool_call=make_async_tool_call_wrapper(key),
+            )
             nodes[key] = _cap_tool_outputs(
                 tool_node,
                 int(self.config.get("max_tool_output_chars", 12000)),

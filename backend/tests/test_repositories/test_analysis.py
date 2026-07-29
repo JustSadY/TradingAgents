@@ -111,6 +111,34 @@ class TestAnalysisRepository:
         prev = await get_previous_signal(db, user_id=test_user.id, ticker="AAPL", exclude_id=a1.id)
         assert prev is None
 
+    async def test_get_previous_signal_system_scope_never_reads_tenant_history(self, db: AsyncSession, test_user: User):
+        global_previous = await create_analysis_result(
+            db,
+            user_id=None,
+            ticker="AAPL",
+            trade_date="2026-07-18",
+            signal="Buy",
+            status="completed",
+        )
+        await self._create_analysis(db, test_user.id, signal="Sell")
+        global_current = await create_analysis_result(
+            db,
+            user_id=None,
+            ticker="AAPL",
+            trade_date="2026-07-18",
+            signal="Hold",
+            status="completed",
+        )
+
+        previous = await get_previous_signal(
+            db,
+            user_id=None,
+            ticker="AAPL",
+            exclude_id=global_current.id,
+        )
+
+        assert previous == global_previous.signal
+
     async def test_get_latest_analysis(self, db: AsyncSession, test_user: User):
         await self._create_analysis(db, test_user.id, ticker="AAPL")
         await self._create_analysis(db, test_user.id, ticker="GOOGL")

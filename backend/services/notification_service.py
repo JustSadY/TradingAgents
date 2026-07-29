@@ -2,6 +2,8 @@ import asyncio
 import json
 import logging
 
+from backend.core.constants import WEBHOOK_EVENTS, signal_direction
+
 _logger = logging.getLogger(__name__)
 
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
@@ -60,9 +62,6 @@ def _event_title(event: str) -> str:
         "alert_triggered": "🔔 Price Alert",
         "signal_flip": "🔄 Signal Reversal",
     }.get(event, event)
-
-
-from backend.core.constants import signal_direction
 
 
 def _signal_direction(signal: str | None) -> str:
@@ -223,7 +222,7 @@ async def notify_analysis_complete(
     if not getattr(settings, "webhook_enabled", False):
         return
     url = getattr(settings, "webhook_url", "") or ""
-    events = _parse_events(getattr(settings, "webhook_events", "[]"))
+    events = _enabled_webhook_events(settings)
     if "analysis_complete" not in events or not url:
         return
     user_id = getattr(settings, "user_id", None)
@@ -244,7 +243,7 @@ async def notify_trade_executed(ticker: str, action: str, quantity: float, price
     if not getattr(settings, "webhook_enabled", False):
         return
     url = getattr(settings, "webhook_url", "") or ""
-    events = _parse_events(getattr(settings, "webhook_events", "[]"))
+    events = _enabled_webhook_events(settings)
     if "trade_executed" not in events or not url:
         return
     user_id = getattr(settings, "user_id", None)
@@ -262,7 +261,7 @@ async def notify_alert_triggered(
     if not getattr(settings, "webhook_enabled", False):
         return
     url = getattr(settings, "webhook_url", "") or ""
-    events = _parse_events(getattr(settings, "webhook_events", "[]"))
+    events = _enabled_webhook_events(settings)
     if "alert_triggered" not in events or not url:
         return
     user_id = getattr(settings, "user_id", None)
@@ -278,7 +277,7 @@ async def notify_signal_flip(ticker: str, prev_signal: str | None, new_signal: s
     if not is_signal_flip(prev_signal, new_signal):
         return
     url = getattr(settings, "webhook_url", "") or ""
-    events = _parse_events(getattr(settings, "webhook_events", "[]"))
+    events = _enabled_webhook_events(settings)
     if "signal_flip" not in events or not url:
         return
     user_id = getattr(settings, "user_id", None)
@@ -290,21 +289,15 @@ async def notify_signal_flip(ticker: str, prev_signal: str | None, new_signal: s
     )
 
 
-def _parse_events(raw: str) -> list[str]:
-    """Parse webhook_events — accepts both JSON array and legacy comma-separated formats."""
-    if not raw:
+def _enabled_webhook_events(settings) -> list[str]:
+    """Return a validated native event list, failing closed for corrupt rows.
+
+    ``webhook_events`` is normalized to JSON by the settings migration.  Do
+    not reintroduce old comma/JSON-string parsers here: malformed manual data
+    should disable delivery until it is fixed rather than silently guessing.
+    """
+    events = getattr(settings, "webhook_events", [])
+    if not isinstance(events, list):
+        _logger.warning("Invalid webhook_events storage type %s; no webhooks will fire", type(events).__name__)
         return []
-    stripped = raw.strip()
-    # JSON array: '["a","b"]'
-    if stripped.startswith("["):
-        try:
-            result = json.loads(stripped)
-            return result if isinstance(result, list) else []
-        except Exception:
-            pass
-    # Anything that looks like a JSON object (starts with '{') is malformed — fail closed.
-    if stripped.startswith("{"):
-        _logger.warning("Malformed webhook_events value, no webhooks will fire: %.50s", stripped)
-        return []
-    # Legacy comma-separated: "analysis_complete,trade_executed"
-    return [p.strip() for p in stripped.split(",") if p.strip()]
+    return [event for event in events if isinstance(event, str) and event in WEBHOOK_EVENTS]

@@ -12,17 +12,57 @@ from .config import get_settings
 settings = get_settings()
 engine_kwargs = {"echo": False, "pool_pre_ping": True}
 if "sqlite" not in settings.DATABASE_URL:
-    engine_kwargs.update({
-        "pool_size": 20,
-        "max_overflow": 20,
-        "pool_timeout": 30,
-        "pool_recycle": 1800,
-    })
+    engine_kwargs.update(
+        {
+            "pool_size": 20,
+            "max_overflow": 20,
+            "pool_timeout": 30,
+            "pool_recycle": 1800,
+        }
+    )
 engine = create_async_engine(settings.DATABASE_URL, **engine_kwargs)
 AsyncSessionLocal = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
 _logger = logging.getLogger(__name__)
 
 MONEY = Numeric(20, 8, asdecimal=True)
+
+# Tables created by the Alembic baseline revision (89f1a049b357).  An older
+# installation created through ``create_all`` has no alembic_version row, so
+# it must be stamped before it can receive later revisions.  Never stamp a
+# partial schema: that would record a baseline it does not actually satisfy
+# and turn missing-table failures into a much harder recovery problem.
+_BASELINE_APP_TABLES = frozenset(
+    {
+        "agent_settings",
+        "agent_tool_settings",
+        "analysis_chats",
+        "analysis_results",
+        "analyst_report_cache",
+        "app_settings",
+        "assistant_messages",
+        "config_presets",
+        "holdings",
+        "market_daily_summaries",
+        "multi_ticker_analyses",
+        "news_analysis_cache",
+        "news_cache",
+        "orders",
+        "portfolios",
+        "price_alerts",
+        "shared_reports",
+        "system_logs",
+        "system_settings",
+        "trade_notes",
+        "user_agent_access",
+        "user_page_permissions",
+        "user_personas",
+        "user_setting_permissions",
+        "user_tool_access",
+        "user_tool_field_access",
+        "users",
+        "webhook_deliveries",
+    }
+)
 
 
 class Base(DeclarativeBase):
@@ -70,9 +110,38 @@ async def _run_alembic(command_name: str, revision: str) -> None:
     await asyncio.to_thread(fn, _alembic_config(), revision)
 
 
-async def _has_legacy_app_tables(conn) -> bool:
-    """Whether an unversioned PostgreSQL database already contains app data."""
-    return bool((await conn.execute(text("SELECT to_regclass('public.users')"))).scalar_one_or_none())
+def _is_complete_unversioned_app_schema(table_names: set[str]) -> bool:
+    """Return whether *table_names* can safely be stamped at the baseline.
+
+    A fresh database contains no application tables and should receive the
+    baseline via ``alembic upgrade head``.  A partial database cannot safely
+    be stamped because the baseline would falsely claim tables already exist.
+    """
+    existing = table_names.intersection(_BASELINE_APP_TABLES)
+    if not existing:
+        return False
+
+    missing = _BASELINE_APP_TABLES.difference(existing)
+    if missing:
+        raise RuntimeError(
+            "Refusing to stamp a partial unversioned Paperclip schema. "
+            f"Found application tables: {', '.join(sorted(existing))}; "
+            f"missing baseline tables: {', '.join(sorted(missing))}. "
+            "Restore or complete the old schema, verify a backup, then stamp "
+            "the Alembic baseline explicitly."
+        )
+    return True
+
+
+async def _has_complete_unversioned_app_schema(conn) -> bool:
+    """Inspect the active PostgreSQL schema before an automatic baseline stamp."""
+    rows = await conn.execute(
+        text(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'"
+        )
+    )
+    return _is_complete_unversioned_app_schema(set(rows.scalars()))
 
 
 async def create_all_tables():
@@ -88,15 +157,22 @@ async def create_all_tables():
     if engine.dialect.name == "sqlite":
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            from backend.core.migrations import apply_column_migrations, apply_type_migrations
+            from backend.core.migrations import (
+                apply_column_migrations,
+                apply_type_migrations,
+                normalize_sqlite_analysis_signals,
+                normalize_sqlite_settings_collections,
+            )
 
             await apply_column_migrations(conn)
             await apply_type_migrations(conn)
+            await normalize_sqlite_analysis_signals(conn)
+            await normalize_sqlite_settings_collections(conn)
         return
 
     async with engine.begin() as conn:
         has_version = await _has_alembic_version(conn)
-        legacy_schema = not has_version and await _has_legacy_app_tables(conn)
+        legacy_schema = not has_version and await _has_complete_unversioned_app_schema(conn)
 
     if legacy_schema:
         # Older installations were created with create_all and never had a

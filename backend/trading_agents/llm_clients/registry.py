@@ -10,6 +10,7 @@ class LLMProvider:
     models: list[tuple[str, str]] = field(default_factory=list)
     effort_options: list[dict[str, str]] = field(default_factory=list)
     is_openai_compatible: bool = False
+    requires_api_key: bool = True
 
     def get_api_key(self) -> str | None:
         # Explicitly removed .env lookup
@@ -44,6 +45,20 @@ class LLMProviderRegistry:
     def is_openai_compatible(self, key: str) -> bool:
         p = self.get(key)
         return p.is_openai_compatible if p else False
+
+    def provider_requires_api_key(self, key: str) -> bool:
+        """Whether a provider expects a tenant-owned credential.
+
+        Unknown providers default to requiring a key so a missing registry
+        entry can never accidentally bypass authentication checks.
+        """
+        p = self.get(key) if isinstance(key, str) else None
+        return p.requires_api_key if p is not None else True
+
+
+def provider_requires_api_key(provider: str) -> bool:
+    """Return the canonical tenant-credential policy for ``provider``."""
+    return llm_registry.provider_requires_api_key(provider)
 
 
 # Global registry instance
@@ -171,6 +186,7 @@ llm_registry.register(
         key="ollama",
         label="Ollama (Local)",
         is_openai_compatible=True,
+        requires_api_key=False,
         models=[
             ("Llama 3.3 70B - Meta's latest 70B instruction model", "llama3.3"),
             ("Llama 3.2 3B - Fast and lightweight", "llama3.2"),

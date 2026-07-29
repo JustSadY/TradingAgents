@@ -48,6 +48,20 @@ class TestUserService:
         key = get_user_api_key(user, "nonexistent", self.fernet)
         assert key is None
 
+    def test_server_managed_provider_key_is_inert_and_not_listed(self):
+        user = User(api_keys_enc=encrypt_api_keys({"ollama": "http://stale.internal"}, self.fernet))
+
+        assert get_user_api_key(user, "ollama", self.fernet) is None
+        assert list_user_api_key_providers(user, self.fernet) == []
+
+    def test_server_managed_provider_key_cannot_be_stored(self):
+        user = User(api_keys_enc=None)
+
+        with pytest.raises(ValueError, match="server-managed"):
+            set_user_api_key(user, "ollama", "http://stale.internal", self.fernet)
+
+        assert user.api_keys_enc is None
+
     def test_get_user_api_key_no_keys_stored(self):
         user = User(api_keys_enc=None)
         key = get_user_api_key(user, "openai", self.fernet)

@@ -90,7 +90,12 @@ async def get_previous_signal(db: AsyncSession, *, user_id: int | None, ticker: 
         .order_by(_desc(AnalysisResult.created_at))
         .limit(1)
     )
-    if user_id is not None:
+    if user_id is None:
+        # System-owned runs are a distinct tenant scope.  Falling through
+        # without a predicate would let a system notification compare against
+        # every user's prior analysis history.
+        q = q.where(AnalysisResult.user_id.is_(None))
+    else:
         q = q.where(AnalysisResult.user_id == user_id)
     result = await db.execute(q)
     return result.scalar_one_or_none()

@@ -97,13 +97,22 @@ async def backfill_returns(db) -> int:
 
 
 async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
+    """Return attribution statistics for one tenant or the system scope.
+
+    ``None`` means system-owned analysis rows (``user_id IS NULL``), never
+    every tenant.  A future administrative all-user aggregate must use an
+    explicitly named function so it cannot be injected into a system run by
+    accident.
+    """
     from sqlalchemy import select
 
     from backend.models.analysis import AnalysisResult
     from backend.trading_agents.agents.analyst_registry import get_report_fields
 
     q = select(AnalysisResult).where(AnalysisResult.raw_return.isnot(None))
-    if user_id is not None:
+    if user_id is None:
+        q = q.where(AnalysisResult.user_id.is_(None))
+    else:
         q = q.where(AnalysisResult.user_id == user_id)
     result = await db.execute(q)
     rows = result.scalars().all()
@@ -181,7 +190,8 @@ async def get_analyst_performance_context(db, user_id: int | None = None) -> str
 
     ``AnalysisResult`` data belongs to individual users.  The analysis graph
     must never tune one user's analyst weights using another user's history.
-    ``None`` remains available for explicitly global/admin maintenance uses.
+    ``None`` selects only system-owned analysis rows; it is not an all-user
+    administrative aggregate.
     """
     try:
         attribution_data = await get_analyst_attribution_stats(db, user_id=user_id)

@@ -44,8 +44,6 @@ class SharedReportResponse(BaseModel):
     quality: Any = None
     degraded: bool = False
     failed_agents: list[str] = []
-    fundamental_report: str | None = None
-    research_report: str | None = None
     duration_seconds: float | None = None
     llm_provider: str | None = None
     llm_model: str | None = None

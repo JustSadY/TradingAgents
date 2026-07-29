@@ -55,18 +55,16 @@ class ApiKeySet(BaseModel):
     api_key: str
 
     @model_validator(mode="after")
-    def reject_user_controlled_ollama_url(self) -> "ApiKeySet":
+    def reject_server_managed_provider_credentials(self) -> "ApiKeySet":
         """Ollama is configured by the server operator, never by a tenant.
 
-        Older versions overloaded this field as a custom Ollama base URL,
-        allowing an authenticated user to make the backend call arbitrary
-        internal addresses.  Keep accepting the endpoint shape for other API
-        keys, but reject URL values for Ollama explicitly and clearly.
+        Older versions overloaded this field as a custom Ollama base URL.  It
+        is a no-key provider whose endpoint is server-managed, so retaining a
+        tenant value of *any* shape only creates inert, misleading state (and
+        a URL would additionally be an SSRF risk).
         """
-        if self.provider.strip().lower() == "ollama" and self.api_key.strip().lower().startswith(
-            ("http://", "https://")
-        ):
-            raise ValueError("Ollama endpoint is configured by the server administrator, not via an API key")
+        if self.provider.strip().lower() == "ollama":
+            raise ValueError("Ollama is configured by the server administrator, not via a tenant API key")
         return self
 
 

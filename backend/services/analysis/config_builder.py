@@ -10,7 +10,9 @@ from backend.core.config import get_settings as _cfg
 from backend.core.security import decrypt_secret
 from backend.models.settings import AppSettings
 from backend.services.user_service import decrypt_api_keys, get_user_api_key
+from backend.trading_agents.config import normalize_fallback_llm_chain
 from backend.trading_agents.default_config import DEFAULT_CONFIG
+from backend.trading_agents.llm_clients.registry import provider_requires_api_key
 
 _logger = logging.getLogger(__name__)
 
@@ -28,6 +30,25 @@ def _decrypt_tool_secret(value: str | None) -> str | None:
         return decrypt_secret(value)
     except Exception:
         return value
+
+
+def _fallback_llm_chain(settings: AppSettings) -> list[dict[str, str]]:
+    """Read the canonical ordered LLM failover settings defensively.
+
+    Settings writes validate this shape, but a manually modified or partially
+    migrated database row must not make an otherwise valid analysis unusable.
+    Invalid persisted entries are ignored with an operator-visible warning;
+    no retired single-provider fallback keys are consulted.
+    """
+    try:
+        return normalize_fallback_llm_chain(getattr(settings, "fallback_llm_chain", None))
+    except ValueError as exc:
+        _logger.warning(
+            "Ignoring invalid fallback_llm_chain for settings id=%s: %s",
+            getattr(settings, "id", "unknown"),
+            exc,
+        )
+        return []
 
 
 def inject_tool_credentials(config: dict) -> None:
@@ -60,8 +81,7 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         "results_dir": os.environ.get("TRADINGAGENTS_RESULTS_DIR", DEFAULT_CONFIG["results_dir"]),
         "llm_provider": settings.llm_provider,
         "llm_model": settings.llm_model,
-        "fallback_llm_provider": getattr(settings, "fallback_llm_provider", None),
-        "fallback_llm_model": getattr(settings, "fallback_llm_model", None),
+        "fallback_llm_chain": _fallback_llm_chain(settings),
         "max_debate_rounds": settings.max_debate_rounds,
         "max_risk_discuss_rounds": settings.max_risk_rounds,
         "output_language": settings.output_language or DEFAULT_CONFIG["output_language"],
@@ -124,10 +144,16 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
     if user is not None:
         try:
             fernet = _cfg().get_fernet()
-            current_provider = cfg.get("llm_provider", "openai")
+            current_provider = str(cfg.get("llm_provider", "openai")).strip().lower()
+            # Server-managed providers never receive tenant credentials. This
+            # drops stale pre-contract values before they enter graph config.
             user_key = get_user_api_key(user, current_provider, fernet)
             if user.api_keys_enc:
-                cfg["user_api_keys"] = decrypt_api_keys(user.api_keys_enc, fernet)
+                cfg["user_api_keys"] = {
+                    provider: key
+                    for provider, key in decrypt_api_keys(user.api_keys_enc, fernet).items()
+                    if provider_requires_api_key(provider)
+                }
             else:
                 cfg["user_api_keys"] = {}
         except Exception:

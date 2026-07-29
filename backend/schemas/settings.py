@@ -1,6 +1,9 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+
+from backend.core.constants import WEBHOOK_EVENTS
+from backend.trading_agents.config import MAX_FALLBACK_LLM_CHAIN_LENGTH, FallbackLLMConfig
 
 
 def _validate_webhook_url_shape(v: str | None) -> str | None:
@@ -24,6 +27,27 @@ def _validate_webhook_url_shape(v: str | None) -> str | None:
     return v
 
 
+def _normalize_webhook_events(events: list[str]) -> list[str]:
+    """Validate the canonical webhook-event collection.
+
+    ``webhook_events`` used to be a comma-separated JSON string.  The API now
+    exposes a real list, so whitespace, duplicates, phantom event names, and
+    non-list values never reach persistence or the delivery path.
+    """
+    normalized: list[str] = []
+    unknown: list[str] = []
+    for event in events:
+        name = event.strip()
+        if name not in WEBHOOK_EVENTS:
+            unknown.append(name or "<empty>")
+            continue
+        if name not in normalized:
+            normalized.append(name)
+    if unknown:
+        raise ValueError(f"Unsupported webhook events: {', '.join(unknown)}")
+    return normalized
+
+
 class SettingsBase(BaseModel):
     cron_enabled: bool = False
     cron_schedule: str = "0 9 * * 1-5"
@@ -32,8 +56,10 @@ class SettingsBase(BaseModel):
     output_language: str = "English"
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
-    fallback_llm_provider: str | None = None
-    fallback_llm_model: str | None = None
+    fallback_llm_chain: list[FallbackLLMConfig] = Field(
+        default_factory=list,
+        max_length=MAX_FALLBACK_LLM_CHAIN_LENGTH,
+    )
     investor_persona: str = "conservative"
     analyst_concurrency_limit: int = 1
     max_recur_limit: int = 1000
@@ -62,7 +88,7 @@ class SettingsBase(BaseModel):
     stall_timeout_seconds: int = 120
     webhook_url: str | None = None
     webhook_enabled: bool = False
-    webhook_events: str = '["analysis_complete"]'
+    webhook_events: list[str] = Field(default_factory=lambda: ["analysis_complete"], max_length=len(WEBHOOK_EVENTS))
     active_preset_name: str | None = None
     memory_store: str = "pinecone"
     pinecone_index: str = "tradingagents-memory"
@@ -90,6 +116,11 @@ class SettingsBase(BaseModel):
     @classmethod
     def validate_webhook_url(cls, v: str | None) -> str | None:
         return _validate_webhook_url_shape(v)
+
+    @field_validator("webhook_events")
+    @classmethod
+    def validate_webhook_events(cls, value: list[str]) -> list[str]:
+        return _normalize_webhook_events(value)
 
 
 class SettingsRead(SettingsBase):
@@ -119,6 +150,10 @@ class LLMProviderCatalogEntry(BaseModel):
 
 
 class SettingsUpdate(BaseModel):
+    # Reject retired/unknown keys explicitly.  Silently ignoring a legacy
+    # field makes clients believe a setting was saved when it was not.
+    model_config = ConfigDict(extra="forbid")
+
     cron_enabled: bool | None = None
     cron_schedule: str | None = None
     price_tolerance_pct: float | None = Field(default=None, ge=0, le=50)
@@ -126,8 +161,10 @@ class SettingsUpdate(BaseModel):
     output_language: str | None = None
     llm_provider: str | None = None
     llm_model: str | None = None
-    fallback_llm_provider: str | None = None
-    fallback_llm_model: str | None = None
+    fallback_llm_chain: list[FallbackLLMConfig] | None = Field(
+        default=None,
+        max_length=MAX_FALLBACK_LLM_CHAIN_LENGTH,
+    )
     investor_persona: str | None = None
     analyst_concurrency_limit: int | None = Field(default=None, ge=1, le=16)
     max_recur_limit: int | None = Field(default=None, ge=100, le=5000)
@@ -156,8 +193,7 @@ class SettingsUpdate(BaseModel):
     stall_timeout_seconds: int | None = Field(default=None, ge=30, le=600)
     webhook_url: str | None = None
     webhook_enabled: bool | None = None
-    webhook_events: str | None = None
-    active_preset_name: str | None = None
+    webhook_events: list[str] | None = Field(default=None, max_length=len(WEBHOOK_EVENTS))
     memory_store: str | None = None
     pinecone_index: str | None = None
     pinecone_cloud: str | None = None
@@ -184,3 +220,30 @@ class SettingsUpdate(BaseModel):
     @classmethod
     def validate_webhook_url(cls, v: str | None) -> str | None:
         return _validate_webhook_url_shape(v)
+
+    @field_validator("webhook_events")
+    @classmethod
+    def validate_webhook_events(cls, value: list[str] | None) -> list[str] | None:
+        return _normalize_webhook_events(value) if value is not None else None
+
+    @model_validator(mode="after")
+    def reject_null_for_non_nullable_fields(self) -> "SettingsUpdate":
+        """Keep PATCH omission separate from an explicit database null.
+
+        Every field is optional in this DTO so callers can send a partial
+        update.  That does not make every persisted column nullable: accepting
+        ``null`` for a boolean/number/string used to defer a confusing
+        integrity error until the service flushed the ORM object.  Only the
+        columns that are genuinely nullable may be cleared explicitly.
+        """
+        nullable_fields = {
+            "anthropic_effort",
+            "benchmark_ticker",
+            "google_thinking_level",
+            "openai_reasoning_effort",
+            "webhook_url",
+        }
+        for field in self.model_fields_set:
+            if getattr(self, field) is None and field not in nullable_fields:
+                raise ValueError(f"{field} may not be null when provided")
+        return self

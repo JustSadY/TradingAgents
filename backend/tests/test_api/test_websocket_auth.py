@@ -34,7 +34,7 @@ def test_websocket_selects_only_fixed_application_subprotocol():
 
 @pytest.mark.asyncio
 async def test_websocket_rejects_a_handshake_without_the_application_protocol():
-    """A JWT-only offer is the removed legacy protocol contract."""
+    """The authenticated socket contract always includes the application protocol."""
     from backend.main import websocket_analysis
 
     class Socket:

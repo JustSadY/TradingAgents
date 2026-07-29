@@ -614,9 +614,10 @@ function RunTab() {
       let ev: WsEvent
       try { ev = JSON.parse(e.data) } catch { return }
       if (ev.type === 'status') {
-        // Newer emitters send a stable technical agent key plus a human
-        // status message. Keep compatibility with older agent-only events.
-        const statusText = ev.message ?? ev.status ?? ev.agent
+        // Status events carry a human-readable message separately from their
+        // technical producer and lifecycle fields. Do not render an agent key
+        // as a user-facing fallback.
+        const statusText = ev.message ?? ev.status
         if (statusText) appendLog(statusText)
       } else if (ev.type === 'progress') {
         setCurrentStep(prev => prev?.label === ev.label && prev?.stage === ev.stage ? prev : { label: ev.label || '', stage: ev.stage || '' })

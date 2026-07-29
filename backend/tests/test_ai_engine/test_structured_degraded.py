@@ -6,7 +6,11 @@ import pytest
 from pydantic import BaseModel
 
 from backend.trading_agents.agents.runtime.resilience import classify_error, retry_call
-from backend.trading_agents.agents.runtime.structured import ainvoke_structured_or_freetext
+from backend.trading_agents.agents.runtime.structured import (
+    ainvoke_structured_or_freetext,
+    get_json_schema,
+    validate_schema,
+)
 from backend.trading_agents.llm_clients.base_client import is_provider_function_degraded, retry_with_exponential_backoff
 from backend.trading_agents.llm_clients.fallback import FallbackLLM
 
@@ -15,6 +19,11 @@ _DEGRADED = "Function id 'ac74040f-9fc9-4c5e-ac74-279ba5161d69': DEGRADED functi
 
 class _Decision(BaseModel):
     rating: str
+
+
+def test_structured_schema_helpers_use_pydantic_v2_contract():
+    assert validate_schema(_Decision, {"rating": "Hold"}) == _Decision(rating="Hold")
+    assert '"rating"' in get_json_schema(_Decision)
 
 
 class _Response:

@@ -26,16 +26,6 @@ _PASSTHROUGH_KWARGS = (
     "presence_penalty",
 )
 
-_MISTRAL_MODEL_ALIASES = {
-    "mistral-large-latest": "mistral-large-latest",
-    "mistral-small-latest": "mistral-small-latest",
-    "codestral-latest": "codestral-latest",
-    "open-mistral-nemo": "open-mistral-nemo",
-    "open-mixtral-8x22b": "open-mixtral-8x22b",
-    "open-mixtral-8x7b": "open-mixtral-8x7b",
-    "open-mistral-7b": "open-mistral-7b",
-}
-
 
 class NormalizedChatMistralAI(ChatMistralAI):
     def invoke(self, input_value, config=None, **kwargs):

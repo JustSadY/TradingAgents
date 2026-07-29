@@ -15,7 +15,7 @@ import pytest
 from backend.trading_agents.llm_clients import FallbackLLM, TokenUsage, TokenUsageTracker, classify_error
 from backend.trading_agents.llm_clients.base_client import is_quota_exhausted, is_rate_limited
 from backend.trading_agents.llm_clients.factory import create_llm_client
-from backend.trading_agents.llm_clients.registry import llm_registry
+from backend.trading_agents.llm_clients.registry import llm_registry, provider_requires_api_key
 
 # ---------------------------------------------------------------------------
 # TokenUsage
@@ -300,6 +300,11 @@ class TestRegistry:
         assert "openai" in efforts
         assert "anthropic" in efforts
         assert "google" in efforts
+
+    def test_provider_credential_policy_is_registry_owned(self):
+        assert provider_requires_api_key("ollama") is False
+        assert provider_requires_api_key("openai") is True
+        assert provider_requires_api_key("unknown-provider") is True
 
 
 # ---------------------------------------------------------------------------
