@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD_HASH: str = ""
     DATABASE_URL: str = "postgresql+asyncpg://tradingagents:tradingagents@localhost:5432/tradingagents"  # NOSONAR
+    DB_POOL_SIZE: int = 5
+    DB_MAX_OVERFLOW: int = 5
     ENCRYPTION_KEY: str = ""
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
     # Bearer token for GET /metrics (Prometheus). Endpoint returns 404 while unset.
