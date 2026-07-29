@@ -204,10 +204,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
       delete settingsUpdate.active_preset_name
       await axios.put(url, settingsUpdate)
       triggerMetaRefetch()
-      if (activeTab === 'agents' && agentPanelRef.current) {
+      if (agentPanelRef.current) {
         await agentPanelRef.current.save()
       }
-      if (activeTab === 'tools' && toolPanelRef.current) {
+      if (toolPanelRef.current) {
         await toolPanelRef.current.save()
       }
       setSaved(true)

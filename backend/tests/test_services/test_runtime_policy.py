@@ -31,3 +31,24 @@ def test_user_may_disable_but_not_revive_server_disabled_agent():
 
     assert build_agent_runtime_state(agent, disabled_server, enabled_user)["enabled"] is False
     assert build_agent_runtime_state(agent, None, disabled_user)["enabled"] is False
+
+
+def test_user_can_enable_default_disabled_agent_when_no_server_override():
+    agent = AgentInfo(
+        key="macro",
+        label="Macro Analyst",
+        description="",
+        category="analyst",
+        default_enabled=False,
+    )
+    enabled_user = SimpleNamespace(enabled=True, settings={})
+    disabled_user = SimpleNamespace(enabled=False, settings={})
+
+    # Default without user row is False
+    assert build_agent_runtime_state(agent, None, None)["enabled"] is False
+    # User explicit enablement turns it True when server row is None
+    assert build_agent_runtime_state(agent, None, enabled_user)["enabled"] is True
+    # Explicit server disablement still overrides user enablement
+    disabled_server = SimpleNamespace(enabled=False, settings={})
+    assert build_agent_runtime_state(agent, disabled_server, enabled_user)["enabled"] is False
+

@@ -123,28 +123,31 @@ def build_agent_runtime_state(
     server_settings = {field.key: field.default for field in agent.settings_schema}
     user_settings = {field.key: field.default for field in agent.settings_schema}
 
-    server_enabled = agent.default_enabled
-    user_enabled = agent.default_enabled
-
     if server_row:
-        if server_row.enabled is not None:
-            server_enabled = server_row.enabled
-        server_settings.update(server_row.settings)
+        if server_row.settings:
+            server_settings.update(server_row.settings)
 
     if user_row:
-        if user_row.enabled is not None:
-            user_enabled = user_row.enabled
-        user_settings.update(user_row.settings)
+        if user_row.settings:
+            user_settings.update(user_row.settings)
 
-    # Server enablement is a hard policy ceiling.  A user may disable an
-    # agent that the server allows, but must not be able to revive an agent
-    # the server has disabled by saving any user-level setting row.
-    effective_enabled = server_enabled if user_row is None else bool(server_enabled) and bool(user_enabled)
+    # Server enablement is a hard policy ceiling when explicitly disabled.
+    # A user may disable an agent that the server allows, but must not be
+    # able to revive an agent that the server admin explicitly set to disabled (enabled=False).
+    if server_row is not None and server_row.enabled is False:
+        effective_enabled = False
+    elif user_row is not None and user_row.enabled is not None:
+        effective_enabled = bool(user_row.enabled)
+    elif server_row is not None and server_row.enabled is not None:
+        effective_enabled = bool(server_row.enabled)
+    else:
+        effective_enabled = bool(agent.default_enabled)
 
     return {
         "enabled": effective_enabled,
         "settings": user_settings if user_row else server_settings,
     }
+
 
 
 async def build_agent_runtime_context(db: AsyncSession, user_id: int | None) -> dict[str, Any]:

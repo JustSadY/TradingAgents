@@ -1,6 +1,6 @@
 import { type ReactNode, useEffect, useMemo, useState, forwardRef, useImperativeHandle, useRef } from 'react'
 import axios from 'axios'
-import { AlertCircle, ChevronDown, ChevronRight, Settings2 } from 'lucide-react'
+import { AlertCircle, ChevronDown, ChevronRight, Settings2, Save, Loader2 } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
 import { useMeta, triggerMetaRefetch } from '../../hooks/useMeta'
 
@@ -478,6 +478,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
   const meta = useMeta()
   const [settings, setSettings] = useState<AgentSettingsData | null>(null)
   const [loading, setLoading] = useState(true)
+  const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const agentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -503,6 +504,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
 
   const save = async () => {
     if (!settings) return
+    setSaving(true)
     setSaveSuccess(false)
     setSaveError(null)
     try {
@@ -516,6 +518,8 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
       const msg = err.response?.data?.detail || 'Failed to save agent settings.'
       setSaveError(msg)
       throw new Error(msg, { cause: err })
+    } finally {
+      setSaving(false)
     }
   }
 
@@ -610,6 +614,14 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
           {saveSuccess && (
             <span className="text-emerald-400 text-xs font-semibold">Saved!</span>
           )}
+          <button
+            onClick={() => save()}
+            disabled={saving}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold shadow-sm transition-all cursor-pointer disabled:opacity-50"
+          >
+            {saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+            <span>{saving ? 'Saving...' : 'Save Agent Settings'}</span>
+          </button>
         </div>
       </div>
 
