@@ -250,8 +250,10 @@ EnvironmentFile=$ENV_FILE
 # TEK PROCESS ZORUNLU: in-memory WebSocket yöneticisi + APScheduler cron birden
 # çok worker ile çoğaltılır (çift analiz / bozuk WS). --workers EKLEMEYİN.
 # The WebSocket implementation emits its own Date header. Disable Uvicorn's
-# generic Date header so a reverse proxy never receives duplicate headers.
-ExecStart=$VENV/bin/uvicorn backend.main:app --host $APP_HOST --port $APP_PORT --no-date-header
+# generic Date header so a reverse proxy never receives duplicate headers;
+# its ping settings match the Docker deployment and keep long-lived streams
+# alive through reverse proxies.
+ExecStart=$VENV/bin/uvicorn backend.main:app --host $APP_HOST --port $APP_PORT --no-date-header --ws-ping-interval 20 --ws-ping-timeout 20
 Restart=on-failure
 RestartSec=5
 # Düşük portlara (örn. 80) bağlanabilmek için

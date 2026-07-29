@@ -44,6 +44,11 @@ const TERMINAL_TASK_CONFIRMATION_DELAY_MS = 250
 const WS_KEEPALIVE_INTERVAL_MS = 20_000
 const WS_KEEPALIVE_MESSAGE = '__tradingagents_keepalive__'
 const WS_NORMAL_CLOSE_CODE = 1000
+const WS_CONNECTING = 0
+const WS_OPEN = 1
+const WS_CLOSING = 2
+const WS_CLOSED = 3
+const WS_MAX_RECONNECT_RETRIES = 3
 
 // Build an absolute ws(s)://host URL rather than a bare relative path —
 // `new WebSocket('/path')` (protocol-relative-by-omission) is only reliably
@@ -68,40 +73,29 @@ function openAnalysisWebSocket(taskId: string, token: string | null): WebSocket 
   return new WebSocket(url, protocols)
 }
 
-/**
- * Retire a client-owned socket without turning an intentional UI change into
- * an abnormal server-side disconnect.  `WebSocket.close()` without a status
- * code is observed by the peer as 1005, and closing while CONNECTING aborts
- * the handshake before either peer can exchange a close frame.  In the latter
- * case wait for `open` and then perform a normal 1000 close.
- */
+/** Retire a client-owned socket with a normal close frame when possible. */
 function closeAnalysisWebSocket(socket: WebSocket, reason: string): void {
+  socket.onopen = null
   socket.onmessage = null
   socket.onerror = null
   socket.onclose = null
 
   const closeNormally = () => {
-    const readyState = socket.readyState
-    if (
-      typeof readyState === 'number' &&
-      (readyState === WebSocket.CLOSING || readyState === WebSocket.CLOSED)
-    ) return
+    if (socket.readyState === WS_CLOSING || socket.readyState === WS_CLOSED) return
     try {
       socket.close(WS_NORMAL_CLOSE_CODE, reason)
     } catch {
-      // The browser owns the final close event and reconnect decision.
+      // The browser owns the final close event.
     }
   }
 
-  // Test doubles and older non-browser implementations sometimes omit
-  // readyState. Treat those as already-open so existing call sites still
-  // receive a normal explicit close request.
-  if (typeof socket.readyState === 'number' && socket.readyState === WebSocket.CONNECTING) {
+  // Calling close while CONNECTING aborts the handshake and can produce an
+  // abnormal 1005/1006 pair, so wait until the connection opens.
+  if (socket.readyState === WS_CONNECTING) {
     socket.onopen = closeNormally
     return
   }
 
-  socket.onopen = null
   closeNormally()
 }
 
@@ -459,8 +453,6 @@ function RunTab() {
     }
   }
 
-  const maxReconnectRetries = 3
-
   const attachWs = useCallback((taskId: string, reconnectAttempt = 0) => {
     // Stop may race a queued reconnect timer or a persisted-task probe.  Do
     // not create a new socket after the user has explicitly stopped the run.
@@ -519,9 +511,9 @@ function RunTab() {
       // prevents an old timer from replacing the socket for a newer task.
       if (stoppedByUserRef.current || finished || taskIdRef.current !== taskId || wsRef.current !== ws) return
       const nextAttempt = reconnectAttempt + 1
-      if (nextAttempt <= maxReconnectRetries) {
+      if (nextAttempt <= WS_MAX_RECONNECT_RETRIES) {
         const delay = Math.min(1000 * Math.pow(2, nextAttempt - 1), 8000)
-        appendLog(`🔄 Reconnecting... (attempt ${nextAttempt}/${maxReconnectRetries})`)
+        appendLog(`🔄 Reconnecting... (attempt ${nextAttempt}/${WS_MAX_RECONNECT_RETRIES})`)
         reconnectTimeoutRef.current = setTimeout(() => {
           reconnectTimeoutRef.current = null
           if (stoppedByUserRef.current || finished || taskIdRef.current !== taskId || wsRef.current !== ws) return
@@ -530,7 +522,7 @@ function RunTab() {
       } else {
         const message = taskProbeUnavailable
           ? t('analysis.ws.task_status_unavailable')
-          : closeCode && closeCode !== 1000
+          : closeCode && closeCode !== WS_NORMAL_CLOSE_CODE
             ? t('analysis.ws.conn_closed_code').replace('{code}', String(closeCode))
             : t('analysis.ws.conn_closed')
         markConnectionAsTerminalFailure(message)
@@ -603,7 +595,7 @@ function RunTab() {
     const sendKeepalive = () => {
       if (
         finished || stoppedByUserRef.current || taskIdRef.current !== taskId ||
-        wsRef.current !== ws || ws.readyState !== WebSocket.OPEN
+        wsRef.current !== ws || ws.readyState !== WS_OPEN
       ) return
       try {
         ws.send(WS_KEEPALIVE_MESSAGE)
@@ -714,11 +706,6 @@ function RunTab() {
           appendLog(`Error: ${ev.message}`)
           notify('error', ev.message ?? t('analysis.ws.analysis_failed'), t('analysis.ws.analysis_error_title'))
         }
-      }
-    }
-    ws.onerror = () => {
-      if (!finished) {
-        // onclose will handle reconnect; don't set error here
       }
     }
     ws.onclose = (event) => {
@@ -1483,7 +1470,7 @@ function MultiTab() {
     const reconnect = () => {
       if (terminal || reconnectScheduled || !shouldReconnectRef.current || wsRef.current !== ws) return
       reconnectScheduled = true
-      if (retries < 3) {
+      if (retries < WS_MAX_RECONNECT_RETRIES) {
         const delay = Math.min(1000 * Math.pow(2, retries), 8000)
         wsRef.current = null
         reconnectTimeoutRef.current = setTimeout(() => connectWs(taskId, retries + 1), delay)
@@ -1494,14 +1481,28 @@ function MultiTab() {
         setRunning(false)
       }
     }
-    ws.onclose = reconnect
-    // A WebSocket error is followed by close in browsers. Let that single
-    // terminal event own retry scheduling so error + close cannot create two
-    // concurrent sockets.
-    ws.onerror = () => {
-      // Browsers always follow an error with `close`. Calling close() here can
-      // abort a CONNECTING handshake and makes the peer report code 1005.
-      // The single onclose handler above owns retry scheduling.
+    ws.onclose = (event) => {
+      if (terminal || !shouldReconnectRef.current || wsRef.current !== ws) return
+
+      // The endpoint uses application close codes for bad credentials,
+      // authorization and startup failures. These cannot recover through a
+      // retry of the exact same handshake.
+      const terminalMessage = event.code === 4001
+        ? t('analysis.ws.auth_required')
+        : event.code === 4003
+          ? t('analysis.ws.access_denied')
+          : event.code === 1011
+            ? t('analysis.ws.initialization_failed')
+            : null
+      if (terminalMessage) {
+        terminal = true
+        shouldReconnectRef.current = false
+        if (wsRef.current === ws) wsRef.current = null
+        setError(terminalMessage)
+        setRunning(false)
+        return
+      }
+      reconnect()
     }
   }, [t])
 

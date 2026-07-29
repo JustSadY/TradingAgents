@@ -4,7 +4,7 @@ import logging
 import os
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI, HTTPException, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -327,8 +327,8 @@ async def _reject_websocket(
 
     Calling ``close`` before ``accept`` turns into an HTTP rejection in most
     ASGI servers, which the browser exposes only as opaque close code 1006.
-    Accepting and immediately closing sends our application code (4001/4003)
-    without registering the socket or allowing it to read any task events.
+    Accepting and immediately closing sends a diagnosable close code without
+    registering the socket or allowing it to read any task events.
     """
     await websocket.accept(subprotocol=subprotocol)
     await websocket.close(code=code, reason=reason)
@@ -338,7 +338,6 @@ async def _reject_websocket(
 async def websocket_analysis(
     websocket: WebSocket,
     task_id: str,
-    token: str | None = Query(None, description="Legacy JWT access-token query parameter"),
 ):
     from backend.api.deps import (
         get_user_from_access_token,
@@ -349,12 +348,20 @@ async def websocket_analysis(
     from backend.core.database import AsyncSessionLocal
     from backend.services.analysis_service import is_task_owner
 
-    # Prefer the private WebSocket subprotocol over the legacy query string.
-    # Browser WebSockets cannot send an Authorization header, and query-string
-    # credentials would otherwise appear in common proxy and Uvicorn logs.
+    # Browser WebSockets cannot send an Authorization header.  The client must
+    # therefore offer both the fixed application protocol and its private JWT
+    # protocol during the handshake; query-string credentials are not allowed.
     offered_subprotocols = websocket.headers.get("sec-websocket-protocol")
     selected_subprotocol = get_websocket_application_subprotocol(offered_subprotocols)
-    access_token = get_websocket_access_token(offered_subprotocols, query_token=token)
+    if selected_subprotocol is None:
+        await _reject_websocket(
+            websocket,
+            code=1002,
+            reason="Unsupported WebSocket protocol",
+        )
+        return
+
+    access_token = get_websocket_access_token(offered_subprotocols)
     if not access_token:
         await _reject_websocket(
             websocket,
@@ -421,7 +428,7 @@ async def websocket_analysis(
             "Analysis WebSocket connected task=%s user=%s protocol=%s",
             task_id,
             user.id,
-            selected_subprotocol or "legacy",
+            selected_subprotocol,
         )
         while True:
             message = await websocket.receive_text()

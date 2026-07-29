@@ -24,11 +24,11 @@ WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX = "tradingagents.jwt."
 
 
 def get_websocket_application_subprotocol(offered_subprotocols: str | None) -> str | None:
-    """Return the safe response protocol when a current client offered it.
+    """Return the fixed response protocol when the client offered it.
 
-    Legacy query-token clients do not offer an application protocol, so they
-    must still be accepted without selecting one. The private JWT protocol is
-    deliberately never returned here.
+    Analysis streams require this protocol in addition to the private JWT
+    protocol.  The JWT-bearing offer is deliberately never returned here:
+    selecting it would expose credentials in the 101 response headers.
     """
     offered = {protocol.strip() for protocol in (offered_subprotocols or "").split(",")}
     if WEBSOCKET_APPLICATION_SUBPROTOCOL in offered:
@@ -38,14 +38,13 @@ def get_websocket_application_subprotocol(offered_subprotocols: str | None) -> s
 
 def get_websocket_access_token(
     offered_subprotocols: str | None,
-    query_token: str | None = None,
 ) -> str | None:
     """Return a JWT supplied through the WebSocket handshake.
 
-    Prefer the private ``Sec-WebSocket-Protocol`` value used by current
-    browser clients.  ``query_token`` remains a temporary compatibility path
-    for an already-cached frontend.  All candidates still pass the normal JWT validation in
-    :func:`get_user_from_access_token`.
+    Tokens are accepted only from the private ``Sec-WebSocket-Protocol``
+    offer.  Query-string credentials are intentionally unsupported because
+    normal proxy and access logs retain URLs.  The returned token still passes
+    the normal JWT validation in :func:`get_user_from_access_token`.
     """
     for protocol in (offered_subprotocols or "").split(","):
         protocol = protocol.strip()
@@ -53,7 +52,7 @@ def get_websocket_access_token(
             token = protocol.removeprefix(WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX)
             if token:
                 return token
-    return query_token
+    return None
 
 
 def _credentials_exception() -> HTTPException:

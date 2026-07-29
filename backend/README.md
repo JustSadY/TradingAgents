@@ -178,4 +178,6 @@ Ensure you have a PostgreSQL database server running and a database named `tradi
 | `/health` | `GET` | No | Health check. Returns `{"status": "ok"}`. |
 
 ¹ Validated via the refresh token in the body, not a bearer header.
-² Authenticated via a `token` query parameter (JWT access token).
+² Authenticated through a private `tradingagents.jwt.<access-token>` WebSocket
+subprotocol. Clients must also offer `tradingagents.v1`, which is the only
+subprotocol the server selects; JWTs must never be placed in the URL.

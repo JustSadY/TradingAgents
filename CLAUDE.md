@@ -217,7 +217,7 @@ In FastAPI routers, always declare **static paths before dynamic/parameterized p
 | `/api/settings/webhook-deliveries` | GET | Yes | Webhook delivery log (success/fail history) |
 | `/api/trading/portfolio-stats` | GET | Yes | Paper trading performance stats (Sharpe, drawdown, win rate) |
 | `/metrics` | GET | Bearer token | Prometheus metrics (enabled via `METRICS_TOKEN` in `.env`; 404 when unset) |
-| `/ws/analysis/{task_id}` | WS | Token | Stream live LangGraph progress + reports |
+| `/ws/analysis/{task_id}` | WS | Token + `tradingagents.v1` subprotocol | Stream live LangGraph progress + reports |
 
 ### Tool System (Tier 3)
 
@@ -515,7 +515,9 @@ Admins can restrict which parts of Settings a user can modify:
 Long-running analyses (2–3 min) stream live progress:
 
 1. API returns `task_id` immediately
-2. Frontend connects to `/ws/analysis/{task_id}` with token query param
+2. Frontend connects to `/ws/analysis/{task_id}` with `tradingagents.v1` and
+   a private `tradingagents.jwt.<access-token>` WebSocket subprotocol. The
+   server selects only `tradingagents.v1`; JWTs must never be placed in the URL.
 3. Backend emits events: `progress`, `report`, `debate`, `complete`
 4. `AnalysisEmitter` broadcasts to all subscribers for that task
 

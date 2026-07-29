@@ -8,18 +8,15 @@ from backend.api.deps import (
 )
 
 
-def test_websocket_auth_prefers_private_subprotocol_over_legacy_query_token():
-    token = get_websocket_access_token(
-        f"chat.v1, {WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX}header-token",
-        query_token="legacy-token",
-    )
+def test_websocket_auth_reads_private_subprotocol_token():
+    token = get_websocket_access_token(f"chat.v1, {WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX}header-token")
 
     assert token == "header-token"
 
 
-def test_websocket_auth_uses_legacy_token_only_when_no_private_protocol_exists():
-    assert get_websocket_access_token(None, query_token="legacy-token") == "legacy-token"
-    assert get_websocket_access_token("chat.v1", query_token="legacy-token") == "legacy-token"
+def test_websocket_auth_requires_a_private_subprotocol_token():
+    assert get_websocket_access_token(None) is None
+    assert get_websocket_access_token("chat.v1") is None
 
 
 def test_websocket_auth_rejects_empty_private_protocol_token():
@@ -33,6 +30,57 @@ def test_websocket_selects_only_fixed_application_subprotocol():
     # The JWT-bearing offer is request-only and must never appear in the 101
     # response header where a proxy/browser could retain it.
     assert get_websocket_application_subprotocol(f"{WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX}header-token") is None
+
+
+@pytest.mark.asyncio
+async def test_websocket_rejects_a_handshake_without_the_application_protocol():
+    """A JWT-only offer is the removed legacy protocol contract."""
+    from backend.main import websocket_analysis
+
+    class Socket:
+        headers = {"sec-websocket-protocol": f"{WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX}header-token"}
+
+        def __init__(self) -> None:
+            self.calls: list[tuple] = []
+
+        async def accept(self, *, subprotocol: str | None = None) -> None:
+            self.calls.append(("accept", subprotocol))
+
+        async def close(self, *, code: int, reason: str) -> None:
+            self.calls.append(("close", code, reason))
+
+    socket = Socket()
+    await websocket_analysis(socket, "task-id")
+
+    assert socket.calls == [
+        ("accept", None),
+        ("close", 1002, "Unsupported WebSocket protocol"),
+    ]
+
+
+@pytest.mark.asyncio
+async def test_websocket_rejects_an_application_protocol_without_a_private_jwt():
+    from backend.main import websocket_analysis
+
+    class Socket:
+        headers = {"sec-websocket-protocol": WEBSOCKET_APPLICATION_SUBPROTOCOL}
+
+        def __init__(self) -> None:
+            self.calls: list[tuple] = []
+
+        async def accept(self, *, subprotocol: str | None = None) -> None:
+            self.calls.append(("accept", subprotocol))
+
+        async def close(self, *, code: int, reason: str) -> None:
+            self.calls.append(("close", code, reason))
+
+    socket = Socket()
+    await websocket_analysis(socket, "task-id")
+
+    assert socket.calls == [
+        ("accept", WEBSOCKET_APPLICATION_SUBPROTOCOL),
+        ("close", 4001, "Unauthorized"),
+    ]
 
 
 @pytest.mark.asyncio
