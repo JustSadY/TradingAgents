@@ -256,14 +256,41 @@ async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, 
 
     try:
         snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id, read_only=True)
-    except Exception as exc:  # noqa: BLE001 — never block trading on the risk snapshot
-        _logger.warning("Risk snapshot failed for %s (allowing order): %s", ticker, exc)
-        return quantity
+    except Exception as exc:  # noqa: BLE001 — risk data unavailable must not open exposure
+        _logger.warning("Risk snapshot failed for %s; skipping new order: %s", ticker, exc)
+        _record_skip("risk_snapshot_unavailable")
+        return 0.0
 
-    equity = float(safe_decimal(snapshot.get("total_value")))
-    holdings = snapshot.get("holdings", [])
-    existing_gross = sum(float(safe_decimal(h.get("market_value"))) for h in holdings)
-    existing_ticker = sum(float(safe_decimal(h.get("market_value"))) for h in holdings if h.get("ticker") == ticker)
+    if not isinstance(snapshot, dict) or not isinstance(snapshot.get("holdings", []), list):
+        _logger.warning("Risk snapshot for %s has an invalid shape; skipping new order", ticker)
+        _record_skip("risk_snapshot_invalid")
+        return 0.0
+
+    equity = _safe_float(snapshot.get("total_value"))
+    if equity is None or equity <= 0:
+        _logger.warning(
+            "Risk snapshot for %s has invalid equity %r; skipping new order", ticker, snapshot.get("total_value")
+        )
+        _record_skip("risk_snapshot_invalid")
+        return 0.0
+
+    holdings = snapshot["holdings"]
+    try:
+        holding_values = []
+        for holding in holdings:
+            if not isinstance(holding, dict):
+                raise ValueError("holding is not an object")
+            market_value = _safe_float(holding.get("market_value"))
+            if market_value is None or market_value < 0:
+                raise ValueError(f"invalid holding market value {holding.get('market_value')!r}")
+            holding_values.append((holding, market_value))
+    except (TypeError, ValueError) as exc:
+        _logger.warning("Risk snapshot holdings are invalid for %s; skipping new order: %s", ticker, exc)
+        _record_skip("risk_snapshot_invalid")
+        return 0.0
+
+    existing_gross = sum(value for _holding, value in holding_values)
+    existing_ticker = sum(value for holding, value in holding_values if holding.get("ticker") == ticker)
     proposed_notional = price * quantity
 
     # Correlation-aware sizing is opt-in: it fetches price history for every
@@ -280,19 +307,24 @@ async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, 
 
     max_concentration_pct = _safe_float(getattr(settings, "max_concentration_pct", None))
     max_gross_exposure = _safe_float(getattr(settings, "max_gross_exposure", None))
-    assessment = cap_order_notional(
-        equity=equity,
-        proposed_notional=proposed_notional,
-        existing_ticker_notional=existing_ticker,
-        existing_gross_notional=existing_gross,
-        max_concentration_pct=max_concentration_pct
-        if max_concentration_pct is not None and max_concentration_pct > 0
-        else DEFAULT_MAX_CONCENTRATION_PCT,
-        max_gross_exposure=max_gross_exposure
-        if max_gross_exposure is not None and max_gross_exposure > 0
-        else DEFAULT_MAX_GROSS_EXPOSURE,
-        correlated_notional=correlated,
-    )
+    try:
+        assessment = cap_order_notional(
+            equity=equity,
+            proposed_notional=proposed_notional,
+            existing_ticker_notional=existing_ticker,
+            existing_gross_notional=existing_gross,
+            max_concentration_pct=max_concentration_pct
+            if max_concentration_pct is not None and max_concentration_pct > 0
+            else DEFAULT_MAX_CONCENTRATION_PCT,
+            max_gross_exposure=max_gross_exposure
+            if max_gross_exposure is not None and max_gross_exposure > 0
+            else DEFAULT_MAX_GROSS_EXPOSURE,
+            correlated_notional=correlated,
+        )
+    except Exception as exc:  # noqa: BLE001 — malformed risk inputs must not open exposure
+        _logger.warning("Risk cap calculation failed for %s; skipping new order: %s", ticker, exc)
+        _record_skip("risk_cap_failed")
+        return 0.0
     if assessment.capped:
         _logger.info(
             "Risk cap (%s) reduced %s order notional %.2f -> %.2f",
@@ -389,25 +421,31 @@ async def place_signal_order(
     # positions are untouched — this only blocks opening/adding new exposure.
     if opening_exposure and getattr(settings, "drawdown_breaker_enabled", False):
         try:
-            initial_capital = float(safe_decimal(portfolio.initial_capital))
-            if initial_capital > 0:
-                from backend.services.mock_trading_service import get_portfolio_with_live_prices
+            initial_capital = _safe_float(portfolio.initial_capital)
+            max_drawdown_pct = _safe_float(getattr(settings, "max_portfolio_drawdown_pct", 20.0))
+            if initial_capital is None or initial_capital <= 0 or max_drawdown_pct is None or max_drawdown_pct < 0:
+                raise ValueError("invalid portfolio capital or drawdown threshold")
 
-                snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id, read_only=True)
-                current_equity = float(safe_decimal(snapshot.get("total_value"), default=Decimal(str(initial_capital))))
-                drawdown_pct = max(0.0, (initial_capital - current_equity) / initial_capital * 100.0)
-                max_drawdown_pct = float(getattr(settings, "max_portfolio_drawdown_pct", 20.0))
-                if drawdown_pct > max_drawdown_pct:
-                    _logger.warning(
-                        "Drawdown circuit breaker: skipping auto-order for %s (drawdown %.1f%% > %.1f%%)",
-                        ticker,
-                        drawdown_pct,
-                        max_drawdown_pct,
-                    )
-                    _record_skip("drawdown_breaker")
-                    return None
-        except Exception as exc:  # noqa: BLE001 — never block trading on the breaker calc itself
-            _logger.warning("Drawdown breaker check failed for %s (allowing order): %s", ticker, exc)
+            from backend.services.mock_trading_service import get_portfolio_with_live_prices
+
+            snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id, read_only=True)
+            current_equity = _safe_float(snapshot.get("total_value")) if isinstance(snapshot, dict) else None
+            if current_equity is None:
+                raise ValueError("snapshot has no finite total_value")
+            drawdown_pct = max(0.0, (initial_capital - current_equity) / initial_capital * 100.0)
+            if drawdown_pct > max_drawdown_pct:
+                _logger.warning(
+                    "Drawdown circuit breaker: skipping auto-order for %s (drawdown %.1f%% > %.1f%%)",
+                    ticker,
+                    drawdown_pct,
+                    max_drawdown_pct,
+                )
+                _record_skip("drawdown_breaker")
+                return None
+        except Exception as exc:  # noqa: BLE001 — unsafe breaker state must not open exposure
+            _logger.warning("Drawdown breaker check failed for %s; skipping new order: %s", ticker, exc)
+            _record_skip("drawdown_snapshot_unavailable")
+            return None
 
     trader = get_trader(
         mode=sys_mode,
@@ -451,9 +489,12 @@ async def place_signal_order(
             stop_loss = stop_loss if stop_loss is not None else default_stop
             take_profit = take_profit if take_profit is not None else default_target
 
-        capital = float(
-            safe_decimal(portfolio.cash_available if portfolio.cash_available > 0 else portfolio.initial_capital)
-        )
+        available_cash = safe_decimal(portfolio.cash_available)
+        if available_cash <= 0:
+            _logger.info("No available cash for a new %s position in %s; skipping order", position_side, ticker)
+            _record_skip("cash_unavailable")
+            return None
+        capital = float(available_cash)
         base_risk_pct = _safe_float(getattr(settings, "max_risk_per_trade_pct", None))
         max_position_size_pct = _safe_float(getattr(settings, "max_position_size_pct", None))
         if base_risk_pct is None or base_risk_pct <= 0 or max_position_size_pct is None or max_position_size_pct <= 0:

@@ -110,3 +110,109 @@ async def test_websocket_rejection_sends_a_diagnostic_close_frame():
         ("accept", WEBSOCKET_APPLICATION_SUBPROTOCOL),
         ("close", 4001, "Unauthorized"),
     ]
+
+
+@pytest.mark.asyncio
+async def test_connected_websocket_revalidation_checks_current_token_and_page_access(monkeypatch):
+    from types import SimpleNamespace
+
+    import backend.api.deps as deps
+    import backend.core.database as database
+    from backend.main import _analysis_websocket_access_is_current
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+    async def current_user(token, db):
+        assert token == "header-token"
+        return SimpleNamespace(id=7)
+
+    async def page_access(db, user, page):
+        assert page == "analysis"
+        return True
+
+    monkeypatch.setattr(database, "AsyncSessionLocal", lambda: Session())
+    monkeypatch.setattr(deps, "get_user_from_access_token", current_user)
+    monkeypatch.setattr(deps, "has_page_access", page_access)
+
+    assert await _analysis_websocket_access_is_current("header-token", 7) is True
+    assert await _analysis_websocket_access_is_current("header-token", 8) is False
+
+
+@pytest.mark.asyncio
+async def test_connected_websocket_closes_when_periodic_revalidation_is_revoked(monkeypatch):
+    import asyncio
+    from types import SimpleNamespace
+
+    import backend.api.deps as deps
+    import backend.core.database as database
+    import backend.main as main
+    import backend.services.analysis_service as analysis_service
+
+    class Session:
+        async def __aenter__(self):
+            return self
+
+        async def __aexit__(self, *args):
+            return None
+
+    class Socket:
+        headers = {
+            "sec-websocket-protocol": (
+                f"{WEBSOCKET_APPLICATION_SUBPROTOCOL}, {WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX}header-token"
+            )
+        }
+
+        def __init__(self):
+            self.calls: list[tuple] = []
+
+        async def accept(self, *, subprotocol=None):
+            self.calls.append(("accept", subprotocol))
+
+        async def close(self, *, code, reason):
+            self.calls.append(("close", code, reason))
+
+        async def receive_text(self):
+            await asyncio.sleep(10)
+            return "never"
+
+    user_calls = 0
+
+    async def get_user(token, db):
+        nonlocal user_calls
+        user_calls += 1
+        if user_calls == 1:
+            return SimpleNamespace(id=7, is_admin=False)
+        raise main.HTTPException(status_code=401)
+
+    async def page_access(db, user, page):
+        return True
+
+    async def owns_task(task_id, user_id, is_admin):
+        return True
+
+    async def connect(task_id, socket, *, subprotocol=None):
+        await socket.accept(subprotocol=subprotocol)
+
+    async def disconnect(task_id, socket):
+        return None
+
+    monkeypatch.setattr(database, "AsyncSessionLocal", lambda: Session())
+    monkeypatch.setattr(deps, "get_user_from_access_token", get_user)
+    monkeypatch.setattr(deps, "has_page_access", page_access)
+    monkeypatch.setattr(analysis_service, "is_task_owner", owns_task)
+    monkeypatch.setattr(main.ws_manager, "connect", connect)
+    monkeypatch.setattr(main.ws_manager, "disconnect", disconnect)
+    monkeypatch.setattr(main, "_WS_AUTH_REVALIDATION_SECONDS", 0.001)
+
+    socket = Socket()
+    await main.websocket_analysis(socket, "task-id")
+
+    assert socket.calls == [
+        ("accept", WEBSOCKET_APPLICATION_SUBPROTOCOL),
+        ("close", 4001, "Unauthorized"),
+    ]

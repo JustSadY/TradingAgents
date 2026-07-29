@@ -105,4 +105,31 @@ describe('Settings', () => {
     expect(await screen.findByRole('option', { name: 'GPT-4o mini' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'settings.custom_model_option' })).toBeInTheDocument()
   })
+
+  it('exposes alert guardrails with explicit zero-value semantics', async () => {
+    vi.mocked(axios.get).mockImplementation((url: string) => {
+      if (url === '/api/settings') {
+        return Promise.resolve({ data: {
+          max_active_alerts: 30,
+          max_ai_alerts_per_run: 3,
+          ai_alert_cooldown_hours: 24,
+          fallback_llm_chain: [],
+          webhook_events: [],
+        } })
+      }
+      if (url === '/api/presets') return Promise.resolve({ data: [] })
+      if (url === '/api/users/me/setting-permissions') return Promise.resolve({ data: { allowed_settings: ['alerts'] } })
+      if (url === '/api/cron/status') return Promise.resolve({ data: null })
+      if (url === '/api/settings/llm-catalog') return Promise.resolve({ data: {} })
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<Settings />)
+
+    expect(await screen.findByDisplayValue('30')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('3')).toBeInTheDocument()
+    expect(screen.getByDisplayValue('24')).toBeInTheDocument()
+    expect(screen.getByText('settings.alert_ai_limit_hint')).toBeInTheDocument()
+    expect(screen.getByText('settings.alert_cooldown_hint')).toBeInTheDocument()
+  })
 })

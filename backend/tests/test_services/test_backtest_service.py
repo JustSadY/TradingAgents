@@ -1,12 +1,16 @@
 from __future__ import annotations
 
+from decimal import Decimal
 from types import SimpleNamespace
 
 import pandas as pd
+import pytest
 
 from backend.services.backtest_service import (
     _apply_slippage,
     _close_position,
+    _close_position_decimal,
+    _compute_metrics,
     _generate_signal,
     _normalise_exit_levels,
     _trade_pnl,
@@ -151,6 +155,33 @@ class TestClosePosition:
         )
         assert trade["entry_price"] == 100.12
         assert trade["exit_price"] == 110.99
+
+    def test_decimal_close_keeps_cash_and_fee_math_exact_until_serialization(self):
+        cash_delta, trade = _close_position_decimal(
+            "long",
+            Decimal("100"),
+            Decimal("110"),
+            Decimal("1"),
+            "2024-01-01",
+            "2024-01-05",
+            "SIGNAL",
+            Decimal("0.001"),
+        )
+
+        assert isinstance(cash_delta, Decimal)
+        assert cash_delta == Decimal("109.8900")
+        assert trade["pnl"] == 9.79
+
+
+def test_backtest_metrics_take_decimal_equity_curve_without_float_money_rounding():
+    metrics = _compute_metrics(
+        [Decimal("100000.0001"), Decimal("101000.0001"), Decimal("100000.0001")],
+        [{"pnl": 1000.0}, {"pnl": -1000.0}],
+        Decimal("100000.0001"),
+    )
+
+    assert metrics["final_value"] == 100000.0
+    assert metrics["max_drawdown"] == pytest.approx(-(1000 / 101000.0001 * 100), abs=0.01)
 
 
 class TestNormaliseExitLevels:

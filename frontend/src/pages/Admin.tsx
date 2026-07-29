@@ -499,6 +499,7 @@ export default function Admin() {
                         { value: 'agents',   label: 'AI Configuration' },
                         { value: 'tools',    label: t('settings.section_tools') || 'Agent Tools' },
                         { value: 'risk',     label: t('settings.section_risk') || 'Risk & Safety' },
+                        { value: 'alerts',   label: t('settings.section_alert_guardrails') || 'Alert Guardrails' },
                         { value: 'webhooks', label: t('settings.section_notifications') || 'Personal Webhooks' },
                         { value: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler' },
                         { value: 'presets',  label: t('settings.section_presets') || 'Configuration Templates' },

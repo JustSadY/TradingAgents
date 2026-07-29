@@ -34,19 +34,46 @@ def _closing_orders(orders: list[Order]) -> list[Order]:
     return [order for order in orders if _is_closing_order(order)]
 
 
-def _closing_cost_basis(order: Order, pnl: Decimal) -> Decimal:
-    """Derive entry notional from a closing order's fill and realized P&L.
+def _equity_max_drawdown_pct(initial_capital: Decimal, orders: list[Order]) -> float | None:
+    """Return the negative peak-to-trough drawdown for realized trade equity.
 
-    Simulation closing orders store exit notional and exit-leg commission.  A
-    long has ``pnl = exit - entry - commission``; a short has
-    ``pnl = entry - exit - commission``.  This keeps return percentages
-    directionally correct without counting a short cover as a new sale.
+    This deliberately starts at deposited capital.  A P&L-only curve has no
+    meaningful denominator around zero and wildly overstates normal reversals.
+    """
+    equity = safe_decimal(initial_capital)
+    if equity <= 0:
+        return None
+
+    peak = equity
+    max_drawdown = Decimal("0.0")
+    for order in orders:
+        equity += safe_decimal(order.realized_pnl)
+        if equity > peak:
+            peak = equity
+        elif peak > 0:
+            drawdown = (peak - equity) / peak * Decimal("100")
+            if drawdown > max_drawdown:
+                max_drawdown = drawdown
+    return -float(max_drawdown)
+
+
+def _closing_cost_basis(order: Order, pnl: Decimal) -> Decimal:
+    """Derive all-in entry capital from a closing order's fill and P&L.
+
+    Simulation closing orders store exit notional, exit-leg commission, and
+    the pro-rata opening commission carried by the holding.  A long has
+    ``pnl = exit - entry - entry_commission - exit_commission``; a short has
+    ``pnl = entry - exit - entry_commission - exit_commission``.  Return
+    percentages therefore use actual capital committed, not a pre-fee value.
     """
     exit_notional = safe_decimal(order.total_value)
     exit_commission = safe_decimal(order.commission)
+    entry_commission = safe_decimal(getattr(order, "entry_commission", None))
     if (order.side or "long").lower() == "short":
-        return exit_notional + pnl + exit_commission
-    return exit_notional - pnl - exit_commission
+        entry_notional = exit_notional + pnl + entry_commission + exit_commission
+    else:
+        entry_notional = exit_notional - pnl - entry_commission - exit_commission
+    return entry_notional + entry_commission
 
 
 async def get_portfolio_stats(db: AsyncSession, user: User) -> dict:
@@ -134,26 +161,7 @@ async def get_portfolio_stats(db: AsyncSession, user: User) -> dict:
         else:
             sharpe_ratio = None
 
-    max_drawdown_pct: float | None = None
-    if total_trades >= 2:
-        pnl_values = [float(safe_decimal(o.realized_pnl)) for o in orders]
-        cumulative = []
-        running = 0.0
-        for p in pnl_values:
-            running += p
-            cumulative.append(running)
-
-        peak = cumulative[0]
-        max_dd = 0.0
-        for val in cumulative[1:]:
-            if val > peak:
-                peak = val
-            elif abs(peak) > 1e-9:
-                dd = (peak - val) / abs(peak) * 100.0
-                if dd > max_dd:
-                    max_dd = dd
-
-        max_drawdown_pct = -max_dd if max_dd > 0.0 else 0.0
+    max_drawdown_pct = _equity_max_drawdown_pct(safe_decimal(portfolio.initial_capital), orders)
 
     ticker_map: dict[str, dict] = {}
     for o in orders:

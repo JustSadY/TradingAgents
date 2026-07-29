@@ -420,19 +420,24 @@ async def _tool_create_price_alert(
         return "condition must be 'above' or 'below'."
     try:
         from backend.core.database import AsyncSessionLocal
-        from backend.repositories.alerts import create_alert as _create
+        from backend.services.alert_creation_service import AlertGuardrailViolation, create_alert_with_guardrails
 
         async with AsyncSessionLocal() as alert_db:
-            alert = await _create(
+            alert = await create_alert_with_guardrails(
                 alert_db,
                 user_id=user.id,
                 ticker=ticker.strip().upper(),
                 condition=cond,
                 target_price=target_price,
                 auto_analyze=False,
+                creation_source="assistant",
             )
             await alert_db.commit()
+        if alert is None:
+            return "Alert was not created because an alert limit is active."
         return f"Alert created (ID {alert.id}): notify when {ticker.upper()} goes {cond} ${target_price:,.2f}."
+    except AlertGuardrailViolation as exc:
+        return f"Alert was not created: {exc.detail}"
     except Exception as e:
         return f"Alert creation failed: {e}"
 

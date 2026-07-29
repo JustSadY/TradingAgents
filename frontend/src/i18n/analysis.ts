@@ -16,6 +16,7 @@ const analysis = {
 
     'analysis.btn.start': 'Start Analysis',
     'analysis.btn.stop': 'Stop',
+    'analysis.btn.stopping': 'Stopping…',
     'analysis.btn.rerun': 'Re-run',
     'analysis.btn.cancel': 'Cancel',
 
@@ -55,6 +56,7 @@ const analysis = {
     'analysis.ws.task_status_unavailable': 'Unable to verify whether the analysis is still running. Check the backend/proxy connection and Analysis History.',
     'analysis.ws.initialization_failed': 'The server could not initialize the live analysis connection. Check backend logs and try again.',
     'analysis.ws.stopped': 'Analysis stopped.',
+    'analysis.ws.stop_failed': 'The analysis could not be stopped. It is still running; please try again.',
     'analysis.ws.failed_to_start': 'Failed to start',
     'analysis.ws.analysis_error_title': 'Analysis Error',
     'analysis.ws.analysis_failed': 'Analysis failed.',
@@ -166,6 +168,7 @@ const analysis = {
 
     'analysis.btn.start': 'Analiz Başlat',
     'analysis.btn.stop': 'Durdur',
+    'analysis.btn.stopping': 'Durduruluyor…',
     'analysis.btn.rerun': 'Yeniden Çalıştır',
     'analysis.btn.cancel': 'İptal',
 
@@ -205,6 +208,7 @@ const analysis = {
     'analysis.ws.task_status_unavailable': 'Analizin hâlâ çalışıp çalışmadığı doğrulanamadı. Backend/proxy bağlantısını ve Analiz Geçmişi’ni kontrol edin.',
     'analysis.ws.initialization_failed': 'Sunucu canlı analiz bağlantısını başlatamadı. Backend loglarını kontrol edip yeniden deneyin.',
     'analysis.ws.stopped': 'Analiz durduruldu.',
+    'analysis.ws.stop_failed': 'Analiz durdurulamadı. Hâlâ çalışıyor; lütfen yeniden deneyin.',
     'analysis.ws.failed_to_start': 'Başlatılamadı',
     'analysis.ws.analysis_error_title': 'Analiz Hatası',
     'analysis.ws.analysis_failed': 'Analiz başarısız.',

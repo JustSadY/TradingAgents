@@ -4,6 +4,8 @@ import logging
 import os
 import re
 import traceback
+from collections import OrderedDict
+from threading import RLock
 
 _logger = logging.getLogger(__name__)
 
@@ -14,13 +16,31 @@ _SENSITIVE_ENV_VARS = (
     "ALPHA_VANTAGE_API_KEY",
 )
 
-_DYNAMIC_LITERALS: set[str] = set()
+# User-supplied strings such as webhook URLs can contain credentials in a
+# path/query. Keep them redactable without letting a long-running server grow
+# an unbounded permanent set as users rotate URLs or submit invalid values.
+# OrderedDict acts as a small LRU and the lock protects logging threads as
+# well as async request tasks.
+_MAX_DYNAMIC_LITERALS = 1_000
+_DYNAMIC_LITERALS: OrderedDict[str, None] = OrderedDict()
+_DYNAMIC_LITERALS_LOCK = RLock()
 
 
 def register_sensitive_literal(value: str):
     """Add a dynamic value to be masked in logs (e.g. user webhook URLs)."""
     if value and len(value) >= 6:
-        _DYNAMIC_LITERALS.add(value)
+        with _DYNAMIC_LITERALS_LOCK:
+            _DYNAMIC_LITERALS.pop(value, None)
+            _DYNAMIC_LITERALS[value] = None
+            while len(_DYNAMIC_LITERALS) > _MAX_DYNAMIC_LITERALS:
+                _DYNAMIC_LITERALS.popitem(last=False)
+
+
+def _dynamic_literals_snapshot() -> list[str]:
+    """Return a stable longest-first literal list for one redaction pass."""
+    with _DYNAMIC_LITERALS_LOCK:
+        values = list(_DYNAMIC_LITERALS)
+    return sorted(values, key=len, reverse=True)
 
 
 _PATTERNS = [
@@ -48,8 +68,12 @@ def _build_literals() -> list[str]:
 def redact_text(text: str, literals: list[str] | None = None) -> str:
     if not text:
         return text
-    # Combine static environment-based literals with dynamic user-based literals
-    combined_literals = (list(_DYNAMIC_LITERALS) + _LITERALS) if literals is None else literals
+    # Combine static environment-based literals with dynamic user-based
+    # literals. Longest-first avoids partially masking a longer secret that
+    # shares a prefix with another literal.
+    combined_literals = (
+        sorted(_dynamic_literals_snapshot() + _LITERALS, key=len, reverse=True) if literals is None else literals
+    )
     for secret in combined_literals:
         if secret in text:
             text = text.replace(secret, _MASK)

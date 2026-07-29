@@ -40,6 +40,17 @@ _DEFAULT_COMMISSION_RATE = Decimal("0.001")
 _DUST = Decimal("1e-6")
 
 
+def _opening_commission(holding: Holding) -> Decimal:
+    """Return the unallocated opening commission carried by ``holding``.
+
+    ``getattr`` keeps this read path safe while an older SQLite development
+    database is being upgraded.  Production PostgreSQL schemas gain the
+    non-null column through Alembic before this code is deployed.
+    """
+    value = getattr(holding, "entry_commission", Decimal("0.0"))
+    return value if value is not None else Decimal("0.0")
+
+
 async def get_or_create_sim_portfolio(
     db: AsyncSession,
     initial_capital: float = 100_000.0,
@@ -156,11 +167,16 @@ async def get_portfolio_with_live_prices(
         if close_status is not None:
             notional_now = price * h.quantity
             commission = (notional_now * _DEFAULT_COMMISSION_RATE).quantize(Decimal("0.0001"))
+            entry_commission = _opening_commission(h)
             if is_short:
-                realized = (h.avg_buy_price - price) * h.quantity - commission
-                cash_available_val += margin + realized
+                gross_pnl = (h.avg_buy_price - price) * h.quantity
+                realized = gross_pnl - entry_commission - commission
+                # Opening commission was deducted from cash when the short
+                # was opened.  Its all-in P&L must include that cost, but the
+                # close cash movement must not deduct it a second time.
+                cash_available_val += margin + gross_pnl - commission
             else:
-                realized = (price - h.avg_buy_price) * h.quantity - commission
+                realized = (price - h.avg_buy_price) * h.quantity - entry_commission - commission
                 cash_available_val += notional_now - borrowed - commission
 
             if not read_only:
@@ -179,6 +195,7 @@ async def get_portfolio_with_live_prices(
                         price_per_share=price,
                         total_value=notional_now,
                         commission=commission,
+                        entry_commission=entry_commission,
                         realized_pnl=realized,
                         executed_at=now,
                     )
@@ -197,13 +214,14 @@ async def get_portfolio_with_live_prices(
             continue
 
         market_value = price * h.quantity
+        entry_commission = _opening_commission(h)
         if is_short:
-            unrealized_pnl = (h.avg_buy_price - price) * h.quantity
+            unrealized_pnl = (h.avg_buy_price - price) * h.quantity - entry_commission
             equity = margin + unrealized_pnl
         else:
             equity = market_value - borrowed
-            unrealized_pnl = market_value - h.avg_buy_price * h.quantity
-        invested = margin or (h.avg_buy_price * h.quantity)
+            unrealized_pnl = market_value - h.avg_buy_price * h.quantity - entry_commission
+        invested = (margin or (h.avg_buy_price * h.quantity)) + entry_commission
         pnl_pct = (unrealized_pnl / invested * Decimal("100")) if invested else Decimal("0.0")
 
         if not read_only:
@@ -303,6 +321,7 @@ async def execute_order(
     notional = price * qty_dec
     commission = (notional * _DEFAULT_COMMISSION_RATE).quantize(Decimal("0.0001"))
     realized_pnl = Decimal("0.0")
+    entry_commission = commission
     status = "FILLED"
 
     stop_dec = _parse_exit_level(stop_loss)
@@ -340,7 +359,7 @@ async def execute_order(
             lang,
         )
     else:
-        realized_pnl = await _execute_close_position(
+        realized_pnl, entry_commission = await _execute_close_position(
             db, portfolio, holding, price, qty_dec, notional, commission, pos_side, lang, quantity
         )
 
@@ -357,6 +376,7 @@ async def execute_order(
         price_per_share=price,
         total_value=notional,
         commission=commission,
+        entry_commission=entry_commission,
         realized_pnl=realized_pnl,
         analysis_id=analysis_id,
         executed_at=datetime.now(UTC),
@@ -482,6 +502,7 @@ def _execute_open_position(
         new_qty = holding.quantity + qty_dec
         holding.avg_buy_price = (holding.avg_buy_price * holding.quantity + price * qty_dec) / new_qty
         holding.quantity = new_qty
+        holding.entry_commission = _opening_commission(holding) + commission
         holding.margin_used = (holding.margin_used or Decimal("0.0")) + margin
         holding.borrowed_amount = (holding.borrowed_amount or Decimal("0.0")) + borrowed
         total_notional = holding.avg_buy_price * holding.quantity
@@ -508,6 +529,7 @@ def _execute_open_position(
                 avg_buy_price=price,
                 current_price=price,
                 unrealized_pnl=Decimal("0.0"),
+                entry_commission=commission,
                 side=pos_side,
                 leverage=lev,
                 margin_used=margin,
@@ -530,7 +552,7 @@ async def _execute_close_position(
     pos_side: str,
     lang: str,
     quantity: float,
-) -> Decimal:
+) -> tuple[Decimal, Decimal]:
     from backend.core.l10n import get_message
 
     if holding is None or holding.quantity < qty_dec:
@@ -540,16 +562,24 @@ async def _execute_close_position(
     fraction = qty_dec / holding.quantity
     released_margin = (holding.margin_used or Decimal("0.0")) * fraction
     borrowed_portion = (holding.borrowed_amount or Decimal("0.0")) * fraction
+    opening_commission = _opening_commission(holding)
+    # Use the exact remainder for a full close.  That avoids leaving a
+    # sub-cent Decimal residue after one or more proportional partial closes.
+    entry_commission = opening_commission if qty_dec == holding.quantity else opening_commission * fraction
 
     if pos_side == "long":
-        realized_pnl = (price - holding.avg_buy_price) * qty_dec - commission
+        realized_pnl = (price - holding.avg_buy_price) * qty_dec - entry_commission - commission
         portfolio.cash_available += notional - borrowed_portion - commission
     else:
-        realized_pnl = (holding.avg_buy_price - price) * qty_dec - commission
-        portfolio.cash_available += released_margin + realized_pnl
+        gross_pnl = (holding.avg_buy_price - price) * qty_dec
+        realized_pnl = gross_pnl - entry_commission - commission
+        # The opening commission has already reduced cash.  It belongs in
+        # reported realized P&L, not in the close-leg cash movement again.
+        portfolio.cash_available += released_margin + gross_pnl - commission
     portfolio.margin_used = (portfolio.margin_used or Decimal("0.0")) - released_margin
 
     holding.quantity -= qty_dec
+    holding.entry_commission = max(Decimal("0.0"), opening_commission - entry_commission)
     holding.borrowed_amount = (holding.borrowed_amount or Decimal("0.0")) - borrowed_portion
     holding.margin_used = (holding.margin_used or Decimal("0.0")) - released_margin
     if holding.quantity < _DUST:
@@ -565,7 +595,7 @@ async def _execute_close_position(
         )
         holding.current_price = price
 
-    return realized_pnl
+    return realized_pnl, entry_commission
 
 
 async def reset_portfolio(db: AsyncSession, initial_capital: float = 100_000.0, user=None) -> dict:

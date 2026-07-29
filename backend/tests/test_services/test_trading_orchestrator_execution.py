@@ -111,3 +111,152 @@ async def test_portfolio_risk_snapshot_is_read_only(monkeypatch):
 
     assert quantity == 10.0
     assert received_kwargs == {"portfolio_id": 42, "read_only": True}
+
+
+async def test_portfolio_risk_snapshot_failure_fails_closed_for_new_exposure(monkeypatch):
+    from backend.services import mock_trading_service
+
+    async def _snapshot(_db, **_kwargs):
+        raise RuntimeError("market-data outage")
+
+    monkeypatch.setattr(mock_trading_service, "get_portfolio_with_live_prices", _snapshot)
+
+    quantity = await _apply_portfolio_risk_caps(
+        object(),
+        portfolio=SimpleNamespace(id=42),
+        ticker="AAPL",
+        price=100.0,
+        quantity=10.0,
+        settings=SimpleNamespace(
+            correlation_risk_enabled=False,
+            max_concentration_pct=25.0,
+            max_gross_exposure=3.0,
+        ),
+    )
+
+    assert quantity == 0.0
+
+
+def _opening_settings(**overrides):
+    values = {
+        "quality_gate_enabled": False,
+        "allow_short_selling": False,
+        "drawdown_breaker_enabled": False,
+        "max_risk_per_trade_pct": 2.0,
+        "max_position_size_pct": 10.0,
+        "max_concentration_pct": 25.0,
+        "max_gross_exposure": 3.0,
+        "correlation_risk_enabled": False,
+    }
+    values.update(overrides)
+    return SimpleNamespace(**values)
+
+
+async def test_drawdown_snapshot_error_blocks_a_new_position(monkeypatch):
+    from backend.repositories import portfolio as portfolio_repo
+    from backend.repositories import system_settings as system_settings_repo
+    from backend.services import mock_trading_service, trading_orchestrator
+
+    portfolio = SimpleNamespace(id=42, initial_capital=Decimal("10000"), cash_available=Decimal("9000"))
+
+    async def _get_system_settings(_db):
+        return None
+
+    async def _get_holding(_db, _portfolio_id, _ticker):
+        return None
+
+    async def _get_portfolio(_db, user=None):
+        return portfolio
+
+    async def _snapshot(_db, **_kwargs):
+        raise RuntimeError("market-data outage")
+
+    monkeypatch.setattr(system_settings_repo, "get_system_settings", _get_system_settings)
+    monkeypatch.setattr(portfolio_repo, "get_holding", _get_holding)
+    monkeypatch.setattr(trading_orchestrator, "get_or_create_sim_portfolio", _get_portfolio)
+    monkeypatch.setattr(mock_trading_service, "get_portfolio_with_live_prices", _snapshot)
+    monkeypatch.setattr(trading_orchestrator, "get_trader", lambda **_kwargs: pytest.fail("must not request a trade"))
+
+    result = await place_signal_order(
+        object(),
+        ticker="AAPL",
+        row=SimpleNamespace(signal="Buy", chart_annotations=None, final_decision=""),
+        settings=_opening_settings(drawdown_breaker_enabled=True, max_portfolio_drawdown_pct=20.0),
+    )
+
+    assert result is None
+
+
+async def test_drawdown_snapshot_error_does_not_block_a_safe_exit(monkeypatch):
+    from backend.repositories import portfolio as portfolio_repo
+    from backend.repositories import system_settings as system_settings_repo
+    from backend.services import mock_trading_service, trading_orchestrator
+
+    portfolio = SimpleNamespace(id=42, initial_capital=Decimal("10000"), cash_available=Decimal("9000"))
+    holding = SimpleNamespace(side="long", quantity=Decimal("7.25"))
+    trader = _FakeTrader()
+    snapshot_calls = 0
+
+    async def _get_system_settings(_db):
+        return None
+
+    async def _get_holding(_db, _portfolio_id, _ticker):
+        return holding
+
+    async def _get_portfolio(_db, user=None):
+        return portfolio
+
+    async def _snapshot(_db, **_kwargs):
+        nonlocal snapshot_calls
+        snapshot_calls += 1
+        raise RuntimeError("must not be called for exits")
+
+    monkeypatch.setattr(system_settings_repo, "get_system_settings", _get_system_settings)
+    monkeypatch.setattr(portfolio_repo, "get_holding", _get_holding)
+    monkeypatch.setattr(trading_orchestrator, "get_or_create_sim_portfolio", _get_portfolio)
+    monkeypatch.setattr(mock_trading_service, "get_portfolio_with_live_prices", _snapshot)
+    monkeypatch.setattr(trading_orchestrator, "get_trader", lambda **_kwargs: trader)
+
+    result = await place_signal_order(
+        object(),
+        ticker="AAPL",
+        row=SimpleNamespace(signal="Sell", chart_annotations=None, final_decision=""),
+        settings=_opening_settings(drawdown_breaker_enabled=True, max_portfolio_drawdown_pct=20.0),
+    )
+
+    assert result is not None
+    assert trader.request.quantity == Decimal("7.25")
+    assert snapshot_calls == 0
+
+
+async def test_zero_cash_never_falls_back_to_initial_capital_for_position_sizing(monkeypatch):
+    from backend.repositories import portfolio as portfolio_repo
+    from backend.repositories import system_settings as system_settings_repo
+    from backend.services import trading_orchestrator
+
+    portfolio = SimpleNamespace(id=42, initial_capital=Decimal("10000"), cash_available=Decimal("0"))
+    trader = _FakeTrader()
+
+    async def _get_system_settings(_db):
+        return None
+
+    async def _get_holding(_db, _portfolio_id, _ticker):
+        return None
+
+    async def _get_portfolio(_db, user=None):
+        return portfolio
+
+    monkeypatch.setattr(system_settings_repo, "get_system_settings", _get_system_settings)
+    monkeypatch.setattr(portfolio_repo, "get_holding", _get_holding)
+    monkeypatch.setattr(trading_orchestrator, "get_or_create_sim_portfolio", _get_portfolio)
+    monkeypatch.setattr(trading_orchestrator, "get_trader", lambda **_kwargs: trader)
+
+    result = await place_signal_order(
+        object(),
+        ticker="AAPL",
+        row=SimpleNamespace(signal="Buy", chart_annotations=None, final_decision=""),
+        settings=_opening_settings(),
+    )
+
+    assert result is None
+    assert trader.request is None

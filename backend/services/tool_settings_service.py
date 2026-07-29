@@ -81,7 +81,12 @@ def validate_tool_settings(tool: BaseAgentTool, incoming: dict[str, Any]) -> dic
 
     try:
         validated_obj = ToolModel(**incoming)
-        normalized = validated_obj.model_dump()
+        # A tool update is a PATCH, not a replacement. ``model_dump()`` would
+        # materialise every schema default for fields the caller did not send.
+        # That silently reset admin-hidden/locked fields whenever the frontend
+        # saved the subset it was allowed to view. Preserve only explicit keys
+        # so field-level permission checks and stored overrides remain intact.
+        normalized = validated_obj.model_dump(exclude_unset=True)
 
         # Manual check for selects/options which are harder to do purely with create_model dynamic types
         for field in tool.settings_schema:
@@ -202,7 +207,7 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
             )
             db.add(row)
 
-        _apply_tool_setting_row_update(row, update, tool, scope="user")
+        _apply_tool_setting_row_update(row, update, tool)
 
     await db.flush()
     return await get_user_tool_settings(db, user)
@@ -216,7 +221,7 @@ def _validate_tool_availability(tool: BaseAgentTool, tool_key: str, agent_ctx: d
             raise ValueError(f"Tool '{tool_key}' is not available because none of its associated agents are enabled.")
 
 
-def _apply_tool_setting_row_update(row: AgentToolSetting, update: Any, tool: BaseAgentTool, scope: str):
+def _apply_tool_setting_row_update(row: AgentToolSetting, update: Any, tool: BaseAgentTool):
     """Apply enablement and settings updates to an AgentToolSetting row."""
     if update.reset_enabled:
         row.enabled = tool.default_enabled
@@ -225,10 +230,11 @@ def _apply_tool_setting_row_update(row: AgentToolSetting, update: Any, tool: Bas
 
     current_settings = row.settings.copy()
     if update.reset_settings:
-        default_settings = tool.default_settings(scope=scope)
         for k in update.reset_settings:
-            if k in current_settings:
-                current_settings[k] = default_settings.get(k)
+            # Reset means "remove this override". Persisting a local default
+            # masks a future server/default-schema change and previously let a
+            # partial form overwrite fields the user could not see.
+            current_settings.pop(k, None)
     elif update.settings is not None:
         validated = validate_tool_settings(tool, update.settings)
 
@@ -267,7 +273,7 @@ async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettings
             )
             db.add(row)
 
-        _apply_tool_setting_row_update(row, update, tool, scope="server")
+        _apply_tool_setting_row_update(row, update, tool)
 
     await db.flush()
     return await get_server_tool_settings(db)

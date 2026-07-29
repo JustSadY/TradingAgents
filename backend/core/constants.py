@@ -21,7 +21,19 @@ PAGE_KEYS = [
     "earnings",
 ]
 
-SETTING_KEYS = ["general", "llm", "agents", "tools", "risk", "webhooks", "cron", "presets", "memory", "personas"]
+SETTING_KEYS = [
+    "general",
+    "llm",
+    "agents",
+    "tools",
+    "risk",
+    "alerts",
+    "webhooks",
+    "cron",
+    "presets",
+    "memory",
+    "personas",
+]
 
 # Notification events are an API/storage contract.  Keep this list beside the
 # rest of the public application constants so the settings schema, metadata

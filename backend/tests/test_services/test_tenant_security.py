@@ -189,6 +189,24 @@ class TestPagePermissionEnforcement:
         assert response.status_code == 401
 
 
+class TestProfileMutationPermission:
+    async def test_profile_reads_remain_available_for_auth_bootstrap(self, async_client, auth_headers):
+        response = await async_client.get("/api/users/me", headers=auth_headers)
+
+        assert response.status_code == 200
+
+    async def test_profile_and_api_key_mutations_require_profile_page(self, async_client, auth_headers):
+        mutations = [
+            ("put", "/api/users/me", {"display_name": "Hidden profile"}),
+            ("put", "/api/users/me/api-keys", {"provider": "openai", "api_key": "sk-test-123"}),
+            ("delete", "/api/users/me/api-keys/openai", None),
+        ]
+
+        for method, path, payload in mutations:
+            response = await getattr(async_client, method)(path, json=payload, headers=auth_headers)
+            assert response.status_code == 403, path
+
+
 class TestWebhookSsrFHardening:
     async def test_settings_service_rejects_private_webhook_url(self, db: AsyncSession, test_user: User):
         settings = await get_or_create_settings(db, test_user)
@@ -342,14 +360,33 @@ class TestProxyAwareRateLimiting:
     def test_forwarded_header_is_ignored_without_explicit_proxy_trust(self, monkeypatch):
         from backend.core import limiter as limiter_module
 
-        monkeypatch.setattr(limiter_module, "get_settings", lambda: SimpleNamespace(TRUST_PROXY_HEADERS=False))
+        monkeypatch.setattr(
+            limiter_module,
+            "get_settings",
+            lambda: SimpleNamespace(TRUST_PROXY_HEADERS=False, TRUSTED_PROXY_CIDRS="10.0.0.0/8"),
+        )
 
         assert limiter_module._client_ip(self._request("10.0.0.2", "203.0.113.9")) == "10.0.0.2"
 
-    def test_valid_forwarded_header_is_used_only_when_proxy_trust_enabled(self, monkeypatch):
+    def test_valid_forwarded_header_is_used_only_from_a_trusted_proxy(self, monkeypatch):
         from backend.core import limiter as limiter_module
 
-        monkeypatch.setattr(limiter_module, "get_settings", lambda: SimpleNamespace(TRUST_PROXY_HEADERS=True))
+        monkeypatch.setattr(
+            limiter_module,
+            "get_settings",
+            lambda: SimpleNamespace(TRUST_PROXY_HEADERS=True, TRUSTED_PROXY_CIDRS="10.0.0.0/8"),
+        )
 
-        assert limiter_module._client_ip(self._request("10.0.0.2", "203.0.113.9, 10.0.0.2")) == "203.0.113.9"
+        assert limiter_module._client_ip(self._request("10.0.0.2", "198.51.100.9, 10.0.0.3")) == "198.51.100.9"
         assert limiter_module._client_ip(self._request("10.0.0.2", "not-an-ip")) == "10.0.0.2"
+
+    def test_forwarded_header_cannot_be_forged_through_an_untrusted_peer(self, monkeypatch):
+        from backend.core import limiter as limiter_module
+
+        monkeypatch.setattr(
+            limiter_module,
+            "get_settings",
+            lambda: SimpleNamespace(TRUST_PROXY_HEADERS=True, TRUSTED_PROXY_CIDRS="10.0.0.0/8"),
+        )
+
+        assert limiter_module._client_ip(self._request("198.51.100.20", "1.1.1.1")) == "198.51.100.20"

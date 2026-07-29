@@ -27,6 +27,7 @@ class AlertRead(BaseModel):
     condition: str
     target_price: float
     auto_analyze: bool
+    creation_source: str
     enabled: bool
     triggered_at: datetime | None
     created_at: datetime

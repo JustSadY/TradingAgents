@@ -492,6 +492,83 @@ describe('Analysis', () => {
     expect(MockWebSocket.instances).toHaveLength(0)
   })
 
+  it('keeps a known analysis running when the server rejects Stop', async () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+      readyState = 1
+      onclose: ((event: CloseEvent) => void) | null = null
+
+      constructor() {
+        MockWebSocket.instances.push(this)
+      }
+
+      close() {
+        this.onclose?.(new CloseEvent('close', { code: 1000 }))
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket)
+
+    const axios = await import('axios')
+    vi.mocked(axios.default.post).mockImplementation((url: string) => {
+      if (url === '/api/analysis/run') return Promise.resolve({ data: { task_id: 'cannot-stop-task' } })
+      if (url === '/api/analysis/cannot-stop-task/cancel') return Promise.reject(new Error('backend unavailable'))
+      return Promise.resolve({ data: {} })
+    })
+    localStorage.setItem('ta_last_run', JSON.stringify({
+      ticker: 'AAPL', date: '2026-07-26', assetType: 'stock', runStatus: 'idle',
+      signal: null, reports: {}, log: [], activeSection: null, analysisId: null, liveDebate: [],
+    }))
+    render(<Analysis />)
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Start analysis' }))
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+    await user.click(screen.getByRole('button', { name: 'Stop analysis' }))
+
+    await waitFor(() => expect(axios.default.post).toHaveBeenCalledWith('/api/analysis/cannot-stop-task/cancel'))
+    expect(screen.getByTestId('run-state')).toHaveTextContent('running')
+  })
+
+  it('cancels a multi-analysis and does not reconnect its socket afterwards', async () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+      readyState = 1
+      onclose: ((event: CloseEvent) => void) | null = null
+
+      constructor() {
+        MockWebSocket.instances.push(this)
+      }
+
+      close() {
+        this.onclose?.(new CloseEvent('close', { code: 1000 }))
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket)
+
+    const axios = await import('axios')
+    vi.mocked(axios.default.get).mockResolvedValue({ data: [] })
+    vi.mocked(axios.default.post).mockImplementation((url: string) => {
+      if (url === '/api/analysis/run-portfolio') return Promise.resolve({ data: { task_id: 'portfolio-stop-task' } })
+      if (url === '/api/analysis/portfolio-stop-task/cancel') return Promise.resolve({ data: { cancelled: true } })
+      return Promise.resolve({ data: {} })
+    })
+    render(<Analysis />)
+
+    const user = userEvent.setup()
+    await user.click(screen.getByText('Multi').closest('button')!)
+    const input = screen.getByPlaceholderText('AAPL, Enter')
+    await user.type(input, 'AAPL{enter}')
+    await user.type(input, 'MSFT{enter}')
+    await user.click(screen.getByText('analysis.multi.btn_start').closest('button')!)
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+
+    await user.click(screen.getByRole('button', { name: /analysis\.btn\.stop/ }))
+
+    await waitFor(() => expect(axios.default.post).toHaveBeenCalledWith('/api/analysis/portfolio-stop-task/cancel'))
+    expect(screen.getByText('analysis.ws.stopped')).toBeInTheDocument()
+    expect(MockWebSocket.instances).toHaveLength(1)
+  })
+
   it('ignores a delayed latest-analysis bootstrap response after a new run starts', async () => {
     class MockWebSocket {
       static instances: MockWebSocket[] = []

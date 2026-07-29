@@ -39,7 +39,6 @@ _logger = logging.getLogger(__name__)
 
 _RUNNING_TASKS: dict[str, asyncio.Task] = {}
 _TASK_REGISTRY: dict[str, dict] = {}
-_BACKGROUND_TASKS: set[asyncio.Task] = set()
 _TASK_OWNERS: dict[str, int | None] = {}
 
 
@@ -221,9 +220,6 @@ async def run_analysis(
             await emitter.close()
 
 
-_ANALYSIS_RETRY_MAX = 1
-
-
 async def run_analysis_task(
     ticker: str,
     trade_date: str,
@@ -338,19 +334,6 @@ async def _maybe_retry_analysis(
     refresh or opening from a new tab does not restart or re-attach to a failed run.
     """
     return False
-
-    from backend.services.analysis_queue import queue_mode as _queue_mode
-
-    if _queue_mode() == "worker":
-        from backend.services.analysis_queue import get_arq_pool
-
-        pool = await get_arq_pool()
-        await pool.enqueue_job("run_analysis_job", ticker, trade_date, asset_type, user.id if user else None, task_id)
-    else:
-        task = asyncio.create_task(run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user))
-        _BACKGROUND_TASKS.add(task)
-        task.add_done_callback(_BACKGROUND_TASKS.discard)
-    return True
 
 
 async def run_portfolio_task(

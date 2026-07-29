@@ -24,7 +24,7 @@ async def get_alert_by_id(db: AsyncSession, alert_id: int, user=None) -> PriceAl
     return result.scalar_one_or_none()
 
 
-async def create_alert(
+async def insert_alert(
     db: AsyncSession,
     user_id: int,
     ticker: str,
@@ -32,7 +32,15 @@ async def create_alert(
     target_price: float,
     auto_analyze: bool,
     alert_type: str = "price",
+    creation_source: str = "manual",
+    creation_run_id: str | None = None,
 ) -> PriceAlert:
+    """Persist an already-authorized alert.
+
+    User-facing callers must use ``alert_creation_service`` first; keeping
+    count/cooldown policy out of this primitive prevents repository helpers
+    from silently starting transactions or owning API-facing error semantics.
+    """
     alert = PriceAlert(
         ticker=ticker.upper(),
         alert_type=alert_type,
@@ -40,6 +48,8 @@ async def create_alert(
         target_price=target_price,
         auto_analyze=auto_analyze,
         user_id=user_id,
+        creation_source=creation_source,
+        creation_run_id=creation_run_id,
     )
     db.add(alert)
     await db.flush()

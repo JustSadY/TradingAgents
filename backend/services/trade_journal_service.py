@@ -26,12 +26,13 @@ class TradeJournalError(Exception):
 
 
 def _realized_cost_basis(order) -> Decimal:
-    """Derive a closing trade's entry notional from its recorded exit and P&L.
+    """Derive a closing trade's all-in entry capital from its exit and P&L.
 
     Orders retain the closing fill, not the original entry fill.  For longs,
-    ``pnl = exit - entry - exit_commission``; for shorts,
-    ``pnl = entry - exit - exit_commission``.  Using the exit notional directly
-    makes winning and losing return percentages systematically inconsistent.
+    ``pnl = exit - entry - entry_commission - exit_commission``; for shorts,
+    ``pnl = entry - exit - entry_commission - exit_commission``.  The opening
+    fee is persisted on a closing order so partial closes use the exact
+    proportion instead of an inferred estimate.
     """
     exit_notional = safe_decimal(getattr(order, "total_value", None))
     if exit_notional <= 0:
@@ -41,9 +42,12 @@ def _realized_cost_basis(order) -> Decimal:
 
     pnl = safe_decimal(getattr(order, "realized_pnl", None))
     exit_commission = safe_decimal(getattr(order, "commission", None))
+    entry_commission = safe_decimal(getattr(order, "entry_commission", None))
     if (getattr(order, "side", "long") or "long").lower() == "short":
-        return exit_notional + pnl + exit_commission
-    return exit_notional - pnl - exit_commission
+        entry_notional = exit_notional + pnl + entry_commission + exit_commission
+    else:
+        entry_notional = exit_notional - pnl - entry_commission - exit_commission
+    return entry_notional + entry_commission
 
 
 def _realized_pnl_pct(order) -> float:

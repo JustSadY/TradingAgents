@@ -56,9 +56,15 @@ class Settings(BaseSettings):
     # Off by default: request.client.host is the only trustworthy source of the
     # caller's IP for rate-limiting unless this app sits behind a reverse proxy
     # that YOU control and that overwrites (not appends to) X-Forwarded-For.
-    # Turning this on without such a proxy lets any client forge the header and
-    # get its own private rate-limit bucket (or blame another IP for its abuse).
+    # Turning this on without a matching trusted-proxy network lets any client
+    # forge the header and get its own private rate-limit bucket (or blame
+    # another IP for its abuse).
     TRUST_PROXY_HEADERS: bool = False
+    # Comma-separated CIDRs for reverse proxies allowed to supply
+    # X-Forwarded-For.  This deliberately remains a simple string so operators
+    # can set it naturally in .env files; parsing/validation happens in the
+    # limiter and an empty value fails closed to request.client.host.
+    TRUSTED_PROXY_CIDRS: str = ""
     # Real-money broker orders are an operator-controlled capability.  They
     # remain disabled unless the server environment explicitly opts in; a
     # database setting or a compromised administrator account must not be

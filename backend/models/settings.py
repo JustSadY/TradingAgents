@@ -55,6 +55,13 @@ class AppSettings(Base):
     circuit_breaker_threshold: Mapped[int] = mapped_column(Integer, default=3)
     circuit_breaker_cooldown: Mapped[int] = mapped_column(Integer, default=60)
     stall_timeout_seconds: Mapped[int] = mapped_column(Integer, default=120)
+    # Alert creation guardrails. The active cap applies to every creation
+    # source; the remaining two fields only throttle alerts generated from an
+    # AI analysis run. Keeping them on the user's settings row lets a row lock
+    # serialize the count-and-insert operation safely.
+    max_active_alerts: Mapped[int] = mapped_column(Integer, default=30)
+    max_ai_alerts_per_run: Mapped[int] = mapped_column(Integer, default=3)
+    ai_alert_cooldown_hours: Mapped[int] = mapped_column(Integer, default=24)
     webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     webhook_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     # Store event selection natively rather than as a JSON/comma-delimited

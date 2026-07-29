@@ -2,7 +2,7 @@ import asyncio
 import json
 import logging
 import math
-from decimal import Decimal
+from decimal import Decimal, InvalidOperation
 
 import pandas as pd
 from sqlalchemy import select
@@ -13,10 +13,33 @@ from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
 
 _logger = logging.getLogger(__name__)
 
-_COMMISSION_RATE = 0.001
+_COMMISSION_RATE = Decimal("0.001")
 _MAX_HOLDING_DAYS = 10
-_ALLOCATION_PCT = 0.95
-_DEFAULT_SLIPPAGE_BPS = 5.0  # 0.05% — worsens every fill against the trader
+_ALLOCATION_PCT = Decimal("0.95")
+_DEFAULT_SLIPPAGE_BPS = Decimal("5.0")  # 0.05% — worsens every fill against the trader
+_MONEY_QUANTUM = Decimal("0.0001")
+_ZERO = Decimal("0")
+
+
+def _decimal(value) -> Decimal:
+    """Convert an external numeric value to a finite Decimal exactly once."""
+    try:
+        result = value if isinstance(value, Decimal) else Decimal(str(value))
+    except (InvalidOperation, TypeError, ValueError) as exc:
+        raise ValueError(f"Expected a finite numeric value, got {value!r}") from exc
+    if not result.is_finite():
+        raise ValueError(f"Expected a finite numeric value, got {value!r}")
+    return result
+
+
+def _money(value: Decimal) -> Decimal:
+    """Keep simulated fees at the same precision as the paper broker."""
+    return value.quantize(_MONEY_QUANTUM)
+
+
+def _apply_slippage_decimal(price: Decimal, action: str, slippage_bps: Decimal) -> Decimal:
+    factor = slippage_bps / Decimal(10_000)
+    return price * (Decimal(1) + factor) if action == "BUY" else price * (Decimal(1) - factor)
 
 
 def _apply_slippage(price: float, action: str, slippage_bps: float) -> float:
@@ -25,27 +48,72 @@ def _apply_slippage(price: float, action: str, slippage_bps: float) -> float:
     ``action`` is the execution direction: "BUY" pays more, "SELL" receives less.
     ``slippage_bps=0`` is a no-op (byte-identical to no slippage modeling).
 
-    Computed in Decimal (converting back to float at the return boundary) so
-    this money math doesn't accumulate binary-float rounding error — the
-    function still takes/returns plain floats since the rest of the
-    simulation loop is float-based (see the module-level note on scope).
+    This public helper keeps its float API for callers/tests.  The simulation
+    itself uses ``_apply_slippage_decimal`` and never brings this float back
+    into its cash or equity calculations.
     """
-    price_d = Decimal(str(price))
-    factor = Decimal(str(slippage_bps)) / Decimal(10_000)
-    result = price_d * (Decimal(1) + factor) if action == "BUY" else price_d * (Decimal(1) - factor)
-    return float(result)
+    return float(_apply_slippage_decimal(_decimal(price), action, _decimal(slippage_bps)))
+
+
+def _trade_pnl_decimal(
+    side: str,
+    entry_price: Decimal,
+    exit_price: Decimal,
+    size: Decimal,
+    rate: Decimal,
+) -> Decimal:
+    """All-in trade P&L with the entry and exit fees charged once each."""
+    gross = (exit_price - entry_price) * size if side == "long" else (entry_price - exit_price) * size
+    entry_commission = _money(entry_price * size * rate)
+    exit_commission = _money(exit_price * size * rate)
+    return gross - entry_commission - exit_commission
 
 
 def _trade_pnl(side: str, entry_price: float, exit_price: float, size: float, rate: float) -> float:
     """Realized P&L for closing ``size`` units, charging commission on both legs.
 
-    Computed in Decimal, matching ``_apply_slippage``'s float-in/float-out
-    boundary convention.
+    Float-compatible wrapper around the Decimal implementation used by the
+    simulator.
     """
-    entry_d, exit_d, size_d, rate_d = (Decimal(str(v)) for v in (entry_price, exit_price, size, rate))
-    gross = (exit_d - entry_d) * size_d if side == "long" else (entry_d - exit_d) * size_d
-    pnl = gross - (exit_d * size_d * rate_d) - (entry_d * size_d * rate_d)
-    return float(pnl)
+    return float(_trade_pnl_decimal(side, _decimal(entry_price), _decimal(exit_price), _decimal(size), _decimal(rate)))
+
+
+def _close_position_decimal(
+    side: str,
+    entry_price: Decimal,
+    exit_price: Decimal,
+    size: Decimal,
+    entry_date: str,
+    exit_date: str,
+    reason: str,
+    rate: Decimal,
+) -> tuple[Decimal, dict]:
+    """Close a simulated position without losing Decimal precision.
+
+    Opening commission was already debited from cash.  Its cost remains in
+    all-in P&L, while close-leg cash only carries the exit fee to prevent a
+    second debit.  This mirrors the simulation broker ledger.
+    """
+    pnl = _trade_pnl_decimal(side, entry_price, exit_price, size, rate)
+    entry_notional = entry_price * size
+    exit_notional = exit_price * size
+    exit_commission = _money(exit_notional * rate)
+    gross_pnl = (exit_price - entry_price) * size if side == "long" else (entry_price - exit_price) * size
+    cash_delta = exit_notional - exit_commission if side == "long" else gross_pnl - exit_commission
+    entry_commission = _money(entry_notional * rate)
+    cost_basis = entry_notional + entry_commission
+    return_pct = (pnl / cost_basis * Decimal(100)) if cost_basis > 0 else _ZERO
+    trade = {
+        "entry_date": entry_date,
+        "exit_date": exit_date,
+        "side": side,
+        "entry_price": round(float(entry_price), 2),
+        "exit_price": round(float(exit_price), 2),
+        "return_pct": round(float(return_pct), 2),
+        "pnl": round(float(pnl), 2),
+        "reason": reason,
+    }
+    return cash_delta, trade
 
 
 def _close_position(
@@ -58,35 +126,18 @@ def _close_position(
     reason: str,
     rate: float,
 ) -> tuple[float, dict]:
-    """Close a position: return ``(cash_delta, trade_record)``.
-
-    Entry commission is already deducted when a position is opened.  The cash
-    movement here must therefore include *only* the exit-leg commission:
-
-    - a long receives its sale proceeds less exit commission;
-    - a short realizes gross P&L less exit commission (the simulation keeps
-      short-sale proceeds out of cash while the position is open).
-
-    ``pnl`` in the trade record still includes both commissions, which makes
-    it the correct all-in trade P&L without double-counting it in cash.
-    """
-    pnl = _trade_pnl(side, entry_price, exit_price, size, rate)
-    entry_d, exit_d, size_d, rate_d, pnl_d = (Decimal(str(v)) for v in (entry_price, exit_price, size, rate, pnl))
-    gross_pnl_d = (exit_d - entry_d) * size_d if side == "long" else (entry_d - exit_d) * size_d
-    exit_commission_d = exit_d * size_d * rate_d
-    cash_delta_d = (exit_d * size_d - exit_commission_d) if side == "long" else (gross_pnl_d - exit_commission_d)
-    return_pct_d = (pnl_d / (entry_d * size_d)) * 100
-    trade = {
-        "entry_date": entry_date,
-        "exit_date": exit_date,
-        "side": side,
-        "entry_price": round(entry_price, 2),
-        "exit_price": round(exit_price, 2),
-        "return_pct": round(float(return_pct_d), 2),
-        "pnl": round(pnl, 2),
-        "reason": reason,
-    }
-    return float(cash_delta_d), trade
+    """Float-compatible wrapper around the precise close implementation."""
+    cash_delta, trade = _close_position_decimal(
+        side,
+        _decimal(entry_price),
+        _decimal(exit_price),
+        _decimal(size),
+        entry_date,
+        exit_date,
+        reason,
+        _decimal(rate),
+    )
+    return float(cash_delta), trade
 
 
 def _prepare_data(data: pd.DataFrame, strategy_type: str) -> pd.DataFrame:
@@ -166,10 +217,10 @@ def _generate_signal(
 
 def _normalise_exit_levels(
     side: str,
-    entry_price: float,
+    entry_price: Decimal | float,
     recommended_stop_loss,
     recommended_take_profit,
-) -> tuple[float, float]:
+) -> tuple[Decimal, Decimal]:
     """Return directionally valid stop/target levels for a simulated entry.
 
     Analyst annotations are sometimes written as a long plan even when the
@@ -177,35 +228,36 @@ def _normalise_exit_levels(
     new short (or make its stop/target impossible); use conservative defaults
     instead.
     """
+    entry_price = _decimal(entry_price)
 
-    def _positive_finite(value) -> float | None:
+    def _positive_finite(value) -> Decimal | None:
         try:
-            parsed = float(value)
-        except (TypeError, ValueError):
+            parsed = _decimal(value)
+        except ValueError:
             return None
-        return parsed if math.isfinite(parsed) and parsed > 0 else None
+        return parsed if parsed > 0 else None
 
     stop = _positive_finite(recommended_stop_loss)
     target = _positive_finite(recommended_take_profit)
     if side == "short":
-        valid_stop = stop if stop is not None and stop > entry_price else entry_price * 1.05
-        valid_target = target if target is not None and target < entry_price else entry_price * 0.90
+        valid_stop = stop if stop is not None and stop > entry_price else entry_price * Decimal("1.05")
+        valid_target = target if target is not None and target < entry_price else entry_price * Decimal("0.90")
     else:
-        valid_stop = stop if stop is not None and stop < entry_price else entry_price * 0.95
-        valid_target = target if target is not None and target > entry_price else entry_price * 1.10
+        valid_stop = stop if stop is not None and stop < entry_price else entry_price * Decimal("0.95")
+        valid_target = target if target is not None and target > entry_price else entry_price * Decimal("1.10")
     return valid_stop, valid_target
 
 
 def _exit_reason_and_price(
     side: str,
-    open_price: float,
-    high_price: float,
-    low_price: float,
-    close_price: float,
+    open_price: Decimal,
+    high_price: Decimal,
+    low_price: Decimal,
+    close_price: Decimal,
     stop_loss,
     take_profit,
     holding_days: int,
-) -> tuple[str | None, float]:
+) -> tuple[str | None, Decimal]:
     """Decide whether an open position exits today and at what fill price."""
     if side == "long":
         if stop_loss is not None and low_price <= stop_loss:
@@ -222,39 +274,51 @@ def _exit_reason_and_price(
     return None, close_price
 
 
-def _compute_metrics(daily_values: list[float], trades: list[dict], initial_capital: float) -> dict:
-    """Summary performance stats: return, win rate, Sharpe, max drawdown."""
+def _compute_metrics(daily_values: list[Decimal], trades: list[dict], initial_capital: Decimal) -> dict:
+    """Summary performance stats using exact money/equity values.
+
+    Sharpe requires a square root and is intentionally converted to float only
+    after each exact Decimal daily return is calculated.  Cash, P&L, equity,
+    total return, and drawdown remain Decimal until API serialization.
+    """
+    if not daily_values or initial_capital <= 0:
+        raise ValueError("Backtest requires positive capital and at least one equity value")
+
     final_value = daily_values[-1]
     total_return = (final_value - initial_capital) / initial_capital
 
     winning_trades = sum(1 for t in trades if t["pnl"] > 0)
     win_rate = winning_trades / len(trades) if trades else 0.0
 
-    daily_returns = []
+    daily_returns: list[Decimal] = []
     for i in range(1, len(daily_values)):
         prev = daily_values[i - 1]
         curr = daily_values[i]
-        daily_returns.append((curr - prev) / prev if prev > 0 else 0)
+        daily_returns.append((curr - prev) / prev if prev > 0 else _ZERO)
 
-    mean_return = sum(daily_returns) / len(daily_returns) if daily_returns else 0.0
-    var_return = sum((r - mean_return) ** 2 for r in daily_returns) / len(daily_returns) if daily_returns else 0.0
-    std_return = math.sqrt(var_return)
-    sharpe_ratio = (mean_return / std_return) * math.sqrt(252) if std_return > 0 else 0.0
+    mean_return = sum(daily_returns, _ZERO) / len(daily_returns) if daily_returns else _ZERO
+    variance = (
+        sum(((r - mean_return) ** 2 for r in daily_returns), _ZERO) / len(daily_returns) if daily_returns else _ZERO
+    )
+    # This is the single intentional float boundary in the accounting path:
+    # Sharpe is a statistical display metric, not a monetary ledger field.
+    std_return = math.sqrt(float(variance))
+    sharpe_ratio = float(mean_return) / std_return * math.sqrt(252) if std_return > 0 else 0.0
 
-    max_dd = 0.0
+    max_dd = _ZERO
     peak = daily_values[0]
     for val in daily_values:
         if val > peak:
             peak = val
-        dd = (val - peak) / peak if peak > 0 else 0.0
+        dd = (val - peak) / peak if peak > 0 else _ZERO
         if dd < max_dd:
             max_dd = dd
 
     return {
-        "final_value": round(final_value, 2),
-        "total_return": round(total_return * 100, 2),
+        "final_value": round(float(final_value), 2),
+        "total_return": round(float(total_return * Decimal(100)), 2),
         "win_rate": round(win_rate * 100, 2),
-        "max_drawdown": round(max_dd * 100, 2),
+        "max_drawdown": round(float(max_dd * Decimal(100)), 2),
         "sharpe_ratio": round(sharpe_ratio, 2),
     }
 
@@ -336,7 +400,7 @@ async def run_backtest_simulation(
     end_date: str,
     initial_capital: float = 100000.0,
     user=None,
-    slippage_bps: float = _DEFAULT_SLIPPAGE_BPS,
+    slippage_bps: float | Decimal = _DEFAULT_SLIPPAGE_BPS,
     benchmark_ticker: str | None = "SPY",
 ) -> dict:
     try:
@@ -356,9 +420,16 @@ async def run_backtest_simulation(
         if strategy_type == "consensus":
             analyses_map = await _load_consensus_analyses(db, ticker, start_date, end_date, user)
 
-        cash = initial_capital
-        position_size = 0.0
-        entry_price = 0.0
+        initial_capital_decimal = _decimal(initial_capital)
+        if initial_capital_decimal <= 0:
+            return {"error": "Initial capital must be positive."}
+        slippage_bps_decimal = _decimal(slippage_bps)
+        if slippage_bps_decimal < 0:
+            return {"error": "Slippage must not be negative."}
+
+        cash = initial_capital_decimal
+        position_size = _ZERO
+        entry_price = _ZERO
         position_side = None
         entry_date = None
         stop_loss = None
@@ -367,7 +438,7 @@ async def run_backtest_simulation(
 
         trades = []
         equity_curve = []
-        daily_values = []
+        daily_values: list[Decimal] = []
 
         # Signals are evaluated only after a bar is complete and are filled on
         # the following bar's open.  Seed the first requested bar from the
@@ -380,10 +451,10 @@ async def run_backtest_simulation(
         )
         for _idx, row in backtest_data.iterrows():
             date_str = row["Date"].strftime("%Y-%m-%d")
-            close_price = float(row["Close"])
-            high_price = float(row["High"])
-            low_price = float(row["Low"])
-            open_price = float(row["Open"])
+            close_price = _decimal(row["Close"])
+            high_price = _decimal(row["High"])
+            low_price = _decimal(row["Low"])
+            open_price = _decimal(row["Open"])
 
             exited = False
             if position_side is not None:
@@ -392,8 +463,12 @@ async def run_backtest_simulation(
                     position_side, open_price, high_price, low_price, close_price, stop_loss, take_profit, holding_days
                 )
                 if exit_reason:
-                    exit_price = _apply_slippage(exit_price, "SELL" if position_side == "long" else "BUY", slippage_bps)
-                    cash_delta, trade = _close_position(
+                    exit_price = _apply_slippage_decimal(
+                        exit_price,
+                        "SELL" if position_side == "long" else "BUY",
+                        slippage_bps_decimal,
+                    )
+                    cash_delta, trade = _close_position_decimal(
                         position_side,
                         entry_price,
                         exit_price,
@@ -406,7 +481,7 @@ async def run_backtest_simulation(
                     cash += cash_delta
                     trades.append(trade)
                     position_side = None
-                    position_size = 0.0
+                    position_size = _ZERO
                     stop_loss = None
                     take_profit = None
                     holding_days = 0
@@ -430,8 +505,8 @@ async def run_backtest_simulation(
 
                 if signal == "BUY" and position_side != "long":
                     if position_side == "short":
-                        cover_price = _apply_slippage(execution_price, "BUY", slippage_bps)
-                        cash_delta, trade = _close_position(
+                        cover_price = _apply_slippage_decimal(execution_price, "BUY", slippage_bps_decimal)
+                        cash_delta, trade = _close_position_decimal(
                             "short",
                             entry_price,
                             cover_price,
@@ -444,23 +519,26 @@ async def run_backtest_simulation(
                         cash += cash_delta
                         trades.append(trade)
                         position_side = None
-                        position_size = 0.0
+                        position_size = _ZERO
 
-                    fill_price = _apply_slippage(execution_price, "BUY", slippage_bps)
-                    allocated = cash * _ALLOCATION_PCT
-                    position_size = allocated / fill_price
-                    commission = allocated * _COMMISSION_RATE
-                    cash -= allocated + commission
-                    entry_price = fill_price
-                    entry_date = date_str
-                    position_side = "long"
-                    holding_days = 0
-                    stop_loss, take_profit = _normalise_exit_levels("long", fill_price, rec_stop_loss, rec_take_profit)
+                    fill_price = _apply_slippage_decimal(execution_price, "BUY", slippage_bps_decimal)
+                    if cash > 0 and fill_price > 0:
+                        allocated = cash * _ALLOCATION_PCT
+                        position_size = allocated / fill_price
+                        commission = _money(allocated * _COMMISSION_RATE)
+                        cash -= allocated + commission
+                        entry_price = fill_price
+                        entry_date = date_str
+                        position_side = "long"
+                        holding_days = 0
+                        stop_loss, take_profit = _normalise_exit_levels(
+                            "long", fill_price, rec_stop_loss, rec_take_profit
+                        )
 
                 elif signal == "SELL" and position_side != "short":
                     if position_side == "long":
-                        sell_price = _apply_slippage(execution_price, "SELL", slippage_bps)
-                        cash_delta, trade = _close_position(
+                        sell_price = _apply_slippage_decimal(execution_price, "SELL", slippage_bps_decimal)
+                        cash_delta, trade = _close_position_decimal(
                             "long",
                             entry_price,
                             sell_price,
@@ -473,20 +551,23 @@ async def run_backtest_simulation(
                         cash += cash_delta
                         trades.append(trade)
                         position_side = None
-                        position_size = 0.0
+                        position_size = _ZERO
 
-                    fill_price = _apply_slippage(execution_price, "SELL", slippage_bps)
-                    allocated = cash * _ALLOCATION_PCT
-                    position_size = allocated / fill_price
-                    commission = allocated * _COMMISSION_RATE
-                    cash -= commission
-                    entry_price = fill_price
-                    entry_date = date_str
-                    position_side = "short"
-                    holding_days = 0
-                    stop_loss, take_profit = _normalise_exit_levels("short", fill_price, rec_stop_loss, rec_take_profit)
+                    fill_price = _apply_slippage_decimal(execution_price, "SELL", slippage_bps_decimal)
+                    if cash > 0 and fill_price > 0:
+                        allocated = cash * _ALLOCATION_PCT
+                        position_size = allocated / fill_price
+                        commission = _money(allocated * _COMMISSION_RATE)
+                        cash -= commission
+                        entry_price = fill_price
+                        entry_date = date_str
+                        position_side = "short"
+                        holding_days = 0
+                        stop_loss, take_profit = _normalise_exit_levels(
+                            "short", fill_price, rec_stop_loss, rec_take_profit
+                        )
 
-            holdings_value = 0.0
+            holdings_value = _ZERO
             if position_side == "long":
                 holdings_value = position_size * close_price
             elif position_side == "short":
@@ -497,9 +578,9 @@ async def run_backtest_simulation(
             equity_curve.append(
                 {
                     "date": date_str,
-                    "value": round(total_value, 2),
-                    "cash": round(cash, 2),
-                    "holdings_value": round(holdings_value, 2),
+                    "value": round(float(total_value), 2),
+                    "cash": round(float(cash), 2),
+                    "holdings_value": round(float(holdings_value), 2),
                 }
             )
             previous_row = row
@@ -508,9 +589,13 @@ async def run_backtest_simulation(
         if position_side is not None:
             last_day = backtest_data.iloc[-1]
             date_str = last_day["Date"].strftime("%Y-%m-%d")
-            close_price = float(last_day["Close"])
-            exit_price = _apply_slippage(close_price, "SELL" if position_side == "long" else "BUY", slippage_bps)
-            cash_delta, trade = _close_position(
+            close_price = _decimal(last_day["Close"])
+            exit_price = _apply_slippage_decimal(
+                close_price,
+                "SELL" if position_side == "long" else "BUY",
+                slippage_bps_decimal,
+            )
+            cash_delta, trade = _close_position_decimal(
                 position_side,
                 entry_price,
                 exit_price,
@@ -525,17 +610,17 @@ async def run_backtest_simulation(
 
             equity_curve[-1] = {
                 "date": date_str,
-                "value": round(cash, 2),
-                "cash": round(cash, 2),
+                "value": round(float(cash), 2),
+                "cash": round(float(cash), 2),
                 "holdings_value": 0.0,
             }
             daily_values[-1] = cash
 
-        metrics = _compute_metrics(daily_values, trades, initial_capital)
+        metrics = _compute_metrics(daily_values, trades, initial_capital_decimal)
         benchmark = await _benchmark_return(benchmark_ticker, start_date, end_date)
         alpha_pct = round(metrics["total_return"] - benchmark["return_pct"], 2) if benchmark else None
         return {
-            "initial_capital": initial_capital,
+            "initial_capital": float(initial_capital_decimal),
             "final_value": metrics["final_value"],
             "total_return": metrics["total_return"],
             "win_rate": metrics["win_rate"],
@@ -544,7 +629,7 @@ async def run_backtest_simulation(
             "trades_count": len(trades),
             "trades": trades,
             "equity_curve": equity_curve,
-            "slippage_bps": slippage_bps,
+            "slippage_bps": float(slippage_bps_decimal),
             "benchmark": benchmark,
             "alpha_pct": alpha_pct,
         }

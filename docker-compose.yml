@@ -61,10 +61,17 @@ services:
       ANALYSIS_QUEUE_MODE: worker
       METRICS_TOKEN: ${METRICS_TOKEN}
       OLLAMA_BASE_URL: http://host.docker.internal:11434
+      # Frontend Nginx is the only public proxy. It overwrites X-Forwarded-For
+      # with its immediate client address; accept that header only from the
+      # private Docker bridge range, never from an exposed backend caller.
+      TRUST_PROXY_HEADERS: ${TRUST_PROXY_HEADERS:-true}
+      TRUSTED_PROXY_CIDRS: ${TRUSTED_PROXY_CIDRS:-172.16.0.0/12,fd00::/8}
     extra_hosts:
       - "host.docker.internal:host-gateway"
     ports:
-      - "8000:8000"
+      # Keep direct backend access local for Swagger/debugging. Public traffic
+      # must traverse frontend Nginx so rate-limit identity cannot be forged.
+      - "127.0.0.1:8000:8000"
     volumes:
       - tradingagents_data:/root/.tradingagents
     networks:

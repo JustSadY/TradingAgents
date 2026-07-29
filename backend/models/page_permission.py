@@ -63,6 +63,11 @@ SECTION_FIELDS = {
         "webhook_enabled",
         "webhook_events",
     ],
+    "alerts": [
+        "max_active_alerts",
+        "max_ai_alerts_per_run",
+        "ai_alert_cooldown_hours",
+    ],
     "cron": [
         "cron_enabled",
         "cron_schedule",

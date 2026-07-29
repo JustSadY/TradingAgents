@@ -314,6 +314,11 @@ app.include_router(personas_api_router)
 
 
 _WS_KEEPALIVE_MESSAGE = "__tradingagents_keepalive__"
+# Re-check an accepted stream even when the browser is idle. A JWT is checked
+# during the handshake, but logout/password changes can bump token_version
+# while a long analysis is still streaming. The frontend also sends explicit
+# keepalives, which trigger the same check sooner.
+_WS_AUTH_REVALIDATION_SECONDS = 30.0
 
 
 async def _reject_websocket(
@@ -332,6 +337,28 @@ async def _reject_websocket(
     """
     await websocket.accept(subprotocol=subprotocol)
     await websocket.close(code=code, reason=reason)
+
+
+async def _analysis_websocket_access_is_current(access_token: str, expected_user_id: int) -> bool:
+    """Re-check a connected analysis socket's token and page entitlement.
+
+    This is intentionally a fresh database lookup rather than trusting the
+    user object captured at handshake time: logout, password change, account
+    deactivation and a revoked analysis page permission must all end an
+    already-open stream. Database failures propagate to the caller, which
+    closes with 1011 instead of continuing to expose events without a check.
+    """
+    from backend.api.deps import get_user_from_access_token, has_page_access
+    from backend.core.database import AsyncSessionLocal
+
+    async with AsyncSessionLocal() as db:
+        try:
+            user = await get_user_from_access_token(access_token, db)
+        except HTTPException:
+            return False
+        if user.id != expected_user_id:
+            return False
+        return await has_page_access(db, user, "analysis")
 
 
 @app.websocket("/ws/analysis/{task_id}")
@@ -430,12 +457,46 @@ async def websocket_analysis(
             user.id,
             selected_subprotocol,
         )
+
+        async def _revalidate_or_close() -> bool:
+            try:
+                is_current = await _analysis_websocket_access_is_current(access_token, user.id)
+            except Exception:
+                _logger.exception("Analysis WebSocket revalidation failed task=%s user=%s", task_id, user.id)
+                await ws_manager.disconnect(task_id, websocket)
+                try:
+                    await websocket.close(code=1011, reason="Authorization check failed")
+                except Exception:
+                    _logger.debug("Could not close WebSocket after revalidation error task=%s", task_id, exc_info=True)
+                return False
+            if is_current:
+                return True
+
+            _logger.info("Analysis WebSocket authorization revoked task=%s user=%s", task_id, user.id)
+            await ws_manager.disconnect(task_id, websocket)
+            try:
+                await websocket.close(code=4001, reason="Unauthorized")
+            except Exception:
+                _logger.debug("Could not close revoked WebSocket task=%s", task_id, exc_info=True)
+            return False
+
+        import asyncio
+
         while True:
-            message = await websocket.receive_text()
+            try:
+                message = await asyncio.wait_for(websocket.receive_text(), timeout=_WS_AUTH_REVALIDATION_SECONDS)
+            except TimeoutError:
+                # Multi-ticker streams do not send application keepalives, so
+                # idle sockets still receive a bounded revocation check.
+                if not await _revalidate_or_close():
+                    return
+                continue
             # Browser-side keepalives make the stream resilient to proxies
             # that require bidirectional activity while a queued worker has
             # not yet emitted graph progress.
             if message == _WS_KEEPALIVE_MESSAGE:
+                if not await _revalidate_or_close():
+                    return
                 continue
     except WebSocketDisconnect as exc:
         await ws_manager.disconnect(task_id, websocket)

@@ -194,6 +194,36 @@ def test_trade_journal_uses_entry_cost_basis_for_long_and_short_returns(
     assert _realized_pnl_pct(order) == pytest.approx(expected_pct)
 
 
+@pytest.mark.parametrize(
+    ("side", "total_value", "exit_commission", "entry_commission", "pnl", "expected_cost", "expected_pct"),
+    [
+        ("long", "1200", "1.2", "1", "197.8", "1001", 197.8 / 1001 * 100),
+        ("short", "800", "0.8", "1", "198.2", "1001", 198.2 / 1001 * 100),
+    ],
+)
+def test_trade_journal_uses_all_in_entry_fee_for_current_closing_orders(
+    side,
+    total_value,
+    exit_commission,
+    entry_commission,
+    pnl,
+    expected_cost,
+    expected_pct,
+):
+    order = SimpleNamespace(
+        side=side,
+        total_value=Decimal(total_value),
+        commission=Decimal(exit_commission),
+        entry_commission=Decimal(entry_commission),
+        realized_pnl=Decimal(pnl),
+        quantity_filled=Decimal("100"),
+        price_per_share=Decimal(total_value) / Decimal("100"),
+    )
+
+    assert _realized_cost_basis(order) == Decimal(expected_cost)
+    assert _realized_pnl_pct(order) == pytest.approx(expected_pct)
+
+
 async def test_cron_uses_the_orchestrator_signal_mapping(monkeypatch):
     from backend.services import cron_service
 

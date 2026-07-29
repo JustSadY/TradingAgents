@@ -4,16 +4,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.user import User
 from backend.repositories.alerts import (
-    create_alert,
     get_alert_by_id,
     get_enabled_alerts,
+    insert_alert,
     list_alerts,
 )
 
 
 class TestAlertRepository:
     async def test_create_alert(self, db: AsyncSession, test_user: User):
-        alert = await create_alert(
+        alert = await insert_alert(
             db,
             user_id=test_user.id,
             ticker="AAPL",
@@ -29,10 +29,10 @@ class TestAlertRepository:
         assert alert.triggered_at is None
 
     async def test_list_alerts(self, db: AsyncSession, test_user: User):
-        await create_alert(
+        await insert_alert(
             db, user_id=test_user.id, ticker="AAPL", condition="above", target_price=200.0, auto_analyze=False
         )
-        await create_alert(
+        await insert_alert(
             db, user_id=test_user.id, ticker="GOOGL", condition="below", target_price=150.0, auto_analyze=True
         )
 
@@ -40,7 +40,7 @@ class TestAlertRepository:
         assert len(alerts) == 2
 
     async def test_list_alerts_scoped(self, db: AsyncSession, test_user: User, admin_user: User):
-        await create_alert(
+        await insert_alert(
             db, user_id=test_user.id, ticker="AAPL", condition="above", target_price=200.0, auto_analyze=False
         )
 
@@ -52,7 +52,7 @@ class TestAlertRepository:
         assert len(other_alerts) == 0
 
     async def test_get_alert_by_id(self, db: AsyncSession, test_user: User):
-        alert = await create_alert(
+        alert = await insert_alert(
             db, user_id=test_user.id, ticker="AAPL", condition="above", target_price=200.0, auto_analyze=False
         )
 
@@ -61,7 +61,7 @@ class TestAlertRepository:
         assert found.id == alert.id
 
     async def test_get_alert_by_id_scoped(self, db: AsyncSession, test_user: User):
-        alert = await create_alert(
+        alert = await insert_alert(
             db, user_id=test_user.id, ticker="AAPL", condition="above", target_price=200.0, auto_analyze=False
         )
 
@@ -70,7 +70,7 @@ class TestAlertRepository:
         assert found is None
 
     async def test_get_alert_by_id_admin(self, db: AsyncSession, test_user: User, admin_user: User):
-        alert = await create_alert(
+        alert = await insert_alert(
             db, user_id=test_user.id, ticker="AAPL", condition="above", target_price=200.0, auto_analyze=False
         )
 
@@ -78,10 +78,10 @@ class TestAlertRepository:
         assert found is not None
 
     async def test_get_enabled_alerts(self, db: AsyncSession, test_user: User):
-        a1 = await create_alert(
+        a1 = await insert_alert(
             db, user_id=test_user.id, ticker="AAPL", condition="above", target_price=200.0, auto_analyze=False
         )
-        a2 = await create_alert(
+        a2 = await insert_alert(
             db, user_id=test_user.id, ticker="GOOGL", condition="below", target_price=150.0, auto_analyze=True
         )
 

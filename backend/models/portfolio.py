@@ -50,6 +50,10 @@ class Holding(Base):
     avg_buy_price: Mapped[Decimal] = mapped_column(MONEY, nullable=False)
     current_price: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     unrealized_pnl: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    # Opening commissions are carried with the position so partial closes can
+    # realize their exact pro-rata cost instead of reconstructing it from a
+    # mutable average fill price.
+    entry_commission: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"), nullable=False)
     side: Mapped[str] = mapped_column(String(5), default="long")
     leverage: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("1.0"))
     margin_used: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))

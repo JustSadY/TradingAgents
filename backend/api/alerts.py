@@ -23,26 +23,37 @@ async def list_alerts_run(
     return await _repo_list(db, user=current_user)
 
 
-@router.post("", response_model=AlertRead)
+@router.post("", response_model=AlertRead, responses={409: {"description": "Alert limit reached"}})
 async def create_alert_run(
     body: AlertCreate,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_page("alerts")),
 ):
-    from backend.repositories.alerts import create_alert as _repo_create
+    from backend.services.alert_creation_service import AlertGuardrailViolation, create_alert_with_guardrails
 
-    return await _repo_create(
-        db,
-        user_id=current_user.id,
-        ticker=body.ticker,
-        condition=body.condition,
-        target_price=body.target_price,
-        auto_analyze=body.auto_analyze,
-        alert_type=body.alert_type,
-    )
+    try:
+        alert = await create_alert_with_guardrails(
+            db,
+            user_id=current_user.id,
+            ticker=body.ticker,
+            condition=body.condition,
+            target_price=body.target_price,
+            auto_analyze=body.auto_analyze,
+            alert_type=body.alert_type,
+        )
+    except AlertGuardrailViolation as exc:
+        raise HTTPException(status_code=409, detail=exc.detail) from exc
+    # Manual calls never use skip_if_limited, so ``None`` would be a bug in
+    # this boundary rather than a valid response-model value.
+    assert alert is not None
+    return alert
 
 
-@router.patch("/{alert_id}", response_model=AlertRead, responses={404: {"description": "Alert not found"}})
+@router.patch(
+    "/{alert_id}",
+    response_model=AlertRead,
+    responses={404: {"description": "Alert not found"}, 409: {"description": "Alert limit reached"}},
+)
 async def update_alert(
     alert_id: int,
     body: AlertUpdate,
@@ -54,10 +65,17 @@ async def update_alert(
     alert = await _repo_get(db, alert_id, user=current_user)
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
-    for field, value in body.model_dump(exclude_none=True).items():
+    changes = body.model_dump(exclude_none=True)
+    if changes.get("enabled") is True:
+        from backend.services.alert_creation_service import AlertGuardrailViolation, rearm_alert_with_guardrails
+
+        try:
+            await rearm_alert_with_guardrails(db, alert)
+        except AlertGuardrailViolation as exc:
+            raise HTTPException(status_code=409, detail=exc.detail) from exc
+        changes.pop("enabled")
+    for field, value in changes.items():
         setattr(alert, field, value)
-        if field == "enabled" and value is True:
-            alert.triggered_at = None
     return alert
 
 

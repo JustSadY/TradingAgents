@@ -94,7 +94,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
       .catch(e => console.error('Failed to load webhook deliveries', e))
       .finally(() => setLoadingDeliveries(false))
   }, [userId])
-  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'agents' | 'risk' | 'webhooks' | 'presets' | 'advanced' | 'cron' | 'tools' | 'memory' | 'personas'>('general')
+  const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'agents' | 'risk' | 'alerts' | 'webhooks' | 'presets' | 'advanced' | 'cron' | 'tools' | 'memory' | 'personas'>('general')
   const [memoryStatus, setMemoryStatus] = useState<any>(null)
   const [pineconeKey, setPineconeKey] = useState('')
   const [pineconeSaving, setPineconeSaving] = useState(false)
@@ -123,12 +123,12 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     ]).then(([settings, presetList, allowedSet, cStatus, catalog]) => {
       setS(settings)
       setPresets(presetList)
-      setAllowedSettings(userId ? ['general', 'agents', 'tools', 'risk', 'webhooks', 'cron', 'memory', 'presets', 'personas'] : allowedSet)
+      setAllowedSettings(userId ? ['general', 'agents', 'tools', 'risk', 'alerts', 'webhooks', 'cron', 'memory', 'presets', 'personas'] : allowedSet)
       setCronStatus(cStatus)
       setLlmCatalog(catalog)
       loadMemoryStatus()
 
-      const defaultTabs = ['general', 'agents', 'tools', 'risk', 'webhooks', 'cron']
+      const defaultTabs = ['general', 'agents', 'tools', 'risk', 'alerts', 'webhooks', 'cron']
       const activeDefault = defaultTabs.find(tab => userId || allowedSet.includes(tab))
       if (activeDefault) {
         setActiveTab(activeDefault as any)
@@ -266,6 +266,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     { key: 'agents',   label: t('settings.tab_agents'),                    icon: <Brain size={14} /> },
     { key: 'tools',    label: t('settings.section_tools') || 'Agent Tools', icon: <Wrench size={14} /> },
     { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety', icon: <ShieldAlert size={14} /> },
+    { key: 'alerts',   label: t('settings.section_alert_guardrails'),       icon: <Bell size={14} /> },
     { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={14} /> },
     { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={14} /> },
     { key: 'memory',   label: t('settings.tab_memory'),                    icon: <Database size={14} /> },
@@ -650,6 +651,53 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     </div>
                   )}
                   </div>
+              </Section>
+            </ErrorBoundary>
+          )}
+
+          {/* Alert Creation Guardrails */}
+          {activeTab === 'alerts' && (
+            <ErrorBoundary name="SettingsAlertGuardrails">
+              <Section title={t('settings.section_alert_guardrails')}>
+                <p className="text-[10px] text-slate-500 px-1 leading-snug">
+                  {t('settings.alert_guardrails_hint')}
+                </p>
+                <Row label={t('settings.row_max_active_alerts')}>
+                  <input
+                    type="number"
+                    min="1"
+                    max="500"
+                    className={Input}
+                    value={s.max_active_alerts ?? 30}
+                    onChange={e => update('max_active_alerts', Number.parseInt(e.target.value) || 1)}
+                  />
+                </Row>
+                <Row label={t('settings.row_max_ai_alerts_per_run')}>
+                  <div className="space-y-1">
+                    <input
+                      type="number"
+                      min="0"
+                      max="20"
+                      className={Input}
+                      value={s.max_ai_alerts_per_run ?? 3}
+                      onChange={e => update('max_ai_alerts_per_run', Math.max(0, Number.parseInt(e.target.value) || 0))}
+                    />
+                    <p className="text-[10px] text-slate-500 leading-snug">{t('settings.alert_ai_limit_hint')}</p>
+                  </div>
+                </Row>
+                <Row label={t('settings.row_ai_alert_cooldown_hours')}>
+                  <div className="space-y-1">
+                    <input
+                      type="number"
+                      min="0"
+                      max="720"
+                      className={Input}
+                      value={s.ai_alert_cooldown_hours ?? 24}
+                      onChange={e => update('ai_alert_cooldown_hours', Math.max(0, Number.parseInt(e.target.value) || 0))}
+                    />
+                    <p className="text-[10px] text-slate-500 leading-snug">{t('settings.alert_cooldown_hint')}</p>
+                  </div>
+                </Row>
               </Section>
             </ErrorBoundary>
           )}

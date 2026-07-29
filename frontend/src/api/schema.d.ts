@@ -1899,6 +1899,8 @@ export interface components {
             target_price: number;
             /** Auto Analyze */
             auto_analyze: boolean;
+            /** Creation Source */
+            creation_source: string;
             /** Enabled */
             enabled: boolean;
             /** Triggered At */
@@ -3294,6 +3296,21 @@ export interface components {
              * @default 120
              */
             stall_timeout_seconds: number;
+            /**
+             * Max Active Alerts
+             * @default 30
+             */
+            max_active_alerts: number;
+            /**
+             * Max Ai Alerts Per Run
+             * @default 3
+             */
+            max_ai_alerts_per_run: number;
+            /**
+             * Ai Alert Cooldown Hours
+             * @default 24
+             */
+            ai_alert_cooldown_hours: number;
             /** Webhook Url */
             webhook_url?: string | null;
             /**
@@ -3483,6 +3500,12 @@ export interface components {
             circuit_breaker_cooldown?: number | null;
             /** Stall Timeout Seconds */
             stall_timeout_seconds?: number | null;
+            /** Max Active Alerts */
+            max_active_alerts?: number | null;
+            /** Max Ai Alerts Per Run */
+            max_ai_alerts_per_run?: number | null;
+            /** Ai Alert Cooldown Hours */
+            ai_alert_cooldown_hours?: number | null;
             /** Webhook Url */
             webhook_url?: string | null;
             /** Webhook Enabled */
@@ -6234,6 +6257,13 @@ export interface operations {
                     "application/json": components["schemas"]["AlertRead"];
                 };
             };
+            /** @description Alert limit reached */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -6309,6 +6339,13 @@ export interface operations {
             };
             /** @description Alert not found */
             404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Alert limit reached */
+            409: {
                 headers: {
                     [name: string]: unknown;
                 };

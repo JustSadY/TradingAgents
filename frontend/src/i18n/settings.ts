@@ -73,6 +73,7 @@ const translations = {
     'settings.section_advanced': 'Admin Engine Routing',
     'settings.section_tools': 'Agent Tools',
     'settings.section_presets': 'Configuration Templates',
+    'settings.section_alert_guardrails': 'Alert Guardrails',
     'settings.section_notifications': 'Personal Webhooks',
 
 
@@ -84,6 +85,12 @@ const translations = {
     'settings.row_active': 'Active',
     'settings.row_schedule': 'Schedule (Cron)',
     'settings.row_price_tolerance': 'Price Tolerance (%)',
+    'settings.row_max_active_alerts': 'Max Active Alerts',
+    'settings.row_max_ai_alerts_per_run': 'Max AI Alerts per Analysis',
+    'settings.row_ai_alert_cooldown_hours': 'AI Equivalent Alert Cooldown (hours)',
+    'settings.alert_guardrails_hint': 'The active cap applies to manual and AI-generated alerts. AI controls apply only to levels extracted automatically after an analysis.',
+    'settings.alert_ai_limit_hint': 'Set to 0 to disable automatic AI alert creation for new analysis runs.',
+    'settings.alert_cooldown_hint': 'Set to 0 to disable the time spacing between equivalent AI alerts from separate analyses.',
 
 
     'settings.row_deep_think_model': 'Deep Think Model',
@@ -298,6 +305,7 @@ const translations = {
     'settings.section_advanced': 'Yönetici Motor Yönlendirmeleri',
     'settings.section_tools': 'Ajan Araçları (Tools)',
     'settings.section_presets': 'Ayar Şablonları',
+    'settings.section_alert_guardrails': 'Alarm Koruma Limitleri',
     'settings.section_notifications': 'Kişisel Webhooklar',
 
 
@@ -309,6 +317,12 @@ const translations = {
     'settings.row_active': 'Aktif',
     'settings.row_schedule': 'Zamanlama (Cron)',
     'settings.row_price_tolerance': 'Fiyat Toleransı (%)',
+    'settings.row_max_active_alerts': 'Maks. Aktif Alarm',
+    'settings.row_max_ai_alerts_per_run': 'Analiz Başına Maks. Yapay Zeka Alarmı',
+    'settings.row_ai_alert_cooldown_hours': 'Eşdeğer Yapay Zeka Alarm Beklemesi (saat)',
+    'settings.alert_guardrails_hint': 'Aktif alarm limiti manuel ve yapay zeka tarafından oluşturulan alarmlara uygulanır. Yapay zeka limitleri yalnızca analiz sonunda otomatik çıkarılan seviyeleri etkiler.',
+    'settings.alert_ai_limit_hint': 'Yeni analizlerde otomatik yapay zeka alarmını kapatmak için 0 girin.',
+    'settings.alert_cooldown_hint': 'Farklı analizlerden gelen eşdeğer yapay zeka alarmları arasındaki zaman beklemesini kapatmak için 0 girin.',
 
 
     'settings.row_deep_think_model': 'Derin Düşünce Modeli',

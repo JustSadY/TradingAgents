@@ -1,5 +1,5 @@
 import React from 'react'
-import { Zap, Square, X, CheckCircle, AlertCircle } from 'lucide-react'
+import { Zap, Square, X, CheckCircle, AlertCircle, Loader2 } from 'lucide-react'
 import { SignalBadge } from './SignalBadge'
 
 export type TickerSuggestion = {
@@ -24,6 +24,7 @@ interface AnalysisControlsProps {
   setAssetType: (v: string) => void
   assetTypes: any[]
   running: boolean
+  stopping?: boolean
   runStatus: string
   handleRun: () => void
   handleStop: () => void
@@ -38,7 +39,7 @@ interface AnalysisControlsProps {
 
 export const AnalysisControls: React.FC<AnalysisControlsProps> = ({
   ticker, setTicker, date, setDate, assetType, setAssetType, assetTypes,
-  running, runStatus, handleRun, handleStop, handleClear, signal,
+  running, stopping = false, runStatus, handleRun, handleStop, handleClear, signal,
   costEstimate, existingId, startError, onSelectTickerSuggestion, t
 }) => {
   const startErrorMessage = startError?.code === 'unknown_ticker'
@@ -94,9 +95,11 @@ export const AnalysisControls: React.FC<AnalysisControlsProps> = ({
           ) : (
             <button
               onClick={handleStop}
-              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs md:text-sm font-semibold text-white bg-rose-600/90 hover:bg-rose-600 shadow-md shadow-rose-500/20 transition-all cursor-pointer"
+              disabled={stopping}
+              className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-3 rounded-xl text-xs md:text-sm font-semibold text-white bg-rose-600/90 hover:bg-rose-600 disabled:opacity-60 disabled:cursor-wait shadow-md shadow-rose-500/20 transition-all cursor-pointer"
             >
-              <Square size={12} fill="currentColor" /> {t('analysis.btn.stop')}
+              {stopping ? <Loader2 size={13} className="animate-spin" /> : <Square size={12} fill="currentColor" />}
+              {stopping ? t('analysis.btn.stopping') : t('analysis.btn.stop')}
             </button>
           )}
 

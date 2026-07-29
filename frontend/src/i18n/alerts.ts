@@ -15,6 +15,7 @@ const alerts = {
     'alerts.type_macd_cross': 'MACD Crossover',
     'alerts.rsi_threshold': 'RSI Threshold',
     'alerts.auto_analyze': 'Start automatic analysis',
+    'alerts.source_ai': 'AI',
     'alerts.add_button': 'Add Alert',
     'alerts.active_alerts': 'Active Alerts',
     'alerts.loading': 'Loading...',
@@ -49,6 +50,7 @@ const alerts = {
     'alerts.type_macd_cross': 'MACD Kesişimi',
     'alerts.rsi_threshold': 'RSI Eşiği',
     'alerts.auto_analyze': 'Otomatik analiz başlat',
+    'alerts.source_ai': 'Yapay Zeka',
     'alerts.add_button': 'Alarm Ekle',
     'alerts.active_alerts': 'Aktif Alarmlar',
     'alerts.loading': 'Yükleniyor...',
@@ -70,4 +72,3 @@ const alerts = {
 }
 
 export default alerts
-

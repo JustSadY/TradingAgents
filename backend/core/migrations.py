@@ -81,6 +81,9 @@ _ALLOWED_COLUMNS = {
         "circuit_breaker_threshold",
         "circuit_breaker_cooldown",
         "stall_timeout_seconds",
+        "max_active_alerts",
+        "max_ai_alerts_per_run",
+        "ai_alert_cooldown_hours",
         "llm_provider",
         "cron_enabled",
         "cron_schedule",
@@ -166,7 +169,7 @@ _ALLOWED_COLUMNS = {
     },
     "portfolios": {"user_id", "initial_capital", "current_balance", "cash_available", "margin_used"},
     "config_presets": {"user_id"},
-    "price_alerts": {"user_id", "target_price", "alert_type"},
+    "price_alerts": {"user_id", "target_price", "alert_type", "creation_source", "creation_run_id"},
     "multi_ticker_analyses": {"user_id"},
     "orders": {
         "quantity_requested",
@@ -174,6 +177,7 @@ _ALLOWED_COLUMNS = {
         "price_per_share",
         "total_value",
         "commission",
+        "entry_commission",
         "leverage",
         "side",
         "realized_pnl",
@@ -183,6 +187,7 @@ _ALLOWED_COLUMNS = {
         "avg_buy_price",
         "current_price",
         "unrealized_pnl",
+        "entry_commission",
         "side",
         "leverage",
         "margin_used",
@@ -262,6 +267,9 @@ _NEW_COLUMNS: list[tuple[str, str, str]] = [
     ("app_settings", "news_article_limit", "INTEGER DEFAULT 20"),
     ("app_settings", "global_news_article_limit", "INTEGER DEFAULT 10"),
     ("app_settings", "global_news_lookback_days", "INTEGER DEFAULT 7"),
+    ("app_settings", "max_active_alerts", "INTEGER DEFAULT 30"),
+    ("app_settings", "max_ai_alerts_per_run", "INTEGER DEFAULT 3"),
+    ("app_settings", "ai_alert_cooldown_hours", "INTEGER DEFAULT 24"),
     ("users", "email", _TYPE_VARCHAR_255),
     ("users", "role", _TYPE_VARCHAR_20_DEFAULT_USER),
     ("users", "display_name", _TYPE_VARCHAR_100),
@@ -353,6 +361,7 @@ _NEW_COLUMNS += [
     ("app_settings", "updated_at", _TYPE_TIMESTAMP_WITH_TZ),
     ("portfolios", "margin_used", _TYPE_NUMERIC_20_8_DEFAULT_0),
     ("holdings", "side", _TYPE_VARCHAR_5_DEFAULT_LONG),
+    ("holdings", "entry_commission", _TYPE_NUMERIC_20_8_DEFAULT_0),
     ("holdings", "leverage", _TYPE_NUMERIC_20_8_DEFAULT_1),
     ("holdings", "margin_used", _TYPE_NUMERIC_20_8_DEFAULT_0),
     ("holdings", "borrowed_amount", _TYPE_NUMERIC_20_8_DEFAULT_0),
@@ -363,16 +372,22 @@ _NEW_COLUMNS += [
     ("holdings", "take_profit", _TYPE_NUMERIC_20_8_DEFAULT_0),
     ("orders", "leverage", _TYPE_NUMERIC_20_8_DEFAULT_1),
     ("orders", "side", _TYPE_VARCHAR_5_DEFAULT_LONG),
+    ("orders", "entry_commission", _TYPE_NUMERIC_20_8_DEFAULT_0),
     ("orders", "realized_pnl", _TYPE_NUMERIC_20_8_DEFAULT_0),
     ("price_alerts", "alert_type", _TYPE_VARCHAR_20_DEFAULT_PRICE),
+    ("price_alerts", "creation_source", _TYPE_VARCHAR_20_DEFAULT_MANUAL),
+    ("price_alerts", "creation_run_id", _TYPE_VARCHAR_100),
     ("system_logs", "user_id", _USER_REF),
 ]
 
 
 _NUMERIC_COLUMNS: list[tuple[str, tuple[str, ...]]] = [
-    ("orders", ("quantity_requested", "quantity_filled", "price_per_share", "total_value", "commission")),
+    (
+        "orders",
+        ("quantity_requested", "quantity_filled", "price_per_share", "total_value", "commission", "entry_commission"),
+    ),
     ("portfolios", ("initial_capital", "current_balance", "cash_available")),
-    ("holdings", ("quantity", "avg_buy_price", "current_price", "unrealized_pnl")),
+    ("holdings", ("quantity", "avg_buy_price", "current_price", "unrealized_pnl", "entry_commission")),
     ("price_alerts", ("target_price",)),
 ]
 _NUMERIC_PRECISION = "NUMERIC(20, 8)"
@@ -611,6 +626,105 @@ async def normalize_sqlite_settings_collections(conn) -> None:
             "Normalized SQLite webhook settings; removed %s retired or unsupported event selection(s)",
             discarded_events,
         )
+
+
+async def normalize_sqlite_simulation_entry_commissions(conn) -> None:
+    """Backfill the all-in fee ledger for existing SQLite paper portfolios.
+
+    PostgreSQL does this once in Alembic revision ``a2b3c4d5e6f7``.  SQLite is
+    intentionally an additive local/test compatibility path, so only records
+    that have not yet received an opening-fee value are changed here.
+    """
+    if conn.dialect.name != "sqlite":
+        return
+
+    holding_columns = await conn.run_sync(_sqlite_table_columns, "holdings")
+    order_columns = await conn.run_sync(_sqlite_table_columns, "orders")
+    portfolio_columns = await conn.run_sync(_sqlite_table_columns, "portfolios")
+    if "entry_commission" not in holding_columns or "entry_commission" not in order_columns:
+        return
+    if not {"id", "mode"}.issubset(portfolio_columns):
+        return
+
+    # Existing open positions lack their original fill ledger.  The simulator
+    # has always used a fixed 10 bps opening commission, which is the only
+    # recoverable value without fabricating an order-history pairing.
+    await conn.execute(
+        text(
+            """
+            UPDATE holdings
+            SET entry_commission = round(max(avg_buy_price * quantity, 0) * 0.001, 4)
+            WHERE coalesce(entry_commission, 0) = 0
+              AND EXISTS (
+                  SELECT 1 FROM portfolios
+                  WHERE portfolios.id = holdings.portfolio_id
+                    AND portfolios.mode = 'simulation'
+              )
+            """
+        )
+    )
+    await conn.execute(
+        text(
+            """
+            UPDATE orders
+            SET entry_commission = coalesce(commission, 0)
+            WHERE coalesce(entry_commission, 0) = 0
+              AND EXISTS (
+                  SELECT 1 FROM portfolios
+                  WHERE portfolios.id = orders.portfolio_id
+                    AND portfolios.mode = 'simulation'
+              )
+              AND (
+                  (lower(coalesce(side, 'long')) = 'long' AND upper(action) = 'BUY')
+                  OR (lower(coalesce(side, 'long')) = 'short' AND upper(action) = 'SELL')
+              )
+            """
+        )
+    )
+    # Closing records written before the fee ledger deducted only the exit
+    # fee.  The guard prevents this compatibility step from running twice.
+    await conn.execute(
+        text(
+            """
+            UPDATE orders
+            SET entry_commission = round(
+                    max(
+                        CASE
+                            WHEN lower(coalesce(side, 'long')) = 'short' THEN
+                                coalesce(total_value, 0) + coalesce(realized_pnl, 0) + coalesce(commission, 0)
+                            ELSE
+                                coalesce(total_value, 0) - coalesce(realized_pnl, 0) - coalesce(commission, 0)
+                        END,
+                        0
+                    ) * 0.001,
+                    4
+                ),
+                realized_pnl = coalesce(realized_pnl, 0) - round(
+                    max(
+                        CASE
+                            WHEN lower(coalesce(side, 'long')) = 'short' THEN
+                                coalesce(total_value, 0) + coalesce(realized_pnl, 0) + coalesce(commission, 0)
+                            ELSE
+                                coalesce(total_value, 0) - coalesce(realized_pnl, 0) - coalesce(commission, 0)
+                        END,
+                        0
+                    ) * 0.001,
+                    4
+                )
+            WHERE coalesce(entry_commission, 0) = 0
+              AND EXISTS (
+                  SELECT 1 FROM portfolios
+                  WHERE portfolios.id = orders.portfolio_id
+                    AND portfolios.mode = 'simulation'
+              )
+              AND upper(coalesce(status, '')) IN ('FILLED', 'STOP_LOSS', 'TAKE_PROFIT', 'LIQUIDATED')
+              AND (
+                  (lower(coalesce(side, 'long')) = 'long' AND upper(action) = 'SELL')
+                  OR (lower(coalesce(side, 'long')) = 'short' AND upper(action) = 'BUY')
+              )
+            """
+        )
+    )
 
 
 async def apply_column_migrations(conn) -> None:

@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.api.deps import get_current_user, get_db, require_admin
+from backend.api.deps import get_current_user, get_db, require_admin, require_page
 from backend.core.config import get_settings as _get_settings
 from backend.core.security import hash_password
 from backend.models.user import User
@@ -46,7 +46,7 @@ async def get_me(current_user: Annotated[User, Depends(get_current_user)]):
 @router.put("/me", response_model=UserRead, responses={400: {"description": "Email already in use"}})
 async def update_me(
     body: ProfileUpdate,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_page("profile"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     if body.email is not None:
@@ -77,7 +77,7 @@ async def list_my_api_keys(current_user: Annotated[User, Depends(get_current_use
 @router.put("/me/api-keys", response_model=MessageResponse)
 async def set_my_api_key(
     body: ApiKeySet,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_page("profile"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     fernet = _get_settings().get_fernet()
@@ -93,7 +93,7 @@ async def set_my_api_key(
 )
 async def delete_my_api_key(
     provider: str,
-    current_user: Annotated[User, Depends(get_current_user)],
+    current_user: Annotated[User, Depends(require_page("profile"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     fernet = _get_settings().get_fernet()

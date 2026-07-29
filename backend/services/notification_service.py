@@ -1,12 +1,31 @@
 import asyncio
 import json
 import logging
+from dataclasses import dataclass
 
 from backend.core.constants import WEBHOOK_EVENTS, signal_direction
 
 _logger = logging.getLogger(__name__)
 
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
+@dataclass(frozen=True)
+class WebhookTarget:
+    """A URL plus the public IPs vetted for this individual delivery.
+
+    Resolving and then giving the original hostname back to a normal HTTP
+    client leaves a DNS-rebinding window: the client performs a second lookup
+    and can be sent to localhost after validation.  A target instead carries
+    the exact addresses that passed the public-address check, and the custom
+    transport below dials only those addresses while retaining the original
+    hostname for HTTP Host and HTTPS SNI/certificate validation.
+    """
+
+    url: str
+    host: str
+    port: int
+    addresses: tuple[str, ...]
 
 
 async def _log_delivery(
@@ -109,7 +128,8 @@ def _format_text(event: str, data: dict) -> str:
     return json.dumps(data)[:500]
 
 
-async def validate_webhook_url(url: str) -> None:
+async def resolve_webhook_target(url: str) -> WebhookTarget:
+    """Validate *url* and resolve it once to a set of public IP addresses."""
     import ipaddress
     import socket
     from urllib.parse import urlparse
@@ -133,12 +153,13 @@ async def validate_webhook_url(url: str) -> None:
 
     import asyncio
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     try:
         infos = await loop.run_in_executor(None, _resolve)
     except socket.gaierror:
         raise ValueError("Webhook host could not be resolved") from None
 
+    addresses: list[str] = []
     for info in infos:
         try:
             ip = ipaddress.ip_address(info[4][0])
@@ -150,18 +171,121 @@ async def validate_webhook_url(url: str) -> None:
         # private network destinations are never valid here.
         if not ip.is_global:
             raise ValueError("Webhook URL resolves to a disallowed internal address")
+        normalized = str(ip)
+        if normalized not in addresses:
+            addresses.append(normalized)
+
+    if not addresses:
+        raise ValueError("Webhook host could not be resolved")
+    return WebhookTarget(url=url, host=host, port=port, addresses=tuple(addresses))
+
+
+async def validate_webhook_url(url: str) -> WebhookTarget:
+    """Compatibility-facing validation helper returning the pinned target.
+
+    Existing save paths can ignore the return value, while delivery paths use
+    it directly to ensure they cannot re-resolve the hostname after vetting.
+    """
+    return await resolve_webhook_target(url)
+
+
+def _normalized_host(host: str) -> str:
+    return host.rstrip(".").lower()
+
+
+class _PinnedWebhookNetworkBackend:
+    """httpcore network backend that dials only a pre-vetted address list."""
+
+    def __init__(self, target: WebhookTarget) -> None:
+        import httpcore
+
+        self._target = target
+        self._backend = httpcore.AnyIOBackend()
+        self._next_address = 0
+
+    async def connect_tcp(
+        self,
+        host: str,
+        port: int,
+        timeout: float | None = None,
+        local_address: str | None = None,
+        socket_options=None,
+    ):
+        import httpcore
+
+        if _normalized_host(host) != _normalized_host(self._target.host) or port != self._target.port:
+            # This transport is never a generic proxy. Reject unexpected
+            # destinations rather than accidentally allowing a future request
+            # redirect/proxy path to bypass the pin.
+            raise httpcore.ConnectError("Pinned webhook transport rejected an unexpected destination")
+        address = self._target.addresses[self._next_address % len(self._target.addresses)]
+        self._next_address += 1
+        return await self._backend.connect_tcp(
+            address,
+            port,
+            timeout=timeout,
+            local_address=local_address,
+            socket_options=socket_options,
+        )
+
+    async def connect_unix_socket(self, path: str, timeout: float | None = None, socket_options=None):
+        import httpcore
+
+        raise httpcore.ConnectError("Pinned webhook transport does not allow Unix sockets")
+
+    async def sleep(self, seconds: float) -> None:
+        await self._backend.sleep(seconds)
+
+
+def _pinned_webhook_transport(target: WebhookTarget):
+    """Return an httpx transport that preserves Host/SNI but pins TCP IPs.
+
+    httpx/httpcore derives HTTP Host and TLS SNI from the request URL, which
+    remains ``target.url``. Replacing only its network backend therefore
+    connects to a vetted numeric address without disabling certificate
+    validation or sending an IP-based Host header.
+    """
+    import httpx
+
+    transport = httpx.AsyncHTTPTransport(
+        trust_env=False,
+        retries=0,
+        limits=httpx.Limits(max_connections=1, max_keepalive_connections=0),
+    )
+    pool = getattr(transport, "_pool", None)
+    if pool is None or not hasattr(pool, "_network_backend"):
+        raise RuntimeError("Installed httpx/httpcore does not support pinned webhook transport")
+    # httpx 0.28/httpcore 1.x expose this extension point on the connection
+    # pool. requirements.txt pins the compatible major API; fail closed above
+    # if an incompatible future dependency removes it.
+    pool._network_backend = _PinnedWebhookNetworkBackend(target)
+    return transport
+
+
+def _webhook_client(target: WebhookTarget):
+    import httpx
+
+    return httpx.AsyncClient(
+        transport=_pinned_webhook_transport(target),
+        timeout=10.0,
+        follow_redirects=False,
+        trust_env=False,
+    )
 
 
 async def test_webhook_url(url: str) -> bool:
     import httpx
 
+    from backend.core.log_redaction import register_sensitive_literal
+
+    register_sensitive_literal(url)
     payload = {
         "text": "TradingAgents webhook testi başarılı! ✓",
         "content": "TradingAgents webhook testi başarılı! ✓",
     }
     try:
-        await validate_webhook_url(url)
-        async with httpx.AsyncClient(timeout=10, follow_redirects=False) as client:
+        target = await validate_webhook_url(url)
+        async with _webhook_client(target) as client:
             r = await client.post(url, json=payload)
             if r.status_code >= 400:
                 return False
@@ -179,18 +303,23 @@ async def send_webhook(
 ) -> bool:
     if not url:
         return False
+    # Manual/legacy rows may not have gone through settings_service's
+    # registration path. Register before any error can include this URL.
+    from backend.core.log_redaction import register_sensitive_literal
+
+    register_sensitive_literal(url)
     result = False
     last_status_code: int | None = None
     last_error: str | None = None
     try:
         import httpx
 
-        # Validate at delivery time as well as at save time.  This protects
-        # against legacy/manual DB values and re-checks DNS immediately before
-        # an outbound request rather than trusting a past validation result.
-        await validate_webhook_url(url)
+        # Validate at delivery time as well as at save time. The returned
+        # target pins the actual TCP connection to this specific DNS answer,
+        # closing the DNS-rebinding gap between validation and httpx's send.
+        target = await validate_webhook_url(url)
         payload = _build_payload(url, event, data)
-        async with httpx.AsyncClient(timeout=10.0, follow_redirects=False) as client:
+        async with _webhook_client(target) as client:
             for attempt in range(retries + 1):
                 try:
                     r = await client.post(url, json=payload)

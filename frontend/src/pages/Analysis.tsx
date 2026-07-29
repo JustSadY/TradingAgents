@@ -170,6 +170,29 @@ function activeTaskState(value: unknown, taskId: string): boolean | null {
 
 type ActiveTaskProbeState = 'active' | 'inactive' | 'unauthorized' | 'forbidden' | 'unavailable'
 
+/**
+ * Resolve whether a task is still live before reconnecting its WebSocket.
+ * A WebSocket close is transport state, not job state: blindly reconnecting
+ * after a worker has already reached a terminal state causes noisy connection
+ * churn and makes the UI look as if it is repeatedly restarting.
+ */
+async function probeActiveTask(taskId: string): Promise<ActiveTaskProbeState> {
+  try {
+    const { data } = await axios.get('/api/analysis/active', { timeout: 2_000 })
+    const state = activeTaskState(data, taskId)
+    if (state === true) return 'active'
+    if (state === false) return 'inactive'
+    return 'unavailable'
+  } catch (error) {
+    // Axios has already attempted its normal token refresh. Retrying a
+    // WebSocket with an explicitly rejected session/permission cannot help.
+    const status = (error as { response?: { status?: number } }).response?.status
+    if (status === 401) return 'unauthorized'
+    if (status === 403) return 'forbidden'
+    return 'unavailable'
+  }
+}
+
 function tickerSuggestions(value: unknown): TickerSuggestion[] {
   if (!Array.isArray(value)) return []
   return value.flatMap(item => {
@@ -302,6 +325,7 @@ function RunTab() {
   const [date, setDate] = useState(saved.date)
   const [assetType, setAssetType] = useState(saved.assetType)
   const [running, setRunning] = useState(saved.runStatus === 'running')
+  const [stopping, setStopping] = useState(false)
   const [runStatus, setRunStatus] = useState<'idle' | 'running' | 'done' | 'error'>(saved.runStatus)
   const [signal, setSignal] = useState<string | null>(saved.signal)
   const [reports, setReports] = useState<Record<string, string>>(saved.reports)
@@ -447,6 +471,7 @@ function RunTab() {
   const setRunning_ = (v: boolean) => {
     setRunning(v)
     if (!v) {
+      setStopping(false)
       localStorage.removeItem(TASK_KEY)
       taskIdRef.current = null
       resumingTaskIdRef.current = null
@@ -542,33 +567,15 @@ function RunTab() {
       // active-task registry first. A transient/unusable probe keeps the
       // bounded retry path, while a definitive auth/permission failure does
       // not retry the same doomed WebSocket handshake.
-      const probeTaskState = async (): Promise<ActiveTaskProbeState> => {
-        try {
-          const { data } = await axios.get('/api/analysis/active', { timeout: 2_000 })
-          const state = activeTaskState(data, taskId)
-          if (state === true) return 'active'
-          if (state === false) return 'inactive'
-          return 'unavailable'
-        } catch (error) {
-          // Axios has already tried its normal token refresh here. A final
-          // 401/403 is not a recoverable socket transport hiccup, so retrying
-          // the same WebSocket handshake only creates misleading noise.
-          const status = (error as { response?: { status?: number } }).response?.status
-          if (status === 401) return 'unauthorized'
-          if (status === 403) return 'forbidden'
-          return 'unavailable'
-        }
-      }
-
       void (async () => {
-        let taskState = await probeTaskState()
+        let taskState = await probeActiveTask(taskId)
         if (taskState === 'inactive') {
           // A failed inline run can briefly disappear from the local registry
           // while its one allowed retry is being queued. Confirm the absence
           // once before declaring the run terminal, without emitting a noisy
           // reconnect entry in the meantime.
           await new Promise<void>(resolve => setTimeout(resolve, TERMINAL_TASK_CONFIRMATION_DELAY_MS))
-          taskState = await probeTaskState()
+          taskState = await probeActiveTask(taskId)
         }
 
         terminalProbePending = false
@@ -841,20 +848,55 @@ function RunTab() {
   }, [ticker, date])
 
   const handleStop = async () => {
+    if (stopping) return
     const tid = taskIdRef.current
     setLog(l => [...l, 'Cancelling...'])
-    // Invalidate any in-flight /run request before awaiting its response.
-    runRequestRef.current += 1
-    stoppedByUserRef.current = true
-    terminalTaskIdRef.current = tid
+
+    // There is no server task id yet only while /run is still in flight. In
+    // that narrow case, invalidate the pending request now; doRun will cancel
+    // the task as soon as the late response gives us its id.
+    if (!tid) {
+      runRequestRef.current += 1
+      stoppedByUserRef.current = true
+    } else {
+      // Do not pretend that Stop worked before the server accepted it. The
+      // former best-effort implementation immediately hid the running task
+      // after a failed request, while the worker continued consuming LLM/API
+      // resources in the background.
+      setStopping(true)
+      try {
+        const { data } = await axios.post(`/api/analysis/${tid}/cancel`)
+        if (isRecord(data) && data.cancelled === false) {
+          throw new Error('Cancellation was not accepted')
+        }
+      } catch {
+        // A terminal socket event may have won the race while the request was
+        // in flight. Preserve that real terminal state instead of replacing
+        // it with a misleading Stop failure.
+        if (taskIdRef.current !== tid) {
+          setStopping(false)
+          return
+        }
+        const message = t('analysis.ws.stop_failed')
+        setLog(l => [...l, message])
+        setStopping(false)
+        notify('error', message, t('analysis.ws.analysis_error_title'))
+        return
+      }
+      if (taskIdRef.current !== tid) {
+        setStopping(false)
+        return
+      }
+      runRequestRef.current += 1
+      stoppedByUserRef.current = true
+      terminalTaskIdRef.current = tid
+    }
+
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = null
     }
     clearWsKeepalive()
-    if (tid) {
-      try { await axios.post(`/api/analysis/${tid}/cancel`) } catch { /* best-effort cancel */ }
-    }
     if (wsRef.current) {
       closeAnalysisWebSocket(wsRef.current, 'Analysis stopped by user')
       wsRef.current = null
@@ -960,7 +1002,7 @@ function RunTab() {
         date={date} setDate={setDate}
         assetType={assetType} setAssetType={setAssetType}
         assetTypes={assetTypes}
-        running={running} runStatus={runStatus}
+        running={running} stopping={stopping} runStatus={runStatus}
         handleRun={handleRun} handleStop={handleStop} handleClear={handleClear}
         signal={signal} costEstimate={costEstimate} existingId={existingId}
         startError={startError}
@@ -1400,13 +1442,18 @@ function MultiTab() {
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [assetType, setAssetType] = useState('stock')
   const [running, setRunning] = useState(false)
+  const [stopping, setStopping] = useState(false)
   const [done, setDone] = useState(false)
+  const [cancelled, setCancelled] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [startError, setStartError] = useState<AnalysisStartError | null>(null)
   const [progress, setProgress] = useState<string>('')
   const wsRef = useRef<WebSocket | null>(null)
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const shouldReconnectRef = useRef(false)
+  const taskIdRef = useRef<string | null>(null)
+  const runRequestRef = useRef(0)
+  const stoppedByUserRef = useRef(false)
   const meta = useMeta()
   const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Stock' }, { value: 'crypto', label: 'Crypto' }]
 
@@ -1434,6 +1481,7 @@ function MultiTab() {
   const handleKeyDown = (e: React.KeyboardEvent) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addTicker() } }
 
   const connectWs = useCallback(function connectWs(taskId: string, retries = 0) {
+    if (stoppedByUserRef.current || taskIdRef.current !== taskId) return
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = null
@@ -1452,7 +1500,64 @@ function MultiTab() {
       terminal = true
       shouldReconnectRef.current = false
       if (wsRef.current === ws) wsRef.current = null
+      if (taskIdRef.current === taskId) taskIdRef.current = null
       closeAnalysisWebSocket(ws, 'Portfolio analysis completed')
+    }
+
+    const markConnectionAsTerminalFailure = (message: string) => {
+      terminal = true
+      shouldReconnectRef.current = false
+      if (reconnectTimeoutRef.current) {
+        clearTimeout(reconnectTimeoutRef.current)
+        reconnectTimeoutRef.current = null
+      }
+      if (wsRef.current === ws) wsRef.current = null
+      if (taskIdRef.current === taskId) taskIdRef.current = null
+      setError(message)
+      setRunning(false)
+      setStopping(false)
+      closeAnalysisWebSocket(ws, 'Portfolio analysis connection failed')
+    }
+
+    const scheduleReconnect = () => {
+      if (terminal || reconnectScheduled || stoppedByUserRef.current || !shouldReconnectRef.current || wsRef.current !== ws || taskIdRef.current !== taskId) return
+      reconnectScheduled = true
+
+      // A closed socket does not tell us whether the worker is still alive.
+      // Probe before reconnecting so a terminal worker does not generate a
+      // burst of duplicate 101 handshakes and changing UI status text.
+      void (async () => {
+        const taskState = await probeActiveTask(taskId)
+        if (terminal || stoppedByUserRef.current || !shouldReconnectRef.current || wsRef.current !== ws || taskIdRef.current !== taskId) return
+        if (taskState === 'unauthorized') {
+          markConnectionAsTerminalFailure(t('analysis.ws.auth_required'))
+          return
+        }
+        if (taskState === 'forbidden') {
+          markConnectionAsTerminalFailure(t('analysis.ws.access_denied'))
+          return
+        }
+        if (taskState === 'inactive') {
+          markConnectionAsTerminalFailure(t('analysis.ws.task_not_active'))
+          return
+        }
+        if (retries >= WS_MAX_RECONNECT_RETRIES) {
+          markConnectionAsTerminalFailure(
+            taskState === 'unavailable'
+              ? t('analysis.ws.task_status_unavailable')
+              : t('analysis.ws.conn_closed'),
+          )
+          return
+        }
+
+        const delay = Math.min(1000 * Math.pow(2, retries), 8000)
+        wsRef.current = null
+        reconnectTimeoutRef.current = setTimeout(() => {
+          reconnectTimeoutRef.current = null
+          if (stoppedByUserRef.current || terminal || taskIdRef.current !== taskId) return
+          connectWs(taskId, retries + 1)
+        }, delay)
+      })()
     }
 
     ws.onmessage = (e) => {
@@ -1461,29 +1566,15 @@ function MultiTab() {
       if (ev.type === 'progress') {
         setProgress(ev.label || '')
       } else if (ev.type === 'complete') {
-        setDone(true); setRunning(false)
+        setDone(true); setCancelled(false); setRunning(false); setStopping(false)
         stopReconnecting()
       } else if (ev.type === 'error') {
-        setError(ev.message || t('analysis.multi.error_default')); setRunning(false)
+        setError(ev.message || t('analysis.multi.error_default')); setRunning(false); setStopping(false)
         stopReconnecting()
-      }
-    }
-    const reconnect = () => {
-      if (terminal || reconnectScheduled || !shouldReconnectRef.current || wsRef.current !== ws) return
-      reconnectScheduled = true
-      if (retries < WS_MAX_RECONNECT_RETRIES) {
-        const delay = Math.min(1000 * Math.pow(2, retries), 8000)
-        wsRef.current = null
-        reconnectTimeoutRef.current = setTimeout(() => connectWs(taskId, retries + 1), delay)
-      } else {
-        shouldReconnectRef.current = false
-        if (wsRef.current === ws) wsRef.current = null
-        setError(t('analysis.ws.conn_closed') || 'Connection lost')
-        setRunning(false)
       }
     }
     ws.onclose = (event) => {
-      if (terminal || !shouldReconnectRef.current || wsRef.current !== ws) return
+      if (terminal || stoppedByUserRef.current || !shouldReconnectRef.current || wsRef.current !== ws || taskIdRef.current !== taskId) return
 
       // The endpoint uses application close codes for bad credentials,
       // authorization and startup failures. These cannot recover through a
@@ -1496,31 +1587,84 @@ function MultiTab() {
             ? t('analysis.ws.initialization_failed')
             : null
       if (terminalMessage) {
-        terminal = true
-        shouldReconnectRef.current = false
-        if (wsRef.current === ws) wsRef.current = null
-        setError(terminalMessage)
-        setRunning(false)
+        markConnectionAsTerminalFailure(terminalMessage)
         return
       }
-      reconnect()
+      scheduleReconnect()
     }
   }, [t])
 
   const handleRun = async () => {
     if (tickers.length < 2) return
-    setRunning(true); setDone(false); setError(null); setStartError(null); setProgress('')
+    const requestId = ++runRequestRef.current
+    stoppedByUserRef.current = false
+    taskIdRef.current = null
+    setRunning(true); setStopping(false); setDone(false); setCancelled(false); setError(null); setStartError(null); setProgress('')
     try {
       const { data } = await axios.post('/api/analysis/run-portfolio', { tickers, trade_date: date, asset_type: assetType })
       const taskId = data.task_id
-      if (!taskId) { setDone(true); setRunning(false); return }
+      if (typeof taskId !== 'string' || !taskId) throw new Error('Portfolio analysis start response did not include a task ID')
+
+      // Stop may be pressed while the start request is still pending. Once a
+      // late task id arrives, cancel it instead of attaching an invisible
+      // background job to a UI the user believes is idle.
+      if (requestId !== runRequestRef.current || stoppedByUserRef.current) {
+        try { await axios.post(`/api/analysis/${taskId}/cancel`) } catch { /* cancellation is retried by durable server intent when accepted */ }
+        return
+      }
+      taskIdRef.current = taskId
       connectWs(taskId, 0)
     } catch (err: unknown) {
+      if (requestId !== runRequestRef.current || stoppedByUserRef.current) return
       const requestError = analysisStartError(err, t('analysis.multi.error_default'))
       setStartError(requestError)
       setError(requestError.message)
       setRunning(false)
     }
+  }
+
+  const handleStop = async () => {
+    if (stopping) return
+    const taskId = taskIdRef.current
+
+    if (!taskId) {
+      // The initial HTTP request is still pending. Mark it stale immediately;
+      // handleRun will cancel any task id that comes back afterwards.
+      runRequestRef.current += 1
+      stoppedByUserRef.current = true
+      closeCurrentSocket()
+      setRunning(false); setDone(false); setCancelled(true); setError(null); setProgress('')
+      return
+    }
+
+    setStopping(true)
+    try {
+      const { data } = await axios.post(`/api/analysis/${taskId}/cancel`)
+      if (isRecord(data) && data.cancelled === false) {
+        throw new Error('Cancellation was not accepted')
+      }
+    } catch {
+      // Retain the live socket and the running state when cancellation failed:
+      // this is the key distinction that prevents a fake-success Stop button.
+      if (taskIdRef.current !== taskId) {
+        setStopping(false)
+        return
+      }
+      setError(t('analysis.ws.stop_failed'))
+      setStopping(false)
+      return
+    }
+
+    if (taskIdRef.current !== taskId) {
+      setStopping(false)
+      return
+    }
+
+    runRequestRef.current += 1
+    stoppedByUserRef.current = true
+    taskIdRef.current = null
+    closeCurrentSocket()
+    setRunning(false); setStopping(false); setDone(false); setCancelled(true); setError(null); setProgress('')
   }
 
   const selectTickerSuggestion = (suggestion: string) => {
@@ -1550,7 +1694,7 @@ function MultiTab() {
             {tickers.map(tk => (
               <span key={tk} className="flex items-center gap-1.5 bg-violet-500/10 border border-violet-500/20 text-violet-300 text-xs font-mono font-bold px-2 py-0.5 rounded-lg">
                 {tk}
-                <button onClick={() => { setTickers(p => p.filter(x => x !== tk)); setError(null); setStartError(null) }} className="text-slate-500 hover:text-rose-400 transition-colors cursor-pointer"><X size={10} /></button>
+                <button disabled={running} onClick={() => { setTickers(p => p.filter(x => x !== tk)); setError(null); setStartError(null) }} className="text-slate-500 hover:text-rose-400 disabled:cursor-not-allowed disabled:opacity-50 transition-colors cursor-pointer"><X size={10} /></button>
               </span>
             ))}
             {tickers.length < 10 && (
@@ -1561,6 +1705,7 @@ function MultiTab() {
                 onChange={e => setInput(e.target.value.toUpperCase())}
                 onKeyDown={handleKeyDown}
                 onBlur={addTicker}
+                disabled={running}
               />
             )}
           </div>
@@ -1585,10 +1730,21 @@ function MultiTab() {
             {running ? <Loader2 size={13} className="animate-spin" /> : <BarChart2 size={13} />}
             {running ? t('analysis.multi.running') : t('analysis.multi.btn_start')}
           </button>
+          {running && (
+            <button
+              onClick={handleStop}
+              disabled={stopping}
+              className="flex items-center gap-2 px-5 py-2.5 rounded-xl text-xs font-semibold text-white bg-rose-600/90 hover:bg-rose-600 disabled:opacity-60 disabled:cursor-wait shadow-md shadow-rose-500/20 transition-all cursor-pointer"
+            >
+              {stopping ? <Loader2 size={13} className="animate-spin" /> : <X size={13} />}
+              {stopping ? t('analysis.btn.stopping') : t('analysis.btn.stop')}
+            </button>
+          )}
         </div>
 
         {running && progress && <div className="flex items-center gap-2 text-violet-300 text-xs font-semibold"><Loader2 size={14} className="animate-spin" /> {progress}</div>}
         {done && <div className="flex items-center gap-2 text-emerald-400 text-xs font-semibold"><CheckCircle size={14} /> {t('analysis.multi.started')}</div>}
+        {cancelled && <div className="flex items-center gap-2 text-slate-400 text-xs font-semibold"><X size={14} /> {t('analysis.ws.stopped')}</div>}
         {error && (
           <div role="alert" className="space-y-2 text-xs font-semibold text-rose-400">
             <div className="flex items-center gap-2"><AlertCircle size={14} /> {displayedError}</div>

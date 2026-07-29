@@ -86,6 +86,9 @@ class SettingsBase(BaseModel):
     circuit_breaker_threshold: int = 3
     circuit_breaker_cooldown: int = 60
     stall_timeout_seconds: int = 120
+    max_active_alerts: int = 30
+    max_ai_alerts_per_run: int = 3
+    ai_alert_cooldown_hours: int = 24
     webhook_url: str | None = None
     webhook_enabled: bool = False
     webhook_events: list[str] = Field(default_factory=lambda: ["analysis_complete"], max_length=len(WEBHOOK_EVENTS))
@@ -191,6 +194,11 @@ class SettingsUpdate(BaseModel):
     circuit_breaker_threshold: int | None = Field(default=None, ge=1, le=20)
     circuit_breaker_cooldown: int | None = Field(default=None, ge=10, le=600)
     stall_timeout_seconds: int | None = Field(default=None, ge=30, le=600)
+    max_active_alerts: int | None = Field(default=None, ge=1, le=500)
+    # Zero is intentional for AI-only controls: it disables automatic alert
+    # creation or temporal spacing without affecting manual alerts.
+    max_ai_alerts_per_run: int | None = Field(default=None, ge=0, le=20)
+    ai_alert_cooldown_hours: int | None = Field(default=None, ge=0, le=720)
     webhook_url: str | None = None
     webhook_enabled: bool | None = None
     webhook_events: list[str] | None = Field(default=None, max_length=len(WEBHOOK_EVENTS))

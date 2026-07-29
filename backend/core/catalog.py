@@ -293,7 +293,10 @@ async def build_meta(db=None, user=None) -> dict:
         "order_actions": ORDER_ACTIONS,
         "chart_periods": CHART_PERIODS,
         "page_keys": PAGE_KEYS,
-        "setting_keys": SETTING_KEYS,
+        # The frontend permission editor consumes choices, not bare strings.
+        # Keeping the API shape aligned with ``Meta.setting_keys`` also makes
+        # newly added sections (such as alert guardrails) administrable.
+        "setting_keys": [{"value": key, "label": key} for key in SETTING_KEYS],
         "sections": SECTIONS,
         "webhook_events": WEBHOOK_EVENTS,
         "memory_stores": MEMORY_STORES,

@@ -220,7 +220,12 @@ async def enforce_tool_settings_permission(
             tool_field_access = field_access_map.get(tool_key, {})
             changed_fields = set(update.settings or {}) | set(update.reset_settings or [])
             for field_key in changed_fields:
-                if not tool_field_access.get(field_key, {}).get("can_edit", True):
+                field_perms = tool_field_access.get(field_key, {})
+                # A field that is intentionally hidden is not safely editable
+                # through a handcrafted request even if a stale/misconfigured
+                # row still says can_edit=True. Both visibility and edit
+                # grants are required for a direct mutation.
+                if not field_perms.get("can_view", True) or not field_perms.get("can_edit", True):
                     raise HTTPException(
                         status_code=403,
                         detail=f"You do not have permission to modify field '{field_key}' on tool '{tool_key}'.",

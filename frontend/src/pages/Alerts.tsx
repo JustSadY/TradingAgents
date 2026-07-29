@@ -6,7 +6,7 @@ import { useTranslation } from '../contexts/LanguageContext'
 interface Alert {
   id: number; ticker: string; condition: 'above' | 'below'
   target_price: number; auto_analyze: boolean; enabled: boolean
-  triggered_at: string | null; created_at: string; alert_type?: string
+  triggered_at: string | null; created_at: string; alert_type?: string; creation_source?: string
 }
 
 const Input = "w-full glass-input rounded-xl px-3 py-2 text-xs outline-none"
@@ -140,6 +140,11 @@ export default function Alerts() {
                           a.alert_type === 'support' ? 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20' : 'bg-blue-500/10 text-blue-400 border border-blue-500/20'
                         }`}>
                           {a.alert_type}
+                        </span>
+                      )}
+                      {a.creation_source === 'analysis' && (
+                        <span className="ml-2 text-[9px] font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider bg-violet-500/10 text-violet-300 border border-violet-500/20">
+                          {t('alerts.source_ai')}
                         </span>
                       )}
                     </td>
