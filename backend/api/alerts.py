@@ -43,8 +43,6 @@ async def create_alert_run(
         )
     except AlertGuardrailViolation as exc:
         raise HTTPException(status_code=409, detail=exc.detail) from exc
-    # Manual calls never use skip_if_limited, so ``None`` would be a bug in
-    # this boundary rather than a valid response-model value.
     assert alert is not None
     return alert
 

@@ -16,7 +16,7 @@ except Exception as exc:
 
     sys.stderr.write(f"Warning: Failed to set up unified logging: {exc}\n")
 try:
-    import langchain_core  # noqa: F401  (availability probe — imported for its side effects)
+    import langchain_core
 except ImportError:
     pass
 warnings.filterwarnings(

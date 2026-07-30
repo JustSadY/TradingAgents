@@ -55,9 +55,6 @@ def _cap_tool_outputs(tool_node: ToolNode, max_chars: int, *, analyst_key: str):
         except TimeoutError:
             from backend.trading_agents.agents.runtime.tool_telemetry import log_tool_timeout
 
-            # A ToolNode can execute multiple calls concurrently.  Return an
-            # addressed error message for each call so the next LLM request
-            # remains valid, and keep the actual tool names in the run trace.
             touch_current_analysis()
             return {"messages": log_tool_timeout(state, analyst=analyst_key, timeout_seconds=timeout)}
         messages = result.get("messages", []) if isinstance(result, dict) else []
@@ -82,14 +79,7 @@ class TradingAgentsGraph:
         if selected_analysts is None:
             selected_analysts = ["market", "social", "news", "fundamentals"]
         self.debug = debug
-        # Keep a graph-local top-level config.  In particular, a missing
-        # checkpoint scope must not be written into the module-level default
-        # dict and then accidentally shared by later graph instances.
         self.config = dict(config or DEFAULT_CONFIG)
-        # Production analysis runs receive a stable user+analysis scope from
-        # the orchestrator.  Direct/library callers without a persisted row
-        # get an ephemeral namespace instead of falling back to the old shared
-        # ticker/date checkpoint identity.
         self.config.setdefault("checkpoint_scope", f"ephemeral:{uuid.uuid4()}")
         self.callbacks = callbacks or []
         set_config(self.config)
@@ -138,7 +128,6 @@ class TradingAgentsGraph:
         return scope
 
     def _init_llms(self, runtime_agent_ctx: dict):
-        # Resolve the Master (Portfolio Manager) LLM to use as thinking_llm
         pm_state = runtime_agent_ctx.get("portfolio_manager") or {}
         pm_settings = pm_state.get("settings") or {}
 
@@ -151,7 +140,6 @@ class TradingAgentsGraph:
         if self.callbacks:
             main_kwargs["callbacks"] = self.callbacks
 
-        # Merge PM-specific settings into main_kwargs if they exist
         if pm_settings.get("temperature") is not None:
             main_kwargs["temperature"] = float(pm_settings["temperature"])
 
@@ -163,7 +151,6 @@ class TradingAgentsGraph:
         main_llm = self._with_fallback(client.get_llm(), main_prov, main_model)
         self.thinking_llm = main_llm.with_config(tags=["portfolio_manager"], metadata={"agent": "portfolio_manager"})
 
-        # LLM factory used by the hierarchy for recursive resolution
         def _make_llm(provider: str, model: str, temperature=None) -> Any:
             prov_lower = provider.lower()
             kwargs = self._get_provider_kwargs(prov_lower)
@@ -178,7 +165,6 @@ class TradingAgentsGraph:
             )
             return self._with_fallback(c.get_llm(), prov_lower, model, temperature)
 
-        # Resolve per-agent LLMs via hierarchy (supports parent fallback)
         from backend.trading_agents.agent_catalog import list_agents
 
         self.agent_llms: dict[str, Any] = {}
@@ -211,7 +197,7 @@ class TradingAgentsGraph:
             prov = entry["provider"]
             mod = entry["model"]
             if prov == (provider or "").lower() and mod == model:
-                continue  # skip if same as primary to avoid pointless failover
+                continue
             try:
                 kwargs = self._get_provider_kwargs(prov)
                 if temperature is not None:
@@ -246,9 +232,6 @@ class TradingAgentsGraph:
 
         from backend.trading_agents.llm_clients.registry import provider_requires_api_key
 
-        # Server-managed providers have no tenant credential. In particular, a
-        # stale pre-contract value must not travel through the graph as an API
-        # key or be mistaken for a network endpoint later.
         if not provider_requires_api_key(prov_lower):
             return kwargs
 
@@ -288,13 +271,6 @@ class TradingAgentsGraph:
         if not agent_tool:
             return True
 
-        # Membership gate: a tool statically wired into an analyst's own tool
-        # list (via @register_analyst) must also declare that analyst in its
-        # registry metadata. Without this, the two sources of truth can drift
-        # (an analyst keeps using a tool nobody updated the registry for), and
-        # the hierarchy gate below ends up reachability-checking the wrong set
-        # of analysts entirely — silently granting or revoking access based on
-        # unrelated agents' kill-switches.
         if agent_tool.allowed_analysts and analyst_key not in agent_tool.allowed_analysts:
             logger.warning(
                 "Tool '%s' is wired into analyst '%s' but its registry allowed_analysts=%s doesn't "
@@ -306,8 +282,6 @@ class TradingAgentsGraph:
             )
             return False
 
-        # Hierarchy gate: if every agent permitted to use this tool sits on a
-        # disabled branch, the tool is unreachable and is stripped entirely.
         if self.hierarchy is not None and not self.hierarchy.tool_is_reachable(tool_key):
             return False
 
@@ -328,9 +302,6 @@ class TradingAgentsGraph:
         user_state = runtime_ctx.get("user_settings", {}).get(tool_key, {})
         server_state = runtime_ctx.get("server_settings", {}).get(tool_key, {})
 
-        # A global disable is an explicit kill-switch.  ``user_state`` is
-        # populated with defaults even when the user has no persisted row, so
-        # it must not be consulted before this guard.
         if server_state and server_state.get("enabled") is False:
             return False
         if user_state and user_state.get("enabled") is not None:
@@ -350,10 +321,6 @@ class TradingAgentsGraph:
         nodes: dict[str, ToolNode] = {}
         for key in list_analysts():
             tools = self._filter_tools_for_analyst(key, get_tools(key))
-            # ``handle_tool_errors`` deliberately remains responsible for
-            # turning tool failures into ToolMessages.  The async wrapper only
-            # supplies the otherwise-missing call identity to its telemetry
-            # callback; it does not change execution or retry.
             tool_node = ToolNode(
                 tools,
                 handle_tool_errors=tool_error_handler,
@@ -372,10 +339,6 @@ class TradingAgentsGraph:
         self.visual_annotations = []
         self.support_levels = []
         self.resistance_levels = []
-        # Merge onto whatever the caller (e.g. analysis orchestrator) already
-        # set — it may carry "emitter" for WS progress events. Overwriting the
-        # dict outright (as this used to) silently drops that key, along with
-        # trade_date/user_id, for the rest of the run.
         existing_ctx = active_run_context.get({})
         token = active_run_context.set(
             {
@@ -501,10 +464,6 @@ class TradingAgentsGraph:
         self.visual_annotations = []
         self.support_levels = []
         self.resistance_levels = []
-        # Merge onto whatever the caller (e.g. analysis orchestrator) already
-        # set — it may carry "emitter" for WS progress events. Overwriting the
-        # dict outright (as this used to) silently drops that key, along with
-        # trade_date/user_id, for the rest of the run.
         existing_ctx = active_run_context.get({})
         token = active_run_context.set(
             {

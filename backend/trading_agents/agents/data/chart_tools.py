@@ -15,7 +15,6 @@ from backend.trading_agents.dataflows.interface import route_to_vendor
 
 _logger = logging.getLogger(__name__)
 
-# Context for storing runtime registered indicators and annotations thread-safely
 active_run_context: contextvars.ContextVar[dict] = contextvars.ContextVar("active_run_context")
 
 
@@ -113,12 +112,10 @@ async def get_vision_chart_analysis(
         if df.empty or len(df) < 10:
             return "Error: Not enough data to plot chart."
 
-        # Plot last 90 trading days for pattern analysis
         df_plot = df.tail(90).copy()
         df_plot["Date"] = pd.to_datetime(df_plot["Date"])
         df_plot.set_index("Date", inplace=True)
 
-        # Plotting using mplfinance
         import matplotlib
         import mplfinance as mpf
 
@@ -136,12 +133,9 @@ async def get_vision_chart_analysis(
         buf.seek(0)
         base64_image = base64.b64encode(buf.read()).decode("utf-8")
 
-        # Resolve LLM for vision.
-        # If the thinking model is not multimodal, try to find a multimodal one or provide a helpful error.
         llm = ctx["graph"].thinking_llm
         model_name = getattr(llm, "model_name", getattr(llm, "model", "")).lower()
 
-        # Common non-multimodal model patterns (heuristic)
         non_multimodal = ["nemotron", "llama-3", "mixtral", "deepseek-v3", "o1-preview", "o1-mini"]
         if any(nm in model_name for nm in non_multimodal) and "vision" not in model_name:
             return _algorithmic_pattern_detection(df_plot, symbol)
@@ -170,7 +164,6 @@ async def get_vision_chart_analysis(
         res = await llm.ainvoke([message])
         content = res.content if hasattr(res, "content") else str(res)
 
-        # Include image in the output string for frontend to pick up if it wants
         return (
             f"--- Vision Chart Analysis for {symbol} ---\nIMAGE_DATA:data:image/png;base64,{base64_image}\n\n{content}"
         )

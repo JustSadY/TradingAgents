@@ -97,7 +97,6 @@ class GraphSetup:
 
         sync_registry_to_graph()
 
-        # Shared, read-only context handed to every main node.
         run_config = dict(self.config)
         run_config.setdefault("analyst_concurrency_limit", self.analyst_concurrency_limit)
         ctx = AgentRunContext(
@@ -110,11 +109,6 @@ class GraphSetup:
             selected_analysts=list(selected_analysts),
         )
 
-        # Main nodes are coordinators, not a single provider call.  They keep
-        # a finite limit (derived from ``node_timeout_seconds``) to contain a
-        # genuinely hung direct sub-call, but must not be cut off after the
-        # first leaf's timeout.  Retrying a timed-out coordinator would rerun
-        # already-completed sub-agents, so only its leaf calls retry timeouts.
         market_intelligence = guard_node(
             create_market_intelligence_node(ctx),
             name=_MARKET_INTELLIGENCE,

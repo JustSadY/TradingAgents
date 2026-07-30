@@ -36,7 +36,6 @@ class GoogleClient(BaseLLMClient):
         self.warn_if_unknown_model()
         llm_kwargs = {"model": self.model, "streaming": True}
 
-        # Determine API Key (NO .env lookup)
         google_api_key = self.kwargs.get("api_key") or self.kwargs.get("google_api_key")
         if not google_api_key:
             raise ValueError("API key for Google Gemini is not set. Please provide it in your Profile or Settings.")

@@ -108,8 +108,6 @@ class NormalizedChatOpenAI(ChatOpenAI):
             raise
 
     def _use_responses_api(self, payload: dict) -> bool:
-        # Always use Chat Completions API — Responses API is not needed for
-        # tool-calling agents and causes 404 on some account tiers.
         return False
 
     def with_structured_output(self, schema, *, method=None, **kwargs):
@@ -167,22 +165,15 @@ class OpenAIClient(BaseLLMClient):
     ):
         self.provider = provider.lower()
         if self.provider == _OLLAMA_PROVIDER:
-            # A local model endpoint is infrastructure configuration, not a
-            # tenant credential. Drop stale URL/key values before they can
-            # re-enter the LLM runtime through a direct library caller.
             base_url = None
             kwargs.pop("api_key", None)
         super().__init__(model, base_url, **kwargs)
 
     def get_llm(self) -> Any:
         self.warn_if_unknown_model()
-        # stream_usage makes OpenAI include token usage in streamed responses;
-        # without it every streaming call reports no usage and the per-analysis
-        # token counters silently stay at zero.
         llm_kwargs = {"model": self.model, "streaming": True, "stream_usage": True}
 
         if self.provider == _OLLAMA_PROVIDER:
-            # Ollama ignores this sentinel, but ChatOpenAI requires a value.
             llm_kwargs["base_url"] = get_ollama_base_url()
             llm_kwargs["api_key"] = _OLLAMA_PROVIDER
         else:
@@ -198,8 +189,6 @@ class OpenAIClient(BaseLLMClient):
             llm_kwargs["api_key"] = api_key
 
         for key in _PASSTHROUGH_KWARGS:
-            # ``api_key`` is resolved by the provider contract above and must
-            # never be overwritten by the generic passthrough.
             if key == "api_key":
                 continue
             if key not in self.kwargs:

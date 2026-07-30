@@ -91,9 +91,6 @@ async def get_previous_signal(db: AsyncSession, *, user_id: int | None, ticker: 
         .limit(1)
     )
     if user_id is None:
-        # System-owned runs are a distinct tenant scope.  Falling through
-        # without a predicate would let a system notification compare against
-        # every user's prior analysis history.
         q = q.where(AnalysisResult.user_id.is_(None))
     else:
         q = q.where(AnalysisResult.user_id == user_id)
@@ -230,18 +227,12 @@ async def update_analysis_result(db: AsyncSession, row_id: int, **fields) -> Ana
         for k, v in fields.items():
             if hasattr(curr, k):
                 setattr(curr, k, v)
-        # A task cancellation can arrive while asyncpg is flushing this
-        # incremental update.  SQLAlchemy then leaves the session in a
-        # rollback-required state; callers cannot safely write the terminal
-        # ``cancelled`` status until the transaction is reset.
         try:
             await db.commit()
         except asyncio.CancelledError:
             await _rollback_after_write_error(db)
             raise
         except Exception:
-            # Keep the session reusable by the terminal failure/cancellation
-            # handler and preserve the original database error for its caller.
             await _rollback_after_write_error(db)
             raise
     return curr

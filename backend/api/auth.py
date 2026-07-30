@@ -19,8 +19,6 @@ from backend.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
-# Verified against when the username does not exist, so login latency does not
-# reveal whether an account exists (timing-based user enumeration).
 _DUMMY_PASSWORD_HASH = hash_password("dummy-password-for-timing-equalization")
 
 
@@ -50,7 +48,6 @@ async def refresh(request: Request, body: RefreshRequest, db: Annotated[AsyncSes
     if not user or not user.is_active:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
 
-    # A rotated/revoked refresh token (older version) can no longer be redeemed.
     ver = getattr(user, "token_version", 0)
     if payload.get("ver", 0) != ver:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token has been revoked")

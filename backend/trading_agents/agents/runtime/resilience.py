@@ -28,17 +28,10 @@ from typing import Any
 
 from backend.trading_agents.llm_clients.base_client import is_provider_function_degraded
 
-# Dedicated run-log stream. Filter logs by this logger name to get the
-# per-agent / per-tool execution trace.
 run_logger = logging.getLogger("tradingagents.run")
 
-# Strong references to in-flight WS event tasks so GC doesn't collect them mid-flight.
 _WS_BG_TASKS: set[asyncio.Task] = set()
 
-# Substrings that mark an error as worth retrying (rate limits, timeouts, 5xx…).
-# NOTE: "resourceexhausted" without "total"/"quota" is a transient rate limit;
-#       quota exhaustion (e.g. "total request limit reached") is permanent and
-#       not included here — \_retry_llm_call in structured.py handles that.
 _TRANSIENT_HINTS = (
     "rate limit",
     "ratelimit",
@@ -55,11 +48,6 @@ _TRANSIENT_HINTS = (
     "again",
 )
 
-# ---- Circuit breaker state ----
-# Maps a tenant/provider-scoped node key → {"failures": int,
-# "open_since": float | None}.  The breaker stays process-local, but one
-# user's bad credential/rate limit must not force another user's run into a
-# fallback path.
 _circuit_state: dict[str, dict] = {}
 
 
@@ -75,14 +63,9 @@ def _circuit_key(name: str, kind: str) -> str:
             provider = (getattr(graph, "config", {}) or {}).get("llm_provider")
         return f"{kind}:{name}:user={user_id if user_id is not None else 'system'}:provider={provider or 'default'}"
     except Exception:
-        # Resilience must remain usable during isolated imports/tests where no
-        # graph context has been installed.
         return f"{kind}:{name}:user=unknown:provider=default"
 
 
-# ---- Per-run report card ----
-# ContextVar so concurrent analysis runs don't clobber each other's data.
-# Each value is a dict: {agent_key: {"retries": int, "fallback": bool, "error": str | None}}
 _run_report_card: contextvars.ContextVar[dict[str, dict] | None] = contextvars.ContextVar(
     "agent_report_card", default=None
 )
@@ -205,9 +188,6 @@ def _analyst_turn_fields(state: Any, kind: str) -> dict[str, Any]:
     if not isinstance(messages, (list, tuple)) or not messages:
         return {"phase": "initial", "turn": 1}
 
-    # A ToolNode writes one ToolMessage per completed tool call.  When an
-    # analyst is scheduled immediately afterwards, those trailing messages
-    # identify a post-tool continuation unambiguously.
     tool_results = 0
     for message in reversed(messages):
         if _message_type(message) != "tool":
@@ -217,10 +197,6 @@ def _analyst_turn_fields(state: Any, kind: str) -> dict[str, Any]:
     if not tool_results:
         return {"phase": "initial", "turn": 1}
 
-    # Every preceding assistant message with tool calls marks one completed
-    # tool round.  ``turn`` includes the original analyst request, so the
-    # first continuation is turn 2.  The count is deliberately scalar and
-    # independent of message/tool-output size.
     completed_rounds = sum(1 for message in messages if _message_has_tool_calls(message))
     return {
         "phase": "continuation",
@@ -230,15 +206,10 @@ def _analyst_turn_fields(state: Any, kind: str) -> dict[str, Any]:
 
 
 def _is_timeout_error(exc: BaseException) -> bool:
-    # ``asyncio.TimeoutError`` is an alias of the built-in exception on modern
-    # Python, but keeping both makes the intent clear for all supported runtimes.
     return isinstance(exc, (TimeoutError, asyncio.TimeoutError))
 
 
 def is_transient(exc: BaseException) -> bool:
-    # ``asyncio.wait_for`` raises an empty ``TimeoutError``.  Looking only at
-    # message substrings classified it as a permanent bug and made timeout
-    # retry policy depend on the error text.
     if _is_timeout_error(exc) or isinstance(exc, ConnectionError):
         return True
     return any(hint in str(exc).lower() for hint in _TRANSIENT_HINTS)
@@ -327,18 +298,13 @@ async def retry_call(
             if effective_timeout is None:
                 return await coro
             return await asyncio.wait_for(coro, timeout=effective_timeout)
-        except Exception as exc:  # noqa: BLE001 — deliberately broad for resilience
+        except Exception as exc:
             last = exc
-            # Quota exhaustion is permanent — no point retrying.
             err_msg = str(exc).lower()
             if "quota exhausted" in err_msg:
                 break
             if "resourceexhausted" in err_msg and ("total" in err_msg or "quota" in err_msg):
                 break
-            # A hosted model marked ``DEGRADED`` rejects every request until
-            # its provider recovers.  Do not retry the entire graph node and
-            # turn one outage into repeated calls; its configured/model-safe
-            # fallback can take over instead.
             if is_provider_function_degraded(exc):
                 break
             if _is_timeout_error(exc) and not retry_timeouts:
@@ -478,7 +444,7 @@ def guard_node(
             _circuit_state.pop(ck, None)
             _log_node_success(name, kind, start, **turn_fields)
             return result
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             await _log_node_error(name, kind, exc, **turn_fields)
             entry = _circuit_state.setdefault(ck, {"failures": 0, "open_since": None})
             entry["failures"] += 1
@@ -527,7 +493,7 @@ async def _handle_node_fallback(name: str, kind: str, fallback: Callable, state:
             update = await fallback(state, exc)
         else:
             update = fallback(state, exc)
-    except Exception as fb_exc:  # noqa: BLE001 — never let the fallback abort
+    except Exception as fb_exc:
         log_event("fallback_error", level=logging.ERROR, node=name, error=str(fb_exc)[:200])
         raise exc from fb_exc
 

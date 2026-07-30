@@ -9,12 +9,11 @@ from fastapi import APIRouter
 router = APIRouter(prefix="/api/market", tags=["market"])
 _logger = logging.getLogger(__name__)
 
-# Simple in-memory cache: rates are refreshed at most once per hour
 _cache: dict = {"rates": {}, "ts": 0.0}
-_CACHE_TTL = 3600  # 1 hour
+_CACHE_TTL = 3600
 
 SUPPORTED_CURRENCIES = {
-    "USD": 1.0,  # base
+    "USD": 1.0,
     "EUR": "EURUSD=X",
     "GBP": "GBPUSD=X",
     "JPY": "JPYUSD=X",
@@ -42,11 +41,6 @@ async def _fetch_rates() -> dict[str, float]:
 
     pairs = await asyncio.gather(*[_one(sym) for sym in symbols])
 
-    # Build currency → USD rate mapping
-    # Note: EURUSD=X gives EUR per 1 USD, but actually yfinance gives the price of 1 EUR in USD
-    # So EURUSD=X = 1.08 means 1 EUR = 1.08 USD
-    # We want: how many USD is 1 [currency]? → that IS the EURUSD=X value
-    # For inverse pairs like JPYUSD=X: yfinance gives 1 JPY in USD (e.g. 0.0067)
     sym_to_rate = dict(pairs)
 
     rates: dict[str, float] = {"USD": 1.0}

@@ -25,13 +25,10 @@ def calculate_kelly_size(
     if win_probability <= 0 or win_loss_ratio <= 0:
         return 0.0
 
-    # Kelly Formula
     kelly_percent = win_probability - ((1 - win_probability) / win_loss_ratio)
 
-    # Apply conservative fraction
     final_size = kelly_percent * kelly_fraction
 
-    # Ensure it's not negative and apply cap
     final_size = max(0.0, min(final_size, max_cap))
 
     _logger.info(f"Kelly Calc: WinProb={win_probability:.2f}, R/R={win_loss_ratio:.2f}, Result={final_size:.4f}")

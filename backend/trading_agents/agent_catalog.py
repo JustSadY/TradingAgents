@@ -7,7 +7,7 @@ from typing import Any
 @dataclass(frozen=True)
 class AgentSettingField:
     key: str
-    type: str  # "boolean", "number", "string", "textarea", "select"
+    type: str
     label_key: str
     description_key: str | None = None
     placeholder_key: str | None = None
@@ -24,7 +24,7 @@ class AgentInfo:
     key: str
     label: str
     description: str
-    category: str  # "analyst" or "manager"
+    category: str
     default_enabled: bool
     settings_schema: list[AgentSettingField] = field(default_factory=list)
     parent_key: str | None = None
@@ -106,7 +106,6 @@ def get_standard_agent_settings() -> list[AgentSettingField]:
 
 
 AGENTS: list[AgentInfo] = [
-    # ── Tier-1 Main Agent: Market Intelligence (owns the analyst sub-agents) ──
     AgentInfo(
         "market_intelligence",
         "Market Intelligence",
@@ -116,7 +115,6 @@ AGENTS: list[AgentInfo] = [
         get_standard_agent_settings(),
         "portfolio_manager",
     ),
-    # Analysts — Tier-2 sub-agents under Market Intelligence
     AgentInfo(
         "market",
         "Market Analyst",
@@ -252,7 +250,6 @@ AGENTS: list[AgentInfo] = [
         get_standard_agent_settings(),
         "market_intelligence",
     ),
-    # ── Research branch: sub-agents under Research Manager ──
     AgentInfo(
         "bull_researcher",
         "Bull Researcher",
@@ -289,7 +286,6 @@ AGENTS: list[AgentInfo] = [
         get_standard_agent_settings(),
         "research_manager",
     ),
-    # ── Tier-1 Main Agents under the Portfolio Manager root ──
     AgentInfo(
         "research_manager",
         "Research Manager",

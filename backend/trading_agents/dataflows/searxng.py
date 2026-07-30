@@ -20,7 +20,7 @@ def fetch_searxng_results(query: str, base_url: str, limit: int = 10, timeout: f
     base = base_url.rstrip("/")
     url = f"{base}/search?{urlencode({'q': query, 'format': 'json'})}"
     req = Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
-    with urlopen(req, timeout=timeout) as resp:  # noqa: S310 — user-configured URL, opt-in feature
+    with urlopen(req, timeout=timeout) as resp:
         payload = json.loads(resp.read())
 
     results = payload.get("results") if isinstance(payload, dict) else None

@@ -13,7 +13,7 @@ def _redaction_filter():
         from backend.core.log_redaction import redaction_filter
 
         return redaction_filter
-    except Exception:  # noqa: BLE001 — logging must never break engine import
+    except Exception:
         return None
 
 
@@ -42,8 +42,6 @@ def setup_unified_logging():
     redaction = _redaction_filter()
 
     root_logger = logging.getLogger()
-    # No handlers means no host application configured logging (CLI usage);
-    # the web app installs its console handler in backend/main.py.
     standalone = not root_logger.handlers
 
     try:
@@ -53,7 +51,7 @@ def setup_unified_logging():
         if redaction is not None:
             file_handler.addFilter(redaction)
         root_logger.addHandler(file_handler)
-    except Exception as e:  # noqa: BLE001 — a read-only disk must not break startup
+    except Exception as e:
         sys.stderr.write(f"Failed to initialize rotating file log handler: {e}\n")
 
     if standalone:
@@ -69,7 +67,6 @@ def setup_unified_logging():
             console_handler.addFilter(redaction)
         root_logger.addHandler(console_handler)
 
-    # Quiet chatty third-party libraries regardless of context.
     for logger_name in [
         "urllib3",
         "asyncio",
@@ -88,9 +85,6 @@ def setup_unified_logging():
     ]:
         logging.getLogger(logger_name).setLevel(logging.WARNING)
 
-    # mplfinance asks for medium/semibold weights that Alpine's bundled fonts
-    # map to normal/bold. The fallback is harmless, but it otherwise floods
-    # persisted system logs once per chart render.
     logging.getLogger("matplotlib.font_manager").setLevel(logging.ERROR)
 
     def handle_unhandled_exception(exc_type, exc_value, exc_traceback):

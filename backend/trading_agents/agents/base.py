@@ -16,7 +16,6 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Protocol
 
-# A node/runner is just "state in → partial-state-update out".
 StateUpdate = dict[str, Any]
 NodeFn = Callable[[dict], StateUpdate]
 
@@ -42,13 +41,13 @@ class AgentRunContext:
     nodes.
     """
 
-    hierarchy: Any  # AgentHierarchy
-    llms: dict[str, Any]  # agent_key → resolved LLM
-    fallback_llm: Any  # global thinking LLM
-    tool_nodes: dict[str, Any]  # analyst_key → ToolNode
-    conditional_logic: Any  # ConditionalLogic
-    config: dict[str, Any]  # the run config dict
-    selected_analysts: list[str]  # permitted + selected analyst keys
+    hierarchy: Any
+    llms: dict[str, Any]
+    fallback_llm: Any
+    tool_nodes: dict[str, Any]
+    conditional_logic: Any
+    config: dict[str, Any]
+    selected_analysts: list[str]
 
     def llm_for(self, key: str) -> Any:
         """Resolved LLM for *key*, falling back to the global thinking LLM."""

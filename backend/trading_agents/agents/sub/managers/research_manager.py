@@ -30,15 +30,13 @@ def create_research_manager(llm):
 
         from backend.trading_agents.dataflows.config import get_config
 
-        # Recall the most similar past situations from episodic memory so the plan
-        # can avoid repeating an action that previously led to a loss.
         memory_lessons = ""
         try:
             from backend.services.memory_service import recall_episode_lessons
 
             situation = state.get("market_report") or state.get("synthesis_report") or ""
             memory_lessons = await recall_episode_lessons(user_id=get_config().get("user_id"), situation_text=situation)
-        except Exception:  # noqa: BLE001 — memory is best-effort
+        except Exception:
             memory_lessons = ""
 
         instruction = get_system_instruction_override("research_manager") or _DEFAULT_INSTRUCTION

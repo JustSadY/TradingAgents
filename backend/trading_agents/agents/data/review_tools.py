@@ -21,18 +21,12 @@ async def get_past_performance_data(ticker: str, curr_date: str | None = None) -
         from backend.core.database import AsyncSessionLocal
         from backend.repositories.analysis import list_historical_analyses
 
-        # Scope strictly to the run's own user — this must never see another
-        # user's analyses/trader_plan, so no admin-sees-all bypass here (unlike
-        # scope_to_user's normal semantics for an authenticated API request).
         from backend.trading_agents.agents.data.chart_tools import active_run_context
 
         ctx = active_run_context.get(None)
         run_user_id = ctx.get("user_id") if ctx else None
 
         if run_user_id is None:
-            # Unknown run owner (e.g. a system-triggered run with no
-            # associated user) — never fall through to an unscoped query,
-            # which would leak every user's history. Just report none found.
             return "No past analysis data found for this ticker."
 
         scope_user = type("_RunUser", (), {"id": run_user_id, "is_admin": False})()
@@ -55,7 +49,6 @@ async def get_past_performance_data(ticker: str, curr_date: str | None = None) -
     try:
         from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
 
-        # load_ohlcv is sync
         hist = await asyncio.to_thread(load_ohlcv, ticker, curr_date)
 
         hist_filtered = hist[hist["Date"] >= pd.to_datetime(past_date)]

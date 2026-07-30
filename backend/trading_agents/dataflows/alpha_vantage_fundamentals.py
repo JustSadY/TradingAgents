@@ -39,10 +39,6 @@ def get_fundamentals(ticker: str, curr_date: str = None) -> str:
     }
     result = _make_api_request("OVERVIEW", params)
 
-    # Alpha Vantage's OVERVIEW endpoint is always a live snapshot — unlike
-    # the statement endpoints below, it has no historical/point-in-time
-    # variant to filter by curr_date. Flag that explicitly for backdated
-    # runs instead of silently presenting today's ratios as historical.
     today = datetime.now(UTC).strftime("%Y-%m-%d")
     if curr_date and curr_date != today:
         warning = (

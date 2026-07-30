@@ -35,7 +35,7 @@ def create_trader_node(ctx: AgentRunContext) -> NodeFn:
             if inspect.iscoroutinefunction(run):
                 return await run(state)
             return run(state)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("[trader] sub-agent failed: %s — using fallback.", exc)
             return {
                 "trader_investment_plan": "Trader agent unavailable; deferring to risk debate.",

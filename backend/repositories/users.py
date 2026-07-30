@@ -61,7 +61,6 @@ async def create_user_with_permissions(
     db.add(user)
     await db.flush()
 
-    # Default permissions
     db.add(UserPagePermission(user_id=user.id, page_key="dashboard", allowed=True))
     db.add(UserPagePermission(user_id=user.id, page_key="portfolio", allowed=True))
 

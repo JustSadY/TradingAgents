@@ -29,7 +29,6 @@ _HOLD = "Hold — automated fallback: Portfolio Manager disabled or unavailable.
 
 def create_portfolio_manager_node(ctx: AgentRunContext) -> NodeFn:
     async def portfolio_manager_node(state) -> dict:
-        # Root kill-switch uses the own-flag (it has no ancestor to cascade from).
         if not ctx.is_branch_enabled(MAIN_KEY):
             logger.info("[portfolio_manager] disabled — emitting automated Hold.")
             return {"final_trade_decision": _HOLD, "final_signal": "Hold"}
@@ -39,7 +38,7 @@ def create_portfolio_manager_node(ctx: AgentRunContext) -> NodeFn:
             if inspect.iscoroutinefunction(run):
                 return await run(state)
             return run(state)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("[portfolio_manager] failed: %s — emitting Hold.", exc)
             return {"final_trade_decision": _HOLD, "final_signal": "Hold"}
 

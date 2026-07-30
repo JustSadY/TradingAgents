@@ -67,7 +67,7 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
             if (state.get(field) or "").strip()
         ]
         if len(available) < 2:
-            return {}  # nothing to cross-examine
+            return {}
 
         def _normalize(name: str) -> str:
             return (
@@ -79,7 +79,7 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
 
         try:
             questions = await _generate_questions(moderator, available)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("[agent_qa] question generation failed: %s", exc)
             return {}
         if not questions:
@@ -93,7 +93,7 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
             try:
                 answer = await _answer_as_analyst(ctx, target_key, target_label, target_report, q.question)
                 return f"**Q → {target_label}:** {q.question}\n**{target_label}:** {answer}"
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning("[agent_qa] answer by %s failed: %s", q.to, exc)
                 return None
 
@@ -116,7 +116,7 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
                 situation_text=state.get("market_report", ""),
                 transcript=transcript,
             )
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.debug("[agent_qa] memory store failed (non-fatal): %s", exc)
 
         return {"agent_qa_report": transcript}
@@ -142,7 +142,7 @@ async def _generate_questions(moderator, available: list[tuple[str, str, str]]) 
     result = await ainvoke_structured_or_freetext(structured, moderator, prompt, "Q&A Moderator", schema=_Questions)
     if isinstance(result, _Questions):
         return result.questions
-    return []  # free-text fallback isn't reliably parseable; skip Q&A this run
+    return []
 
 
 async def _answer_as_analyst(ctx: AgentRunContext, analyst_key: str, label: str, report: str, question: str) -> str:

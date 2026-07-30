@@ -185,9 +185,6 @@ def get_vendor(category: str, method: str = None) -> str:
     return config.get("data_vendors", {}).get(category, "default")
 
 
-# Default timeout for synchronous vendor calls dispatched via ``asyncio.to_thread``.
-# Each vendor implementation is expected to have its own per-call timeout, but this
-# acts as a safety net so a hung thread cannot stall the event loop indefinitely.
 _VENDOR_CALL_TIMEOUT = 60
 
 
@@ -197,9 +194,6 @@ async def route_to_vendor(method: str, *args, **kwargs):
 
     category = get_category_for_method(method)
     vendor_config = get_vendor(category, method)
-    # A cache hit must come from the same requested vendor/fallback policy.
-    # Resolve this before cache lookup rather than allowing the first caller's
-    # provider preference to become a process-wide result for the TTL.
     cache_scope = f"vendors:{vendor_config}"
     cached_val = APICache.get(method, *args, cache_scope=cache_scope, **kwargs)
     if cached_val is not None:
@@ -233,9 +227,6 @@ async def route_to_vendor(method: str, *args, **kwargs):
                     timeout=_VENDOR_CALL_TIMEOUT,
                 )
 
-            # A provider-declared unavailable result is intentionally visible
-            # to the caller, but it is not market data and must not outlive its
-            # short provider cooldown in the regular API cache.
             if isinstance(val, StockTwitsUnavailable):
                 return val
             APICache.set(method, val, *args, cache_scope=cache_scope, **kwargs)
@@ -245,15 +236,11 @@ async def route_to_vendor(method: str, *args, **kwargs):
             last_error = exc
             continue
         except YFinanceTickerUnavailableError as exc:
-            # The first missing-ticker response is visible at warning level;
-            # later calls during the short process-local cooldown are expected
-            # and still fall through to any alternate vendor without flooding
-            # the run/system logs.
             log = _logger.debug if exc.from_cooldown else _logger.warning
             log("Vendor '%s' cannot serve ticker for method '%s': %s", vendor, method, exc)
             last_error = exc
             continue
-        except Exception as exc:  # noqa: BLE001 — any vendor failure should fall through to the next
+        except Exception as exc:
             if not isinstance(exc, AlphaVantageRateLimitError):
                 _logger.warning("Vendor '%s' failed for method '%s': %s", vendor, method, exc)
             last_error = exc

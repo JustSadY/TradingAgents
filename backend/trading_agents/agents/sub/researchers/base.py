@@ -18,12 +18,7 @@ from backend.trading_agents.agents.runtime.report_aggregator import (
 )
 from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block, get_system_instruction_override
 
-# A prompt builder receives (instruction, target_label, resources_text,
-# synthesis_report, qa_block, recent_history, last_opposing_argument) and
-# returns the prompt body. ``instruction`` is either this agent's Settings ->
-# Agents "System Prompt Override" (verbatim) or the rendered default.
 PromptBuilder = Callable[[str, str, str, str, str, str, str], str]
-# Renders this researcher's default opening instruction for a given target_label.
 DefaultInstruction = Callable[[str], str]
 
 

@@ -30,17 +30,14 @@ def extract_json_block(text: str) -> str | None:
     """Extract a JSON substring from text, supporting markdown blocks or raw bounds."""
     if not text:
         return None
-    # Try finding json markdown code blocks
     match = re.search(r"```json\s*(.*?)\s*```", text, re.DOTALL | re.IGNORECASE)
     if match:
         return match.group(1).strip()
 
-    # Try finding any markdown code blocks
     match = re.search(r"```\s*(.*?)\s*```", text, re.DOTALL)
     if match:
         return match.group(1).strip()
 
-    # Try finding a bounding brace block
     match = re.search(r"(\{.*\})", text, re.DOTALL)
     if match:
         return match.group(1).strip()
@@ -132,10 +129,6 @@ async def self_correct_structured(
         text = response.content if hasattr(response, "content") else str(response)
         return parse_and_validate(text, schema)
     except Exception as exc:
-        # A NIM ``DEGRADED function`` response is a provider-side deployment
-        # outage.  Trying the same model again cannot repair JSON and merely
-        # creates two more failing requests.  Let the caller retain the
-        # already-generated free text instead.
         if is_provider_function_degraded(exc):
             logger.warning(
                 "%s: provider function is degraded during self-correction; stopping further correction attempts.",
@@ -199,10 +192,6 @@ async def _retry_llm_call(
             return await asyncio.wait_for(llm.ainvoke(prompt), timeout=timeout)
         except Exception as exc:
             last_exc = exc
-            # NVIDIA NIM reports an unhealthy hosted model deployment as a
-            # 400 ``DEGRADED function`` error.  It is neither a malformed
-            # prompt nor a recoverable same-model retry, so preserve it for a
-            # configured fallback chain or the graph-level safe fallback.
             if is_provider_function_degraded(exc):
                 raise
             if _is_quota_exhausted(exc):
@@ -226,7 +215,7 @@ async def _retry_llm_call(
                     exc,
                 )
                 await asyncio.sleep(delay)
-    raise last_exc  # type: ignore[misc]
+    raise last_exc
 
 
 async def ainvoke_structured_or_freetext(
@@ -248,11 +237,6 @@ async def ainvoke_structured_or_freetext(
                 return result
             return _coerce_structured_result(result, schema)
         except Exception as exc:
-            # ``structured_llm`` is already built with any configured model
-            # fallbacks.  If its invocation still surfaces a degraded hosted
-            # function, do not issue a plain-text request and then two JSON
-            # self-corrections against that same unavailable deployment.
-            # Re-raise so the graph can use its explicit safe fallback.
             if is_provider_function_degraded(exc):
                 logger.warning(
                     "%s: provider function is degraded; skipping same-model free-text and self-correction requests.",

@@ -17,7 +17,6 @@ _OAUTH_SEARCH = "https://oauth.reddit.com/r/{sub}/search?{qs}"
 _OAUTH_TOKEN_URL = "https://www.reddit.com/api/v1/access_token"
 _DEFAULT_UA = "tradingagents/0.2 (+https://github.com/TauricResearch/TradingAgents)"
 
-# client_id -> (access_token, expiry_epoch); application-only tokens are reusable.
 _TOKEN_CACHE: dict[str, tuple[str, float]] = {}
 
 
@@ -89,7 +88,6 @@ def _fetch_subreddit(
     )
     user_agent = _get_user_agent()
 
-    # Preferred path: authenticated OAuth API (higher rate limits, more reliable).
     creds = _get_credentials()
     if creds:
         try:
@@ -111,9 +109,8 @@ def _fetch_subreddit(
                 ticker,
                 exc,
             )
-            _TOKEN_CACHE.pop(creds[0], None)  # drop a possibly-stale token
+            _TOKEN_CACHE.pop(creds[0], None)
 
-    # Fallback: unauthenticated public endpoint (used when no credentials set).
     req = Request(
         _PUBLIC_SEARCH.format(sub=sub, qs=qs),
         headers={"User-Agent": user_agent, "Accept": "application/json"},

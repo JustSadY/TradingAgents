@@ -16,7 +16,6 @@ Usage in an analyst node::
     if cached:
         await emit_cache_hit("my_analyst", ticker)
         return {"messages": [AIMessage(content=cached)], "my_report": cached}
-    # ... run LLM ...
     await store_analyst_cache("my_analyst", ticker, data_hash, report_text)
 """
 
@@ -32,11 +31,6 @@ from backend.core.database import AsyncSessionLocal
 
 _logger = logging.getLogger(__name__)
 
-# Default TTL: if no exact hash match is found but a cache entry exists for
-# this analyst+ticker, fall back to the most recent entry if it is younger
-# than this threshold.  This provides resilience against transient data-fetch
-# failures that would otherwise produce a different hash and force a costly
-# re-generation.
 _CACHE_STALE_DAYS = 7
 
 
@@ -165,11 +159,6 @@ async def check_analyst_cache(
         if not fallback_to_stale:
             return None
 
-        # The stale fallback intentionally ignores the *data* hash (that's the
-        # point — it's a resilience net for transient fetch failures), but it
-        # must still match the same user and the same provider/model/persona/
-        # language, or it could hand back a report generated for a different
-        # tenant or config.
         config_fingerprint = _compute_config_fingerprint(analyst_key)
         cutoff = datetime.now(UTC) - timedelta(days=_CACHE_STALE_DAYS)
         if analyst_key == "news":
@@ -254,4 +243,4 @@ async def emit_cache_hit(analyst_key: str, ticker: str) -> None:
                 f"Reusing cached {analyst_key} analysis for {ticker} (saved tokens).",
             )
     except Exception:
-        pass  # Never fail the run over a cosmetic notification
+        pass

@@ -9,8 +9,6 @@ from .validators import validate_model
 
 _logger = logging.getLogger(__name__)
 
-# Only worth a cache breakpoint once the cached prefix is large enough to beat
-# Anthropic's minimum cacheable size; below this the write overhead isn't repaid.
 _MIN_CACHEABLE_CHARS = 2000
 
 
@@ -38,10 +36,9 @@ def _apply_cache_control(input_value: Any) -> Any:
             if isinstance(msg, SystemMessage) and isinstance(msg.content, str):
                 if len(msg.content) >= _MIN_CACHEABLE_CHARS:
                     msg.content = [{"type": "text", "text": msg.content, "cache_control": {"type": "ephemeral"}}]
-                break  # one breakpoint on the system prefix is enough
+                break
         return messages
-    # caching is an optimisation, never break the call
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         _logger.debug("prompt caching skipped: %s", exc)
         return input_value
 
@@ -68,7 +65,6 @@ def _supports_effort(model: str) -> bool:
 
 
 class NormalizedChatAnthropic(ChatAnthropic):
-    # Set by the client factory; when True the system prompt is cache-tagged.
     prompt_caching: bool = False
 
     def invoke(self, input_value, config=None, **kwargs):
@@ -100,11 +96,8 @@ class AnthropicClient(BaseLLMClient):
     def get_llm(self) -> Any:
         self.warn_if_unknown_model()
         llm_kwargs = {"model": self.model, "streaming": True}
-        # Opt-in (default on) prompt caching for the system prefix. Popped here
-        # because it's our flag, not a ChatAnthropic constructor kwarg.
         prompt_caching = bool(self.kwargs.get("prompt_caching", True))
 
-        # Determine API Key (NO .env lookup)
         api_key = self.kwargs.get("api_key")
         if not api_key:
             raise ValueError("API key for Anthropic is not set. Please provide it in your Profile or Settings.")

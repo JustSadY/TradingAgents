@@ -29,7 +29,5 @@ class ToolRegistry:
         return self._langchain_tool_to_agent_tool_key.get(langchain_tool_name)
 
 
-# Central registry singleton
 registry = ToolRegistry()
 
-# Auto-load built-in tools is handled by package init or main bootstrap.

@@ -17,15 +17,9 @@ from backend.trading_agents.agents.runtime.report_aggregator import (
 )
 from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
 
-# A prompt builder receives (instruction, trader_decision, resources_text,
-# recent_history, risk_debate_state) and returns the fully rendered prompt
-# body. ``instruction`` is either the shared "risk_debate" agent's Settings ->
-# Agents "System Prompt Override" (verbatim) or this stance's rendered default.
 PromptBuilder = Callable[[str, str, str, str, dict], str]
 DefaultInstruction = Callable[[], str]
 
-# All three stances (aggressive/conservative/neutral) share a single settings
-# entry — see agents/main/risk.py: ctx.llm_for("risk_debate").
 _SETTINGS_AGENT_KEY = "risk_debate"
 
 
@@ -47,8 +41,6 @@ def make_risk_debator(
             trader_decision = state["trader_investment_plan"]
 
             report_fields = build_report_fields("Latest World Affairs Report", "Company Fundamentals Report")
-            # Risk debators argue over the trade decision, not the raw data, so
-            # send each analyst's Executive Summary instead of the full report.
             resources_text = build_resources(state, report_fields, summary_only=True)
 
             instruction = get_system_instruction_override(_SETTINGS_AGENT_KEY) or default_instruction()
@@ -60,8 +52,6 @@ def make_risk_debator(
             response = await llm.ainvoke(prompt)
             argument = f"{speaker} Analyst: {response.content}"
 
-            # Carry every sibling field forward, then overwrite the two this
-            # stance owns (its running history and its latest response).
             new_risk_debate_state = {
                 "history": history + "\n" + argument,
                 "aggressive_history": risk_debate_state.get("aggressive_history", ""),

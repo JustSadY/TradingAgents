@@ -51,9 +51,6 @@ def get_category_for_method(method: str) -> str:
 
 class APICache:
     _init_lock = threading.Lock()
-    # Track schema init per resolved DB path, not via a single bool, so a change
-    # to data_cache_dir at runtime initializes the new DB file instead of
-    # hitting "no such table" because a one-shot flag was already set.
     _initialized_paths: set[str] = set()
 
     @classmethod

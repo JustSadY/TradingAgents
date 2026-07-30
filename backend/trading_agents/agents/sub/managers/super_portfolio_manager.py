@@ -3,8 +3,6 @@ from langchain_core.prompts import ChatPromptTemplate
 from backend.trading_agents.agents.runtime.report_aggregator import middle_truncate
 from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
 
-# Per-section cap: with many tickers the combined plans/decisions dominate the
-# prompt, and the allocation needs each ticker's conclusion, not every detail.
 _MAX_SECTION_CHARS = 4000
 
 

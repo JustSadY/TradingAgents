@@ -64,8 +64,6 @@ def safe_tool_error(exc: BaseException, *, limit: int = 300) -> str:
 
         message = redact_text(message)
     except Exception:
-        # Telemetry must never fail because the optional redactor could not be
-        # imported during an isolated graph/test invocation.
         message = _FALLBACK_SECRET_RE.sub(r"\1\2***REDACTED***", message)
     message = _FALLBACK_SECRET_RE.sub(r"\1\2***REDACTED***", message)
     message = " ".join(message.split())
@@ -77,8 +75,6 @@ def _context_for_exception(exc: BaseException) -> ToolCallContext:
     if context is not None:
         return context
 
-    # LangGraph's ToolInvocationError carries the tool name for malformed
-    # tool arguments when the wrapper has no active request context.
     return ToolCallContext(
         tool=_safe_identifier(getattr(exc, "tool_name", None)),
         analyst=None,
@@ -110,8 +106,6 @@ def tool_error_handler(exc: Exception) -> str:
 
         metrics.TOOL_ERRORS.labels(tool_name=context.tool, error_type=error_type).inc()
     except Exception:
-        # Metrics are observability only; a missing registry must not turn an
-        # otherwise recoverable vendor failure into an analysis failure.
         pass
 
     return (

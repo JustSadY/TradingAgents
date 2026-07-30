@@ -152,7 +152,7 @@ class AgentHierarchy:
                     model=model,
                     temperature=origin_temperature,
                 )
-            except Exception as exc:  # noqa: BLE001
+            except Exception as exc:
                 logger.warning(
                     "Custom LLM for agent '%s' failed (%s); climbing parent chain.",
                     agent_key,
@@ -163,8 +163,6 @@ class AgentHierarchy:
         if parent:
             return self.resolve_llm(parent, fallback_llm, llm_factory, _origin_key=origin_key)
 
-        # Ultimate master fallback: If we reached the top and it wasn't the portfolio_manager,
-        # try to get the portfolio_manager settings before giving up to fallback_llm.
         if agent_key != "portfolio_manager":
             return self.resolve_llm("portfolio_manager", fallback_llm, llm_factory, _origin_key=origin_key)
 
@@ -186,6 +184,5 @@ class AgentHierarchy:
             return False
         allowed = tool.allowed_analysts or []
         if not allowed:
-            # Tools with no analyst restriction are always reachable.
             return True
         return any(self.is_enabled(a) for a in allowed)

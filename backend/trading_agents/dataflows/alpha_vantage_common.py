@@ -16,9 +16,6 @@ from backend.trading_agents.dataflows.retry import retry_sync
 _logger = logging.getLogger(__name__)
 API_BASE_URL = "https://www.alphavantage.co/query"
 
-# Rate limits and key rotation belong to a provider credential/configuration,
-# not to the most recently constructed graph.  A process-wide reset on every
-# analysis let concurrent runs refill each other's token buckets.
 _AV_RATE_LIMITERS: dict[tuple[str, int, float], TokenBucketRateLimiter] = {}
 _AV_KEY_INDICES: dict[str, int] = {}
 _AV_STATE_LOCK = threading.Lock()
@@ -36,8 +33,6 @@ def reset_state() -> None:
 
 def _credential_scope() -> str:
     raw = get_config().get("alpha_vantage_api_key") or os.getenv("ALPHA_VANTAGE_API_KEY", "")
-    # Keep the actual credential out of map keys/debuggers while retaining a
-    # stable identity across concurrent runs configured with the same keys.
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
 
 

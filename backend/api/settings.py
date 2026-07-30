@@ -95,9 +95,6 @@ async def _check_section_permissions(db: AsyncSession, user: User, body: Setting
     mapped_fields = {field for fields in SECTION_FIELDS.values() for field in fields}
     unmapped = set(attempted) - mapped_fields
     if unmapped:
-        # New settings must be assigned to an explicit permission section
-        # before a non-admin can write them.  Silent allow-by-omission was an
-        # authorization bypass whenever SettingsUpdate gained a new field.
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"No permission section is configured for settings: {', '.join(sorted(unmapped))}",

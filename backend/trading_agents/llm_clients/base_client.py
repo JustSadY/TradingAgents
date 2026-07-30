@@ -8,9 +8,6 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 
-# ---------------------------------------------------------------------------
-# Token usage tracking
-# ---------------------------------------------------------------------------
 
 
 @dataclass
@@ -70,9 +67,6 @@ class TokenUsageTracker:
         }
 
 
-# ---------------------------------------------------------------------------
-# Error classification
-# ---------------------------------------------------------------------------
 
 
 def is_quota_exhausted(exc: Exception) -> bool:
@@ -145,9 +139,6 @@ def classify_error(exc: Exception) -> str:
     return "unknown"
 
 
-# ---------------------------------------------------------------------------
-# Retry helper for rate-limited calls
-# ---------------------------------------------------------------------------
 
 
 async def retry_with_exponential_backoff(
@@ -188,7 +179,6 @@ async def retry_with_exponential_backoff(
             category = classify_error(exc)
             if category in ("quota_exhausted", "auth", "provider_degraded", "unknown"):
                 raise
-            # rate_limited or timeout — retry
             delay = min(base_delay * (2**attempt), max_delay)
             logger.info(
                 "LLM call %s (attempt %d/%d), retrying in %.1fs: %s",
@@ -202,9 +192,6 @@ async def retry_with_exponential_backoff(
     raise last_exc
 
 
-# ---------------------------------------------------------------------------
-# Content normalisation
-# ---------------------------------------------------------------------------
 
 
 def normalize_content(response):
@@ -222,9 +209,6 @@ def normalize_content(response):
     return response
 
 
-# ---------------------------------------------------------------------------
-# Base client contract
-# ---------------------------------------------------------------------------
 
 
 class BaseLLMClient(ABC):

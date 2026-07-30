@@ -13,7 +13,6 @@ class LLMProvider:
     requires_api_key: bool = True
 
     def get_api_key(self) -> str | None:
-        # Explicitly removed .env lookup
         return None
 
 
@@ -28,7 +27,6 @@ class LLMProviderRegistry:
         return self._providers.get(key.lower())
 
     def list_providers(self) -> list[LLMProvider]:
-        # Return in a specific order for the UI
         order = ["openai", "anthropic", "google", "mistral", "groq", "nvidia", "deepseek", "ollama"]
         return [self._providers[k] for k in order if k in self._providers]
 
@@ -61,17 +59,14 @@ def provider_requires_api_key(provider: str) -> bool:
     return llm_registry.provider_requires_api_key(provider)
 
 
-# Global registry instance
 llm_registry = LLMProviderRegistry()
 
-# Standard effort options
 _STANDARD_EFFORT = [
     {"value": "low", "label": "Low"},
     {"value": "medium", "label": "Medium"},
     {"value": "high", "label": "High"},
 ]
 
-# Register core supported providers (NO api_key_env defined)
 llm_registry.register(
     LLMProvider(
         key="openai",

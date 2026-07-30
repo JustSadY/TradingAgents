@@ -1,28 +1,28 @@
 #!/usr/bin/env bash
 #
-# TradingAgents — tek komutla Linux kurulum + systemd servisi.
+# TradingAgents — single-command Linux installation + systemd service.
 #
 #   sudo bash deploy/install.sh
 #
-# Yaptıkları (hepsi idempotent — tekrar çalıştırılabilir):
-#   1. Sistem bağımlılıkları: Python 3.10+, Node 20, PostgreSQL, git, curl
-#   2. Python sanal ortamı + backend/requirements.txt
-#   3. Frontend build (npm) -> frontend/dist (backend tarafından sunulur)
-#   4. PostgreSQL veritabanı + kullanıcı
-#   5. .env üretimi (güvenli rastgele SECRET_KEY / ENCRYPTION_KEY / DB şifresi /
-#      admin şifresi) — yalnızca .env yoksa
-#   6. systemd servisi (tek process: in-memory WebSocket + APScheduler cron
-#      birden çok worker ile bozulur, bu yüzden uvicorn tek process çalışır)
-#   7. Servisi enable + start eder, sağlık kontrolü yapar
+# Actions performed (all idempotent — safe to re-run):
+#   1. System dependencies: Python 3.10+, Node 20, PostgreSQL, git, curl
+#   2. Python virtual environment + backend/requirements.txt
+#   3. Frontend build (npm) -> frontend/dist (served by backend)
+#   4. PostgreSQL database + user setup
+#   5. .env generation (secure random SECRET_KEY / ENCRYPTION_KEY / DB password /
+#      admin password) — only if .env does not exist
+#   6. systemd service (single process: in-memory WebSocket + APScheduler cron
+#      will break with multiple workers, so uvicorn runs as single process)
+#   7. Enable + start service and perform health check
 #
-# Ortam değişkenleriyle özelleştirme (opsiyonel):
-#   SERVICE_NAME=tradingagents  SERVICE_USER=<kullanıcı>  APP_PORT=8000
-#   ADMIN_USERNAME=admin        ADMIN_PASSWORD=<düz şifre>  NODE_MAJOR=20
-#   SKIP_DB=1 (harici PostgreSQL kullan)   BUILD_FRONTEND=0 (UI build'i atla)
+# Environment variable overrides (optional):
+#   SERVICE_NAME=tradingagents  SERVICE_USER=<user>  APP_PORT=8000
+#   ADMIN_USERNAME=admin        ADMIN_PASSWORD=<raw password>  NODE_MAJOR=20
+#   SKIP_DB=1 (use external PostgreSQL)   BUILD_FRONTEND=0 (skip UI build)
 #
 set -euo pipefail
 
-# ── Ayarlar (ortam değişkeniyle override edilebilir) ────────────────────────────
+# ── Configuration (can be overridden via environment variables) ────────────
 SERVICE_NAME="${SERVICE_NAME:-tradingagents}"
 APP_HOST="${APP_HOST:-0.0.0.0}"
 APP_PORT="${APP_PORT:-8000}"
@@ -38,41 +38,41 @@ VENV="$PROJECT_ROOT/.venv"
 ENV_FILE="$PROJECT_ROOT/.env"
 UNIT_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
-# Uygulama içi otomatik güncelleme bileşenleri
+# In-app auto-updater components
 UPDATE_UNIT="${SERVICE_NAME}-update"
 UPDATE_UNIT_FILE="/etc/systemd/system/${UPDATE_UNIT}.service"
 UPDATER_BIN="/usr/local/sbin/tradingagents-update"
 UPDATE_CONF="/etc/tradingagents/update.env"
 SUDOERS_FILE="/etc/sudoers.d/${SERVICE_NAME}-update"
 
-# Servisi çalıştıracak kullanıcı: belirtilmemişse sudo'yu çağıran kişi.
+# Service execution user: defaults to the user who invoked sudo if not set.
 RUN_USER="${SERVICE_USER:-${SUDO_USER:-root}}"
 
-# ── Loglama ─────────────────────────────────────────────────────────────────────
+# ── Logging ─────────────────────────────────────────────────────────────────────
 info() { printf '\033[1;34m[*]\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m[+]\033[0m %s\n' "$*"; }
 warn() { printf '\033[1;33m[!]\033[0m %s\n' "$*"; }
 err()  { printf '\033[1;31m[x]\033[0m %s\n' "$*" >&2; }
 die()  { err "$*"; exit 1; }
 
-# ── Ön kontroller ───────────────────────────────────────────────────────────────
-[ "$(id -u)" -eq 0 ] || die "Bu script root gerektirir:  sudo bash deploy/install.sh"
-[ -f "$PROJECT_ROOT/backend/requirements.txt" ] || die "backend/requirements.txt bulunamadı — proje kökünden çalıştırın."
-[ -d "$PROJECT_ROOT/frontend" ] || die "frontend/ bulunamadı — proje yapısı beklenenden farklı."
-command -v systemctl >/dev/null || die "systemd (systemctl) bulunamadı — bu script systemd tabanlı dağıtımlar içindir."
+# ── Pre-flight checks ───────────────────────────────────────────────────────────
+[ "$(id -u)" -eq 0 ] || die "This script requires root: sudo bash deploy/install.sh"
+[ -f "$PROJECT_ROOT/backend/requirements.txt" ] || die "backend/requirements.txt not found — run from project root."
+[ -d "$PROJECT_ROOT/frontend" ] || die "frontend/ directory not found — unexpected project layout."
+command -v systemctl >/dev/null || die "systemd (systemctl) not found — this script is for systemd-based distributions."
 SYSTEMCTL_BIN="$(command -v systemctl)"
 
 id "$RUN_USER" &>/dev/null || {
-    info "Servis kullanıcısı '$RUN_USER' oluşturuluyor..."
+    info "Creating service user '$RUN_USER'..."
     useradd --system --create-home --shell /usr/sbin/nologin "$RUN_USER"
 }
 
-# ── Paket yöneticisi tespiti ────────────────────────────────────────────────────
+# ── Package manager detection ────────────────────────────────────────────────────
 if   command -v apt-get >/dev/null; then PM=apt
 elif command -v dnf     >/dev/null; then PM=dnf
 elif command -v yum     >/dev/null; then PM=yum
-else die "Desteklenen paket yöneticisi yok (apt/dnf/yum)."; fi
-info "Paket yöneticisi: $PM"
+else die "No supported package manager found (apt/dnf/yum)."; fi
+info "Package manager: $PM"
 
 pm_install() {
     case "$PM" in
@@ -82,8 +82,8 @@ pm_install() {
     esac
 }
 
-# ── 1. Sistem bağımlılıkları ────────────────────────────────────────────────────
-info "Sistem paketleri kuruluyor..."
+# ── 1. System dependencies ────────────────────────────────────────────────────
+info "Installing system packages..."
 if [ "$PM" = apt ]; then
     apt-get update -y
     pm_install python3 python3-venv python3-dev build-essential libpq-dev git curl ca-certificates sudo
@@ -92,30 +92,26 @@ else
     pm_install python3 python3-devel gcc gcc-c++ make git curl sudo
     [ "$SKIP_DB" = 1 ] || pm_install postgresql-server postgresql-contrib || true
 fi
-ok "Sistem paketleri hazır."
+ok "System packages ready."
 
-# ── Python 3.10–3.13 seç ────────────────────────────────────────────────────────
+# ── Select Python 3.10–3.13 ────────────────────────────────────────────────────
 pick_python() {
     local c v
     for c in python3.13 python3.12 python3.11 python3.10 python3; do
         command -v "$c" >/dev/null || continue
         v=$("$c" -c 'import sys;print(sys.version_info[0]*100+sys.version_info[1])' 2>/dev/null || echo 0)
-        # aiosqlite is used by the local development/test and LangGraph
-        # checkpoint paths.  Python 3.14 currently deadlocks that driver when
-        # SQLite connections cross its worker thread, so choose a verified
-        # interpreter rather than silently creating an unusable environment.
         if [ "$v" -ge 310 ] && [ "$v" -lt 314 ]; then echo "$c"; return 0; fi
     done
     return 1
 }
-PYTHON="$(pick_python)" || die "Desteklenen Python 3.10–3.13 bulunamadı. Lütfen python3.10–3.13 kurun."
+PYTHON="$(pick_python)" || die "No supported Python 3.10–3.13 interpreter found. Please install python3.10–3.13."
 info "Python: $PYTHON ($("$PYTHON" --version 2>&1))"
 
-# ── 2. Node 20 (Vite 8 için gerekli) ───────────────────────────────────────────
+# ── 2. Node 20 (Required for Vite 8) ───────────────────────────────────────────
 if [ "$BUILD_FRONTEND" = 1 ]; then
     node_major() { command -v node >/dev/null && node -v | sed 's/v\([0-9]*\).*/\1/' || echo 0; }
     if [ "$(node_major)" -lt "$NODE_MAJOR" ]; then
-        info "Node $NODE_MAJOR kuruluyor (NodeSource)..."
+        info "Installing Node $NODE_MAJOR (NodeSource)..."
         if [ "$PM" = apt ]; then
             curl -fsSL "https://deb.nodesource.com/setup_${NODE_MAJOR}.x" -o /tmp/nodesource.sh
             bash /tmp/nodesource.sh >/dev/null
@@ -129,43 +125,40 @@ if [ "$BUILD_FRONTEND" = 1 ]; then
     ok "Node $(node -v) / npm $(npm -v)"
 fi
 
-# ── 3. Python venv + bağımlılıklar ──────────────────────────────────────────────
-info "Python sanal ortamı hazırlanıyor: $VENV"
+# ── 3. Python venv + dependencies ──────────────────────────────────────────────
+info "Preparing Python virtual environment: $VENV"
 [ -d "$VENV" ] || "$PYTHON" -m venv "$VENV"
 "$VENV/bin/pip" install --upgrade pip wheel >/dev/null
-info "backend/requirements.txt kuruluyor (birkaç dakika sürebilir)..."
+info "Installing backend/requirements.txt (may take a few minutes)..."
 "$VENV/bin/pip" install -r "$PROJECT_ROOT/backend/requirements.txt"
-ok "Python bağımlılıkları kuruldu."
+ok "Python dependencies installed."
 
 # ── 4. Frontend build ───────────────────────────────────────────────────────────
 if [ "$BUILD_FRONTEND" = 1 ]; then
-    info "Frontend derleniyor (npm)..."
+    info "Building frontend (npm)..."
     pushd "$PROJECT_ROOT/frontend" >/dev/null
     if [ -f package-lock.json ]; then npm ci || npm install; else npm install; fi
     npm run build
     popd >/dev/null
-    [ -f "$PROJECT_ROOT/frontend/dist/index.html" ] || die "Frontend build başarısız (dist/index.html yok)."
-    ok "Frontend derlendi -> frontend/dist"
+    [ -f "$PROJECT_ROOT/frontend/dist/index.html" ] || die "Frontend build failed (dist/index.html not found)."
+    ok "Frontend built -> frontend/dist"
 else
-    warn "BUILD_FRONTEND=0 — UI derlenmedi (yalnızca API)."
+    warn "BUILD_FRONTEND=0 — UI build skipped (API only)."
 fi
 
-# ── 5. .env (yalnızca yoksa üret) ───────────────────────────────────────────────
+# ── 5. .env (generate only if missing) ─────────────────────────────────────────
 GENERATED_ADMIN_PW=""
 if [ ! -f "$ENV_FILE" ]; then
-    info ".env üretiliyor (güvenli rastgele secret'lar)..."
+    info "Generating .env (secure random secrets)..."
     SECRET_KEY=$("$PYTHON" -c 'import secrets;print(secrets.token_hex(32))')
-    # Fernet anahtarı = 32 baytın urlsafe base64'ü (stdlib ile üretilebilir)
     ENCRYPTION_KEY=$("$PYTHON" -c 'import base64,os;print(base64.urlsafe_b64encode(os.urandom(32)).decode())')
     DB_USER="$DB_USER_DEFAULT"
     DB_NAME="$DB_NAME_DEFAULT"
-    DB_PASS=$("$PYTHON" -c 'import secrets;print(secrets.token_urlsafe(24))')  # @ : / içermez
+    DB_PASS=$("$PYTHON" -c 'import secrets;print(secrets.token_urlsafe(24))')
     ADMIN_PASSWORD="${ADMIN_PASSWORD:-$("$PYTHON" -c 'import secrets;print(secrets.token_urlsafe(12))')}"
     GENERATED_ADMIN_PW="$ADMIN_PASSWORD"
     ADMIN_HASH=$("$VENV/bin/python" -c 'import bcrypt,sys;print(bcrypt.hashpw(sys.argv[1].encode(),bcrypt.gensalt()).decode())' "$ADMIN_PASSWORD")
 
-    # Değerler tek tırnak içinde yazılır: bcrypt hash "$" içerir ve dotenv/systemd
-    # bunu değişken olarak genişletmemeli. CORS_ORIGINS de JSON köşeli parantez içerir.
     {
         printf "SECRET_KEY='%s'\n"          "$SECRET_KEY"
         printf "ENCRYPTION_KEY='%s'\n"      "$ENCRYPTION_KEY"
@@ -173,16 +166,16 @@ if [ ! -f "$ENV_FILE" ]; then
         printf "ADMIN_PASSWORD_HASH='%s'\n" "$ADMIN_HASH"
         printf "DATABASE_URL='postgresql+asyncpg://%s:%s@localhost:5432/%s'\n" "$DB_USER" "$DB_PASS" "$DB_NAME"
         printf "CORS_ORIGINS='[\"http://localhost:%s\"]'\n" "$APP_PORT"
-        printf '\n# LLM sağlayıcı anahtarları — en az birini doldurun, sonra: systemctl restart %s\n' "$SERVICE_NAME"
-        printf '\n# Veri sağlayıcı anahtarları (opsiyonel)\nALPHA_VANTAGE_API_KEY=\nREDDIT_CLIENT_ID=\nREDDIT_CLIENT_SECRET=\n'
+        printf '\n# LLM Provider API keys — fill at least one, then: systemctl restart %s\n' "$SERVICE_NAME"
+        printf '\n# Data provider API keys (optional)\nALPHA_VANTAGE_API_KEY=\nREDDIT_CLIENT_ID=\nREDDIT_CLIENT_SECRET=\n'
     } > "$ENV_FILE"
     chmod 600 "$ENV_FILE"
-    ok ".env oluşturuldu."
+    ok ".env created."
 else
-    info ".env zaten var — korunuyor (secret'lar yeniden üretilmedi)."
+    info ".env already exists — preserving existing file (secrets not regenerated)."
 fi
 
-# Postgres kurulumu için DB bilgilerini .env'den oku (kaynak tek: .env)
+# Read DB credentials from .env for Postgres setup
 read DB_USER DB_PASS DB_NAME < <(
     "$VENV/bin/python" - "$ENV_FILE" <<'PY'
 import sys, urllib.parse as u
@@ -192,24 +185,22 @@ p = u.urlsplit(url)
 print(p.username or "", p.password or "", (p.path or "/").lstrip("/"))
 PY
 ) || true
-[ -n "${DB_NAME:-}" ] || die "DATABASE_URL .env içinden ayrıştırılamadı."
+[ -n "${DB_NAME:-}" ] || die "Could not parse DATABASE_URL from .env."
 
-# ── 6. PostgreSQL veritabanı + kullanıcı ────────────────────────────────────────
+# ── 6. PostgreSQL database + user ────────────────────────────────────────
 if [ "$SKIP_DB" = 1 ]; then
-    warn "SKIP_DB=1 — PostgreSQL kurulumu atlandı (harici DB bekleniyor)."
+    warn "SKIP_DB=1 — Skipping PostgreSQL setup (expecting external DB)."
 else
-    info "PostgreSQL yapılandırılıyor..."
+    info "Configuring PostgreSQL..."
     if [ "$PM" != apt ]; then
-        # RHEL ailesi: initdb gerekli, ve 127.0.0.1 için parola auth'a geç (en iyi çaba)
         if [ ! -s /var/lib/pgsql/data/PG_VERSION ]; then
             (postgresql-setup --initdb || /usr/bin/postgresql-setup initdb) || true
         fi
         HBA=/var/lib/pgsql/data/pg_hba.conf
         [ -f "$HBA" ] && sed -i 's/^\(host\s\+all\s\+all\s\+127.0.0.1\/32\s\+\)ident/\1scram-sha-256/' "$HBA" || true
     fi
-    systemctl enable --now postgresql >/dev/null 2>&1 || systemctl enable --now postgresql || die "postgresql başlatılamadı."
+    systemctl enable --now postgresql >/dev/null 2>&1 || systemctl enable --now postgresql || die "Failed to start postgresql."
 
-    # Soketin hazır olmasını bekle (root olduğumuz için runuser yeterli; sudo gerekmez)
     for _ in $(seq 1 10); do runuser -u postgres -- psql -d template1 -tAc 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
 
     psql_admin() { runuser -u postgres -- psql -d template1 -v ON_ERROR_STOP=1 "$@"; }
@@ -221,17 +212,15 @@ else
     if ! psql_admin -tAc "SELECT 1 FROM pg_database WHERE datname='$DB_NAME'" | grep -q 1; then
         runuser -u postgres -- createdb --maintenance-db=template1 -O "$DB_USER" "$DB_NAME"
     fi
-    ok "PostgreSQL hazır (db=$DB_NAME, user=$DB_USER)."
+    ok "PostgreSQL ready (db=$DB_NAME, user=$DB_USER)."
 fi
 
-# ── Dosya sahipliği ─────────────────────────────────────────────────────────────
-# Tüm proje RUN_USER'a ait olmalı: uygulama içi güncelleme (git pull + build) bu
-# kullanıcı olarak çalışır, dolayısıyla checkout'a yazabilmesi gerekir.
-info "Dosya sahipliği '$RUN_USER' kullanıcısına veriliyor..."
+# ── File Ownership ─────────────────────────────────────────────────────────────
+info "Giving file ownership to '$RUN_USER' user..."
 chown -R "$RUN_USER":"$RUN_USER" "$PROJECT_ROOT" 2>/dev/null || true
 
-# ── 7. systemd servisi ──────────────────────────────────────────────────────────
-info "systemd servisi yazılıyor: $UNIT_FILE"
+# ── 7. systemd service ──────────────────────────────────────────────────────────
+info "Writing systemd service unit: $UNIT_FILE"
 cat > "$UNIT_FILE" <<EOF
 [Unit]
 Description=TradingAgents Web (FastAPI + multi-agent LLM trading)
@@ -247,16 +236,9 @@ Environment=PYTHONUNBUFFERED=1
 Environment=TRADINGAGENTS_UPDATE_UNIT=${UPDATE_UNIT}.service
 Environment=TRADINGAGENTS_SYSTEMCTL=$SYSTEMCTL_BIN
 EnvironmentFile=$ENV_FILE
-# TEK PROCESS ZORUNLU: in-memory WebSocket yöneticisi + APScheduler cron birden
-# çok worker ile çoğaltılır (çift analiz / bozuk WS). --workers EKLEMEYİN.
-# The WebSocket implementation emits its own Date header. Disable Uvicorn's
-# generic Date header so a reverse proxy never receives duplicate headers;
-# its ping settings match the Docker deployment and keep long-lived streams
-# alive through reverse proxies.
 ExecStart=$VENV/bin/uvicorn backend.main:app --host $APP_HOST --port $APP_PORT --no-date-header --no-access-log --ws-ping-interval 20 --ws-ping-timeout 20
 Restart=on-failure
 RestartSec=5
-# Düşük portlara (örn. 80) bağlanabilmek için
 AmbientCapabilities=CAP_NET_BIND_SERVICE
 NoNewPrivileges=true
 PrivateTmp=true
@@ -265,12 +247,8 @@ PrivateTmp=true
 WantedBy=multi-user.target
 EOF
 
-# ── Uygulama içi otomatik güncelleme ("Güncelle" butonu) ────────────────────────
-# Ayrı bir oneshot updater servisi: ana servisi restart edince kendisi ölmez
-# (farklı cgroup). Backend (RUN_USER) yalnızca bu tek servisi başlatma yetkisine
-# sahiptir (sudoers ile). git pull + build RUN_USER olarak yapılır; yalnızca
-# restart root'tur — bu yüzden çekilen kod root ayrıcalığı kazanmaz.
-info "Otomatik güncelleme bileşenleri kuruluyor..."
+# ── In-app automatic updater ("Update" button) ────────────────────────
+info "Installing automatic update components..."
 mkdir -p "$(dirname "$UPDATE_CONF")" "$(dirname "$UPDATER_BIN")"
 cat > "$UPDATE_CONF" <<EOF
 PROJECT_ROOT=$PROJECT_ROOT
@@ -292,41 +270,39 @@ Type=oneshot
 ExecStart=$UPDATER_BIN
 EOF
 
-# Backend kullanıcısı SADECE bu tek komutu parolasız çalıştırabilir (başka hiçbir şey)
 cat > "$SUDOERS_FILE" <<EOF
 $RUN_USER ALL=(root) NOPASSWD: $SYSTEMCTL_BIN start --no-block ${UPDATE_UNIT}.service
 EOF
 chmod 440 "$SUDOERS_FILE"
 if visudo -cf "$SUDOERS_FILE" >/dev/null 2>&1; then
-    ok "Uygulama içi güncelleme hazır."
+    ok "In-app updater ready."
 else
     rm -f "$SUDOERS_FILE"
-    warn "sudoers doğrulaması başarısız — uygulama içi güncelleme kapalı (manuel: sudo bash deploy/update.sh)."
+    warn "sudoers validation failed — in-app updater disabled (manual: sudo bash deploy/update.sh)."
 fi
 
 systemctl daemon-reload
 systemctl enable "$SERVICE_NAME" >/dev/null 2>&1 || true
 systemctl restart "$SERVICE_NAME"
-ok "Servis başlatıldı: $SERVICE_NAME"
+ok "Service started: $SERVICE_NAME"
 
 # ── 8. Logrotate ────────────────────────────────────────────────────────────────
 if command -v logrotate >/dev/null; then
-    info "Logrotate yapılandırması kuruluyor..."
+    info "Installing Logrotate configuration..."
     cp "$PROJECT_ROOT/deploy/logrotate.conf" /etc/logrotate.d/tradingagents 2>/dev/null && \
-        ok "Logrotate kuruldu: /etc/logrotate.d/tradingagents" || \
-        warn "Logrotate kurulamadı."
+        ok "Logrotate installed: /etc/logrotate.d/tradingagents" || \
+        warn "Logrotate configuration failed."
 else
-    warn "logrotate bulunamadı — log rotasyonu atlandı."
+    warn "logrotate not found — log rotation skipped."
 fi
 
-# Güvenlik duvarı (opsiyonel, ufw aktifse)
 if command -v ufw >/dev/null && ufw status 2>/dev/null | grep -q "Status: active"; then
     ufw allow "${APP_PORT}/tcp" >/dev/null 2>&1 || true
-    info "ufw: ${APP_PORT}/tcp portu açıldı."
+    info "ufw: opened port ${APP_PORT}/tcp."
 fi
 
-# ── Sağlık kontrolü ─────────────────────────────────────────────────────────────
-info "Sağlık kontrolü yapılıyor..."
+# ── Health check ─────────────────────────────────────────────────────────────
+info "Performing health check..."
 HEALTHY=0
 for _ in $(seq 1 15); do
     if curl -fsS "http://127.0.0.1:${APP_PORT}/health" >/dev/null 2>&1; then HEALTHY=1; break; fi
@@ -337,31 +313,31 @@ LAN_IP="$(hostname -I 2>/dev/null | awk '{print $1}')"
 echo
 if [ "$HEALTHY" = 1 ]; then
     ok "============================================================"
-    ok " TradingAgents çalışıyor 🎉"
+    ok " TradingAgents is running 🎉"
     ok "============================================================"
-    echo "  Arayüz   :  http://localhost:${APP_PORT}"
+    echo "  UI       :  http://localhost:${APP_PORT}"
     [ -n "$LAN_IP" ] && echo "             http://${LAN_IP}:${APP_PORT}"
     echo "  Admin    :  ${ADMIN_USERNAME}"
     if [ -n "$GENERATED_ADMIN_PW" ]; then
-        echo "  Şifre    :  ${GENERATED_ADMIN_PW}"
-        warn "Bu şifreyi kaydedin — bir daha gösterilmeyecek."
+        echo "  Password :  ${GENERATED_ADMIN_PW}"
+        warn "Save this password — it will not be shown again."
     else
-        echo "  Şifre    :  (mevcut .env'deki ADMIN_PASSWORD_HASH kullanılıyor)"
+        echo "  Password :  (using ADMIN_PASSWORD_HASH from existing .env)"
     fi
     echo
-    echo "  ⚠  LLM anahtarı ekleyin:  nano $ENV_FILE   sonra: systemctl restart $SERVICE_NAME"
+    echo "  ⚠  Add LLM API key:  nano $ENV_FILE   then: systemctl restart $SERVICE_NAME"
     echo
-    echo "  🔄 Güncelleme: yeni commit gelince arayüzün üstünde 'Güncelle' butonu çıkar"
-    echo "                (otomatik git pull + build + restart). Manuel: sudo bash deploy/update.sh"
+    echo "  🔄 Updates: An 'Update' button appears in the UI header when a new commit is pushed"
+    echo "             (automatic git pull + build + restart). Manual: sudo bash deploy/update.sh"
     echo
-    echo "  Yönetim:"
-    echo "    journalctl -u $SERVICE_NAME -f              # canlı log"
+    echo "  Management Commands:"
+    echo "    journalctl -u $SERVICE_NAME -f              # live logs"
     echo "    systemctl restart|stop $SERVICE_NAME"
-    echo "    bash deploy/backup.sh                      # manuel yedek"
-    echo "    bash deploy/setup-backup-cron.sh            # otomatik yedek (systemd timer)"
-    echo "    bash deploy/uninstall.sh                    # kaldır"
+    echo "    bash deploy/backup.sh                      # manual backup"
+    echo "    bash deploy/setup-backup-cron.sh            # automatic backup (systemd timer)"
+    echo "    bash deploy/uninstall.sh                    # uninstall"
 else
-    err "Servis sağlık kontrolünden geçemedi. Logları inceleyin:"
+    err "Service health check failed. Inspect logs:"
     err "    journalctl -u $SERVICE_NAME -n 50 --no-pager"
     exit 1
 fi

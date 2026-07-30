@@ -119,8 +119,6 @@ def create_portfolio_manager(llm):
             schema=PortfolioDecision,
         )
 
-        # When structured output succeeds, carry the rating enum straight through
-        # so the final signal never depends on re-parsing rendered markdown.
         final_signal: str | None = None
         if isinstance(result, str):
             final_trade_decision = result

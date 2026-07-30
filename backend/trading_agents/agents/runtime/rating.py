@@ -10,12 +10,8 @@ RATINGS_5_TIER: tuple[str, ...] = (
     "Sell",
 )
 _RATING_SET = {r.lower() for r in RATINGS_5_TIER}
-# Leading markdown / emphasis noise a model may put before a label:
-# "**Rating**", "## Final Decision", "- Signal", "> Recommendation", etc.
 _LEADING_MD = r"[\s#>*_\-]*"
 _DECISION_KEYWORDS = r"(?:rating|recommendation|decision|signal|action)"
-# Tolerate emphasis both BEFORE the keyword and around the ``:``/``-`` separator,
-# so ``**Rating**: Buy`` (the exact output of render_pm_decision) is matched.
 _RATING_LABEL_RE = re.compile(
     rf"^{_LEADING_MD}(?:final\s+)?{_DECISION_KEYWORDS}\s*\**\s*[:\-]\s*\**\s*(buy|overweight|hold|underweight|sell)\b",
     re.IGNORECASE,
@@ -42,7 +38,6 @@ def parse_rating_matched(text: str, default: str | None = "Hold") -> tuple[str |
             return m.group(1).capitalize(), True
     structured_candidates = []
     for line in lines:
-        # Strip leading markdown so headings like "## Final Decision: ..." are seen.
         stripped = line.strip().lstrip("#>*_- ").strip().lower()
         if not stripped:
             continue

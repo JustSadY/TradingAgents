@@ -93,12 +93,9 @@ async def get_news_yfinance(
     try:
         from backend.services.news_service import get_news_feed
 
-        # Correctly await the async news feed service in the main loop
         cached_items = await get_news_feed(ticker, article_limit)
         cached_items = cached_items or []
 
-        # Inclusive [start_date 00:00 UTC, end_date+1 00:00 UTC): keeps all of
-        # end_date in UTC and nothing after, so a backtest never sees next-day news.
         start_boundary = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=UTC)
         end_boundary = datetime.strptime(end_date, "%Y-%m-%d").replace(tzinfo=UTC) + relativedelta(days=1)
         news_str = ""
@@ -136,7 +133,6 @@ def get_global_news_yfinance(
     look_back_days: int | None = None,
     limit: int | None = None,
 ) -> str:
-    # yfinance.Search is sync, so it will be wrapped by route_to_vendor's to_thread
     config = get_config()
     if look_back_days is None:
         look_back_days = config["global_news_lookback_days"]
@@ -171,8 +167,6 @@ def get_global_news_yfinance(
         curr_dt = datetime.strptime(curr_date, "%Y-%m-%d")
         start_dt = curr_dt - relativedelta(days=look_back_days)
         start_date = start_dt.strftime("%Y-%m-%d")
-        # Exclude anything from the day after curr_date onward (UTC) so a backtest
-        # never sees future news.
         end_boundary = curr_dt.replace(tzinfo=UTC) + relativedelta(days=1)
         news_str = ""
         for article in all_news[:limit]:

@@ -33,7 +33,6 @@ def checkpoint_scope(user_id: int | None, analysis_id: int | str) -> str:
 def _scope_component(scope: str) -> str:
     if not isinstance(scope, str) or not scope:
         raise ValueError("checkpoint scope is required")
-    # Do not put tenant or analysis identifiers directly in a filesystem path.
     return hashlib.sha256(scope.encode()).hexdigest()[:24]
 
 
@@ -108,7 +107,6 @@ def clear_checkpoint(data_dir: str | Path, ticker: str, date: str, scope: str) -
             conn.execute(f"DELETE FROM {table} WHERE thread_id = ?", (tid,))
         conn.commit()
     except sqlite3.OperationalError as exc:
-        # Table may not exist yet (no checkpoint ever written) — non-fatal.
         _logger.debug("clear_checkpoint skipped for %s/%s: %s", ticker, date, exc)
     finally:
         conn.close()
@@ -129,10 +127,8 @@ async def list_checkpoints_for_thread(data_dir: str | Path, ticker: str, date: s
             metadata = cp.metadata or {}
             step = metadata.get("step", -1)
             writes = metadata.get("writes") or {}
-            # Try to identify which node executed to generate this checkpoint
             node_name = next(iter(writes.keys()), "START") if writes else "START"
 
-            # Translate node name into a user-friendly label if possible
             from backend.core.catalog import node_progress
 
             prog = node_progress(node_name)
@@ -148,6 +144,5 @@ async def list_checkpoints_for_thread(data_dir: str | Path, ticker: str, date: s
                 }
             )
 
-    # Sort checkpoints by step number ascending
     checkpoints.sort(key=lambda x: x["step"])
     return checkpoints

@@ -10,16 +10,10 @@ from __future__ import annotations
 
 import re
 
-# Analyst reports follow a fixed template whose first section is an "Executive
-# Summary" (see each analyst's system prompt). Downstream debators argue over
-# the *conclusions*, not the raw tables, so we extract just the summary for them.
-# The heading may carry inline content, e.g. "1. **Executive Summary:** ...".
 _SUMMARY_HEADING = re.compile(
     r"#{0,4}\s*(?:\d+[.)]\s*)?\**\s*executive\s+summary\b[:*\s]*",
     re.IGNORECASE,
 )
-# Start of the section that follows the summary: a markdown heading, or a
-# numbered/bold section title such as "2." / "**Detailed Analysis**".
 _NEXT_HEADING = re.compile(
     r"\n\s{0,3}(?:#{1,4}\s|\**\s*\d+[.)]\s|\*\*[A-Z])",
 )
@@ -78,7 +72,7 @@ def tail_history(history: str, limit: int | None = None) -> str:
             from backend.trading_agents.dataflows.config import get_config
 
             limit = int(get_config().get("max_debate_history_chars", 8000))
-        except Exception:  # noqa: BLE001
+        except Exception:
             limit = 0
     if limit <= 0 or len(history) <= limit:
         return history
@@ -155,7 +149,7 @@ def build_resources(
             from backend.trading_agents.dataflows.config import get_config
 
             max_chars_per_report = int(get_config().get("max_report_chars_in_prompts", 6000))
-        except Exception:  # noqa: BLE001 — config is best-effort; fall back to no cap
+        except Exception:
             max_chars_per_report = 0
 
     resources = []

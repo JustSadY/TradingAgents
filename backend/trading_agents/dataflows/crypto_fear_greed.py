@@ -14,7 +14,7 @@ def fetch_crypto_fear_greed_index(timeout: float = 10.0) -> str:
     """Fetch the current Crypto Fear & Greed Index (alternative.me, free, no API key)."""
     req = Request(_API, headers={"User-Agent": _UA, "Accept": "application/json"})
     try:
-        with urlopen(req, timeout=timeout) as resp:  # noqa: S310 — fixed https API, not user input
+        with urlopen(req, timeout=timeout) as resp:
             payload = json.loads(resp.read())
     except (HTTPError, URLError, json.JSONDecodeError, TimeoutError, ValueError) as exc:
         logger.warning("Crypto Fear & Greed fetch failed: %s", exc)

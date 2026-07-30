@@ -54,7 +54,6 @@ def get_stock_stats_indicators_window(
     if "Date" in data.columns:
         data = data.set_index("Date")
 
-    # Calculate requested indicator using central service
     series = data["Close"]
     res_series = None
 
@@ -92,11 +91,9 @@ def get_stock_stats_indicators_window(
     if res_series is None:
         return f"Indicator {indicator} not yet supported in centralized service"
 
-    # Filter and format output
     end_dt = datetime.strptime(curr_date, "%Y-%m-%d")
     start_dt = end_dt - relativedelta(days=look_back_days)
 
-    # Align and filter
     df_res = pd.DataFrame({"value": res_series}, index=data.index)
     mask = (df_res.index >= start_dt) & (df_res.index <= end_dt)
     df_filtered = df_res.loc[mask].sort_index(ascending=False)
@@ -165,8 +162,6 @@ def get_fundamentals(
         header += "\n"
         return header + "\n".join(lines)
     except Exception:
-        # Re-raise so route_to_vendor can fall back to another vendor instead of
-        # returning (and caching) an error string the router treats as data.
         raise
 
 
@@ -242,8 +237,6 @@ def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the compan
         data = yf_retry(lambda: ticker_obj.insider_transactions, ticker=ticker)
         if data is None or data.empty:
             return f"No insider transactions data found for symbol '{ticker}'"
-        # Keep only the most recent rows; older Form 4 filings add tokens without
-        # changing the signal the analyst is reading.
         csv_string = data.head(25).to_csv()
         header = f"# Insider Transactions data for {ticker.upper()}\n"
         header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
@@ -371,7 +364,6 @@ def get_analyst_ratings(ticker: Annotated[str, "ticker symbol of the company"]):
             parts.append("\n## Recommendation Trend (analyst counts by period)")
             parts.append(recommendations.to_csv(index=False))
 
-        # Fallback to info summary fields if recommendations table is sparse
         info = yf_retry(lambda: ticker_obj.info, ticker=ticker_upper) or {}
         if len(parts) <= 2 or ("## Price Targets" not in "\n".join(parts) and info.get("targetMeanPrice")):
             rec_key = info.get("recommendationKey", "N/A")
@@ -580,7 +572,6 @@ def get_sec_filings(ticker: Annotated[str, "ticker symbol of the company"]):
         import pandas as pd
 
         df = pd.DataFrame(data)
-        # Drop excessive columns for context efficiency
         cols_to_keep = ["date", "type", "title", "edgarUrl"]
         df = df[[c for m, c in enumerate(cols_to_keep) if c in df.columns]]
 

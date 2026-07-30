@@ -14,11 +14,9 @@ async def get_quant_data(
 ) -> str:
     """Retrieve quantitative risk metrics (Beta, Sharpe Ratio, Volatility, Max Drawdown) for an asset."""
     try:
-        # Load last year of daily data
         start_date = (pd.to_datetime(curr_date) - pd.DateOffset(years=1)).strftime("%Y-%m-%d")
         csv_payload = await route_to_vendor("get_stock_data", symbol, start_date, curr_date)
 
-        # Strip comments/headers
         lines = [line for line in csv_payload.splitlines() if line and not line.startswith("#")]
         if not lines:
             return "Error: No price data available for quantitative analysis."
@@ -27,12 +25,10 @@ async def get_quant_data(
         if df.empty or len(df) < 20:
             return "Error: Insufficient data for quantitative metrics."
 
-        # Basic Quant Stats
         returns = df["Close"].pct_change().dropna()
         volatility = returns.std() * (252**0.5)
         sharpe = (returns.mean() / returns.std()) * (252**0.5) if returns.std() != 0 else 0
 
-        # Max Drawdown
         cum_returns = (1 + returns).cumprod()
         running_max = cum_returns.cummax()
         drawdown = (cum_returns - running_max) / running_max

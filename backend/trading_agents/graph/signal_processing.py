@@ -15,9 +15,6 @@ class SignalProcessor:
     def process_signal(self, full_signal: str) -> str:
         rating, matched = parse_rating_matched(full_signal)
         if not matched:
-            # No rating could be located — the run silently defaults. Surface it
-            # so a broken decision format (see the render/parse mismatch that made
-            # every run return Hold) is visible instead of masked.
             _logger.warning(
                 "Signal parse found no rating in decision text; defaulting to %r.",
                 rating,
@@ -26,6 +23,6 @@ class SignalProcessor:
                 from backend.core.metrics import SIGNAL_PARSE_FALLBACK
 
                 SIGNAL_PARSE_FALLBACK.inc()
-            except Exception:  # noqa: BLE001 — metrics are best-effort / optional
+            except Exception:
                 pass
         return rating

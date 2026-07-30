@@ -16,8 +16,6 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
 
-# Shared scaffold wrapped around every tool-using analyst's own system_message.
-# Rewording this changes every tool-using analyst's prompt (intentional).
 _COLLAB_SYSTEM = (
     "You are a specialist analyst on a trading research team. First call the tools you need to gather"
     " real data, then write a thorough, self-contained report for your role — do not leave gaps for"
@@ -61,8 +59,6 @@ async def run_tool_analyst(
                 candidate = settings.get("collab_system_prompt")
                 if isinstance(candidate, str) and candidate.strip():
                     effective_collab_system = candidate.strip()
-            # Per-agent "System Prompt Override" from Settings → Agents: replaces
-            # this analyst's own hard-coded instructions wholesale when set.
             override = settings.get("system_instruction")
             if isinstance(override, str) and override.strip():
                 effective_system_message = override.strip()
@@ -93,14 +89,6 @@ async def run_tool_analyst(
 
     analyst = report_key.replace("_report", "")
 
-    # The graph wraps every analyst node in ``guard_node``.  That wrapper is
-    # the single lifecycle telemetry source (node_start/node_end, timing,
-    # retry and circuit-breaker state).  Emitting the same lifecycle pair here
-    # used to make every LLM turn look like two analyst runs: one named by the
-    # graph node ("Fundamentals Analyst") and one named by this report key
-    # ("fundamentals").  Keep the local error/fallback events below because
-    # this function converts those failures into a safe state update before
-    # they reach the outer wrapper.
 
     if ctx and "emitter" in ctx:
         emitter = ctx["emitter"]
@@ -129,7 +117,7 @@ async def run_tool_analyst(
             run_in_thread=False,
             runtime_config=runtime_retry_config,
         )
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         import traceback as _tb
 
         log_event(

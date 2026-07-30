@@ -54,6 +54,6 @@ async def get_portfolio_context(user_id: int | None) -> str:
             lines.append(f"- Total portfolio value: ${cash + invested:,.2f}")
             lines.append("Size positions against these real figures; do not assume a different balance.")
             return "\n".join(lines)
-    except Exception as exc:  # noqa: BLE001 — context is best-effort
+    except Exception as exc:
         logger.warning("Could not fetch portfolio context for user_id=%s: %s", user_id, exc)
         return ""

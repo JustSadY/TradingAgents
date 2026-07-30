@@ -13,12 +13,6 @@ from backend.trading_agents.agents.tools.registry import registry
 
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 
-# Native browser WebSockets cannot attach an Authorization header. Clients
-# therefore offer the access JWT in a private WebSocket subprotocol instead of
-# putting it in the URL, where normal proxy/access logs would retain it. A
-# separate, non-secret protocol is negotiated in the response: echoing the
-# JWT-bearing offer would expose it in the response headers and some strict
-# clients abort a 101 response that selects no offered protocol at all.
 WEBSOCKET_APPLICATION_SUBPROTOCOL = "tradingagents.v1"
 WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX = "tradingagents.jwt."
 
@@ -81,8 +75,6 @@ async def get_user_from_access_token(token: str, db: AsyncSession) -> User:
     user = await get_user_by_username(db, username)
     if user is None or not user.is_active:
         raise credentials_exc
-    # Reject tokens minted before the user's current version (logout / password
-    # change bumps token_version, immediately invalidating older tokens).
     if payload.get("ver", 0) != getattr(user, "token_version", 0):
         raise credentials_exc
     return user
@@ -214,17 +206,10 @@ async def enforce_tool_settings_permission(
                     status_code=403, detail=f"You do not have permission to modify settings for tool '{tool_key}'."
                 )
 
-            # Tool-level can_edit only says the user may edit *something* on
-            # this tool — an admin can still lock/hide individual fields
-            # (UserToolFieldAccess), which the check above never consulted.
             tool_field_access = field_access_map.get(tool_key, {})
             changed_fields = set(update.settings or {}) | set(update.reset_settings or [])
             for field_key in changed_fields:
                 field_perms = tool_field_access.get(field_key, {})
-                # A field that is intentionally hidden is not safely editable
-                # through a handcrafted request even if a stale/misconfigured
-                # row still says can_edit=True. Both visibility and edit
-                # grants are required for a direct mutation.
                 if not field_perms.get("can_view", True) or not field_perms.get("can_edit", True):
                     raise HTTPException(
                         status_code=403,

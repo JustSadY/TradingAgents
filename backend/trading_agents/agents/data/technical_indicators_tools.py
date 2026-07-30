@@ -29,7 +29,7 @@ async def collect_indicators(
         try:
             value = await route_to_vendor("get_indicators", symbol, indicator, curr_date, look_back_days)
             results.append(value)
-        except Exception as exc:  # noqa: BLE001 — a single indicator must not hide the rest
+        except Exception as exc:
             _logger.warning("Indicator %s failed for %s: %s", indicator, symbol, exc)
             results.append(f"Error calculating {indicator}: {exc}")
     return "\n\n".join(results)

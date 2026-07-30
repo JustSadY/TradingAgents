@@ -44,14 +44,13 @@ async def _safe(label: str, fn, state: dict, fallback: dict) -> dict:
         if inspect.iscoroutinefunction(fn):
             return await fn(state)
         return fn(state)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning("[research_manager] sub '%s' failed: %s — using fallback.", label, exc, exc_info=True)
         return fallback
 
 
 def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
     async def research_manager_node(state) -> dict:
-        # Tier-1 kill-switch.
         if not ctx.is_enabled(MAIN_KEY):
             logger.info("[research_manager] branch disabled — skipping research.")
             return {
@@ -80,7 +79,6 @@ def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
             bull = create_bull_researcher(ctx.llm_for("bull_researcher"))
             bear = create_bear_researcher(ctx.llm_for("bear_researcher"))
             max_rounds = ctx.config.get("max_debate_rounds", 1)
-            # Ensure a debate state exists to read counts from.
             if not local.get("investment_debate_state"):
                 apply({"investment_debate_state": neutral_invest_debate_state()})
 

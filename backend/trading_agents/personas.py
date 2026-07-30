@@ -22,7 +22,7 @@ class InvestorPersona:
     key: str
     label: str
     description: str
-    instructions: str  # injected verbatim into the Portfolio Manager prompt
+    instructions: str
 
 
 _PERSONAS: dict[str, InvestorPersona] = {}
