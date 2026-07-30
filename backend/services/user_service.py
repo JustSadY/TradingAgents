@@ -49,7 +49,8 @@ def resolve_user_api_key(user: User, provider: str) -> str | None:
 
     try:
         return get_user_api_key(user, provider, get_settings().get_fernet())
-    except Exception:
+    except Exception as exc:
+        _logger.debug("Failed to resolve user API key for provider %s: %s", provider, exc)
         return None
 
 

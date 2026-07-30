@@ -1,3 +1,6 @@
+import logging
+
+_logger = logging.getLogger(__name__)
 from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.data.search_tools import search_web
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
@@ -37,7 +40,10 @@ def create_macro_analyst(llm):
 
         try:
             data = await route_to_vendor("get_global_news", trade_date, 1, 10)
-        except Exception:
+        except Exception as _e:
+
+            _logger.warning("Data fetch failed in macro_analyst: %s", _e)
+
             data = ""
 
         data_hash = compute_data_hash("macro", ticker, trade_date, data)

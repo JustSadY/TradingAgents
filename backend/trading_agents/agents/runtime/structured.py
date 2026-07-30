@@ -81,8 +81,8 @@ def _coerce_structured_result(result: Any, schema: type[T]) -> Any:
     if isinstance(content, str):
         try:
             return parse_and_validate(content, schema)
-        except Exception:
-            pass
+        except Exception as _e:
+            logger.debug("parse_and_validate failed, returning raw result: %s", _e)
     return result
 
 

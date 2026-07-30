@@ -1,6 +1,7 @@
 import asyncio
 import logging
 
+from sqlalchemy import delete
 from sqlalchemy import desc as _desc
 from sqlalchemy import select, update
 from sqlalchemy.exc import IntegrityError
@@ -118,14 +119,15 @@ async def delete_analysis_by_id(db: AsyncSession, analysis_id: int, user=None) -
 
 
 async def clear_analysis_history(db: AsyncSession, user=None) -> int:
-    q = select(AnalysisResult)
-    q = scope_to_user(q, AnalysisResult, user)
-    res = await db.execute(q)
-    rows = list(res.scalars().all())
-    count = len(rows)
-    for row in rows:
-        await db.delete(row)
+    count_q = select(AnalysisResult)
+    count_q = scope_to_user(count_q, AnalysisResult, user)
+    count_res = await db.execute(count_q)
+    count = len(count_res.scalars().all())
     if count > 0:
+        del_q = delete(AnalysisResult)
+        if user is not None and not getattr(user, "is_admin", False):
+            del_q = del_q.where(AnalysisResult.user_id == user.id)
+        await db.execute(del_q)
         await db.commit()
     return count
 

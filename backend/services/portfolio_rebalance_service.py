@@ -152,7 +152,8 @@ async def _call_llm(db: AsyncSession, user: User, prompt: str) -> dict:
 
     try:
         user_key = get_user_api_key(user, provider, get_settings().get_fernet())
-    except Exception:
+    except Exception as exc:
+        _logger.debug("Failed to retrieve user API key: %s", exc)
         user_key = None
 
     if provider_requires_api_key(provider) and not user_key:

@@ -1,3 +1,4 @@
+import logging
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
@@ -10,6 +11,7 @@ from backend.schemas.daily_summary import DailySummaryResponse
 from backend.services.daily_summary_service import generate_daily_summary, get_latest_summary
 
 router = APIRouter(prefix="/api/market", tags=["daily-summary"])
+_logger = logging.getLogger(__name__)
 
 
 @router.get("/daily-summary", response_model=DailySummaryResponse)
@@ -39,4 +41,5 @@ async def trigger_daily_summary(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
+        _logger.exception("Daily summary generation failed for user=%s", current_user.id)
         raise HTTPException(status_code=500, detail=f"Summary generation failed: {e}") from e

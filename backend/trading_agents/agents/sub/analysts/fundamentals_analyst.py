@@ -1,3 +1,6 @@
+import logging
+
+_logger = logging.getLogger(__name__)
 from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
@@ -84,37 +87,67 @@ Your final report MUST follow this structure:
         try:
             fund_data = await route_to_vendor("get_fundamentals", ticker, trade_date)
 
-        except Exception:
+        except Exception as _e:
+
+
+            _logger.warning("Data fetch failed in fundamentals_analyst: %s", _e)
+
+
             fund_data = ""
 
         try:
             bs_data = await route_to_vendor("get_balance_sheet", ticker, "quarterly", trade_date)
 
-        except Exception:
+        except Exception as _e:
+
+
+            _logger.warning("Data fetch failed in fundamentals_analyst: %s", _e)
+
+
             bs_data = ""
 
         try:
             cf_data = await route_to_vendor("get_cashflow", ticker, "quarterly", trade_date)
 
-        except Exception:
+        except Exception as _e:
+
+
+            _logger.warning("Data fetch failed in fundamentals_analyst: %s", _e)
+
+
             cf_data = ""
 
         try:
             is_data = await route_to_vendor("get_income_statement", ticker, "quarterly", trade_date)
 
-        except Exception:
+        except Exception as _e:
+
+
+            _logger.warning("Data fetch failed in fundamentals_analyst: %s", _e)
+
+
             is_data = ""
 
         try:
             sec_data = await route_to_vendor("get_sec_filings", ticker)
 
-        except Exception:
+        except Exception as _e:
+
+
+            _logger.warning("Data fetch failed in fundamentals_analyst: %s", _e)
+
+
             sec_data = ""
 
         try:
             insider_data = await route_to_vendor("get_insider_transactions", ticker)
 
-        except Exception:
+        except Exception as _e:
+
+
+            _logger.warning("Data fetch failed in fundamentals_analyst: %s", _e)
+
+
             insider_data = ""
 
         data_hash = compute_data_hash(

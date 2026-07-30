@@ -184,8 +184,13 @@ async def get_signal_performance(db: AsyncSession, ticker: str | None = None, us
 
     n = len(rows)
     for bucket in by_signal.values():
-        bucket["avg_return"] = round(bucket["avg_return"] / bucket["count"] * 100, 2)
-        bucket["win_rate"] = round(bucket["wins"] / bucket["count"] * 100, 1)
+        c = bucket["count"]
+        if c > 0:
+            bucket["avg_return"] = round(bucket["avg_return"] / c * 100, 2)
+            bucket["win_rate"] = round(bucket["wins"] / c * 100, 1)
+        else:
+            bucket["avg_return"] = 0.0
+            bucket["win_rate"] = 0.0
     return {
         "total": n,
         "win_rate": round(wins / n * 100, 1),

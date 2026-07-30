@@ -1,3 +1,6 @@
+import logging
+
+_logger = logging.getLogger(__name__)
 from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.data.backtest_tools import run_strategy_backtest
 from backend.trading_agents.agents.data.chart_tools import (
@@ -116,13 +119,23 @@ Your final report MUST follow this structure:
 
             start_date_str = start_dt.strftime("%Y-%m-%d")
 
-        except Exception:
+        except Exception as _e:
+
+
+            _logger.warning("Data fetch failed in market_analyst: %s", _e)
+
+
             start_date_str = trade_date
 
         try:
             stock_data = await route_to_vendor("get_stock_data", ticker, start_date_str, trade_date)
 
-        except Exception:
+        except Exception as _e:
+
+
+            _logger.warning("Data fetch failed in market_analyst: %s", _e)
+
+
             stock_data = ""
 
         try:
@@ -143,7 +156,12 @@ Your final report MUST follow this structure:
                 lookback_days,
             )
 
-        except Exception:
+        except Exception as _e:
+
+
+            _logger.warning("Data fetch failed in market_analyst: %s", _e)
+
+
             indicators_data = ""
 
         data_hash = compute_data_hash("market", ticker, trade_date, stock_data, indicators_data)

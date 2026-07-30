@@ -12,6 +12,10 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_system_instruction_override,
 )
 
+import logging
+
+_logger = logging.getLogger(__name__)
+
 _DEFAULT_INSTRUCTION = (
     "As the Research Manager and debate facilitator, your role is to critically evaluate this round "
     "of debate and deliver a clear, actionable investment plan for the trader."
@@ -36,7 +40,8 @@ def create_research_manager(llm):
 
             situation = state.get("market_report") or state.get("synthesis_report") or ""
             memory_lessons = await recall_episode_lessons(user_id=get_config().get("user_id"), situation_text=situation)
-        except Exception:
+        except Exception as _e:
+            _logger.debug("Memory recall skipped in research_manager: %s", _e)
             memory_lessons = ""
 
         instruction = get_system_instruction_override("research_manager") or _DEFAULT_INSTRUCTION

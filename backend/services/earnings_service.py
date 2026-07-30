@@ -183,8 +183,8 @@ async def _resolve_tickers(db: AsyncSession, user: User, tickers: str | None) ->
     for t in raw_list:
         try:
             cleaned.append(safe_ticker_component(t, max_len=20))
-        except Exception:
-            pass
+        except Exception as _e:
+            _logger.warning("Skipped invalid ticker component %r: %s", t, _e)
     return cleaned[:MAX_TICKERS]
 
 
@@ -194,13 +194,16 @@ async def get_earnings_calendar(db: AsyncSession, user: User, tickers: str | Non
     if not cleaned:
         return []
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     tasks = [loop.run_in_executor(None, fetch_earnings, ticker) for ticker in cleaned]
     raw_results = await asyncio.gather(*tasks, return_exceptions=True)
 
     results: list[dict] = []
-    for entry in raw_results:
-        if isinstance(entry, Exception) or entry is None:
+    for ticker, entry in zip(cleaned, raw_results, strict=False):
+        if isinstance(entry, Exception):
+            _logger.warning("Failed to fetch earnings for ticker %s: %s", ticker, entry)
+            continue
+        if entry is None:
             continue
         results.append(entry.model_dump())
 

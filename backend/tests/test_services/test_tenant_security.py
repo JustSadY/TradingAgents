@@ -203,7 +203,10 @@ class TestProfileMutationPermission:
         ]
 
         for method, path, payload in mutations:
-            response = await getattr(async_client, method)(path, json=payload, headers=auth_headers)
+            kwargs: dict = {"headers": auth_headers}
+            if payload is not None:
+                kwargs["json"] = payload
+            response = await getattr(async_client, method)(path, **kwargs)
             assert response.status_code == 403, path
 
 

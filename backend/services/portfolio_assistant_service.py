@@ -158,6 +158,7 @@ async def _run_tool_loop(llm_with_tools, lc_messages: list, tool_map: dict) -> s
                 try:
                     result_text = await tool.ainvoke(tc["args"])
                 except Exception as e:
+                    _logger.warning("Assistant tool execution failed for %s: %s", tc['name'], e)
                     result_text = f"Tool error ({tc['name']}): {e}"
             lc_messages.append(ToolMessage(content=str(result_text), tool_call_id=tc["id"]))
 
@@ -272,6 +273,7 @@ async def _tool_get_portfolio_summary(db: AsyncSession, user: User, allowed_page
             lines.append("\nNo open holdings.")
         return "\n".join(lines)
     except Exception as e:
+        _logger.warning("Assistant failed to fetch portfolio summary: %s", e)
         return f"Could not fetch portfolio: {e}"
 
 
@@ -317,6 +319,7 @@ async def _tool_get_analysis_history(
             lines.append(f"[ID {row.id}] {row.ticker} | {row.trade_date} | Signal: {row.signal or 'N/A'}\n  {summary}")
         return "\n\n".join(lines)
     except Exception as e:
+        _logger.warning("Assistant failed to fetch analysis history: %s", e)
         return f"Could not fetch analysis history: {e}"
 
 
@@ -353,6 +356,7 @@ async def _tool_get_analysis_report(db: AsyncSession, user: User, allowed_pages:
             + "\n\n".join(sections)
         )
     except Exception as e:
+        _logger.warning("Assistant failed to fetch analysis report %s: %s", analysis_id, e)
         return f"Could not fetch report: {e}"
 
 
@@ -368,6 +372,7 @@ async def _tool_get_live_price(user: User, allowed_pages: set[str], ticker: str)
             return f"Could not fetch live price for {ticker.upper()}."
         return f"{ticker.upper()}: ${price:,.2f}"
     except Exception as e:
+        _logger.warning("Assistant live price lookup failed for %s: %s", ticker, e)
         return f"Price lookup failed: {e}"
 
 
@@ -387,6 +392,7 @@ async def _tool_get_watchlist(db: AsyncSession, user: User, allowed_pages: set[s
         lines = [f"  {t}: ${prices[t]:,.2f}" if t in prices else f"  {t}: N/A" for t in tickers]
         return "Watchlist:\n" + "\n".join(lines)
     except Exception as e:
+        _logger.warning("Assistant failed to fetch watchlist: %s", e)
         return f"Could not fetch watchlist: {e}"
 
 
@@ -406,6 +412,7 @@ async def _tool_get_alerts(db: AsyncSession, user: User, allowed_pages: set[str]
             lines.append(f"  [{a.id}] {a.ticker} — {a.condition} ${float(a.target_price):,.2f} | {status}")
         return "Price alerts:\n" + "\n".join(lines)
     except Exception as e:
+        _logger.warning("Assistant failed to fetch alerts: %s", e)
         return f"Could not fetch alerts: {e}"
 
 
@@ -439,6 +446,7 @@ async def _tool_create_price_alert(
     except AlertGuardrailViolation as exc:
         return f"Alert was not created: {exc.detail}"
     except Exception as e:
+        _logger.warning("Assistant alert creation failed for %s: %s", ticker, e)
         return f"Alert creation failed: {e}"
 
 
@@ -467,6 +475,7 @@ async def _tool_run_stock_analysis(user: User, allowed_pages: set[str], ticker: 
         task.add_done_callback(_BACKGROUND_TASKS.discard)
         return f"Analysis started for {clean_ticker} (date: {trade_date}, task_id: {task_id}). It will take about 2-3 minutes. Go to the Analysis page to track progress and see results."
     except Exception as e:
+        _logger.warning("Assistant analysis trigger failed for %s: %s", ticker, e)
         return f"Could not start analysis: {e}"
 
 
@@ -499,4 +508,5 @@ async def _tool_place_paper_order(
     except ValueError as e:
         return f"Order rejected: {e}"
     except Exception as e:
+        _logger.warning("Assistant paper order failed for %s: %s", ticker, e)
         return f"Order failed: {e}"

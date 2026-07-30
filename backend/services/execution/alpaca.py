@@ -145,8 +145,8 @@ class AlpacaTrader(BaseTraderInterface):
                     )
 
                 data = resp.json()
-                order_id = data["id"]
-                status = data["status"].upper()
+                order_id = data.get("id", "")
+                status = (data.get("status") or "UNKNOWN").upper()
                 filled_price = None
                 filled_qty = None
                 if data.get("filled_avg_price"):
@@ -161,7 +161,7 @@ class AlpacaTrader(BaseTraderInterface):
                     chk_resp = await client.get(f"{url}/{order_id}", headers=headers, timeout=5.0)
                     if chk_resp.status_code == 200:
                         chk_data = chk_resp.json()
-                        status = chk_data["status"].upper()
+                        status = (chk_data.get("status") or "UNKNOWN").upper()
                         if chk_data.get("filled_avg_price"):
                             filled_price = float(chk_data["filled_avg_price"])
                         if chk_data.get("filled_qty"):

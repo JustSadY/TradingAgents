@@ -54,7 +54,7 @@ async def get_sector_rotation() -> list[dict[str, Any]]:
             threads=False,
         )
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     max_retries = 3
     delay = 1.0
     raw = None
@@ -118,7 +118,8 @@ async def get_sector_rotation() -> list[dict[str, Any]]:
                     "momentum_score": round(momentum_score, 3),
                 }
             )
-        except Exception:
+        except Exception as _e:
+            _logger.debug("Failed processing sector ticker %s: %s", ticker, _e)
             continue
 
     results.sort(key=lambda x: x["momentum_score"], reverse=True)

@@ -38,7 +38,7 @@ async def compute_correlation_matrix(tickers: list[str], period: str) -> dict[st
             "warning": "Need at least 2 holdings",
         }
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     corr_df, available_tickers = await loop.run_in_executor(None, _download_and_correlate, tickers, period)
 
     if corr_df is None:

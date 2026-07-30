@@ -1,3 +1,6 @@
+import logging
+
+_logger = logging.getLogger(__name__)
 from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
@@ -36,7 +39,10 @@ def create_short_interest_analyst(llm):
 
         try:
             data = await route_to_vendor("get_short_interest", ticker)
-        except Exception:
+        except Exception as _e:
+
+            _logger.warning("Data fetch failed in short_interest_analyst: %s", _e)
+
             data = ""
 
         data_hash = compute_data_hash("short_interest", ticker, trade_date, data)

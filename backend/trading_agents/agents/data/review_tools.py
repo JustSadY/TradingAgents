@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import pandas as pd
 from langchain_core.tools import tool
@@ -12,7 +12,7 @@ _logger = logging.getLogger(__name__)
 async def get_past_performance_data(ticker: str, curr_date: str | None = None) -> str:
     """Retrieve historical performance reports and analyze realized returns relative to previous model suggestions for a given stock ticker."""
     if not curr_date:
-        curr_date = datetime.now().strftime("%Y-%m-%d")
+        curr_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
 
     past_report = None
     past_date = None

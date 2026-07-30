@@ -108,12 +108,13 @@ async def _fetch_watchlist_prices(watchlist: list[str]) -> list[str]:
     import pandas as pd
     import yfinance as yf
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
 
     def _fetch():
         try:
             return yf.download(watchlist, period="2d", progress=False, auto_adjust=True)
-        except Exception:
+        except Exception as exc:
+            _logger.warning("yfinance download failed in daily summary: %s", exc)
             return None
 
     try:
@@ -136,7 +137,8 @@ async def _fetch_watchlist_prices(watchlist: list[str]) -> list[str]:
                     price_lines.append(f"  {ticker}: ${curr:.2f} ({chg:+.1f}%)")
                 elif len(series) == 1:
                     price_lines.append(f"  {ticker}: ${float(series.iloc[-1]):.2f}")
-            except Exception:
+            except Exception as exc:
+                _logger.debug("Failed to parse prices for ticker %s in daily summary: %s", ticker, exc)
                 continue
     except Exception as e:
         _logger.warning("Price fetch failed for daily summary: %s", e)

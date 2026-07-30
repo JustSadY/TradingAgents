@@ -1,3 +1,6 @@
+import logging
+
+_logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta
 
 from backend.trading_agents.agents.analyst_registry import register_analyst
@@ -52,7 +55,10 @@ def create_quant_analyst(llm):
             end_dt = datetime.strptime(trade_date, "%Y-%m-%d")
             start_dt = (end_dt - timedelta(days=365)).strftime("%Y-%m-%d")
             data = await route_to_vendor("get_stock_data", ticker, start_dt, trade_date)
-        except Exception:
+        except Exception as _e:
+
+            _logger.warning("Data fetch failed in quant_analyst: %s", _e)
+
             data = ""
 
         data_hash = compute_data_hash("quant", ticker, trade_date, data)

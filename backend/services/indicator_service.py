@@ -175,5 +175,6 @@ async def fetch_sector(ticker: str) -> str:
     try:
         info = await asyncio.to_thread(lambda: yf.Ticker(ticker).info)
         return info.get("sector") or "Unknown"
-    except Exception:
+    except Exception as exc:
+        _logger.debug("Could not fetch sector for ticker %s: %s", ticker, exc)
         return "Unknown"

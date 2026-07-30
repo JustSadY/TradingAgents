@@ -267,7 +267,7 @@ async def create_alert_with_guardrails(
     except AlertGuardrailViolation as exc:
         if not skip_if_limited:
             raise
-        _logger.info(
+        _logger.debug(
             "Skipped AI alert user=%s ticker=%s source=%s reason=%s",
             user_id,
             normalized_ticker,

@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Annotated
 
 import pandas as pd
@@ -35,7 +35,7 @@ def get_yfin_data_online(
     csv_string = data.to_csv()
     header = f"# Stock data for {symbol.upper()} from {start_date} to {end_date}\n"
     header += f"# Total records: {len(data)}\n"
-    header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+    header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
     return header + csv_string
 
 
@@ -150,9 +150,9 @@ def get_fundamentals(
         for label, value in fields:
             if value is not None:
                 lines.append(f"{label}: {value}")
-        today = datetime.now().strftime("%Y-%m-%d")
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         header = f"# Company Fundamentals for {ticker.upper()}\n"
-        header += f"# Data retrieved on: {today} {datetime.now().strftime('%H:%M:%S')}\n"
+        header += f"# Data retrieved on: {today} {datetime.now(timezone.utc).strftime('%H:%M:%S')}\n"
         if curr_date and curr_date != today:
             header += (
                 f"# WARNING: these are TODAY'S live metrics, not a historical snapshot as of {curr_date}. "
@@ -181,7 +181,7 @@ def get_balance_sheet(
             return f"No balance sheet data found for symbol '{ticker}'"
         csv_string = data.to_csv()
         header = f"# Balance Sheet data for {ticker.upper()} ({freq})\n"
-        header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
     except Exception:
         raise
@@ -203,7 +203,7 @@ def get_cashflow(
             return f"No cash flow data found for symbol '{ticker}'"
         csv_string = data.to_csv()
         header = f"# Cash Flow data for {ticker.upper()} ({freq})\n"
-        header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
     except Exception:
         raise
@@ -225,7 +225,7 @@ def get_income_statement(
             return f"No income statement data found for symbol '{ticker}'"
         csv_string = data.to_csv()
         header = f"# Income Statement data for {ticker.upper()} ({freq})\n"
-        header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
     except Exception:
         raise
@@ -239,7 +239,7 @@ def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the compan
             return f"No insider transactions data found for symbol '{ticker}'"
         csv_string = data.head(25).to_csv()
         header = f"# Insider Transactions data for {ticker.upper()}\n"
-        header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
     except Exception:
         raise
@@ -265,7 +265,7 @@ def get_short_interest(ticker: Annotated[str, "ticker symbol of the company"]):
         if not rows:
             return f"No short-interest data found for symbol '{ticker}'"
         header = f"# Short Interest data for {ticker.upper()}\n"
-        header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + "\n".join(rows)
     except Exception:
         raise
@@ -325,7 +325,7 @@ def get_valuation_comparison(ticker: Annotated[str, "ticker symbol of the compan
         sector = info.get("sector")
 
         parts = [f"# Valuation Comparison for {ticker_upper}"]
-        parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        parts.append(f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n")
         parts.append(f"## {ticker_upper} Valuation Multiples (Sector: {sector or 'Unknown'})")
         own_lines = _valuation_lines(info)
         if not own_lines:
@@ -351,7 +351,7 @@ def get_analyst_ratings(ticker: Annotated[str, "ticker symbol of the company"]):
         ticker_upper = ticker.upper()
         ticker_obj = yf.Ticker(ticker_upper)
         parts: list[str] = [f"# Analyst Ratings & Price Targets for {ticker_upper}"]
-        parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        parts.append(f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n")
 
         targets = yf_retry(lambda: ticker_obj.analyst_price_targets, ticker=ticker_upper)
         if isinstance(targets, dict) and targets:
@@ -403,7 +403,7 @@ def get_options_data(ticker: Annotated[str, "ticker symbol of the company"]):
             return f"No options chain data available for symbol '{ticker_upper}' (symbol may not trade options or market is closed)."
 
         parts: list[str] = [f"# Options Market Derivatives & Chain Summary for {ticker_upper}"]
-        parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        parts.append(f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n")
         parts.append(f"- Available Expirations ({len(expirations)}): {', '.join(expirations[:5])}")
 
         total_call_vol = 0
@@ -479,7 +479,7 @@ def get_macro_data(curr_date: Annotated[str, "current date in YYYY-MM-DD format"
             "S&P 500 Index": "^GSPC",
         }
         parts = ["# Macroeconomic Benchmark Indicators"]
-        parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        parts.append(f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n")
 
         for label, symbol in macro_tickers.items():
             try:
@@ -494,7 +494,8 @@ def get_macro_data(curr_date: Annotated[str, "current date in YYYY-MM-DD format"
                         price = float(hist["Close"].iloc[-1])
                 if price is not None:
                     parts.append(f"- {label} ({symbol}): {price:.2f}")
-            except Exception:
+            except Exception as _e:
+                logger.debug("Failed fetching macro symbol %s: %s", symbol, _e)
                 continue
 
         if len(parts) <= 2:
@@ -510,7 +511,7 @@ def get_catalyst_calendar(ticker: Annotated[str, "ticker symbol of the company"]
     try:
         ticker_obj = yf.Ticker(ticker.upper())
         parts: list[str] = [f"# Upcoming Catalysts for {ticker.upper()}"]
-        parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        parts.append(f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n")
 
         calendar = yf_retry(lambda: ticker_obj.calendar, ticker=ticker)
         if isinstance(calendar, dict) and calendar:
@@ -538,7 +539,7 @@ def get_institutional_holdings(ticker: Annotated[str, "ticker symbol of the comp
     try:
         ticker_obj = yf.Ticker(ticker.upper())
         parts: list[str] = [f"# Institutional & Major Holders for {ticker.upper()}"]
-        parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        parts.append(f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n")
 
         major = yf_retry(lambda: ticker_obj.major_holders, ticker=ticker)
         if major is not None and not major.empty:
@@ -577,7 +578,7 @@ def get_sec_filings(ticker: Annotated[str, "ticker symbol of the company"]):
 
         csv_string = df.to_csv(index=False)
         header = f"# SEC Filings for {ticker.upper()}\n"
-        header += f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
         return header + csv_string
     except Exception:
         raise

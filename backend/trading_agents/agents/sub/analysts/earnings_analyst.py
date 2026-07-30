@@ -1,3 +1,6 @@
+import logging
+
+_logger = logging.getLogger(__name__)
 from datetime import datetime, timedelta
 
 from backend.trading_agents.agents.analyst_registry import register_analyst
@@ -40,13 +43,19 @@ def create_earnings_analyst(llm):
 
         try:
             catalyst_data = await route_to_vendor("get_catalyst_calendar", ticker)
-        except Exception:
+        except Exception as _e:
+
+            _logger.warning("Data fetch failed in earnings_analyst: %s", _e)
+
             catalyst_data = ""
         try:
             end_dt = datetime.strptime(trade_date, "%Y-%m-%d")
             search_start = (end_dt - timedelta(days=365)).strftime("%Y-%m-%d")
             search_data = await route_to_vendor("get_news", ticker, search_start, trade_date)
-        except Exception:
+        except Exception as _e:
+
+            _logger.warning("Data fetch failed in earnings_analyst: %s", _e)
+
             search_data = ""
 
         data_hash = compute_data_hash("earnings", ticker, trade_date, catalyst_data, search_data)

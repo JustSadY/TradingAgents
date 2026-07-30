@@ -36,7 +36,8 @@ async def _fetch_rates() -> dict[str, float]:
             if hist.empty:
                 return symbol, None
             return symbol, float(hist.iloc[-1])
-        except Exception:
+        except Exception as exc:
+            _logger.debug("Failed to fetch FX rate for %s: %s", symbol, exc)
             return symbol, None
 
     pairs = await asyncio.gather(*[_one(sym) for sym in symbols])

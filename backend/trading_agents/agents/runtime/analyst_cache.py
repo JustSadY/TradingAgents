@@ -152,7 +152,7 @@ async def check_analyst_cache(
                 .limit(1)
             )
         res = await db.execute(stmt)
-        entry = res.scalars().first()
+        entry = res.scalar_one_or_none()
         if entry:
             return entry.analysis_result
 
@@ -187,7 +187,7 @@ async def check_analyst_cache(
                 .limit(1)
             )
         res = await db.execute(stmt)
-        fallback = res.scalars().first()
+        fallback = res.scalar_one_or_none()
         if fallback:
             _logger.info(
                 "Stale-cache fallback for %s/%s (no exact hash match, using entry from %s)",
@@ -242,5 +242,5 @@ async def emit_cache_hit(analyst_key: str, ticker: str) -> None:
                 analyst_key,
                 f"Reusing cached {analyst_key} analysis for {ticker} (saved tokens).",
             )
-    except Exception:
-        pass
+    except Exception as _e:
+        _logger.debug("emit_cache_hit skipped: %s", _e)

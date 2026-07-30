@@ -10,7 +10,7 @@ a worker thread.
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -43,7 +43,7 @@ def _resolve_dates(period: str, start_date: str | None, end_date: str | None) ->
     if start_date and end_date:
         s, e = start_date, end_date
     else:
-        end = datetime.now()
+        end = datetime.now(timezone.utc)
         start = end - PERIOD_DELTAS.get(period, PERIOD_DELTAS["1y"])
         s, e = start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
     try:

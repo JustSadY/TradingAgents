@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import logging
+
+_logger = logging.getLogger(__name__)
 
 from backend.trading_agents.agents.runtime.report_aggregator import tail_history
 from backend.trading_agents.agents.runtime.risk_math import calculate_kelly_size, get_risk_reward_from_plan
@@ -50,8 +53,8 @@ def create_portfolio_manager(llm):
                         f"- Suggested Maximum Position Size: {kelly_pct * 100:.1f}% of portfolio.\n"
                         "Note: Use this as a ceiling for your final sizing decision.\n"
                     )
-            except Exception:
-                pass
+            except Exception as _e:
+                _logger.debug("Kelly criterion calculation skipped: %s", _e)
 
         memory_lessons = ""
         try:
@@ -62,7 +65,8 @@ def create_portfolio_manager(llm):
                 situation_text=state.get("market_report") or research_plan or "",
                 top_k=get_config().get("memory_recall_count", 5),
             )
-        except Exception:
+        except Exception as _e:
+            _logger.debug("Memory recall skipped: %s", _e)
             memory_lessons = ""
 
         from backend.trading_agents.agents.runtime.portfolio_context import get_portfolio_context

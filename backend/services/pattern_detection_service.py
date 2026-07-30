@@ -276,7 +276,7 @@ async def detect_patterns(ticker: str, period: str = "1y") -> list[dict[str, Any
     def _fetch() -> Any:
         return yf.download(ticker, period=period, progress=False, auto_adjust=True)
 
-    loop = asyncio.get_event_loop()
+    loop = asyncio.get_running_loop()
     raw = await loop.run_in_executor(None, _fetch)
 
     if raw.empty or len(raw) < 30:

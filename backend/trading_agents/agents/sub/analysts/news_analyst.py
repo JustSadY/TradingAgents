@@ -1,3 +1,6 @@
+import logging
+
+_logger = logging.getLogger(__name__)
 from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.data.search_tools import get_crypto_fear_and_greed_index, search_web
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
@@ -79,19 +82,34 @@ Your final report MUST follow this structure:
 
             start_date_str = start_dt.strftime("%Y-%m-%d")
 
-        except Exception:
+        except Exception as _e:
+
+
+            _logger.warning("Data fetch failed in news_analyst: %s", _e)
+
+
             start_date_str = trade_date
 
         try:
             news_data = await route_to_vendor("get_news", ticker, start_date_str, trade_date)
 
-        except Exception:
+        except Exception as _e:
+
+
+            _logger.warning("Data fetch failed in news_analyst: %s", _e)
+
+
             news_data = ""
 
         try:
             global_news_data = await route_to_vendor("get_global_news", trade_date)
 
-        except Exception:
+        except Exception as _e:
+
+
+            _logger.warning("Data fetch failed in news_analyst: %s", _e)
+
+
             global_news_data = ""
 
         insider_data = ""
@@ -100,7 +118,12 @@ Your final report MUST follow this structure:
             try:
                 insider_data = await route_to_vendor("get_insider_transactions", ticker)
 
-            except Exception:
+            except Exception as _e:
+
+
+                _logger.warning("Data fetch failed in news_analyst: %s", _e)
+
+
                 insider_data = ""
 
         crypto_data = ""
@@ -115,7 +138,12 @@ Your final report MUST follow this structure:
 
                 crypto_data = await asyncio.to_thread(fetch_crypto_fear_greed_index)
 
-            except Exception:
+            except Exception as _e:
+
+
+                _logger.warning("Data fetch failed in news_analyst: %s", _e)
+
+
                 crypto_data = ""
 
         articles_hash = compute_data_hash(
