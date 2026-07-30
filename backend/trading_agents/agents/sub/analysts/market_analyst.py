@@ -11,6 +11,7 @@ from backend.trading_agents.agents.data.technical_indicators_tools import collec
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
+    get_general_settings_block,
     get_indicators,
     get_stock_data,
 )
@@ -102,7 +103,7 @@ Your final report MUST follow this structure:
 2. **Detailed Analysis:** Nuanced interpretation of trends, momentum, and volatility with supporting evidence and specific price levels.
 3. **Identified Patterns:** Chart patterns detected (if any), with direction and confidence.
 4. **Key Levels:** Identified support, resistance, and volume-weighted price levels.
-5. **Data Table:** A Markdown table summarizing all calculated indicators, their current values, and signal interpretation."""
+5. **Data Table:** A Markdown table summarizing all calculated indicators, their current values, and signal interpretation.""" + get_general_settings_block()
 
         ticker = state.get("company_of_interest", "")
 

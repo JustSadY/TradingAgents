@@ -10,6 +10,7 @@ from backend.trading_agents.agents.data.chart_tools import (
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
+    get_general_settings_block,
     get_quant_data,
 )
 
@@ -85,7 +86,7 @@ Your final report MUST follow this structure:
 2. **Detailed Analysis:** Nuanced interpretation of statistical metrics, market correlation, and risk efficiency.
 3. **Portfolio Fit Assessment:** How the asset's quant profile fits into broader portfolio context (diversification, risk contribution).
 4. **Risk Flags:** Any statistical red flags (extreme volatility, negative Sharpe, high drawdown risk).
-5. **Quantitative Data Table:** A Markdown table summarizing all calculated quant metrics, current values, and signal interpretation."""
+5. **Quantitative Data Table:** A Markdown table summarizing all calculated quant metrics, current values, and signal interpretation.""" + get_general_settings_block()
 
         res = await run_tool_analyst(
             llm,

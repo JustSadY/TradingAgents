@@ -3,6 +3,7 @@ from backend.trading_agents.agents.data.search_tools import get_crypto_fear_and_
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
+    get_general_settings_block,
     get_global_news,
     get_insider_transactions,
     get_news,
@@ -65,7 +66,7 @@ Your final report MUST follow this structure:
 2. **Detailed Analysis:** Comprehensive review of {asset_label}-specific and global macroeconomic developments, each with direction, impact, and confidence.
 3. **Insider Activity Note:** Summary of any notable insider transactions found, with trend (accumulation/distribution).
 4. **Upcoming Catalysts:** Specific upcoming catalysts or risks for traders to monitor with dates.
-5. **News Event Table:** A Markdown table summarizing key events, their dates, impact (High/Med/Low), confidence, and a brief description."""
+5. **News Event Table:** A Markdown table summarizing key events, their dates, impact (High/Med/Low), confidence, and a brief description.""" + get_general_settings_block()
 
         ticker = state.get("company_of_interest", "")
 

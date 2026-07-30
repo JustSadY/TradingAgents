@@ -2,6 +2,7 @@ from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
+    get_general_settings_block,
     get_insider_transactions,
 )
 
@@ -68,7 +69,7 @@ Your final report MUST follow this structure:
 2. **Detailed Analysis:** Buy/sell breakdown, who traded, size, significance classification, and role weighting.
 3. **Cluster Detection:** Notable clusters of insider activity with timeframe and aggregate signal.
 4. **Actionable Insights:** What the insider pattern implies for the trade thesis.
-5. **Insider Transactions Table:** A Markdown table of the most relevant recent transactions with classification and signal."""
+5. **Insider Transactions Table:** A Markdown table of the most relevant recent transactions with classification and signal.""" + get_general_settings_block()
 
         res = await run_tool_analyst(
             llm,

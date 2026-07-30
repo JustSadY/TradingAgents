@@ -10,8 +10,8 @@ from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
 _API = "https://api.stocktwits.com/api/2/streams/symbol/{ticker}.json"
-_UA = "tradingagents/0.2 (+https://github.com/TauricResearch/TradingAgents)"
-_ACCESS_DENIED_COOLDOWN_SECONDS = 900.0
+_UA = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+_ACCESS_DENIED_COOLDOWN_SECONDS = 60.0
 _RATE_LIMIT_COOLDOWN_SECONDS = 60.0
 _cooldown_lock = threading.Lock()
 _cooldown_until = 0.0
@@ -68,7 +68,14 @@ def fetch_stocktwits_messages(ticker: str, limit: int = 30, timeout: float = 10.
         return _unavailable_message(reason, retry_after)
 
     url = _API.format(ticker=ticker.upper())
-    req = Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
+    req = Request(
+        url,
+        headers={
+            "User-Agent": _UA,
+            "Accept": "application/json, text/plain, */*",
+            "Accept-Language": "en-US,en;q=0.9",
+        },
+    )
     try:
         with urlopen(req, timeout=timeout) as resp:
             data = json.loads(resp.read())

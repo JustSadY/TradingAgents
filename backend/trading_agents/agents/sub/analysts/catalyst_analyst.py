@@ -3,6 +3,7 @@ from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_catalyst_calendar,
+    get_general_settings_block,
 )
 
 _CATALYST_TOOLS = [get_catalyst_calendar]
@@ -67,7 +68,7 @@ Your final report MUST follow this structure:
 2. **Detailed Analysis:** Event-by-event review with dates, estimates, and the asymmetry of each.
 3. **Risk Window Map:** Timeline of upcoming events with risk ratings and confidence for each window.
 4. **Actionable Insights:** Concrete sizing/leverage/stop adjustments for trading through (or around) the events.
-5. **Catalyst Table:** A Markdown table of upcoming events with dates, risk ratings, and confidence."""
+5. **Catalyst Table:** A Markdown table of upcoming events with dates, risk ratings, and confidence.""" + get_general_settings_block()
 
         res = await run_tool_analyst(
             llm,

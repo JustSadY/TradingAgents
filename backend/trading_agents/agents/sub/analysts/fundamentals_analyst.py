@@ -5,6 +5,7 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_balance_sheet,
     get_cashflow,
     get_fundamentals,
+    get_general_settings_block,
     get_income_statement,
     get_insider_transactions_deep,
     get_sec_filings,
@@ -74,7 +75,7 @@ Your final report MUST follow this structure:
 3. **Growth & Cash Flow Analysis:** Revenue trajectory, free cash flow stability, and earnings quality assessment.
 4. **SEC & Insider Sentiment:** Specific breakdown of recent filings and insider trading activity with classification.
 5. **Risk Flags:** Explicit list of red flags or concerns identified, if any.
-6. **Financial Data Table:** A Markdown table summarizing key fundamental metrics, current values, sector comparison, and signal."""
+6. **Financial Data Table:** A Markdown table summarizing key fundamental metrics, current values, sector comparison, and signal.""" + get_general_settings_block()
 
         ticker = state.get("company_of_interest", "")
 

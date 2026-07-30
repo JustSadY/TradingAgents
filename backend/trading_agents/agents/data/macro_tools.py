@@ -9,10 +9,7 @@ from backend.trading_agents.dataflows.interface import route_to_vendor
 async def get_macro_data(
     curr_date: Annotated[str, "current date in YYYY-MM-DD format"],
 ) -> str:
-    """Retrieve recent global macro news used as a market-regime proxy.
-
-    Note: no dedicated market-data vendor (VIX, 10-Year Yield, Oil, Gold) is
-    wired up, so this returns recent global macro news rather than those
-    numeric markers. Do not fabricate specific index/yield values from it.
-    """
-    return await route_to_vendor("get_global_news", curr_date, look_back_days=1, limit=10)
+    """Retrieve key numerical macroeconomic indicators (VIX, 10-Year Yield, Crude Oil, Gold, DXY) and global macro news."""
+    indicators = await route_to_vendor("get_macro_data", curr_date)
+    news = await route_to_vendor("get_global_news", curr_date, look_back_days=1, limit=5)
+    return f"{indicators}\n\n## Global Macro News Flow\n{news}"

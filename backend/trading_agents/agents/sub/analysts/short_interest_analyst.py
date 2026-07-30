@@ -2,6 +2,7 @@ from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
+    get_general_settings_block,
     get_short_interest,
 )
 
@@ -68,7 +69,7 @@ Your final report MUST follow this structure:
 2. **Detailed Analysis:** Shares short, short ratio, short % of float, and the month-over-month change.
 3. **Price-Positioning Divergence:** Analysis of how short positioning relates to recent price action.
 4. **Actionable Insights:** What the positioning implies for the trade thesis (squeeze setup vs. confirmed weakness).
-5. **Short Interest Table:** A Markdown table of the key short-interest figures with interpretation."""
+5. **Short Interest Table:** A Markdown table of the key short-interest figures with interpretation.""" + get_general_settings_block()
 
         res = await run_tool_analyst(
             llm,

@@ -2,6 +2,7 @@ from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
+    get_general_settings_block,
     get_institutional_holdings,
 )
 
@@ -68,7 +69,7 @@ Your final report MUST follow this structure:
 2. **Detailed Analysis:** Ownership concentration, notable holders, holder quality assessment, and crowding/liquidity considerations.
 3. **Trend Observation:** Directional shift in institutional interest (accumulation/distribution/stable).
 4. **Actionable Insights:** What institutional positioning implies for the trade thesis and risk.
-5. **Ownership Table:** A Markdown table of the major and institutional holders with ownership stakes."""
+5. **Ownership Table:** A Markdown table of the major and institutional holders with ownership stakes.""" + get_general_settings_block()
 
         res = await run_tool_analyst(
             llm,

@@ -3,6 +3,7 @@ from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_analyst_ratings,
+    get_general_settings_block,
 )
 
 _RATINGS_TOOLS = [get_analyst_ratings]
@@ -67,7 +68,7 @@ Your final report MUST follow this structure:
 2. **Detailed Analysis:** Recommendation trend over time, price-target spread, and implied upside/downside.
 3. **Shift Detection:** Any notable changes in the consensus trend (upgrades/downgrades appearing) with magnitude assessment.
 4. **Contrarian Signals:** Potential contrarian warnings if consensus is extreme.
-5. **Ratings Table:** A Markdown table of the recommendation trend and key price-target figures."""
+5. **Ratings Table:** A Markdown table of the recommendation trend and key price-target figures.""" + get_general_settings_block()
 
         res = await run_tool_analyst(
             llm,

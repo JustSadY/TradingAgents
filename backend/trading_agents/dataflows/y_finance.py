@@ -355,26 +355,161 @@ def get_valuation_comparison(ticker: Annotated[str, "ticker symbol of the compan
 def get_analyst_ratings(ticker: Annotated[str, "ticker symbol of the company"]):
     """Wall Street analyst consensus: recommendation trend + price targets."""
     try:
-        ticker_obj = yf.Ticker(ticker.upper())
-        parts: list[str] = [f"# Analyst Ratings & Price Targets for {ticker.upper()}"]
+        ticker_upper = ticker.upper()
+        ticker_obj = yf.Ticker(ticker_upper)
+        parts: list[str] = [f"# Analyst Ratings & Price Targets for {ticker_upper}"]
         parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
 
-        targets = yf_retry(lambda: ticker_obj.analyst_price_targets, ticker=ticker)
+        targets = yf_retry(lambda: ticker_obj.analyst_price_targets, ticker=ticker_upper)
         if isinstance(targets, dict) and targets:
             parts.append("## Price Targets")
             for key, value in targets.items():
                 parts.append(f"- {key}: {value}")
 
-        recommendations = yf_retry(lambda: ticker_obj.recommendations, ticker=ticker)
+        recommendations = yf_retry(lambda: ticker_obj.recommendations, ticker=ticker_upper)
         if recommendations is not None and not recommendations.empty:
             parts.append("\n## Recommendation Trend (analyst counts by period)")
             parts.append(recommendations.to_csv(index=False))
+
+        # Fallback to info summary fields if recommendations table is sparse
+        info = yf_retry(lambda: ticker_obj.info, ticker=ticker_upper) or {}
+        if len(parts) <= 2 or ("## Price Targets" not in "\n".join(parts) and info.get("targetMeanPrice")):
+            rec_key = info.get("recommendationKey", "N/A")
+            num_opinions = info.get("numberOfAnalystOpinions", "N/A")
+            target_mean = info.get("targetMeanPrice")
+            target_high = info.get("targetHighPrice")
+            target_low = info.get("targetLowPrice")
+            current_p = info.get("currentPrice") or info.get("regularMarketPrice")
+
+            if target_mean or rec_key != "N/A":
+                parts.append("\n## Summary Consensus & Target Ratings (from Info Overview)")
+                parts.append(f"- Recommendation Key: {rec_key}")
+                parts.append(f"- Number of Analysts: {num_opinions}")
+                if current_p:
+                    parts.append(f"- Current Price: {current_p}")
+                if target_mean:
+                    parts.append(f"- Target Mean Price: {target_mean}")
+                if target_high:
+                    parts.append(f"- Target High Price: {target_high}")
+                if target_low:
+                    parts.append(f"- Target Low Price: {target_low}")
 
         if len(parts) <= 2:
             return f"No analyst ratings data found for symbol '{ticker}'"
         return "\n".join(parts)
     except Exception:
         raise
+
+
+def get_options_data(ticker: Annotated[str, "ticker symbol of the company"]):
+    """Retrieve options chain summary metrics (Put/Call ratios, IV, Open Interest)."""
+    try:
+        ticker_upper = ticker.upper()
+        ticker_obj = yf.Ticker(ticker_upper)
+        expirations = yf_retry(lambda: ticker_obj.options, ticker=ticker_upper)
+        if not expirations:
+            return f"No options chain data available for symbol '{ticker_upper}' (symbol may not trade options or market is closed)."
+
+        parts: list[str] = [f"# Options Market Derivatives & Chain Summary for {ticker_upper}"]
+        parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        parts.append(f"- Available Expirations ({len(expirations)}): {', '.join(expirations[:5])}")
+
+        total_call_vol = 0
+        total_put_vol = 0
+        total_call_oi = 0
+        total_put_oi = 0
+        iv_list = []
+
+        for exp in expirations[:2]:
+            chain = yf_retry(lambda: ticker_obj.option_chain(exp), ticker=ticker_upper)
+            if chain is None:
+                continue
+            calls = chain.calls
+            puts = chain.puts
+            if calls is not None and not calls.empty:
+                if "volume" in calls.columns:
+                    total_call_vol += calls["volume"].fillna(0).sum()
+                if "openInterest" in calls.columns:
+                    total_call_oi += calls["openInterest"].fillna(0).sum()
+                if "impliedVolatility" in calls.columns:
+                    iv_list.extend(calls["impliedVolatility"].dropna().tolist())
+            if puts is not None and not puts.empty:
+                if "volume" in puts.columns:
+                    total_put_vol += puts["volume"].fillna(0).sum()
+                if "openInterest" in puts.columns:
+                    total_put_oi += puts["openInterest"].fillna(0).sum()
+                if "impliedVolatility" in puts.columns:
+                    iv_list.extend(puts["impliedVolatility"].dropna().tolist())
+
+        pc_vol_ratio = (total_put_vol / total_call_vol) if total_call_vol > 0 else 0.0
+        pc_oi_ratio = (total_put_oi / total_call_oi) if total_call_oi > 0 else 0.0
+        mean_iv = (sum(iv_list) / len(iv_list) * 100) if iv_list else 0.0
+
+        parts.append("\n## Options Sentiment & Volatility Metrics")
+        parts.append(f"- Total Call Volume (near-term): {int(total_call_vol):,}")
+        parts.append(f"- Total Put Volume (near-term): {int(total_put_vol):,}")
+        parts.append(f"- Put/Call Volume Ratio: {pc_vol_ratio:.2f}")
+        parts.append(f"- Total Call Open Interest: {int(total_call_oi):,}")
+        parts.append(f"- Total Put Open Interest: {int(total_put_oi):,}")
+        parts.append(f"- Put/Call Open Interest Ratio: {pc_oi_ratio:.2f}")
+        parts.append(f"- Average Implied Volatility (IV): {mean_iv:.2f}%")
+
+        near_exp = expirations[0]
+        near_chain = yf_retry(lambda: ticker_obj.option_chain(near_exp), ticker=ticker_upper)
+        if near_chain and near_chain.calls is not None and not near_chain.calls.empty:
+            cols = [c for c in ["strike", "lastPrice", "volume", "openInterest", "impliedVolatility"] if c in near_chain.calls.columns]
+            if "openInterest" in cols:
+                top_calls = near_chain.calls.sort_values("openInterest", ascending=False).head(5)
+                parts.append(f"\n## Top Call Options by Open Interest (Exp: {near_exp})")
+                parts.append(top_calls[cols].to_csv(index=False))
+
+        if near_chain and near_chain.puts is not None and not near_chain.puts.empty:
+            cols = [c for c in ["strike", "lastPrice", "volume", "openInterest", "impliedVolatility"] if c in near_chain.puts.columns]
+            if "openInterest" in cols:
+                top_puts = near_chain.puts.sort_values("openInterest", ascending=False).head(5)
+                parts.append(f"\n## Top Put Options by Open Interest (Exp: {near_exp})")
+                parts.append(top_puts[cols].to_csv(index=False))
+
+        return "\n".join(parts)
+    except Exception as exc:
+        return f"Options data currently unavailable for '{ticker}': {exc}"
+
+
+def get_macro_data(curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None):
+    """Retrieve numerical macroeconomic indicators (VIX, 10-Yr Yield, Oil, Gold, DXY, S&P 500)."""
+    try:
+        macro_tickers = {
+            "VIX Volatility Index": "^VIX",
+            "10-Year Treasury Yield": "^TNX",
+            "Crude Oil WTI": "CL=F",
+            "Gold Futures": "GC=F",
+            "US Dollar Index": "UUP",
+            "S&P 500 Index": "^GSPC",
+        }
+        parts = ["# Macroeconomic Benchmark Indicators"]
+        parts.append(f"# Data retrieved on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+
+        for label, symbol in macro_tickers.items():
+            try:
+                t = yf.Ticker(symbol)
+                price = None
+                info = yf_retry(lambda: getattr(t, "fast_info", None), ticker=symbol)
+                if info:
+                    price = getattr(info, "last_price", None) or getattr(info, "previous_close", None)
+                if price is None:
+                    hist = yf_retry(lambda: t.history(period="5d"), ticker=symbol)
+                    if hist is not None and not hist.empty:
+                        price = float(hist["Close"].iloc[-1])
+                if price is not None:
+                    parts.append(f"- {label} ({symbol}): {price:.2f}")
+            except Exception:
+                continue
+
+        if len(parts) <= 2:
+            return "No numerical macro indicator data retrieved."
+        return "\n".join(parts)
+    except Exception as exc:
+        return f"Macro indicator data currently unavailable: {exc}"
 
 
 def get_catalyst_calendar(ticker: Annotated[str, "ticker symbol of the company"]):

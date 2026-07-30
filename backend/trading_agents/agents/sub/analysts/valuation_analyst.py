@@ -2,6 +2,7 @@ from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
+    get_general_settings_block,
     get_valuation_comparison,
 )
 
@@ -67,7 +68,7 @@ Your final report MUST follow this structure:
 2. **Detailed Analysis:** Multiple-by-multiple comparison against the sector benchmark with classification.
 3. **Quality Context:** Assessment of whether the premium/discount is justified by margins or growth.
 4. **Actionable Insights:** What the relative valuation implies for the trade thesis.
-5. **Valuation Table:** A Markdown table of the stock's multiples next to the sector benchmark's with classification and signal."""
+5. **Valuation Table:** A Markdown table of the stock's multiples next to the sector benchmark's with classification and signal.""" + get_general_settings_block()
 
         res = await run_tool_analyst(
             llm,

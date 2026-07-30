@@ -3,6 +3,7 @@ from backend.trading_agents.agents.data.search_tools import search_web
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
+    get_general_settings_block,
     get_macro_data,
 )
 
@@ -70,7 +71,7 @@ Your final report MUST follow this structure:
 3. **Detailed Analysis:** Nuanced breakdown of key indicators, their historical context, and specific influence on the market.
 4. **Instrument Impact:** How the macro environment specifically affects the asset under review (sector sensitivity).
 5. **Actionable Insights:** Potential macro-driven triggers or headwinds for the trader to consider.
-6. **Macro Data Table:** A Markdown table summarizing all fetched macro indicators, current levels, historical percentile, and interpretation."""
+6. **Macro Data Table:** A Markdown table summarizing all fetched macro indicators, current levels, historical percentile, and interpretation.""" + get_general_settings_block()
 
         res = await run_tool_analyst(
             llm,

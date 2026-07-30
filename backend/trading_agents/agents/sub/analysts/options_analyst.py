@@ -4,6 +4,7 @@ from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
+    get_general_settings_block,
     get_options_data,
 )
 
@@ -72,7 +73,7 @@ Your final report MUST follow this structure:
 2. **Detailed Analysis:** Nuanced interpretation of Put/Call ratios, IV skew, Open Interest trends, and expected move.
 3. **Positioning Assessment:** What the options market implies about institutional positioning and sentiment.
 4. **Key Levels:** Implied move range, max pain, and significant open interest concentrations.
-5. **Options Data Table:** A Markdown table summarizing key options metrics, current values, and signal interpretation."""
+5. **Options Data Table:** A Markdown table summarizing key options metrics, current values, and signal interpretation.""" + get_general_settings_block()
 
         res = await run_tool_analyst(
             llm,
