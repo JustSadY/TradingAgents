@@ -84,7 +84,7 @@ def fetch_stocktwits_messages(ticker: str, limit: int = 30, timeout: float = 10.
             reason = f"HTTP {exc.code} access denied"
             started = _start_cooldown(reason, _ACCESS_DENIED_COOLDOWN_SECONDS)
             if started:
-                logger.warning(
+                logger.info(
                     "StockTwits denied unauthenticated access (HTTP %s); source cooling down for %.0fs.",
                     exc.code,
                     _ACCESS_DENIED_COOLDOWN_SECONDS,
