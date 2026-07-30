@@ -135,20 +135,30 @@ async def check_analyst_cache(
 
     async with AsyncSessionLocal() as db:
         if analyst_key == "news":
-            stmt = select(NewsAnalysisCache).where(
-                _user_filter(NewsAnalysisCache.user_id),
-                NewsAnalysisCache.ticker == ticker,
-                NewsAnalysisCache.articles_hash == data_hash,
+            stmt = (
+                select(NewsAnalysisCache)
+                .where(
+                    _user_filter(NewsAnalysisCache.user_id),
+                    NewsAnalysisCache.ticker == ticker,
+                    NewsAnalysisCache.articles_hash == data_hash,
+                )
+                .order_by(NewsAnalysisCache.created_at.desc())
+                .limit(1)
             )
         else:
-            stmt = select(AnalystReportCache).where(
-                _user_filter(AnalystReportCache.user_id),
-                AnalystReportCache.analyst_key == analyst_key,
-                AnalystReportCache.ticker == ticker,
-                AnalystReportCache.data_hash == data_hash,
+            stmt = (
+                select(AnalystReportCache)
+                .where(
+                    _user_filter(AnalystReportCache.user_id),
+                    AnalystReportCache.analyst_key == analyst_key,
+                    AnalystReportCache.ticker == ticker,
+                    AnalystReportCache.data_hash == data_hash,
+                )
+                .order_by(AnalystReportCache.created_at.desc())
+                .limit(1)
             )
         res = await db.execute(stmt)
-        entry = res.scalar_one_or_none()
+        entry = res.scalars().first()
         if entry:
             return entry.analysis_result
 
@@ -188,7 +198,7 @@ async def check_analyst_cache(
                 .limit(1)
             )
         res = await db.execute(stmt)
-        fallback = res.scalar_one_or_none()
+        fallback = res.scalars().first()
         if fallback:
             _logger.info(
                 "Stale-cache fallback for %s/%s (no exact hash match, using entry from %s)",
