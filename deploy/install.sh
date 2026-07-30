@@ -253,7 +253,7 @@ EnvironmentFile=$ENV_FILE
 # generic Date header so a reverse proxy never receives duplicate headers;
 # its ping settings match the Docker deployment and keep long-lived streams
 # alive through reverse proxies.
-ExecStart=$VENV/bin/uvicorn backend.main:app --host $APP_HOST --port $APP_PORT --no-date-header --ws-ping-interval 20 --ws-ping-timeout 20
+ExecStart=$VENV/bin/uvicorn backend.main:app --host $APP_HOST --port $APP_PORT --no-date-header --no-access-log --ws-ping-interval 20 --ws-ping-timeout 20
 Restart=on-failure
 RestartSec=5
 # Düşük portlara (örn. 80) bağlanabilmek için
