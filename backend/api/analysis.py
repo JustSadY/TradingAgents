@@ -317,6 +317,17 @@ async def get_portfolio_analysis(
     )
 
 
+@router.delete("/history/clear")
+async def clear_history(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_page("analysis")),
+):
+    from backend.repositories.analysis import clear_analysis_history as _repo_clear
+
+    deleted_count = await _repo_clear(db, user=current_user)
+    return {"deleted_count": deleted_count}
+
+
 @router.get("/{analysis_id}", response_model=AnalysisResultRead, responses={404: {"description": _ANALYSIS_NOT_FOUND}})
 async def get_analysis(
     analysis_id: int,
@@ -334,6 +345,20 @@ async def get_analysis(
         row.llm_provider, row.llm_model, int(row.tokens_in or 0), int(row.tokens_out or 0)
     )
     return row
+
+
+@router.delete("/{analysis_id}")
+async def delete_analysis(
+    analysis_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_page("analysis")),
+):
+    from backend.repositories.analysis import delete_analysis_by_id as _repo_delete
+
+    deleted = await _repo_delete(db, analysis_id, user=current_user)
+    if not deleted:
+        raise HTTPException(status_code=404, detail=_ANALYSIS_NOT_FOUND)
+    return {"success": True, "id": analysis_id}
 
 
 @router.get("/{analysis_id}/chat", response_model=list[ChatMessageRead])

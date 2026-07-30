@@ -332,3 +332,40 @@ class TestAnalysisAPI:
         assert response.status_code == 200
         assert response.json()["ticker"] == "AAPL"
         assert dispatch.await_args.kwargs["ticker"] == "AAPL"
+
+    async def test_delete_analysis_single(self, auth_client: AsyncClient, db: AsyncSession, test_user):
+        analysis = AnalysisResult(
+            user_id=test_user.id,
+            ticker="TSLA",
+            trade_date="2026-07-28",
+            signal="BUY",
+            status="completed",
+        )
+        db.add(analysis)
+        await db.commit()
+        await db.refresh(analysis)
+
+        # Delete single
+        resp = await auth_client.delete(f"/api/analysis/{analysis.id}")
+        assert resp.status_code == 200
+        assert resp.json() == {"success": True, "id": analysis.id}
+
+        # Verify deleted
+        get_resp = await auth_client.get(f"/api/analysis/{analysis.id}")
+        assert get_resp.status_code == 404
+
+    async def test_clear_analysis_history(self, auth_client: AsyncClient, db: AsyncSession, test_user):
+        a1 = AnalysisResult(user_id=test_user.id, ticker="NVDA", trade_date="2026-07-28", signal="BUY", status="completed")
+        a2 = AnalysisResult(user_id=test_user.id, ticker="AMZN", trade_date="2026-07-28", signal="HOLD", status="completed")
+        db.add_all([a1, a2])
+        await db.commit()
+
+        # Clear history
+        resp = await auth_client.delete("/api/analysis/history/clear")
+        assert resp.status_code == 200
+        assert resp.json()["deleted_count"] >= 2
+
+        # Verify history is now empty
+        hist_resp = await auth_client.get("/api/analysis/history")
+        assert hist_resp.status_code == 200
+        assert hist_resp.json() == []

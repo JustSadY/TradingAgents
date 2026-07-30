@@ -13,7 +13,7 @@ import {
   Loader2, CheckCircle, AlertCircle, History,
   X, BarChart2, FileText, Zap,
   Download, FileDown, AlertTriangle, Scale, Share2, Copy,
-  MessageSquare, Bot, Terminal, BookOpen
+  MessageSquare, Bot, Terminal, BookOpen, Trash2
 } from 'lucide-react'
 import type { AnalysisListItem, AnalysisResultRead, MultiTickerListItem, MultiTickerResultRead } from '../api/types'
 import { SignalBadge } from '../components/analysis/SignalBadge'
@@ -1834,6 +1834,10 @@ function HistoryTab({
   const [activeDetailTab, setActiveDetailTab] = useState<'reports' | 'debate' | 'chat' | 'timetravel'>('reports')
   const [shareLink, setShareLink] = useState<string | null>(null)
   const [sharing, setSharing] = useState(false)
+  const [itemToDelete, setItemToDelete] = useState<number | null>(null)
+  const [showClearAllModal, setShowClearAllModal] = useState(false)
+  const [deletingId, setDeletingId] = useState<number | null>(null)
+  const [clearingAll, setClearingAll] = useState(false)
 
   const shareReport = useCallback(async (id: number) => {
     setSharing(true)
@@ -1864,6 +1868,38 @@ function HistoryTab({
     finally { setDetailLoading(false) }
   }, [])
 
+  const confirmDeleteSingle = async () => {
+    if (!itemToDelete) return
+    const id = itemToDelete
+    setDeletingId(id)
+    try {
+      await axios.delete(`/api/analysis/${id}`)
+      setItems(prev => prev.filter(item => item.id !== id))
+      notify('success', t('analysis.history.deleted_single'), t('analysis.title'))
+      if (detail?.id === id) setDetail(null)
+    } catch (err: any) {
+      notify('error', err.response?.data?.detail || 'Delete failed', t('analysis.title'))
+    } finally {
+      setDeletingId(null)
+      setItemToDelete(null)
+    }
+  }
+
+  const confirmClearAll = async () => {
+    setClearingAll(true)
+    try {
+      await axios.delete('/api/analysis/history/clear')
+      setItems([])
+      setDetail(null)
+      notify('success', t('analysis.history.deleted_all'), t('analysis.title'))
+    } catch (err: any) {
+      notify('error', err.response?.data?.detail || 'Clear history failed', t('analysis.title'))
+    } finally {
+      setClearingAll(false)
+      setShowClearAllModal(false)
+    }
+  }
+
   // Open the detail modal directly when arriving via a /analysis?id=… deep link.
   useEffect(() => {
     if (initialDetailId) openDetail(initialDetailId)
@@ -1878,12 +1914,20 @@ function HistoryTab({
           <p className="p-6 text-slate-600 text-xs text-center">{t('analysis.history.empty')}</p>
         ) : (
           <div className="overflow-x-auto">
-            <div className="flex justify-end px-4 py-2 border-b border-white/[0.04]">
+            <div className="flex justify-end items-center gap-2 px-4 py-2 border-b border-white/[0.04]">
               <button
                 onClick={() => exportAnalysesCSV(items)}
                 className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold text-slate-500 hover:text-violet-300 hover:bg-violet-500/10 border border-white/[0.04] hover:border-violet-500/20 transition cursor-pointer"
               >
                 <Download size={11} /> Export CSV
+              </button>
+              <button
+                onClick={() => setShowClearAllModal(true)}
+                disabled={clearingAll}
+                className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-[10px] font-bold text-rose-400 hover:text-white hover:bg-rose-500/20 border border-rose-500/20 transition cursor-pointer disabled:opacity-40"
+              >
+                {clearingAll ? <Loader2 size={11} className="animate-spin" /> : <Trash2 size={11} />}
+                {t('analysis.history.btn_clear_all')}
               </button>
             </div>
             <table className="w-full text-xs min-w-[500px]">
@@ -1895,6 +1939,7 @@ function HistoryTab({
                   <th className="px-5 py-3 text-left font-bold">{t('analysis.history.col_duration')}</th>
                   <th className="px-5 py-3 text-left hidden sm:table-cell font-bold">{t('analysis.history.col_source')}</th>
                   <th className="px-5 py-3 text-left hidden md:table-cell font-bold">{t('analysis.history.col_time')}</th>
+                  <th className="px-5 py-3 text-right font-bold">{t('analysis.history.col_actions')}</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/[0.02] text-slate-300">
@@ -1907,6 +1952,16 @@ function HistoryTab({
                     <td className="px-5 py-3.5 text-slate-500 font-mono">{(item.duration_seconds ?? 0).toFixed(1)}s</td>
                     <td className="px-5 py-3.5 text-slate-500 hidden sm:table-cell">{item.triggered_by}</td>
                     <td className="px-5 py-3.5 text-slate-600 hidden md:table-cell font-mono">{new Date(item.created_at).toLocaleString()}</td>
+                    <td className="px-5 py-3.5 text-right" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={(e) => { e.stopPropagation(); setItemToDelete(item.id) }}
+                        disabled={deletingId === item.id}
+                        className="p-1.5 rounded-lg text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 transition-colors cursor-pointer disabled:opacity-50"
+                        title={t('analysis.history.confirm_delete_single')}
+                      >
+                        {deletingId === item.id ? <Loader2 size={12} className="animate-spin" /> : <Trash2 size={12} />}
+                      </button>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -1914,6 +1969,68 @@ function HistoryTab({
           </div>
         )}
       </div>
+
+      {itemToDelete !== null && (
+        <div className="fixed inset-0 bg-black/75 z-[60] flex items-center justify-center p-5 backdrop-blur-md">
+          <div className="bg-slate-900 border border-white/[0.06] rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
+            <div className="space-y-2">
+              <h3 className="text-white text-lg font-display font-bold flex items-center gap-2">
+                <Trash2 className="text-rose-500" size={18} /> {t('analysis.history.btn_clear_all')}
+              </h3>
+              <p className="text-slate-400 text-xs leading-relaxed">
+                {t('analysis.history.confirm_delete_single')}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={confirmDeleteSingle}
+                disabled={deletingId !== null}
+                className="flex-1 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold py-2.5 rounded-xl transition shadow shadow-rose-600/20 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {deletingId !== null ? <Loader2 size={13} className="animate-spin" /> : null}
+                Sil
+              </button>
+              <button
+                onClick={() => setItemToDelete(null)}
+                className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold py-2.5 rounded-xl transition cursor-pointer"
+              >
+                {t('analysis.btn.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showClearAllModal && (
+        <div className="fixed inset-0 bg-black/75 z-[60] flex items-center justify-center p-5 backdrop-blur-md">
+          <div className="bg-slate-900 border border-white/[0.06] rounded-3xl p-6 max-w-sm w-full space-y-5 shadow-2xl">
+            <div className="space-y-2">
+              <h3 className="text-white text-lg font-display font-bold flex items-center gap-2">
+                <AlertTriangle className="text-rose-500" size={18} /> {t('analysis.history.btn_clear_all')}
+              </h3>
+              <p className="text-slate-400 text-xs leading-relaxed">
+                {t('analysis.history.confirm_clear_all')}
+              </p>
+            </div>
+            <div className="flex gap-3">
+              <button
+                onClick={confirmClearAll}
+                disabled={clearingAll}
+                className="flex-1 bg-rose-600 hover:bg-rose-500 text-white text-xs font-semibold py-2.5 rounded-xl transition shadow shadow-rose-600/20 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
+              >
+                {clearingAll ? <Loader2 size={13} className="animate-spin" /> : null}
+                {t('analysis.history.btn_clear_all')}
+              </button>
+              <button
+                onClick={() => setShowClearAllModal(false)}
+                className="flex-1 bg-white/5 hover:bg-white/10 text-slate-300 text-xs font-semibold py-2.5 rounded-xl transition cursor-pointer"
+              >
+                {t('analysis.btn.cancel')}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
 
       {(detail || detailLoading) && (
         <div className="fixed inset-0 bg-black/80 z-50 flex items-start justify-center p-3 md:p-4 overflow-y-auto backdrop-blur-sm">

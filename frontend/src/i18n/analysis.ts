@@ -91,9 +91,15 @@ const analysis = {
     'analysis.history.col_duration': 'Duration',
     'analysis.history.col_source': 'Source',
     'analysis.history.col_time': 'Time',
-    'analysis.history.detail_loading': 'Loading...',
-    'analysis.history.btn_download_md': 'Download Markdown',
+    'analysis.history.col_actions': 'Actions',
+    'analysis.history.detail_loading': 'Loading detail...',
+    'analysis.history.btn_download_md': 'Download MD',
     'analysis.history.btn_download_pdf': 'Download PDF',
+    'analysis.history.btn_clear_all': 'Clear All',
+    'analysis.history.confirm_delete_single': 'Are you sure you want to delete this analysis record?',
+    'analysis.history.confirm_clear_all': 'Are you sure you want to delete ALL analysis history? This action cannot be undone.',
+    'analysis.history.deleted_single': 'Analysis record deleted.',
+    'analysis.history.deleted_all': 'All analysis history cleared.',
 
 
     'analysis.section.market_report': 'Market Analysis',
@@ -243,9 +249,15 @@ const analysis = {
     'analysis.history.col_duration': 'Süre',
     'analysis.history.col_source': 'Kaynak',
     'analysis.history.col_time': 'Zaman',
+    'analysis.history.col_actions': 'İşlemler',
     'analysis.history.detail_loading': 'Yükleniyor...',
     'analysis.history.btn_download_md': 'Markdown İndir',
     'analysis.history.btn_download_pdf': 'PDF İndir',
+    'analysis.history.btn_clear_all': 'Tümünü Temizle',
+    'analysis.history.confirm_delete_single': 'Bu analiz kaydını silmek istediğinize emin misiniz?',
+    'analysis.history.confirm_clear_all': 'TÜM analiz geçmişinizi silmek istediğinize emin misiniz? Bu işlem geri alınamaz.',
+    'analysis.history.deleted_single': 'Analiz kaydı silindi.',
+    'analysis.history.deleted_all': 'Tüm analiz geçmişi temizlendi.',
 
 
     'analysis.section.market_report': 'Piyasa Analizi',
