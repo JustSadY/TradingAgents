@@ -28,6 +28,8 @@ TOOLS_CATEGORIES = {
             "get_analyst_ratings",
             "get_short_interest",
             "get_valuation_comparison",
+            "get_options_data",
+            "get_macro_data",
         ],
     },
     "social_sentiment_data": {
