@@ -26,6 +26,27 @@ class _LLM:
         return self._response
 
 
+class _SequenceLLM:
+    def __init__(self, *responses):
+        self._responses = list(responses)
+        self.calls = 0
+
+    def bind_tools(self, _tools):
+        return self
+
+    async def ainvoke(self, _messages):
+        self.calls += 1
+        return self._responses.pop(0)
+
+
+def test_analyst_cache_rejects_blank_reports() -> None:
+    from backend.trading_agents.agents.runtime.analyst_cache import _usable_report
+
+    assert _usable_report(" \n\t") is None
+    assert _usable_report(None) is None
+    assert _usable_report("  usable report  ") == "usable report"
+
+
 @pytest.mark.asyncio
 async def test_tool_analyst_leaves_lifecycle_logging_to_guard_node(monkeypatch):
     """A single graph-node turn must not emit a second key-based lifecycle."""
@@ -56,6 +77,61 @@ async def test_tool_analyst_leaves_lifecycle_logging_to_guard_node(monkeypatch):
 
     assert result["fundamentals_report"] == "Fundamentals report"
     assert not [event for event, _fields in events if event in {"node_start", "node_end"}]
+
+
+@pytest.mark.asyncio
+async def test_tool_analyst_recovers_an_empty_final_report(monkeypatch):
+    """A blank provider response must not become a blank persisted report."""
+    from backend.trading_agents.agents.runtime import analyst_node_factory, resilience
+
+    async def call_once(fn, **_kwargs):
+        return await fn()
+
+    monkeypatch.setattr(analyst_node_factory, "ChatPromptTemplate", _Prompt)
+    monkeypatch.setattr(analyst_node_factory, "get_general_settings_block", lambda: "")
+    monkeypatch.setattr(resilience, "retry_call", call_once)
+
+    llm = _SequenceLLM(
+        SimpleNamespace(content=" \n\t", tool_calls=[]),
+        SimpleNamespace(content="Recovered market report", tool_calls=[]),
+    )
+    result = await analyst_node_factory.run_tool_analyst(
+        llm,
+        {"company_of_interest": "AAPL", "trade_date": "2026-08-01", "messages": []},
+        tools=[],
+        system_message="test instructions",
+        report_key="market_report",
+        instrument_context="test context",
+    )
+
+    assert result["market_report"] == "Recovered market report"
+    assert llm.calls == 2
+
+
+@pytest.mark.asyncio
+async def test_tool_analyst_exposes_a_visible_degraded_report_when_recovery_is_empty(monkeypatch):
+    from backend.trading_agents.agents.runtime import analyst_node_factory, resilience
+
+    async def call_once(fn, **_kwargs):
+        return await fn()
+
+    monkeypatch.setattr(analyst_node_factory, "ChatPromptTemplate", _Prompt)
+    monkeypatch.setattr(analyst_node_factory, "get_general_settings_block", lambda: "")
+    monkeypatch.setattr(resilience, "retry_call", call_once)
+
+    result = await analyst_node_factory.run_tool_analyst(
+        _SequenceLLM(
+            SimpleNamespace(content="", tool_calls=[]),
+            SimpleNamespace(content=" ", tool_calls=[]),
+        ),
+        {"company_of_interest": "AAPL", "trade_date": "2026-08-01", "messages": []},
+        tools=[],
+        system_message="test instructions",
+        report_key="market_report",
+        instrument_context="test context",
+    )
+
+    assert result["market_report"].startswith("⚠️ Market analysis unavailable:")
 
 
 @pytest.mark.asyncio

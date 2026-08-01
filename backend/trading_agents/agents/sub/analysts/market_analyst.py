@@ -31,6 +31,73 @@ _MARKET_TOOLS = [
 ]
 
 
+_UNAVAILABLE_REPORT_PREFIX = "market analysis unavailable"
+
+
+def _is_usable_market_report(value: object) -> bool:
+    """Whether a model result is a narrative that may safely be cached.
+
+    The shared analyst runtime now turns an empty terminal model response into
+    a visible ``Market analysis unavailable`` notice.  That is useful for the
+    current run, but caching it would make every later run for the ticker look
+    broken even after the provider has recovered.
+    """
+    if not isinstance(value, str):
+        return False
+    report = value.strip()
+    if not report:
+        return False
+    return _UNAVAILABLE_REPORT_PREFIX not in report[:120].lower()
+
+
+def _snapshot_block(value: object, *, empty_message: str) -> str:
+    """Return a bounded, display-safe representation of pre-fetched data."""
+    from backend.trading_agents.agents.runtime.report_aggregator import middle_truncate
+
+    text = str(value or "").strip()
+    if not text:
+        return empty_message
+    return middle_truncate(text, 4_000)
+
+
+def _market_data_snapshot(ticker: str, stock_data: object, indicators_data: object) -> str:
+    """Preserve collected market evidence when the model returns no report.
+
+    This deliberately does not invent a technical conclusion.  It makes the
+    degradation explicit and keeps the data that was already fetched available
+    to the user instead of silently persisting an empty Market Analysis panel.
+    """
+    price_data = _snapshot_block(stock_data, empty_message="No price/volume data was returned.")
+    indicators = _snapshot_block(indicators_data, empty_message="No technical indicator data was returned.")
+    return (
+        "⚠️ Market analysis unavailable: the selected model did not return a usable narrative report. "
+        "No trading conclusion was inferred.\n\n"
+        f"### Collected Market Data — {ticker}\n\n"
+        "The following raw data was retrieved before the model response failed. "
+        "Treat any unavailable/error lines as data-source status, not as an investment signal.\n\n"
+        f"#### Price and Volume\n{price_data}\n\n"
+        f"#### Technical Indicators\n{indicators}"
+    )
+
+
+def _has_pending_tool_calls(result: object) -> bool:
+    """Keep the ToolNode loop intact before considering an empty report.
+
+    ``run_tool_analyst`` deliberately writes an empty report on an intermediate
+    tool-call turn.  Replacing that transient value with a snapshot here would
+    make the graph look degraded before the model has received its tool data.
+    """
+    if not isinstance(result, dict):
+        return False
+    messages = result.get("messages") or []
+    if not messages:
+        return False
+    last_message = messages[-1]
+    if isinstance(last_message, dict):
+        return bool(last_message.get("tool_calls"))
+    return bool(getattr(last_message, "tool_calls", None))
+
+
 @register_analyst(
     key="market",
     agent_node="Market Analyst",
@@ -120,10 +187,7 @@ Your final report MUST follow this structure:
             start_date_str = start_dt.strftime("%Y-%m-%d")
 
         except Exception as _e:
-
-
             _logger.warning("Data fetch failed in market_analyst: %s", _e)
-
 
             start_date_str = trade_date
 
@@ -131,10 +195,7 @@ Your final report MUST follow this structure:
             stock_data = await route_to_vendor("get_stock_data", ticker, start_date_str, trade_date)
 
         except Exception as _e:
-
-
             _logger.warning("Data fetch failed in market_analyst: %s", _e)
-
 
             stock_data = ""
 
@@ -157,10 +218,7 @@ Your final report MUST follow this structure:
             )
 
         except Exception as _e:
-
-
             _logger.warning("Data fetch failed in market_analyst: %s", _e)
-
 
             indicators_data = ""
 
@@ -185,9 +243,15 @@ Your final report MUST follow this structure:
             instrument_context=instrument_context,
         )
 
-        report_text = res.get("market_report", "")
+        if _has_pending_tool_calls(res):
+            return res
 
-        if report_text and "unavailable" not in report_text[:50].lower():
+        report_text = res.get("market_report", "")
+        if not _is_usable_market_report(report_text):
+            report_text = _market_data_snapshot(ticker, stock_data, indicators_data)
+            res = {**res, "market_report": report_text}
+
+        if _is_usable_market_report(report_text):
             await store_analyst_cache("market", ticker, data_hash, report_text)
 
         return res

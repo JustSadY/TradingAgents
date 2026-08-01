@@ -11,6 +11,8 @@ from langchain_core.messages import HumanMessage
 from langchain_core.tools import tool
 
 from backend.services.indicator_service import calculate_ema, calculate_macd, calculate_rsi
+from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
+from backend.trading_agents.agents.utils.report_localization import report_texts
 from backend.trading_agents.dataflows.interface import route_to_vendor
 
 _logger = logging.getLogger(__name__)
@@ -127,7 +129,10 @@ async def get_vision_chart_analysis(
             type="candle",
             style="charles",
             volume=True,
-            title=f"{symbol.upper()} - Last 90 Trading Days",
+            # Keep chart-internal text language-neutral.  The analysis returned
+            # to the user is localized below; a fixed English chart title used
+            # to leak into vision-model responses for non-English runs.
+            title=f"{symbol.upper()} — {curr_date}",
             savefig={"fname": buf, "format": "png", "dpi": 100},
         )
         buf.seek(0)
@@ -140,15 +145,12 @@ async def get_vision_chart_analysis(
         if any(nm in model_name for nm in non_multimodal) and "vision" not in model_name:
             return _algorithmic_pattern_detection(df_plot, symbol)
 
-        from backend.trading_agents.dataflows.config import get_config
-
-        lang = get_config().get("output_language", "English")
-
         prompt = (
             f"You are a professional technical analyst reviewing a chart. Here is the daily candlestick chart image for {symbol} up to {curr_date}.\n"
             "Examine this image and detect any visual chart patterns (e.g. Head and Shoulders, Cup and Handle, Double Top/Bottom, Triangles, Channels, Flags).\n"
             "State the patterns found, confidence level (High/Medium/Low), break direction direction, and target level if possible.\n"
-            f"Please respond completely in {lang}."
+            "Keep the response concise and do not reproduce the image data."
+            + get_general_settings_block()
         )
 
         message = HumanMessage(
@@ -164,9 +166,8 @@ async def get_vision_chart_analysis(
         res = await llm.ainvoke([message])
         content = res.content if hasattr(res, "content") else str(res)
 
-        return (
-            f"--- Vision Chart Analysis for {symbol} ---\nIMAGE_DATA:data:image/png;base64,{base64_image}\n\n{content}"
-        )
+        labels = report_texts(("vision_chart_analysis",))
+        return f"--- {labels['vision_chart_analysis']} — {symbol.upper()} ---\nIMAGE_DATA:data:image/png;base64,{base64_image}\n\n{content}"
 
     except Exception as e:
         err_msg = str(e)
@@ -177,8 +178,24 @@ async def get_vision_chart_analysis(
 
 
 def _algorithmic_pattern_detection(df_plot: pd.DataFrame, symbol: str) -> str:
+    labels = report_texts(
+        (
+            "algorithmic_pattern_analysis",
+            "no_price_data",
+            "detected_pattern",
+            "confidence",
+            "medium",
+            "consolidation_range",
+            "support_levels",
+            "resistance_levels",
+            "current_price_position",
+            "testing_upper_range",
+            "rectangle_flag",
+            "ascending_channel",
+        )
+    )
     if df_plot.empty:
-        return f"Algorithmic Pattern Analysis for {symbol.upper()}: No price data available."
+        return f"{labels['algorithmic_pattern_analysis']} — {symbol.upper()}: {labels['no_price_data']}"
     recent = df_plot.tail(30)
     high_max = float(recent["High"].max())
     low_min = float(recent["Low"].min())
@@ -186,15 +203,15 @@ def _algorithmic_pattern_detection(df_plot: pd.DataFrame, symbol: str) -> str:
     spread_pct = ((high_max - low_min) / low_min) * 100 if low_min > 0 else 0
 
     supports, resistances = _local_find_support_resistance(df_plot, curr_close)
-    pattern_desc = "Rectangle / Flag Consolidation" if spread_pct < 10 else "Ascending Price Channel"
+    pattern_desc = labels["rectangle_flag"] if spread_pct < 10 else labels["ascending_channel"]
 
     return (
-        f"--- Algorithmic Chart Pattern Analysis for {symbol.upper()} ---\n"
-        f"Detected Pattern: {pattern_desc} (Confidence: MEDIUM)\n"
-        f"Consolidation Range: ${low_min:.2f} - ${high_max:.2f}\n"
-        f"Drawn Support Levels: {', '.join(f'${s:.2f}' for s in supports)}\n"
-        f"Drawn Resistance Levels: {', '.join(f'${r:.2f}' for r in resistances)}\n"
-        f"Current Price Position: ${curr_close:.2f} (testing upper range limit)"
+        f"--- {labels['algorithmic_pattern_analysis']} — {symbol.upper()} ---\n"
+        f"{labels['detected_pattern']}: {pattern_desc} ({labels['confidence']}: {labels['medium']})\n"
+        f"{labels['consolidation_range']}: ${low_min:.2f} - ${high_max:.2f}\n"
+        f"{labels['support_levels']}: {', '.join(f'${s:.2f}' for s in supports)}\n"
+        f"{labels['resistance_levels']}: {', '.join(f'${r:.2f}' for r in resistances)}\n"
+        f"{labels['current_price_position']}: ${curr_close:.2f} ({labels['testing_upper_range']})"
     )
 
 

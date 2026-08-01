@@ -34,6 +34,19 @@ _logger = logging.getLogger(__name__)
 _CACHE_STALE_DAYS = 7
 
 
+def _usable_report(value: object) -> str | None:
+    """Return a non-blank report, or ``None`` for an invalid cache entry.
+
+    A prior empty-model response could be persisted as whitespace.  Whitespace
+    is truthy, so such an entry became a cache hit and kept the analyst panel
+    visibly blank on every later run for that ticker.
+    """
+    if not isinstance(value, str):
+        return None
+    report = value.strip()
+    return report or None
+
+
 def _current_run_context() -> dict | None:
     try:
         from backend.trading_agents.agents.data.chart_tools import active_run_context
@@ -137,7 +150,7 @@ async def check_analyst_cache(
                     NewsAnalysisCache.articles_hash == data_hash,
                 )
                 .order_by(NewsAnalysisCache.created_at.desc())
-                .limit(1)
+                .limit(10)
             )
         else:
             stmt = (
@@ -149,12 +162,19 @@ async def check_analyst_cache(
                     AnalystReportCache.data_hash == data_hash,
                 )
                 .order_by(AnalystReportCache.created_at.desc())
-                .limit(1)
+                .limit(10)
             )
         res = await db.execute(stmt)
-        entry = res.scalar_one_or_none()
-        if entry:
-            return entry.analysis_result
+        for entry in res.scalars():
+            report = _usable_report(entry.analysis_result)
+            if report is not None:
+                return report
+            _logger.warning(
+                "Ignoring blank analyst cache entry id=%s for %s/%s.",
+                getattr(entry, "id", "unknown"),
+                analyst_key,
+                ticker,
+            )
 
         if not fallback_to_stale:
             return None
@@ -171,7 +191,7 @@ async def check_analyst_cache(
                     NewsAnalysisCache.created_at >= cutoff,
                 )
                 .order_by(NewsAnalysisCache.created_at.desc())
-                .limit(1)
+                .limit(10)
             )
         else:
             stmt = (
@@ -184,18 +204,26 @@ async def check_analyst_cache(
                     AnalystReportCache.created_at >= cutoff,
                 )
                 .order_by(AnalystReportCache.created_at.desc())
-                .limit(1)
+                .limit(10)
             )
         res = await db.execute(stmt)
-        fallback = res.scalar_one_or_none()
-        if fallback:
+        for fallback in res.scalars():
+            report = _usable_report(fallback.analysis_result)
+            if report is None:
+                _logger.warning(
+                    "Ignoring blank stale analyst cache entry id=%s for %s/%s.",
+                    getattr(fallback, "id", "unknown"),
+                    analyst_key,
+                    ticker,
+                )
+                continue
             _logger.info(
                 "Stale-cache fallback for %s/%s (no exact hash match, using entry from %s)",
                 analyst_key,
                 ticker,
                 fallback.created_at,
             )
-            return fallback.analysis_result
+            return report
     return None
 
 
@@ -203,6 +231,11 @@ async def store_analyst_cache(analyst_key: str, ticker: str, data_hash: str, rep
     """Persist a new cache entry so future runs with the same data can skip
     the LLM call."""
     from backend.models.news_cache import AnalystReportCache, NewsAnalysisCache
+
+    report = _usable_report(report_text)
+    if report is None:
+        _logger.warning("Not caching blank %s report for %s.", analyst_key, ticker)
+        return
 
     user_id = _current_user_id()
     config_fingerprint = _compute_config_fingerprint(analyst_key)
@@ -214,7 +247,7 @@ async def store_analyst_cache(analyst_key: str, ticker: str, data_hash: str, rep
                 ticker=ticker,
                 articles_hash=data_hash,
                 config_fingerprint=config_fingerprint,
-                analysis_result=report_text,
+                analysis_result=report,
             )
         else:
             entry = AnalystReportCache(
@@ -223,7 +256,7 @@ async def store_analyst_cache(analyst_key: str, ticker: str, data_hash: str, rep
                 ticker=ticker,
                 data_hash=data_hash,
                 config_fingerprint=config_fingerprint,
-                analysis_result=report_text,
+                analysis_result=report,
             )
         db.add(entry)
         await db.commit()

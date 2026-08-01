@@ -44,8 +44,26 @@ class AnalysisEmitter:
     async def emit_report(self, section: str, content: str) -> None:
         await self.emit({"type": "report", "section": section, "content": content})
 
-    async def emit_debate_bubble(self, debate_type: str, message: str) -> None:
-        await self.emit({"type": "debate_bubble", "debate_type": debate_type, "message": message})
+    async def emit_debate_bubble(
+        self,
+        debate_type: str,
+        message: str,
+        *,
+        sender: str | None = None,
+        content: str | None = None,
+    ) -> None:
+        """Emit one complete debate turn.
+
+        ``message`` remains for older clients.  New clients consume the
+        structured sender/content fields, which avoids reparsing multiline
+        Markdown responses on the browser side.
+        """
+        event: dict[str, Any] = {"type": "debate_bubble", "debate_type": debate_type, "message": message}
+        if sender:
+            event["sender"] = sender
+        if content is not None:
+            event["content"] = content
+        await self.emit(event)
 
     async def emit_mental_model(self, agent: str, thought: str) -> None:
         """Send a mental model (thought process) event for an agent."""

@@ -4,6 +4,8 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
+from backend.trading_agents.agents.utils.report_localization import report_rating, report_texts
+
 
 class PortfolioRating(str, Enum):
     BUY = "Buy"
@@ -43,14 +45,15 @@ class ResearchPlan(BaseModel):
     )
 
 
-def render_research_plan(plan: ResearchPlan) -> str:
+def render_research_plan(plan: ResearchPlan, output_language: str | None = None) -> str:
+    labels = report_texts(("recommendation", "rationale", "strategic_actions"), output_language)
     return "\n".join(
         [
-            f"**Recommendation**: {plan.recommendation.value}",
+            f"**{labels['recommendation']}**: {report_rating(plan.recommendation.value, output_language)}",
             "",
-            f"**Rationale**: {plan.rationale}",
+            f"**{labels['rationale']}**: {plan.rationale}",
             "",
-            f"**Strategic Actions**: {plan.strategic_actions}",
+            f"**{labels['strategic_actions']}**: {plan.strategic_actions}",
         ]
     )
 
@@ -105,31 +108,48 @@ class TraderProposal(BaseModel):
     )
 
 
-def render_trader_proposal(proposal: TraderProposal) -> str:
+def render_trader_proposal(proposal: TraderProposal, output_language: str | None = None) -> str:
+    labels = report_texts(
+        (
+            "action",
+            "reasoning",
+            "confidence_score",
+            "kelly_size",
+            "suggested_capital",
+            "entry_price",
+            "stop_loss",
+            "take_profit",
+            "position_sizing",
+            "recommended_leverage",
+            "final_transaction_proposal",
+        ),
+        output_language,
+    )
+    display_action = report_rating(proposal.action.value, output_language)
     parts = [
-        f"**Action**: {proposal.action.value}",
+        f"**{labels['action']}**: {display_action}",
         "",
-        f"**Reasoning**: {proposal.reasoning}",
-        f"**Confidence Score**: {proposal.confidence_score:.2f}",
+        f"**{labels['reasoning']}**: {proposal.reasoning}",
+        f"**{labels['confidence_score']}**: {proposal.confidence_score:.2f}",
     ]
     if proposal.kelly_size is not None:
-        parts.append(f"**Kelly Criterion Size**: {proposal.kelly_size:.2%}")
+        parts.append(f"**{labels['kelly_size']}**: {proposal.kelly_size:.2%}")
     if proposal.suggested_capital is not None:
-        parts.append(f"**Suggested Capital Allocation**: ${proposal.suggested_capital:,.2f}")
+        parts.append(f"**{labels['suggested_capital']}**: ${proposal.suggested_capital:,.2f}")
     if proposal.entry_price is not None:
-        parts.extend(["", f"**Entry Price**: {proposal.entry_price}"])
+        parts.extend(["", f"**{labels['entry_price']}**: {proposal.entry_price}"])
     if proposal.stop_loss is not None:
-        parts.extend(["", f"**Stop Loss**: {proposal.stop_loss}"])
+        parts.extend(["", f"**{labels['stop_loss']}**: {proposal.stop_loss}"])
     if proposal.take_profit_price is not None:
-        parts.extend(["", f"**Take Profit**: {proposal.take_profit_price}"])
+        parts.extend(["", f"**{labels['take_profit']}**: {proposal.take_profit_price}"])
     if proposal.position_sizing:
-        parts.extend(["", f"**Position Sizing**: {proposal.position_sizing}"])
+        parts.extend(["", f"**{labels['position_sizing']}**: {proposal.position_sizing}"])
     if proposal.recommended_leverage and abs(proposal.recommended_leverage - 1.0) > 1e-9:
-        parts.extend(["", f"**Recommended Leverage**: {proposal.recommended_leverage:.1f}x"])
+        parts.extend(["", f"**{labels['recommended_leverage']}**: {proposal.recommended_leverage:.1f}x"])
     parts.extend(
         [
             "",
-            f"FINAL TRANSACTION PROPOSAL: **{proposal.action.value.upper()}**",
+            f"**{labels['final_transaction_proposal']}**: **{display_action}**",
         ]
     )
     return "\n".join(parts)
@@ -182,22 +202,34 @@ class PortfolioDecision(BaseModel):
     )
 
 
-def render_pm_decision(decision: PortfolioDecision) -> str:
+def render_pm_decision(decision: PortfolioDecision, output_language: str | None = None) -> str:
+    labels = report_texts(
+        (
+            "rating",
+            "executive_summary",
+            "investment_thesis",
+            "price_target",
+            "recommended_leverage",
+            "liquidation_price",
+            "time_horizon",
+        ),
+        output_language,
+    )
     parts = [
-        f"**Rating**: {decision.rating.value}",
+        f"**{labels['rating']}**: {report_rating(decision.rating.value, output_language)}",
         "",
-        f"**Executive Summary**: {decision.executive_summary}",
+        f"**{labels['executive_summary']}**: {decision.executive_summary}",
         "",
-        f"**Investment Thesis**: {decision.investment_thesis}",
+        f"**{labels['investment_thesis']}**: {decision.investment_thesis}",
     ]
     if decision.price_target is not None:
-        parts.extend(["", f"**Price Target**: {decision.price_target}"])
+        parts.extend(["", f"**{labels['price_target']}**: {decision.price_target}"])
     if decision.recommended_leverage and abs(decision.recommended_leverage - 1.0) > 1e-9:
-        parts.extend(["", f"**Recommended Leverage**: {decision.recommended_leverage:.1f}x"])
+        parts.extend(["", f"**{labels['recommended_leverage']}**: {decision.recommended_leverage:.1f}x"])
     if decision.liquidation_price is not None:
-        parts.extend(["", f"**Liquidation Price**: {decision.liquidation_price}"])
+        parts.extend(["", f"**{labels['liquidation_price']}**: {decision.liquidation_price}"])
     if decision.time_horizon:
-        parts.extend(["", f"**Time Horizon**: {decision.time_horizon}"])
+        parts.extend(["", f"**{labels['time_horizon']}**: {decision.time_horizon}"])
     return "\n".join(parts)
 
 

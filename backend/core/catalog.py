@@ -4,6 +4,8 @@ from backend.core.config import is_live_trading_enabled
 from backend.core.constants import PAGE_KEYS, SETTING_KEYS, WEBHOOK_EVENTS
 from backend.trading_agents.agent_catalog import label_for
 from backend.trading_agents.agent_catalog import list_analysts as _engine_analysts
+from backend.trading_agents.llm_clients.capabilities import get_supported_output_languages
+from backend.trading_agents.llm_clients.registry import llm_registry
 
 _RISK_DEBATE = "Risk Debate"
 
@@ -113,8 +115,6 @@ BROKERS: list[dict] = [
     {"value": "simulation", "label": "Simulation"},
     {"value": "alpaca", "label": "Alpaca (Paper/Live)"},
 ]
-from backend.trading_agents.llm_clients.registry import llm_registry
-
 PROVIDER_LABELS: dict[str, str] = llm_registry.get_provider_labels()
 
 EFFORT_OPTIONS: dict[str, list[dict]] = llm_registry.get_effort_options()
@@ -123,7 +123,14 @@ EFFORT_OPTIONS: dict[str, list[dict]] = llm_registry.get_effort_options()
 LLM_CATALOG: dict[str, dict] = {
     p.key: {
         "label": p.label,
-        "models": [{"value": value, "label": label} for label, value in p.models],
+        "models": [
+            {
+                "value": value,
+                "label": label,
+                "supported_output_languages": get_supported_output_languages(value),
+            }
+            for label, value in p.models
+        ],
     }
     for p in llm_registry.list_providers()
 }

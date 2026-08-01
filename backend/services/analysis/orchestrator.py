@@ -12,6 +12,7 @@ from backend.core.metrics import ANALYSIS_DURATION, ANALYSIS_RUNS
 from backend.repositories.system_settings import get_system_settings
 from backend.services.stats_handler import StatsCallbackHandler
 from backend.services.token_analytics_service import estimate_cost
+from backend.trading_agents.agents.runtime.debate_history import debate_messages
 from backend.trading_agents.agents.schemas import PropagateResult
 from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
 
@@ -307,30 +308,41 @@ async def run_individual_analysis(
                     curr_count = d_state.get("count", 0)
 
                     is_new = False
+                    prior_count = prev_inv_count if d_type == "investment" else prev_risk_count
 
-                    if d_type == "investment" and curr_count > prev_inv_count:
+                    if d_type == "investment" and curr_count > prior_count:
                         prev_inv_count = curr_count
 
                         is_new = True
 
-                    elif d_type == "risk" and curr_count > prev_risk_count:
+                    elif d_type == "risk" and curr_count > prior_count:
                         prev_risk_count = curr_count
 
                         is_new = True
 
                     if is_new:
                         history = d_state.get("history", "")
+                        messages = debate_messages(history)
 
-                        lines = [line.strip() for line in history.split("\n") if line.strip()]
-
-                        if lines:
-                            await emitter.emit_debate_bubble(d_type, lines[-1])
+                        # A merged Risk Debate node can add all three
+                        # perspectives in one state update. Emit every newly
+                        # added *message*, not just the last physical line of
+                        # a multiline response, so live and persisted views
+                        # have the same transcript.
+                        newly_added = max(1, curr_count - prior_count)
+                        for message in messages[-newly_added:]:
+                            await emitter.emit_debate_bubble(
+                                d_type,
+                                f"{message['sender']}: {message['content']}",
+                                sender=message["sender"],
+                                content=message["content"],
+                            )
 
                         if d_type == "investment":
                             await update_result_fields(
                                 db,
                                 row.id,
-                                investment_debate_history=history_json_from(history),
+                                investment_debate_history=messages or None,
                                 bull_history=history_json_from(d_state.get("bull_history", "")),
                                 bear_history=history_json_from(d_state.get("bear_history", "")),
                                 judge_decision=str(d_state.get("judge_decision", "") or ""),
@@ -340,7 +352,7 @@ async def run_individual_analysis(
                             await update_result_fields(
                                 db,
                                 row.id,
-                                risk_debate_history=history_json_from(history),
+                                risk_debate_history=messages or None,
                             )
 
             for key, value in chunk.items():
@@ -462,8 +474,8 @@ async def run_individual_analysis(
             "final_decision": result.final_decision,
             "bull_history": history_json_from(inv_debate.get("bull_history", "")),
             "bear_history": history_json_from(inv_debate.get("bear_history", "")),
-            "investment_debate_history": history_json_from(inv_debate.get("history", "")),
-            "risk_debate_history": history_json_from(risk_debate.get("history", "")),
+            "investment_debate_history": debate_messages(inv_debate.get("history", "")) or None,
+            "risk_debate_history": debate_messages(risk_debate.get("history", "")) or None,
             "judge_decision": str(inv_debate.get("judge_decision", "") or ""),
             "trader_proposal_json": final_state.get("trader_proposal_json", "{}"),
             "chart_annotations": structured_data,

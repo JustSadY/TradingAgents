@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from typing import Annotated
 
 import pandas as pd
@@ -10,6 +10,39 @@ from dateutil.relativedelta import relativedelta
 from .stockstats_utils import filter_financials_by_date, load_ohlcv, yf_retry
 
 _logger = logging.getLogger(__name__)
+
+
+def _format_usd_amount(value: object) -> str:
+    """Render Yahoo's raw monetary fields with an unambiguous USD unit.
+
+    Yahoo Finance returns fields such as ``totalRevenue`` as a bare number of
+    dollars.  Passing ``253500000000`` through to an LLM made it easy to call
+    the figure ``$253.5M`` instead of ``$253.5B``.  The human-readable form is
+    deliberately included at the data-source boundary so every analyst sees
+    the same unit rather than having to infer it from the magnitude.
+    """
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return str(value)
+    if pd.isna(value):
+        return "N/A"
+
+    magnitude = abs(float(value))
+    for divisor, suffix in ((1_000_000_000_000, "T"), (1_000_000_000, "B"), (1_000_000, "M"), (1_000, "K")):
+        if magnitude >= divisor:
+            return f"${float(value) / divisor:,.2f}{suffix} USD"
+    return f"${float(value):,.2f} USD"
+
+
+_MONETARY_FUNDAMENTAL_LABELS = frozenset(
+    {
+        "Market Cap",
+        "Revenue (TTM)",
+        "Gross Profit",
+        "EBITDA",
+        "Net Income",
+        "Free Cash Flow",
+    }
+)
 
 
 def get_yfin_data_online(
@@ -149,10 +182,12 @@ def get_fundamentals(
         lines = []
         for label, value in fields:
             if value is not None:
-                lines.append(f"{label}: {value}")
+                rendered_value = _format_usd_amount(value) if label in _MONETARY_FUNDAMENTAL_LABELS else value
+                lines.append(f"{label}: {rendered_value}")
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
         header = f"# Company Fundamentals for {ticker.upper()}\n"
         header += f"# Data retrieved on: {today} {datetime.now(timezone.utc).strftime('%H:%M:%S')}\n"
+        header += "# Monetary values are formatted in USD (B = billion, M = million); do not infer a different unit.\n"
         if curr_date and curr_date != today:
             header += (
                 f"# WARNING: these are TODAY'S live metrics, not a historical snapshot as of {curr_date}. "
@@ -182,6 +217,7 @@ def get_balance_sheet(
         csv_string = data.to_csv()
         header = f"# Balance Sheet data for {ticker.upper()} ({freq})\n"
         header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        header += "# Monetary statement rows are raw USD: 1,000,000,000 = $1.00B and 1,000,000 = $1.00M. Preserve period labels.\n\n"
         return header + csv_string
     except Exception:
         raise
@@ -204,6 +240,7 @@ def get_cashflow(
         csv_string = data.to_csv()
         header = f"# Cash Flow data for {ticker.upper()} ({freq})\n"
         header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        header += "# Monetary statement rows are raw USD: 1,000,000,000 = $1.00B and 1,000,000 = $1.00M. Preserve period labels.\n\n"
         return header + csv_string
     except Exception:
         raise
@@ -226,6 +263,7 @@ def get_income_statement(
         csv_string = data.to_csv()
         header = f"# Income Statement data for {ticker.upper()} ({freq})\n"
         header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
+        header += "# Monetary statement rows are raw USD: 1,000,000,000 = $1.00B and 1,000,000 = $1.00M. Preserve period labels.\n\n"
         return header + csv_string
     except Exception:
         raise
@@ -479,7 +517,14 @@ def get_macro_data(curr_date: Annotated[str, "current date in YYYY-MM-DD format"
             "S&P 500 Index": "^GSPC",
         }
         parts = ["# Macroeconomic Benchmark Indicators"]
-        parts.append(f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n")
+        retrieved_at = datetime.now(UTC)
+        today = retrieved_at.strftime("%Y-%m-%d")
+        parts.append(f"# Data retrieved on: {retrieved_at.strftime('%Y-%m-%d %H:%M:%S')}\n")
+        if curr_date and curr_date != today:
+            parts.append(
+                f"# WARNING: these are live values retrieved on {today}, not a historical macro snapshot for "
+                f"{curr_date}. Do not describe them as values observed on the analysis date.\n"
+            )
 
         for label, symbol in macro_tickers.items():
             try:
@@ -495,7 +540,7 @@ def get_macro_data(curr_date: Annotated[str, "current date in YYYY-MM-DD format"
                 if price is not None:
                     parts.append(f"- {label} ({symbol}): {price:.2f}")
             except Exception as _e:
-                logger.debug("Failed fetching macro symbol %s: %s", symbol, _e)
+                _logger.debug("Failed fetching macro symbol %s: %s", symbol, _e)
                 continue
 
         if len(parts) <= 2:
@@ -505,13 +550,21 @@ def get_macro_data(curr_date: Annotated[str, "current date in YYYY-MM-DD format"
         return f"Macro indicator data currently unavailable: {exc}"
 
 
-def get_catalyst_calendar(ticker: Annotated[str, "ticker symbol of the company"]):
+def get_catalyst_calendar(
+    ticker: Annotated[str, "ticker symbol of the company"],
+    curr_date: Annotated[str | None, "analysis reference date in YYYY-MM-DD format"] = None,
+):
     """Upcoming known catalysts: next earnings date, ex-dividend date, and any
     recent/scheduled earnings dates with EPS estimates."""
     try:
         ticker_obj = yf.Ticker(ticker.upper())
-        parts: list[str] = [f"# Upcoming Catalysts for {ticker.upper()}"]
+        parts: list[str] = [f"# Catalyst Calendar for {ticker.upper()} (live provider snapshot)"]
         parts.append(f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n")
+        if curr_date:
+            parts.append(
+                f"# Analysis reference date: {curr_date}. This is a live calendar, not a point-in-time historical "
+                "snapshot; do not call any event before the reference date 'upcoming'.\n"
+            )
 
         calendar = yf_retry(lambda: ticker_obj.calendar, ticker=ticker)
         if isinstance(calendar, dict) and calendar:
@@ -521,10 +574,11 @@ def get_catalyst_calendar(ticker: Annotated[str, "ticker symbol of the company"]
 
         try:
             earnings_dates = yf_retry(lambda: ticker_obj.get_earnings_dates(limit=8), ticker=ticker)
-        except Exception:
+        except Exception as _e:
+            _logger.warning("get_earnings_dates failed for %s: %s", ticker, _e)
             earnings_dates = None
         if earnings_dates is not None and not earnings_dates.empty:
-            parts.append("\n## Recent & Upcoming Earnings Dates")
+            parts.append("\n## Provider Earnings Dates (verify date status against the analysis reference date)")
             parts.append(earnings_dates.head(8).to_csv())
 
         if len(parts) <= 2:

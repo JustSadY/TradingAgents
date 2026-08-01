@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from backend.trading_agents.agents.runtime.debate_history import format_debate_argument
 from backend.trading_agents.agents.runtime.report_aggregator import (
     build_report_fields,
     build_resources,
@@ -57,10 +58,19 @@ def make_researcher(
                     tail_history(history),
                     current_response,
                 )
+                + "\n\nReturn only the body of your argument. Do not begin with a speaker heading such as "
+                + f"'{speaker} Analyst:', Markdown title, or bold role label; the orchestration layer adds it."
                 + get_general_settings_block()
             )
             response = await llm.ainvoke(prompt)
-            argument = f"{speaker} Analyst: {response.content}"
+            # The speaker header belongs to the transcript, not to the LLM.
+            # This keeps provider Markdown headings from rendering as literal
+            # ``**Bull Analyst**`` / ``**Bear Analyst**`` inside the bubble.
+            argument = format_debate_argument(
+                f"{speaker} Analyst",
+                response,
+                empty_notice=f"{speaker} perspective was unavailable for this debate turn.",
+            )
             other = "bear" if side == "bull" else "bull"
             new_investment_debate_state = {
                 "history": history + "\n" + argument,

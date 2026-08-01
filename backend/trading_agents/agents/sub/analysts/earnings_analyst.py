@@ -42,7 +42,7 @@ def create_earnings_analyst(llm):
         trade_date = state.get("trade_date", "")
 
         try:
-            catalyst_data = await route_to_vendor("get_catalyst_calendar", ticker)
+            catalyst_data = await route_to_vendor("get_catalyst_calendar", ticker, trade_date)
         except Exception as _e:
 
             _logger.warning("Data fetch failed in earnings_analyst: %s", _e)
@@ -83,6 +83,10 @@ def create_earnings_analyst(llm):
 - Search for '[Ticker] latest earnings call transcript summary' or '[Ticker] management guidance'.
 - Highlight macro-headwinds mentioned by management.
 - Focus on future-looking statements over historical results.
+- **IMPORTANT — dates:** The analysis reference date is the current run date. Never call an event or article
+  before that date "upcoming", and do not use a source published after it as historical evidence. The live
+  catalyst calendar cannot reconstruct a past point in time; label it as current-only when it conflicts with
+  the reference date. Include the year for every earnings date you cite.
 - A tone downgrade (more hedging than the prior quarter) often precedes guidance cuts — flag it even when the numbers still look fine.
 - **IMPORTANT:** NEVER output a Buy/Sell/Hold rating. Earnings analysis only.
 - Assign a confidence level (HIGH/MEDIUM/LOW) to each key observation.

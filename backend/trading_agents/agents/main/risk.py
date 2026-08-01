@@ -19,13 +19,28 @@ from backend.trading_agents.agents.base import (
     NodeFn,
     neutral_risk_debate_state,
 )
+from backend.trading_agents.agents.runtime.debate_history import (
+    format_debate_argument,
+    text_from_response,
+)
+from backend.trading_agents.agents.utils.agent_utils import (
+    get_general_settings_block,
+    get_system_instruction_override,
+)
 
 logger = logging.getLogger(__name__)
 
 MAIN_KEY = "risk_debate"
 
 
-def _build_merged_prompt(trader_decision: str, resources_text: str) -> str:
+def _build_merged_prompt(
+    trader_decision: str,
+    resources_text: str,
+    custom_instruction: str | None = None,
+) -> str:
+    custom_instruction_block = (
+        f"\nPANEL-SPECIFIC INSTRUCTION:\n{custom_instruction.strip()}\n" if custom_instruction else ""
+    )
     return f"""You are the Risk Debate Panel consisting of three analysts evaluating the trader's proposal.
 
 TRADER'S INVESTMENT PLAN:
@@ -35,29 +50,50 @@ MARKET DATA & ANALYSIS:
 {resources_text}
 
 INSTRUCTIONS:
-Provide all three risk perspectives in sequence using the exact format below.
+Provide all three risk perspectives in the following exact plain-text layout.
+Use each label once, put the response below it, and do not add Markdown bold,
+headings, asterisks, or alternative speaker labels.
 
-**Aggressive Risk Analyst** — Champion the high-reward aspects. Emphasize upside potential, competitive advantages, and why bold action is warranted even with elevated risk.
+AGGRESSIVE:
+[full aggressive perspective]
 
-**Conservative Risk Analyst** — Prioritize capital preservation. Highlight downside risks, worst-case scenarios, and logical flaws in aggressive optimism.
+CONSERVATIVE:
+[full conservative perspective]
 
-**Neutral Risk Analyst** — Provide a balanced, objective evaluation. Mediate between the aggressive and conservative positions, weighing evidence fairly.
+NEUTRAL:
+[full neutral perspective]
 
-Be specific. Reference the trader's plan and market data directly.
-
-AGGRESSIVE: [aggressive analyst's full response]
-CONSERVATIVE: [conservative analyst's full response]
-NEUTRAL: [neutral analyst's full response]"""
+The aggressive perspective champions well-supported upside but must name the
+risks it accepts. The conservative perspective prioritizes capital preservation
+and concrete downside scenarios. The neutral perspective weighs both sides and
+states practical guardrails. Be specific and reference the trader's plan and
+market data directly.{custom_instruction_block}"""
 
 
 def _parse_perspectives(text: str) -> dict[str, str]:
+    """Extract risk panel sections from strict and common provider variants.
+
+    A number of providers return Markdown headings such as
+    ``**Aggressive Risk Analyst**`` despite the requested ``AGGRESSIVE:``
+    layout.  Treat those variants as equivalent so one formatting choice never
+    erases the entire risk debate.
+    """
     sections = {"aggressive": "", "conservative": "", "neutral": ""}
-    for key in sections:
-        heading = key.upper()
-        pattern = rf"(?:^|\n)\*{{0,2}}{re.escape(heading)}\*{{0,2}}\s*:\s*(.*?)(?=\n\*{{0,2}}(?:AGGRESSIVE|CONSERVATIVE|NEUTRAL)\*{{0,2}}\s*:|\Z)"
-        m = re.search(pattern, text, re.DOTALL | re.IGNORECASE)
-        if m:
-            sections[key] = m.group(1).strip()
+    if not text:
+        return sections
+
+    heading_names = "aggressive|conservative|neutral"
+    header = re.compile(
+        rf"^[ \t]*(?:#{{1,6}}[ \t]+)?(?:\*{{1,3}}[ \t]*)?"
+        rf"(?P<key>{heading_names})(?:[ \t]+(?:risk[ \t]+)?(?:analyst|debator))?"
+        rf"(?:[ \t]*\*{{1,3}})?[ \t]*(?::|[—–-][ \t]+|$)",
+        re.IGNORECASE | re.MULTILINE,
+    )
+    matches = list(header.finditer(text))
+    for index, match in enumerate(matches):
+        key = match.group("key").lower()
+        end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
+        sections[key] = text[match.end() : end].strip(" \t\n:—–-")
     return sections
 
 
@@ -77,15 +113,28 @@ def create_risk_debate_node(ctx: AgentRunContext) -> NodeFn:
         trader_decision = state.get("trader_investment_plan", "No trader decision available.")
         report_fields = build_report_fields("Latest World Affairs Report", "Company Fundamentals Report")
         resources_text = build_resources(state, report_fields, summary_only=True)
-        prompt = _build_merged_prompt(trader_decision, resources_text)
+        custom_instruction = get_system_instruction_override(MAIN_KEY)
+        prompt = (
+            _build_merged_prompt(trader_decision, resources_text, custom_instruction) + get_general_settings_block()
+        )
 
         response = await llm.ainvoke(prompt)
-        text = response.content if hasattr(response, "content") else str(response)
+        text = text_from_response(response)
         sections = _parse_perspectives(text)
 
-        aggressive_arg = f"Aggressive Analyst: {sections['aggressive']}" if sections["aggressive"] else ""
-        conservative_arg = f"Conservative Analyst: {sections['conservative']}" if sections["conservative"] else ""
-        neutral_arg = f"Neutral Analyst: {sections['neutral']}" if sections["neutral"] else ""
+        aggressive_arg = format_debate_argument("Aggressive Analyst", sections["aggressive"])
+        conservative_arg = format_debate_argument("Conservative Analyst", sections["conservative"])
+        neutral_arg = format_debate_argument("Neutral Analyst", sections["neutral"])
+
+        # If a provider disregards all section labels, preserve its response as
+        # a clearly marked neutral assessment instead of silently persisting an
+        # empty Risk Debate panel.
+        if not any((aggressive_arg, conservative_arg, neutral_arg)):
+            neutral_arg = format_debate_argument(
+                "Neutral Analyst",
+                text,
+                empty_notice="Risk Debate did not return a readable structured response.",
+            )
 
         history_parts = [p for p in (aggressive_arg, conservative_arg, neutral_arg) if p]
         history = "\n".join(history_parts)

@@ -70,7 +70,9 @@ def _get_language_instruction() -> str:
         f"\n\n**CRITICAL LANGUAGE REQUIREMENT:** You MUST write your ENTIRE response in {lang}. "
         f"This is a strict, non-negotiable requirement. Do NOT use any other language under any circumstances. "
         f"Even if source data, tool outputs, or retrieved content are in a different language, "
-        f"all of your analysis, commentary, headings, and narrative text MUST be written in {lang}."
+        f"all of your analysis, commentary, headings, role labels, tables, and narrative text MUST be written in {lang}. "
+        "Do not mix languages or writing systems. The only exceptions are exact ticker symbols, official company or "
+        "product names, standard financial abbreviations, and short verbatim source quotes explicitly marked as quotes."
     )
 
 
@@ -114,10 +116,25 @@ def build_instrument_context(ticker: str, asset_type: str = "stock") -> str:
         if asset_type == "crypto"
         else ""
     )
+    normalized_ticker = ticker.strip().upper()
+    if asset_type == "crypto":
+        quote_currency_hint = (
+            " Keep every price in the trading pair's quote currency; changing the report language must never "
+            "change the currency."
+        )
+    elif normalized_ticker.endswith(".IS"):
+        quote_currency_hint = " This Borsa Istanbul ticker is quoted in TRY; label price targets as TRY, never USD."
+    elif normalized_ticker.endswith(".L"):
+        quote_currency_hint = " This London ticker is normally quoted in GBp/GBP; preserve the source quote unit."
+    else:
+        quote_currency_hint = (
+            " For an unsuffixed US equity ticker such as NVDA, prices and price targets are USD unless a tool "
+            "explicitly supplies another quote currency. The output language must never change USD into TL/TRY."
+        )
     return (
         f"The {instrument_label} to analyze is `{ticker}`. "
         "Use this exact ticker in every tool call, report, and recommendation, "
-        "preserving any exchange suffix (e.g. `.TO`, `.L`, `.HK`, `.T`, `-USD`)." + extra_hint
+        "preserving any exchange suffix (e.g. `.TO`, `.L`, `.HK`, `.T`, `-USD`)." + extra_hint + quote_currency_hint
     )
 
 

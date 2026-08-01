@@ -69,6 +69,11 @@ def create_fundamentals_analyst(llm):
   snapshot rather than historical (this happens on backdated analysis dates, since no vendor exposes
   point-in-time overview data), state that caveat explicitly and lower your confidence on any
   valuation-ratio-based conclusion accordingly.
+- **IMPORTANT — financial units and periods:** Yahoo Finance statement rows are raw USD and the
+  fundamentals tool explicitly formats monetary values. Before citing a monetary figure, preserve its
+  source period (TTM, fiscal year, or fiscal quarter) and its supplied unit. Never label a value of
+  1,000,000,000 USD or more as millions, and never combine TTM, annual, and quarterly figures into one
+  comparison without clearly naming each period.
 - Assign a confidence level (HIGH/MEDIUM/LOW) to each key observation.
 
 ### Output Format:

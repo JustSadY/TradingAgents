@@ -1,12 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
-import { DebateHistoryWidget, parseDebateMessage, getSenderStyles } from '../DebateHistoryWidget'
+import { DebateHistoryWidget, parseDebateHistory, parseDebateMessage, getSenderStyles } from '../DebateHistoryWidget'
 
 vi.mock('../../../contexts/LanguageContext', () => ({
   useTranslation: () => ({ t: (k: string) => {
     const map: Record<string, string> = {
       'analysis.section.risk_debate_history': 'Risk Debate',
       'analysis.reports.empty': 'No debate messages yet.',
+      'analysis.debate.consensus': 'Consensus Debate',
     }
     return map[k] || k
   }}),
@@ -29,6 +30,46 @@ describe('parseDebateMessage', () => {
     const result = parseDebateMessage('Bear Analyst: Price: $150, Target: $145')
     expect(result.sender).toBe('Bear Analyst')
     expect(result.content).toBe('Price: $150, Target: $145')
+  })
+
+  it('removes a repeated Markdown role heading from the bubble body', () => {
+    const result = parseDebateMessage('Aggressive Analyst: **Aggressive Risk Analyst**\n**Upside:** Momentum is strong.')
+    expect(result.sender).toBe('Aggressive Analyst')
+    expect(result.content).toBe('**Upside:** Momentum is strong.')
+  })
+})
+
+describe('parseDebateHistory', () => {
+  it('keeps a multiline analyst response in one bubble', () => {
+    const messages = parseDebateHistory(
+      'Bull Analyst: **Catalyst:** Earnings are improving.\n- Revenue growth accelerated\n- Margin expanded\nBear Analyst: Valuation remains demanding.',
+    )
+
+    expect(messages).toEqual([
+      { sender: 'Bull Analyst', content: '**Catalyst:** Earnings are improving.\n- Revenue growth accelerated\n- Margin expanded' },
+      { sender: 'Bear Analyst', content: 'Valuation remains demanding.' },
+    ])
+  })
+
+  it('removes the dangling Markdown delimiter present in older Risk Debate rows', () => {
+    const messages = parseDebateHistory(
+      'Aggressive Analyst: **\nThe upside case remains well supported by earnings growth.',
+    )
+
+    expect(messages).toEqual([
+      { sender: 'Aggressive Analyst', content: 'The upside case remains well supported by earnings growth.' },
+    ])
+  })
+
+  it('accepts the structured transcript sent by the backend', () => {
+    const messages = parseDebateHistory([
+      { sender: 'Aggressive Risk Analyst', content: '**Upside:** Breakout volume supports a larger position.' },
+      { sender: 'Conservative Analyst', content: 'Use a defined stop before adding exposure.' },
+    ])
+
+    expect(messages[0].sender).toBe('Aggressive Analyst')
+    expect(messages[0].content).toBe('**Upside:** Breakout volume supports a larger position.')
+    expect(messages[1].sender).toBe('Conservative Analyst')
   })
 })
 

@@ -1,5 +1,7 @@
 from typing import Any
 
+from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
+
 
 class Reflector:
     def __init__(self, llm: Any):
@@ -25,13 +27,11 @@ class Reflector:
         alpha_return: float,
         benchmark_name: str = "SPY",
     ) -> str:
-        from backend.trading_agents.dataflows.config import get_config
-
-        lang = get_config().get("output_language", "English")
-        lang_inst = "" if lang.strip().lower() == "english" else f"\nWrite your entire response in {lang}."
-
         messages = [
-            ("system", self.log_reflection_prompt + lang_inst),
+            # Reflection is an older direct LLM path, so it does not inherit
+            # the graph-node prompt wrapper.  Use the same strict language
+            # block as the main analysts instead of a weak one-line request.
+            ("system", self.log_reflection_prompt + get_general_settings_block()),
             (
                 "human",
                 (

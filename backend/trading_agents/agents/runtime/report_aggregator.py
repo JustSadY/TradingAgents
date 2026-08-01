@@ -10,12 +10,21 @@ from __future__ import annotations
 
 import re
 
+from backend.trading_agents.agents.utils.report_localization import executive_summary_headings
+
+_SUMMARY_HEADING_TERMS = "|".join(re.escape(term) for term in executive_summary_headings())
 _SUMMARY_HEADING = re.compile(
-    r"#{0,4}\s*(?:\d+[.)]\s*)?\**\s*executive\s+summary\b[:*\s]*",
+    rf"(?:^|\n)\s*#{{0,4}}\s*(?:\d+[.)]\s*)?(?:\*\*)?\s*"
+    rf"(?:{_SUMMARY_HEADING_TERMS})\s*(?::|：)?\s*(?:\*\*)?",
     re.IGNORECASE,
 )
 _NEXT_HEADING = re.compile(
-    r"\n\s{0,3}(?:#{1,4}\s|\**\s*\d+[.)]\s|\*\*[A-Z])",
+    # Prompts prescribe numbered Markdown sections.  Keeping the numbered
+    # branch prevents bold metric labels inside summary bullets from being
+    # mistaken for a new section, while still accepting an ordinary Markdown
+    # heading produced by a model.
+    r"\n\s{0,3}(?:#{1,4}\s+|(?:\d+[.)]\s*)?\*\*[^*\n]{2,120}(?::\*\*|\*\*\s*:|：\*\*|\*\*\s*：))",
+    re.UNICODE,
 )
 
 

@@ -37,6 +37,7 @@ def create_macro_analyst(llm):
         instrument_context = build_instrument_context(state["company_of_interest"])
         ticker = state.get("company_of_interest", "")
         trade_date = state.get("trade_date", "")
+        run_market_snapshot = state.get("past_context", "")
 
         try:
             data = await route_to_vendor("get_global_news", trade_date, 1, 10)
@@ -46,7 +47,7 @@ def create_macro_analyst(llm):
 
             data = ""
 
-        data_hash = compute_data_hash("macro", ticker, trade_date, data)
+        data_hash = compute_data_hash("macro", ticker, trade_date, data, run_market_snapshot)
         cached = await check_analyst_cache("macro", ticker, data_hash)
         if cached:
             await emit_cache_hit("macro", ticker)
@@ -54,7 +55,7 @@ def create_macro_analyst(llm):
 
         tools = _MACRO_TOOLS
 
-        system_message = """You are a senior macroeconomic analyst. Your role is EXCLUSIVELY macro analysis — you do NOT make buy/sell/hold recommendations. Output only macro regime observations.
+        system_message = f"""You are a senior macroeconomic analyst. Your role is EXCLUSIVELY macro analysis — you do NOT make buy/sell/hold recommendations. Output only macro regime observations.
 
 ### Analytical Process (Chain-of-Thought):
 1. **Data Acquisition:** Use `get_macro_data` to fetch latest values for VIX, 10-Year Yield, Crude Oil, Gold, etc.
@@ -67,6 +68,10 @@ def create_macro_analyst(llm):
 - High VIX (>20) suggests elevated fear and risk-off environment.
 - Rising yields typically pressure growth stocks but may benefit financials.
 - Commodity prices (Oil/Gold) signal inflation or geopolitical stress.
+- **IMPORTANT — snapshot consistency:** The run-level market snapshot below was captured once at the
+  start of this analysis and is the canonical VIX/S&P/Gold snapshot for this report. A live tool may
+  return a later value; if it differs, identify it as a later live observation rather than combining
+  both values or assigning both to the same market regime.
 - **IMPORTANT:** NEVER output a Buy/Sell/Hold rating. Macro analysis only.
 - Assign a confidence level (HIGH/MEDIUM/LOW) to each key observation.
 
@@ -77,7 +82,10 @@ Your final report MUST follow this structure:
 3. **Detailed Analysis:** Nuanced breakdown of key indicators, their historical context, and specific influence on the market.
 4. **Instrument Impact:** How the macro environment specifically affects the asset under review (sector sensitivity).
 5. **Actionable Insights:** Potential macro-driven triggers or headwinds for the trader to consider.
-6. **Macro Data Table:** A Markdown table summarizing all fetched macro indicators, current levels, historical percentile, and interpretation.""" + get_general_settings_block()
+6. **Macro Data Table:** A Markdown table summarizing all fetched macro indicators, current levels, historical percentile, and interpretation.
+
+### Run-Level Market Snapshot
+{run_market_snapshot}""" + get_general_settings_block()
 
         res = await run_tool_analyst(
             llm,

@@ -44,7 +44,14 @@ async def search_web(
 
     start_date = (end_dt - timedelta(days=365)).strftime("%Y-%m-%d")
     end_date = end_dt.strftime("%Y-%m-%d")
-    return await route_to_vendor("get_news", query, start_date, end_date)
+
+    # Extract ticker candidate if query is a search phrase (e.g. 'WMT earnings call May 2026')
+    ticker_candidate = query.split()[0].strip() if query and query.strip() else query
+    try:
+        return await route_to_vendor("get_news", ticker_candidate, start_date, end_date)
+    except Exception as vendor_exc:
+        _logger.warning("News proxy fallback failed for query %r (candidate %r): %s", query, ticker_candidate, vendor_exc)
+        return f"Web search and news fallback unavailable for query: {query}"
 
 
 @tool

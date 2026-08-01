@@ -55,6 +55,8 @@ async def test_shared_report_exposes_only_canonical_report_fields(monkeypatch) -
     )
     analysis.fundamentals_report = "Canonical fundamentals"
     analysis.investment_plan = "Canonical investment plan"
+    analysis.market_report = "Canonical market analysis"
+    analysis.risk_debate_history = ["Aggressive Analyst: Keep the position small"]
     now = datetime.now(UTC)
     shared = SimpleNamespace(analysis_id=123, expires_at=now + timedelta(hours=1), created_at=now)
 
@@ -70,7 +72,16 @@ async def test_shared_report_exposes_only_canonical_report_fields(monkeypatch) -
 
     payload = await share_api.get_shared_report("share-token", object())
 
+    # A public link is deliberately a read-only view, but it must still carry
+    # every analysis report that the public frontend can render.  The previous
+    # UI bug was particularly easy to miss because the backend already sent
+    # this data while rendering only three decision sections.
+    for field in report_text_fields:
+        assert field in payload
+
+    assert payload["market_report"] == "Canonical market analysis"
     assert payload["fundamentals_report"] == "Canonical fundamentals"
     assert payload["investment_plan"] == "Canonical investment plan"
+    assert payload["risk_debate_history"] == ["Aggressive Analyst: Keep the position small"]
     assert "fundamental_report" not in payload
     assert "research_report" not in payload

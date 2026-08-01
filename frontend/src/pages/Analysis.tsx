@@ -8,6 +8,7 @@ import { notify } from '../utils/notify'
 import { exportMarkdown, exportPDF } from '../utils/exportReport'
 import { exportAnalysesCSV } from '../utils/csvExport'
 import { sendBrowserNotification } from '../utils/browserNotify'
+import { buildPublicShareUrl } from '../utils/shareLink'
 import { useTranslation } from '../contexts/LanguageContext'
 import {
   Loader2, CheckCircle, AlertCircle, History,
@@ -20,7 +21,7 @@ import { SignalBadge } from '../components/analysis/SignalBadge'
 import { ReportCard } from '../components/analysis/ReportCard'
 import { AnalysisControls, type AnalysisStartError, type TickerSuggestion } from '../components/analysis/AnalysisControls'
 
-import { DebateHistoryWidget, parseDebateMessage, getSenderStyles } from '../components/analysis/DebateHistoryWidget'
+import { DebateBubble, DebateHistoryWidget, parseDebateMessage } from '../components/analysis/DebateHistoryWidget'
 import { AnalysisChatWidget } from '../components/analysis/AnalysisChatWidget'
 import { RiskMetricsCard } from '../components/analysis/RiskMetricsCard'
 import { MentalModelTicker } from '../components/analysis/MentalModelTicker'
@@ -33,7 +34,7 @@ interface WsEvent {
   llm_calls?: number; status?: string; agent?: string; analysis_id?: number
   label?: string; stage?: string; node?: string
   thought?: string; metrics?: any; token?: string; tokens_in?: number; tokens_out?: number
-  debate_type?: string
+  debate_type?: string; sender?: string
   attempt?: number; max_attempts?: number; error?: string; kind?: string
   error_type?: string; elapsed_seconds?: number
   estimated_cost_usd?: number
@@ -667,8 +668,18 @@ function RunTab() {
       } else if (ev.type === 'risk_metrics' && ev.metrics) {
         setRiskMetrics(ev.metrics)
       } else if (ev.type === 'debate_bubble' && ev.message) {
-        const parsed = parseDebateMessage(ev.message)
-        setLiveDebate(prev => [...prev, { ...parsed, type: ev.debate_type || 'investment' }])
+        const parsed = typeof ev.sender === 'string' && typeof ev.content === 'string'
+          ? { sender: ev.sender, content: ev.content }
+          : parseDebateMessage(ev.message)
+        const next = { ...parsed, type: ev.debate_type || 'investment' }
+        // Buffered WebSocket replay after a reconnect can repeat the last
+        // event. Keep one complete turn instead of showing cloned bubbles.
+        setLiveDebate(prev => {
+          const last = prev.at(-1)
+          return last && last.sender === next.sender && last.content === next.content && last.type === next.type
+            ? prev
+            : [...prev, next]
+        })
       } else if (ev.type === 'retry') {
         appendLog(`⚠️ Retrying ${ev.node} (attempt ${ev.attempt}/${ev.max_attempts})`)
       } else if (ev.type === 'fallback') {
@@ -1332,7 +1343,7 @@ function RunTab() {
                                 liveDebateTab === 'inv' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
                               }`}
                             >
-                              Consensus Debate
+                              {t('analysis.debate.consensus')}
                             </button>
                             <button
                               onClick={() => setLiveDebateTab('risk')}
@@ -1340,7 +1351,7 @@ function RunTab() {
                                 liveDebateTab === 'risk' ? 'bg-white/5 text-white' : 'text-slate-500 hover:text-white'
                               }`}
                             >
-                              Risk Debate
+                              {t('analysis.section.risk_debate_history')}
                             </button>
                           </div>
                           <div className="flex-1 overflow-y-auto space-y-3 max-h-[45vh] pr-1">
@@ -1350,23 +1361,15 @@ function RunTab() {
                                 <p className="text-xs font-medium uppercase tracking-widest text-center">
                                   {running && currentStep && (currentStep.stage === 'research' || currentStep.stage === 'risk')
                                     ? t('analysis.debate.waiting')
-                                    : 'Live debate has not started yet.'}
+                                    : t('analysis.debate.not_started')}
                                 </p>
                               </div>
                             )}
-                            {filteredLiveMessages.map((bubble, i) => {
-                              const styles = getSenderStyles(bubble.sender);
-                              return (
-                                <div key={i} className={`flex w-full ${styles.side} animate-in zoom-in-95 fade-in duration-300`}>
-                                  <div className={`border rounded-2xl px-4 py-2.5 text-xs flex flex-col gap-1 max-w-[85%] ${styles.bg}`}>
-                                    <span className="font-bold uppercase tracking-wider text-[9px] opacity-80 flex items-center gap-1">
-                                      {styles.icon} {bubble.sender}
-                                    </span>
-                                    <span className="leading-relaxed whitespace-pre-wrap">{bubble.content}</span>
-                                  </div>
-                                </div>
-                              );
-                            })}
+                            {filteredLiveMessages.map((bubble, i) => (
+                              <div key={`${bubble.sender}-${i}`} className="animate-in zoom-in-95 fade-in duration-300">
+                                <DebateBubble message={bubble} />
+                              </div>
+                            ))}
                             
                             {running && currentStep && (
                               (liveDebateTab === 'inv' && currentStep.stage === 'research') ||
@@ -1844,10 +1847,21 @@ function HistoryTab({
     setShareLink(null)
     try {
       const { data } = await axios.post<{ token: string; expires_at: string }>(`/api/analysis/${id}/share`)
-      const link = `${window.location.origin}/share/${data.token}`
+      const link = buildPublicShareUrl(data.token)
       setShareLink(link)
-      await navigator.clipboard.writeText(link).catch(() => {})
-      notify('success', 'Share link copied to clipboard', 'Share')
+      // Clipboard access is unavailable on plain HTTP origins (including the
+      // common local Docker URL).  A successful API response must still leave
+      // a usable link in the UI rather than falling into the outer error path.
+      let copied = false
+      try {
+        if (navigator.clipboard?.writeText) {
+          await navigator.clipboard.writeText(link)
+          copied = true
+        }
+      } catch {
+        // The readonly link field below is the manual-copy fallback.
+      }
+      notify('success', copied ? 'Share link copied to clipboard' : 'Share link created — copy it from the field below', 'Share')
     } catch (e: any) {
       notify('error', e.response?.data?.detail || 'Share failed', 'Share')
     } finally {
@@ -1864,6 +1878,9 @@ function HistoryTab({
   const openDetail = useCallback(async (id: number) => {
     setDetailLoading(true)
     setActiveDetailTab('reports')
+    // Never leave the previous record's token visible while a new detail is
+    // loading; doing so made it easy to copy the wrong report's link.
+    setShareLink(null)
     try { const { data } = await axios.get(`/api/analysis/${id}`); setDetail(data) }
     finally { setDetailLoading(false) }
   }, [])
@@ -2064,13 +2081,31 @@ function HistoryTab({
                       {sharing ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />} Share
                     </button>
                     {shareLink && (
-                      <button
-                        onClick={() => navigator.clipboard.writeText(shareLink)}
-                        className="flex items-center gap-1 bg-emerald-500/10 border border-emerald-500/20 text-[10px] font-bold text-emerald-400 px-2 py-1.5 rounded-lg transition cursor-pointer"
-                        title={shareLink}
-                      >
-                        <Copy size={11} /> Copied!
-                      </button>
+                      <div className="flex items-center gap-1 max-w-[min(24rem,50vw)]">
+                        <input
+                          aria-label="Share link"
+                          readOnly
+                          value={shareLink}
+                          onFocus={event => event.currentTarget.select()}
+                          className="min-w-0 flex-1 bg-slate-950/70 border border-emerald-500/20 rounded-lg px-2 py-1.5 text-[10px] text-emerald-300 font-mono outline-none focus:border-emerald-400/50"
+                          title={shareLink}
+                        />
+                        <button
+                          onClick={async () => {
+                            try {
+                              if (!navigator.clipboard?.writeText) throw new Error('Clipboard API unavailable')
+                              await navigator.clipboard.writeText(shareLink)
+                              notify('success', 'Share link copied to clipboard', 'Share')
+                            } catch {
+                              notify('error', 'Select and copy the share link manually', 'Share')
+                            }
+                          }}
+                          className="shrink-0 flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-[10px] font-bold text-emerald-400 px-2 py-1.5 rounded-lg transition cursor-pointer"
+                          title="Copy share link"
+                        >
+                          <Copy size={11} /> Copy
+                        </button>
+                      </div>
                     )}
                     <button onClick={() => { setDetail(null); setShareLink(null) }} className="text-slate-500 hover:text-white transition-colors p-1 rounded-lg hover:bg-white/5 cursor-pointer"><X size={16} /></button>
                   </div>

@@ -35,6 +35,10 @@ ENCRYPTION_KEY=your-fernet-key-here
 # Must be a JSON array of domains allowed to call the FastAPI backend.
 CORS_ORIGINS=["http://localhost:5173","http://localhost:3000"]
 
+# Optional external frontend URL for public report-share links. This value is
+# consumed at frontend build time, so rebuild the frontend after changing it.
+VITE_PUBLIC_APP_URL=https://trading.example.com
+
 # Prometheus Metrics Endpoint (Optional)
 # Bearer token protecting GET /metrics. Leave empty to disable the endpoint (404).
 # Generate one using: python -c "import secrets; print(secrets.token_hex(32))"

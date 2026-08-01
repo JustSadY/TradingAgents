@@ -120,6 +120,7 @@ llm_registry.register(
         label="NVIDIA NIM",
         is_openai_compatible=True,
         models=[
+            ("Nemotron 3 Super 120B A12B", "nvidia/nemotron-3-super-120b-a12b"),
             ("Llama-3.1-Nemotron-70B-Instruct", "nvidia/llama-3.1-nemotron-70b-instruct"),
             ("Nemotron-4 340B Instruct", "nvidia/nemotron-4-340b-instruct"),
             ("Llama-3.1 405B Instruct", "meta/llama-3.1-405b-instruct"),

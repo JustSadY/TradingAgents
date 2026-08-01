@@ -162,6 +162,7 @@ Only **infrastructure secrets** live in `.env` — all LLM/data-provider keys an
 | `ADMIN_USERNAME` | First administrator username | `admin` |
 | `ENCRYPTION_KEY` | Fernet key encrypting per-user API keys at rest | *(generate with `Fernet.generate_key()`)* |
 | `CORS_ORIGINS` | JSON array of allowed origins | `["http://localhost:5173"]` |
+| `VITE_PUBLIC_APP_URL` | Optional public frontend base URL baked into Docker share links | `https://trading.example.com` |
 | `REDIS_URL` | Optional: enables cross-process events + task registry | *(empty = single-process)* |
 | `ANALYSIS_QUEUE_MODE` | `inline` (default) or `worker` (arq queue, needs Redis) | `inline` |
 

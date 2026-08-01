@@ -56,6 +56,7 @@ yfinance>=0.2.63
 stockstats>=0.6.5
 mplfinance>=0.12.10b0
 matplotlib>=3.9.0
+lxml>=5.0.0
 
 # Observability
 prometheus-client>=0.20.0

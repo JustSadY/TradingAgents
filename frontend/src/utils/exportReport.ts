@@ -70,6 +70,73 @@ const SECTION_ORDER = [
   'bull_history', 'bear_history', 'investment_debate_history', 'risk_debate_history', 'judge_decision',
 ]
 
+export interface ExportSection {
+  key: string
+  content: string
+}
+
+type AnalysisRecord = Record<string, unknown>
+
+/**
+ * Turn a persisted report value into printable text. Debate histories are JSON
+ * columns, so newer runs may store them as structured turn objects rather than
+ * the legacy newline-delimited string.
+ */
+function printableContent(value: unknown): string {
+  if (typeof value === 'string') return value.trim()
+  if (!Array.isArray(value)) return ''
+
+  return value.map(item => {
+    if (typeof item === 'string') return item.trim()
+    if (!item || typeof item !== 'object') return ''
+    const turn = item as Record<string, unknown>
+    const content = typeof turn.content === 'string' ? turn.content.trim() : ''
+    if (!content) return ''
+    const sender = typeof turn.sender === 'string' ? turn.sender.trim() : ''
+    return sender ? `${sender}: ${content}` : content
+  }).filter(Boolean).join('\n\n')
+}
+
+function normalizedContent(content: string): string {
+  return content.replace(/\s+/g, ' ').trim()
+}
+
+/**
+ * Select the report sections once for every export format.
+ *
+ * A completed investment debate has three representations in older results:
+ * individual bull/bear histories and a combined chronological history. The
+ * combined history is authoritative because it preserves turn order, so it
+ * replaces the two individual copies whenever present. Likewise, the research
+ * manager writes the same plan to both `investment_plan` and `judge_decision`;
+ * the latter is retained only when it differs after whitespace normalisation.
+ */
+export function buildExportSections(analysis: AnalysisResultRead): ExportSection[] {
+  const record = analysis as unknown as AnalysisRecord
+  const contentByKey = Object.fromEntries(
+    SECTION_ORDER.map(key => [key, printableContent(record[key])])
+  ) as Record<string, string>
+  const hasCombinedInvestmentDebate = Boolean(contentByKey.investment_debate_history)
+  const investmentPlan = contentByKey.investment_plan
+
+  return SECTION_ORDER.flatMap(key => {
+    const content = contentByKey[key]
+    if (!content) return []
+
+    // Avoid a three-way replay of the same Bull/Bear turns in PDF/Markdown.
+    if (hasCombinedInvestmentDebate && (key === 'bull_history' || key === 'bear_history')) return []
+
+    // `judge_decision` is a legacy mirror of the Research Manager plan.
+    if (
+      key === 'judge_decision' &&
+      investmentPlan &&
+      normalizedContent(content) === normalizedContent(investmentPlan)
+    ) return []
+
+    return [{ key, content }]
+  })
+}
+
 // ── Markdown export ──────────────────────────────────────────────────────────
 
 export function exportMarkdown(analysis: AnalysisResultRead, language: Lang = 'en'): void {
@@ -84,11 +151,8 @@ export function exportMarkdown(analysis: AnalysisResultRead, language: Lang = 'e
     '',
   ]
 
-  for (const key of SECTION_ORDER) {
-    const content = (analysis as unknown as Record<string, unknown>)[key]
-    if (typeof content === 'string' && content.trim()) {
-      lines.push(`## ${labels[key] ?? key}`, '', content.trim(), '', '---', '')
-    }
+  for (const { key, content } of buildExportSections(analysis)) {
+    lines.push(`## ${labels[key] ?? key}`, '', content, '', '---', '')
   }
 
   const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' })
@@ -109,15 +173,12 @@ export function exportPDF(analysis: AnalysisResultRead, language: Lang = 'en'): 
   const metaHtml = meta.map(l => `<p class="meta-line">${escapeHtml(l)}</p>`).join('')
 
   let sectionsHtml = ''
-  for (const key of SECTION_ORDER) {
-    const content = (analysis as unknown as Record<string, unknown>)[key]
-    if (typeof content === 'string' && content.trim()) {
-      sectionsHtml += `
-        <div class="section">
-          <h2>${escapeHtml(labels[key] ?? key)}</h2>
-          <div class="section-body">${mdToHtml(content.trim())}</div>
-        </div>`
-    }
+  for (const { key, content } of buildExportSections(analysis)) {
+    sectionsHtml += `
+      <div class="section">
+        <h2>${escapeHtml(labels[key] ?? key)}</h2>
+        <div class="section-body">${markdownToHtml(content)}</div>
+      </div>`
   }
 
   const signalColor = _signalColor(analysis.signal)
@@ -145,6 +206,9 @@ export function exportPDF(analysis: AnalysisResultRead, language: Lang = 'en'): 
   .section-body h4 { font-size: 10.5pt; font-weight: 600; color: #2d3748; margin: 8px 0 4px; }
   .section-body ul, .section-body ol { padding-left: 20px; margin-bottom: 8px; }
   .section-body li { margin-bottom: 3px; }
+  .section-body table { width: 100%; border-collapse: collapse; margin: 10px 0; font-size: 9.5pt; }
+  .section-body th, .section-body td { border: 1px solid #dbe3ee; padding: 6px 8px; text-align: left; vertical-align: top; overflow-wrap: anywhere; }
+  .section-body th { background: #f1f5f9; color: #1e293b; font-weight: 600; }
   .section-body strong { font-weight: 600; }
   .section-body em { font-style: italic; color: #4a5568; }
   .section-body hr { border: none; border-top: 1px solid #e2e8f0; margin: 10px 0; }
@@ -154,6 +218,7 @@ export function exportPDF(analysis: AnalysisResultRead, language: Lang = 'en'): 
     .header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .signal-badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     .section { page-break-inside: avoid; }
+    .section-body thead { display: table-header-group; }
   }
 </style>
 </head>
@@ -213,7 +278,50 @@ function escapeHtml(s: string): string {
 }
 
 /** Converts the subset of Markdown that LLMs typically produce into safe HTML. */
-function mdToHtml(md: string): string {
+function splitTableRow(line: string): string[] {
+  const row = line.trim().replace(/^\|/, '').replace(/\|$/, '')
+  const cells: string[] = []
+  let cell = ''
+  let escaped = false
+
+  for (const char of row) {
+    if (escaped) {
+      cell += char
+      escaped = false
+    } else if (char === '\\') {
+      escaped = true
+    } else if (char === '|') {
+      cells.push(cell.trim())
+      cell = ''
+    } else {
+      cell += char
+    }
+  }
+  if (escaped) cell += '\\'
+  cells.push(cell.trim())
+  return cells
+}
+
+function isTableSeparator(line: string): boolean {
+  const cells = splitTableRow(line)
+  return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell))
+}
+
+function isTableRow(line: string): boolean {
+  return line.includes('|') && splitTableRow(line).length > 1
+}
+
+function renderTable(headers: string[], rows: string[][]): string {
+  const head = headers.map(cell => `<th>${inlineFormat(cell)}</th>`).join('')
+  const body = rows.map(row => {
+    const cells = headers.map((_, index) => `<td>${inlineFormat(row[index] ?? '')}</td>`).join('')
+    return `<tr>${cells}</tr>`
+  }).join('')
+  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`
+}
+
+/** Converts the supported, safe Markdown subset used by AI reports into HTML. */
+export function markdownToHtml(md: string): string {
   const lines = md.split('\n')
   const out: string[] = []
   let inUl = false
@@ -224,8 +332,24 @@ function mdToHtml(md: string): string {
     if (inOl) { out.push('</ol>'); inOl = false }
   }
 
-  for (const rawLine of lines) {
-    const line = rawLine
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index]
+
+    // GFM tables need a header row followed by a separator row. Requiring the
+    // separator prevents ordinary prose containing a pipe from becoming HTML.
+    if (isTableRow(line) && index + 1 < lines.length && isTableSeparator(lines[index + 1])) {
+      closeList()
+      const headers = splitTableRow(line)
+      const rows: string[][] = []
+      index += 2
+      while (index < lines.length && isTableRow(lines[index]) && lines[index].trim() !== '') {
+        rows.push(splitTableRow(lines[index]))
+        index += 1
+      }
+      index -= 1
+      out.push(renderTable(headers, rows))
+      continue
+    }
 
     if (/^#{4,}\s/.test(line)) {
       closeList()

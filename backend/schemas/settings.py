@@ -145,6 +145,7 @@ class MemoryStatusResponse(BaseModel):
 class LLMModelOption(BaseModel):
     value: str
     label: str
+    supported_output_languages: list[str] | None = None
 
 
 class LLMProviderCatalogEntry(BaseModel):

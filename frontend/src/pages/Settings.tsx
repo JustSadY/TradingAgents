@@ -18,7 +18,7 @@ import type { AgentSettingsPanelHandle } from '../components/settings/AgentSetti
 import type { WebhookDeliveryRead, SettingsRead, PresetRead } from '../api/types'
 
 type Settings = SettingsRead
-type LlmModelOption = { value: string; label: string }
+type LlmModelOption = { value: string; label: string; supported_output_languages?: string[] }
 type LlmCatalog = Record<string, { label: string; models: LlmModelOption[] }>
 type FallbackLLMEntry = { provider: string; model: string }
 
@@ -35,9 +35,11 @@ function normalizeLlmCatalog(value: unknown): LlmCatalog {
     const models = rawModels.flatMap(model => {
       if (typeof model !== 'object' || model === null || Array.isArray(model)) return []
       const option = model as Record<string, unknown>
-      return typeof option.value === 'string' && typeof option.label === 'string'
-        ? [{ value: option.value, label: option.label }]
-        : []
+      if (typeof option.value !== 'string' || typeof option.label !== 'string') return []
+      const supported_output_languages = Array.isArray(option.supported_output_languages)
+        ? option.supported_output_languages.filter((language): language is string => typeof language === 'string')
+        : undefined
+      return [{ value: option.value, label: option.label, supported_output_languages }]
     })
     catalog[provider] = {
       label: typeof (entry as Record<string, unknown>).label === 'string'
@@ -47,6 +49,14 @@ function normalizeLlmCatalog(value: unknown): LlmCatalog {
     }
   }
   return catalog
+}
+
+function lacksVerifiedOutputLanguage(model: LlmModelOption | undefined, language: string): boolean {
+  const supported = model?.supported_output_languages
+  return Boolean(
+    supported?.length
+      && !supported.some(candidate => candidate.localeCompare(language, undefined, { sensitivity: 'accent' }) === 0),
+  )
 }
 
 const Input = "w-full glass-input rounded-xl px-3 py-2 text-xs outline-none"
@@ -224,6 +234,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const update = (k: keyof Settings, v: any) => setS(prev => prev ? { ...prev, [k]: v } : prev)
   const primaryModels = llmCatalog[s.llm_provider]?.models ?? []
   const primaryUsesCustomModel = !primaryModels.some(model => model.value === s.llm_model)
+  const primaryModel = primaryModels.find(model => model.value === s.llm_model)
   const fallbackChain = s.fallback_llm_chain ?? []
   const webhookEvents = s.webhook_events ?? []
   const metaProviders = Object.entries(meta?.provider_labels ?? {})
@@ -389,6 +400,11 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                             placeholder={t('settings.custom_model_placeholder')}
                           />
                         )}
+                        {lacksVerifiedOutputLanguage(primaryModel, s.output_language) && (
+                          <p className="rounded-lg border border-amber-400/25 bg-amber-400/[0.06] px-2.5 py-2 text-[10px] leading-relaxed text-amber-200">
+                            {t('settings.model_language_warning')} {primaryModel?.supported_output_languages?.join(', ')}.
+                          </p>
+                        )}
                       </div>
                     </Row>
 
@@ -400,6 +416,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                         {fallbackChain.map((entry, index) => {
                           const models = llmCatalog[entry.provider]?.models ?? []
                           const usesCustomModel = !models.some(model => model.value === entry.model)
+                          const selectedFallbackModel = models.find(model => model.value === entry.model)
                           return (
                             <div key={`${entry.provider}-${entry.model}-${index}`} className="space-y-2 rounded-xl border border-white/[0.05] bg-white/[0.015] p-2.5">
                               <div className="flex items-center gap-2">
@@ -445,6 +462,11 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                                   onChange={e => updateFallbackEntry(index, { model: e.target.value })}
                                   placeholder={t('settings.custom_model_placeholder')}
                                 />
+                              )}
+                              {lacksVerifiedOutputLanguage(selectedFallbackModel, s.output_language) && (
+                                <p className="rounded-lg border border-amber-400/25 bg-amber-400/[0.06] px-2.5 py-2 text-[10px] leading-relaxed text-amber-200">
+                                  {t('settings.model_language_warning')} {selectedFallbackModel?.supported_output_languages?.join(', ')}.
+                                </p>
                               )}
                             </div>
                           )

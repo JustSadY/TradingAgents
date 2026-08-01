@@ -10,6 +10,7 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
+from backend.trading_agents.agents.runtime.debate_history import format_debate_argument
 from backend.trading_agents.agents.runtime.report_aggregator import (
     build_report_fields,
     build_resources,
@@ -50,7 +51,11 @@ def make_risk_debator(
             )
 
             response = await llm.ainvoke(prompt)
-            argument = f"{speaker} Analyst: {response.content}"
+            argument = format_debate_argument(
+                f"{speaker} Analyst",
+                response,
+                empty_notice=f"{speaker} perspective was unavailable for this debate turn.",
+            )
 
             new_risk_debate_state = {
                 "history": history + "\n" + argument,
