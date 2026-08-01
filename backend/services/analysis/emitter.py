@@ -72,6 +72,64 @@ class AnalysisEmitter:
     async def emit_decision(self, signal: str | None, final_decision: str) -> None:
         await self.emit({"type": "decision", "signal": signal, "final_decision": final_decision})
 
+    async def emit_order_result(
+        self,
+        *,
+        analysis_id: int,
+        ticker: str,
+        action: str | None,
+        signal: str | None,
+        outcome: str,
+        broker_status: str | None = None,
+        order_id: str | None = None,
+        filled_quantity: object | None = None,
+        filled_price: object | None = None,
+        commission: object | None = None,
+        message: str = "",
+        reason_code: str | None = None,
+    ) -> None:
+        """Publish the durable outcome of an optional post-analysis order.
+
+        ``complete`` means that the AI report was persisted; it must not be
+        interpreted as an assertion that an order was filled.  This separate
+        event gives the client an explicit filled/skipped/rejected/error
+        result, while retaining broker-specific detail for an order history.
+        Values may be ``Decimal`` instances, so convert them at this wire
+        boundary instead of relying on a JSON encoder implementation.
+        """
+
+        if outcome not in {"filled", "skipped", "rejected", "error"}:
+            raise ValueError(f"Unsupported order outcome: {outcome}")
+
+        def _number(value: object | None) -> float | None:
+            if value is None:
+                return None
+            try:
+                return float(value)
+            except (TypeError, ValueError):
+                return None
+
+        event: dict[str, Any] = {
+            "type": "order_result",
+            "analysis_id": analysis_id,
+            "ticker": ticker,
+            "action": action,
+            "signal": signal,
+            # ``status`` is retained as the compact conventional field; the
+            # more explicit ``outcome`` makes event consumers self-documenting.
+            "status": outcome,
+            "outcome": outcome,
+            "broker_status": broker_status,
+            "order_id": order_id or None,
+            "filled_quantity": _number(filled_quantity),
+            "filled_price": _number(filled_price),
+            "commission": _number(commission),
+            "message": message,
+        }
+        if reason_code:
+            event["reason_code"] = reason_code
+        await self.emit(event)
+
     async def emit_complete(
         self,
         analysis_id: int,

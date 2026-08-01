@@ -28,9 +28,9 @@ interface SectionDef {
 const SHARED_REPORT_SECTION_DEFS: SectionDef[] = [
   { key: 'final_decision', labelKey: 'analysis.section.final_trade_decision', fallbackLabel: 'Final Decision', icon: Scale, category: 'decision' },
   { key: 'investment_plan', labelKey: 'analysis.section.investment_plan', fallbackLabel: 'Investment Plan', icon: BookOpen, category: 'decision' },
-  { key: 'trader_plan', labelKey: 'analysis.section.trader_investment_plan', fallbackLabel: 'Trader Proposal', icon: Zap, category: 'decision' },
+  { key: 'trader_plan', labelKey: 'analysis.section.trader_investment_plan', fallbackLabel: 'Legacy Trader Proposal', icon: Zap, category: 'decision' },
   { key: 'judge_decision', labelKey: 'analysis.section.judge_decision', fallbackLabel: 'Judge Decision', icon: Scale, category: 'decision' },
-  { key: 'trader_proposal_json', labelKey: 'analysis.section.trader_proposal_json', fallbackLabel: 'Trade Proposal Details', icon: Zap, category: 'decision', kind: 'structured' },
+  { key: 'trader_proposal_json', labelKey: 'analysis.section.trader_proposal_json', fallbackLabel: 'Legacy Trade Proposal Details', icon: Zap, category: 'decision', kind: 'structured' },
 
   { key: 'market_report', labelKey: 'analysis.section.market_report', fallbackLabel: 'Market Analysis', icon: TrendingUp, category: 'analyst' },
   { key: 'fundamentals_report', labelKey: 'analysis.section.fundamentals_report', fallbackLabel: 'Fundamental Analysis', icon: BookOpen, category: 'analyst' },

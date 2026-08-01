@@ -1,6 +1,6 @@
 # 🤖 TradingAgents AI: Multi-Agent Decision Engine
 
-This directory contains the core multi-agent AI system designed to analyze securities, conduct investment thesis debates, negotiate position sizing parameters under risk constraints, and execute final trades. 
+This directory contains the core multi-agent AI system designed to analyze securities, conduct investment thesis debates, surface risk guardrails, and have one Portfolio Manager produce the final trade recommendation.
 
 Built using **LangGraph** and **LangChain Core**, the system models complex financial decision-making as a state machine with asynchronous execution, self-correction reflection loops, and streaming updates.
 
@@ -47,7 +47,7 @@ graph TD
         RiskDebate --> RN[Neutral Risk Agent]
     end
     
-    RA & RC & RN --> FinalExecution[Portfolio Manager Decision Node]
+    RA & RC & RN --> FinalExecution[Portfolio Manager: Sole Execution Decision]
     FinalExecution --> Reflection{Reflection & Correction Loop}
     Reflection -->|Validation Failed| AnalystExecution
     Reflection -->|Validation Approved| EndNode([Final Output & Execution])
@@ -67,13 +67,12 @@ trading_agents/
 │   ├── base.py              # Shared agent contracts
 │   ├── hierarchy.py         # AgentHierarchy: cascading kill-switches + LLM fallback resolution
 │   ├── main/                # Tier-1 main graph nodes (market intelligence, agent Q&A,
-│   │                        #   research, trade execution, risk, portfolio)
+│   │                        #   research, risk, portfolio)
 │   ├── sub/                 # Tier-2 sub-agents
 │   │   ├── analysts/        # The 12 analyst plugins
 │   │   ├── researchers/     # Bull & Bear thesis builders
 │   │   ├── managers/        # Research, Synthesis, Auditor, and Portfolio managers
 │   │   ├── risk_mgmt/       # Risk analyst personalities (Aggressive, Conservative, Neutral)
-│   │   └── trader/          # Trader node logic
 │   ├── runtime/             # Execution runtime helpers (resilience, memory,
 │   │                        #   analyst_execution, analyst_node_factory)
 │   ├── tools/               # Tier-3 modular tool registry (base, registry, bootstrap, builtin/)

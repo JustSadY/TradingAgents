@@ -99,7 +99,7 @@ async def test_merged_risk_debate_preserves_all_perspectives_and_language_settin
 
     result = await risk.create_risk_debate_node(ctx)(
         {
-            "trader_investment_plan": "Accumulate AAPL gradually.",
+            "investment_plan": "Research posture: Bullish; earnings quality improved.",
             "market_report": "## Executive Summary\nTrend remains constructive.",
         }
     )
@@ -113,3 +113,5 @@ async def test_merged_risk_debate_preserves_all_perspectives_and_language_settin
     )
     assert "LANGUAGE: Turkish only." in llm.prompt
     assert "Use concise risk controls." in llm.prompt
+    assert "TRADER'S INVESTMENT PLAN" not in llm.prompt
+    assert "RESEARCH MANAGER EVIDENCE BRIEF" in llm.prompt

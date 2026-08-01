@@ -58,7 +58,6 @@ async def run_portfolio_analysis(
                 )
                 data = {
                     "id": row.id,
-                    "trader_plan": row.trader_plan,
                     "portfolio_decision": row.final_decision,
                 }
             if portfolio_emitter:
@@ -78,7 +77,6 @@ async def run_portfolio_analysis(
         ticker, data = res
         analysis_ids.append(data["id"])
         ticker_reports[ticker] = {
-            "trader_plan": data["trader_plan"],
             "portfolio_decision": data["portfolio_decision"],
         }
 

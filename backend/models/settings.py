@@ -40,6 +40,10 @@ class AppSettings(Base):
     max_risk_rounds: Mapped[int] = mapped_column(Integer, default=1)
     max_position_size_pct: Mapped[float] = mapped_column(Float, default=10.0)
     max_risk_per_trade_pct: Mapped[float] = mapped_column(Float, default=2.0)
+    # Explicit opt-in: an analysis may produce a directional signal without
+    # being permission to open a position.  Auto-execution stays disabled
+    # until the account owner enables this setting deliberately.
+    auto_execute_signals: Mapped[bool] = mapped_column(Boolean, default=False)
     allow_short_selling: Mapped[bool] = mapped_column(Boolean, default=False)
     max_concentration_pct: Mapped[float] = mapped_column(Float, default=25.0)
     max_gross_exposure: Mapped[float] = mapped_column(Float, default=3.0)

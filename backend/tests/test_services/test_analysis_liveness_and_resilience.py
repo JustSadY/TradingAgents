@@ -188,7 +188,6 @@ def test_graph_setup_uses_composite_timeouts_without_signature_regression(monkey
     monkeypatch.setattr(graph_setup, "create_market_intelligence_node", lambda _ctx: empty_node)
     monkeypatch.setattr(graph_setup, "create_agent_qa_node", lambda _ctx: empty_node)
     monkeypatch.setattr(graph_setup, "create_research_manager_node", lambda _ctx: empty_node)
-    monkeypatch.setattr(graph_setup, "create_trader_node", lambda _ctx: empty_node)
     monkeypatch.setattr(graph_setup, "create_risk_debate_node", lambda _ctx: empty_node)
     monkeypatch.setattr(graph_setup, "create_portfolio_manager_node", lambda _ctx: empty_node)
 
@@ -204,3 +203,4 @@ def test_graph_setup_uses_composite_timeouts_without_signature_regression(monkey
     assert captured["Market Intelligence"]["timeout_multiplier"] == 2
     assert captured["Research Manager"]["timeout_multiplier"] == 5
     assert captured["Research Manager"]["retry_timeouts"] is False
+    assert "Trader" not in captured

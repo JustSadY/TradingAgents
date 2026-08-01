@@ -196,7 +196,7 @@ export default function MockTrading() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('mocktrading.title')}</h2>
-          <p className="text-xs text-slate-500 mt-1">Execute manual sandbox orders and track real-time position ledger stats</p>
+          <p className="text-xs text-slate-500 mt-1">{t('mocktrading.subtitle')}</p>
         </div>
         <div className="flex gap-2">
           <button
@@ -262,6 +262,9 @@ export default function MockTrading() {
             <h3 className="text-sm font-display font-semibold text-slate-200 mb-4 flex items-center gap-2">
               <ShoppingCart size={15} className="text-violet-400" /> {t('mocktrading.order_title')}
             </h3>
+            <p data-testid="manual-order-independence" className="mb-4 rounded-xl border border-slate-700/50 bg-slate-950/30 px-3 py-2 text-[10px] leading-relaxed text-slate-400">
+              {t('mocktrading.manual_independent_hint')}
+            </p>
             <form onSubmit={handleOrder} className="space-y-4">
               <div className="flex rounded-xl overflow-hidden border border-white/[0.08] p-0.5 bg-slate-950/40">
                 <button

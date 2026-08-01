@@ -1,45 +1,20 @@
-"""
-Main Agent: Trader.
+"""Deprecated compatibility shim for the retired Trader graph stage.
 
-Owns the single execution-planner sub-agent, which turns the research plan into
-a concrete trade proposal (entry / stop / target / confidence).
-
-Kill-switch behaviour:
-  • trader disabled  → emit a neutral plan and skip the sub-agent (zero tokens).
+The active graph is ``Research Manager -> Risk Debate -> Portfolio Manager``.
+This factory remains import-compatible for extensions compiled against older
+versions, but it cannot call an LLM or produce a competing order proposal.
 """
 
 from __future__ import annotations
 
-import inspect
-import logging
-
 from backend.trading_agents.agents.base import AgentRunContext, NodeFn
-from backend.trading_agents.agents.sub.trader.trader import create_trader
-
-logger = logging.getLogger(__name__)
-
-MAIN_KEY = "trader"
 
 
-def create_trader_node(ctx: AgentRunContext) -> NodeFn:
-    async def trader_node(state) -> dict:
-        if not ctx.is_enabled(MAIN_KEY):
-            logger.info("[trader] branch disabled — skipping trade planning.")
-            return {
-                "trader_investment_plan": "",
-                "trader_proposal_json": "{}",
-            }
-
-        run = create_trader(ctx.llm_for("trader"))
-        try:
-            if inspect.iscoroutinefunction(run):
-                return await run(state)
-            return run(state)
-        except Exception as exc:
-            logger.warning("[trader] sub-agent failed: %s — using fallback.", exc)
-            return {
-                "trader_investment_plan": "Trader agent unavailable; deferring to risk debate.",
-                "trader_proposal_json": "{}",
-            }
+def create_trader_node(_ctx: AgentRunContext) -> NodeFn:
+    async def trader_node(_state) -> dict:
+        return {
+            "trader_investment_plan": "",
+            "trader_proposal_json": "{}",
+        }
 
     return trader_node

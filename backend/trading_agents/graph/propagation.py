@@ -47,6 +47,12 @@ class Propagator:
                     "count": 0,
                 }
             ),
+            # The prior Trader LLM was removed from the active path. Keep
+            # these empty compatibility fields so historical result readers do
+            # not need a destructive database migration.
+            "trader_investment_plan": "",
+            "trader_proposal_json": "{}",
+            "portfolio_decision_json": "{}",
             "market_report": "",
             "fundamentals_report": "",
             "sentiment_report": "",

@@ -7,6 +7,7 @@ from backend.trading_agents.agents.runtime.report_aggregator import extract_exec
 from backend.trading_agents.agents.schemas import (
     PortfolioDecision,
     PortfolioRating,
+    ResearchBias,
     ResearchPlan,
     TraderAction,
     TraderProposal,
@@ -20,9 +21,10 @@ from backend.trading_agents.graph.reflection import Reflector
 def test_structured_renderers_localize_turkish_scaffolding_and_actions():
     plan = render_research_plan(
         ResearchPlan(
-            recommendation=PortfolioRating.BUY,
+            research_bias=ResearchBias.BULLISH,
             rationale="Kanıtlar olumlu.",
-            strategic_actions="Pozisyonu kademeli artır.",
+            key_evidence="Büyüme ve talep verileri olumlu.",
+            risk_conditions="Beklenenden zayıf kılavuzluk bu görüşü geçersiz kılar.",
         ),
         "Turkish",
     )
@@ -46,7 +48,7 @@ def test_structured_renderers_localize_turkish_scaffolding_and_actions():
         "Turkish",
     )
 
-    assert "**Öneri**: Al" in plan
+    assert "**Araştırma Eğilimi**: Olumlu" in plan
     assert "**İşlem**: Sat" in trader
     assert "**Nihai İşlem Önerisi**: **Sat**" in trader
     assert "**Derecelendirme**: Ağırlığı Artır" in decision

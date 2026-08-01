@@ -25,7 +25,6 @@ import { DebateBubble, DebateHistoryWidget, parseDebateMessage } from '../compon
 import { AnalysisChatWidget } from '../components/analysis/AnalysisChatWidget'
 import { RiskMetricsCard } from '../components/analysis/RiskMetricsCard'
 import { MentalModelTicker } from '../components/analysis/MentalModelTicker'
-import { KellyPositioningCard } from '../components/analysis/KellyPositioningCard'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 
 interface WsEvent {
@@ -38,6 +37,9 @@ interface WsEvent {
   attempt?: number; max_attempts?: number; error?: string; kind?: string
   error_type?: string; elapsed_seconds?: number
   estimated_cost_usd?: number
+  outcome?: string; action?: string; ticker?: string; quantity?: number
+  price?: number; filled_quantity?: number; filled_price?: number
+  reason?: string; reason_code?: string
 }
 const STORAGE_KEY = 'ta_last_run'
 const TASK_KEY = 'ta_task_running'
@@ -129,6 +131,17 @@ function QualityBadge({ quality }: { quality: RunQuality }) {
 
 type RunStatus = 'idle' | 'running' | 'done' | 'error'
 type LiveDebateMessage = { sender: string; content: string; type: string }
+type OrderOutcome = 'filled' | 'skipped' | 'rejected' | 'error'
+type AnalysisOrderResult = {
+  outcome: OrderOutcome
+  action?: 'BUY' | 'SELL'
+  ticker: string
+  quantity?: number
+  price?: number
+  reason?: string
+  message?: string
+  analysisId?: number
+}
 type SavedRun = {
   ticker: string
   date: string
@@ -140,13 +153,14 @@ type SavedRun = {
   activeSection: string | null
   analysisId: number | null
   liveDebate: LiveDebateMessage[]
+  orderResult: AnalysisOrderResult | null
 }
 
 function emptyRun(): SavedRun {
   return {
     ticker: '', date: new Date().toISOString().slice(0, 10), assetType: 'stock',
     runStatus: 'idle', signal: null, reports: {}, log: [], activeSection: null,
-    analysisId: null, liveDebate: [],
+    analysisId: null, liveDebate: [], orderResult: null,
   }
 }
 
@@ -240,6 +254,102 @@ function liveDebateMessages(value: unknown): LiveDebateMessage[] {
   })
 }
 
+function isFiniteNumeric(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value)
+}
+
+function normalizedOrderOutcome(value: unknown): OrderOutcome | null {
+  if (typeof value !== 'string') return null
+  switch (value.trim().toLowerCase()) {
+    case 'filled':
+    case 'executed':
+    case 'success':
+      return 'filled'
+    case 'skipped':
+    case 'no_trade':
+    case 'no-trade':
+      return 'skipped'
+    case 'rejected':
+    case 'blocked':
+    case 'denied':
+      return 'rejected'
+    case 'error':
+    case 'failed':
+      return 'error'
+    default:
+      return null
+  }
+}
+
+/**
+ * Normalise the execution event at the UI boundary.  The execution service
+ * intentionally emits a small, transport-safe payload, but old workers used
+ * `status` rather than `outcome`; accepting both makes reconnect/replay and
+ * rolling deployment harmless without treating arbitrary payloads as fills.
+ */
+function readOrderResult(value: unknown, fallbackTicker: string): AnalysisOrderResult | null {
+  if (!isRecord(value)) return null
+  const outcome = normalizedOrderOutcome(value.outcome ?? value.status)
+  if (!outcome) return null
+
+  const rawAction = typeof value.action === 'string' ? value.action.trim().toUpperCase() : ''
+  const action = rawAction === 'BUY' || rawAction === 'SELL' ? rawAction : undefined
+  const rawTicker = typeof value.ticker === 'string' ? value.ticker.trim().toUpperCase() : ''
+  const ticker = rawTicker || fallbackTicker.trim().toUpperCase()
+  if (!ticker) return null
+
+  return {
+    outcome,
+    action,
+    ticker,
+    quantity: isFiniteNumeric(value.quantity) && value.quantity > 0
+      ? value.quantity
+      : isFiniteNumeric(value.filled_quantity) && value.filled_quantity > 0
+        ? value.filled_quantity
+        : undefined,
+    price: isFiniteNumeric(value.price) && value.price >= 0
+      ? value.price
+      : isFiniteNumeric(value.filled_price) && value.filled_price >= 0
+        ? value.filled_price
+        : undefined,
+    reason: typeof value.reason === 'string' && value.reason.trim()
+      ? value.reason.trim()
+      : typeof value.reason_code === 'string' && value.reason_code.trim()
+        ? value.reason_code.trim()
+        : undefined,
+    message: typeof value.message === 'string' && value.message.trim() ? value.message.trim() : undefined,
+    analysisId: isFiniteNumeric(value.analysis_id) && value.analysis_id > 0 ? value.analysis_id : undefined,
+  }
+}
+
+function sameOrderResult(left: AnalysisOrderResult | null, right: AnalysisOrderResult): boolean {
+  return !!left && left.outcome === right.outcome && left.action === right.action &&
+    left.ticker === right.ticker && left.quantity === right.quantity && left.price === right.price &&
+    left.reason === right.reason && left.message === right.message && left.analysisId === right.analysisId
+}
+
+function orderActionLabel(action: AnalysisOrderResult['action'], t: (key: string) => string): string | null {
+  if (!action) return null
+  return t(action === 'BUY' ? 'analysis.order.action.buy' : 'analysis.order.action.sell')
+}
+
+function orderResultLogLine(result: AnalysisOrderResult, t: (key: string) => string): string {
+  const marker = result.outcome === 'filled' ? '✓' : result.outcome === 'skipped' ? '⚠' : '❌'
+  const details = [
+    orderActionLabel(result.action, t),
+    result.quantity !== undefined ? String(result.quantity) : null,
+    result.ticker,
+    result.price !== undefined ? `@ $${result.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : null,
+  ].filter((part): part is string => !!part)
+  const reason = result.message ?? result.reason
+  return [
+    `${marker} ${t('analysis.order.log_prefix')}`,
+    t(`analysis.order.outcome.${result.outcome}`),
+    details.join(' '),
+    reason,
+  ].filter((part): part is string => !!part).join(' — ')
+}
+
 function hasValidRunningTask(): boolean {
   const raw = localStorage.getItem(TASK_KEY)
   if (!raw) return false
@@ -299,21 +409,207 @@ function loadRunState(): SavedRun {
         ? parsed.analysisId
         : null,
       liveDebate: liveDebateMessages(parsed.liveDebate),
+      orderResult: readOrderResult(parsed.orderResult, typeof parsed.ticker === 'string' ? parsed.ticker : fallback.ticker),
     }
   } catch {
     return fallback
   }
 }
 
-// Safely render the Kelly card from a (possibly malformed/partial) JSON string.
-// trader_proposal_json is streamed over the WebSocket, so an unguarded JSON.parse
-// in the render path could throw and take down the whole tab.
-function KellyPositioningFromJson({ json }: { json?: string | null }) {
-  if (!json || json === '{}') return null
-  let parsed: any
-  try { parsed = JSON.parse(json) } catch { return null }
-  if (!parsed || typeof parsed !== 'object') return null
-  return <KellyPositioningCard kellySize={parsed.kelly_size} suggestedCapital={parsed.suggested_capital} />
+type PortfolioDecisionPreview = {
+  source: 'portfolio_manager' | 'legacy_trader'
+  rating?: string
+  confidenceScore?: number
+  entryPrice?: number
+  stopLoss?: number
+  takeProfit?: number
+  positionSizePct?: number
+  suggestedCapital?: number
+  recommendedLeverage?: number
+}
+
+function objectFromJson(value: unknown): Record<string, unknown> | null {
+  if (isRecord(value)) return value
+  if (typeof value !== 'string' || !value.trim()) return null
+  try {
+    const parsed: unknown = JSON.parse(value)
+    return isRecord(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+function decisionNumber(value: unknown): number | undefined {
+  return isFiniteNumeric(value) ? value : undefined
+}
+
+/**
+ * New runs store the sole Portfolio Manager recommendation inside
+ * `chart_annotations.portfolio_decision`.  The Trader JSON is read only for
+ * old saved analyses so current UI never presents competing AI trade sizes.
+ */
+function readPortfolioDecision(
+  chartAnnotations: unknown,
+  legacyTraderJson?: string | null,
+  streamedPortfolioDecision?: unknown,
+): PortfolioDecisionPreview | null {
+  const annotations = objectFromJson(chartAnnotations)
+  const decision = objectFromJson(
+    annotations?.portfolio_decision ?? annotations?.portfolio_decision_json ?? streamedPortfolioDecision,
+  )
+  if (decision) {
+    const rating = typeof decision.rating === 'string' && decision.rating.trim() ? decision.rating.trim() : undefined
+    const preview: PortfolioDecisionPreview = {
+      source: 'portfolio_manager',
+      rating,
+      confidenceScore: decisionNumber(decision.confidence_score),
+      entryPrice: decisionNumber(decision.entry_price),
+      stopLoss: decisionNumber(decision.stop_loss),
+      takeProfit: decisionNumber(decision.take_profit_price ?? decision.take_profit),
+      positionSizePct: decisionNumber(decision.position_size_pct),
+      suggestedCapital: decisionNumber(decision.suggested_capital),
+      recommendedLeverage: decisionNumber(decision.recommended_leverage),
+    }
+    if (Object.entries(preview).some(([key, value]) => key !== 'source' && value !== undefined)) return preview
+  }
+
+  const legacy = objectFromJson(legacyTraderJson)
+  if (!legacy) return null
+  const kellySize = decisionNumber(legacy.kelly_size)
+  const preview: PortfolioDecisionPreview = {
+    source: 'legacy_trader',
+    rating: typeof legacy.action === 'string' && legacy.action.trim() ? legacy.action.trim() : undefined,
+    confidenceScore: decisionNumber(legacy.confidence_score),
+    entryPrice: decisionNumber(legacy.entry_price),
+    stopLoss: decisionNumber(legacy.stop_loss),
+    takeProfit: decisionNumber(legacy.take_profit_price ?? legacy.take_profit),
+    positionSizePct: kellySize === undefined ? decisionNumber(legacy.position_size_pct) : (kellySize <= 1 ? kellySize * 100 : kellySize),
+    suggestedCapital: decisionNumber(legacy.suggested_capital),
+    recommendedLeverage: decisionNumber(legacy.recommended_leverage),
+  }
+  return Object.entries(preview).some(([key, value]) => key !== 'source' && value !== undefined) ? preview : null
+}
+
+function PortfolioDecisionCard({
+  chartAnnotations,
+  legacyTraderJson,
+  streamedPortfolioDecision,
+}: {
+  chartAnnotations?: unknown
+  legacyTraderJson?: string | null
+  streamedPortfolioDecision?: unknown
+}) {
+  const { t } = useTranslation()
+  const decision = readPortfolioDecision(chartAnnotations, legacyTraderJson, streamedPortfolioDecision)
+  if (!decision) return null
+
+  const confidence = decision.confidenceScore === undefined
+    ? null
+    : decision.confidenceScore <= 1 ? decision.confidenceScore * 100 : decision.confidenceScore
+  const money = (value: number) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const values = [
+    decision.entryPrice === undefined ? null : [t('analysis.pm.entry'), money(decision.entryPrice)],
+    decision.stopLoss === undefined ? null : [t('analysis.pm.stop'), money(decision.stopLoss)],
+    decision.takeProfit === undefined ? null : [t('analysis.pm.target'), money(decision.takeProfit)],
+    decision.positionSizePct === undefined ? null : [t('analysis.pm.allocation'), `${decision.positionSizePct.toFixed(1)}%`],
+    decision.suggestedCapital === undefined ? null : [t('analysis.pm.capital'), money(decision.suggestedCapital)],
+    decision.recommendedLeverage === undefined ? null : [t('analysis.pm.leverage'), `${decision.recommendedLeverage.toFixed(1)}x`],
+  ].filter((entry): entry is [string, string] => entry !== null)
+
+  return (
+    <div data-testid="portfolio-decision-card" className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.06] p-4 space-y-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="space-y-0.5">
+          <h4 className="text-[10px] font-bold text-violet-300 uppercase tracking-widest">{t('analysis.pm.title')}</h4>
+          <p className="text-[10px] text-slate-400">
+            {decision.source === 'portfolio_manager' ? t('analysis.pm.single_authority') : t('analysis.pm.legacy_fallback')}
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {decision.rating && <SignalBadge signal={decision.rating} />}
+          {confidence !== null && <span className="rounded-md border border-violet-400/20 bg-violet-400/10 px-2 py-0.5 text-[10px] font-mono font-bold text-violet-200">{confidence.toFixed(0)}%</span>}
+        </div>
+      </div>
+      {values.length > 0 && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 gap-x-3 gap-y-2 text-[10px]">
+          {values.map(([label, value]) => (
+            <div key={label}>
+              <span className="block text-slate-500 uppercase tracking-wide font-semibold">{label}</span>
+              <span className="font-mono text-slate-100">{value}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+/**
+ * Analysis completion and order execution are deliberately distinct states.
+ * A final model signal is a recommendation; this card only confirms whether
+ * the separately guarded execution layer actually placed a sandbox order.
+ */
+function AutomatedOrderResultCard({ result }: { result: AnalysisOrderResult | null }) {
+  const { t } = useTranslation()
+  const outcome = result?.outcome
+  const presentation = outcome === 'filled'
+    ? { Icon: CheckCircle, panel: 'border-emerald-500/25 bg-emerald-500/[0.06]', icon: 'text-emerald-400', text: 'text-emerald-200' }
+    : outcome === 'skipped'
+      ? { Icon: AlertTriangle, panel: 'border-amber-500/25 bg-amber-500/[0.06]', icon: 'text-amber-400', text: 'text-amber-100' }
+      : outcome
+        ? { Icon: AlertCircle, panel: 'border-rose-500/25 bg-rose-500/[0.06]', icon: 'text-rose-400', text: 'text-rose-100' }
+        : { Icon: AlertTriangle, panel: 'border-slate-600/40 bg-slate-900/35', icon: 'text-slate-400', text: 'text-slate-300' }
+  const status = outcome ? t(`analysis.order.outcome.${outcome}`) : t('analysis.order.pending')
+  const explanation = result?.message ?? result?.reason
+  const action = orderActionLabel(result?.action, t)
+
+  return (
+    <div
+      data-testid="analysis-order-result"
+      data-outcome={outcome ?? 'pending'}
+      className={`rounded-2xl border p-4 space-y-3 ${presentation.panel}`}
+    >
+      <div className="flex items-start gap-2.5">
+        <presentation.Icon size={16} className={`${presentation.icon} shrink-0 mt-0.5`} />
+        <div className="min-w-0 space-y-0.5">
+          <h3 className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('analysis.order.title')}</h3>
+          <p className={`text-xs font-bold ${presentation.text}`}>{status}</p>
+        </div>
+      </div>
+
+      {result ? (
+        <>
+          <div className="grid grid-cols-2 gap-x-3 gap-y-2 text-[10px]">
+            <div>
+              <span className="block text-slate-500 uppercase tracking-wide font-semibold">{t('analysis.order.symbol')}</span>
+              <span className="font-mono text-slate-100">{result.ticker}</span>
+            </div>
+            {action && (
+              <div>
+                <span className="block text-slate-500 uppercase tracking-wide font-semibold">{t('analysis.order.action')}</span>
+                <span className="font-mono text-slate-100">{action}</span>
+              </div>
+            )}
+            {result.quantity !== undefined && (
+              <div>
+                <span className="block text-slate-500 uppercase tracking-wide font-semibold">{t('analysis.order.quantity')}</span>
+                <span className="font-mono text-slate-100">{result.quantity.toLocaleString()}</span>
+              </div>
+            )}
+            {result.price !== undefined && (
+              <div>
+                <span className="block text-slate-500 uppercase tracking-wide font-semibold">{t('analysis.order.price')}</span>
+                <span className="font-mono text-slate-100">${result.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</span>
+              </div>
+            )}
+          </div>
+          {explanation && <p className="border-t border-white/[0.07] pt-2 text-[11px] leading-relaxed text-slate-300">{explanation}</p>}
+        </>
+      ) : (
+        <p className="text-[11px] leading-relaxed text-slate-400">{t('analysis.order.pending_description')}</p>
+      )}
+    </div>
+  )
 }
 
 function RunTab() {
@@ -336,6 +632,7 @@ function RunTab() {
   const [detail, setDetail] = useState<AnalysisResultRead | null>(null)
   const [activeTab, setActiveTab] = useState<'consensus' | 'reports' | 'debate' | 'chat' | 'timetravel'>('consensus')
   const [liveDebate, setLiveDebate] = useState<{ sender: string; content: string; type: string }[]>(saved.liveDebate || [])
+  const [orderResult, setOrderResult] = useState<AnalysisOrderResult | null>(saved.orderResult)
   const [liveDebateTab, setLiveDebateTab] = useState<'inv' | 'risk'>('inv')
   const [riskMetrics, setRiskMetrics] = useState<any>(null)
   const [mentalModel, setMentalModel] = useState<{ agent: string; thought: string } | null>(null)
@@ -409,13 +706,13 @@ function RunTab() {
     try {
       // Don't persist reports while running — they're large and will be re-streamed via WS on reconnect
       const payload = runStatus === 'running'
-        ? { ticker, date, assetType, runStatus, signal, reports: {}, log: [], liveDebate: [], activeSection, analysisId }
-        : { ticker, date, assetType, runStatus, signal, reports, log, liveDebate, activeSection, analysisId }
+        ? { ticker, date, assetType, runStatus, signal, reports: {}, log: [], liveDebate: [], orderResult, activeSection, analysisId }
+        : { ticker, date, assetType, runStatus, signal, reports, log, liveDebate, orderResult, activeSection, analysisId }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
     } catch {
       // QuotaExceededError — ignore, state lives in memory
     }
-  }, [ticker, date, assetType, runStatus, signal, reports, log, liveDebate, activeSection, analysisId])
+  }, [ticker, date, assetType, runStatus, signal, reports, log, liveDebate, orderResult, activeSection, analysisId])
 
   useEffect(() => {
     if (analysisId && runStatus === 'done' && !detail) {
@@ -690,6 +987,11 @@ function RunTab() {
         appendLog(`🔒 Circuit open for ${ev.node} (${ev.elapsed_seconds}s)`)
       } else if (ev.type === 'decision') {
         setSignal(ev.signal || null)
+      } else if (ev.type === 'order_result') {
+        const nextOrderResult = readOrderResult(ev, tickerRef.current)
+        if (!nextOrderResult) return
+        setOrderResult(previous => sameOrderResult(previous, nextOrderResult) ? previous : nextOrderResult)
+        appendLog(orderResultLogLine(nextOrderResult, t))
       } else if (ev.type === 'complete') {
         finished = true
         terminalTaskIdRef.current = taskId
@@ -700,6 +1002,7 @@ function RunTab() {
         setMentalModel(null)
         setStats(prev => prev ? { ...prev, llmCalls: ev.llm_calls || prev.llmCalls, estimatedCost: ev.estimated_cost_usd } : null)
         appendLog(`Completed in ${ev.duration_seconds}s / ${ev.llm_calls} LLM calls`)
+        appendLog(t('analysis.order.analysis_complete'))
         sendBrowserNotification(
           `${tickerRef.current.toUpperCase()} Analysis Completed`,
           `Signal: ${ev.signal ?? 'N/A'} • Duration: ${ev.duration_seconds?.toFixed(0)}s`
@@ -773,6 +1076,7 @@ function RunTab() {
     seenLogRef.current = new Set()
     setReports({})
     setSignal(null)
+    setOrderResult(null)
     setAnalysisId(null)
     setDetail(null)
     localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: task.ticker, taskId: task.task_id, startedAt: new Date(task.started_at * 1000).toISOString() }))
@@ -933,6 +1237,7 @@ function RunTab() {
     setReports({})
     setLog([])
     setLiveDebate([])
+    setOrderResult(null)
     setAnalysisId(null)
     setDetail(null)
     setActiveSection(null)
@@ -979,7 +1284,7 @@ function RunTab() {
 
   const handleClear = () => {
     setRunStatus('idle'); setSignal(null); setReports({}); setLog([]); setActiveSection(null); setCurrentStep(null)
-    setAnalysisId(null); setDetail(null); setLiveDebate([]); setStats(null); setStartError(null)
+    setAnalysisId(null); setDetail(null); setLiveDebate([]); setOrderResult(null); setStats(null); setStartError(null)
   }
 
   const handleRollbackStart = (taskId: string) => {
@@ -992,6 +1297,7 @@ function RunTab() {
     setReports({})
     setLog([])
     setLiveDebate([])
+    setOrderResult(null)
     setAnalysisId(null)
     setDetail(null)
     setActiveSection(null)
@@ -1058,20 +1364,28 @@ function RunTab() {
         <MentalModelTicker agent={mentalModel.agent} thought={mentalModel.thought} />
       )}
 
-      {(running || log.length > 0 || reportEntries.length > 0 || !!detail) && (() => {
+      {(running || log.length > 0 || reportEntries.length > 0 || !!detail || !!orderResult) && (() => {
         const isCompleted = !!detail || runStatus === 'done';
         const activeSignal = detail ? detail.signal : signal;
         const activeRiskMetrics = detail ? detail.risk_metrics : riskMetrics;
-        const activeTraderProposal = detail ? detail.trader_proposal_json : reports.trader_proposal_json;
+        const activeLegacyTraderProposal = detail ? detail.trader_proposal_json : reports.trader_proposal_json;
+        const activeChartAnnotations = detail?.chart_annotations ?? reports.chart_annotations;
+        const streamedPortfolioDecision = reports.portfolio_decision_json || reports.portfolio_decision;
+        const activePortfolioDecision = readPortfolioDecision(
+          activeChartAnnotations,
+          activeLegacyTraderProposal,
+          streamedPortfolioDecision,
+        );
+        const hasPortfolioManagerDecision = activePortfolioDecision?.source === 'portfolio_manager';
         const activeId = detail ? detail.id : analysisId;
 
         const activePlans = detail ? {
           investment_plan: detail.investment_plan,
-          trader_plan: detail.trader_plan,
+          trader_plan: hasPortfolioManagerDecision ? '' : detail.trader_plan,
           final_decision: detail.final_decision,
         } : {
-          investment_plan: reports.trader_investment_plan || reports.trader_plan || reports.investment_plan || '',
-          trader_plan: reports.trader_plan || '',
+          investment_plan: reports.investment_plan || '',
+          trader_plan: hasPortfolioManagerDecision ? '' : reports.trader_plan || reports.trader_investment_plan || '',
           final_decision: reports.final_decision || '',
         };
 
@@ -1112,7 +1426,7 @@ function RunTab() {
                   ) : runStatus === 'done' ? (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
                       <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-                      Completed
+                      {t('analysis.order.analysis_complete_status')}
                     </span>
                   ) : runStatus === 'error' ? (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
@@ -1143,6 +1457,10 @@ function RunTab() {
                   </div>
                 )}
               </div>
+
+              {(runStatus === 'done' || !!orderResult) && (
+                <AutomatedOrderResultCard result={orderResult} />
+              )}
 
               {/* Statistics Dashboard */}
               {(stats || detail) && (
@@ -1185,8 +1503,9 @@ function RunTab() {
                     <div key={i} className="flex gap-2.5 leading-relaxed animate-in fade-in slide-in-from-left-2 duration-300">
                       <span className="text-slate-600 shrink-0 select-none">{(i + 1).toString().padStart(2, '0')}</span>
                       <span className={`${
-                        line.startsWith('Completed') ? 'text-emerald-400' :
-                        line.startsWith('Error') ? 'text-rose-400' :
+                        line.startsWith('Completed') || line.startsWith('✓') ? 'text-emerald-400' :
+                        line.startsWith('Error') || line.startsWith('❌') ? 'text-rose-400' :
+                        line.startsWith('⚠') ? 'text-amber-400' :
                         line.startsWith('Progress') ? 'text-violet-400' : 'text-slate-400'
                       }`}>
                         {line}
@@ -1262,9 +1581,13 @@ function RunTab() {
                           {detail?.quality ? <QualityBadge quality={detail.quality as RunQuality} /> : null}
                         </div>
                       </div>
-                      {activeTraderProposal && activeTraderProposal !== '{}' && (
+                      {activePortfolioDecision && (
                         <div className="flex-1 max-w-md min-w-[200px]">
-                          <KellyPositioningFromJson json={activeTraderProposal} />
+                          <PortfolioDecisionCard
+                            chartAnnotations={activeChartAnnotations}
+                            legacyTraderJson={activeLegacyTraderProposal}
+                            streamedPortfolioDecision={streamedPortfolioDecision}
+                          />
                         </div>
                       )}
                     </div>
@@ -1298,7 +1621,7 @@ function RunTab() {
                       )}
                       {activePlans.trader_plan && (
                         <div className="glass-panel p-4 rounded-xl space-y-2 bg-slate-900/30">
-                          <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{sectionLabels.trader_plan || 'Trader Proposal'}</h5>
+                          <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{sectionLabels.trader_plan || 'Legacy Trader Proposal'}</h5>
                           <div className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed select-text font-sans">{activePlans.trader_plan}</div>
                         </div>
                       )}
@@ -1922,6 +2245,11 @@ function HistoryTab({
     if (initialDetailId) openDetail(initialDetailId)
   }, [initialDetailId, openDetail])
 
+  const historyPortfolioDecision = detail
+    ? readPortfolioDecision(detail.chart_annotations, detail.trader_proposal_json)
+    : null
+  const historyHasPortfolioManagerDecision = historyPortfolioDecision?.source === 'portfolio_manager'
+
   if (loading) return <div className="p-8 text-slate-500 text-xs">{t('analysis.history.loading')}</div>
 
   return (
@@ -2150,7 +2478,10 @@ function HistoryTab({
                   {activeDetailTab === 'reports' && (
                     <div className="space-y-2 pr-1">
                       {detail.risk_metrics ? <RiskMetricsCard metrics={detail.risk_metrics as any} /> : null}
-                      <KellyPositioningFromJson json={detail.trader_proposal_json} />
+                      <PortfolioDecisionCard
+                        chartAnnotations={detail.chart_annotations}
+                        legacyTraderJson={detail.trader_proposal_json}
+                      />
                       {([
                         ['market_report', detail.market_report],
                         ['sentiment_report', detail.sentiment_report],
@@ -2171,7 +2502,7 @@ function HistoryTab({
                         ['audit_report', detail.audit_report],
                         ['agent_qa_report', detail.agent_qa_report],
                         ['investment_plan', detail.investment_plan],
-                        ['trader_plan', detail.trader_plan],
+                        ...(historyHasPortfolioManagerDecision ? [] : [['trader_plan', detail.trader_plan] as [string, string]]),
                         ['final_decision', detail.final_decision],
                       ] as [string, string][]).filter(entry => !!entry[1]).map(([k, v]) => (
                         <ReportCard key={k} label={sectionLabels[k] || k} content={v} />
@@ -2311,7 +2642,16 @@ function TimeTravelWidget({
     const fields: Record<string, string> = {}
     if (cp.node === 'Research Manager' || cp.node === 'ResearchManager') {
       fields['investment_plan'] = ''
+    } else if (cp.node === 'Portfolio Manager' || cp.node === 'portfolio_manager') {
+      // The Portfolio Manager owns the sole executable decision in new runs.
+      // Clear its structured output before a replay so a previous action/size
+      // cannot remain visible while the new decision is being generated.
+      fields['portfolio_decision_json'] = '{}'
+      fields['final_trade_decision'] = ''
+      fields['final_signal'] = ''
     } else if (cp.node === 'Trader') {
+      // Historical checkpoints can still be inspected, but the retired node
+      // cannot create a new execution recommendation in the current graph.
       fields['trader_investment_plan'] = ''
       fields['trader_proposal_json'] = '{}'
     } else if (cp.node === 'Agent Q&A' || cp.node === 'agent_qa') {
@@ -2411,8 +2751,8 @@ function TimeTravelWidget({
                   }
                   className="w-full h-24 bg-slate-950 border border-white/[0.08] rounded-xl p-3 text-xs text-white outline-none focus:border-violet-500/50 font-mono leading-relaxed"
                   placeholder={
-                    field === 'trader_proposal_json'
-                      ? '{"action": "Buy", "entry_price": 150.0}'
+                    field === 'portfolio_decision_json'
+                      ? '{"rating": "Buy", "entry_price": 150.0, "position_size_pct": 5}'
                       : `Enter custom ${field} value...`
                   }
                 />

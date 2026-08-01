@@ -3216,6 +3216,11 @@ export interface components {
              */
             max_risk_per_trade_pct: number;
             /**
+             * Auto Execute Signals
+             * @default false
+             */
+            auto_execute_signals: boolean;
+            /**
              * Allow Short Selling
              * @default false
              */
@@ -3464,6 +3469,8 @@ export interface components {
             max_position_size_pct?: number | null;
             /** Max Risk Per Trade Pct */
             max_risk_per_trade_pct?: number | null;
+            /** Auto Execute Signals */
+            auto_execute_signals?: boolean | null;
             /** Allow Short Selling */
             allow_short_selling?: boolean | null;
             /** Max Concentration Pct */

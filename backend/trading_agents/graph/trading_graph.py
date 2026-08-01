@@ -430,7 +430,6 @@ class TradingAgentsGraph:
                 "current_response": final_state["investment_debate_state"]["current_response"],
                 "judge_decision": final_state["investment_debate_state"]["judge_decision"],
             },
-            "trader_investment_decision": final_state["trader_investment_plan"],
             "risk_debate_state": {
                 "aggressive_history": final_state["risk_debate_state"]["aggressive_history"],
                 "conservative_history": final_state["risk_debate_state"]["conservative_history"],
@@ -439,6 +438,7 @@ class TradingAgentsGraph:
                 "judge_decision": final_state["risk_debate_state"]["judge_decision"],
             },
             "investment_plan": final_state["investment_plan"],
+            "portfolio_decision": final_state.get("portfolio_decision_json", "{}"),
             "final_trade_decision": final_state["final_trade_decision"],
         }
         if self.config.get("skip_disk_log", True):

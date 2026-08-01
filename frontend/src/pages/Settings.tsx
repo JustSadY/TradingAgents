@@ -658,6 +658,11 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_correlation_risk')}</span>
                     <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.correlation_risk_enabled} onChange={e => update('correlation_risk_enabled', e.target.checked)} />
                   </label>
+                  <label className="flex items-center justify-between gap-4 p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
+                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_auto_execute_signals')}</span>
+                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.auto_execute_signals ?? false} onChange={e => update('auto_execute_signals', e.target.checked)} />
+                  </label>
+                  <p className="text-[10px] text-amber-300/70 px-1 leading-snug -mt-1">{t('settings.auto_execute_signals_hint')}</p>
                   <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
                     <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_quality_gate')}</span>
                     <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.quality_gate_enabled} onChange={e => update('quality_gate_enabled', e.target.checked)} />

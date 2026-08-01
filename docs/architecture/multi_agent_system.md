@@ -34,25 +34,14 @@ stateDiagram-v2
         Research_Manager --> Generate_Consensus : Write Judge Decision
     }
     
-    Phase2_Debate --> Phase3_Plan : Send Thesis Consensus
-    
-    state Phase3_Plan {
-        [*] --> Trader_Agent : Draft Execution Details
-        Trader_Agent --> Formulate_Mock_Trade : Define Stop & Target
+    Phase2_Debate --> Phase3_Risk : Send Research Evidence Brief
+
+    state Phase3_Risk {
+        [*] --> Risk_Panel : Surface upside, downside, and neutral guardrails
+        Risk_Panel --> PM_Decision : Non-executable evidence only
     }
     
-    Phase3_Plan --> Phase4_Risk : Send Proposed Trade Plan
-    
-    state Phase4_Risk {
-        [*] --> Aggressive_Debator : Argue Size & Wide Targets
-        Aggressive_Debator --> Conservative_Debator : Argue Tight Safety Limits
-        Conservative_Debator --> Neutral_Debator : Arbitrate Size Allocation
-        Neutral_Debator --> Evaluate_Agreement : Consensus Reached?
-        Evaluate_Agreement --> Aggressive_Debator : No (Loop)
-        Evaluate_Agreement --> PM_Decision : Yes
-    }
-    
-    Phase4_Risk --> [*] : Execute Orders & Save State
+    PM_Decision --> [*] : One final direction, sizing, stops, targets, and save state
 ```
 
 ---
@@ -78,15 +67,12 @@ To prevent confirmation bias and ensure factual accuracy, the system employs an 
 
 ---
 
-## 4. Phase 3 & 4: Trade Formulation & The Risk Debate
+## 4. Phase 3: Risk Debate and Single Final Execution Authority
 
-Once the investment thesis is finalized, a trade plan is drafted and optimized:
-1.  **The Trader (`trader.py`):** Receives the Research Manager's thesis and designs the trade plan, specifying the ticker, direction (Buy, Sell, Hold), entry range, target profit, and stop-loss levels.
-2.  **The Risk Debate Loop:** The proposed trade plan is reviewed by three agents representing different risk tolerances:
-    *   **Aggressive Debator (`aggressive_debator.py`):** Pushes for maximum sizing and wider stop-loss/take-profit ranges to capture volatility.
-    *   **Conservative Debator (`conservative_debator.py`):** Prioritizes capital preservation, proposing smaller position sizes and tighter stop-losses.
-    *   **Neutral Debator (`neutral_debator.py`):** Arbitrates the discussion to find a balanced position size and structure.
-3.  **Portfolio Manager (`portfolio_manager.py`):** Resolves the risk debate, reviews the active portfolio's cash balance and risk limits, writes the final trade plan, and executes the simulated order.
+Once the investment thesis is finalized, the evidence flows to a risk panel and then to one execution authority:
+1.  **Research Manager:** Produces a non-executable Bullish / Neutral / Bearish evidence brief with key evidence and invalidation conditions.
+2.  **Risk Debate:** Aggressive, conservative, and neutral perspectives identify upside, downside, and guardrails. They do not emit Buy/Sell/Hold, quantities, prices, stops, or leverage.
+3.  **Portfolio Manager (`portfolio_manager.py`):** Receives every active analyst summary plus synthesis, audit, Q&A, the research brief, risk transcript, prior lessons, and the live portfolio. It is the only AI output allowed to set the final rating, confidence, entry, stop loss, take profit, allocation, capital, and leverage. The deterministic execution layer then applies hard portfolio controls before any optional simulated order.
 
 ---
 
@@ -120,8 +106,8 @@ To provide professional-grade analysis, the system includes several advanced mod
 The **Fundamentals Analyst** leverages specialized tools (`get_sec_filings`, `get_insider_transactions_deep`) to monitor regulatory filings and management sentiment. High-volume insider buying is treated as a high-conviction bullish signal, while delayed filings or excessive selling trigger caution flags.
 
 ### Mathematical Risk Sizing (Kelly Criterion)
-Moving beyond fixed percentages, the **Portfolio Manager** utilizes a mathematical risk engine based on the **Kelly Criterion**.
-*   **Win Probability:** Derived from the Trader's confidence score.
+The **Portfolio Manager** produces the only AI confidence and allocation recommendation; the deterministic execution layer applies mathematical risk sizing and hard portfolio caps.
+*   **Win Probability:** Derived from the Portfolio Manager's calibrated confidence score.
 *   **Risk/Reward:** Calculated from precise entry, stop-loss, and take-profit targets.
 *   **Sizing Formula:** `K% = W - [(1 - W) / R]`, capped by user settings to ensure portfolio safety.
 

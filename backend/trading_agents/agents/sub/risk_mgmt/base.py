@@ -12,7 +12,6 @@ from collections.abc import Callable
 
 from backend.trading_agents.agents.runtime.debate_history import format_debate_argument
 from backend.trading_agents.agents.runtime.report_aggregator import (
-    build_report_fields,
     build_resources,
     tail_history,
 )
@@ -39,14 +38,15 @@ def make_risk_debator(
             risk_debate_state = state["risk_debate_state"]
             history = risk_debate_state.get("history", "")
             own_history = risk_debate_state.get(f"{stance}_history", "")
-            trader_decision = state["trader_investment_plan"]
+            research_evidence = state.get("investment_plan", "No research evidence brief available.")
 
-            report_fields = build_report_fields("Latest World Affairs Report", "Company Fundamentals Report")
-            resources_text = build_resources(state, report_fields, summary_only=True)
+            from backend.trading_agents.agents.analyst_registry import get_report_fields
+
+            resources_text = build_resources(state, get_report_fields(), summary_only=True)
 
             instruction = get_system_instruction_override(_SETTINGS_AGENT_KEY) or default_instruction()
             prompt = (
-                build_prompt(instruction, trader_decision, resources_text, tail_history(history), risk_debate_state)
+                build_prompt(instruction, research_evidence, resources_text, tail_history(history), risk_debate_state)
                 + get_general_settings_block()
             )
 

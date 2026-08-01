@@ -21,13 +21,15 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
+from types import SimpleNamespace
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import task_store
 from backend.core.database import AsyncSessionLocal
 from backend.models.settings import AppSettings
-from backend.services.trading_orchestrator import place_signal_order
+from backend.services.execution.base import OrderResult
+from backend.services.trading_orchestrator import auto_execute_signals_enabled, place_signal_order
 
 from .analysis.emitter import AnalysisEmitter
 
@@ -157,6 +159,83 @@ async def _emit_cancelled_task(task_id: str, *, close: bool = True) -> None:
             await emitter.close()
 
 
+async def _emit_auto_order_result(
+    emitter: AnalysisEmitter,
+    *,
+    row,
+    ticker: str,
+    result: OrderResult | None = None,
+    outcome: str | None = None,
+    message: str = "",
+    reason_code: str | None = None,
+) -> None:
+    """Emit a post-analysis order outcome without making it a second analysis.
+
+    The report is already complete when this runs.  Keep an execution failure
+    separate from the analysis terminal event: otherwise a valid report looks
+    like it either filled an order or failed entirely.
+    """
+    action = None
+    try:
+        from backend.core.constants import SIGNAL_TO_ACTION
+
+        action = SIGNAL_TO_ACTION.get(getattr(row, "signal", None))
+    except Exception:  # pragma: no cover - constants are local/static
+        pass
+
+    broker_status = (getattr(result, "status", "") or "").upper() if result else None
+    if outcome is None:
+        if broker_status in {"FILLED", "PARTIALLY_FILLED"}:
+            outcome = "filled"
+        elif broker_status == "SKIPPED":
+            outcome = "skipped"
+        elif broker_status:
+            # A broker status that did not produce a fill cannot be presented
+            # as a successful trade.  Preserve its exact value separately.
+            outcome = "rejected"
+        else:
+            outcome = "skipped"
+
+    try:
+        await emitter.emit_order_result(
+            analysis_id=int(row.id),
+            ticker=ticker,
+            action=action,
+            signal=getattr(row, "signal", None),
+            outcome=outcome,
+            broker_status=broker_status,
+            order_id=getattr(result, "order_id", None) if result else None,
+            filled_quantity=getattr(result, "filled_quantity", None) if result else None,
+            filled_price=getattr(result, "filled_price", None) if result else None,
+            commission=getattr(result, "commission", None) if result else None,
+            message=message or getattr(result, "message", "") or "",
+            reason_code=reason_code or getattr(result, "reason_code", None),
+        )
+    except Exception:
+        # Event delivery must never undo a durable analysis/order transaction.
+        _logger.exception("Could not emit auto-order outcome for analysis_id=%s", getattr(row, "id", None))
+
+
+def _snapshot_auto_order_context(row) -> SimpleNamespace:
+    """Copy order inputs before committing so expired ORM rows are never read.
+
+    SQLAlchemy may expire ``AnalysisResult`` attributes at commit time.  The
+    automatic order is deliberately a later transaction, therefore it must
+    work from plain values rather than accidentally lazy-loading through a
+    cancelled or rolled-back session.
+    """
+    return SimpleNamespace(
+        id=getattr(row, "id", None),
+        signal=getattr(row, "signal", None),
+        quality=getattr(row, "quality", None),
+        chart_annotations=getattr(row, "chart_annotations", None),
+        portfolio_decision_json=getattr(row, "portfolio_decision_json", None),
+        trader_proposal_json=getattr(row, "trader_proposal_json", None),
+        trader_plan=getattr(row, "trader_plan", ""),
+        final_decision=getattr(row, "final_decision", ""),
+    )
+
+
 async def run_analysis(
     ticker: str,
     trade_date: str,
@@ -251,21 +330,96 @@ async def run_analysis_task(
                 user=user,
                 defer_terminal_cleanup=True,
             )
-            # ``run_individual_analysis`` emits ``complete`` before returning.
-            # A later final-commit/order failure must not resurrect that
-            # completed task as an invisible retry.
+            # Preserve all values needed for the later order before committing
+            # the analysis.  ORM attributes may expire on that commit.
+            order_context = _snapshot_auto_order_context(row)
+            try:
+                await db.commit()
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                await db.rollback()
+                _logger.exception("Could not persist completed analysis task=%s", task_id)
+                # ``run_individual_analysis`` may have already streamed its
+                # report-complete event. Make a failed durable commit explicit
+                # instead of silently treating it as an order-only problem.
+                await AnalysisEmitter(task_id).emit_error("Analysis could not be saved. Please try again.")
+                await _clear_terminal_task_state(task_id, user.id if user else None)
+                return
             analysis_completed = True
-            await db.commit()
-            # Signal-based paper trading (separate txn — analysis already committed)
+            emitter = AnalysisEmitter(task_id)
+
+            # A report completion is not an execution fill. Every exit from
+            # this optional phase emits an explicit order_result event.
             if await task_store.is_cancel_requested(task_id):
                 _logger.info("Skipping signal order for cancelled analysis task=%s", task_id)
+                await _emit_auto_order_result(
+                    emitter,
+                    row=order_context,
+                    ticker=ticker,
+                    outcome="skipped",
+                    message="Analysis was cancelled before any automatic order was sent.",
+                    reason_code="cancelled",
+                )
+            elif not auto_execute_signals_enabled(settings):
+                await _emit_auto_order_result(
+                    emitter,
+                    row=order_context,
+                    ticker=ticker,
+                    outcome="skipped",
+                    message="Automatic signal execution is disabled in settings.",
+                    reason_code="auto_execution_disabled",
+                )
             else:
                 try:
-                    await place_signal_order(db, ticker=ticker, row=row, settings=settings, user=user)
-                    await db.commit()
+                    result = await place_signal_order(
+                        db,
+                        ticker=ticker,
+                        row=order_context,
+                        settings=settings,
+                        user=user,
+                        include_skip_result=True,
+                    )
+                    # A Stop that arrives while pricing/sizing is running wins
+                    # over a not-yet-committed simulation order.
+                    if await task_store.is_cancel_requested(task_id):
+                        await db.rollback()
+                        await _emit_auto_order_result(
+                            emitter,
+                            row=order_context,
+                            ticker=ticker,
+                            outcome="skipped",
+                            message="Analysis was cancelled before the automatic order could be committed.",
+                            reason_code="cancelled",
+                        )
+                    else:
+                        # Never announce a fill before its transaction is
+                        # durable. A commit error becomes an execution error,
+                        # not a phantom order in the UI.
+                        await db.commit()
+                        await _emit_auto_order_result(emitter, row=order_context, ticker=ticker, result=result)
+                except asyncio.CancelledError:
+                    await db.rollback()
+                    await _emit_auto_order_result(
+                        emitter,
+                        row=order_context,
+                        ticker=ticker,
+                        outcome="skipped",
+                        message="Analysis was cancelled before the automatic order could be committed.",
+                        reason_code="cancelled",
+                    )
+                    raise
                 except Exception as exc:
                     await db.rollback()
                     _logger.warning("Order execution skipped for %s: %s", ticker, exc)
+                    await _emit_auto_order_result(
+                        emitter,
+                        row=order_context,
+                        ticker=ticker,
+                        outcome="error",
+                        message="Automatic order execution failed; the analysis remains available.",
+                        reason_code="execution_error",
+                    )
             await _clear_terminal_task_state(task_id, user.id if user else None)
         except asyncio.CancelledError:
             _logger.info("Background analysis cancelled task=%s", task_id)

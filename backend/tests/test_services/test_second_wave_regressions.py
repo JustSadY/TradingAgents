@@ -246,7 +246,7 @@ async def test_cron_uses_the_orchestrator_signal_mapping(monkeypatch):
         _Db(),
         ticker="AAPL",
         row=row,
-        settings=SimpleNamespace(),
+        settings=SimpleNamespace(auto_execute_signals=True),
         user=SimpleNamespace(id=1),
     )
 

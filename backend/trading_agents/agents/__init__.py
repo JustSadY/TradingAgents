@@ -25,7 +25,6 @@ from .sub.researchers.bull_researcher import create_bull_researcher
 from .sub.risk_mgmt.aggressive_debator import create_aggressive_debator
 from .sub.risk_mgmt.conservative_debator import create_conservative_debator
 from .sub.risk_mgmt.neutral_debator import create_neutral_debator
-from .sub.trader.trader import create_trader
 from .utils.agent_utils import create_msg_delete
 
 __all__ = [
@@ -46,7 +45,6 @@ __all__ = [
     "create_conservative_debator",
     "create_sentiment_analyst",
     "create_market_analyst",
-    "create_trader",
     "create_macro_analyst",
     "create_options_analyst",
     "create_quant_analyst",

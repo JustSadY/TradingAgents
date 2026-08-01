@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+
 from backend.trading_agents.agents.runtime.report_aggregator import tail_history
 from backend.trading_agents.agents.runtime.structured import (
     ainvoke_structured_or_freetext,
@@ -12,13 +14,11 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_system_instruction_override,
 )
 
-import logging
-
 _logger = logging.getLogger(__name__)
 
 _DEFAULT_INSTRUCTION = (
     "As the Research Manager and debate facilitator, your role is to critically evaluate this round "
-    "of debate and deliver a clear, actionable investment plan for the trader."
+    "of debate and deliver an evidence brief for the Portfolio Manager. You are not an execution agent."
 )
 
 
@@ -56,13 +56,14 @@ def create_research_manager(llm):
 ---
 {memory_lessons}
 ---
-**Rating Scale** (use exactly one):
-- **Buy**: Strong conviction in the bull thesis; recommend taking or growing the position
-- **Overweight**: Constructive view; recommend gradually increasing exposure
-- **Hold**: Balanced view; recommend maintaining the current position
-- **Underweight**: Cautious view; recommend trimming exposure
-- **Sell**: Strong conviction in the bear thesis; recommend exiting or avoiding the position
-Commit to a clear stance whenever the debate's strongest arguments warrant one; reserve Hold for situations where the evidence on both sides is genuinely balanced.
+**Research posture** (use exactly one):
+- **Bullish**: The evidence leans constructive, subject to stated invalidation conditions.
+- **Neutral**: The evidence is balanced or insufficient for a directional conclusion.
+- **Bearish**: The evidence leans adverse, subject to stated invalidation conditions.
+This is evidence for the Portfolio Manager, not a trade instruction. Do **not**
+output Buy, Overweight, Hold, Underweight, Sell, an entry, a stop, a target,
+leverage, capital amount, or position size. The Portfolio Manager is the only
+agent allowed to turn this research into a final order recommendation.
 ---
 **Debate History:**
 {history}""" + get_general_settings_block()

@@ -14,9 +14,6 @@ def create_super_portfolio_manager(llm):
         for ticker, report in ticker_reports.items():
             context_str += f"\n--- Ticker: {ticker} ---\n"
             context_str += (
-                f"Trader Plan: {middle_truncate(report.get('trader_plan') or 'No plan', _MAX_SECTION_CHARS)}\n"
-            )
-            context_str += (
                 "Portfolio Manager Decision: "
                 f"{middle_truncate(report.get('portfolio_decision') or 'No decision', _MAX_SECTION_CHARS)}\n"
             )
@@ -35,7 +32,7 @@ def create_super_portfolio_manager(llm):
                 ("system", system_message),
                 (
                     "user",
-                    f"{portfolio_block}Here are the final decisions from the trading team for the selected assets:"
+                    f"{portfolio_block}Here are the final Portfolio Manager decisions for the selected assets:"
                     f"\n\n{context_str}\n\nAllocate the user's actual cash available across these assets "
                     "(use the real figures above; keep an explicit cash position when appropriate). "
                     "Provide the final portfolio allocation and strategy.",

@@ -14,7 +14,7 @@ from backend.models.user import User
 from backend.services.alert_service import check_price_alerts
 from backend.services.analysis_service import run_analysis
 from backend.services.performance_service import backfill_returns
-from backend.services.trading_orchestrator import is_actionable, place_signal_order
+from backend.services.trading_orchestrator import auto_execute_signals_enabled, is_actionable, place_signal_order
 
 _logger = logging.getLogger(__name__)
 _cron_service: Optional["CronService"] = None
@@ -195,6 +195,13 @@ class CronService:
 
 async def _place_actionable_signal_order(db, *, ticker: str, row, settings, user) -> bool:
     """Place cron orders through the orchestrator's single signal mapping."""
+    if not auto_execute_signals_enabled(settings):
+        _logger.info(
+            "Automatic signal execution is disabled for user=%s; cron will not trade %s",
+            getattr(user, "id", None),
+            ticker,
+        )
+        return False
     if not is_actionable(getattr(row, "signal", None)):
         return False
     await place_signal_order(db, ticker=ticker, row=row, settings=settings, user=user)

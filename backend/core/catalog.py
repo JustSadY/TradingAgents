@@ -72,8 +72,10 @@ SECTION_LABELS: dict[str, str] = {
     "review_report": "Performance Review",
     "agent_qa_report": "Analyst Cross-Examination",
     "investment_plan": "Investment Plan",
-    "trader_investment_plan": "Trader Proposal (preliminary)",
-    "trader_plan": "Trader Proposal (preliminary)",
+    # Retained only for reports created before the single Portfolio Manager
+    # execution authority. New analyses leave these fields empty.
+    "trader_investment_plan": "Legacy Trader Proposal (historical only)",
+    "trader_plan": "Legacy Trader Proposal (historical only)",
     "final_trade_decision": "Final Decision (Portfolio Manager)",
     "final_decision": "Final Decision (Portfolio Manager)",
     "bull_history": "Bull Arguments",
@@ -200,7 +202,7 @@ SECTIONS: list[dict] = [
     {"key": "audit_report", "label": "Audit", "category": "research", "order": 17, "icon": "ShieldAlert"},
     {"key": "agent_qa_report", "label": "Cross-Examination", "category": "research", "order": 18, "icon": "Bot"},
     {"key": "investment_plan", "label": "Investment Plan", "category": "trade", "order": 19, "icon": "Target"},
-    {"key": "trader_plan", "label": "Trader Proposal", "category": "trade", "order": 20, "icon": "Play"},
+    {"key": "trader_plan", "label": "Legacy Trader Proposal", "category": "trade", "order": 20, "icon": "History"},
     {"key": "bull_history", "label": "Bull Arguments", "category": "debate", "order": 21, "icon": "TrendingUp"},
     {"key": "bear_history", "label": "Bear Arguments", "category": "debate", "order": 22, "icon": "TrendingDown"},
     {
@@ -317,7 +319,7 @@ _STATIC_NODE_LABELS: dict[str, tuple[str, str]] = {
     "Bull Researcher": ("Bull Researcher", "research"),
     "Bear Researcher": ("Bear Researcher", "research"),
     "Research Manager": ("Research Manager — investment plan", "research"),
-    "Trader": ("Trader — execution plan", "trade"),
+    "Trader": ("Legacy Trader checkpoint", "trade"),
     _RISK_DEBATE: (_RISK_DEBATE, "risk"),
     "Aggressive Analyst": ("Aggressive Risk Analyst", "risk"),
     "Conservative Analyst": ("Conservative Risk Analyst", "risk"),

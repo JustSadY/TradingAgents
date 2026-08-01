@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import logging
 import time
 
@@ -129,6 +130,7 @@ REPORT_FIELDS = (
     "investment_plan",
     "trader_investment_plan",
     "trader_proposal_json",
+    "portfolio_decision_json",
     "final_trade_decision",
 )
 
@@ -430,12 +432,30 @@ async def run_individual_analysis(
         if not isinstance(structured_data, dict):
             structured_data = {}
 
-        trader_obj = final_state.get("trader_investment_plan_obj")
+        # New runs have exactly one structured execution recommendation: the
+        # Portfolio Manager's decision.  Keep the old Trader proposal only if
+        # a pre-migration checkpoint supplied it, so historical records remain
+        # readable without allowing a second authority for new orders.
+        portfolio_decision_raw = final_state.get("portfolio_decision_json")
+        if isinstance(portfolio_decision_raw, BaseModel):
+            structured_data["portfolio_decision"] = portfolio_decision_raw.model_dump()
+        elif isinstance(portfolio_decision_raw, dict):
+            structured_data["portfolio_decision"] = portfolio_decision_raw
+        elif isinstance(portfolio_decision_raw, str) and portfolio_decision_raw.strip() not in {"", "{}"}:
+            try:
+                portfolio_decision = json.loads(portfolio_decision_raw)
+            except json.JSONDecodeError:
+                _logger.warning("Ignoring malformed portfolio_decision_json for %s", ticker)
+            else:
+                if isinstance(portfolio_decision, dict):
+                    structured_data["portfolio_decision"] = portfolio_decision
 
-        if isinstance(trader_obj, BaseModel):
-            structured_data["trader_proposal"] = trader_obj.model_dump()
-        elif isinstance(trader_obj, dict):
-            structured_data["trader_proposal"] = trader_obj
+        trader_obj = final_state.get("trader_investment_plan_obj")
+        if "portfolio_decision" not in structured_data:
+            if isinstance(trader_obj, BaseModel):
+                structured_data["trader_proposal"] = trader_obj.model_dump()
+            elif isinstance(trader_obj, dict):
+                structured_data["trader_proposal"] = trader_obj
 
         _VALID_SIGNALS = {"Buy", "Overweight", "Hold", "Underweight", "Sell"}
         raw_signal = result.signal

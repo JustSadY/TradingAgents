@@ -20,6 +20,8 @@ vi.mock('../../contexts/LanguageContext', () => ({
     t: (key: string) => {
       const map: Record<string, string> = {
         'mocktrading.title': 'Paper Trading',
+        'mocktrading.subtitle': 'Manual sandbox orders',
+        'mocktrading.manual_independent_hint': 'Manual orders are independent of AI analysis.',
         'mocktrading.loading': 'Loading portfolio...',
         'mocktrading.error_title': 'Error Loading Portfolio',
         'mocktrading.error_msg': 'Unable to connect to trading engine',
@@ -82,6 +84,13 @@ describe('MockTrading', () => {
     await waitFor(() => {
       expect(screen.getByText('Paper Trading')).toBeInTheDocument()
     })
+  })
+
+  it('makes clear that manual orders do not reuse an AI analysis decision', async () => {
+    render(<MockTrading />)
+
+    await screen.findByText('Paper Trading')
+    expect(screen.getByTestId('manual-order-independence')).toHaveTextContent('Manual orders are independent of AI analysis.')
   })
 
   it('shows a recoverable error instead of rendering a malformed portfolio payload', async () => {

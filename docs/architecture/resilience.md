@@ -47,8 +47,7 @@ with the data it already has, instead of crashing. (Falls back to the default
   | Bull / Bear researcher | advance the investment debate (count +1) |
   | Synthesis / Auditor | empty `synthesis_report` / `audit_report` |
   | Research Manager | placeholder `investment_plan` |
-  | Trader | placeholder `trader_investment_plan` + empty proposal |
-  | Risk debators | advance the risk debate (count +1) |
+  | Risk Debate | neutral risk-guardrail state |
   | **Portfolio Manager** | `final_trade_decision = "Hold — automated fallback"` |
 
 The Portfolio Manager fallback guarantees the run always produces a final

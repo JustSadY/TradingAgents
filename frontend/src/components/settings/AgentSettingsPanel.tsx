@@ -46,7 +46,6 @@ const MAIN_AGENT_KEYS = new Set([
   'portfolio_manager',
   'market_intelligence',
   'research_manager',
-  'trader',
   'risk_debate',
 ])
 
@@ -627,7 +626,8 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
 
       <div className="text-[10px] text-slate-600 bg-white/[0.01] border border-white/[0.03] rounded-xl px-3 py-2 leading-relaxed">
         <span className="text-violet-400 font-bold">Hierarchy:</span>
-        {' '}Portfolio Manager (root) → Market Intelligence / Research Manager / Trader / Risk Debate.
+        {' '}Portfolio Manager (root) → Market Intelligence / Research Manager / Risk Debate.
+        The Portfolio Manager is the sole source of final order direction, sizing, and risk levels.
         Disabling a parent immediately kills its entire sub-tree — no tokens will be consumed.
         Sub-agents inherit the parent&apos;s LLM unless overridden.
       </div>

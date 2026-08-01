@@ -1,6 +1,8 @@
 const translations = {
   en: {
     'mocktrading.title': 'Simulation Trading',
+    'mocktrading.subtitle': 'Execute manual sandbox orders and track real-time position ledger stats.',
+    'mocktrading.manual_independent_hint': 'Manual orders are independent of AI analysis. Use the analysis screen to review any AI-directed order result.',
     'mocktrading.refresh': 'Refresh',
     'mocktrading.reset': 'Reset',
     'mocktrading.reset_confirm': 'Are you sure you want to reset the portfolio? All positions will be deleted.',
@@ -40,6 +42,8 @@ const translations = {
   },
   tr: {
     'mocktrading.title': 'Simülasyon Trading',
+    'mocktrading.subtitle': 'Manuel simülasyon emirleri verin ve anlık pozisyon defteri istatistiklerini takip edin.',
+    'mocktrading.manual_independent_hint': 'Manuel emirler AI analizinden bağımsızdır. AI yönlendirmeli emir sonucunu Analiz ekranından inceleyin.',
     'mocktrading.refresh': 'Güncelle',
     'mocktrading.reset': 'Sıfırla',
     'mocktrading.reset_confirm': 'Portföyü sıfırlamak istediğinizden emin misiniz? Tüm pozisyonlar silinecek.',
@@ -80,4 +84,3 @@ const translations = {
 }
 
 export default translations
-

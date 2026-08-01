@@ -34,17 +34,17 @@ MAIN_KEY = "risk_debate"
 
 
 def _build_merged_prompt(
-    trader_decision: str,
+    research_evidence: str,
     resources_text: str,
     custom_instruction: str | None = None,
 ) -> str:
     custom_instruction_block = (
         f"\nPANEL-SPECIFIC INSTRUCTION:\n{custom_instruction.strip()}\n" if custom_instruction else ""
     )
-    return f"""You are the Risk Debate Panel consisting of three analysts evaluating the trader's proposal.
+    return f"""You are the Risk Debate Panel consisting of three analysts evaluating research evidence and portfolio guardrails.
 
-TRADER'S INVESTMENT PLAN:
-{trader_decision}
+RESEARCH MANAGER EVIDENCE BRIEF (NON-EXECUTABLE):
+{research_evidence}
 
 MARKET DATA & ANALYSIS:
 {resources_text}
@@ -66,8 +66,10 @@ NEUTRAL:
 The aggressive perspective champions well-supported upside but must name the
 risks it accepts. The conservative perspective prioritizes capital preservation
 and concrete downside scenarios. The neutral perspective weighs both sides and
-states practical guardrails. Be specific and reference the trader's plan and
-market data directly.{custom_instruction_block}"""
+states practical guardrails. Be specific and reference the research evidence
+and market data directly. Do not issue Buy, Overweight, Hold, Underweight, or
+Sell; do not prescribe a quantity, allocation, entry, stop, target, or leverage.
+The Portfolio Manager is the sole final decision and execution authority.{custom_instruction_block}"""
 
 
 def _parse_perspectives(text: str) -> dict[str, str]:
@@ -98,8 +100,8 @@ def _parse_perspectives(text: str) -> dict[str, str]:
 
 
 def create_risk_debate_node(ctx: AgentRunContext) -> NodeFn:
+    from backend.trading_agents.agents.analyst_registry import get_report_fields
     from backend.trading_agents.agents.runtime.report_aggregator import (
-        build_report_fields,
         build_resources,
     )
 
@@ -110,12 +112,11 @@ def create_risk_debate_node(ctx: AgentRunContext) -> NodeFn:
 
         llm = ctx.llm_for("risk_debate")
 
-        trader_decision = state.get("trader_investment_plan", "No trader decision available.")
-        report_fields = build_report_fields("Latest World Affairs Report", "Company Fundamentals Report")
-        resources_text = build_resources(state, report_fields, summary_only=True)
+        research_evidence = state.get("investment_plan", "No research evidence brief available.")
+        resources_text = build_resources(state, get_report_fields(), summary_only=True)
         custom_instruction = get_system_instruction_override(MAIN_KEY)
         prompt = (
-            _build_merged_prompt(trader_decision, resources_text, custom_instruction) + get_general_settings_block()
+            _build_merged_prompt(research_evidence, resources_text, custom_instruction) + get_general_settings_block()
         )
 
         response = await llm.ainvoke(prompt)

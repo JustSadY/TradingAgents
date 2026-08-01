@@ -284,6 +284,8 @@ async def execute_order(
     action: str,
     quantity: float,
     analysis_id: int | None = None,
+    ai_signal: str = "",
+    ai_reasoning: str = "",
     user=None,
     portfolio_id: int | None = None,
     leverage: float = 1.0,
@@ -379,6 +381,11 @@ async def execute_order(
         entry_commission=entry_commission,
         realized_pnl=realized_pnl,
         analysis_id=analysis_id,
+        ai_signal=str(ai_signal or "")[:50],
+        # A decision can be long, but the order row is a lightweight audit
+        # record rather than a second copy of the whole report.  Keep enough
+        # context for the journal while keeping every automatic fill bounded.
+        ai_reasoning=str(ai_reasoning or "")[:4_000],
         executed_at=datetime.now(UTC),
     )
     db.add(order)

@@ -296,18 +296,9 @@ AGENTS: list[AgentInfo] = [
         "portfolio_manager",
     ),
     AgentInfo(
-        "trader",
-        "Trader Agent",
-        "Creates tactical execution strategy and sizing plans",
-        "manager",
-        True,
-        get_standard_agent_settings(),
-        "portfolio_manager",
-    ),
-    AgentInfo(
         "risk_debate",
         "Risk Debate Manager",
-        "Orchestrates aggressive, neutral, and conservative risk debate",
+        "Surfaces non-executable aggressive, neutral, and conservative risk guardrails",
         "manager",
         True,
         get_standard_agent_settings(),
@@ -316,7 +307,7 @@ AGENTS: list[AgentInfo] = [
     AgentInfo(
         "portfolio_manager",
         "Portfolio Manager",
-        "Makes final asset allocation and trade decisions",
+        "Sole authority for final allocation, order direction, sizing, and risk levels",
         "manager",
         True,
         get_standard_agent_settings(),

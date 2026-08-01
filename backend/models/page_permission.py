@@ -31,6 +31,7 @@ SECTION_FIELDS = {
     "risk": [
         "max_risk_per_trade_pct",
         "max_position_size_pct",
+        "auto_execute_signals",
         "max_debate_rounds",
         "max_risk_rounds",
         "analyst_concurrency_limit",

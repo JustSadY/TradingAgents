@@ -52,8 +52,11 @@ def normalize_output_language(language: str | None = None) -> str:
 _TEXT: dict[str, dict[str, str]] = {
     "english": {
         "recommendation": "Recommendation",
+        "research_bias": "Research Bias",
         "rationale": "Rationale",
         "strategic_actions": "Strategic Actions",
+        "key_evidence": "Key Evidence",
+        "risk_conditions": "Risk Conditions",
         "action": "Action",
         "reasoning": "Reasoning",
         "confidence_score": "Confidence Score",
@@ -87,8 +90,11 @@ _TEXT: dict[str, dict[str, str]] = {
     },
     "turkish": {
         "recommendation": "Öneri",
+        "research_bias": "Araştırma Eğilimi",
         "rationale": "Gerekçe",
         "strategic_actions": "Stratejik Adımlar",
+        "key_evidence": "Temel Kanıtlar",
+        "risk_conditions": "Risk Koşulları",
         "action": "İşlem",
         "reasoning": "Gerekçe",
         "confidence_score": "Güven Skoru",
@@ -122,8 +128,11 @@ _TEXT: dict[str, dict[str, str]] = {
     },
     "german": {
         "recommendation": "Empfehlung",
+        "research_bias": "Forschungsneigung",
         "rationale": "Begründung",
         "strategic_actions": "Strategische Maßnahmen",
+        "key_evidence": "Wesentliche Evidenz",
+        "risk_conditions": "Risikobedingungen",
         "action": "Aktion",
         "reasoning": "Begründung",
         "confidence_score": "Konfidenzwert",
@@ -157,8 +166,11 @@ _TEXT: dict[str, dict[str, str]] = {
     },
     "french": {
         "recommendation": "Recommandation",
+        "research_bias": "Biais de recherche",
         "rationale": "Justification",
         "strategic_actions": "Actions stratégiques",
+        "key_evidence": "Éléments probants clés",
+        "risk_conditions": "Conditions de risque",
         "action": "Action",
         "reasoning": "Raisonnement",
         "confidence_score": "Score de confiance",
@@ -192,8 +204,11 @@ _TEXT: dict[str, dict[str, str]] = {
     },
     "spanish": {
         "recommendation": "Recomendación",
+        "research_bias": "Sesgo de investigación",
         "rationale": "Justificación",
         "strategic_actions": "Acciones estratégicas",
+        "key_evidence": "Evidencia clave",
+        "risk_conditions": "Condiciones de riesgo",
         "action": "Acción",
         "reasoning": "Razonamiento",
         "confidence_score": "Puntuación de confianza",
@@ -227,8 +242,11 @@ _TEXT: dict[str, dict[str, str]] = {
     },
     "chinese": {
         "recommendation": "建议",
+        "research_bias": "研究倾向",
         "rationale": "理由",
         "strategic_actions": "战略行动",
+        "key_evidence": "关键证据",
+        "risk_conditions": "风险条件",
         "action": "操作",
         "reasoning": "分析依据",
         "confidence_score": "置信评分",
@@ -262,8 +280,11 @@ _TEXT: dict[str, dict[str, str]] = {
     },
     "japanese": {
         "recommendation": "推奨",
+        "research_bias": "調査バイアス",
         "rationale": "根拠",
         "strategic_actions": "戦略的アクション",
+        "key_evidence": "主要な根拠",
+        "risk_conditions": "リスク条件",
         "action": "取引アクション",
         "reasoning": "判断理由",
         "confidence_score": "信頼度スコア",
@@ -297,8 +318,11 @@ _TEXT: dict[str, dict[str, str]] = {
     },
     "arabic": {
         "recommendation": "التوصية",
+        "research_bias": "توجه البحث",
         "rationale": "المبررات",
         "strategic_actions": "الإجراءات الاستراتيجية",
+        "key_evidence": "الأدلة الرئيسية",
+        "risk_conditions": "شروط المخاطر",
         "action": "الإجراء",
         "reasoning": "المنطق",
         "confidence_score": "درجة الثقة",
@@ -387,6 +411,18 @@ _RATINGS: dict[str, dict[str, str]] = {
 }
 
 
+_RESEARCH_BIASES: dict[str, dict[str, str]] = {
+    "english": {},
+    "turkish": {"Bullish": "Olumlu", "Neutral": "Nötr", "Bearish": "Olumsuz"},
+    "german": {"Bullish": "Positiv", "Neutral": "Neutral", "Bearish": "Negativ"},
+    "french": {"Bullish": "Haussier", "Neutral": "Neutre", "Bearish": "Baissier"},
+    "spanish": {"Bullish": "Alcista", "Neutral": "Neutral", "Bearish": "Bajista"},
+    "chinese": {"Bullish": "看涨", "Neutral": "中性", "Bearish": "看跌"},
+    "japanese": {"Bullish": "強気", "Neutral": "中立", "Bearish": "弱気"},
+    "arabic": {"Bullish": "إيجابي", "Neutral": "محايد", "Bearish": "سلبي"},
+}
+
+
 def report_text(key: str, language: str | None = None) -> str:
     """Return a localized, fixed report label for *key*."""
     lang = normalize_output_language(language)
@@ -397,6 +433,12 @@ def report_rating(value: str, language: str | None = None) -> str:
     """Return a display translation of a canonical structured rating/action."""
     lang = normalize_output_language(language)
     return _RATINGS.get(lang, {}).get(value, value)
+
+
+def report_bias(value: str, language: str | None = None) -> str:
+    """Return a display translation for non-executable research posture."""
+    lang = normalize_output_language(language)
+    return _RESEARCH_BIASES.get(lang, {}).get(value, value)
 
 
 def executive_summary_headings() -> tuple[str, ...]:

@@ -4,7 +4,7 @@ from enum import Enum
 
 from pydantic import BaseModel, Field
 
-from backend.trading_agents.agents.utils.report_localization import report_rating, report_texts
+from backend.trading_agents.agents.utils.report_localization import report_bias, report_rating, report_texts
 
 
 class PortfolioRating(str, Enum):
@@ -15,50 +15,80 @@ class PortfolioRating(str, Enum):
     SELL = "Sell"
 
 
+class ResearchBias(str, Enum):
+    """Non-executable research posture used by upstream research agents.
+
+    This deliberately does not reuse :class:`PortfolioRating`.  Research and
+    risk agents are evidence producers, while the Portfolio Manager is the
+    only component allowed to produce a Buy/Sell/Hold-style decision.
+    """
+
+    BULLISH = "Bullish"
+    NEUTRAL = "Neutral"
+    BEARISH = "Bearish"
+
+
 class TraderAction(str, Enum):
+    """Legacy action enum retained only to read historical trader proposals."""
+
     BUY = "Buy"
     HOLD = "Hold"
     SELL = "Sell"
 
 
 class ResearchPlan(BaseModel):
-    recommendation: PortfolioRating = Field(
+    research_bias: ResearchBias = Field(
         description=(
-            "The investment recommendation. Exactly one of Buy / Overweight / "
-            "Hold / Underweight / Sell. Reserve Hold for situations where the "
-            "evidence on both sides is genuinely balanced; otherwise commit to "
-            "the side with the stronger arguments."
+            "The evidence posture only. Exactly one of Bullish / Neutral / Bearish. "
+            "This is not a trading instruction; do not use Buy, Sell, Hold, "
+            "Overweight, Underweight, quantities, or position sizes."
         ),
     )
     rationale: str = Field(
         description=(
             "Conversational summary of the key points from both sides of the "
-            "debate, ending with which arguments led to the recommendation. "
+            "debate, ending with which arguments support the evidence posture. "
             "Speak naturally, as if to a teammate."
         ),
     )
-    strategic_actions: str = Field(
+    key_evidence: str = Field(
         description=(
-            "Concrete steps for the trader to implement the recommendation, "
-            "including position sizing guidance consistent with the rating."
+            "The most decision-relevant, source-grounded evidence, including "
+            "what would invalidate it. Do not prescribe an order direction or size."
+        ),
+    )
+    risk_conditions: str = Field(
+        description=(
+            "Open questions, invalidation conditions, and risk checks for the "
+            "Portfolio Manager. Do not prescribe an order direction, entry, stop, "
+            "target, leverage, or quantity."
         ),
     )
 
 
 def render_research_plan(plan: ResearchPlan, output_language: str | None = None) -> str:
-    labels = report_texts(("recommendation", "rationale", "strategic_actions"), output_language)
+    labels = report_texts(("research_bias", "rationale", "key_evidence", "risk_conditions"), output_language)
     return "\n".join(
         [
-            f"**{labels['recommendation']}**: {report_rating(plan.recommendation.value, output_language)}",
+            f"**{labels['research_bias']}**: {report_bias(plan.research_bias.value, output_language)}",
             "",
             f"**{labels['rationale']}**: {plan.rationale}",
             "",
-            f"**{labels['strategic_actions']}**: {plan.strategic_actions}",
+            f"**{labels['key_evidence']}**: {plan.key_evidence}",
+            "",
+            f"**{labels['risk_conditions']}**: {plan.risk_conditions}",
         ]
     )
 
 
 class TraderProposal(BaseModel):
+    """Legacy persisted proposal shape.
+
+    New analyses never create this model: the Portfolio Manager now owns the
+    final direction and execution parameters.  It remains available so old
+    ``trader_proposal_json`` records can still be rendered and migrated.
+    """
+
     action: TraderAction = Field(
         description="The transaction direction. Exactly one of Buy / Hold / Sell.",
     )
@@ -89,6 +119,8 @@ class TraderProposal(BaseModel):
     )
     recommended_leverage: float = Field(
         default=1.0,
+        ge=1.0,
+        le=10.0,
         description=(
             "Per-stock leverage multiplier for this trade, from 1.0 (no leverage / "
             "cash) up to 10.0. Choose based on conviction AND the instrument's "
@@ -175,6 +207,58 @@ class PortfolioDecision(BaseModel):
             "incorporate them; otherwise rely solely on the current analysis."
         ),
     )
+    confidence_score: float = Field(
+        default=0.5,
+        ge=0.0,
+        le=1.0,
+        description=(
+            "The Portfolio Manager's calibrated probability of a favourable outcome, "
+            "from 0.0 to 1.0. This is the sole execution confidence used by the order "
+            "engine; do not copy an upstream agent's score without reassessing it."
+        ),
+    )
+    entry_price: float | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Planned entry or execution reference price in the instrument's quote currency. "
+            "Required for a new Buy/Overweight entry when a reliable price is available; null for Hold."
+        ),
+    )
+    stop_loss: float | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Protective stop price in the instrument's quote currency. For a long it must be below entry; "
+            "for a short it must be above entry. Null only when no order should be opened."
+        ),
+    )
+    take_profit_price: float | None = Field(
+        default=None,
+        gt=0,
+        description=(
+            "Planned take-profit price in the instrument's quote currency. For a long it must be above entry; "
+            "for a short it must be below entry. Null only when no order should be opened."
+        ),
+    )
+    position_size_pct: float | None = Field(
+        default=None,
+        ge=0.0,
+        le=100.0,
+        description=(
+            "Desired total allocation after the action as a percentage of current portfolio equity. "
+            "Use 0 for a full exit, a lower target allocation for Underweight, and null for Hold. "
+            "This is the sole AI sizing recommendation; the execution engine still applies hard risk caps."
+        ),
+    )
+    suggested_capital: float | None = Field(
+        default=None,
+        ge=0.0,
+        description=(
+            "Approximate order notional in the portfolio's base currency. It must agree with "
+            "position_size_pct and available cash; use 0 for no new order."
+        ),
+    )
     price_target: float | None = Field(
         default=None,
         description="Optional target price in the instrument's quote currency.",
@@ -208,6 +292,12 @@ def render_pm_decision(decision: PortfolioDecision, output_language: str | None 
             "rating",
             "executive_summary",
             "investment_thesis",
+            "confidence_score",
+            "entry_price",
+            "stop_loss",
+            "take_profit",
+            "position_sizing",
+            "suggested_capital",
             "price_target",
             "recommended_leverage",
             "liquidation_price",
@@ -221,7 +311,19 @@ def render_pm_decision(decision: PortfolioDecision, output_language: str | None 
         f"**{labels['executive_summary']}**: {decision.executive_summary}",
         "",
         f"**{labels['investment_thesis']}**: {decision.investment_thesis}",
+        "",
+        f"**{labels['confidence_score']}**: {decision.confidence_score:.0%}",
     ]
+    if decision.entry_price is not None:
+        parts.extend(["", f"**{labels['entry_price']}**: {decision.entry_price}"])
+    if decision.stop_loss is not None:
+        parts.extend(["", f"**{labels['stop_loss']}**: {decision.stop_loss}"])
+    if decision.take_profit_price is not None:
+        parts.extend(["", f"**{labels['take_profit']}**: {decision.take_profit_price}"])
+    if decision.position_size_pct is not None:
+        parts.extend(["", f"**{labels['position_sizing']}**: {decision.position_size_pct:.1f}%"])
+    if decision.suggested_capital is not None:
+        parts.extend(["", f"**{labels['suggested_capital']}**: {decision.suggested_capital:,.2f}"])
     if decision.price_target is not None:
         parts.extend(["", f"**{labels['price_target']}**: {decision.price_target}"])
     if decision.recommended_leverage and abs(decision.recommended_leverage - 1.0) > 1e-9:
@@ -257,6 +359,7 @@ class PropagateResult(BaseModel):
     audit_report: str = ""
     investment_plan: str = ""
     trader_plan: str = ""
+    portfolio_decision_json: str = "{}"
     final_decision: str = ""
 
     @classmethod
@@ -287,5 +390,6 @@ class PropagateResult(BaseModel):
             audit_report=state.get(StateKeys.AUDIT_REPORT, ""),
             investment_plan=state.get(StateKeys.INVESTMENT_PLAN, ""),
             trader_plan=state.get(StateKeys.TRADER_INVESTMENT_PLAN, ""),
+            portfolio_decision_json=state.get(StateKeys.PORTFOLIO_DECISION_JSON, "{}"),
             final_decision=state.get(StateKeys.FINAL_TRADE_DECISION, ""),
         )

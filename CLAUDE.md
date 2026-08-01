@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## 🎯 Project: TradingAgents
 
-A comprehensive, production-ready multi-agent AI investment platform. FastAPI backend orchestrates a **6-node LangGraph** state machine where specialized AI analysts, researchers, traders, and risk managers collaborate to produce final investment decisions. Includes **Pinecone vector memory** for episodic learning, real-time **WebSocket streaming**, **RBAC with page-level permissions**, **encrypted per-user API keys**, and extensive **developer extensibility** (custom analysts, tools, personas, etc.).
+A comprehensive, production-ready multi-agent AI investment platform. FastAPI backend orchestrates a **5-stage LangGraph** where specialized analysts, researchers, and risk managers provide evidence to one Portfolio Manager that produces the final investment decision. Includes **Pinecone vector memory** for episodic learning, real-time **WebSocket streaming**, **RBAC with page-level permissions**, **encrypted per-user API keys**, and extensive developer extensibility (custom analysts, tools, personas, etc.).
 
 **START HERE:**
 - [docs/introduction.md](docs/introduction.md) — Overview
@@ -15,7 +15,7 @@ A comprehensive, production-ready multi-agent AI investment platform. FastAPI ba
 
 ---
 
-## 🏗️ Current Architecture (6-Node LangGraph)
+## 🏗️ Current Architecture (5 Decision Stages)
 
 ```
 START
@@ -26,11 +26,9 @@ Agent Q&A (inter-analyst cross-examination & conflict resolution)
   ↓
 Research Manager (bull/bear debate, synthesis, auditing)
   ↓
-Trader (signal processing & tactical execution)
+Risk Debate (non-executable aggressive/conservative/neutral guardrails)
   ↓
-Risk Debate (aggressive/conservative/neutral negotiation)
-  ↓
-Portfolio Manager (final decision)
+Portfolio Manager (sole final direction, sizing, and execution recommendation)
   ↓
 END
 ```
@@ -40,15 +38,15 @@ END
 1. **API:** `/api/analysis/run` → `run_analysis_task()`
 2. **Config Builder:** Reads user's AppSettings + AgentSettings, builds `RuntimeAgentContext`
 3. **Memory Recall:** If user has Pinecone configured, fetch similar past situations + losses
-4. **LangGraph:** `TradingAgentsGraph(selected_analysts, config).propagate(ticker, date)` → 6 nodes execute
+4. **LangGraph:** `TradingAgentsGraph(selected_analysts, config).propagate(ticker, date)` → 5 decision stages execute
 5. **Streaming:** `AnalysisEmitter` broadcasts `/ws/analysis/{task_id}` events in real-time
 6. **Persistence:** Store in `AnalysisResult`, stream updates to `AnalysisChat`
 7. **Memory Record:** After outcome known, embed & store in Pinecone for future recall
-8. **Paper Trading:** `place_signal_order()` creates orders in `Order` table
+8. **Optional paper/live execution:** only when `auto_execute_signals` is explicitly enabled; `place_signal_order()` records the originating analysis and Portfolio Manager rationale in `Order`.
 
 ### Tier System
 
-- **Tier 1 (Main Agents):** 6 nodes in `agents/main/*.py` — guard-wrapped for resilience
+- **Tier 1 (Main Agents):** 5 active stages in `agents/main/*.py` — guard-wrapped for resilience
 - **Tier 2 (Sub-Agents):** Analysts, researchers, managers in `agents/sub/`
 - **Tier 3 (Tools):** Modular registry in `agents/tools/` — dynamically registered, user-configurable
 
@@ -563,7 +561,6 @@ Every main node is **guard-wrapped** with retry logic + fallback stubs:
 | Bull/Bear researcher | advance debate count |
 | Synthesis/Auditor | empty report |
 | Research Manager | placeholder investment plan |
-| Trader | placeholder proposal |
 | Risk debators | advance debate count |
 | **Portfolio Manager** | `Hold — automated fallback` |
 
@@ -915,7 +912,7 @@ See `docs/developer_guide.md` sections 5A–5I for:
 
 ## 💡 When Working on This Codebase
 
-- **Understand the graph first.** Read `agents/main/*.py` to see how the 6 nodes work.
+- **Understand the graph first.** Read `agents/main/*.py` to see how the 5 active decision stages work.
 - **Follow layering.** Keep `api → services → repositories → models` unidirectional.
 - **Scope all queries.** Apply `scope_to_user()` in repositories.
 - **Async throughout.** No sync database calls in async context.

@@ -30,6 +30,15 @@ class TestSettingsAPI:
         assert data["llm_provider"] == "anthropic"
         assert data["llm_model"] == "claude-3-opus"
 
+    async def test_auto_execution_requires_explicit_settings_opt_in(self, auth_client: AsyncClient):
+        initial = await auth_client.get("/api/settings")
+        assert initial.status_code == 200
+        assert initial.json()["auto_execute_signals"] is False
+
+        updated = await auth_client.put("/api/settings", json={"auto_execute_signals": True})
+        assert updated.status_code == 200
+        assert updated.json()["auto_execute_signals"] is True
+
     async def test_update_settings_uses_native_webhook_and_fallback_collections(self, auth_client: AsyncClient):
         resp = await auth_client.put(
             "/api/settings",

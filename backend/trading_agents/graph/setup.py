@@ -1,10 +1,14 @@
 """
 Top-level graph assembly for the 3-tier agent model.
 
-The graph now has exactly five nodes — one per Main Agent — wired linearly:
+The graph has five decision stages wired linearly:
 
-    START → Market Intelligence → Research Manager → Trader
+    START → Market Intelligence → Agent Q&A → Research Manager
           → Risk Debate → Portfolio Manager → END
+
+The former Trader node was intentionally removed. It used a separate LLM to
+emit a competing action, quantity, and price plan; the Portfolio Manager now
+owns the only executable AI decision.
 
 Each Main Agent node internally checks its kill-switch and orchestrates its own
 Tier-2 sub-agents (which in turn call Tier-3 tools). All of the per-analyst
@@ -33,7 +37,6 @@ from backend.trading_agents.agents.main import (
     create_portfolio_manager_node,
     create_research_manager_node,
     create_risk_debate_node,
-    create_trader_node,
 )
 from backend.trading_agents.agents.runtime.resilience import guard_node
 
@@ -44,7 +47,6 @@ logger = logging.getLogger(__name__)
 _MARKET_INTELLIGENCE = "Market Intelligence"
 _AGENT_QA = "Agent Q&A"
 _RESEARCH_MANAGER = "Research Manager"
-_TRADER = "Trader"
 _RISK_DEBATE = "Risk Debate"
 _PORTFOLIO_MANAGER = "Portfolio Manager"
 
@@ -136,17 +138,6 @@ class GraphSetup:
             timeout_multiplier=_research_timeout_multiplier(self.config.get("max_debate_rounds", 1)),
             retry_timeouts=False,
         )
-        trader = guard_node(
-            create_trader_node(ctx),
-            name=_TRADER,
-            kind="main",
-            fallback=lambda state, exc: {
-                "trader_investment_plan": "Trader agent unavailable; deferring to risk debate.",
-                "trader_proposal_json": "{}",
-            },
-            timeout_multiplier=2,
-            retry_timeouts=False,
-        )
         risk_debate = guard_node(
             create_risk_debate_node(ctx),
             name=_RISK_DEBATE,
@@ -171,15 +162,13 @@ class GraphSetup:
         workflow.add_node(_MARKET_INTELLIGENCE, market_intelligence)
         workflow.add_node(_AGENT_QA, agent_qa)
         workflow.add_node(_RESEARCH_MANAGER, research_manager)
-        workflow.add_node(_TRADER, trader)
         workflow.add_node(_RISK_DEBATE, risk_debate)
         workflow.add_node(_PORTFOLIO_MANAGER, portfolio_manager)
 
         workflow.add_edge(START, _MARKET_INTELLIGENCE)
         workflow.add_edge(_MARKET_INTELLIGENCE, _AGENT_QA)
         workflow.add_edge(_AGENT_QA, _RESEARCH_MANAGER)
-        workflow.add_edge(_RESEARCH_MANAGER, _TRADER)
-        workflow.add_edge(_TRADER, _RISK_DEBATE)
+        workflow.add_edge(_RESEARCH_MANAGER, _RISK_DEBATE)
         workflow.add_edge(_RISK_DEBATE, _PORTFOLIO_MANAGER)
         workflow.add_edge(_PORTFOLIO_MANAGER, END)
 

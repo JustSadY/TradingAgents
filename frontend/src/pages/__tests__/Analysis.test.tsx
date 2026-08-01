@@ -50,6 +50,31 @@ vi.mock('../../contexts/LanguageContext', () => ({
         'analysis.tab.history': 'History',
         'analysis.running': 'Running...',
         'analysis.ws.failed_to_start': 'Failed to start analysis',
+        'analysis.order.title': 'Automated Order Result',
+        'analysis.order.analysis_complete_status': 'Analysis complete',
+        'analysis.order.analysis_complete': 'Analysis complete. This does not confirm that a trade was placed.',
+        'analysis.order.pending': 'Order result pending',
+        'analysis.order.pending_description': 'No execution outcome has been received. Check Orders before assuming an order was placed.',
+        'analysis.order.log_prefix': 'Order result',
+        'analysis.order.outcome.filled': 'Order filled',
+        'analysis.order.outcome.skipped': 'Order skipped',
+        'analysis.order.outcome.rejected': 'Order rejected',
+        'analysis.order.outcome.error': 'Order execution failed',
+        'analysis.order.action': 'Action',
+        'analysis.order.action.buy': 'Buy',
+        'analysis.order.action.sell': 'Sell',
+        'analysis.order.symbol': 'Symbol',
+        'analysis.order.quantity': 'Quantity',
+        'analysis.order.price': 'Price',
+        'analysis.pm.title': 'Portfolio Manager Recommendation',
+        'analysis.pm.single_authority': 'Single AI authority for sizing and trade parameters',
+        'analysis.pm.legacy_fallback': 'Legacy Trader proposal retained for this historical analysis',
+        'analysis.pm.entry': 'Entry',
+        'analysis.pm.stop': 'Stop Loss',
+        'analysis.pm.target': 'Take Profit',
+        'analysis.pm.allocation': 'Allocation',
+        'analysis.pm.capital': 'Suggested Capital',
+        'analysis.pm.leverage': 'Leverage',
         'analysis.btn.rerun': 'Re-run',
         'analysis.btn.cancel': 'Cancel',
         'analysis.rerun.title': 'Re-run Analysis',
@@ -133,7 +158,6 @@ vi.mock('../../components/analysis/DebateHistoryWidget', () => ({
 vi.mock('../../components/analysis/AnalysisChatWidget', () => ({ AnalysisChatWidget: () => <div>AnalysisChatWidget</div> }))
 vi.mock('../../components/analysis/RiskMetricsCard', () => ({ RiskMetricsCard: () => <div>RiskMetricsCard</div> }))
 vi.mock('../../components/analysis/MentalModelTicker', () => ({ MentalModelTicker: () => <div>MentalModelTicker</div> }))
-vi.mock('../../components/analysis/KellyPositioningCard', () => ({ KellyPositioningCard: () => <div>KellyPositioningCard</div> }))
 vi.mock('../../components/ErrorBoundary', () => ({ ErrorBoundary: ({ children }: any) => children }))
 
 describe('Analysis', () => {
@@ -216,6 +240,149 @@ describe('Analysis', () => {
 
     expect(screen.getAllByText('Preparing engine')).not.toHaveLength(0)
     expect(screen.queryByText('portfolio_manager')).not.toBeInTheDocument()
+  })
+
+  it('shows the separate filled order outcome after analysis completion', async () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+      onmessage: ((event: MessageEvent) => void) | null = null
+
+      constructor() {
+        MockWebSocket.instances.push(this)
+      }
+
+      close() {}
+
+      emit(event: Record<string, unknown>) {
+        this.onmessage?.({ data: JSON.stringify(event) } as MessageEvent)
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket)
+
+    const axios = await import('axios')
+    vi.mocked(axios.default.post).mockImplementation((url: string) => {
+      if (url === '/api/analysis/run') return Promise.resolve({ data: { task_id: 'order-result-task' } })
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<Analysis />)
+    const user = userEvent.setup()
+    await user.type(screen.getByRole('textbox', { name: 'Ticker' }), 'AAPL')
+    await user.click(screen.getByRole('button', { name: 'Start analysis' }))
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+
+    await act(async () => {
+      // `complete` only closes the analysis lifecycle. The execution result
+      // arrives as its own event, so it can never be mistaken for a fill.
+      MockWebSocket.instances[0].emit({ type: 'complete', duration_seconds: 5, llm_calls: 2, signal: 'Buy' })
+      MockWebSocket.instances[0].emit({
+        type: 'order_result', outcome: 'filled', action: 'BUY', ticker: 'AAPL',
+        filled_quantity: 2, filled_price: 123.45, reason_code: 'risk_checks_passed',
+      })
+    })
+
+    const card = await screen.findByTestId('analysis-order-result')
+    expect(card).toHaveAttribute('data-outcome', 'filled')
+    expect(card).toHaveTextContent('Order filled')
+    expect(card).toHaveTextContent('Buy')
+    expect(card).toHaveTextContent('AAPL')
+    expect(card).toHaveTextContent('2')
+    expect(card).toHaveTextContent('$123.45')
+    expect(card).toHaveTextContent('risk_checks_passed')
+    expect(screen.getByText('Analysis complete. This does not confirm that a trade was placed.')).toBeInTheDocument()
+  })
+
+  it('renders a skipped order result from the legacy status field', async () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+      onmessage: ((event: MessageEvent) => void) | null = null
+
+      constructor() {
+        MockWebSocket.instances.push(this)
+      }
+
+      close() {}
+
+      emit(event: Record<string, unknown>) {
+        this.onmessage?.({ data: JSON.stringify(event) } as MessageEvent)
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket)
+
+    const axios = await import('axios')
+    vi.mocked(axios.default.post).mockImplementation((url: string) => {
+      if (url === '/api/analysis/run') return Promise.resolve({ data: { task_id: 'skipped-order-task' } })
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<Analysis />)
+    const user = userEvent.setup()
+    await user.type(screen.getByRole('textbox', { name: 'Ticker' }), 'NVDA')
+    await user.click(screen.getByRole('button', { name: 'Start analysis' }))
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+
+    await act(async () => {
+      MockWebSocket.instances[0].emit({
+        type: 'order_result', status: 'skipped', ticker: 'NVDA',
+        message: 'Signal is HOLD, so no order was sent.',
+      })
+    })
+
+    const card = await screen.findByTestId('analysis-order-result')
+    expect(card).toHaveAttribute('data-outcome', 'skipped')
+    expect(card).toHaveTextContent('Order skipped')
+    expect(card).toHaveTextContent('Signal is HOLD, so no order was sent.')
+  })
+
+  it('uses the streamed Portfolio Manager decision as the only live sizing recommendation', async () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+      onmessage: ((event: MessageEvent) => void) | null = null
+
+      constructor() {
+        MockWebSocket.instances.push(this)
+      }
+
+      close() {}
+
+      emit(event: Record<string, unknown>) {
+        this.onmessage?.({ data: JSON.stringify(event) } as MessageEvent)
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket)
+
+    const axios = await import('axios')
+    vi.mocked(axios.default.post).mockImplementation((url: string) => {
+      if (url === '/api/analysis/run') return Promise.resolve({ data: { task_id: 'pm-decision-task' } })
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<Analysis />)
+    const user = userEvent.setup()
+    await user.type(screen.getByRole('textbox', { name: 'Ticker' }), 'NVDA')
+    await user.click(screen.getByRole('button', { name: 'Start analysis' }))
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+
+    await act(async () => {
+      MockWebSocket.instances[0].emit({ type: 'report', section: 'trader_plan', content: 'Legacy-looking trader text' })
+      MockWebSocket.instances[0].emit({
+        type: 'report',
+        section: 'portfolio_decision_json',
+        content: JSON.stringify({
+          rating: 'Buy', confidence_score: 0.82, entry_price: 120, stop_loss: 112,
+          take_profit_price: 140, position_size_pct: 8, suggested_capital: 8000,
+          recommended_leverage: 1,
+        }),
+      })
+    })
+
+    const card = await screen.findByTestId('portfolio-decision-card')
+    expect(card).toHaveTextContent('Portfolio Manager Recommendation')
+    expect(card).toHaveTextContent('Single AI authority for sizing and trade parameters')
+    expect(card).toHaveTextContent('82%')
+    expect(card).toHaveTextContent('$120.00')
+    expect(card).toHaveTextContent('8.0%')
+    expect(screen.queryByText('Trader Proposal')).not.toBeInTheDocument()
   })
 
   it('does not reconnect the multi-ticker WebSocket after a terminal completion event', async () => {
