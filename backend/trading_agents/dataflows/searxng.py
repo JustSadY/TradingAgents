@@ -2,11 +2,37 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
+import time
 from urllib.parse import urlencode
 from urllib.request import Request, urlopen
 
 logger = logging.getLogger(__name__)
-_UA = "tradingagents/0.2 (+https://github.com/TauricResearch/TradingAgents)"
+_UA = "tradingagents/0.2 (+https://github.com/JustSadY/TradingAgents)"
+
+# --- Process-wide cooldown for 429 rate limiting ---
+_COOLDOWN_SECONDS = 60.0
+_cooldown_lock = threading.Lock()
+_cooldown_until = 0.0
+
+
+def _is_cooling_down() -> bool:
+    """Return True if the SearXNG source is in a rate-limit cooldown."""
+    with _cooldown_lock:
+        return _cooldown_until > time.monotonic()
+
+
+def _start_cooldown() -> None:
+    """Activate a process-wide cooldown after a 429 response."""
+    global _cooldown_until
+    with _cooldown_lock:
+        now = time.monotonic()
+        if _cooldown_until <= now:
+            _cooldown_until = now + _COOLDOWN_SECONDS
+            logger.warning(
+                "SearXNG rate limited (HTTP 429); cooling down for %.0fs.",
+                _COOLDOWN_SECONDS,
+            )
 
 def fetch_searxng_results(query: str, base_url: str, limit: int = 10, timeout: float = 8.0) -> str:
     """Query a user-configured SearXNG instance for live web results.

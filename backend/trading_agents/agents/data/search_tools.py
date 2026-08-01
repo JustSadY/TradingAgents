@@ -19,10 +19,17 @@ async def search_web(
 
     searxng_url = (get_config().get("searxng_url") or "").strip()
     if searxng_url:
-        try:
-            return await asyncio.to_thread(fetch_searxng_results, query, searxng_url)
-        except Exception as exc:
-            _logger.warning("SearXNG query failed (%s); falling back to news proxy: %s", searxng_url, exc)
+        from backend.trading_agents.dataflows.searxng import _is_cooling_down, _start_cooldown
+
+        if _is_cooling_down():
+            _logger.debug("SearXNG cooldown active; skipping to news proxy fallback.")
+        else:
+            try:
+                return await asyncio.to_thread(fetch_searxng_results, query, searxng_url)
+            except Exception as exc:
+                if "429" in str(exc):
+                    _start_cooldown()
+                _logger.warning("SearXNG query failed (%s); falling back to news proxy: %s", searxng_url, exc)
 
     from datetime import UTC, datetime, timedelta
 
@@ -44,7 +51,7 @@ async def search_web(
     start_date = (end_dt - timedelta(days=365)).strftime("%Y-%m-%d")
     end_date = end_dt.strftime("%Y-%m-%d")
 
-    ticker_candidate = query.split()[0].strip() if query and query.strip() else query
+    ticker_candidate = query.split()[0].strip().strip("\"'") if query and query.strip() else query
     try:
         return await route_to_vendor("get_news", ticker_candidate, start_date, end_date)
     except Exception as vendor_exc:

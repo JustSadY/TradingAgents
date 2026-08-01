@@ -75,12 +75,32 @@ async def _recover_empty_report(
         messages = list(messages)
     else:
         messages = [messages]
+
+    # Extract meaningful tool data snippets so the recovery prompt has
+    # concrete data to summarize even when the message history is long.
+    tool_data_snippets: list[str] = []
+    for m in messages:
+        content = getattr(m, "content", "")
+        if hasattr(m, "type") and getattr(m, "type", None) == "tool" and content:
+            snippet = str(content)[:500]
+            if len(snippet.strip()) > 50:
+                tool_data_snippets.append(snippet)
+
+    extra_context = ""
+    if tool_data_snippets:
+        extra_context = (
+            " Here is a summary of data your tools collected:\n"
+            + "\n---\n".join(tool_data_snippets[:3])
+            + "\n\nUse this data to write your report."
+        )
+
     recovery_request = HumanMessage(
         content=(
             "Your previous response contained no readable final report. "
             "Return a concise, self-contained analyst report using the data already gathered above. "
             "Keep it under 500 words so the final answer is emitted before any provider output budget is exhausted. "
             "Do not call tools and do not return an empty response."
+            + extra_context
         )
     )
     try:
@@ -198,6 +218,7 @@ async def run_tool_analyst(
         import traceback as _tb
 
         from langchain_core.messages import AIMessage
+        from backend.trading_agents.llm_clients.base_client import is_quota_exhausted
 
         log_event(
             "node_error",
@@ -209,6 +230,13 @@ async def run_tool_analyst(
             traceback=_tb.format_exc()[-1500:],
         )
         log_event("node_skipped", level=30, node=analyst, kind="analyst")
+
+        if is_quota_exhausted(exc):
+            _logger.warning(
+                "%s skipped due to provider quota exhaustion — recovery not attempted.",
+                analyst,
+            )
+
         return {
             "messages": [AIMessage(content="")],
             report_key: f"{analyst.title()} analysis unavailable (agent error: {exc}).",

@@ -79,7 +79,9 @@ class PineconeMemoryStore:
         index = await self._get_index()
         if self._embedder is None:
             payload = [{"_id": r.id, "text": r.text, **_clean_metadata(r.metadata)} for r in records]
-            await asyncio.to_thread(index.upsert_records, namespace, payload)
+            await asyncio.to_thread(
+                lambda: index.upsert_records(namespace=namespace, records=payload)
+            )
         else:
             vectors = await self._embedder.embed([r.text for r in records])
             items = [

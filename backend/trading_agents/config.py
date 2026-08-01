@@ -84,6 +84,7 @@ class TradingAgentsConfig(BaseModel):
     tool_timeout_seconds: int = Field(default=60, ge=15)
     circuit_breaker_threshold: int = Field(default=3, ge=1)
     circuit_breaker_cooldown: int = Field(default=60, ge=10)
+    max_analyst_tool_turns: int = Field(default=10, ge=2)
     stall_timeout_seconds: int = Field(default=120, ge=30)
     alpha_vantage_rate_limit_calls: int = Field(default=5, ge=1)
     alpha_vantage_rate_limit_window: float = Field(default=60.0, ge=1.0)
