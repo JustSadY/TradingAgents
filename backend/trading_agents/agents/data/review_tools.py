@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pandas as pd
 from langchain_core.tools import tool
@@ -8,11 +8,28 @@ from langchain_core.tools import tool
 _logger = logging.getLogger(__name__)
 
 
+def _past_decision_for_review(analysis) -> tuple[str, str]:
+    """Choose the prior run's single final decision for a performance review.
+
+    Old rows can retain a ``trader_plan`` for display, but a new review must
+    learn from the Portfolio Manager's actual final decision rather than
+    reintroducing a retired second AI as a source of truth.
+    """
+    final_decision = str(getattr(analysis, "final_decision", "") or "").strip()
+    if final_decision:
+        return final_decision, "PAST FINAL PORTFOLIO MANAGER DECISION"
+
+    legacy_plan = str(getattr(analysis, "trader_plan", "") or "").strip()
+    if legacy_plan:
+        return legacy_plan, "PAST LEGACY TRADER PLAN (historical only)"
+    return "", ""
+
+
 @tool
 async def get_past_performance_data(ticker: str, curr_date: str | None = None) -> str:
     """Retrieve historical performance reports and analyze realized returns relative to previous model suggestions for a given stock ticker."""
     if not curr_date:
-        curr_date = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        curr_date = datetime.now(UTC).strftime("%Y-%m-%d")
 
     past_report = None
     past_date = None
@@ -20,7 +37,6 @@ async def get_past_performance_data(ticker: str, curr_date: str | None = None) -
     try:
         from backend.core.database import AsyncSessionLocal
         from backend.repositories.analysis import list_historical_analyses
-
         from backend.trading_agents.agents.data.chart_tools import active_run_context
 
         ctx = active_run_context.get(None)
@@ -37,7 +53,7 @@ async def get_past_performance_data(ticker: str, curr_date: str | None = None) -
             )
             if past_analyses:
                 latest = past_analyses[0]
-                past_report = latest.trader_plan
+                past_report, report_label = _past_decision_for_review(latest)
                 past_date = latest.trade_date
     except Exception as e:
         _logger.warning("Failed to fetch past performance data from db for %s: %s", ticker, e)
@@ -67,7 +83,7 @@ async def get_past_performance_data(ticker: str, curr_date: str | None = None) -
             f"Price on that date: ${past_price:.2f}\n"
             f"Current Price (as of {curr_date}): ${current_price:.2f}\n"
             f"Actual Return Since Then: {return_pct:.2f}%\n"
-            f"\n--- EXCERPT OF PAST TRADER PLAN ---\n"
+            f"\n--- EXCERPT OF {report_label} ---\n"
             f"{brief_report}\n"
         )
         return result

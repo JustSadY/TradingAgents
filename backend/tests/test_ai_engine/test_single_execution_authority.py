@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+from types import SimpleNamespace
 
 import pytest
 
@@ -66,17 +67,45 @@ def test_portfolio_decision_exposes_the_complete_canonical_execution_contract():
     }
 
 
-@pytest.mark.asyncio
-async def test_legacy_trader_factory_is_a_safe_noop_not_a_second_llm_authority():
-    from backend.trading_agents.agents.sub.trader.trader import create_trader
+def test_active_graph_state_excludes_retired_trader_execution_fields():
+    from backend.trading_agents.agents.runtime.agent_states import AgentState, StateKeys
 
-    result = await create_trader(object())({"investment_plan": "ignored"})
+    assert "trader_investment_plan" not in AgentState.__annotations__
+    assert "trader_proposal_json" not in AgentState.__annotations__
+    assert not hasattr(StateKeys, "TRADER_INVESTMENT_PLAN")
+    assert not hasattr(StateKeys, "TRADER_PROPOSAL_JSON")
 
-    assert result == {
-        "trader_investment_plan": "",
-        "trader_proposal_json": "{}",
-        "sender": "Legacy Trader",
-    }
+
+def test_multi_ticker_overview_is_deterministic_and_non_executing():
+    from backend.services.analysis.portfolio_orchestrator import build_portfolio_overview
+
+    overview = build_portfolio_overview(
+        {
+            "NVDA": {"portfolio_decision": "**Rating**: Buy\n**Position Sizing**: 5.0%"},
+            "AAPL": {"portfolio_decision": "**Rating**: Hold"},
+        },
+        portfolio_context="Cash available: $10,000.",
+    )
+
+    assert "This overview does not create or amend a buy/sell order" in overview
+    assert "## AAPL" in overview
+    assert "## NVDA" in overview
+    assert "**Rating**: Buy" in overview
+    assert "this multi-ticker overview cannot place an order or change a quantity" in overview
+
+
+def test_performance_review_prefers_the_prior_final_pm_decision_over_legacy_trader_text():
+    from backend.trading_agents.agents.data.review_tools import _past_decision_for_review
+
+    decision, label = _past_decision_for_review(
+        SimpleNamespace(
+            final_decision="**Rating**: Hold",
+            trader_plan="SELL EVERYTHING",
+        )
+    )
+
+    assert decision == "**Rating**: Hold"
+    assert label == "PAST FINAL PORTFOLIO MANAGER DECISION"
 
 
 def test_portfolio_manager_evidence_tracks_registry_reports_and_supplemental_artifacts(monkeypatch):

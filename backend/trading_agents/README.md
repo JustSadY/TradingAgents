@@ -118,13 +118,16 @@ To avoid LLM bias, analyst reports are synthesized by the **Synthesis Manager** 
 
 ### 3. Risk Management & Portfolio Allocation
 The Research Manager's summary is evaluated by three risk personas:
-*   **Aggressive Risk Agent:** Argues for larger position sizing and wider stop-losses to capture maximum upside.
-*   **Conservative Risk Agent:** Focuses on downside risk, urging tight stop-losses, hedging strategies, or skipping the trade entirely.
-*   **Neutral Risk Agent:** Seeks a balanced allocation target.
-They negotiate a compromise on:
-- **Signal Strength:** (Buy / Sell / Hold / Avoid)
-- **Position Allocation Size:** Percentage of total available cash.
-- **Stop Loss & Take Profit Levels.**
+*   **Aggressive Risk Agent:** Surfaces upside cases, liquidity considerations, and risk conditions that could justify a measured entry.
+*   **Conservative Risk Agent:** Focuses on downside, invalidation conditions, hedging considerations, and failure modes.
+*   **Neutral Risk Agent:** Reconciles the guardrails and unresolved risk questions.
+
+They are evidence producers, not order authorities: they do not issue a
+Buy/Sell/Hold instruction, quantity, or allocation. The **Portfolio Manager**
+then evaluates their transcript together with every active analyst report and
+emits the one structured final rating, target allocation, entry, stop, target,
+and leverage. The order engine may only consume that final structured decision
+and can still reduce or reject it using deterministic cash and risk limits.
 
 ### 4. Self-Correcting Reflection Loop
 Before publishing the final report, the **Reflection Node** checks the generated output:
@@ -220,5 +223,5 @@ configuration.
 TradingAgents is designed for high-conviction, professional analysis through three core pillars:
 
 1.  **SEC & Insider Intelligence:** The **Fundamentals Analyst** leverages specialized tools (`get_sec_filings`, `get_insider_transactions_deep`) to monitor regulatory filings (10-K, 10-Q) and Form 4 insider transactions to gauge management sentiment and regulatory risks.
-2.  **Mathematical Risk Sizing:** The **Portfolio Manager** uses a mathematical risk engine based on the **Kelly Criterion** (`K% = W - [(1 - W) / R]`) and **Sharpe Ratio** to calculate mathematically optimal position sizes based on win probability and risk/reward profiles.
+2.  **Bounded Risk Sizing:** The **Portfolio Manager** proposes one total-equity target allocation. The deterministic order engine applies the user's cash, per-trade risk, concentration, gross-exposure, and stop-loss guardrails before it can place any order.
 3.  **Continuous Learning Loop:** The **Synthesis Manager** automated historical backtests set performance baselines, and past failures are injected as constraints to prevent the system from repeating historical errors on specific assets.

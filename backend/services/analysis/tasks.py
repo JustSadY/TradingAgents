@@ -93,9 +93,10 @@ async def extract_and_save_annotations(
             row = await _repo_get(s, analysis_id)
             if row:
                 # Merge rather than overwrite: finalize_result already stored the
-                # structured trader_proposal (entry/stop/target/confidence) that
-                # position sizing reads. A blind assignment here dropped it,
-                # leaving sizing to fall back to fragile text parsing.
+                # final structured Portfolio Manager decision
+                # (entry/stop/target/allocation). A blind assignment here would
+                # drop the canonical execution data and make the order engine
+                # reject the result rather than falling back to rendered text.
                 existing = row.chart_annotations if isinstance(row.chart_annotations, dict) else {}
                 row.chart_annotations = {**existing, **annotations}
 

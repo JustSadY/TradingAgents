@@ -28,14 +28,6 @@ class ResearchBias(str, Enum):
     BEARISH = "Bearish"
 
 
-class TraderAction(str, Enum):
-    """Legacy action enum retained only to read historical trader proposals."""
-
-    BUY = "Buy"
-    HOLD = "Hold"
-    SELL = "Sell"
-
-
 class ResearchPlan(BaseModel):
     research_bias: ResearchBias = Field(
         description=(
@@ -79,112 +71,6 @@ def render_research_plan(plan: ResearchPlan, output_language: str | None = None)
             f"**{labels['risk_conditions']}**: {plan.risk_conditions}",
         ]
     )
-
-
-class TraderProposal(BaseModel):
-    """Legacy persisted proposal shape.
-
-    New analyses never create this model: the Portfolio Manager now owns the
-    final direction and execution parameters.  It remains available so old
-    ``trader_proposal_json`` records can still be rendered and migrated.
-    """
-
-    action: TraderAction = Field(
-        description="The transaction direction. Exactly one of Buy / Hold / Sell.",
-    )
-    reasoning: str = Field(
-        description=(
-            "The case for this action, anchored in the analysts' reports and the research plan. Two to four sentences."
-        ),
-    )
-    confidence_score: float = Field(
-        default=0.5,
-        description="Probability of success for this trade, from 0.0 to 1.0. Critical for Kelly sizing.",
-    )
-    entry_price: float | None = Field(
-        default=None,
-        description="Optional entry price target in the instrument's quote currency.",
-    )
-    stop_loss: float | None = Field(
-        default=None,
-        description="Optional stop-loss price in the instrument's quote currency.",
-    )
-    take_profit_price: float | None = Field(
-        default=None,
-        description="Optional target price to take profit.",
-    )
-    position_sizing: str | None = Field(
-        default=None,
-        description="Optional sizing guidance, e.g. '5% of portfolio'.",
-    )
-    recommended_leverage: float = Field(
-        default=1.0,
-        ge=1.0,
-        le=10.0,
-        description=(
-            "Per-stock leverage multiplier for this trade, from 1.0 (no leverage / "
-            "cash) up to 10.0. Choose based on conviction AND the instrument's "
-            "volatility: use 1.0-2.0 for volatile or speculative names, only raise "
-            "leverage for high-confidence setups on liquid, stable instruments with "
-            "a well-defined stop-loss. Higher leverage tightens the liquidation "
-            "price, so size it against the stop, not just the conviction."
-        ),
-    )
-    kelly_size: float | None = Field(
-        default=None,
-        description="The calculated Kelly Criterion size (0.0 to 1.0) based on confidence and risk/reward.",
-    )
-    suggested_capital: float | None = Field(
-        default=None,
-        description="The actual currency amount to allocate based on Kelly size and portfolio balance.",
-    )
-
-
-def render_trader_proposal(proposal: TraderProposal, output_language: str | None = None) -> str:
-    labels = report_texts(
-        (
-            "action",
-            "reasoning",
-            "confidence_score",
-            "kelly_size",
-            "suggested_capital",
-            "entry_price",
-            "stop_loss",
-            "take_profit",
-            "position_sizing",
-            "recommended_leverage",
-            "final_transaction_proposal",
-        ),
-        output_language,
-    )
-    display_action = report_rating(proposal.action.value, output_language)
-    parts = [
-        f"**{labels['action']}**: {display_action}",
-        "",
-        f"**{labels['reasoning']}**: {proposal.reasoning}",
-        f"**{labels['confidence_score']}**: {proposal.confidence_score:.2f}",
-    ]
-    if proposal.kelly_size is not None:
-        parts.append(f"**{labels['kelly_size']}**: {proposal.kelly_size:.2%}")
-    if proposal.suggested_capital is not None:
-        parts.append(f"**{labels['suggested_capital']}**: ${proposal.suggested_capital:,.2f}")
-    if proposal.entry_price is not None:
-        parts.extend(["", f"**{labels['entry_price']}**: {proposal.entry_price}"])
-    if proposal.stop_loss is not None:
-        parts.extend(["", f"**{labels['stop_loss']}**: {proposal.stop_loss}"])
-    if proposal.take_profit_price is not None:
-        parts.extend(["", f"**{labels['take_profit']}**: {proposal.take_profit_price}"])
-    if proposal.position_sizing:
-        parts.extend(["", f"**{labels['position_sizing']}**: {proposal.position_sizing}"])
-    if proposal.recommended_leverage and abs(proposal.recommended_leverage - 1.0) > 1e-9:
-        parts.extend(["", f"**{labels['recommended_leverage']}**: {proposal.recommended_leverage:.1f}x"])
-    parts.extend(
-        [
-            "",
-            f"**{labels['final_transaction_proposal']}**: **{display_action}**",
-        ]
-    )
-    return "\n".join(parts)
 
 
 class PortfolioDecision(BaseModel):
@@ -267,7 +153,7 @@ class PortfolioDecision(BaseModel):
         default=1.0,
         description=(
             "Final per-stock leverage multiplier for this decision, 1.0 (cash) to "
-            "10.0. This is the trader's recommended_leverage adjusted for the risk "
+            "10.0. This is the final Portfolio Manager leverage adjusted for the risk "
             "debate outcome and the persona's risk tolerance. Conservative personas "
             "should cap this near 1.0; only use elevated leverage on high-conviction "
             "ratings (Buy) for liquid instruments with a defined stop-loss."
@@ -358,7 +244,6 @@ class PropagateResult(BaseModel):
     synthesis_report: str = ""
     audit_report: str = ""
     investment_plan: str = ""
-    trader_plan: str = ""
     portfolio_decision_json: str = "{}"
     final_decision: str = ""
 
@@ -389,7 +274,6 @@ class PropagateResult(BaseModel):
             synthesis_report=state.get(StateKeys.SYNTHESIS_REPORT, ""),
             audit_report=state.get(StateKeys.AUDIT_REPORT, ""),
             investment_plan=state.get(StateKeys.INVESTMENT_PLAN, ""),
-            trader_plan=state.get(StateKeys.TRADER_INVESTMENT_PLAN, ""),
             portfolio_decision_json=state.get(StateKeys.PORTFOLIO_DECISION_JSON, "{}"),
             final_decision=state.get(StateKeys.FINAL_TRADE_DECISION, ""),
         )

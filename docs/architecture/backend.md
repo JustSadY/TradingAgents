@@ -150,7 +150,7 @@ import engine modules lazily inside functions (they pull heavy deps).
 - Structure: `graph/` (LangGraph wiring — `trading_graph.py`, `setup.py`,
   `conditional_logic.py`, checkpointer), `agents/` (Tier-1 main nodes under
   `main/`, the sub-agents under `sub/` [analysts, managers, researchers,
-  risk_mgmt, trader], execution runtime helpers in `runtime/`, the modular tool
+  risk_mgmt], execution runtime helpers in `runtime/`, the modular tool
   registry in `tools/`, tool data helpers in `data/`, shared utilities in
   `utils/` + `analyst_registry.py` + `schemas.py`), `dataflows/` (vendor-routed
   data via `interface.py`), `llm_clients/` (provider factory).

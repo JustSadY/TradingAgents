@@ -39,6 +39,10 @@ class SharedReportResponse(BaseModel):
     risk_debate_history: Any = None
     judge_decision: str | None = None
     trader_proposal_json: str | None = None
+    # The canonical, structured decision produced by the Portfolio Manager.
+    # Keeping this explicit avoids making public clients reconstruct it from
+    # the broader chart annotation payload.
+    portfolio_decision: dict[str, Any] | None = None
     chart_annotations: Any = None
     risk_metrics: Any = None
     quality: Any = None

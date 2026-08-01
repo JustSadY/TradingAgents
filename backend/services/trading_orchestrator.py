@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import logging
 import math
-import re
 from decimal import Decimal
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -25,7 +24,6 @@ from backend.core.money import safe_decimal
 from backend.services.execution.base import OrderRequest, OrderResult
 from backend.services.execution.factory import get_trader
 from backend.services.mock_trading_service import get_or_create_sim_portfolio
-from backend.trading_agents.agents.runtime.risk_math import calculate_kelly_size, get_risk_reward_from_plan
 
 _logger = logging.getLogger(__name__)
 
@@ -120,9 +118,9 @@ def _as_mapping(raw) -> dict:
 def _portfolio_decision(row) -> dict:
     """Return the Portfolio Manager's structured decision when available.
 
-    A new run must use the Portfolio Manager as the only AI authority for
-    entry, exits, leverage and requested allocation.  Older rows only have a
-    Trader proposal, which remains a read-only compatibility fallback.
+    The Portfolio Manager is the only AI authority for entry, exits, leverage,
+    and requested allocation. Historical Trader fields are intentionally not
+    an execution fallback: those records remain display-only.
     """
     annotations = _annotations(row)
     for raw in (
@@ -136,127 +134,22 @@ def _portfolio_decision(row) -> dict:
     return {}
 
 
-def _legacy_trader_proposal(row) -> dict:
-    """Read a Trader proposal only when a final PM decision is absent.
-
-    The raw JSON column is needed for analyses saved before the single-final-
-    decision migration.  New runs persist a PortfolioDecision in annotations,
-    so this fallback can never become a competing execution authority.
-    """
-    annotations = _annotations(row)
-    for raw in (annotations.get("trader_proposal"), getattr(row, "trader_proposal_json", None)):
-        proposal = _as_mapping(raw)
-        if proposal:
-            return proposal
-    return {}
-
-
 def _decision_value(row, *keys: str):
-    """Prefer the final Portfolio Manager output, then historical fields."""
+    """Read one value exclusively from the final Portfolio Manager output."""
     decision = _portfolio_decision(row)
-    annotations = _annotations(row)
-    legacy_trader = _legacy_trader_proposal(row) if not decision else {}
-    for source in (decision, annotations, legacy_trader):
-        for key in keys:
-            value = source.get(key)
-            if value is not None:
-                return value
-    return None
-
-
-def _extract_confidence_score(row) -> float | None:
-    raw = _decision_value(row, "confidence_score")
-    try:
-        if raw is not None:
-            parsed = float(raw)
-            if parsed > 1.0:
-                parsed /= 100.0
-            return max(0.0, min(1.0, parsed))
-    except (TypeError, ValueError):
-        pass
-
-    confidence_text_sources = [
-        getattr(row, "trader_plan", None) or "",
-        getattr(row, "final_decision", None) or "",
-    ]
-    for text in confidence_text_sources:
-        match = re.search(r"confidence\s*score\s*[:=]\s*([0-9]*\.?[0-9]+)", text, flags=re.IGNORECASE)
-        if not match:
-            continue
-        try:
-            parsed = float(match.group(1))
-        except ValueError:
-            continue
-        if parsed > 1.0:
-            parsed = parsed / 100.0
-        return max(0.0, min(1.0, parsed))
+    for key in keys:
+        value = decision.get(key)
+        if value is not None:
+            return value
     return None
 
 
 def _extract_leverage(row) -> float:
-    """Pull the AI's per-stock leverage recommendation, clamped to [1, 10].
-
-    Prefers the structured PortfolioDecision / TraderProposal carried in
-    ``chart_annotations``; falls back to a "**Recommended Leverage**: Nx" line
-    in the rendered decision text. Defaults to 1.0 (cash) when unspecified.
-    """
-    candidates: list = [_decision_value(row, "recommended_leverage")]
-
-    for raw in candidates:
-        value = _safe_float(raw)
-        if value is not None and value >= 1.0:
-            return min(value, 10.0)
-
-    for text in (getattr(row, "final_decision", "") or "", getattr(row, "trader_plan", "") or ""):
-        match = re.search(r"Recommended\s+Leverage\s*[:=]\s*\*?\*?\s*([0-9]+(?:\.[0-9]+)?)\s*x", text, re.IGNORECASE)
-        value = _safe_float(match.group(1)) if match else None
-        if value is not None and value >= 1.0:
-            return min(value, 10.0)
+    """Read the PM's structured leverage recommendation, clamped to [1, 10]."""
+    value = _safe_float(_decision_value(row, "recommended_leverage"))
+    if value is not None and value >= 1.0:
+        return min(value, 10.0)
     return 1.0
-
-
-def _extract_price_level(text: str, label: str, row=None) -> float | None:
-    key_map = {"Entry Price": "entry_price", "Stop Loss": "stop_loss", "Take Profit": "take_profit_price"}
-    struct_key = key_map.get(label)
-    raw = _decision_value(row, struct_key) if struct_key else None
-    parsed = _safe_float(raw)
-    if parsed is not None and parsed > 0:
-        return parsed
-
-    pattern = rf"\*\*{re.escape(label)}\*\*\s*:\s*\$?\s*([0-9]+(?:\.[0-9]+)?)"
-    match = re.search(pattern, text, flags=re.IGNORECASE)
-    value = _safe_float(match.group(1)) if match else None
-    return value if (value is not None and value > 0) else None
-
-
-def _extract_kelly_ceiling_pct(row, *, confidence_score: float | None, current_price: float) -> float | None:
-    # ``position_size_pct`` is the final Portfolio Manager's requested
-    # allocation.  It supersedes a historical Trader/Kelly suggestion, while
-    # the deterministic risk caps below can still reduce it.
-    for key in ("position_size_pct", "kelly_recommendation_pct", "kelly_position_size_pct", "kelly_pct"):
-        parsed = _safe_float(_decision_value(row, key))
-        if parsed is not None and parsed >= 0:
-            return min(parsed, 100.0)
-
-    final_decision = getattr(row, "final_decision", "") or ""
-    match = re.search(
-        r"Suggested\s+Maximum\s+Position\s+Size\s*:\s*([0-9]+(?:\.[0-9]+)?)%",
-        final_decision,
-        flags=re.IGNORECASE,
-    )
-    parsed = _safe_float(match.group(1)) if match else None
-    if parsed is not None and parsed >= 0:
-        return min(parsed, 100.0)
-
-    trader_plan = getattr(row, "trader_plan", "") or ""
-    entry = _extract_price_level(trader_plan, "Entry Price", row=row) or current_price
-    stop = _extract_price_level(trader_plan, "Stop Loss", row=row)
-    target = _extract_price_level(trader_plan, "Take Profit", row=row)
-    if confidence_score is None or stop is None or target is None:
-        return None
-    rr = get_risk_reward_from_plan(target, stop, entry)
-    kelly_size = calculate_kelly_size(confidence_score, rr)
-    return max(0.0, min(kelly_size * 100.0, 100.0))
 
 
 def _pm_target_notional(row, *, portfolio_equity: float) -> float | None:
@@ -480,7 +373,7 @@ async def place_signal_order(
     user=None,
     include_skip_result: bool = False,
 ) -> OrderResult | None:
-    """Size and place a paper order for ``row``'s signal.
+    """Size and place an order from one canonical Portfolio Manager decision.
 
     Returns the ``OrderResult`` (so callers can persist their own order record),
     or ``None`` when the signal is not actionable or no price is available.
@@ -488,12 +381,37 @@ async def place_signal_order(
     outcome with a safe reason code (used by the live analysis stream).
     The caller is responsible for committing the transaction.
     """
-    action = SIGNAL_TO_ACTION.get(row.signal)
-    if action is None:
+    pm_decision = _portfolio_decision(row)
+    if not pm_decision:
         return _skipped_order(
-            reason_code="non_actionable_signal",
-            message="The final signal is not actionable; no order was sent.",
+            reason_code="portfolio_decision_missing",
+            message="This analysis has no canonical Portfolio Manager decision; no order was sent.",
             include_skip_result=include_skip_result,
+        )
+
+    signal = str(pm_decision.get("rating", "") or "").strip()
+    action = SIGNAL_TO_ACTION.get(signal)
+    if action is None:
+        if signal == "Hold":
+            return _skipped_order(
+                reason_code="non_actionable_signal",
+                message="The final Portfolio Manager rating is Hold; no order was sent.",
+                include_skip_result=include_skip_result,
+            )
+        return _skipped_order(
+            reason_code="invalid_portfolio_decision",
+            message="The canonical Portfolio Manager rating is not actionable; no order was sent.",
+            include_skip_result=include_skip_result,
+        )
+
+    persisted_signal = str(getattr(row, "signal", "") or "").strip()
+    if persisted_signal and persisted_signal != signal:
+        _logger.warning(
+            "Analysis signal differs from the canonical Portfolio Manager rating for %s (%s != %s); "
+            "using the Portfolio Manager rating.",
+            ticker,
+            persisted_signal,
+            signal,
         )
 
     # Quality gate (opt-in): don't auto-trade low-confidence runs — the ones with
@@ -566,7 +484,6 @@ async def place_signal_order(
 
     holding = await get_holding(db, portfolio.id, ticker)
     allow_short = bool(getattr(settings, "allow_short_selling", False))
-    signal = str(getattr(row, "signal", "") or "").strip()
     # Underweight means reduce an existing long toward the Portfolio Manager's
     # target allocation. It must not be reinterpreted as "open a new short"
     # merely because the generic action mapping says SELL.
@@ -643,11 +560,11 @@ async def place_signal_order(
             include_skip_result=include_skip_result,
         )
 
-    # New reports are driven by the final Portfolio Manager decision.  The
-    # second spelling remains for historical rows whose chart annotation used
-    # ``target_price`` instead of the structured decision's field.
+    # All executable price levels come from the same final Portfolio Manager
+    # object as the rating and target allocation. Never parse a second model's
+    # markdown or a historical Trader proposal into a live order.
     raw_stop_loss = _decision_value(row, "stop_loss")
-    raw_take_profit = _decision_value(row, "take_profit_price", "target_price")
+    raw_take_profit = _decision_value(row, "take_profit_price")
 
     if opening_exposure:
         stop_loss, take_profit = _directional_exit_levels(position_side, price, raw_stop_loss, raw_take_profit)
@@ -687,51 +604,46 @@ async def place_signal_order(
                 include_skip_result=include_skip_result,
             )
 
-        # The Portfolio Manager's structured requested allocation is the only
-        # AI sizing input.  Its size is bounded by user guardrails and by the
-        # deterministic risk-per-share calculation; a historical Kelly value
-        # is only used when a pre-migration row has no final allocation.
-        pm_decision = _portfolio_decision(row)
-        allocation_snapshot: dict | None = None
-        pm_target_quantity: float | None = None
-        if "position_size_pct" in pm_decision:
-            allocation_snapshot = await _allocation_snapshot(db, portfolio=portfolio)
-            if allocation_snapshot is None:
-                return _skipped_order(
-                    reason_code="portfolio_equity_unavailable",
-                    message="Current portfolio equity was unavailable, so the target allocation was not traded.",
-                    include_skip_result=include_skip_result,
-                )
-            total_equity = _safe_float(allocation_snapshot.get("total_value"))
-            target_notional = _pm_target_notional(row, portfolio_equity=total_equity or 0.0)
-            if target_notional is None:
-                return _skipped_order(
-                    reason_code="target_allocation_missing",
-                    message="The final Portfolio Manager target allocation is missing or invalid.",
-                    include_skip_result=include_skip_result,
-                )
-            existing_notional = (
-                price * float(safe_decimal(holding.quantity))
-                if holding is not None and getattr(holding, "side", None) == "long"
-                else 0.0
+        # A new position always needs the final PM's total-equity target. That
+        # target is the only AI sizing input; user risk/cash/cap settings may
+        # reduce it, but no legacy Kelly or rendered text may replace it.
+        if "position_size_pct" not in pm_decision:
+            return _skipped_order(
+                reason_code="target_allocation_missing",
+                message="A new position needs a final Portfolio Manager target allocation.",
+                include_skip_result=include_skip_result,
             )
-            target_addition = max(0.0, target_notional - existing_notional)
-            if target_addition <= 0:
-                return _skipped_order(
-                    reason_code="target_allocation_met",
-                    message="The current position already meets or exceeds the Portfolio Manager target allocation.",
-                    include_skip_result=include_skip_result,
-                )
-            pm_target_quantity = target_addition / price
-
-        confidence_score = _extract_confidence_score(row)
-        requested_allocation_pct = _extract_kelly_ceiling_pct(
-            row,
-            confidence_score=confidence_score,
-            current_price=price,
+        allocation_snapshot = await _allocation_snapshot(db, portfolio=portfolio)
+        if allocation_snapshot is None:
+            return _skipped_order(
+                reason_code="portfolio_equity_unavailable",
+                message="Current portfolio equity was unavailable, so the target allocation was not traded.",
+                include_skip_result=include_skip_result,
+            )
+        total_equity = _safe_float(allocation_snapshot.get("total_value"))
+        target_notional = _pm_target_notional(row, portfolio_equity=total_equity or 0.0)
+        if target_notional is None:
+            return _skipped_order(
+                reason_code="target_allocation_missing",
+                message="The final Portfolio Manager target allocation is missing or invalid.",
+                include_skip_result=include_skip_result,
+            )
+        existing_notional = (
+            price * float(safe_decimal(holding.quantity))
+            if holding is not None and getattr(holding, "side", None) == "long"
+            else 0.0
         )
+        target_addition = max(0.0, target_notional - existing_notional)
+        if target_addition <= 0:
+            return _skipped_order(
+                reason_code="target_allocation_met",
+                message="The current position already meets or exceeds the Portfolio Manager target allocation.",
+                include_skip_result=include_skip_result,
+            )
+        pm_target_quantity = target_addition / price
+        requested_allocation_pct = _safe_float(pm_decision.get("position_size_pct"))
         if requested_allocation_pct is not None:
-            max_position_size_pct = min(max_position_size_pct, requested_allocation_pct)
+            max_position_size_pct = min(max_position_size_pct, max(0.0, requested_allocation_pct))
 
         quantity = _position_quantity(
             base_risk_pct,
@@ -793,7 +705,6 @@ async def place_signal_order(
                 include_skip_result=include_skip_result,
             )
         if intent == "reduce_long":
-            pm_decision = _portfolio_decision(row)
             if "position_size_pct" not in pm_decision:
                 return _skipped_order(
                     reason_code="target_allocation_missing",
@@ -848,7 +759,7 @@ async def place_signal_order(
         quantity=safe_decimal(quantity),
         reference_price=safe_decimal(price),
         analysis_id=getattr(row, "id", None),
-        ai_signal=row.signal or "",
+        ai_signal=signal,
         ai_reasoning=(getattr(row, "final_decision", "") or "")[:4_000],
         leverage=leverage,
         stop_loss=safe_decimal(stop_loss) if opening_exposure and stop_loss else None,

@@ -46,7 +46,13 @@ async def test_shared_report_exposes_only_canonical_report_fields(monkeypatch) -
         bear_history=None,
         investment_debate_history=None,
         risk_debate_history=None,
-        chart_annotations=None,
+        chart_annotations={
+            "portfolio_decision": {
+                "rating": "Buy",
+                "position_size_pct": 5,
+                "stop_loss": 95,
+            }
+        },
         risk_metrics=None,
         quality=None,
         degraded=False,
@@ -83,5 +89,10 @@ async def test_shared_report_exposes_only_canonical_report_fields(monkeypatch) -
     assert payload["fundamentals_report"] == "Canonical fundamentals"
     assert payload["investment_plan"] == "Canonical investment plan"
     assert payload["risk_debate_history"] == ["Aggressive Analyst: Keep the position small"]
+    assert payload["portfolio_decision"] == {
+        "rating": "Buy",
+        "position_size_pct": 5,
+        "stop_loss": 95,
+    }
     assert "fundamental_report" not in payload
     assert "research_report" not in payload

@@ -68,7 +68,11 @@ async def test_signal_exit_closes_the_entire_held_position_not_a_new_risk_sized_
     result = await place_signal_order(
         object(),
         ticker="AAPL",
-        row=SimpleNamespace(signal=signal, chart_annotations=None, final_decision=""),
+        row=SimpleNamespace(
+            signal=signal,
+            chart_annotations={"portfolio_decision": {"rating": signal}},
+            final_decision="",
+        ),
         settings=SimpleNamespace(
             quality_gate_enabled=False,
             allow_short_selling=False,
@@ -180,7 +184,11 @@ async def test_drawdown_snapshot_error_blocks_a_new_position(monkeypatch):
     result = await place_signal_order(
         object(),
         ticker="AAPL",
-        row=SimpleNamespace(signal="Buy", chart_annotations=None, final_decision=""),
+        row=SimpleNamespace(
+            signal="Buy",
+            chart_annotations={"portfolio_decision": {"rating": "Buy", "position_size_pct": 5}},
+            final_decision="",
+        ),
         settings=_opening_settings(drawdown_breaker_enabled=True, max_portfolio_drawdown_pct=20.0),
     )
 
@@ -220,7 +228,11 @@ async def test_drawdown_snapshot_error_does_not_block_a_safe_exit(monkeypatch):
     result = await place_signal_order(
         object(),
         ticker="AAPL",
-        row=SimpleNamespace(signal="Sell", chart_annotations=None, final_decision=""),
+        row=SimpleNamespace(
+            signal="Sell",
+            chart_annotations={"portfolio_decision": {"rating": "Sell"}},
+            final_decision="",
+        ),
         settings=_opening_settings(drawdown_breaker_enabled=True, max_portfolio_drawdown_pct=20.0),
     )
 
@@ -254,7 +266,11 @@ async def test_zero_cash_never_falls_back_to_initial_capital_for_position_sizing
     result = await place_signal_order(
         object(),
         ticker="AAPL",
-        row=SimpleNamespace(signal="Buy", chart_annotations=None, final_decision=""),
+        row=SimpleNamespace(
+            signal="Buy",
+            chart_annotations={"portfolio_decision": {"rating": "Buy", "position_size_pct": 5}},
+            final_decision="",
+        ),
         settings=_opening_settings(),
     )
 

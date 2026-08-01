@@ -741,7 +741,6 @@ backend/
     │   │   ├── market_intelligence.py
     │   │   ├── agent_qa.py    # Inter-agent cross-examination
     │   │   ├── research.py
-    │   │   ├── trade_execution.py
     │   │   ├── risk.py
     │   │   └── portfolio.py
     │   ├── sub/               # Tier-2: analysts, researchers, managers
@@ -749,7 +748,6 @@ backend/
     │   │   ├── managers/
     │   │   ├── researchers/
     │   │   ├── risk_mgmt/
-    │   │   └── trader/
     │   ├── tools/             # Tier-3: tool registry & builtin tools
     │   │   ├── base.py
     │   │   ├── registry.py

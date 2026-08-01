@@ -2,10 +2,11 @@
 
 Agents used to be prompted with manually-entered account values (or hardcoded
 ones like a "$100,000 portfolio"). This pulls the user's actual simulation
-portfolio — cash and current holdings — from the database so the trader,
-portfolio manager and super portfolio manager size positions against the real
-account state. Returns "" when there is no portfolio or on any error (the agents
-must still run).
+portfolio — cash and current holdings — from the database so the final
+Portfolio Manager can size its single decision against the real account state.
+The multi-ticker view only presents those existing decisions; it does not
+perform a second allocation pass. Returns "" when there is no portfolio or on
+any error (the analysis must still run).
 """
 
 from __future__ import annotations

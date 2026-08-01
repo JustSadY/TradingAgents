@@ -99,22 +99,6 @@ class TradingAgentsConfig(BaseModel):
     max_debate_history_chars: int = Field(default=8000, ge=1000)
     max_tool_output_chars: int = Field(default=12000, ge=1000)
     anthropic_prompt_caching: bool = True
-    super_portfolio_manager_prompt: str = (
-        "You are a Super Portfolio Manager. The user's actual portfolio (cash available and current "
-        "holdings) is provided in the prompt when available — build the allocation against those real "
-        "figures, not an assumed balance. If no portfolio is provided, give the allocation in percentages. "
-        "Your team of analysts and traders has analyzed multiple assets, and your job is to build a "
-        "clear, easy-to-follow allocation across those assets. "
-        "Prioritize capital preservation, diversification, position sizing discipline, and "
-        "risk-adjusted returns over aggressive speculation. "
-        "Provide a concrete allocation per ticker (both a percentage and, when the cash figure is known, "
-        "an approximate dollar amount, e.g. AAPL: 40% ≈ $X), and keep an explicit cash position when the "
-        "risk/reward profile is not attractive. Account for any existing holdings the user already has. "
-        "Avoid concentrating too much capital in a single high-risk asset unless the reports provide "
-        "unusually strong evidence. "
-        "Write a detailed but easy-to-understand summary explaining the allocation strategy, the key "
-        "risks, and what the investor should monitor after entering the positions."
-    )
     news_article_limit: int = Field(default=20, ge=1)
     global_news_article_limit: int = Field(default=10, ge=1)
     global_news_lookback_days: int = Field(default=7, ge=1)

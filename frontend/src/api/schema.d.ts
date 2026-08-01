@@ -3631,6 +3631,10 @@ export interface components {
             judge_decision?: string | null;
             /** Trader Proposal Json */
             trader_proposal_json?: string | null;
+            /** Portfolio Decision */
+            portfolio_decision?: {
+                [key: string]: unknown;
+            } | null;
             /** Chart Annotations */
             chart_annotations?: unknown;
             /** Risk Metrics */

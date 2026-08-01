@@ -128,8 +128,6 @@ REPORT_FIELDS = (
     "audit_report",
     "agent_qa_report",
     "investment_plan",
-    "trader_investment_plan",
-    "trader_proposal_json",
     "portfolio_decision_json",
     "final_trade_decision",
 )
@@ -433,9 +431,9 @@ async def run_individual_analysis(
             structured_data = {}
 
         # New runs have exactly one structured execution recommendation: the
-        # Portfolio Manager's decision.  Keep the old Trader proposal only if
-        # a pre-migration checkpoint supplied it, so historical records remain
-        # readable without allowing a second authority for new orders.
+        # Portfolio Manager's decision. Historical Trader columns remain in
+        # the database/API only so already-saved reports can be displayed; the
+        # active graph never reads or persists them.
         portfolio_decision_raw = final_state.get("portfolio_decision_json")
         if isinstance(portfolio_decision_raw, BaseModel):
             structured_data["portfolio_decision"] = portfolio_decision_raw.model_dump()
@@ -449,13 +447,6 @@ async def run_individual_analysis(
             else:
                 if isinstance(portfolio_decision, dict):
                     structured_data["portfolio_decision"] = portfolio_decision
-
-        trader_obj = final_state.get("trader_investment_plan_obj")
-        if "portfolio_decision" not in structured_data:
-            if isinstance(trader_obj, BaseModel):
-                structured_data["trader_proposal"] = trader_obj.model_dump()
-            elif isinstance(trader_obj, dict):
-                structured_data["trader_proposal"] = trader_obj
 
         _VALID_SIGNALS = {"Buy", "Overweight", "Hold", "Underweight", "Sell"}
         raw_signal = result.signal
@@ -490,14 +481,12 @@ async def run_individual_analysis(
             "audit_report": result.audit_report,
             "agent_qa_report": final_state.get("agent_qa_report", ""),
             "investment_plan": result.investment_plan,
-            "trader_plan": result.trader_plan,
             "final_decision": result.final_decision,
             "bull_history": history_json_from(inv_debate.get("bull_history", "")),
             "bear_history": history_json_from(inv_debate.get("bear_history", "")),
             "investment_debate_history": debate_messages(inv_debate.get("history", "")) or None,
             "risk_debate_history": debate_messages(risk_debate.get("history", "")) or None,
             "judge_decision": str(inv_debate.get("judge_decision", "") or ""),
-            "trader_proposal_json": final_state.get("trader_proposal_json", "{}"),
             "chart_annotations": structured_data,
             "risk_metrics": risk_metrics,
             "quality": quality,

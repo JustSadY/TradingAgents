@@ -95,6 +95,35 @@ describe('SharedReport', () => {
     expect(screen.getByTestId('shared-debates')).toHaveTextContent('Consensus argument')
     expect(screen.getByTestId('shared-debates')).toHaveTextContent('Risk argument')
   })
+
+  it('shows the canonical Portfolio Manager decision and hides competing legacy Trader proposals', async () => {
+    vi.mocked(axios.get).mockResolvedValue({
+      data: {
+        ...fullSharedReport,
+        portfolio_decision: {
+          rating: 'Buy',
+          executive_summary: 'Enter only with a defined stop.',
+          investment_thesis: 'The analyst evidence supports a measured long.',
+          confidence_score: 0.72,
+          entry_price: 180,
+          stop_loss: 165,
+          take_profit_price: 210,
+          position_size_pct: 12.5,
+          suggested_capital: 2500,
+        },
+      },
+    })
+
+    render(<SharedReport />)
+
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Portfolio Manager Recommendation' })).toBeInTheDocument())
+    expect(screen.queryByRole('button', { name: 'Legacy Trader Proposal' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: 'Legacy Trade Proposal Details' })).not.toBeInTheDocument()
+
+    expect(screen.getByTestId('shared-portfolio-decision')).toHaveTextContent('Enter only with a defined stop.')
+    expect(screen.getByTestId('shared-portfolio-decision')).toHaveTextContent('$2,500.00')
+    expect(screen.getByTestId('shared-portfolio-decision')).toHaveTextContent('12.5%')
+  })
 })
 
 describe('formatSharedReportValue', () => {

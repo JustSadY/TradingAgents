@@ -8,6 +8,7 @@ import {
 import { useTranslation } from '../contexts/LanguageContext'
 import type { SharedReportResponse } from '../api/types'
 import { DebateHistoryWidget } from '../components/analysis/DebateHistoryWidget'
+import { MarkdownReport } from '../components/report/MarkdownReport'
 import { formatSharedReportValue } from '../utils/sharedReport'
 
 // ── Section definitions ──────────────────────────────────────────────────────
@@ -18,7 +19,7 @@ interface SectionDef {
   fallbackLabel: string
   icon: React.ComponentType<{ size?: number; className?: string }>
   category: 'decision' | 'analyst' | 'research'
-  kind?: 'text' | 'structured' | 'debates'
+  kind?: 'text' | 'structured' | 'debates' | 'portfolioDecision'
 }
 
 // Keep this list aligned with the public API contract.  The original shared
@@ -26,6 +27,7 @@ interface SectionDef {
 // returned every analyst report and both debate histories.  That made a valid
 // share link look like it had lost most of its analysis.
 const SHARED_REPORT_SECTION_DEFS: SectionDef[] = [
+  { key: 'portfolio_decision', labelKey: 'analysis.pm.title', fallbackLabel: 'Portfolio Manager Recommendation', icon: Scale, category: 'decision', kind: 'portfolioDecision' },
   { key: 'final_decision', labelKey: 'analysis.section.final_trade_decision', fallbackLabel: 'Final Decision', icon: Scale, category: 'decision' },
   { key: 'investment_plan', labelKey: 'analysis.section.investment_plan', fallbackLabel: 'Investment Plan', icon: BookOpen, category: 'decision' },
   { key: 'trader_plan', labelKey: 'analysis.section.trader_investment_plan', fallbackLabel: 'Legacy Trader Proposal', icon: Zap, category: 'decision' },
@@ -78,6 +80,15 @@ function SignalBadge({ signal }: { signal: string | null }) {
 }
 
 function hasSharedSectionContent(def: SectionDef, report: SharedReportResponse): boolean {
+  const hasCanonicalPortfolioDecision = isNonEmptyRecord(report.portfolio_decision)
+  // New reports have one final authority: the Portfolio Manager.  Keep the
+  // old Trader output reachable only for historical reports that do not have
+  // that canonical decision, so public links cannot show competing trade
+  // sizes or directions.
+  if (hasCanonicalPortfolioDecision && (def.key === 'trader_plan' || def.key === 'trader_proposal_json')) {
+    return false
+  }
+  if (def.kind === 'portfolioDecision') return hasCanonicalPortfolioDecision
   if (def.kind === 'debates') {
     return Boolean(
       formatSharedReportValue(report.investment_debate_history)
@@ -85,6 +96,10 @@ function hasSharedSectionContent(def: SectionDef, report: SharedReportResponse):
     )
   }
   return Boolean(formatSharedReportValue((report as unknown as Record<string, unknown>)[def.key]))
+}
+
+function isNonEmptyRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length > 0)
 }
 
 function ReportContent({ content }: { content: string }) {
@@ -106,9 +121,93 @@ function ReportContent({ content }: { content: string }) {
           <img src={imageSrc} alt="Chart Analysis" className="w-full h-auto" />
         </div>
       )}
-      <pre className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed font-mono select-text">
-        {textContent}
-      </pre>
+      <MarkdownReport content={textContent} />
+    </div>
+  )
+}
+
+function PortfolioDecisionContent({ decision }: { decision: SharedReportResponse['portfolio_decision'] }) {
+  const { t } = useTranslation()
+  if (!isNonEmptyRecord(decision)) return null
+
+  const label = (key: string, fallback: string) => {
+    const translated = t(key)
+    return translated === key ? fallback : translated
+  }
+  const stringValue = (key: string) => typeof decision[key] === 'string' ? decision[key].trim() : ''
+  const numberValue = (key: string) => {
+    const value = decision[key]
+    return typeof value === 'number' && Number.isFinite(value) ? value : null
+  }
+  const money = (value: number) => `$${value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+  const confidencePercent = (value: number) => `${(value * 100).toFixed(1)}%`
+  // `position_size_pct` is already a percentage in the canonical PM schema.
+  // Only confidence is stored as a 0..1 fraction.
+  const allocationPercent = (value: number) => `${value.toFixed(1)}%`
+
+  const rating = stringValue('rating')
+  const summary = stringValue('executive_summary')
+  const thesis = stringValue('investment_thesis')
+  const confidence = numberValue('confidence_score')
+  const values: Array<[string, string, number | null, (value: number) => string]> = [
+    ['entry_price', label('analysis.pm.entry', 'Entry'), numberValue('entry_price'), money],
+    ['stop_loss', label('analysis.pm.stop', 'Stop Loss'), numberValue('stop_loss'), money],
+    ['take_profit_price', label('analysis.pm.target', 'Take Profit'), numberValue('take_profit_price'), money],
+    ['position_size_pct', label('analysis.pm.allocation', 'Allocation'), numberValue('position_size_pct'), allocationPercent],
+    ['suggested_capital', label('analysis.pm.capital', 'Suggested Capital'), numberValue('suggested_capital'), money],
+    ['price_target', label('analysis.pm.price_target', 'Price Target'), numberValue('price_target'), money],
+    ['recommended_leverage', label('analysis.pm.leverage', 'Leverage'), numberValue('recommended_leverage'), (value: number) => `${value.toFixed(1)}x`],
+    ['liquidation_price', label('analysis.pm.liquidation', 'Liquidation Price'), numberValue('liquidation_price'), money],
+  ].filter((item): item is [string, string, number, (value: number) => string] => item[2] !== null)
+  const timeHorizon = stringValue('time_horizon')
+
+  return (
+    <div data-testid="shared-portfolio-decision" className="space-y-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.05] p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3 border-b border-violet-300/10 pb-4">
+        <div className="space-y-1">
+          <h3 className="text-sm font-bold text-white">{label('analysis.pm.title', 'Portfolio Manager Recommendation')}</h3>
+          <p className="text-[11px] text-violet-200/75">{label('analysis.pm.single_authority', 'Single AI authority for sizing and trade parameters')}</p>
+        </div>
+        <div className="flex items-center gap-2">
+          {rating && <SignalBadge signal={rating} />}
+          {confidence !== null && (
+            <span className="rounded-lg border border-violet-300/20 bg-violet-400/10 px-2.5 py-1 text-xs font-mono font-bold text-violet-100">
+              {confidencePercent(confidence)}
+            </span>
+          )}
+        </div>
+      </div>
+
+      {summary && (
+        <section>
+          <h4 className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">{label('analysis.pm.summary', 'Executive Summary')}</h4>
+          <MarkdownReport content={summary} />
+        </section>
+      )}
+
+      {(values.length > 0 || timeHorizon) && (
+        <div className="grid grid-cols-2 gap-x-3 gap-y-3 rounded-xl border border-white/[0.06] bg-black/15 p-3 sm:grid-cols-3">
+          {values.map(([key, valueLabel, value, formatter]) => (
+            <div key={key} className="min-w-0">
+              <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">{valueLabel}</span>
+              <span className="font-mono text-xs text-slate-100">{formatter(value)}</span>
+            </div>
+          ))}
+          {timeHorizon && (
+            <div className="min-w-0">
+              <span className="block text-[10px] font-semibold uppercase tracking-wide text-slate-500">{label('analysis.pm.horizon', 'Time Horizon')}</span>
+              <span className="text-xs text-slate-100">{timeHorizon}</span>
+            </div>
+          )}
+        </div>
+      )}
+
+      {thesis && (
+        <section className="border-t border-white/[0.06] pt-4">
+          <h4 className="mb-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">{label('analysis.pm.thesis', 'Investment Thesis')}</h4>
+          <MarkdownReport content={thesis} />
+        </section>
+      )}
     </div>
   )
 }
@@ -180,7 +279,7 @@ export default function SharedReport() {
 
   const expires = new Date(report.expires_at)
   const activeSection = availableSections.find(s => s.key === activeKey) || availableSections[0]
-  const activeContent = activeSection && activeSection.kind !== 'debates'
+  const activeContent = activeSection && activeSection.kind !== 'debates' && activeSection.kind !== 'portfolioDecision'
     ? formatSharedReportValue((report as unknown as Record<string, unknown>)[activeSection.key])
     : ''
 
@@ -266,6 +365,8 @@ export default function SharedReport() {
                   investmentHistory={report.investment_debate_history}
                   riskHistory={report.risk_debate_history}
                 />
+              ) : activeSection?.kind === 'portfolioDecision' ? (
+                <PortfolioDecisionContent decision={report.portfolio_decision} />
               ) : activeSection && activeContent && (
                 <div className="bg-slate-900/30 border border-white/[0.04] rounded-2xl overflow-hidden animate-in fade-in duration-300">
                   {/* Section header */}

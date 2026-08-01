@@ -230,8 +230,6 @@ def _snapshot_auto_order_context(row) -> SimpleNamespace:
         quality=getattr(row, "quality", None),
         chart_annotations=getattr(row, "chart_annotations", None),
         portfolio_decision_json=getattr(row, "portfolio_decision_json", None),
-        trader_proposal_json=getattr(row, "trader_proposal_json", None),
-        trader_plan=getattr(row, "trader_plan", ""),
         final_decision=getattr(row, "final_decision", ""),
     )
 

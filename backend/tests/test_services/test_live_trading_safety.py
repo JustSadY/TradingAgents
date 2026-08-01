@@ -50,7 +50,11 @@ async def test_orchestrator_skips_live_order_when_server_flag_is_disabled(monkey
     result = await trading_orchestrator.place_signal_order(
         object(),
         ticker="AAPL",
-        row=SimpleNamespace(signal="Buy", chart_annotations=None, final_decision=""),
+        row=SimpleNamespace(
+            signal="Buy",
+            chart_annotations={"portfolio_decision": {"rating": "Buy", "position_size_pct": 5}},
+            final_decision="",
+        ),
         settings=SimpleNamespace(quality_gate_enabled=False),
         user=SimpleNamespace(is_owner=True),
     )

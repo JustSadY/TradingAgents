@@ -8,15 +8,83 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.database import AsyncSessionLocal
 from backend.models.portfolio_analysis import MultiTickerAnalysis
 from backend.models.settings import AppSettings
-from backend.repositories.system_settings import get_system_settings
-from backend.trading_agents.agents.sub.managers.super_portfolio_manager import create_super_portfolio_manager
-from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
 
-from .config_builder import build_analysis_config, prepare_graph_config
 from .emitter import AnalysisEmitter
 from .orchestrator import run_individual_analysis
 
 _logger = logging.getLogger(__name__)
+
+
+def _portfolio_overview_labels(output_language: str | None) -> dict[str, str]:
+    """Fixed copy for the non-executing multi-ticker overview.
+
+    Individual Portfolio Manager reports own every executable rating and size.
+    This summary is intentionally deterministic so it cannot become another
+    LLM authority or silently revise any of those decisions.
+    """
+    language = str(output_language or "English").strip().casefold()
+    if language in {"turkish", "türkçe"}:
+        return {
+            "title": "# Portföy Analizi Özeti",
+            "notice": (
+                "> Bu özet yeni bir alım/satım emri, miktar veya portföy dağılımı oluşturmaz. "
+                "Her hissenin tek yetkili kararı kendi Nihai Portföy Yöneticisi raporundadır."
+            ),
+            "context": "## Mevcut Portföy Bağlamı (yalnız referans)",
+            "decision": "Nihai Portföy Yöneticisi Kararı",
+            "missing": "Bu hisse için doğrulanmış nihai Portföy Yöneticisi kararı yok.",
+            "rule": "## İşlem Kuralı",
+            "rule_text": (
+                "Otomatik işlem yalnızca hisseye ait yapılandırılmış Nihai Portföy Yöneticisi kararıyla "
+                "değerlendirilir; bu çoklu-hisse özeti emir veremez veya miktar değiştiremez."
+            ),
+        }
+    return {
+        "title": "# Portfolio Analysis Overview",
+        "notice": (
+            "> This overview does not create or amend a buy/sell order, quantity, or portfolio allocation. "
+            "Each ticker's own final Portfolio Manager report remains the sole authority."
+        ),
+        "context": "## Current Portfolio Context (reference only)",
+        "decision": "Final Portfolio Manager Decision",
+        "missing": "No validated final Portfolio Manager decision is available for this ticker.",
+        "rule": "## Execution Rule",
+        "rule_text": (
+            "Automatic execution considers only the structured final Portfolio Manager decision for that ticker; "
+            "this multi-ticker overview cannot place an order or change a quantity."
+        ),
+    }
+
+
+def build_portfolio_overview(
+    ticker_reports: dict[str, dict],
+    *,
+    portfolio_context: str = "",
+    output_language: str | None = None,
+) -> str:
+    """Render a read-only summary of already-final single-ticker decisions.
+
+    No LLM is invoked here. This deliberately preserves the useful multi-ticker
+    report without adding a second model that could contradict an individual
+    Portfolio Manager's direction, stop, or amount.
+    """
+    labels = _portfolio_overview_labels(output_language)
+    parts = [labels["title"], labels["notice"]]
+    if portfolio_context.strip():
+        parts.extend((labels["context"], portfolio_context.strip()))
+
+    for ticker, report in sorted(ticker_reports.items()):
+        decision = str(report.get("portfolio_decision") or "").strip()
+        parts.extend(
+            (
+                f"## {ticker}",
+                f"### {labels['decision']}",
+                decision or labels["missing"],
+            )
+        )
+
+    parts.extend((labels["rule"], labels["rule_text"]))
+    return "\n\n".join(parts)
 
 
 async def run_portfolio_analysis(
@@ -39,8 +107,6 @@ async def run_portfolio_analysis(
     if portfolio_emitter:
         await portfolio_emitter.emit_progress(f"Starting portfolio analysis ({total} tickers)", "starting", "portfolio")
 
-    sys_settings = await get_system_settings(db)
-    config = build_analysis_config(settings, user=user, sys_settings=sys_settings)
     concurrency = settings.analyst_concurrency_limit or 1
     semaphore = asyncio.Semaphore(concurrency)
 
@@ -82,7 +148,11 @@ async def run_portfolio_analysis(
 
     super_report = ""
     if ticker_reports:
-        super_report = await _generate_super_report(db, user, config, ticker_reports)
+        super_report = await _generate_portfolio_overview(
+            user=user,
+            ticker_reports=ticker_reports,
+            output_language=getattr(settings, "output_language", None),
+        )
 
     multi_row = MultiTickerAnalysis(
         trade_date=trade_date,
@@ -111,21 +181,19 @@ async def run_portfolio_analysis(
     return multi_row
 
 
-async def _generate_super_report(db, user, config, ticker_reports) -> str:
+async def _generate_portfolio_overview(*, user, ticker_reports: dict[str, dict], output_language: str | None) -> str:
+    """Build the report-only multi-ticker overview without a second decision LLM."""
     username = user.username if user else "system"
     try:
         user_id = user.id if user else None
-        permitted_analysts = await prepare_graph_config(db, user_id, config)
         from backend.trading_agents.agents.runtime.portfolio_context import get_portfolio_context
 
         portfolio_context = await get_portfolio_context(user_id)
-
-        ta = TradingAgentsGraph(selected_analysts=permitted_analysts, config=config)
-        spm_node = create_super_portfolio_manager(ta.thinking_llm)
-        state_out = await asyncio.to_thread(
-            spm_node, {"ticker_reports": ticker_reports, "portfolio_context": portfolio_context}
+        return build_portfolio_overview(
+            ticker_reports,
+            portfolio_context=portfolio_context,
+            output_language=output_language,
         )
-        return state_out.get("super_portfolio_report", "")
     except Exception as e:
-        _logger.exception("SuperPortfolioManager failed for user=%s", username)
-        return f"Portfolio synthesis failed: {e}"
+        _logger.exception("Portfolio overview failed for user=%s", username)
+        return f"Portfolio overview failed: {e}"

@@ -9,11 +9,8 @@ from backend.trading_agents.agents.schemas import (
     PortfolioRating,
     ResearchBias,
     ResearchPlan,
-    TraderAction,
-    TraderProposal,
     render_pm_decision,
     render_research_plan,
-    render_trader_proposal,
 )
 from backend.trading_agents.graph.reflection import Reflector
 
@@ -28,17 +25,6 @@ def test_structured_renderers_localize_turkish_scaffolding_and_actions():
         ),
         "Turkish",
     )
-    trader = render_trader_proposal(
-        TraderProposal(
-            action=TraderAction.SELL,
-            reasoning="Risk seviyesi yükseldi.",
-            confidence_score=0.71,
-            entry_price=100.0,
-            stop_loss=105.0,
-            take_profit_price=92.0,
-        ),
-        "Turkish",
-    )
     decision = render_pm_decision(
         PortfolioDecision(
             rating=PortfolioRating.OVERWEIGHT,
@@ -49,11 +35,8 @@ def test_structured_renderers_localize_turkish_scaffolding_and_actions():
     )
 
     assert "**Araştırma Eğilimi**: Olumlu" in plan
-    assert "**İşlem**: Sat" in trader
-    assert "**Nihai İşlem Önerisi**: **Sat**" in trader
     assert "**Derecelendirme**: Ağırlığı Artır" in decision
     assert "Recommendation" not in plan
-    assert "FINAL TRANSACTION PROPOSAL" not in trader
     assert "Executive Summary" not in decision
 
 

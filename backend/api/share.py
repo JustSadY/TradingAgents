@@ -59,6 +59,8 @@ async def get_shared_report(token: str, db: AsyncSession = Depends(get_db)):
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis data not found")
 
+    annotations = analysis.chart_annotations if isinstance(analysis.chart_annotations, dict) else {}
+
     return {
         "ticker": analysis.ticker,
         "trade_date": str(analysis.trade_date) if analysis.trade_date else None,
@@ -90,6 +92,7 @@ async def get_shared_report(token: str, db: AsyncSession = Depends(get_db)):
         "risk_debate_history": analysis.risk_debate_history,
         "judge_decision": analysis.judge_decision or "",
         "trader_proposal_json": analysis.trader_proposal_json or "{}",
+        "portfolio_decision": annotations.get("portfolio_decision"),
         "chart_annotations": analysis.chart_annotations,
         "risk_metrics": analysis.risk_metrics,
         "quality": analysis.quality,

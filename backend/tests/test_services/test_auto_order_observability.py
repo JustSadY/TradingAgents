@@ -92,6 +92,7 @@ async def test_final_portfolio_decision_constrains_auto_order_and_provenance(mon
         final_decision="Portfolio Manager: Buy because the final risk-adjusted decision is positive.",
         chart_annotations={
             "portfolio_decision": {
+                "rating": "Buy",
                 "confidence_score": 0.8,
                 "entry_price": 100,
                 "stop_loss": 95,
@@ -132,6 +133,33 @@ async def test_final_portfolio_decision_constrains_auto_order_and_provenance(mon
     assert trader.request.analysis_id == 19
     assert trader.request.ai_signal == "Buy"
     assert "Portfolio Manager" in trader.request.ai_reasoning
+
+
+async def test_legacy_trader_proposal_is_display_only_and_cannot_open_an_order():
+    from backend.services import trading_orchestrator
+
+    result = await trading_orchestrator.place_signal_order(
+        object(),
+        ticker="NVDA",
+        row=SimpleNamespace(
+            id=21,
+            signal="Buy",
+            final_decision="",
+            chart_annotations={
+                "trader_proposal": {
+                    "rating": "Buy",
+                    "position_size_pct": 90,
+                    "stop_loss": 80,
+                }
+            },
+        ),
+        settings=SimpleNamespace(quality_gate_enabled=False),
+        include_skip_result=True,
+    )
+
+    assert result is not None
+    assert result.status == "SKIPPED"
+    assert result.reason_code == "portfolio_decision_missing"
 
 
 async def test_underweight_reduces_only_to_final_target_allocation(monkeypatch):
@@ -182,6 +210,7 @@ async def test_underweight_reduces_only_to_final_target_allocation(monkeypatch):
         final_decision="Portfolio Manager: reduce the long position to a 6% allocation.",
         chart_annotations={
             "portfolio_decision": {
+                "rating": "Underweight",
                 "position_size_pct": 6,
                 "suggested_capital": 400,
                 "recommended_leverage": 1,

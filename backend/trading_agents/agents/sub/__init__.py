@@ -9,7 +9,6 @@ Grouped by role:
   researchers/  — bull, bear (investment debate)
   risk_mgmt/    — aggressive, conservative, neutral (risk debate)
   managers/     — synthesis, auditor, research manager, portfolio manager
-  trader/       — execution planner
 
 These modules keep using absolute imports, so they are orchestrated by the main
 agents without any per-file wiring here.
