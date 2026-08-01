@@ -30,9 +30,7 @@ _MARKET_TOOLS = [
     search_web,
 ]
 
-
 _UNAVAILABLE_REPORT_PREFIX = "market analysis unavailable"
-
 
 def _is_usable_market_report(value: object) -> bool:
     """Whether a model result is a narrative that may safely be cached.
@@ -49,7 +47,6 @@ def _is_usable_market_report(value: object) -> bool:
         return False
     return _UNAVAILABLE_REPORT_PREFIX not in report[:120].lower()
 
-
 def _snapshot_block(value: object, *, empty_message: str) -> str:
     """Return a bounded, display-safe representation of pre-fetched data."""
     from backend.trading_agents.agents.runtime.report_aggregator import middle_truncate
@@ -58,7 +55,6 @@ def _snapshot_block(value: object, *, empty_message: str) -> str:
     if not text:
         return empty_message
     return middle_truncate(text, 4_000)
-
 
 def _market_data_snapshot(ticker: str, stock_data: object, indicators_data: object) -> str:
     """Preserve collected market evidence when the model returns no report.
@@ -79,7 +75,6 @@ def _market_data_snapshot(ticker: str, stock_data: object, indicators_data: obje
         f"#### Technical Indicators\n{indicators}"
     )
 
-
 def _has_pending_tool_calls(result: object) -> bool:
     """Keep the ToolNode loop intact before considering an empty report.
 
@@ -96,7 +91,6 @@ def _has_pending_tool_calls(result: object) -> bool:
     if isinstance(last_message, dict):
         return bool(last_message.get("tool_calls"))
     return bool(getattr(last_message, "tool_calls", None))
-
 
 @register_analyst(
     key="market",

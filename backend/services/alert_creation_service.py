@@ -26,7 +26,6 @@ ALERT_SOURCE_ASSISTANT = "assistant"
 ALERT_SOURCE_ANALYSIS = "analysis"
 _ALERT_SOURCES = frozenset({ALERT_SOURCE_MANUAL, ALERT_SOURCE_ASSISTANT, ALERT_SOURCE_ANALYSIS})
 
-
 class AlertGuardrailViolation(RuntimeError):
     """A user-configured alert limit rejected a new or re-armed alert."""
 
@@ -35,11 +34,9 @@ class AlertGuardrailViolation(RuntimeError):
         self.code = code
         self.detail = detail
 
-
 def _now() -> datetime:
     """Small seam for deterministic cooldown tests."""
     return datetime.now(UTC)
-
 
 async def _lock_user_settings(db: AsyncSession, user_id: int) -> AppSettings:
     """Return the user's settings after acquiring the creation-policy lock.
@@ -64,7 +61,6 @@ async def _lock_user_settings(db: AsyncSession, user_id: int) -> AppSettings:
     settings = (await db.execute(statement)).scalar_one()
     return settings
 
-
 async def _active_alert_count(db: AsyncSession, user_id: int, *, exclude_alert_id: int | None = None) -> int:
     statement = select(func.count(PriceAlert.id)).where(
         PriceAlert.user_id == user_id,
@@ -74,7 +70,6 @@ async def _active_alert_count(db: AsyncSession, user_id: int, *, exclude_alert_i
     if exclude_alert_id is not None:
         statement = statement.where(PriceAlert.id != exclude_alert_id)
     return int((await db.execute(statement)).scalar_one())
-
 
 async def _enforce_active_cap(
     db: AsyncSession,
@@ -90,7 +85,6 @@ async def _enforce_active_cap(
             "active_limit",
             f"Your active alert limit ({max_active_alerts}) has been reached. Disable or delete an alert first.",
         )
-
 
 async def _enforce_ai_run_cap(
     db: AsyncSession,
@@ -119,7 +113,6 @@ async def _enforce_ai_run_cap(
             f"This analysis has already created the maximum of {max_per_run} AI alerts.",
         )
 
-
 async def _enforce_ai_cooldown(
     db: AsyncSession,
     settings: AppSettings,
@@ -145,9 +138,6 @@ async def _enforce_ai_cooldown(
                 PriceAlert.ticker == ticker,
                 PriceAlert.condition == condition,
                 PriceAlert.alert_type == alert_type,
-                # A run may intentionally surface several distinct levels;
-                # its own cap governs that batch. Cooldown prevents the next
-                # scan from repeating an equivalent alert soon afterwards.
                 PriceAlert.creation_run_id != run_id,
                 PriceAlert.created_at >= cutoff,
             )
@@ -159,7 +149,6 @@ async def _enforce_ai_cooldown(
             "ai_cooldown",
             f"An equivalent AI alert was created within the last {cooldown_hours} hour(s).",
         )
-
 
 async def _has_active_exact_alert(
     db: AsyncSession,
@@ -184,7 +173,6 @@ async def _has_active_exact_alert(
         .limit(1)
     )
     return result.scalar_one_or_none() is not None
-
 
 async def create_alert_with_guardrails(
     db: AsyncSession,
@@ -227,7 +215,7 @@ async def create_alert_with_guardrails(
         await _enforce_active_cap(db, settings, user_id)
 
         if normalized_source == ALERT_SOURCE_ANALYSIS:
-            assert creation_run_id is not None  # narrowed above; keeps mypy honest
+            assert creation_run_id is not None
             await _enforce_ai_run_cap(db, settings, user_id, creation_run_id)
             now = _now()
             target_decimal = Decimal(str(target_price))
@@ -275,7 +263,6 @@ async def create_alert_with_guardrails(
             exc.code,
         )
         return None
-
 
 async def rearm_alert_with_guardrails(db: AsyncSession, alert: PriceAlert) -> PriceAlert:
     """Re-enable a manual UI alert without letting it bypass the active cap."""

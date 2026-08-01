@@ -2,7 +2,6 @@ import logging
 
 _logger = logging.getLogger(__name__)
 
-
 def calculate_kelly_size(
     win_probability: float, win_loss_ratio: float, kelly_fraction: float = 0.5, max_cap: float = 0.20
 ) -> float:
@@ -33,7 +32,6 @@ def calculate_kelly_size(
 
     _logger.info(f"Kelly Calc: WinProb={win_probability:.2f}, R/R={win_loss_ratio:.2f}, Result={final_size:.4f}")
     return final_size
-
 
 def get_risk_reward_from_plan(target_price: float, stop_loss: float, current_price: float) -> float:
     """Calculates R/R ratio based on proposed trade levels."""

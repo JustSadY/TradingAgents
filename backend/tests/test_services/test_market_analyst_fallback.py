@@ -6,7 +6,6 @@ from types import SimpleNamespace
 
 import pytest
 
-
 @pytest.mark.asyncio
 async def test_market_analyst_preserves_prefetched_data_when_model_report_is_unavailable(monkeypatch):
     """A provider-side blank must not become an empty or permanently cached panel."""
@@ -58,7 +57,6 @@ async def test_market_analyst_preserves_prefetched_data_when_model_report_is_una
     assert "2026-07-28,212.35,45678900" in report
     assert "RSI: 58.4" in report
     assert cached_reports == []
-
 
 @pytest.mark.asyncio
 async def test_market_analyst_keeps_report_empty_while_a_tool_call_is_pending(monkeypatch):

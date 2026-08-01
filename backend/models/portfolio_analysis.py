@@ -6,7 +6,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
 
-
 class MultiTickerAnalysis(Base):
     __tablename__ = "multi_ticker_analyses"
     __table_args__ = (

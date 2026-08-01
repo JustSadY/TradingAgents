@@ -10,7 +10,6 @@ from backend.models.user import User
 
 router = APIRouter(prefix="/api/meta", tags=["meta"])
 
-
 @router.get("", response_model=dict[str, Any])
 async def get_meta(
     current_user: User = Depends(get_current_user),

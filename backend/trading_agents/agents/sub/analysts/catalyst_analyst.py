@@ -11,7 +11,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
 
 _CATALYST_TOOLS = [get_catalyst_calendar]
 
-
 @register_analyst(
     key="catalyst",
     agent_node="Catalyst Calendar Analyst",

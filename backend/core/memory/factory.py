@@ -13,7 +13,6 @@ from .base import MemoryStore
 
 _logger = logging.getLogger(__name__)
 
-
 def build_pinecone_store(
     *,
     api_key: str,
@@ -57,7 +56,6 @@ def build_pinecone_store(
     except Exception as exc:  # noqa: BLE001 — never let memory init break a run
         _logger.warning("Failed to build memory store: %s", exc)
         return None
-
 
 def build_pgvector_store(
     *,

@@ -4,7 +4,6 @@ from typing import Any
 import numpy as np
 import yfinance as yf
 
-
 def _local_extrema(prices: np.ndarray, order: int = 5) -> tuple[list[int], list[int]]:
     maxima: list[int] = []
     minima: list[int] = []
@@ -17,7 +16,6 @@ def _local_extrema(prices: np.ndarray, order: int = 5) -> tuple[list[int], list[
         if prices[i] <= window_l.min() and prices[i] <= window_r.min():
             minima.append(i)
     return maxima, minima
-
 
 def _detect_double_top(
     prices: np.ndarray,
@@ -59,7 +57,6 @@ def _detect_double_top(
         )
     return patterns
 
-
 def _detect_double_bottom(
     prices: np.ndarray,
     dates: list[str],
@@ -99,7 +96,6 @@ def _detect_double_bottom(
             }
         )
     return patterns
-
 
 def _detect_head_and_shoulders(
     prices: np.ndarray,
@@ -145,7 +141,6 @@ def _detect_head_and_shoulders(
         )
     return patterns
 
-
 def _detect_inv_head_and_shoulders(
     prices: np.ndarray,
     dates: list[str],
@@ -187,7 +182,6 @@ def _detect_inv_head_and_shoulders(
             }
         )
     return patterns
-
 
 def _detect_flags(prices: np.ndarray, dates: list[str]) -> list[dict[str, Any]]:
     patterns: list[dict[str, Any]] = []
@@ -262,7 +256,6 @@ def _detect_flags(prices: np.ndarray, dates: list[str]) -> list[dict[str, Any]]:
 
     return patterns
 
-
 def _dedup(patterns: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: dict[str, dict[str, Any]] = {}
     for p in patterns:
@@ -270,7 +263,6 @@ def _dedup(patterns: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if key not in seen or p["confidence"] > seen[key]["confidence"]:
             seen[key] = p
     return list(seen.values())
-
 
 async def detect_patterns(ticker: str, period: str = "1y") -> list[dict[str, Any]]:
     def _fetch() -> Any:

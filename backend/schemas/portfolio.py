@@ -2,7 +2,6 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
-
 class HoldingRead(BaseModel):
     id: int
     ticker: str
@@ -22,7 +21,6 @@ class HoldingRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
 class PortfolioRead(BaseModel):
     id: int
     mode: str
@@ -37,13 +35,11 @@ class PortfolioRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
 class CorrelationResponse(BaseModel):
     tickers: list[str]
     matrix: list[list]
     avg_correlation: float | None
     warning: str | None
-
 
 class OrderRead(BaseModel):
     id: int

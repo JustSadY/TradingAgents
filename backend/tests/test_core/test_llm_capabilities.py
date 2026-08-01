@@ -4,7 +4,6 @@ from backend.trading_agents.llm_clients.capabilities import (
     supports_output_language,
 )
 
-
 def test_nemotron_3_language_support_is_explicit_and_case_insensitive():
     model = "nvidia/nemotron-3-super-120b-a12b"
 
@@ -21,11 +20,9 @@ def test_nemotron_3_language_support_is_explicit_and_case_insensitive():
         "Spanish",
     ]
 
-
 def test_unknown_model_language_support_is_not_guessed():
     assert supports_output_language("custom/unverified-model", "Turkish") is None
     assert get_supported_output_languages("custom/unverified-model") is None
-
 
 def test_catalog_exposes_known_model_language_metadata():
     model = next(

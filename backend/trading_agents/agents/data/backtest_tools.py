@@ -7,7 +7,6 @@ from backend.services.indicator_service import calculate_macd, calculate_rsi
 
 _logger = logging.getLogger(__name__)
 
-
 @tool
 def run_strategy_backtest(ticker: str, strategy_type: str, curr_date: str | None = None) -> str:
     """Run a strategy backtest (e.g. macd_crossover, rsi_oversold) for a stock ticker up to a specific date."""

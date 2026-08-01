@@ -12,7 +12,6 @@ from backend.services import system_metrics_service, token_analytics_service
 
 router = APIRouter(tags=["analytics"])
 
-
 @router.get("/api/analytics/token-usage", response_model=dict[str, Any])
 async def get_token_usage(
     db: AsyncSession = Depends(get_db),
@@ -20,14 +19,12 @@ async def get_token_usage(
 ) -> dict[str, Any]:
     return await token_analytics_service.get_token_analytics(db, current_user.id)
 
-
 @router.get("/api/admin/system-metrics", response_model=dict[str, Any])
 async def get_system_metrics(
     _: User = Depends(require_admin),
 ) -> dict[str, Any]:
     """Return key Prometheus metrics as JSON for the admin dashboard."""
     return system_metrics_service.collect_system_metrics()
-
 
 @router.get("/api/admin/system-health", response_model=dict[str, Any])
 async def get_system_health(

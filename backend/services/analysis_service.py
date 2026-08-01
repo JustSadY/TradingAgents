@@ -33,7 +33,6 @@ from backend.services.trading_orchestrator import auto_execute_signals_enabled, 
 
 from .analysis.emitter import AnalysisEmitter
 
-# Sub-module imports
 from .analysis.orchestrator import run_individual_analysis
 from .analysis.portfolio_orchestrator import run_portfolio_analysis
 
@@ -43,16 +42,13 @@ _RUNNING_TASKS: dict[str, asyncio.Task] = {}
 _TASK_REGISTRY: dict[str, dict] = {}
 _TASK_OWNERS: dict[str, int | None] = {}
 
-
 async def register_task_owner(task_id: str, user_id: int | None) -> None:
     _TASK_OWNERS[task_id] = user_id
     await task_store.set_owner(task_id, user_id)
 
-
 async def clear_task_owner(task_id: str) -> None:
     _TASK_OWNERS.pop(task_id, None)
     await task_store.clear_owner(task_id)
-
 
 async def is_task_owner(task_id: str, user_id: int | None, is_admin: bool = False) -> bool:
     """Return True if *user* may subscribe to *task_id*'s event stream.
@@ -65,22 +61,16 @@ async def is_task_owner(task_id: str, user_id: int | None, is_admin: bool = Fals
         return True
     owner = _TASK_OWNERS.get(task_id)
     if owner is None:
-        # The run may have been registered by another process (arq worker mode).
         owner = await task_store.get_owner(task_id)
     return owner is not None and owner == user_id
 
-
 async def cancel_local_task(task_id: str) -> bool:
     """Cancel ``task_id`` if it is running in THIS process."""
-    # Do not clear the distributed task record here.  A cancellation can race
-    # with a queued job starting, and the runner is the only component that
-    # can acknowledge terminal cancellation after it has stopped its work.
     task = _RUNNING_TASKS.get(task_id)
     if task and not task.done():
         task.cancel()
         return True
     return False
-
 
 async def cancel_analysis(task_id: str) -> bool:
     """Cancel a run wherever it is executing.
@@ -92,10 +82,7 @@ async def cancel_analysis(task_id: str) -> bool:
     await task_store.request_cancel(task_id)
     await cancel_local_task(task_id)
     await task_store.publish_cancel(task_id)
-    # The caller has already verified ownership.  A queued task is therefore
-    # accepted for cancellation even though no local coroutine exists yet.
     return True
-
 
 async def get_active_tasks_for_user(user_id: int | None) -> list[dict]:
     """Returns a list of active tasks for the given user (all processes)."""
@@ -104,7 +91,6 @@ async def get_active_tasks_for_user(user_id: int | None) -> list[dict]:
         seen = {t["task_id"] for t in tasks}
         tasks.extend(t for t in await task_store.list_tasks_for_user(user_id) if t["task_id"] not in seen)
     return tasks
-
 
 async def _track_running_task(
     task_id: str,
@@ -133,7 +119,6 @@ async def _track_running_task(
     await task_store.set_meta(task_id, meta)
     await register_task_owner(task_id, user_id)
 
-
 async def _clear_terminal_task_state(task_id: str, user_id: int | None) -> None:
     """Remove tracking only after the runner reached a terminal state."""
     _RUNNING_TASKS.pop(task_id, None)
@@ -141,7 +126,6 @@ async def _clear_terminal_task_state(task_id: str, user_id: int | None) -> None:
     await task_store.clear_meta(task_id, user_id)
     await clear_task_owner(task_id)
     await task_store.clear_cancel_request(task_id)
-
 
 async def _emit_cancelled_task(task_id: str, *, close: bool = True) -> None:
     """Tell subscribers about a pre-start or portfolio cancellation.
@@ -157,7 +141,6 @@ async def _emit_cancelled_task(task_id: str, *, close: bool = True) -> None:
     finally:
         if close:
             await emitter.close()
-
 
 async def _emit_auto_order_result(
     emitter: AnalysisEmitter,
@@ -180,7 +163,7 @@ async def _emit_auto_order_result(
         from backend.core.constants import SIGNAL_TO_ACTION
 
         action = SIGNAL_TO_ACTION.get(getattr(row, "signal", None))
-    except Exception:  # pragma: no cover - constants are local/static
+    except Exception:
         pass
 
     broker_status = (getattr(result, "status", "") or "").upper() if result else None
@@ -190,8 +173,6 @@ async def _emit_auto_order_result(
         elif broker_status == "SKIPPED":
             outcome = "skipped"
         elif broker_status:
-            # A broker status that did not produce a fill cannot be presented
-            # as a successful trade.  Preserve its exact value separately.
             outcome = "rejected"
         else:
             outcome = "skipped"
@@ -212,9 +193,7 @@ async def _emit_auto_order_result(
             reason_code=reason_code or getattr(result, "reason_code", None),
         )
     except Exception:
-        # Event delivery must never undo a durable analysis/order transaction.
         _logger.exception("Could not emit auto-order outcome for analysis_id=%s", getattr(row, "id", None))
-
 
 def _snapshot_auto_order_context(row) -> SimpleNamespace:
     """Copy order inputs before committing so expired ORM rows are never read.
@@ -232,7 +211,6 @@ def _snapshot_auto_order_context(row) -> SimpleNamespace:
         portfolio_decision_json=getattr(row, "portfolio_decision_json", None),
         final_decision=getattr(row, "final_decision", ""),
     )
-
 
 async def run_analysis(
     ticker: str,
@@ -262,8 +240,6 @@ async def run_analysis(
     user_id = user.id if user else None
     emitter = AnalysisEmitter(task_id)
     try:
-        # A Stop request can arrive while an inline BackgroundTask/ARQ job is
-        # still queued.  Never enter the graph when its durable marker exists.
         if await task_store.is_cancel_requested(task_id):
             await emitter.emit_error("Analysis cancelled.")
             raise asyncio.CancelledError
@@ -275,16 +251,11 @@ async def run_analysis(
             asset_type=asset_type,
             user_id=user_id,
         )
-        # Cover the narrow window between the first check and registration.
         if await task_store.is_cancel_requested(task_id):
             await emitter.emit_error("Analysis cancelled.")
             raise asyncio.CancelledError
         return await run_individual_analysis(ticker, trade_date, asset_type, settings, db, emitter, triggered_by, user)
     except Exception as exc:
-        # The inner orchestrator normally emits an error before re-raising.
-        # Track the fact only after the event was actually published: errors
-        # before that point (for example while creating the skeleton record)
-        # may still use the bounded infrastructure retry.
         if getattr(emitter, "terminal_event_emitted", False):
             exc._analysis_terminal_event_emitted = True
         raise
@@ -295,7 +266,6 @@ async def run_analysis(
             _TASK_OWNERS.pop(task_id, None)
             await task_store.clear_owner(task_id)
             await emitter.close()
-
 
 async def run_analysis_task(
     ticker: str,
@@ -310,9 +280,6 @@ async def run_analysis_task(
         from backend.core.log_handler import current_user_id
 
         current_user_id.set(user.id)
-    # Keep the stream and distributed task ownership alive across a scheduled
-    # retry.  The retry uses the same task id, so closing it here would make a
-    # healthy retry look like a dead WebSocket to the client.
     retry_scheduled = False
     analysis_completed = False
     async with AsyncSessionLocal() as db:
@@ -328,8 +295,6 @@ async def run_analysis_task(
                 user=user,
                 defer_terminal_cleanup=True,
             )
-            # Preserve all values needed for the later order before committing
-            # the analysis.  ORM attributes may expire on that commit.
             order_context = _snapshot_auto_order_context(row)
             try:
                 await db.commit()
@@ -338,17 +303,12 @@ async def run_analysis_task(
             except Exception:
                 await db.rollback()
                 _logger.exception("Could not persist completed analysis task=%s", task_id)
-                # ``run_individual_analysis`` may have already streamed its
-                # report-complete event. Make a failed durable commit explicit
-                # instead of silently treating it as an order-only problem.
                 await AnalysisEmitter(task_id).emit_error("Analysis could not be saved. Please try again.")
                 await _clear_terminal_task_state(task_id, user.id if user else None)
                 return
             analysis_completed = True
             emitter = AnalysisEmitter(task_id)
 
-            # A report completion is not an execution fill. Every exit from
-            # this optional phase emits an explicit order_result event.
             if await task_store.is_cancel_requested(task_id):
                 _logger.info("Skipping signal order for cancelled analysis task=%s", task_id)
                 await _emit_auto_order_result(
@@ -378,8 +338,6 @@ async def run_analysis_task(
                         user=user,
                         include_skip_result=True,
                     )
-                    # A Stop that arrives while pricing/sizing is running wins
-                    # over a not-yet-committed simulation order.
                     if await task_store.is_cancel_requested(task_id):
                         await db.rollback()
                         await _emit_auto_order_result(
@@ -391,9 +349,6 @@ async def run_analysis_task(
                             reason_code="cancelled",
                         )
                     else:
-                        # Never announce a fill before its transaction is
-                        # durable. A commit error becomes an execution error,
-                        # not a phantom order in the UI.
                         await db.commit()
                         await _emit_auto_order_result(emitter, row=order_context, ticker=ticker, result=result)
                 except asyncio.CancelledError:
@@ -421,9 +376,6 @@ async def run_analysis_task(
             await _clear_terminal_task_state(task_id, user.id if user else None)
         except asyncio.CancelledError:
             _logger.info("Background analysis cancelled task=%s", task_id)
-            # ``run_individual_analysis`` has marked its row cancelled.  Its
-            # session changes must be committed before the worker acknowledges
-            # cancellation to ARQ (or exits an inline BackgroundTask).
             try:
                 await db.commit()
             except Exception:
@@ -432,10 +384,6 @@ async def run_analysis_task(
             await _clear_terminal_task_state(task_id, user.id if user else None)
             raise
         except Exception as exc:
-            # A cancellation can interrupt an awaited DB flush/commit.  In
-            # that case SQLAlchemy raises a non-cancellation follow-up error
-            # while the session is rolling back.  Prefer the durable Stop
-            # intent over reporting that expected race as a backend failure.
             if await task_store.is_cancel_requested(task_id):
                 _logger.info("Background analysis stopped during failure cleanup task=%s", task_id)
                 await db.rollback()
@@ -452,25 +400,17 @@ async def run_analysis_task(
             except Exception:
                 _logger.exception("Analysis retry failed for task=%s", task_id)
             if not retry_scheduled:
-                # Do not leave an in-memory owner/registry entry behind when
-                # the retry budget is exhausted or enqueueing itself failed.
                 if await task_store.is_cancel_requested(task_id):
                     await _emit_cancelled_task(task_id, close=False)
                 else:
                     await AnalysisEmitter(task_id).emit_error("Analysis failed before completion. Please try again.")
                 await _clear_terminal_task_state(task_id, user.id if user else None)
         finally:
-            # ``run_analysis`` deliberately leaves the event stream open for
-            # this background wrapper.  Closing only after the exception
-            # handlers run guarantees that a cancellation/failure terminal
-            # event is delivered before clients observe ``onclose`` and start
-            # reconnecting.
             if not retry_scheduled:
                 try:
                     await AnalysisEmitter(task_id).close()
                 except Exception:
                     _logger.debug("Could not close analysis event stream task=%s", task_id, exc_info=True)
-
 
 async def _maybe_retry_analysis(
     ticker: str,
@@ -486,7 +426,6 @@ async def _maybe_retry_analysis(
     refresh or opening from a new tab does not restart or re-attach to a failed run.
     """
     return False
-
 
 async def run_portfolio_task(
     tickers: list[str],
@@ -537,15 +476,12 @@ async def run_portfolio_task(
     except Exception:
         _logger.exception("Portfolio analysis failed")
         if task_id:
-            # Surface the failure on the WebSocket channel so a subscribed
-            # client stops waiting instead of hanging on an open socket.
             emitter = AnalysisEmitter(task_id)
             await emitter.emit_error("Portfolio analysis failed")
             await emitter.close()
     finally:
         if task_id:
             await _clear_terminal_task_state(task_id, user_id)
-
 
 async def rollback_and_resume_analysis(
     analysis_id: int,
@@ -575,9 +511,6 @@ async def rollback_and_resume_analysis(
     config = build_analysis_config(settings, user=current_user, sys_settings=sys_settings)
     permitted_analysts = await prepare_graph_config(db, current_user.id if current_user else None, config)
 
-    # Checkpoints are tied to the owned analysis row, not merely ticker/date.
-    # An administrator may resume another user's analysis, so use the row's
-    # owner rather than the caller's id.
     checkpoint_namespace = checkpoint_scope(analysis.user_id, analysis.id)
     config["checkpoint_scope"] = checkpoint_namespace
 
@@ -640,10 +573,6 @@ async def rollback_and_resume_analysis(
                         checkpoint_namespace=checkpoint_namespace,
                         result_owner_user_id=analysis.user_id,
                     )
-                    # A time-travel replay is an exploratory edit of an old
-                    # analysis.  It must never place another paper/live order
-                    # as a side effect; execution requires an explicit new
-                    # order from the user after reviewing the result.
                 finally:
                     _RUNNING_TASKS.pop(task_id, None)
                     _TASK_REGISTRY.pop(task_id, None)
@@ -654,7 +583,6 @@ async def rollback_and_resume_analysis(
 
     task = asyncio.create_task(run_resume())
     _RUNNING_TASKS[task_id] = task
-
 
 async def list_analysis_checkpoints(analysis_id: int, db: AsyncSession, current_user) -> list[dict] | None:
     import os

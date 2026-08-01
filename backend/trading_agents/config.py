@@ -7,7 +7,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator
 _HOME = Path.home() / ".tradingagents"
 MAX_FALLBACK_LLM_CHAIN_LENGTH = 3
 
-
 class FallbackLLMConfig(BaseModel):
     """One ordered provider/model failover target for an analysis run."""
 
@@ -32,7 +31,6 @@ class FallbackLLMConfig(BaseModel):
             raise ValueError("fallback model must not be empty")
         return normalised
 
-
 def normalize_fallback_llm_chain(value: Any) -> list[dict[str, str]]:
     """Validate and canonicalize the ordered LLM failover contract.
 
@@ -51,7 +49,6 @@ def normalize_fallback_llm_chain(value: Any) -> list[dict[str, str]]:
         FallbackLLMConfig.model_validate(entry.model_dump() if isinstance(entry, BaseModel) else entry).model_dump()
         for entry in value
     ]
-
 
 class TradingAgentsConfig(BaseModel):
     project_dir: str = Field(

@@ -12,14 +12,12 @@ from backend.services.alert_creation_service import (
 )
 from backend.services.settings_service import get_or_create_settings
 
-
 async def _settings(db: AsyncSession, user: User, **values):
     settings = await get_or_create_settings(db, user)
     for field, value in values.items():
         setattr(settings, field, value)
     await db.flush()
     return settings
-
 
 async def test_manual_alerts_obey_active_cap_but_not_ai_controls(db: AsyncSession, test_user: User):
     await _settings(db, test_user, max_active_alerts=2, max_ai_alerts_per_run=0, ai_alert_cooldown_hours=720)
@@ -32,8 +30,6 @@ async def test_manual_alerts_obey_active_cap_but_not_ai_controls(db: AsyncSessio
         target_price=200,
         auto_analyze=False,
     )
-    # Explicitly user-created duplicates stay possible when capacity remains;
-    # users sometimes want more than one notification channel/threshold plan.
     second = await create_alert_with_guardrails(
         db,
         user_id=test_user.id,
@@ -56,7 +52,6 @@ async def test_manual_alerts_obey_active_cap_but_not_ai_controls(db: AsyncSessio
             auto_analyze=False,
         )
     assert error.value.code == "active_limit"
-
 
 async def test_ai_alert_limit_is_scoped_to_one_analysis_run(db: AsyncSession, test_user: User):
     await _settings(db, test_user, max_active_alerts=10, max_ai_alerts_per_run=2, ai_alert_cooldown_hours=24)
@@ -90,7 +85,6 @@ async def test_ai_alert_limit_is_scoped_to_one_analysis_run(db: AsyncSession, te
     )
     assert skipped is None
 
-    # The next run has its own budget, even for the same user.
     next_run = await create_alert_with_guardrails(
         db,
         user_id=test_user.id,
@@ -103,7 +97,6 @@ async def test_ai_alert_limit_is_scoped_to_one_analysis_run(db: AsyncSession, te
         creation_run_id="analysis-2",
     )
     assert next_run is not None
-
 
 async def test_ai_equivalent_alert_cooldown_crosses_runs(db: AsyncSession, test_user: User):
     await _settings(db, test_user, max_active_alerts=10, max_ai_alerts_per_run=3, ai_alert_cooldown_hours=24)
@@ -135,7 +128,6 @@ async def test_ai_equivalent_alert_cooldown_crosses_runs(db: AsyncSession, test_
         )
     assert error.value.code == "ai_cooldown"
 
-
 async def test_zero_ai_limit_disables_only_automatic_generation(db: AsyncSession, test_user: User):
     await _settings(db, test_user, max_active_alerts=10, max_ai_alerts_per_run=0, ai_alert_cooldown_hours=0)
 
@@ -161,7 +153,6 @@ async def test_zero_ai_limit_disables_only_automatic_generation(db: AsyncSession
     )
     assert skipped is None
     assert manual is not None
-
 
 async def test_rearming_cannot_bypass_active_cap(db: AsyncSession, test_user: User):
     await _settings(db, test_user, max_active_alerts=1, max_ai_alerts_per_run=3, ai_alert_cooldown_hours=0)
@@ -191,7 +182,6 @@ async def test_rearming_cannot_bypass_active_cap(db: AsyncSession, test_user: Us
     with pytest.raises(AlertGuardrailViolation, match=r"active alert limit \(1\)"):
         await rearm_alert_with_guardrails(db, first)
 
-
 async def test_analysis_source_requires_a_run_id(db: AsyncSession, test_user: User):
     await _settings(db, test_user)
     with pytest.raises(ValueError, match="require an analysis run ID"):
@@ -205,7 +195,6 @@ async def test_analysis_source_requires_a_run_id(db: AsyncSession, test_user: Us
             creation_source=ALERT_SOURCE_ANALYSIS,
         )
 
-
 class _AssistantSession:
     async def __aenter__(self):
         return self
@@ -215,7 +204,6 @@ class _AssistantSession:
 
     async def commit(self):
         return None
-
 
 async def test_assistant_uses_manual_guardrail_path_and_returns_limit_message(monkeypatch):
     from types import SimpleNamespace

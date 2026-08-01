@@ -44,15 +44,12 @@ _ANALYST_REPORTS: list[tuple[str, str, str]] = [
     ("review", "review_report", "Performance Review Analyst"),
 ]
 
-
 class _Question(BaseModel):
     to: str = Field(description="The label of the analyst who should answer (exactly as listed).")
     question: str = Field(description="A focused question that probes a conflict or gap in that analyst's report.")
 
-
 class _Questions(BaseModel):
     questions: list[_Question] = Field(default_factory=list)
-
 
 def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
     async def agent_qa_node(state) -> dict:
@@ -123,7 +120,6 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
 
     return agent_qa_node
 
-
 async def _generate_questions(moderator, available: list[tuple[str, str, str]]) -> list[_Question]:
     """Ask the moderator for up to a few sharp cross-agent questions."""
     from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
@@ -143,7 +139,6 @@ async def _generate_questions(moderator, available: list[tuple[str, str, str]]) 
     if isinstance(result, _Questions):
         return result.questions
     return []
-
 
 async def _answer_as_analyst(ctx: AgentRunContext, analyst_key: str, label: str, report: str, question: str) -> str:
     """Answer a peer's question in the target analyst's voice, using its own LLM

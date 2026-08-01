@@ -10,7 +10,6 @@ from .validators import validate_model
 
 logger = logging.getLogger(__name__)
 
-
 class NormalizedChatGroq(ChatGroq):
     def invoke(self, input_value, config=None, **kwargs):
         try:
@@ -29,7 +28,6 @@ class NormalizedChatGroq(ChatGroq):
                 logger.warning("Groq quota exhausted: %s", exc)
             raise
 
-
 _PASSTHROUGH_KWARGS = (
     "timeout",
     "max_retries",
@@ -42,7 +40,6 @@ _PASSTHROUGH_KWARGS = (
     "frequency_penalty",
     "presence_penalty",
 )
-
 
 class GroqClient(BaseLLMClient):
     def __init__(self, model: str, base_url: str | None = None, **kwargs):

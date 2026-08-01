@@ -13,7 +13,6 @@ _logger = logging.getLogger(__name__)
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
 _ANALYSIS_BACKGROUND_TASKS: dict[str, set[asyncio.Task]] = {}
 
-
 def track_background_task(coro: Awaitable[None], task_id: str | None = None):
     task = asyncio.create_task(coro)
     _BACKGROUND_TASKS.add(task)
@@ -32,13 +31,11 @@ def track_background_task(coro: Awaitable[None], task_id: str | None = None):
     task.add_done_callback(_cleanup)
     return task
 
-
 async def await_analysis_background_tasks(task_id: str) -> None:
     pending = list(_ANALYSIS_BACKGROUND_TASKS.get(task_id, set()))
     if not pending:
         return
     await asyncio.gather(*pending, return_exceptions=True)
-
 
 async def send_analysis_webhook(ticker, trade_date, signal, final_decision, settings):
     try:
@@ -46,13 +43,11 @@ async def send_analysis_webhook(ticker, trade_date, signal, final_decision, sett
     except Exception as exc:
         _logger.debug("Webhook notify failed (non-fatal): %s", exc)
 
-
 async def send_signal_flip_webhook(ticker, prev_signal, new_signal, settings):
     try:
         await notify_signal_flip(ticker, prev_signal, new_signal, settings)
     except Exception as exc:
         _logger.debug("Signal-flip notify failed (non-fatal): %s", exc)
-
 
 async def extract_and_save_annotations(
     analysis_id: int,
@@ -92,15 +87,9 @@ async def extract_and_save_annotations(
 
             row = await _repo_get(s, analysis_id)
             if row:
-                # Merge rather than overwrite: finalize_result already stored the
-                # final structured Portfolio Manager decision
-                # (entry/stop/target/allocation). A blind assignment here would
-                # drop the canonical execution data and make the order engine
-                # reject the result rather than falling back to rendered text.
                 existing = row.chart_annotations if isinstance(row.chart_annotations, dict) else {}
                 row.chart_annotations = {**existing, **annotations}
 
-                # Auto-generate support/resistance alerts if user_id is set
                 if row.user_id:
                     from decimal import Decimal
 

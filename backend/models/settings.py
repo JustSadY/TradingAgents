@@ -6,12 +6,8 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
 
-
 class AppSettings(Base):
     __tablename__ = "app_settings"
-    # One row per user, plus one optional system row.  A regular UNIQUE(user_id)
-    # does not constrain multiple NULLs in PostgreSQL, so use a functional
-    # index to make the global row part of the same invariant.
     __table_args__ = (Index("uq_app_settings_owner", text("COALESCE(user_id, 0)"), unique=True),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int | None] = mapped_column(
@@ -24,9 +20,6 @@ class AppSettings(Base):
     output_language: Mapped[str] = mapped_column(String(50), default="English")
     llm_provider: Mapped[str] = mapped_column(String(50), default="openai")
     llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini")
-    # JSON is deliberate: an ordered failover chain is part of the current
-    # settings contract.  The old provider/model column pair could represent
-    # only one fallback and forced compatibility branches throughout runtime.
     fallback_llm_chain: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list, nullable=False)
     investor_persona: Mapped[str] = mapped_column(String(50), default="conservative")
     analyst_concurrency_limit: Mapped[int] = mapped_column(Integer, default=1)
@@ -40,9 +33,6 @@ class AppSettings(Base):
     max_risk_rounds: Mapped[int] = mapped_column(Integer, default=1)
     max_position_size_pct: Mapped[float] = mapped_column(Float, default=10.0)
     max_risk_per_trade_pct: Mapped[float] = mapped_column(Float, default=2.0)
-    # Explicit opt-in: an analysis may produce a directional signal without
-    # being permission to open a position.  Auto-execution stays disabled
-    # until the account owner enables this setting deliberately.
     auto_execute_signals: Mapped[bool] = mapped_column(Boolean, default=False)
     allow_short_selling: Mapped[bool] = mapped_column(Boolean, default=False)
     max_concentration_pct: Mapped[float] = mapped_column(Float, default=25.0)
@@ -59,18 +49,11 @@ class AppSettings(Base):
     circuit_breaker_threshold: Mapped[int] = mapped_column(Integer, default=3)
     circuit_breaker_cooldown: Mapped[int] = mapped_column(Integer, default=60)
     stall_timeout_seconds: Mapped[int] = mapped_column(Integer, default=120)
-    # Alert creation guardrails. The active cap applies to every creation
-    # source; the remaining two fields only throttle alerts generated from an
-    # AI analysis run. Keeping them on the user's settings row lets a row lock
-    # serialize the count-and-insert operation safely.
     max_active_alerts: Mapped[int] = mapped_column(Integer, default=30)
     max_ai_alerts_per_run: Mapped[int] = mapped_column(Integer, default=3)
     ai_alert_cooldown_hours: Mapped[int] = mapped_column(Integer, default=24)
     webhook_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     webhook_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
-    # Store event selection natively rather than as a JSON/comma-delimited
-    # string.  This mirrors ``watchlist`` while avoiding another parser at
-    # every notification call site.
     webhook_events: Mapped[list[str]] = mapped_column(JSON, default=lambda: ["analysis_complete"], nullable=False)
     active_preset_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
 

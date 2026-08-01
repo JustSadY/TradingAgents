@@ -5,7 +5,6 @@ from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
 
-
 class AnalysisResult(Base):
     __tablename__ = "analysis_results"
     __table_args__ = (
@@ -71,7 +70,6 @@ class AnalysisResult(Base):
     chats: Mapped[list["AnalysisChat"]] = relationship(
         "AnalysisChat", back_populates="analysis", cascade="all, delete-orphan"
     )
-
 
 class AnalysisChat(Base):
     __tablename__ = "analysis_chats"

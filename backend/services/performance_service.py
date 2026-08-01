@@ -10,7 +10,6 @@ _logger = logging.getLogger(__name__)
 
 from backend.services.market_data_service import calculate_returns
 
-
 async def backfill_returns(db) -> int:
     from sqlalchemy import select
 
@@ -50,7 +49,6 @@ async def backfill_returns(db) -> int:
             row.alpha_return = alpha
             row.holding_days = days
 
-            # Generate reflection using the Reflector
             try:
                 import asyncio
 
@@ -95,7 +93,6 @@ async def backfill_returns(db) -> int:
     _logger.info("Performance backfill: updated %d rows with custom benchmarks", updated)
     return updated
 
-
 async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
     """Return attribution statistics for one tenant or the system scope.
 
@@ -132,7 +129,6 @@ async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
             pred = parse_rating(report_text, default=None)
             if not pred:
                 continue
-            # Normalize to Buy/Sell/Hold for grading
             if pred in ("Overweight", "Buy"):
                 pred = "Buy"
             elif pred in ("Underweight", "Sell"):
@@ -183,7 +179,6 @@ async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
     attribution_list = list(stats.values())
     total_runs_evaluated = sum(s["total_predictions"] for s in attribution_list)
     return {"attribution": attribution_list, "total_evaluated_runs": total_runs_evaluated}
-
 
 async def get_analyst_performance_context(db, user_id: int | None = None) -> str:
     """Return a tenant-scoped Markdown summary for AI prompt injection.

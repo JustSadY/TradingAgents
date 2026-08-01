@@ -24,7 +24,6 @@ from .base_client import classify_error
 
 logger = logging.getLogger(__name__)
 
-
 def _is_permanent_failure(exc: Exception) -> bool:
     """Check if an exception indicates a permanent failure that would also
     affect fallback providers (e.g. invalid API key format).
@@ -44,7 +43,6 @@ def _is_permanent_failure(exc: Exception) -> bool:
         "billing",
     )
     return any(s in err_msg for s in high_confidence)
-
 
 class FallbackLLM:
     """Multilevel fallback chain for chat models.

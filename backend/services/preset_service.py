@@ -10,7 +10,6 @@ from backend.repositories.permissions import get_user_setting_permission
 from backend.repositories.users import get_user_by_id
 from backend.schemas.settings import SettingsUpdate
 
-
 class PresetError(Exception):
     """Raised for client-correctable problems (missing user/template, no
     permission, name conflict) — the API layer translates ``status_code``
@@ -21,7 +20,6 @@ class PresetError(Exception):
         super().__init__(message)
         self.status_code = status_code
 
-
 async def resolve_target_user(db: AsyncSession, user_id: int | None, current_user: User) -> User:
     if user_id is not None and current_user.is_admin:
         target_user = await get_user_by_id(db, user_id)
@@ -30,14 +28,12 @@ async def resolve_target_user(db: AsyncSession, user_id: int | None, current_use
         return target_user
     return current_user
 
-
 async def _check_presets_permission(db: AsyncSession, user: User, current_user: User) -> None:
     if current_user.is_admin:
         return
     perm = await get_user_setting_permission(db, user.id, "presets")
     if not perm or not perm.allowed:
         raise PresetError("You do not have permission to manage preset templates.", status_code=403)
-
 
 async def _check_preset_settings_permissions(
     db: AsyncSession,
@@ -74,13 +70,11 @@ async def _check_preset_settings_permissions(
         if attempted.intersection(fields) and section not in allowed_sections:
             raise PresetError(f"You do not have permission to modify settings in section: {section}", status_code=403)
 
-
 async def list_user_presets(db: AsyncSession, user_id: int | None, current_user: User) -> list[ConfigPreset]:
     from backend.repositories.preset import list_presets
 
     target_user = await resolve_target_user(db, user_id, current_user)
     return await list_presets(db, user=target_user)
-
 
 async def create_user_preset(
     db: AsyncSession,
@@ -114,7 +108,6 @@ async def create_user_preset(
         settings_json=serialize_preset_settings(update),
     )
 
-
 async def delete_user_preset(db: AsyncSession, user_id: int | None, current_user: User, preset_id: int) -> None:
     from backend.repositories.preset import get_preset_by_id
 
@@ -125,7 +118,6 @@ async def delete_user_preset(db: AsyncSession, user_id: int | None, current_user
     if not preset:
         raise PresetError("Template not found", status_code=404)
     await db.delete(preset)
-
 
 async def apply_user_preset(db: AsyncSession, user_id: int | None, current_user: User, preset_id: int) -> str:
     """Apply a preset's settings to the target user's AppSettings row. Returns the preset name."""

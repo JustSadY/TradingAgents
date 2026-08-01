@@ -14,10 +14,9 @@ from backend.services.indicator_service import fetch_sector
 
 _logger = logging.getLogger(__name__)
 
-_BETA_THRESHOLD = 1.5  # portfolio beta above this is flagged
-_VOL_THRESHOLD = 0.40  # annualized volatility above this (40%) is flagged
-_SECTOR_THRESHOLD = 50.0  # single-sector weight above this (%) is flagged
-
+_BETA_THRESHOLD = 1.5
+_VOL_THRESHOLD = 0.40
+_SECTOR_THRESHOLD = 50.0
 
 def _evaluate_breaches(
     portfolio_beta: float | None,
@@ -42,7 +41,6 @@ def _evaluate_breaches(
             )
     return breaches
 
-
 _EMPTY_DASHBOARD = {
     "beta": None,
     "volatility": None,
@@ -52,7 +50,6 @@ _EMPTY_DASHBOARD = {
     "breaches": [],
     "message": "No open positions",
 }
-
 
 def _prepare_holdings(holdings: list[dict]) -> Decimal:
     for h in holdings:
@@ -67,7 +64,6 @@ def _prepare_holdings(holdings: list[dict]) -> Decimal:
     total_equity = sum(h["_market_value"] for h in holdings)
     return total_equity if total_equity >= Decimal("1e-9") else Decimal("1")
 
-
 async def _fetch_close_history(ticker: str, period: str = "3mo"):
     """Fetch a ticker's close-price series off-thread; ``None`` on any failure."""
     try:
@@ -77,7 +73,6 @@ async def _fetch_close_history(ticker: str, period: str = "3mo"):
     except Exception:
         _logger.warning("Failed to fetch close history for %s", ticker, exc_info=True)
         return None
-
 
 def _spy_returns(spy_hist_raw: Any):
     """Daily SPY returns when at least 10 observations exist, else ``None``."""
@@ -91,7 +86,6 @@ def _spy_returns(spy_hist_raw: Any):
         _logger.debug("Failed to compute SPY returns", exc_info=True)
         return None
     return None
-
 
 async def _fetch_market_data(tickers: list[str]) -> tuple[dict[str, Any], Any, dict[str, str]]:
     """Concurrently fetch per-ticker close history, SPY history, and sectors.
@@ -134,7 +128,6 @@ async def _fetch_market_data(tickers: list[str]) -> tuple[dict[str, Any], Any, d
 
     return ticker_hist, _spy_returns(spy_hist_raw), sector_map
 
-
 def _beta_vs_spy(daily_ret: Any, spy_returns: Any) -> float | None:
     """Beta of a return series against SPY over their overlapping >=10-day window."""
     if spy_returns is None:
@@ -149,7 +142,6 @@ def _beta_vs_spy(daily_ret: Any, spy_returns: Any) -> float | None:
     if abs(var_spy) > 1e-9:
         return round(cov / var_spy, 4)
     return None
-
 
 def _holding_vol_beta(hist: Any, spy_returns: Any) -> tuple[Any, float | None, float | None]:
     """Compute ``(daily_returns, annual_volatility, beta)`` from a close series.
@@ -177,7 +169,6 @@ def _holding_vol_beta(hist: Any, spy_returns: Any) -> tuple[Any, float | None, f
     except Exception:
         _logger.debug("Failed to compute vol/beta for holding", exc_info=True)
     return daily_ret, vol_annual, beta
-
 
 def _build_holdings_risk(
     holdings: list[dict],
@@ -220,7 +211,6 @@ def _build_holdings_risk(
     portfolio_volatility = round(vol_num / vol_den, 4) if vol_den > 0 else None
     return holdings_risk, portfolio_beta, portfolio_volatility, ticker_returns
 
-
 def _build_sector_weights(holdings: list[dict], sector_map: dict[str, str], total_equity: Decimal) -> list[dict]:
     sector_values: dict[str, Decimal] = {}
     for h in holdings:
@@ -233,7 +223,6 @@ def _build_sector_weights(holdings: list[dict], sector_map: dict[str, str], tota
     ]
     sector_weights.sort(key=lambda x: x["weight_pct"], reverse=True)
     return sector_weights
-
 
 def _build_correlation_matrix(ticker_returns: dict[str, Any]) -> list[dict]:
     """Pairwise return correlations over each pair's overlapping >=10-day window."""
@@ -256,7 +245,6 @@ def _build_correlation_matrix(ticker_returns: dict[str, Any]) -> list[dict]:
                 _logger.debug("Correlation calc failed for %s / %s", ta, tb, exc_info=True)
     return correlation
 
-
 async def _fetch_returns(tickers: list[str]) -> dict[str, Any]:
     """Fetch 3mo daily returns per ticker; failed/short series are omitted."""
     results = await asyncio.gather(*[_fetch_close_history(t) for t in tickers], return_exceptions=True)
@@ -271,7 +259,6 @@ async def _fetch_returns(tickers: list[str]) -> dict[str, Any]:
         except Exception:
             _logger.debug("Failed to compute returns for %s", ticker, exc_info=True)
     return out
-
 
 async def correlated_notional(ticker: str, holdings: list[dict], threshold: float = 0.3) -> float:
     """Correlation-weighted notional of *other* holdings that move with ``ticker``.
@@ -304,13 +291,10 @@ async def correlated_notional(ticker: str, holdings: list[dict], threshold: floa
             corr = float(base.loc[common].corr(r.loc[common]))
         except Exception:
             _logger.debug("Correlation calc failed for %s vs %s", ticker, h.get("ticker"), exc_info=True)
-            # Do not reuse a previous holding's correlation (or reference an
-            # unbound local on the first failure).
             continue
         if corr > threshold:
             total += corr * float(safe_decimal(h.get("market_value")))
     return total
-
 
 async def get_risk_dashboard(db: AsyncSession, user: User) -> dict:
     """Calculate portfolio risk metrics from current open holdings."""

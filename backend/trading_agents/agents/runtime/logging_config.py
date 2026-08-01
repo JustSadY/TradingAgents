@@ -6,7 +6,6 @@ from logging.handlers import RotatingFileHandler
 
 _CONFIGURED = False
 
-
 def _redaction_filter():
     """The backend's secret-redaction filter (None if unavailable)."""
     try:
@@ -15,7 +14,6 @@ def _redaction_filter():
         return redaction_filter
     except Exception:
         return None
-
 
 def setup_unified_logging():
     """Attach the engine's rotating file log without disturbing the host app.

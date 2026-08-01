@@ -14,7 +14,6 @@ _logger = logging.getLogger(__name__)
 _TTL_SECONDS = 900
 _MAX_TICKERS = 10
 
-
 def _fetch_news_sync(ticker: str) -> list[dict]:
     import yfinance as yf
 
@@ -23,7 +22,6 @@ def _fetch_news_sync(ticker: str) -> list[dict]:
     except Exception as exc:
         _logger.warning("News fetch failed %s: %s", ticker, exc)
         return []
-
 
 async def get_news_feed(tickers: str, limit: int) -> list[dict]:
     from sqlalchemy import select
@@ -38,7 +36,6 @@ async def get_news_feed(tickers: str, limit: int) -> list[dict]:
     cutoff = now - timedelta(seconds=_TTL_SECONDS)
 
     async with AsyncSessionLocal() as db:
-        # Load cache for all tickers in list
         result = await db.execute(select(NewsCache).where(NewsCache.ticker.in_(ticker_list)))
         cache_map = {row.ticker: row for row in result.scalars().all()}
 
@@ -47,7 +44,6 @@ async def get_news_feed(tickers: str, limit: int) -> list[dict]:
             if cached and cached.updated_at >= cutoff:
                 collected.extend(cached.news_json[:limit])
             else:
-                # Cache miss or expired, fetch fresh news
                 items = await asyncio.to_thread(_fetch_news_sync, ticker)
 
                 parsed = []

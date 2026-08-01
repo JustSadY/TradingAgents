@@ -2,7 +2,6 @@ from types import SimpleNamespace
 
 import pytest
 
-
 class _Prompt:
     @classmethod
     def from_messages(cls, _messages):
@@ -14,7 +13,6 @@ class _Prompt:
     def __or__(self, llm):
         return llm
 
-
 class _LLM:
     def __init__(self, response):
         self._response = response
@@ -24,7 +22,6 @@ class _LLM:
 
     async def ainvoke(self, _messages):
         return self._response
-
 
 class _SequenceLLM:
     def __init__(self, *responses):
@@ -38,14 +35,12 @@ class _SequenceLLM:
         self.calls += 1
         return self._responses.pop(0)
 
-
 def test_analyst_cache_rejects_blank_reports() -> None:
     from backend.trading_agents.agents.runtime.analyst_cache import _usable_report
 
     assert _usable_report(" \n\t") is None
     assert _usable_report(None) is None
     assert _usable_report("  usable report  ") == "usable report"
-
 
 @pytest.mark.asyncio
 async def test_tool_analyst_leaves_lifecycle_logging_to_guard_node(monkeypatch):
@@ -78,7 +73,6 @@ async def test_tool_analyst_leaves_lifecycle_logging_to_guard_node(monkeypatch):
     assert result["fundamentals_report"] == "Fundamentals report"
     assert not [event for event, _fields in events if event in {"node_start", "node_end"}]
 
-
 @pytest.mark.asyncio
 async def test_tool_analyst_recovers_an_empty_final_report(monkeypatch):
     """A blank provider response must not become a blank persisted report."""
@@ -107,7 +101,6 @@ async def test_tool_analyst_recovers_an_empty_final_report(monkeypatch):
     assert result["market_report"] == "Recovered market report"
     assert llm.calls == 2
 
-
 @pytest.mark.asyncio
 async def test_tool_analyst_exposes_a_visible_degraded_report_when_recovery_is_empty(monkeypatch):
     from backend.trading_agents.agents.runtime import analyst_node_factory, resilience
@@ -132,7 +125,6 @@ async def test_tool_analyst_exposes_a_visible_degraded_report_when_recovery_is_e
     )
 
     assert result["market_report"].startswith("⚠️ Market analysis unavailable:")
-
 
 @pytest.mark.asyncio
 async def test_guard_node_remains_the_single_analyst_lifecycle_source(monkeypatch):
@@ -168,7 +160,6 @@ async def test_guard_node_remains_the_single_analyst_lifecycle_source(monkeypatc
     assert start["phase"] == "initial"
     assert start["turn"] == 1
 
-
 @pytest.mark.asyncio
 async def test_guard_node_marks_post_tool_analyst_invocations_as_continuations(monkeypatch):
     """ToolNode loops are real LLM turns, but must not look like duplicate starts."""
@@ -185,8 +176,6 @@ async def test_guard_node_marks_post_tool_analyst_invocations_as_continuations(m
     async def analyst_node(_state):
         return {"market_report": "final report"}
 
-    # Use lightweight message-shaped objects so the test remains independent
-    # of LangChain's concrete message implementation.
     assistant_tool_request = SimpleNamespace(type="ai", tool_calls=[{"name": "get_stock_data"}])
     tool_result_one = SimpleNamespace(type="tool")
     tool_result_two = SimpleNamespace(type="tool")

@@ -19,13 +19,11 @@ _DEFAULT_UA = "tradingagents/0.2 (+https://github.com/TauricResearch/TradingAgen
 
 _TOKEN_CACHE: dict[str, tuple[str, float]] = {}
 
-
 def _get_user_agent() -> str:
     cfg_ua = get_config().get("reddit_user_agent")
     if cfg_ua:
         return cfg_ua
     return _DEFAULT_UA
-
 
 def _get_credentials() -> tuple[str, str] | None:
     """Reddit app credentials, injected from the modular tool settings
@@ -36,7 +34,6 @@ def _get_credentials() -> tuple[str, str] | None:
     if client_id and client_secret:
         return client_id, client_secret
     return None
-
 
 def _get_oauth_token(client_id: str, client_secret: str, user_agent: str, timeout: float) -> str:
     """Fetch (and cache) an application-only OAuth bearer token."""
@@ -62,14 +59,11 @@ def _get_oauth_token(client_id: str, client_secret: str, user_agent: str, timeou
     _TOKEN_CACHE[client_id] = (token, now + float(payload.get("expires_in", 3600)))
     return token
 
-
 def _parse_children(payload: dict) -> list[dict]:
     children = (payload.get("data") or {}).get("children") or []
     return [c.get("data", {}) for c in children if isinstance(c, dict)]
 
-
 DEFAULT_SUBREDDITS = ("wallstreetbets", "stocks", "investing")
-
 
 def _fetch_subreddit(
     ticker: str,
@@ -121,7 +115,6 @@ def _fetch_subreddit(
     except (HTTPError, URLError, json.JSONDecodeError, TimeoutError) as exc:
         logger.warning("Reddit fetch failed for r/%s · %s: %s", sub, ticker, exc)
         return []
-
 
 def fetch_reddit_posts(
     ticker: str,

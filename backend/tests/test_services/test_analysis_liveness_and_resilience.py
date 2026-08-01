@@ -14,7 +14,6 @@ from backend.services.analysis.streaming_handler import TokenStreamingCallbackHa
 from backend.trading_agents.agents.data.chart_tools import active_run_context
 from backend.trading_agents.agents.runtime import resilience
 
-
 class _Emitter:
     task_id = "liveness-test"
 
@@ -28,7 +27,6 @@ class _Emitter:
     async def emit_progress(self, label: str, stage: str, node: str) -> None:
         self.progress.append((label, stage, node))
 
-
 @pytest.mark.asyncio
 async def test_streaming_callback_refreshes_only_its_task_activity_tracker():
     now = [0.0]
@@ -39,7 +37,6 @@ async def test_streaming_callback_refreshes_only_its_task_activity_tracker():
     await handler.on_llm_start({}, ["prompt"], run_id=uuid4())
 
     assert tracker.last_activity_at() == 41.0
-
 
 @pytest.mark.asyncio
 async def test_heartbeat_stays_running_when_callback_activity_arrives():
@@ -52,8 +49,6 @@ async def test_heartbeat_stays_running_when_callback_activity_arrives():
         nonlocal sleep_calls
         sleep_calls += 1
         now[0] += seconds
-        # This models a provider token/tool callback while the graph has not
-        # yielded a state update yet.
         tracker.touch()
         if sleep_calls > 2:
             raise asyncio.CancelledError
@@ -73,7 +68,6 @@ async def test_heartbeat_stays_running_when_callback_activity_arrives():
         ("heartbeat", "running", "system"),
     ]
 
-
 def test_touch_current_analysis_uses_the_current_task_tracker():
     now = [0.0]
     tracker = AnalysisActivityTracker(clock=lambda: now[0])
@@ -85,7 +79,6 @@ def test_touch_current_analysis_uses_the_current_task_tracker():
         active_run_context.reset(token)
 
     assert tracker.last_activity_at() == 7.0
-
 
 @pytest.mark.asyncio
 async def test_retry_call_retries_an_empty_asyncio_timeout_as_transient():
@@ -110,7 +103,6 @@ async def test_retry_call_retries_an_empty_asyncio_timeout_as_transient():
     )
     assert calls == 2
 
-
 @pytest.mark.asyncio
 async def test_retry_call_does_not_repeat_a_degraded_provider_function():
     calls = 0
@@ -130,7 +122,6 @@ async def test_retry_call_does_not_repeat_a_degraded_provider_function():
         )
 
     assert calls == 1
-
 
 @pytest.mark.asyncio
 async def test_guard_node_forwards_composite_timeout_and_no_timeout_retry(monkeypatch):
@@ -167,7 +158,6 @@ async def test_guard_node_forwards_composite_timeout_and_no_timeout_retry(monkey
     assert captured["retry_timeouts"] is False
     assert captured["retry_all"] is False
     assert captured["runtime_config"] == {"node_timeout_seconds": 120}
-
 
 def test_graph_setup_uses_composite_timeouts_without_signature_regression(monkeypatch):
     """Building the graph must pass coordinator timeout policy to guard_node."""

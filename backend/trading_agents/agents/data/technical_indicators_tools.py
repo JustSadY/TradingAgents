@@ -7,7 +7,6 @@ from backend.trading_agents.dataflows.interface import route_to_vendor
 
 _logger = logging.getLogger(__name__)
 
-
 async def collect_indicators(
     symbol: str,
     indicators: str,
@@ -33,7 +32,6 @@ async def collect_indicators(
             _logger.warning("Indicator %s failed for %s: %s", indicator, symbol, exc)
             results.append(f"Error calculating {indicator}: {exc}")
     return "\n\n".join(results)
-
 
 @tool
 async def get_indicators(

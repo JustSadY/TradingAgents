@@ -4,15 +4,12 @@ from typing import Any
 
 from pydantic import BaseModel
 
-
 class ToolSettingValue(BaseModel):
     enabled: bool
     settings: dict[str, Any] = {}
 
-
 class ToolSettingsRead(BaseModel):
     tools: dict[str, ToolSettingValue]
-
 
 class ToolSettingUpdateValue(BaseModel):
     enabled: bool | None = None
@@ -20,10 +17,8 @@ class ToolSettingUpdateValue(BaseModel):
     reset_enabled: bool = False
     reset_settings: list[str] = []
 
-
 class ToolSettingsUpdate(BaseModel):
     tools: dict[str, ToolSettingUpdateValue]
-
 
 class ToolSettingFieldMeta(BaseModel):
     key: str
@@ -39,7 +34,6 @@ class ToolSettingFieldMeta(BaseModel):
     options: list[dict] = []
     secret: bool = False
     advanced: bool = False
-
 
 class ToolMeta(BaseModel):
     key: str

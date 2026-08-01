@@ -45,7 +45,6 @@ _CLOSE_TYPE = "__task_close__"
 _DEDUP_WINDOW = 30
 _DEDUP_MAX = 50000
 
-
 def _event_id(task_id: str, event: dict[str, Any], seq: int) -> str:
     """Deterministic event identity for deduplication.
 
@@ -56,18 +55,12 @@ def _event_id(task_id: str, event: dict[str, Any], seq: int) -> str:
     raw = json.dumps({"task_id": task_id, "event": event, "_seq": seq}, sort_keys=True, ensure_ascii=False)
     return hashlib.sha256(raw.encode()).hexdigest()
 
-
-# Per-task monotonic counters backing the sequence numbers above. Small
-# (one int per active task_id); cleared on publish_close so it doesn't grow
-# unbounded over the server's lifetime.
 _seq_counters: dict[str, int] = {}
-
 
 def _next_seq(task_id: str) -> int:
     seq = _seq_counters.get(task_id, 0) + 1
     _seq_counters[task_id] = seq
     return seq
-
 
 class _DedupTracker:
     """Bounded, time-windowed deduplication set.
@@ -96,17 +89,11 @@ class _DedupTracker:
         while self._seen and next(iter(self._seen.values())) < cutoff:
             self._seen.popitem(last=False)
 
-
 _dedup = _DedupTracker()
-
 
 async def publish_event(task_id: str, event: dict[str, Any]) -> None:
     eid = _event_id(task_id, event, _next_seq(task_id))
     if redis_enabled():
-        # Delivery happens through this process's pub/sub forwarder as well as
-        # the other web processes.  Do not mark the id as seen here: doing so
-        # makes the local forwarder discard every event that this process
-        # published (the normal Redis + inline-queue configuration).
         redis = get_redis()
         await redis.publish(
             EVENTS_CHANNEL, json.dumps({"task_id": task_id, "event": event, "_eid": eid}, ensure_ascii=False)
@@ -117,12 +104,8 @@ async def publish_event(task_id: str, event: dict[str, Any]) -> None:
         return
     await ws_manager.send(task_id, event)
 
-
 async def publish_close(task_id: str) -> None:
     eid = _event_id(task_id, {"type": _CLOSE_TYPE}, _next_seq(task_id))
-    # No more events are expected for this task after close — drop its
-    # sequence counter so _seq_counters doesn't grow for the server's entire
-    # lifetime.
     _seq_counters.pop(task_id, None)
     if redis_enabled():
         redis = get_redis()
@@ -135,13 +118,11 @@ async def publish_close(task_id: str) -> None:
         return
     await ws_manager.close_task(task_id)
 
-
 async def _deliver(task_id: str, event: dict[str, Any]) -> None:
     if event.get("type") == _CLOSE_TYPE:
         await ws_manager.close_task(task_id)
     else:
         await ws_manager.send(task_id, event)
-
 
 async def event_forwarder() -> None:
     """Deliver Redis-published analysis events to this process's ws_manager.

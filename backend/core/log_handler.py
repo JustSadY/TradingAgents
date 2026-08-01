@@ -14,7 +14,6 @@ _VERBOSE_PREFIXES = (
     "tradingagents.run",
 )
 
-
 class _BackendFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
         if record.levelno >= logging.WARNING:
@@ -22,7 +21,6 @@ class _BackendFilter(logging.Filter):
         if record.levelno == logging.INFO:
             return any(record.name.startswith(p) for p in _VERBOSE_PREFIXES)
         return False
-
 
 class DatabaseLogHandler(logging.Handler):
     def __init__(self):
@@ -35,7 +33,7 @@ class DatabaseLogHandler(logging.Handler):
         self._task: asyncio.Task | None = None
         self._started = False
 
-    async def start(self):  # NOSONAR
+    async def start(self):
         if self._started:
             return
         self._queue = asyncio.Queue(maxsize=_QUEUE_MAXSIZE)
@@ -121,7 +119,6 @@ class DatabaseLogHandler(logging.Handler):
                     await flush()
             except TimeoutError:
                 await flush()
-
 
 db_log_handler = DatabaseLogHandler()
 _fmt = logging.Formatter("%(message)s")

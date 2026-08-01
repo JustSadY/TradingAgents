@@ -11,7 +11,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
 
 _OWNERSHIP_TOOLS = [get_institutional_holdings]
 
-
 @register_analyst(
     key="ownership",
     agent_node="Institutional Ownership Analyst",

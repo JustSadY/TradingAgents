@@ -23,7 +23,6 @@ SUPPORTED_CURRENCIES = {
     "CHF": "CHFUSD=X",
 }
 
-
 async def _fetch_rates() -> dict[str, float]:
     """Fetch current FX rates vs USD using yfinance. Returns {currency: rate_vs_usd}."""
     symbols = [sym for sym in SUPPORTED_CURRENCIES.values() if isinstance(sym, str)]
@@ -53,7 +52,6 @@ async def _fetch_rates() -> dict[str, float]:
             rates[currency] = round(rate, 6)
 
     return rates
-
 
 @router.get("/fx-rates", response_model=dict[str, float | None])
 async def get_fx_rates():

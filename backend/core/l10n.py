@@ -23,7 +23,6 @@ MESSAGES = {
     },
 }
 
-
 def get_message(key: str, lang: str = "English", **kwargs: Any) -> str:
     lang_code = "tr" if (lang or "").lower() in ("turkish", "türkçe") else "en"
     msg_dict = MESSAGES.get(key, {})

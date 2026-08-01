@@ -16,15 +16,9 @@ _SENSITIVE_ENV_VARS = (
     "ALPHA_VANTAGE_API_KEY",
 )
 
-# User-supplied strings such as webhook URLs can contain credentials in a
-# path/query. Keep them redactable without letting a long-running server grow
-# an unbounded permanent set as users rotate URLs or submit invalid values.
-# OrderedDict acts as a small LRU and the lock protects logging threads as
-# well as async request tasks.
 _MAX_DYNAMIC_LITERALS = 1_000
 _DYNAMIC_LITERALS: OrderedDict[str, None] = OrderedDict()
 _DYNAMIC_LITERALS_LOCK = RLock()
-
 
 def register_sensitive_literal(value: str):
     """Add a dynamic value to be masked in logs (e.g. user webhook URLs)."""
@@ -35,13 +29,11 @@ def register_sensitive_literal(value: str):
             while len(_DYNAMIC_LITERALS) > _MAX_DYNAMIC_LITERALS:
                 _DYNAMIC_LITERALS.popitem(last=False)
 
-
 def _dynamic_literals_snapshot() -> list[str]:
     """Return a stable longest-first literal list for one redaction pass."""
     with _DYNAMIC_LITERALS_LOCK:
         values = list(_DYNAMIC_LITERALS)
     return sorted(values, key=len, reverse=True)
-
 
 _PATTERNS = [
     re.compile(r"sk-[A-Za-z0-9_\-]{12,}"),
@@ -55,7 +47,6 @@ _PATTERNS = [
     ),
 ]
 
-
 def _build_literals() -> list[str]:
     values: set[str] = set()
     for name in _SENSITIVE_ENV_VARS:
@@ -64,13 +55,9 @@ def _build_literals() -> list[str]:
             values.add(val)
     return sorted(values, key=len, reverse=True)
 
-
 def redact_text(text: str, literals: list[str] | None = None) -> str:
     if not text:
         return text
-    # Combine static environment-based literals with dynamic user-based
-    # literals. Longest-first avoids partially masking a longer secret that
-    # shares a prefix with another literal.
     combined_literals = (
         sorted(_dynamic_literals_snapshot() + _LITERALS, key=len, reverse=True) if literals is None else literals
     )
@@ -84,9 +71,7 @@ def redact_text(text: str, literals: list[str] | None = None) -> str:
             text = pat.sub(_MASK, text)
     return text
 
-
 _LITERALS = _build_literals()
-
 
 class RedactionFilter(logging.Filter):
     def filter(self, record: logging.LogRecord) -> bool:
@@ -105,9 +90,7 @@ class RedactionFilter(logging.Filter):
             _logger.debug("Log redaction failed (non-fatal)")
         return True
 
-
 redaction_filter = RedactionFilter()
-
 
 def install_redaction(*handlers: logging.Handler) -> None:
     for h in handlers:

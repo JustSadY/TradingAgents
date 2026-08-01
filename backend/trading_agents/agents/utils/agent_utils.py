@@ -59,7 +59,6 @@ __all__ = [
     "run_macd_rsi_backtests",
 ]
 
-
 def _get_language_instruction() -> str:
     from backend.trading_agents.dataflows.config import get_config
 
@@ -74,7 +73,6 @@ def _get_language_instruction() -> str:
         "Do not mix languages or writing systems. The only exceptions are exact ticker symbols, official company or "
         "product names, standard financial abbreviations, and short verbatim source quotes explicitly marked as quotes."
     )
-
 
 def get_system_instruction_override(agent_key: str) -> str | None:
     """Return *agent_key*'s Settings → Agents "System Prompt Override" text.
@@ -95,7 +93,6 @@ def get_system_instruction_override(agent_key: str) -> str | None:
     override = settings.get("system_instruction") if isinstance(settings, dict) else None
     return override.strip() if isinstance(override, str) and override.strip() else None
 
-
 def get_general_settings_block() -> str:
     """Return all general settings that should be appended to every agent system prompt.
 
@@ -107,7 +104,6 @@ def get_general_settings_block() -> str:
     if lang:
         parts.append(lang)
     return "".join(parts)
-
 
 def build_instrument_context(ticker: str, asset_type: str = "stock") -> str:
     instrument_label = "asset" if asset_type == "crypto" else "instrument"
@@ -137,7 +133,6 @@ def build_instrument_context(ticker: str, asset_type: str = "stock") -> str:
         "preserving any exchange suffix (e.g. `.TO`, `.L`, `.HK`, `.T`, `-USD`)." + extra_hint + quote_currency_hint
     )
 
-
 def create_msg_delete():
     def delete_messages(state):
         messages = state["messages"]
@@ -146,7 +141,6 @@ def create_msg_delete():
         return {"messages": removal_operations + [placeholder]}
 
     return delete_messages
-
 
 async def run_macd_rsi_backtests(ticker: str, trade_date: str | None = None) -> tuple[str, str]:
     macd_args = {"ticker": ticker, "strategy_type": "macd_crossover"}

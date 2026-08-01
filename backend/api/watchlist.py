@@ -14,7 +14,6 @@ from backend.services.settings_service import (
 
 router = APIRouter(prefix="/api/watchlist", tags=["watchlist"])
 
-
 @router.get("", response_model=list[str])
 async def get_watchlist(
     db: AsyncSession = Depends(get_db),
@@ -22,7 +21,6 @@ async def get_watchlist(
 ):
     settings = await get_or_create_settings(db, current_user)
     return settings.watchlist
-
 
 @router.get("/prices", response_model=dict[str, dict[str, float]])
 async def get_watchlist_prices(
@@ -33,7 +31,6 @@ async def get_watchlist_prices(
     if not settings.watchlist:
         return {}
     return await get_live_prices_details_batch(settings.watchlist)
-
 
 @router.post("/{ticker}", response_model=list[str], responses={422: {"description": "Invalid ticker format"}})
 async def add_to_watchlist(
@@ -47,7 +44,6 @@ async def add_to_watchlist(
         raise HTTPException(status_code=422, detail=str(e)) from e
 
     return await add_ticker_to_watchlist(db, current_user, ticker.upper())
-
 
 @router.delete("/{ticker}", response_model=list[str])
 async def remove_from_watchlist(

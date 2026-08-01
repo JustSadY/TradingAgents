@@ -4,7 +4,6 @@ from typing import Any
 
 _logger = logging.getLogger(__name__)
 
-
 def _download_and_correlate(tickers: list[str], period: str) -> tuple[Any, list[str] | None]:
     import yfinance as yf
 
@@ -27,7 +26,6 @@ def _download_and_correlate(tickers: list[str], period: str) -> tuple[Any, list[
 
     corr = close.corr().round(3)
     return corr, close.columns.tolist()
-
 
 async def compute_correlation_matrix(tickers: list[str], period: str) -> dict[str, Any]:
     if len(tickers) < 2:

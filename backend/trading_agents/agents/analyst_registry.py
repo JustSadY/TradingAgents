@@ -6,7 +6,6 @@ from dataclasses import dataclass
 
 _logger = logging.getLogger(__name__)
 
-
 @dataclass
 class AnalystRegistration:
     key: str
@@ -17,9 +16,7 @@ class AnalystRegistration:
     factory: Callable
     tools: list
 
-
 _REGISTRY: dict[str, AnalystRegistration] = {}
-
 
 def register_analyst(
     key: str,
@@ -44,7 +41,6 @@ def register_analyst(
         return factory_fn
 
     return decorator
-
 
 def sync_registry_to_graph() -> None:
     from backend.trading_agents.agents.runtime.analyst_execution import ANALYST_NODE_SPECS, AnalystNodeSpec
@@ -78,7 +74,6 @@ def sync_registry_to_graph() -> None:
             setattr(ConditionalLogic, method_name, _condition)
             _logger.debug("Injected %s into ConditionalLogic", method_name)
 
-
 def get_factory(key: str) -> Callable:
     reg = _REGISTRY.get(key)
     if reg is None:
@@ -90,23 +85,19 @@ def get_factory(key: str) -> Callable:
         )
     return reg.factory
 
-
 def get_tools(key: str) -> list:
     reg = _REGISTRY.get(key)
     if reg is None:
         raise KeyError(f"Analyst {key!r} is not registered.")
     return list(reg.tools)
 
-
 def list_analysts() -> list[str]:
     return sorted(_REGISTRY)
-
 
 def report_key_for(key: str) -> str | None:
     """Return the report_key an analyst writes to, or ``None`` if not registered."""
     reg = _REGISTRY.get(key)
     return reg.report_key if reg else None
-
 
 def all_report_keys() -> tuple[str, ...]:
     """Every registered analyst's report key, in registration order.
@@ -115,7 +106,6 @@ def all_report_keys() -> tuple[str, ...]:
     never have to hardcode (and drift out of sync with) the analyst roster.
     """
     return tuple(reg.report_key for reg in _REGISTRY.values())
-
 
 def get_report_fields() -> dict[str, str]:
     """Return a mapping of report_key to the analyst's human-readable label."""

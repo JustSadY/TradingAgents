@@ -3,16 +3,12 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from decimal import Decimal
 
-
 @dataclass
 class OrderRequest:
     ticker: str
     action: str
     quantity: Decimal
     reference_price: Decimal
-    # A signal order is not a generic manual trade: retain its originating
-    # analysis so audit, performance and trade-debrief views can explain why
-    # it happened.  ``None`` is the intentional value for manual orders.
     analysis_id: int | None = None
     ai_signal: str = ""
     ai_reasoning: str = ""
@@ -20,7 +16,6 @@ class OrderRequest:
     stop_loss: Decimal | None = None
     take_profit: Decimal | None = None
     allow_short: bool = False
-
 
 @dataclass
 class OrderResult:
@@ -30,12 +25,8 @@ class OrderResult:
     filled_quantity: Decimal | None
     commission: Decimal = Decimal("0")
     message: str = ""
-    # Set by the orchestration layer for guardrail/non-actionable skips.  It
-    # intentionally remains empty for broker responses, whose status/message
-    # are authoritative.
     reason_code: str = ""
     executed_at: datetime = field(default_factory=lambda: datetime.now(UTC))
-
 
 class BaseTraderInterface(ABC):
     @abstractmethod

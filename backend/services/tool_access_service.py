@@ -7,9 +7,7 @@ from backend.models.tool_settings import UserAgentAccess, UserToolAccess, UserTo
 from backend.trading_agents.agents.analyst_registry import list_analysts
 from backend.trading_agents.agents.tools.registry import registry
 
-
 async def get_user_agent_access(db: AsyncSession, user_id: int) -> dict[str, bool]:
-    # Default to all registered analysts being allowed
     analysts = list_analysts()
     access_map = dict.fromkeys(analysts, True)
 
@@ -18,7 +16,6 @@ async def get_user_agent_access(db: AsyncSession, user_id: int) -> dict[str, boo
         access_map[row.agent_key] = row.can_run
 
     return access_map
-
 
 async def update_user_agent_access(db: AsyncSession, user_id: int, access_map: dict[str, bool]) -> dict[str, bool]:
     analysts = set(list_analysts())
@@ -39,7 +36,6 @@ async def update_user_agent_access(db: AsyncSession, user_id: int, access_map: d
 
     await db.flush()
     return await get_user_agent_access(db, user_id)
-
 
 async def get_user_tool_access(db: AsyncSession, user_id: int) -> dict[str, dict]:
     tools = registry.list()
@@ -65,7 +61,6 @@ async def get_user_tool_access(db: AsyncSession, user_id: int) -> dict[str, dict
 
     return access_map
 
-
 async def update_user_tool_access(db: AsyncSession, user_id: int, updates: dict[str, dict]) -> dict[str, dict]:
     for tool_key, perms in updates.items():
         if not registry.get(tool_key):
@@ -82,7 +77,6 @@ async def update_user_tool_access(db: AsyncSession, user_id: int, updates: dict[
     await db.flush()
     return await get_user_tool_access(db, user_id)
 
-
 def _add_user_tool_access(db: AsyncSession, user_id: int, tool_key: str, perms: dict):
     row = UserToolAccess(
         user_id=user_id,
@@ -94,15 +88,12 @@ def _add_user_tool_access(db: AsyncSession, user_id: int, tool_key: str, perms: 
     )
     db.add(row)
 
-
 def _apply_tool_access_perms(row: UserToolAccess, perms: dict):
     for key in ("can_view", "can_use", "can_edit", "can_enable"):
         if key in perms:
             setattr(row, key, perms[key])
 
-
 async def get_user_tool_field_access(db: AsyncSession, user_id: int) -> dict[str, dict[str, dict]]:
-    # Structure: tool_key -> field_key -> {can_view, can_edit}
     access_map = {}
     for tool in registry.list():
         access_map[tool.key] = {
@@ -122,7 +113,6 @@ async def get_user_tool_field_access(db: AsyncSession, user_id: int) -> dict[str
             }
 
     return access_map
-
 
 async def update_user_tool_field_access(
     db: AsyncSession, user_id: int, updates: dict[str, dict[str, dict]]
@@ -151,7 +141,6 @@ async def update_user_tool_field_access(
     await db.flush()
     return await get_user_tool_field_access(db, user_id)
 
-
 def _add_user_tool_field_access(db: AsyncSession, user_id: int, tool_key: str, field_key: str, perms: dict):
     row = UserToolFieldAccess(
         user_id=user_id,
@@ -161,7 +150,6 @@ def _add_user_tool_field_access(db: AsyncSession, user_id: int, tool_key: str, f
         can_edit=perms.get("can_edit", True),
     )
     db.add(row)
-
 
 def _apply_field_access_perms(row: UserToolFieldAccess, perms: dict):
     if "can_view" in perms:

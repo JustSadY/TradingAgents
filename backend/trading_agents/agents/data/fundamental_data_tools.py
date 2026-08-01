@@ -4,7 +4,6 @@ from langchain_core.tools import tool
 
 from backend.trading_agents.dataflows.interface import route_to_vendor
 
-
 @tool
 async def get_fundamentals(
     ticker: Annotated[str, "ticker symbol of the company"],
@@ -12,7 +11,6 @@ async def get_fundamentals(
 ) -> str:
     """Retrieve high-level company fundamentals (Sector, PE, Beta, Market Cap, etc.)."""
     return await route_to_vendor("get_fundamentals", ticker, curr_date)
-
 
 @tool
 async def get_balance_sheet(
@@ -23,7 +21,6 @@ async def get_balance_sheet(
     """Retrieve the company's balance sheet statement."""
     return await route_to_vendor("get_balance_sheet", ticker, freq, curr_date)
 
-
 @tool
 async def get_cashflow(
     ticker: Annotated[str, "ticker symbol of the company"],
@@ -32,7 +29,6 @@ async def get_cashflow(
 ) -> str:
     """Retrieve the company's cash flow statement."""
     return await route_to_vendor("get_cashflow", ticker, freq, curr_date)
-
 
 @tool
 async def get_income_statement(

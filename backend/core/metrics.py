@@ -78,6 +78,5 @@ AUTO_ORDER_SKIPPED = Counter(
     ["reason"],
 )
 
-
 def render_latest() -> tuple[bytes, str]:
     return generate_latest(), CONTENT_TYPE_LATEST

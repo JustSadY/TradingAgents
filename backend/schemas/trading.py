@@ -1,13 +1,11 @@
 from pydantic import BaseModel
 
-
 class AutoCloseRecord(BaseModel):
     ticker: str
     reason: str
     side: str
     price: float
     realized_pnl: float
-
 
 class HoldingItem(BaseModel):
     ticker: str
@@ -26,7 +24,6 @@ class HoldingItem(BaseModel):
     unrealized_pnl: float
     pnl_pct: float
 
-
 class PortfolioResponse(BaseModel):
     id: int
     mode: str
@@ -41,12 +38,10 @@ class PortfolioResponse(BaseModel):
     auto_closes: list[AutoCloseRecord] = []
     liquidations: list[AutoCloseRecord] = []
 
-
 class PerformanceResponse(PortfolioResponse):
     benchmark_ticker: str | None = None
     benchmark_return_pct: float | None = None
     alpha_pct: float | None = None
-
 
 class OrderResponse(BaseModel):
     order_id: int
@@ -61,11 +56,9 @@ class OrderResponse(BaseModel):
     realized_pnl: float
     status: str
 
-
 class ResetResponse(BaseModel):
     status: str
     message: str
-
 
 class BacktestTradeRecord(BaseModel):
     entry_date: str
@@ -77,18 +70,15 @@ class BacktestTradeRecord(BaseModel):
     pnl: float
     reason: str
 
-
 class BacktestEquityPoint(BaseModel):
     date: str
     value: float
     cash: float
     holdings_value: float
 
-
 class BacktestBenchmark(BaseModel):
     ticker: str
     return_pct: float
-
 
 class BacktestResponse(BaseModel):
     initial_capital: float
@@ -104,12 +94,10 @@ class BacktestResponse(BaseModel):
     benchmark: BacktestBenchmark | None = None
     alpha_pct: float | None = None
 
-
 class TradeSummaryRecord(BaseModel):
     ticker: str
     pnl_pct: float
     date: str | None = None
-
 
 class TickerBreakdownRecord(BaseModel):
     ticker: str
@@ -117,7 +105,6 @@ class TickerBreakdownRecord(BaseModel):
     wins: int
     win_rate: float
     total_pnl: float
-
 
 class PortfolioStatsResponse(BaseModel):
     total_trades: int
@@ -131,17 +118,14 @@ class PortfolioStatsResponse(BaseModel):
     max_drawdown_pct: float | None = None
     by_ticker: list[TickerBreakdownRecord] = []
 
-
 class SectorWeight(BaseModel):
     sector: str
     weight_pct: float
-
 
 class CorrelationPair(BaseModel):
     ticker_a: str
     ticker_b: str
     correlation: float
-
 
 class HoldingRisk(BaseModel):
     ticker: str
@@ -150,13 +134,11 @@ class HoldingRisk(BaseModel):
     beta: float | None = None
     sector: str
 
-
 class RiskBreach(BaseModel):
     type: str
     value: float
     threshold: float
     sector: str | None = None
-
 
 class RiskDashboardResponse(BaseModel):
     beta: float | None = None
@@ -167,7 +149,6 @@ class RiskDashboardResponse(BaseModel):
     breaches: list[RiskBreach] = []
     message: str | None = None
 
-
 class RebalanceSuggestion(BaseModel):
     action: str
     ticker: str
@@ -175,26 +156,22 @@ class RebalanceSuggestion(BaseModel):
     rationale: str
     urgency: str
 
-
 class RebalanceResponse(BaseModel):
     summary: str
     score: int
     issues: list[str] = []
     suggestions: list[RebalanceSuggestion] = []
 
-
 class JournalNoteResponse(BaseModel):
     order_id: int
     note: str
     has_debrief: bool
-
 
 class JournalNoteReadResponse(BaseModel):
     order_id: int
     note: str
     ai_debrief: str | None = None
     has_debrief: bool
-
 
 class JournalDebriefResponse(BaseModel):
     order_id: int

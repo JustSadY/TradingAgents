@@ -10,7 +10,6 @@ import json
 
 from starlette.exceptions import HTTPException
 
-
 class BodySizeLimitMiddleware:
     def __init__(self, app, max_body_size: int):
         self.app = app
@@ -52,8 +51,6 @@ class BodySizeLimitMiddleware:
         try:
             await self.app(scope, limited_receive, tracking_send)
         except _BodyTooLarge:
-            # If the app already started responding we cannot send a 413;
-            # the connection is torn down instead.
             if response_started:
                 raise
             await self._reject(send)
@@ -72,10 +69,6 @@ class BodySizeLimitMiddleware:
         )
         await send({"type": "http.response.body", "body": body})
 
-
-# Subclasses HTTPException so that when the body is consumed inside FastAPI's
-# request parsing (which re-raises HTTPException but maps any other error to a
-# generic 400), the response is still a proper 413.
 class _BodyTooLarge(HTTPException):
     def __init__(self):
         super().__init__(status_code=413, detail="Request body too large")

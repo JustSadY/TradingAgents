@@ -16,10 +16,8 @@ from backend.services.backtest_service import (
     _trade_pnl,
 )
 
-
 class TestApplySlippage:
     def test_buy_worsens_price_upward(self):
-        # 5 bps = 0.05% higher
         assert _apply_slippage(100.0, "BUY", 5.0) == 100.05
 
     def test_sell_worsens_price_downward(self):
@@ -33,10 +31,8 @@ class TestApplySlippage:
         result = _apply_slippage(50.0, "BUY", 10.0)
         assert isinstance(result, float)
 
-
 class TestTradePnl:
     def test_long_profit(self):
-        # Bought at 100, sold at 110, 10 shares, no commission
         pnl = _trade_pnl("long", entry_price=100.0, exit_price=110.0, size=10.0, rate=0.0)
         assert pnl == 100.0
 
@@ -49,7 +45,6 @@ class TestTradePnl:
         assert pnl == 100.0
 
     def test_commission_charged_on_both_legs(self):
-        # 1000 notional in, 1100 notional out, 0.1% commission each leg
         pnl = _trade_pnl("long", entry_price=100.0, exit_price=110.0, size=10.0, rate=0.001)
         expected_gross = 100.0
         expected_commission = 1000.0 * 0.001 + 1100.0 * 0.001
@@ -57,7 +52,6 @@ class TestTradePnl:
 
     def test_returns_plain_float(self):
         assert isinstance(_trade_pnl("long", 100.0, 110.0, 10.0, 0.001), float)
-
 
 class TestClosePosition:
     def test_long_cash_delta_returns_sale_proceeds_without_double_counting_pnl(self):
@@ -71,8 +65,6 @@ class TestClosePosition:
             reason="SIGNAL",
             rate=0.0,
         )
-        # Entry notional was already removed from cash. Closing returns only
-        # the sale proceeds (110*10), not sale proceeds plus the same $100 P&L.
         assert cash_delta == 1100.0
         assert trade["pnl"] == 100.0
         assert trade["return_pct"] == 10.0
@@ -94,8 +86,6 @@ class TestClosePosition:
         assert trade["pnl"] == 100.0
 
     def test_exit_cash_flows_charge_each_commission_leg_once(self):
-        # $1,000 initial cash: buy 1 @100, sell @110, 0.1% commission each
-        # leg.  Cash after open is 899.90 and close returns 109.89 = 1,009.79.
         cash_delta, trade = _close_position(
             "long",
             entry_price=100.0,
@@ -111,8 +101,6 @@ class TestClosePosition:
         assert trade["pnl"] == 9.79
 
     def test_short_exit_does_not_charge_entry_commission_twice(self):
-        # The short entry commission is deducted when opening.  Closing only
-        # deducts the buy-to-cover commission from gross P&L.
         cash_delta, trade = _close_position(
             "short",
             entry_price=100.0,
@@ -138,7 +126,6 @@ class TestClosePosition:
             reason="SIGNAL",
             rate=0.0,
         )
-        # pnl = (55-50)*4 = 20; cost basis = 50*4 = 200; return = 10%
         assert trade["pnl"] == 20.0
         assert trade["return_pct"] == 10.0
 
@@ -172,7 +159,6 @@ class TestClosePosition:
         assert cash_delta == Decimal("109.8900")
         assert trade["pnl"] == 9.79
 
-
 def test_backtest_metrics_take_decimal_equity_curve_without_float_money_rounding():
     metrics = _compute_metrics(
         [Decimal("100000.0001"), Decimal("101000.0001"), Decimal("100000.0001")],
@@ -182,7 +168,6 @@ def test_backtest_metrics_take_decimal_equity_curve_without_float_money_rounding
 
     assert metrics["final_value"] == 100000.0
     assert metrics["max_drawdown"] == pytest.approx(-(1000 / 101000.0001 * 100), abs=0.01)
-
 
 class TestNormaliseExitLevels:
     def test_short_discards_long_oriented_annotation_levels(self):
@@ -194,7 +179,6 @@ class TestNormaliseExitLevels:
         stop, target = _normalise_exit_levels("long", 100.0, 95.0, 110.0)
         assert stop == 95.0
         assert target == 110.0
-
 
 class TestConsensusTiming:
     def test_consensus_requires_a_prior_trading_date_signal(self):

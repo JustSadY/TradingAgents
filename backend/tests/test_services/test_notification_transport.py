@@ -2,7 +2,6 @@ import socket
 
 import pytest
 
-
 @pytest.mark.asyncio
 async def test_webhook_resolution_returns_only_vetted_public_addresses(monkeypatch):
     from backend.services.notification_service import resolve_webhook_target
@@ -25,7 +24,6 @@ async def test_webhook_resolution_returns_only_vetted_public_addresses(monkeypat
     assert target.port == 443
     assert target.addresses == ("1.1.1.1", "2606:4700:4700::1111")
 
-
 @pytest.mark.asyncio
 async def test_webhook_resolution_rejects_a_mixed_public_and_private_dns_answer(monkeypatch):
     from backend.services.notification_service import resolve_webhook_target
@@ -41,7 +39,6 @@ async def test_webhook_resolution_rejects_a_mixed_public_and_private_dns_answer(
 
     with pytest.raises(ValueError, match="disallowed internal address"):
         await resolve_webhook_target("https://hooks.example/path")
-
 
 @pytest.mark.asyncio
 async def test_pinned_webhook_backend_dials_vetted_ip_not_hostname():
@@ -74,7 +71,6 @@ async def test_pinned_webhook_backend_dials_vetted_ip_not_hostname():
     assert calls == [("1.1.1.1", 443), ("2606:4700:4700::1111", 443)]
     with pytest.raises(httpcore.ConnectError, match="unexpected destination"):
         await backend.connect_tcp("localhost", 443)
-
 
 @pytest.mark.asyncio
 async def test_pinned_transport_uses_vetted_ip_but_preserves_original_host_header():

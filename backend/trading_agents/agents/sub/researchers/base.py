@@ -22,7 +22,6 @@ from backend.trading_agents.agents.utils.agent_utils import get_general_settings
 PromptBuilder = Callable[[str, str, str, str, str, str, str], str]
 DefaultInstruction = Callable[[str], str]
 
-
 def make_researcher(
     side: str, speaker: str, build_prompt: PromptBuilder, default_instruction: DefaultInstruction
 ) -> Callable:
@@ -63,9 +62,6 @@ def make_researcher(
                 + get_general_settings_block()
             )
             response = await llm.ainvoke(prompt)
-            # The speaker header belongs to the transcript, not to the LLM.
-            # This keeps provider Markdown headings from rendering as literal
-            # ``**Bull Analyst**`` / ``**Bear Analyst**`` inside the bubble.
             argument = format_debate_argument(
                 f"{speaker} Analyst",
                 response,

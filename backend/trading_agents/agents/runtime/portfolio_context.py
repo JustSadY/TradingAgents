@@ -15,7 +15,6 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-
 async def get_portfolio_context(user_id: int | None) -> str:
     if not user_id:
         return ""

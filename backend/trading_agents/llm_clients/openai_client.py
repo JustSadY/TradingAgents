@@ -11,7 +11,6 @@ from .validators import validate_model
 
 logger = logging.getLogger(__name__)
 
-
 def _strip_chunk_usage(chunk) -> Any | None:
     """Remove (and return) the usage_metadata carried by a streamed chunk."""
     message = getattr(chunk, "message", None)
@@ -37,10 +36,8 @@ def _strip_chunk_usage(chunk) -> Any | None:
 
     return usage or None
 
-
 def _final_usage_chunk(usage) -> ChatGenerationChunk:
     return ChatGenerationChunk(message=AIMessageChunk(content="", usage_metadata=usage))
-
 
 class NormalizedChatOpenAI(ChatOpenAI):
     """ChatOpenAI with normalized content and sane streamed token usage.
@@ -122,7 +119,6 @@ class NormalizedChatOpenAI(ChatOpenAI):
             kwargs.setdefault("tool_choice", None)
         return super().with_structured_output(schema, method=method, **kwargs)
 
-
 _PASSTHROUGH_KWARGS = (
     "timeout",
     "max_retries",
@@ -146,14 +142,12 @@ _PROVIDER_BASE_URL = {
 
 _OLLAMA_PROVIDER = "ollama"
 
-
 def get_ollama_base_url() -> str:
     """Return the server-owned OpenAI-compatible Ollama endpoint."""
     from backend.core.config import get_settings
 
     base_url = get_settings().OLLAMA_BASE_URL.rstrip("/")
     return base_url if base_url.endswith("/v1") else f"{base_url}/v1"
-
 
 class OpenAIClient(BaseLLMClient):
     def __init__(

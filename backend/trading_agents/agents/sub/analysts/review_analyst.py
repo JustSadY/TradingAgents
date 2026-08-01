@@ -18,7 +18,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
 
 _REVIEW_TOOLS = [get_past_performance_data, run_strategy_backtest]
 
-
 @register_analyst(
     key="review",
     agent_node="Performance Review Analyst",

@@ -17,7 +17,6 @@ from backend.core.config import get_settings
 
 _logger = logging.getLogger(__name__)
 
-
 async def run_analysis_job(ctx, ticker: str, trade_date: str, asset_type: str, user_id: int | None, task_id: str):
     from backend.core.database import AsyncSessionLocal
     from backend.models.user import User
@@ -28,8 +27,6 @@ async def run_analysis_job(ctx, ticker: str, trade_date: str, asset_type: str, u
         async with AsyncSessionLocal() as db:
             user = await db.get(User, user_id) if user_id is not None else None
             if user_id is not None and user is None:
-                # A queued user-owned run must never silently fall back to the
-                # global settings/portfolio after that user has been deleted.
                 _logger.warning("Dropping analysis task=%s: owner user_id=%s no longer exists", task_id, user_id)
                 from backend.core import task_store
                 from backend.services.analysis.emitter import AnalysisEmitter
@@ -46,12 +43,8 @@ async def run_analysis_job(ctx, ticker: str, trade_date: str, asset_type: str, u
 
         await run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user)
     except asyncio.CancelledError:
-        # Application-level retry is handled by ``_maybe_retry_analysis``.
-        # ARQ otherwise requeues CancelledError by default, which turns a
-        # user's Stop request into a fresh analysis run.
         _logger.info("Analysis worker job cancelled task=%s", task_id)
         return
-
 
 async def run_portfolio_job(
     ctx, tickers: list[str], trade_date: str, asset_type: str, user_id: int | None, task_id: str
@@ -84,18 +77,15 @@ async def run_portfolio_job(
         _logger.info("Portfolio worker job cancelled task=%s", task_id)
         return
 
-
-async def startup(ctx):  # NOSONAR
+async def startup(ctx):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
-    # Register tools so analyst plugins resolve, same as the web process.
     import backend.trading_agents.agents.tools.bootstrap  # noqa: F401
     from backend.core.task_store import control_listener
     from backend.services.analysis_service import cancel_local_task
 
     ctx["control_listener"] = asyncio.create_task(control_listener(cancel_local_task))
     _logger.info("Analysis worker ready (queue mode).")
-
 
 async def shutdown(ctx):
     listener = ctx.get("control_listener")
@@ -105,18 +95,15 @@ async def shutdown(ctx):
 
     await close_redis()
 
-
 def _redis_settings():
     from arq.connections import RedisSettings
 
     return RedisSettings.from_dsn(get_settings().REDIS_URL or "redis://localhost:6379/0")
-
 
 class WorkerSettings:
     functions = [run_analysis_job, run_portfolio_job]
     on_startup = startup
     on_shutdown = shutdown
     redis_settings = _redis_settings()
-    # LLM-heavy graph runs: keep per-worker concurrency low and allow long jobs.
     max_jobs = 4
     job_timeout = 1800

@@ -13,7 +13,6 @@ import threading
 import time
 from collections.abc import Callable
 
-
 class AnalysisActivityTracker:
     """Record the most recent meaningful activity in one analysis task.
 
@@ -38,7 +37,6 @@ class AnalysisActivityTracker:
         with self._lock:
             return self._last_activity_at
 
-
 def touch_current_analysis() -> None:
     """Best-effort liveness update for code running inside an analysis graph.
 
@@ -54,5 +52,4 @@ def touch_current_analysis() -> None:
         if isinstance(tracker, AnalysisActivityTracker):
             tracker.touch()
     except Exception:
-        # Observability must never affect an analysis result.
         return

@@ -35,11 +35,9 @@ _logger = logging.getLogger(__name__)
 
 _OWNER_UNSET = object()
 
-
 async def _emit_system_status(emitter: AnalysisEmitter, message: str, status: str = "starting") -> None:
     """Emit a lifecycle message without treating the message as an agent name."""
     await emitter.emit_status(agent="system", status=status, message=message)
-
 
 async def _persist_terminal_status(db: AsyncSession, row_id: int, *, status: str) -> None:
     """Reset an interrupted transaction before writing a terminal state.
@@ -59,12 +57,9 @@ async def _persist_terminal_status(db: AsyncSession, row_id: int, *, status: str
         else:
             await mark_as_failed(db, row_id)
     except asyncio.CancelledError:
-        # A second cancellation is still cancellation, never an analysis
-        # failure.  Let the caller preserve that terminal signal.
         raise
     except Exception:
         _logger.exception("Could not persist terminal analysis status=%s row_id=%s", status, row_id)
-
 
 async def _heartbeat_monitor(
     emitter: AnalysisEmitter,
@@ -107,7 +102,6 @@ async def _heartbeat_monitor(
         stall_warning_sent = False
         await emitter.emit_progress("heartbeat", "running", "system")
 
-
 REPORT_FIELDS = (
     "market_report",
     "sentiment_report",
@@ -132,7 +126,6 @@ REPORT_FIELDS = (
     "final_trade_decision",
 )
 
-
 async def run_individual_analysis(
     ticker: str,
     trade_date: str,
@@ -152,9 +145,6 @@ async def run_individual_analysis(
     username = user.username if user else "system"
 
     user_id = user.id if user else None
-    # A privileged user may time-travel another user's analysis.  Persist the
-    # result under its original owner in that case; the caller's identity is
-    # still used for authorization and runtime configuration below.
     persisted_user_id = user_id if result_owner_user_id is _OWNER_UNSET else result_owner_user_id
 
     row = await create_skeleton_result(
@@ -166,9 +156,6 @@ async def run_individual_analysis(
         triggered_by,
         persisted_user_id,
     )
-    # Capture the scalar identifier while the initial transaction is healthy.
-    # A later cancelled commit can expire ``row`` and make ``row.id`` trigger
-    # a PendingRollbackError during cancellation cleanup.
     row_id = row.id
 
     try:
@@ -180,10 +167,6 @@ async def run_individual_analysis(
 
         config = build_analysis_config(settings, user=user, sys_settings=sys_settings)
 
-        # LangGraph checkpoints contain full report/tool state.  Bind every
-        # normal run to its persisted AnalysisResult row; a time-travel resume
-        # supplies the original row's namespace explicitly so it can only
-        # resume that analysis, never another user's same ticker/date run.
         from backend.trading_agents.graph.checkpointer import checkpoint_scope
 
         config["checkpoint_scope"] = checkpoint_namespace or checkpoint_scope(row.user_id, row.id)
@@ -248,10 +231,6 @@ async def run_individual_analysis(
 
         init_report_card()
         stats_handler = StatsCallbackHandler()
-        # A graph-state update is not the only sign of life: a model may be
-        # generating or a tool may be fetching data for a long time before the
-        # graph yields its next chunk.  Keep one tracker per task, never a
-        # module-global timestamp shared by concurrent users.
         activity_tracker = AnalysisActivityTracker()
 
         streaming_handler = TokenStreamingCallbackHandler(emitter, activity_tracker=activity_tracker)
@@ -324,11 +303,6 @@ async def run_individual_analysis(
                         history = d_state.get("history", "")
                         messages = debate_messages(history)
 
-                        # A merged Risk Debate node can add all three
-                        # perspectives in one state update. Emit every newly
-                        # added *message*, not just the last physical line of
-                        # a multiline response, so live and persisted views
-                        # have the same transcript.
                         newly_added = max(1, curr_count - prior_count)
                         for message in messages[-newly_added:]:
                             await emitter.emit_debate_bubble(
@@ -430,10 +404,6 @@ async def run_individual_analysis(
         if not isinstance(structured_data, dict):
             structured_data = {}
 
-        # New runs have exactly one structured execution recommendation: the
-        # Portfolio Manager's decision. Historical Trader columns remain in
-        # the database/API only so already-saved reports can be displayed; the
-        # active graph never reads or persists them.
         portfolio_decision_raw = final_state.get("portfolio_decision_json")
         if isinstance(portfolio_decision_raw, BaseModel):
             structured_data["portfolio_decision"] = portfolio_decision_raw.model_dump()
@@ -587,8 +557,6 @@ async def run_individual_analysis(
         try:
             await emitter.emit_error("Analysis cancelled.")
         except Exception:
-            # Losing a transport during Stop should not relabel the task as a
-            # background failure after it has already been cancelled.
             _logger.warning("Could not emit cancellation event task=%s", emitter.task_id, exc_info=True)
 
         raise

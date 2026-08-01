@@ -5,7 +5,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
 
-
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (Index("ix_users_is_active", "is_active"),)
@@ -18,8 +17,6 @@ class User(Base):
     role: Mapped[str] = mapped_column(String(20), default="user", nullable=False, server_default="user")
     display_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     api_keys_enc: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Bumped on logout / password change to invalidate all previously issued
-    # access & refresh tokens (they carry the version they were minted with).
     token_version: Mapped[int] = mapped_column(Integer, default=0, nullable=False, server_default="0")
 
     @property

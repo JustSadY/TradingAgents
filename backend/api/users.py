@@ -37,11 +37,9 @@ router = APIRouter(prefix="/api/users", tags=["users"])
 
 _USER_NOT_FOUND = "User not found"
 
-
 @router.get("/me", response_model=UserRead)
 async def get_me(current_user: Annotated[User, Depends(get_current_user)]):
     return current_user
-
 
 @router.put("/me", response_model=UserRead, responses={400: {"description": "Email already in use"}})
 async def update_me(
@@ -66,13 +64,11 @@ async def update_me(
         hashed_password=hash_password(body.password) if body.password else None,
     )
 
-
 @router.get("/me/api-keys", response_model=ApiKeyProvidersResponse)
 async def list_my_api_keys(current_user: Annotated[User, Depends(get_current_user)]):
     fernet = _get_settings().get_fernet()
     providers = list_user_api_key_providers(current_user, fernet)
     return {"providers": providers}
-
 
 @router.put("/me/api-keys", response_model=MessageResponse)
 async def set_my_api_key(
@@ -84,7 +80,6 @@ async def set_my_api_key(
     set_user_api_key(current_user, body.provider, body.api_key, fernet)
     await db.flush()
     return {"detail": f"API key for '{body.provider}' saved"}
-
 
 @router.delete(
     "/me/api-keys/{provider}",
@@ -102,7 +97,6 @@ async def delete_my_api_key(
         raise HTTPException(status_code=404, detail=f"No key found for provider '{provider}'")
     return {"detail": f"API key for '{provider}' deleted"}
 
-
 @router.get("/me/permissions", response_model=PagePermissionsRead)
 async def get_my_permissions(
     current_user: Annotated[User, Depends(get_current_user)],
@@ -117,7 +111,6 @@ async def get_my_permissions(
         allowed.append("settings")
     return PagePermissionsRead(allowed_pages=allowed)
 
-
 @router.get("/me/setting-permissions", response_model=SettingPermissionsResponse)
 async def get_my_setting_permissions(
     current_user: Annotated[User, Depends(get_current_user)],
@@ -130,7 +123,6 @@ async def get_my_setting_permissions(
     allowed = sorted(await list_allowed_setting_sections(db, current_user.id))
     return {"allowed_settings": allowed}
 
-
 @router.get("", response_model=list[UserRead])
 async def list_users_run(
     _: Annotated[User, Depends(require_admin)],
@@ -139,7 +131,6 @@ async def list_users_run(
     from backend.repositories.users import list_users as _repo_list
 
     return await _repo_list(db)
-
 
 @router.post(
     "",
@@ -178,7 +169,6 @@ async def create_user(
         role=body.role,
     )
 
-
 @router.put(
     "/{user_id}",
     response_model=UserRead,
@@ -212,7 +202,6 @@ async def update_user(
         db, user, role=body.role, is_active=body.is_active, email=body.email, display_name=body.display_name
     )
 
-
 @router.delete(
     "/{user_id}",
     status_code=status.HTTP_204_NO_CONTENT,
@@ -240,7 +229,6 @@ async def delete_user(
 
     await delete_user_and_emit(db, user)
 
-
 @router.get("/{user_id}/permissions", response_model=UserPermissionsResponse)
 async def get_user_permissions(
     user_id: int,
@@ -253,7 +241,6 @@ async def get_user_permissions(
     perms = await get_user_page_permissions_map(db, user_id)
     full = {k: perms.get(k, False) for k in ALL_PAGE_KEYS}
     return {"user_id": user_id, "permissions": full}
-
 
 @router.put("/{user_id}/permissions", response_model=MessageResponse, responses={404: {"description": _USER_NOT_FOUND}})
 async def set_user_permissions(
@@ -277,7 +264,6 @@ async def set_user_permissions(
     await db.flush()
     return {"detail": "Permissions updated"}
 
-
 @router.get(
     "/{user_id}/api-keys", response_model=ApiKeyProvidersResponse, responses={404: {"description": _USER_NOT_FOUND}}
 )
@@ -293,7 +279,6 @@ async def list_user_api_keys(
     providers = list_user_api_key_providers(user, fernet)
     return {"providers": providers}
 
-
 @router.put("/{user_id}/api-keys", response_model=MessageResponse, responses={404: {"description": _USER_NOT_FOUND}})
 async def set_user_api_key_endpoint(
     user_id: int,
@@ -308,7 +293,6 @@ async def set_user_api_key_endpoint(
     set_user_api_key(user, body.provider, body.api_key, fernet)
     await db.flush()
     return {"detail": f"API key for '{body.provider}' saved for user {user.username}"}
-
 
 @router.delete(
     "/{user_id}/api-keys/{provider}",
@@ -331,7 +315,6 @@ async def delete_user_api_key_endpoint(
     await db.flush()
     return {"detail": f"API key for '{provider}' deleted for user {user.username}"}
 
-
 @router.get(
     "/{user_id}/setting-permissions",
     response_model=UserPermissionsResponse,
@@ -352,10 +335,8 @@ async def get_user_setting_permissions(
     full = {k: perms.get(k, False) for k in SETTING_KEYS}
     return {"user_id": user_id, "permissions": full}
 
-
 class SettingPermissionsUpdate(BaseModel):
     permissions: dict[str, bool]
-
 
 @router.put(
     "/{user_id}/setting-permissions", response_model=MessageResponse, responses={404: {"description": _USER_NOT_FOUND}}
@@ -381,7 +362,6 @@ async def set_user_setting_permissions(
     await db.flush()
     return {"detail": "Setting permissions updated"}
 
-
 @router.get("/{user_id}/agent-access", response_model=dict[str, Any])
 async def get_agent_access(
     user_id: int,
@@ -392,10 +372,8 @@ async def get_agent_access(
 
     return await get_user_agent_access(db, user_id)
 
-
 class AgentAccessUpdate(BaseModel):
     agents: dict[str, bool]
-
 
 @router.put("/{user_id}/agent-access", response_model=AgentAccessUpdateResponse)
 async def set_agent_access(
@@ -409,7 +387,6 @@ async def set_agent_access(
     updated = await update_user_agent_access(db, user_id, body.agents)
     return {"detail": "Agent access updated", "agents": updated}
 
-
 @router.get("/{user_id}/tool-access", response_model=dict[str, Any])
 async def get_tool_access(
     user_id: int,
@@ -420,10 +397,8 @@ async def get_tool_access(
 
     return await get_user_tool_access(db, user_id)
 
-
 class ToolAccessUpdate(BaseModel):
     tools: dict[str, dict]
-
 
 @router.put("/{user_id}/tool-access", response_model=ToolAccessUpdateResponse)
 async def set_tool_access(
@@ -437,7 +412,6 @@ async def set_tool_access(
     updated = await update_user_tool_access(db, user_id, body.tools)
     return {"detail": "Tool access updated", "tools": updated}
 
-
 @router.get("/{user_id}/tool-field-access", response_model=dict[str, Any])
 async def get_tool_field_access(
     user_id: int,
@@ -448,10 +422,8 @@ async def get_tool_field_access(
 
     return await get_user_tool_field_access(db, user_id)
 
-
 class ToolFieldAccessUpdate(BaseModel):
     fields: dict[str, dict[str, dict]]
-
 
 @router.put("/{user_id}/tool-field-access", response_model=ToolFieldAccessUpdateResponse)
 async def set_tool_field_access(

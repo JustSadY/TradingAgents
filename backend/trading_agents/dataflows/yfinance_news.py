@@ -11,7 +11,6 @@ _logger = logging.getLogger(__name__)
 
 _NO_TITLE = "No title"
 
-
 def _parse_news_datetime(raw_value):
     if raw_value is None:
         return None
@@ -37,7 +36,6 @@ def _parse_news_datetime(raw_value):
             return None
     return None
 
-
 def _to_utc(dt: datetime | None) -> datetime | None:
     """Normalize a parsed publish datetime to aware UTC.
 
@@ -53,7 +51,6 @@ def _to_utc(dt: datetime | None) -> datetime | None:
     if dt.tzinfo is None:
         return dt.replace(tzinfo=UTC)
     return dt.astimezone(UTC)
-
 
 def _extract_article_data(article: dict) -> dict:
     if "content" in article:
@@ -82,7 +79,6 @@ def _extract_article_data(article: dict) -> dict:
             "link": article.get("link", ""),
             "pub_date": None,
         }
-
 
 async def get_news_yfinance(
     ticker: str,
@@ -126,7 +122,6 @@ async def get_news_yfinance(
     except Exception as e:
         _logger.exception("Unexpected error fetching news for %s", ticker)
         return f"Error fetching news for {ticker}: {str(e)}"
-
 
 def get_global_news_yfinance(
     curr_date: str,

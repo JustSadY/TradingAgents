@@ -22,7 +22,6 @@ DefaultInstruction = Callable[[], str]
 
 _SETTINGS_AGENT_KEY = "risk_debate"
 
-
 def make_risk_debator(
     stance: str, speaker: str, build_prompt: PromptBuilder, default_instruction: DefaultInstruction
 ) -> Callable:

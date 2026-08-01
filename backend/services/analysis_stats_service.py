@@ -21,7 +21,6 @@ from backend.models.analysis import AnalysisResult
 
 _logger = logging.getLogger(__name__)
 
-
 def estimate_cost(analysts: str, debate_rounds: int, model: str, provider: str | None = None) -> dict:
     """Return a pre-run cost estimate from the canonical model-price catalogue."""
     analyst_list = [a.strip() for a in analysts.split(",") if a.strip()]
@@ -38,13 +37,8 @@ def estimate_cost(analysts: str, debate_rounds: int, model: str, provider: str |
         "pricing_is_fallback": pricing.is_fallback,
     }
 
-
 def _is_correct(signal: str | None, raw_return: float) -> bool:
     return (signal in _BUY_SIGNALS and raw_return > 0) or (signal in _SELL_SIGNALS and raw_return < 0)
-
-
-# Static placeholder definition deleted to avoid returning fake/mock data in production.
-
 
 async def get_ab_comparison(db: AsyncSession, user_id: int | None = None) -> list[dict]:
     try:
@@ -52,7 +46,7 @@ async def get_ab_comparison(db: AsyncSession, user_id: int | None = None) -> lis
         if user_id is not None:
             q = q.where(AnalysisResult.user_id == user_id)
         rows = (await db.execute(q)).scalars().all()
-    except Exception as exc:  # tolerate an un-migrated DB
+    except Exception as exc:
         _logger.warning("Failed to query AnalysisResult (DB may be unmigrated): %s", exc)
         rows = []
 
@@ -67,7 +61,6 @@ async def get_ab_comparison(db: AsyncSession, user_id: int | None = None) -> lis
         comparison.append(metrics)
     return comparison
 
-
 def _resolve_preset_name(row: AnalysisResult) -> str:
     """Resolve a display name for the preset/model combo."""
     preset = row.preset_name
@@ -80,7 +73,6 @@ def _resolve_preset_name(row: AnalysisResult) -> str:
             mod = "Model"
         preset = f"{prov}:{mod}"
     return preset
-
 
 def _calculate_preset_metrics(preset: str, runs: list[AnalysisResult]) -> dict:
     """Calculate performance metrics for a group of runs."""
@@ -104,7 +96,6 @@ def _calculate_preset_metrics(preset: str, runs: list[AnalysisResult]) -> dict:
         "avg_raw_return_last_50": realized_metrics["avg_raw_return_last_50"],
         "total_graded_last_50": realized_metrics["total_graded_last_50"],
     }
-
 
 def _calc_base(runs: list[AnalysisResult]) -> dict:
     total = len(runs)
@@ -141,7 +132,6 @@ def _calc_base(runs: list[AnalysisResult]) -> dict:
         "total_graded": len(graded),
     }
 
-
 def _calc_realized(runs: list[AnalysisResult]) -> dict:
     graded = [r for r in runs if r.raw_return is not None and r.signal in (_BUY_SIGNALS | _SELL_SIGNALS)]
     wins = sum(1 for r in graded if _is_correct(r.signal, r.raw_return))
@@ -154,7 +144,6 @@ def _calc_realized(runs: list[AnalysisResult]) -> dict:
         "avg_raw_return_last_50": round(sum(raws) / len(raws) * 100, 2) if raws else 0.0,
         "total_graded_last_50": len(graded),
     }
-
 
 async def get_signal_performance(db: AsyncSession, ticker: str | None = None, user_id: int | None = None) -> dict:
     q = select(AnalysisResult).where(AnalysisResult.status == "completed").where(AnalysisResult.raw_return.isnot(None))

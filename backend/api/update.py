@@ -9,11 +9,9 @@ from backend.services import update_service
 
 router = APIRouter(prefix="/api/update", tags=["update"])
 
-
 @router.get("/status", response_model=dict[str, Any])
 async def update_status(_: User = Depends(require_admin)):
     return await asyncio.to_thread(update_service.get_status)
-
 
 @router.post(
     "/apply",

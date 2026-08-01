@@ -20,7 +20,6 @@ from typing import Literal
 
 _logger = logging.getLogger(__name__)
 
-
 @dataclass(frozen=True)
 class ModelPricing:
     """Input and output rates in USD per one million tokens."""
@@ -28,9 +27,7 @@ class ModelPricing:
     input_per_million_usd: float
     output_per_million_usd: float
 
-
 PricingSource = Literal["exact", "model_id", "provider_fallback", "unknown_provider", "local"]
-
 
 @dataclass(frozen=True)
 class PricingResolution:
@@ -43,10 +40,6 @@ class PricingResolution:
     def is_fallback(self) -> bool:
         return self.source in {"provider_fallback", "unknown_provider"}
 
-
-# This is the sole model-price catalogue.  Matching supports versioned model
-# IDs (for example ``gpt-4o-mini-2024-07-18``) by selecting the longest known
-# model key, avoiding the old ``gpt-4o``-before-``gpt-4o-mini`` prefix bug.
 MODEL_PRICING: dict[str, dict[str, ModelPricing]] = {
     "openai": {
         "gpt-4o-mini": ModelPricing(0.15, 0.60),
@@ -80,18 +73,13 @@ MODEL_PRICING: dict[str, dict[str, ModelPricing]] = {
     },
 }
 
-# Catalogued providers without per-model prices still receive an explicit,
-# labelled estimate rather than silently pretending an arbitrary model is an
-# exact match.  Ollama executes locally and has no provider token charge.
 KNOWN_CLOUD_PROVIDERS = frozenset({*MODEL_PRICING, "mistral", "groq", "deepseek"})
 LOCAL_PROVIDERS = frozenset({"ollama"})
 DEFAULT_CLOUD_PRICING = ModelPricing(2.0, 8.0)
 ZERO_PRICING = ModelPricing(0.0, 0.0)
 
-
 def _normalize(value: str | None) -> str:
     return (value or "").strip().casefold()
-
 
 def _matching_price(provider: str, model: str) -> ModelPricing | None:
     """Return an exact/longest-prefix price for a provider/model pair."""
@@ -103,7 +91,6 @@ def _matching_price(provider: str, model: str) -> ModelPricing | None:
         if key in model:
             return rates[key]
     return None
-
 
 @lru_cache(maxsize=512)
 def _resolve_normalized(provider: str, model: str) -> PricingResolution:
@@ -124,9 +111,6 @@ def _resolve_normalized(provider: str, model: str) -> PricingResolution:
         )
         return PricingResolution(DEFAULT_CLOUD_PRICING, source)
 
-    # Some historical records predate the provider column.  A unique model ID
-    # is still safe to price exactly; callers can expose ``model_id`` so this
-    # inference is not hidden from users.
     candidates = {
         price
         for candidate_provider in MODEL_PRICING
@@ -141,11 +125,9 @@ def _resolve_normalized(provider: str, model: str) -> PricingResolution:
     )
     return PricingResolution(DEFAULT_CLOUD_PRICING, "unknown_provider")
 
-
 def resolve_model_pricing(provider: str | None, model: str | None) -> PricingResolution:
     """Resolve a model rate and retain whether the result is a fallback."""
     return _resolve_normalized(_normalize(provider), _normalize(model))
-
 
 def estimate_token_cost(
     provider: str | None,
@@ -160,7 +142,6 @@ def estimate_token_cost(
         / 1_000_000,
         6,
     )
-
 
 def estimate_total_token_cost(provider: str | None, model: str | None, total_tokens: int) -> float:
     """Estimate a pre-run cost when only a total token estimate is available.

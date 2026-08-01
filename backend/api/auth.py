@@ -21,7 +21,6 @@ router = APIRouter(prefix="/auth", tags=["auth"])
 
 _DUMMY_PASSWORD_HASH = hash_password("dummy-password-for-timing-equalization")
 
-
 @router.post("/login", response_model=TokenResponse)
 @limiter.limit("10/minute")
 async def login(request: Request, body: LoginRequest, db: Annotated[AsyncSession, Depends(get_db)]):
@@ -34,7 +33,6 @@ async def login(request: Request, body: LoginRequest, db: Annotated[AsyncSession
         access_token=create_access_token(user.username, role=user.role, token_version=ver),
         refresh_token=create_refresh_token(user.username, token_version=ver),
     )
-
 
 @router.post("/refresh", response_model=TokenResponse)
 @limiter.limit("30/minute")
@@ -56,7 +54,6 @@ async def refresh(request: Request, body: RefreshRequest, db: Annotated[AsyncSes
         access_token=create_access_token(user.username, role=user.role, token_version=ver),
         refresh_token=create_refresh_token(user.username, token_version=ver),
     )
-
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(

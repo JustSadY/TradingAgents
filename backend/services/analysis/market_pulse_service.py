@@ -4,10 +4,9 @@ from backend.services.market_data_service import get_live_prices_batch
 
 _logger = logging.getLogger(__name__)
 
-
 async def get_market_pulse() -> str:
     """Fetch and summarize major market indicators for global context."""
-    tickers = ["^GSPC", "^VIX", "BTC-USD", "GC=F"]  # S&P 500, VIX, Bitcoin, Gold
+    tickers = ["^GSPC", "^VIX", "BTC-USD", "GC=F"]
     names = {"^GSPC": "S&P 500", "^VIX": "VIX (Fear Index)", "BTC-USD": "Bitcoin", "GC=F": "Gold"}
 
     try:
@@ -20,7 +19,6 @@ async def get_market_pulse() -> str:
             name = names.get(ticker, ticker)
             md += f"- {name}: ${price:,.2f}\n"
 
-        # Add sentiment hint based on VIX
         vix = prices.get("^VIX")
         if vix:
             if vix > 30:

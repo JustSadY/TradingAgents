@@ -13,7 +13,6 @@ from backend.services.stats_handler import StatsCallbackHandler
 
 _logger = logging.getLogger(__name__)
 
-
 class TokenStreamingCallbackHandler(AsyncCallbackHandler):
     """Callback handler that streams generated tokens, tool durations, and run stats to WebSocket."""
 

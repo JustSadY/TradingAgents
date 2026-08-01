@@ -6,14 +6,12 @@ import pytest
 
 from backend.core import event_bus
 
-
 class _FakeRedis:
     def __init__(self):
         self.payloads: list[str] = []
 
     async def publish(self, _channel: str, payload: str) -> None:
         self.payloads.append(payload)
-
 
 @pytest.mark.asyncio
 async def test_redis_published_event_reaches_publisher_process(monkeypatch):

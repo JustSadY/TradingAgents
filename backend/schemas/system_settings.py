@@ -3,7 +3,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
-
 class SystemSettingsRead(BaseModel):
     id: int = 1
     trading_mode: str = "simulation"
@@ -17,7 +16,6 @@ class SystemSettingsRead(BaseModel):
     updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
-
 
 class SystemSettingsUpdate(BaseModel):
     trading_mode: Literal["simulation", "live"] | None = None

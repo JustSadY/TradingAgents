@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
-
 @dataclass(frozen=True)
 class LLMProvider:
     key: str
@@ -14,7 +13,6 @@ class LLMProvider:
 
     def get_api_key(self) -> str | None:
         return None
-
 
 class LLMProviderRegistry:
     def __init__(self):
@@ -53,11 +51,9 @@ class LLMProviderRegistry:
         p = self.get(key) if isinstance(key, str) else None
         return p.requires_api_key if p is not None else True
 
-
 def provider_requires_api_key(provider: str) -> bool:
     """Return the canonical tenant-credential policy for ``provider``."""
     return llm_registry.provider_requires_api_key(provider)
-
 
 llm_registry = LLMProviderRegistry()
 

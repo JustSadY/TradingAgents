@@ -24,14 +24,10 @@ Rules:
 - key_levels: list technical levels like moving average, Bollinger bands, etc. (max 4).
 - Use only numerical values explicitly mentioned in the report, do not estimate or extrapolate."""
 
-# Language-specific instruction prefixes injected before _SYSTEM_PROMPT_EN.
-# To add a new language, add a single entry here — no need to duplicate the
-# full prompt. Keys are lower-cased language identifiers.
 _LANG_PREFIXES: dict[str, str] = {
     "turkish": "Please respond in Turkish.\n\n",
     "türkçe": "Lütfen Türkçe yanıtla.\n\n",
 }
-
 
 async def extract_chart_annotations(
     market_report: str,
@@ -61,7 +57,6 @@ async def extract_chart_annotations(
         _logger.warning("Annotation extraction failed (non-fatal): %s", exc)
         return {}
 
-
 async def _call_llm_async(llm, text: str, system_prompt: str) -> str:
     import asyncio
 
@@ -76,7 +71,6 @@ async def _call_llm_async(llm, text: str, system_prompt: str) -> str:
         return result.content if hasattr(result, "content") else str(result)
 
     return await asyncio.to_thread(_sync_call)
-
 
 def _validate_annotations(data: dict) -> dict:
     def _floats(lst) -> list[float]:
@@ -107,7 +101,6 @@ def _validate_annotations(data: dict) -> dict:
             v = float(val)
         except (TypeError, ValueError):
             return None
-        # Only surface meaningful (>1x) leverage, clamped to the engine's max.
         return round(min(v, 10.0), 1) if v > 1.0 else None
 
     return {

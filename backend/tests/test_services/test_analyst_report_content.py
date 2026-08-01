@@ -13,7 +13,6 @@ from types import SimpleNamespace
 
 import pytest
 
-
 class _Prompt:
     @classmethod
     def from_messages(cls, _messages):
@@ -25,7 +24,6 @@ class _Prompt:
     def __or__(self, llm):
         return llm
 
-
 class _LLM:
     def __init__(self, response):
         self._response = response
@@ -35,7 +33,6 @@ class _LLM:
 
     async def ainvoke(self, _messages):
         return self._response
-
 
 async def _invoke_market_analyst(monkeypatch, response):
     from backend.trading_agents.agents.runtime import analyst_node_factory, resilience
@@ -56,7 +53,6 @@ async def _invoke_market_analyst(monkeypatch, response):
         instrument_context="test context",
     )
 
-
 @pytest.mark.asyncio
 async def test_tool_analyst_flattens_final_content_blocks_before_persisting_report(monkeypatch):
     response = SimpleNamespace(
@@ -72,7 +68,6 @@ async def test_tool_analyst_flattens_final_content_blocks_before_persisting_repo
     assert result["market_report"] == ("## Technical summary\nPrice remains above the 50-day moving average.")
     assert isinstance(result["market_report"], str)
 
-
 @pytest.mark.asyncio
 @pytest.mark.parametrize("content", [None, []])
 async def test_tool_analyst_replaces_empty_final_response_with_visible_market_report(monkeypatch, content):
@@ -85,7 +80,6 @@ async def test_tool_analyst_replaces_empty_final_response_with_visible_market_re
     assert isinstance(report, str)
     assert report.strip()
     assert "market" in report.lower()
-
 
 @pytest.mark.asyncio
 async def test_tool_analyst_does_not_publish_empty_fallback_while_waiting_for_tool_result(monkeypatch):

@@ -22,7 +22,6 @@ from backend.schemas.settings import SettingsRead, SettingsUpdate
 
 _logger = logging.getLogger(__name__)
 
-
 def parse_preset_settings_json(settings_json: str) -> SettingsUpdate:
     """Parse a stored preset as a strict, validated ``SettingsUpdate``.
 
@@ -48,11 +47,9 @@ def parse_preset_settings_json(settings_json: str) -> SettingsUpdate:
     except ValidationError as exc:
         raise ValueError(f"Preset settings are invalid: {exc}") from exc
 
-
 def serialize_preset_settings(update: SettingsUpdate) -> str:
     """Store only the validated fields of a preset in a canonical form."""
     return json.dumps(update.model_dump(exclude_unset=True), separators=(",", ":"), sort_keys=True)
-
 
 async def get_or_create_settings(
     db: AsyncSession,
@@ -67,10 +64,6 @@ async def get_or_create_settings(
     result = await db.execute(select(AppSettings).where(where_clause).limit(1))
     settings = result.scalar_one_or_none()
     if settings is None:
-        # The database has a unique owner key, but two first requests for the
-        # same account can still race between the SELECT above and INSERT.
-        # Use a savepoint so a duplicate key does not roll back unrelated work
-        # already pending in the caller's session; load the row the winner made.
         try:
             async with db.begin_nested():
                 created = AppSettings(user_id=user_id)
@@ -85,11 +78,9 @@ async def get_or_create_settings(
         register_sensitive_literal(settings.webhook_url)
     return settings
 
-
 def settings_to_read(settings: AppSettings) -> SettingsRead:
     """Map an ``AppSettings`` row to its read DTO (single source of truth)."""
     return SettingsRead.model_validate(settings)
-
 
 async def apply_settings_update(
     db: AsyncSession,
@@ -102,10 +93,6 @@ async def apply_settings_update(
     fields = body.model_dump(exclude_unset=True)
     webhook_url = fields.get("webhook_url")
     if webhook_url:
-        # Keep this at the service boundary as well as the HTTP route.  Preset
-        # imports, admin/internal callers and future routes must not turn a
-        # stored webhook setting into an SSRF primitive by bypassing the API
-        # helper.
         from backend.services.notification_service import validate_webhook_url
 
         await validate_webhook_url(webhook_url)
@@ -134,7 +121,6 @@ async def apply_settings_update(
 
     return settings
 
-
 async def get_user_language(db: AsyncSession, user=None) -> str:
     """Return the preferred output language for a user (fallback to English)."""
     if user is None:
@@ -145,7 +131,6 @@ async def get_user_language(db: AsyncSession, user=None) -> str:
     except Exception as exc:
         _logger.warning("Could not load language preference for user %s: %s", getattr(user, "id", "?"), exc)
         return "English"
-
 
 async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
     """Apply a preset's settings JSON onto *user*'s AppSettings row.
@@ -164,11 +149,6 @@ async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
 
     settings = await get_or_create_settings(db, user)
     for key, value in fields.items():
-        # ``SettingsUpdate`` has already restricted this list to fields that
-        # exist on the model and rejects explicit null for non-null columns.
-        # Applying the remaining values verbatim lets a preset deliberately
-        # clear a nullable value (for example a benchmark or webhook URL),
-        # matching normal PATCH semantics.
         setattr(settings, key, value)
     settings.active_preset_name = preset.name
     settings.updated_at = datetime.now(UTC)
@@ -179,8 +159,6 @@ async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
         register_sensitive_literal(settings.webhook_url)
 
     await db.flush()
-    # Keep event consumers (notably the cron scheduler) from observing stale
-    # settings in a different session.  This mirrors apply_settings_update.
     await db.commit()
 
     from backend.core.events import emit
@@ -191,7 +169,6 @@ async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
         _logger.warning("Preset settings update event emission failed", exc_info=True)
     return preset.name
 
-
 async def add_ticker_to_watchlist(db: AsyncSession, user, ticker: str) -> list[str]:
     """Add ``ticker`` (already validated/normalized) to ``user``'s watchlist."""
     settings = await get_or_create_settings(db, user)
@@ -200,14 +177,12 @@ async def add_ticker_to_watchlist(db: AsyncSession, user, ticker: str) -> list[s
     await db.flush()
     return settings.watchlist
 
-
 async def remove_ticker_from_watchlist(db: AsyncSession, user, ticker: str) -> list[str]:
     """Remove ``ticker`` from ``user``'s watchlist."""
     settings = await get_or_create_settings(db, user)
     settings.watchlist = [t for t in settings.watchlist if t != ticker]
     await db.flush()
     return settings.watchlist
-
 
 async def get_webhook_deliveries(db: AsyncSession, user_id: int, limit: int = 20):
     from backend.repositories.webhook_delivery import list_webhook_deliveries

@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock
 
 from backend.services import alert_service
 
-
 class _SessionContext:
     """Expose a fake session through AsyncSessionLocal's context-manager API."""
 
@@ -19,14 +18,12 @@ class _SessionContext:
     async def __aexit__(self, *_args) -> bool:
         return False
 
-
 class _Scalars:
     def __init__(self, rows) -> None:
         self._rows = rows
 
     def all(self):
         return self._rows
-
 
 class _Result:
     def __init__(self, *, rows=None, scalar=None) -> None:
@@ -38,7 +35,6 @@ class _Result:
 
     def scalar_one_or_none(self):
         return self._scalar
-
 
 class _RecoverySession:
     def __init__(self, alerts, analysis_ids) -> None:
@@ -52,7 +48,6 @@ class _RecoverySession:
             return _Result(rows=self._alerts)
         return _Result(scalar=next(self._analysis_ids))
 
-
 def _triggered_alert(*, user_id: int, ticker: str = "AAPL"):
     return SimpleNamespace(
         user_id=user_id,
@@ -60,12 +55,8 @@ def _triggered_alert(*, user_id: int, ticker: str = "AAPL"):
         triggered_at=datetime(2026, 7, 28, tzinfo=UTC),
     )
 
-
 async def test_recovery_accepts_multiple_existing_alert_analyses(monkeypatch):
     """Recovery checks existence; duplicate historical rows are not an error."""
-    # The former unrestricted query caused SQLAlchemy to raise
-    # MultipleResultsFound here when two historical rows matched.  The recovery
-    # query must ask for only one id because it is an existence check.
     session = _RecoverySession([_triggered_alert(user_id=7)], [101])
 
     throttled_analyze = AsyncMock()
@@ -77,7 +68,6 @@ async def test_recovery_accepts_multiple_existing_alert_analyses(monkeypatch):
     throttled_analyze.assert_not_awaited()
     assert "analysis_results.id" in str(session.statements[1])
     assert "LIMIT" in str(session.statements[1])
-
 
 async def test_recovery_deduplicates_identical_alert_targets(monkeypatch):
     """Two triggered alerts for one target must not launch two recovery jobs."""

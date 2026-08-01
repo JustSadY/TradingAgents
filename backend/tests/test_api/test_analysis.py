@@ -16,7 +16,6 @@ from backend.services.ticker_validation_service import (
     TickerValidationUnavailableError,
 )
 
-
 @pytest.mark.parametrize(
     ("signal", "expected"),
     [
@@ -41,7 +40,6 @@ def test_analysis_list_signal_exposes_only_canonical_values(signal: str, expecte
     )
 
     assert item.signal == expected
-
 
 class TestAnalysisAPI:
     """Tests for the analysis API endpoints."""
@@ -76,7 +74,6 @@ class TestAnalysisAPI:
     async def test_get_latest_analysis_scoped(
         self, async_client: AsyncClient, auth_client: AsyncClient, db: AsyncSession, test_user
     ):
-        # Create analysis for this user
         analysis = AnalysisResult(
             user_id=test_user.id,
             ticker="AAPL",
@@ -183,7 +180,6 @@ class TestAnalysisAPI:
         db.add(analysis)
         await db.flush()
 
-        # This user owns the analysis - should work
         resp = await auth_client.get(f"/api/analysis/{analysis.id}")
         assert resp.status_code == 200
 
@@ -345,12 +341,10 @@ class TestAnalysisAPI:
         await db.commit()
         await db.refresh(analysis)
 
-        # Delete single
         resp = await auth_client.delete(f"/api/analysis/{analysis.id}")
         assert resp.status_code == 200
         assert resp.json() == {"success": True, "id": analysis.id}
 
-        # Verify deleted
         get_resp = await auth_client.get(f"/api/analysis/{analysis.id}")
         assert get_resp.status_code == 404
 
@@ -360,12 +354,10 @@ class TestAnalysisAPI:
         db.add_all([a1, a2])
         await db.commit()
 
-        # Clear history
         resp = await auth_client.delete("/api/analysis/history/clear")
         assert resp.status_code == 200
         assert resp.json()["deleted_count"] >= 2
 
-        # Verify history is now empty
         hist_resp = await auth_client.get("/api/analysis/history")
         assert hist_resp.status_code == 200
         assert hist_resp.json() == []

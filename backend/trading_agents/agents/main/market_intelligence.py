@@ -41,7 +41,6 @@ ANALYST_TEAMS: dict[str, list[str]] = {
     "catalyst_options": ["options", "catalyst"],
 }
 
-
 def _report_keys() -> tuple[str, ...]:
     """Analyst report keys, derived from the live registry at call time.
 
@@ -49,7 +48,6 @@ def _report_keys() -> tuple[str, ...]:
     insider/ownership/catalyst — is covered, instead of a stale hardcoded list.
     """
     return all_report_keys()
-
 
 def _fb_analyst(report_key: str):
     def fb(state, exc):
@@ -62,7 +60,6 @@ def _fb_analyst(report_key: str):
         }
 
     return fb
-
 
 def _build_analyst_subgraph(enabled_keys: list[str], ctx: AgentRunContext):
     """
@@ -100,7 +97,6 @@ def _build_analyst_subgraph(enabled_keys: list[str], ctx: AgentRunContext):
 
     return workflow.compile()
 
-
 def _add_analyst_nodes(workflow, spec, ctx: AgentRunContext) -> None:
     """Register one analyst's agent/clear/tool nodes on *workflow*."""
     factory = get_factory(spec.key)
@@ -113,7 +109,6 @@ def _add_analyst_nodes(workflow, spec, ctx: AgentRunContext) -> None:
     workflow.add_node(spec.agent_node, node)
     workflow.add_node(spec.clear_node, create_msg_delete())
     workflow.add_node(spec.tool_node, ctx.tool_nodes[spec.key])
-
 
 def create_market_intelligence_node(ctx: AgentRunContext) -> NodeFn:
     async def market_intelligence_node(state) -> dict:

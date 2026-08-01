@@ -8,7 +8,6 @@ from backend.models.order import Order
 from backend.models.portfolio import Portfolio
 from backend.repositories.trade_note import clear_debrief, get_note, get_notes_for_orders, set_debrief, upsert_note
 
-
 class TestTradeNoteRepository:
     async def _create_orders(self, db: AsyncSession, user_id: int, count: int = 1) -> list[Order]:
         portfolio = Portfolio(

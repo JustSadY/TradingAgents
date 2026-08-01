@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
-
 @dataclass(frozen=True)
 class AgentSettingField:
     key: str
@@ -17,7 +16,6 @@ class AgentSettingField:
     max: float | None = None
     step: float | None = None
     options: list[dict] = field(default_factory=list)
-
 
 @dataclass(frozen=True)
 class AgentInfo:
@@ -55,9 +53,7 @@ class AgentInfo:
             ],
         }
 
-
 from backend.trading_agents.llm_clients.registry import llm_registry
-
 
 def get_standard_agent_settings() -> list[AgentSettingField]:
     provider_options = [{"value": "", "label_key": "settings.analyst_default_provider"}]
@@ -103,7 +99,6 @@ def get_standard_agent_settings() -> list[AgentSettingField]:
             required=False,
         ),
     ]
-
 
 AGENTS: list[AgentInfo] = [
     AgentInfo(
@@ -315,10 +310,8 @@ AGENTS: list[AgentInfo] = [
     ),
 ]
 
-
 def list_agents() -> list[AgentInfo]:
     return AGENTS
-
 
 def get_agent(key: str) -> AgentInfo | None:
     for a in AGENTS:
@@ -326,14 +319,12 @@ def get_agent(key: str) -> AgentInfo | None:
             return a
     return None
 
-
 @dataclass(frozen=True)
 class AnalystInfo:
     key: str
     label: str
     description: str
     default_on: bool
-
 
 ANALYSTS: list[AnalystInfo] = [
     AnalystInfo(
@@ -348,14 +339,11 @@ ANALYSTS: list[AnalystInfo] = [
 
 _ANALYSTS_BY_KEY = {a.key: a for a in ANALYSTS}
 
-
 def list_analysts() -> list[AnalystInfo]:
     return list(ANALYSTS)
 
-
 def get_analyst(key: str) -> AnalystInfo | None:
     return _ANALYSTS_BY_KEY.get(key)
-
 
 def label_for(key: str) -> str:
     info = _ANALYSTS_BY_KEY.get(key)

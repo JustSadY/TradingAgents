@@ -42,7 +42,6 @@ router = APIRouter(prefix="/api/analysis", tags=["analysis"])
 
 _ANALYSIS_NOT_FOUND = "Analysis not found"
 
-
 def _unknown_ticker_detail(error: TickerNotFoundError) -> dict:
     """Return a stable, UI-friendly 422 payload without choosing a symbol."""
     suggestions = [suggestion.as_dict() for suggestion in error.suggestions]
@@ -55,7 +54,6 @@ def _unknown_ticker_detail(error: TickerNotFoundError) -> dict:
         "ticker": error.ticker,
         "suggestions": suggestions,
     }
-
 
 async def _preflight_ticker(ticker: str, asset_type: str) -> str:
     """Validate semantic ticker existence and map service failures to HTTP."""
@@ -74,7 +72,6 @@ async def _preflight_ticker(ticker: str, asset_type: str) -> str:
             },
         ) from exc
     return result.ticker
-
 
 @router.post(
     "/run",
@@ -110,7 +107,6 @@ async def run_analysis(
     )
     return AnalysisRunResponse(task_id=task_id, ticker=ticker, trade_date=body.trade_date)
 
-
 @router.get("/active", response_model=list[ActiveTaskRead])
 async def get_active_tasks(
     current_user: User = Depends(require_page("analysis")),
@@ -118,7 +114,6 @@ async def get_active_tasks(
     from backend.services.analysis_service import get_active_tasks_for_user
 
     return await get_active_tasks_for_user(current_user.id)
-
 
 @router.get("/latest", response_model=AnalysisResultRead, responses={404: {"description": "No completed analyses"}})
 async def get_latest_analysis(
@@ -137,7 +132,6 @@ async def get_latest_analysis(
     )
     return row
 
-
 @router.get("/history", response_model=list[AnalysisListItem])
 async def list_analysis(
     ticker: str | None = Query(default=None),
@@ -149,7 +143,6 @@ async def list_analysis(
     from backend.repositories.analysis import list_analyses as _repo_list
 
     return await _repo_list(db, user=current_user, ticker=ticker, limit=limit, offset=offset)
-
 
 @router.post("/{task_id}/cancel", response_model=CancelTaskResponse, responses={404: {"description": "Task not found"}})
 async def cancel_analysis(
@@ -163,7 +156,6 @@ async def cancel_analysis(
         raise HTTPException(status_code=404, detail="Task not found")
     cancelled = await _cancel(task_id)
     return {"cancelled": cancelled, "task_id": task_id}
-
 
 @router.get("/cost-estimate", response_model=CostEstimateResponse)
 async def cost_estimate(
@@ -188,7 +180,6 @@ async def cost_estimate(
     model = settings.llm_model or "gpt-4o"
     return _est(analysts_str, debate_rounds, model, settings.llm_provider)
 
-
 @router.get("/ab-comparison", response_model=list[ABComparisonItem])
 async def get_ab_comparison(
     db: AsyncSession = Depends(get_db),
@@ -197,7 +188,6 @@ async def get_ab_comparison(
     from backend.services.analysis_stats_service import get_ab_comparison as _ab
 
     return await _ab(db, user_id=None)
-
 
 @router.get("/performance", response_model=PerformanceResponse)
 async def get_performance(
@@ -209,7 +199,6 @@ async def get_performance(
 
     return await _perf(db, ticker, user_id=current_user.id)
 
-
 @router.get("/performance-attribution", response_model=PerformanceAttributionResponse)
 async def get_performance_attribution(
     db: AsyncSession = Depends(get_db),
@@ -218,7 +207,6 @@ async def get_performance_attribution(
     from backend.services.performance_service import get_analyst_attribution_stats as _attr
 
     return await _attr(db, user_id=current_user.id)
-
 
 @router.post(
     "/run-portfolio",
@@ -266,7 +254,6 @@ async def run_portfolio_run(
     )
     return MultiTickerRunResponse(task_id=task_id, tickers=tickers, trade_date=body.trade_date)
 
-
 @router.get("/portfolio-history", response_model=list[MultiTickerListItem])
 async def list_portfolio_analyses(
     limit: int = Query(default=20, ge=1, le=100),
@@ -288,7 +275,6 @@ async def list_portfolio_analyses(
         )
         for r in rows
     ]
-
 
 @router.get(
     "/portfolio/{portfolio_id}",
@@ -316,7 +302,6 @@ async def get_portfolio_analysis(
         created_at=row.created_at,
     )
 
-
 @router.delete("/history/clear")
 async def clear_history(
     db: AsyncSession = Depends(get_db),
@@ -326,7 +311,6 @@ async def clear_history(
 
     deleted_count = await _repo_clear(db, user=current_user)
     return {"deleted_count": deleted_count}
-
 
 @router.get("/{analysis_id}", response_model=AnalysisResultRead, responses={404: {"description": _ANALYSIS_NOT_FOUND}})
 async def get_analysis(
@@ -346,7 +330,6 @@ async def get_analysis(
     )
     return row
 
-
 @router.delete("/{analysis_id}")
 async def delete_analysis(
     analysis_id: int,
@@ -360,7 +343,6 @@ async def delete_analysis(
         raise HTTPException(status_code=404, detail=_ANALYSIS_NOT_FOUND)
     return {"success": True, "id": analysis_id}
 
-
 @router.get("/{analysis_id}/chat", response_model=list[ChatMessageRead])
 async def get_analysis_chat(
     analysis_id: int,
@@ -370,7 +352,6 @@ async def get_analysis_chat(
     from backend.services.report_chat_service import get_chat_history
 
     return await get_chat_history(db, analysis_id, current_user)
-
 
 @router.post("/{analysis_id}/chat", response_model=ChatMessageRead)
 async def ask_analysis_report(
@@ -382,7 +363,6 @@ async def ask_analysis_report(
     from backend.services.report_chat_service import answer_report_question
 
     return await answer_report_question(db, analysis_id, body.message, current_user)
-
 
 @router.get(
     "/{analysis_id}/checkpoints",
@@ -400,7 +380,6 @@ async def list_checkpoints(
     if result is None:
         raise HTTPException(status_code=404, detail=_ANALYSIS_NOT_FOUND)
     return result
-
 
 @router.post(
     "/{analysis_id}/time-travel",

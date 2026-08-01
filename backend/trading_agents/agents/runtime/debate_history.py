@@ -34,9 +34,6 @@ _SENDER_ALIASES: tuple[tuple[re.Pattern[str], str], ...] = (
     (re.compile(r"^system$", re.IGNORECASE), "System"),
 )
 
-# The label is intentionally constrained to the known debate participants so
-# Markdown paragraphs such as ``**Key Risk:**`` cannot accidentally split one
-# analyst response into a new speaker bubble.
 _SPEAKER_NAMES = (
     r"bull(?:\s+(?:researcher|analyst))?"
     r"|bear(?:\s+(?:researcher|analyst))?"
@@ -53,7 +50,6 @@ _SPEAKER_HEADER = re.compile(
     re.IGNORECASE | re.MULTILINE,
 )
 
-
 def canonical_debate_sender(value: object, *, default: str = "System") -> str:
     """Map provider/legacy speaker labels to the stable UI contract."""
     label = str(value or "").strip().strip("*# \t:")
@@ -62,12 +58,10 @@ def canonical_debate_sender(value: object, *, default: str = "System") -> str:
             return canonical
     return label or default
 
-
 def text_from_response(response: object) -> str:
     """Extract readable text from the common LangChain provider response shapes."""
     content = getattr(response, "content", response)
     return _text_from_content(content)
-
 
 def _text_from_content(content: object) -> str:
     if isinstance(content, str):
@@ -82,31 +76,20 @@ def _text_from_content(content: object) -> str:
         return "\n".join(part for part in parts if part).strip()
     return "" if content is None else str(content).strip()
 
-
 def clean_debate_content(value: object, sender: str | None = None) -> str:
     """Remove a duplicated leading speaker heading without stripping Markdown body text."""
     text = _text_from_content(value).replace("\r\n", "\n").strip()
     if not text:
         return ""
 
-    # LLMs frequently return ``**Aggressive Risk Analyst**`` even though the
-    # backend already supplies ``Aggressive Analyst:``.  Remove that one
-    # redundant leading header; later Markdown remains untouched and can be
-    # rendered normally by the frontend.
     first = _SPEAKER_HEADER.match(text)
     if first:
         heading_sender = canonical_debate_sender(first.group("label"))
         if sender is None or heading_sender == canonical_debate_sender(sender):
             text = text[first.end() :].lstrip(" \t:\n—–-").strip()
 
-    # Some providers close an implicit Markdown heading after the colon, for
-    # example ``Aggressive Analyst: **\nactual response``.  The two asterisks
-    # are not content and used to leak into both historical and live debate
-    # bubbles.  Only remove a line made solely of Markdown emphasis markers;
-    # a legitimate opening such as ``**Upside:**`` remains intact.
     text = re.sub(r"^(?:\*{1,3}|_{1,3})[ \t]*(?:\n+|$)", "", text).strip()
     return text
-
 
 def format_debate_argument(sender: str, response: object, *, empty_notice: str | None = None) -> str:
     """Create one canonical internal transcript entry for a model response."""
@@ -115,7 +98,6 @@ def format_debate_argument(sender: str, response: object, *, empty_notice: str |
     if not content and empty_notice:
         content = empty_notice
     return f"{canonical_sender}: {content}" if content else ""
-
 
 def debate_messages(value: object) -> list[dict[str, str]]:
     """Convert a legacy string or structured payload into display-safe messages.
@@ -147,7 +129,6 @@ def debate_messages(value: object) -> list[dict[str, str]]:
         try:
             return debate_messages(json.loads(text))
         except (TypeError, ValueError):
-            # It is just a prose string that happens to start with a bracket.
             pass
 
     headers = list(_SPEAKER_HEADER.finditer(text))

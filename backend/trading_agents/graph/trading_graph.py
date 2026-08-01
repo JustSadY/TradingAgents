@@ -29,7 +29,6 @@ from .propagation import Propagator
 from .setup import GraphSetup
 from .signal_processing import SignalProcessor
 
-
 def _cap_tool_outputs(tool_node: ToolNode, max_chars: int, *, analyst_key: str):
     """Wrap a ToolNode so oversized tool results are middle-truncated before
     they enter the analyst's conversation, and a hard timeout prevents a hung
@@ -66,7 +65,6 @@ def _cap_tool_outputs(tool_node: ToolNode, max_chars: int, *, analyst_key: str):
         return result
 
     return _run
-
 
 class TradingAgentsGraph:
     def __init__(

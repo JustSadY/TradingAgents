@@ -23,7 +23,6 @@ _logger = logging.getLogger(__name__)
 _MAX_ROWS = 50
 _RECENT_SHOWN = 5
 
-
 def _summarize(rows: list) -> dict[str, dict]:
     """Per-signal stats over rows that have a realized raw_return."""
     stats: dict[str, dict] = {}
@@ -33,13 +32,11 @@ def _summarize(rows: list) -> dict[str, dict]:
         s = stats.setdefault(row.signal, {"count": 0, "wins": 0, "total_return": 0.0})
         s["count"] += 1
         s["total_return"] += float(row.raw_return)
-        # A Sell/Underweight call "wins" when the price fell.
         bearish = row.signal in ("Sell", "Underweight")
         realized = float(row.raw_return)
         if (realized < 0) if bearish else (realized > 0):
             s["wins"] += 1
     return stats
-
 
 def render_signal_replay(ticker: str, rows: list) -> str:
     stats = _summarize(rows)
@@ -68,7 +65,6 @@ def render_signal_replay(ticker: str, rows: list) -> str:
     )
     return md
 
-
 async def get_signal_replay_context(db: AsyncSession, ticker: str, user_id: int | None) -> str:
     """Markdown replay summary for ``ticker`` scoped to the requesting user.
 
@@ -84,14 +80,11 @@ async def get_signal_replay_context(db: AsyncSession, ticker: str, user_id: int 
             .limit(_MAX_ROWS)
         )
         if user_id is None:
-            # A system-owned run has its own global scope.  Do not inject
-            # every tenant's realized performance into an LLM prompt.
             q = q.where(AnalysisResult.user_id.is_(None))
         else:
             q = q.where(AnalysisResult.user_id == user_id)
         rows = list((await db.execute(q)).scalars().all())
         return render_signal_replay(ticker, rows)
-    # context is best-effort, never block a run
     except Exception as exc:  # noqa: BLE001
         _logger.warning("Signal replay context failed for %s: %s", ticker, exc)
         return ""

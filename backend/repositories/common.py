@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-
 def scope_to_user(query, model, user):
     """Restrict ``query`` to rows owned by ``user`` unless the user is an admin.
 
@@ -14,7 +13,6 @@ def scope_to_user(query, model, user):
     if user is not None and not getattr(user, "is_admin", False):
         return query.where(model.user_id == user.id)
     return query
-
 
 async def get_settings_by_scope_generic(db, model, scope: str, user_id: int | None = None):
     from sqlalchemy import select

@@ -380,7 +380,6 @@ _NEW_COLUMNS += [
     ("system_logs", "user_id", _USER_REF),
 ]
 
-
 _NUMERIC_COLUMNS: list[tuple[str, tuple[str, ...]]] = [
     (
         "orders",
@@ -392,10 +391,6 @@ _NUMERIC_COLUMNS: list[tuple[str, tuple[str, ...]]] = [
 ]
 _NUMERIC_PRECISION = "NUMERIC(20, 8)"
 
-
-# Values written before the analysis signal enum was made canonical.  Keep
-# this SQL deliberately narrow: recognised spellings are safe to rewrite,
-# while unexpected historical text is left untouched for operators to inspect.
 _NORMALIZE_ANALYSIS_SIGNALS_SQL = """
     UPDATE analysis_results
     SET signal = CASE lower(trim(signal))
@@ -409,7 +404,6 @@ _NORMALIZE_ANALYSIS_SIGNALS_SQL = """
 """
 
 _LEGACY_WEBHOOK_EVENT_ALIASES = {"order_filled": "trade_executed"}
-
 
 def _normalize_webhook_events_value(value: object) -> tuple[list[str], bool]:
     """Convert a pre-JSON event value without guessing malformed JSON.
@@ -450,7 +444,6 @@ def _normalize_webhook_events_value(value: object) -> tuple[list[str], bool]:
             normalized.append(event)
     return normalized, discarded
 
-
 def _normalize_fallback_chain_value(
     value: object,
     legacy_provider: object = None,
@@ -486,7 +479,6 @@ def _normalize_fallback_chain_value(
     model = legacy_model.strip() if isinstance(legacy_model, str) else ""
     return [{"provider": provider, "model": model}] if provider and model else []
 
-
 def _normalize_preset_settings_collections(settings_json: object) -> tuple[str | None, bool]:
     """Upgrade known collection fields inside a stored preset JSON object.
 
@@ -503,10 +495,6 @@ def _normalize_preset_settings_collections(settings_json: object) -> tuple[str |
         return None, False
 
     changed = False
-    # Pre-contract settings pages stored a whole SettingsRead response in a
-    # preset.  These are response-only fields and the current strict preset
-    # parser correctly rejects them, so remove only the known app-generated
-    # metadata while preserving any other unexpected user data for review.
     for read_only_field in ("updated_at", "active_preset_name"):
         if read_only_field in settings:
             settings.pop(read_only_field)
@@ -532,7 +520,6 @@ def _normalize_preset_settings_collections(settings_json: object) -> tuple[str |
 
     return (json.dumps(settings, separators=(",", ":"), sort_keys=True), True) if changed else (None, False)
 
-
 async def apply_type_migrations(conn) -> None:
     """Convert legacy float money columns to exact NUMERIC on PostgreSQL."""
     if conn.dialect.name == "sqlite":
@@ -557,7 +544,6 @@ async def apply_type_migrations(conn) -> None:
                     )
                 )
 
-
 async def normalize_sqlite_analysis_signals(conn) -> None:
     """Canonicalize known pre-enum signals in SQLite development databases.
 
@@ -568,13 +554,11 @@ async def normalize_sqlite_analysis_signals(conn) -> None:
     if conn.dialect.name == "sqlite":
         await conn.execute(text(_NORMALIZE_ANALYSIS_SIGNALS_SQL))
 
-
 def _sqlite_table_columns(sync_conn, table: str) -> set[str]:
     inspector = inspect(sync_conn)
     if not inspector.has_table(table):
         return set()
     return {column["name"] for column in inspector.get_columns(table)}
-
 
 async def normalize_sqlite_settings_collections(conn) -> None:
     """Upgrade legacy SQLite settings/presets after additive columns exist.
@@ -627,7 +611,6 @@ async def normalize_sqlite_settings_collections(conn) -> None:
             discarded_events,
         )
 
-
 async def normalize_sqlite_simulation_entry_commissions(conn) -> None:
     """Backfill the all-in fee ledger for existing SQLite paper portfolios.
 
@@ -646,9 +629,6 @@ async def normalize_sqlite_simulation_entry_commissions(conn) -> None:
     if not {"id", "mode"}.issubset(portfolio_columns):
         return
 
-    # Existing open positions lack their original fill ledger.  The simulator
-    # has always used a fixed 10 bps opening commission, which is the only
-    # recoverable value without fabricating an order-history pairing.
     await conn.execute(
         text(
             """
@@ -681,8 +661,6 @@ async def normalize_sqlite_simulation_entry_commissions(conn) -> None:
             """
         )
     )
-    # Closing records written before the fee ledger deducted only the exit
-    # fee.  The guard prevents this compatibility step from running twice.
     await conn.execute(
         text(
             """
@@ -726,7 +704,6 @@ async def normalize_sqlite_simulation_entry_commissions(conn) -> None:
         )
     )
 
-
 async def apply_column_migrations(conn) -> None:
     """Add any missing columns from ``_NEW_COLUMNS`` to the connected database."""
     for table, column, col_type in _NEW_COLUMNS:
@@ -738,7 +715,6 @@ async def apply_column_migrations(conn) -> None:
             await conn.run_sync(_add_column_sqlite, table, column, col_type)
         else:
             await conn.execute(text(f"ALTER TABLE {table} ADD COLUMN IF NOT EXISTS {column} {col_type}"))
-
 
 def _add_column_sqlite(sync_conn, table: str, column: str, col_type: str) -> None:
     """SQLite has no ``ADD COLUMN IF NOT EXISTS``; check the catalog first."""

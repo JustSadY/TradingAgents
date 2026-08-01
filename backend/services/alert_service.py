@@ -18,12 +18,10 @@ from backend.services.settings_service import get_or_create_settings
 _logger = logging.getLogger(__name__)
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
 
-# Concurrency limits
 _RECOVERY_SEMAPHORE = asyncio.Semaphore(3)
 _ALERT_SEMAPHORE = asyncio.Semaphore(5)
 
 _INDICATOR_ALERT_TYPES = frozenset({"rsi", "macd_cross"})
-
 
 async def _fetch_alert_market_summary(ticker: str) -> str:
     try:
@@ -66,7 +64,6 @@ async def _fetch_alert_market_summary(ticker: str) -> str:
         _logger.warning("Market summary fetch failed for %s: %s", ticker, exc)
         return ""
 
-
 async def _fetch_close_series(ticker: str, period: str = "6mo"):
     """Daily close-price series for indicator alerts; ``None`` on any failure."""
     try:
@@ -76,7 +73,6 @@ async def _fetch_close_series(ticker: str, period: str = "6mo"):
     except Exception as exc:  # noqa: BLE001 — never block the alert loop on one bad ticker
         _logger.warning("Indicator alert history fetch failed for %s: %s", ticker, exc)
         return None
-
 
 async def _check_indicator_alert(alert: PriceAlert) -> tuple[bool, str]:
     """Evaluate an RSI/MACD-cross alert. Returns ``(hit, detail)`` for logging."""
@@ -110,7 +106,6 @@ async def _check_indicator_alert(alert: PriceAlert) -> tuple[bool, str]:
 
     return False, ""
 
-
 async def _notify_and_maybe_analyze(db, alert: PriceAlert, settings, current_value: float | None) -> None:
     """Shared trigger side-effects: mark triggered, notify, optionally auto-analyze."""
     alert.triggered_at = datetime.now(UTC)
@@ -136,7 +131,6 @@ async def _notify_and_maybe_analyze(db, alert: PriceAlert, settings, current_val
         task = asyncio.create_task(_throttled_analyze(alert.ticker, today, alert.user_id, _ALERT_SEMAPHORE))
         _BACKGROUND_TASKS.add(task)
         task.add_done_callback(_BACKGROUND_TASKS.discard)
-
 
 async def check_price_alerts() -> None:
     async with AsyncSessionLocal() as db:
@@ -189,12 +183,10 @@ async def check_price_alerts() -> None:
 
         await db.commit()
 
-
 async def _throttled_analyze(ticker: str, trade_date: str, user_id: int | None, semaphore: asyncio.Semaphore) -> None:
     """Acquire *semaphore* before running ``_auto_analyze`` to cap concurrency."""
     async with semaphore:
         await _auto_analyze(ticker, trade_date, user_id)
-
 
 async def _auto_analyze(ticker: str, trade_date: str, user_id: int | None) -> None:
     try:
@@ -212,7 +204,6 @@ async def _auto_analyze(ticker: str, trade_date: str, user_id: int | None) -> No
     except Exception:
         _logger.exception("Auto-analyze from alert failed %s", ticker)
 
-
 async def check_and_recover_lost_alerts() -> None:
     async with AsyncSessionLocal() as db:
         result = await db.execute(
@@ -222,10 +213,6 @@ async def check_and_recover_lost_alerts() -> None:
             .where(PriceAlert.auto_analyze.is_(True))
         )
         triggered_alerts = result.scalars().all()
-        # A user can legitimately have more than one alert-driven analysis for
-        # the same ticker and date (for example after a retry).  Recovery only
-        # needs to know whether *any* such analysis was recorded, so do not use
-        # ``scalar_one_or_none()`` on the full result set here.
         missing: list[tuple[str, str, int | None]] = []
         missing_keys: set[tuple[str, str, int | None]] = set()
         for alert in triggered_alerts:
@@ -246,8 +233,6 @@ async def check_and_recover_lost_alerts() -> None:
                     trigger_date,
                 )
                 recovery_key = (alert.ticker, trigger_date, alert.user_id)
-                # Multiple alert rows can describe the same recovery target.
-                # Starting each one would duplicate LLM work on server boot.
                 if recovery_key not in missing_keys:
                     missing_keys.add(recovery_key)
                     missing.append(recovery_key)

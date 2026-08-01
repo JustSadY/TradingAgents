@@ -4,7 +4,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.log import SystemLog
 from backend.repositories.common import scope_to_user
 
-
 async def list_user_logs(
     db: AsyncSession,
     user,
@@ -18,7 +17,6 @@ async def list_user_logs(
     q = scope_to_user(q, SystemLog, user)
     result = await db.execute(q)
     return list(result.scalars().all())
-
 
 async def list_all_logs(
     db: AsyncSession,

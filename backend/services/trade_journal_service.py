@@ -14,7 +14,6 @@ from backend.repositories import trade_note as repo
 
 _logger = logging.getLogger(__name__)
 
-
 class TradeJournalError(Exception):
     """Raised for client-correctable problems (missing order, missing API key,
     upstream LLM failure) — the API layer translates ``status_code`` into an
@@ -23,7 +22,6 @@ class TradeJournalError(Exception):
     def __init__(self, message: str, status_code: int = 400):
         super().__init__(message)
         self.status_code = status_code
-
 
 def _realized_cost_basis(order) -> Decimal:
     """Derive a closing trade's all-in entry capital from its exit and P&L.
@@ -49,17 +47,14 @@ def _realized_cost_basis(order) -> Decimal:
         entry_notional = exit_notional - pnl - entry_commission - exit_commission
     return entry_notional + entry_commission
 
-
 def _realized_pnl_pct(order) -> float:
     cost_basis = _realized_cost_basis(order)
     if cost_basis <= 0:
         return 0.0
     return float(safe_decimal(getattr(order, "realized_pnl", None)) / cost_basis * Decimal("100"))
 
-
 async def save_note(db: AsyncSession, user: User, order_id: int, note: str) -> dict:
     """Upsert a user note for an order. Returns {"order_id", "note", "has_debrief"}."""
-    # Only allow notes on the user's own orders (orders have no user_id).
     if await portfolio_repo.get_order_by_id(db, order_id, user=user) is None:
         raise TradeJournalError("Order not found.", status_code=404)
     trade_note = await repo.upsert_note(db, order_id=order_id, user_id=user.id, note=note)
@@ -69,7 +64,6 @@ async def save_note(db: AsyncSession, user: User, order_id: int, note: str) -> d
         "note": trade_note.note,
         "has_debrief": trade_note.ai_debrief is not None,
     }
-
 
 async def get_note(db: AsyncSession, user: User, order_id: int) -> dict | None:
     """Get note for an order. Returns {"order_id", "note", "ai_debrief", "has_debrief"} or None."""
@@ -82,7 +76,6 @@ async def get_note(db: AsyncSession, user: User, order_id: int) -> dict | None:
         "ai_debrief": trade_note.ai_debrief,
         "has_debrief": trade_note.ai_debrief is not None,
     }
-
 
 async def generate_debrief(db: AsyncSession, user: User, order_id: int) -> dict:
     """Generate AI debrief for a trade and persist it."""

@@ -20,7 +20,6 @@ _logger = logging.getLogger(__name__)
 
 MAX_TICKERS = 20
 
-
 class EarningsEntry(BaseModel):
     ticker: str
     earnings_date: str | None
@@ -28,8 +27,7 @@ class EarningsEntry(BaseModel):
     reported_eps: float | None
     surprise_pct: float | None
     days_until: int | None
-    status: str  # "upcoming" | "reported" | "unknown"
-
+    status: str
 
 def _parse_float(val: Any) -> float | None:
     """Coerce a yfinance cell to float, treating NaN/None sentinels as missing."""
@@ -40,14 +38,12 @@ def _parse_float(val: Any) -> float | None:
     except (TypeError, ValueError):
         return None
 
-
 def _to_date(idx: Any) -> date | None:
     """Best-effort extraction of a ``date`` from a (possibly datetime-like) index."""
     try:
         return idx.date() if hasattr(idx, "date") else None
     except Exception:
         return None
-
 
 def _earnings_date_from_calendar(ticker_obj: Any) -> date | None:
     """Read the next earnings date from ``Ticker.calendar`` (if available)."""
@@ -68,7 +64,6 @@ def _earnings_date_from_calendar(ticker_obj: Any) -> date | None:
         _logger.warning("Calendar lookup failed: %s", e)
     return None
 
-
 def _eps_row_values(row: Any) -> tuple[float | None, float | None, float | None]:
     """Pull (eps_estimate, reported_eps, surprise_pct) out of a dataframe row."""
     return (
@@ -76,7 +71,6 @@ def _eps_row_values(row: Any) -> tuple[float | None, float | None, float | None]
         _parse_float(row.get("Reported EPS")),
         _parse_float(row.get("Surprise(%)")),
     )
-
 
 def _eps_from_earnings_dates(
     ticker_obj: Any, earnings_date_val: date | None
@@ -92,7 +86,6 @@ def _eps_from_earnings_dates(
         if df is None or df.empty:
             return earnings_date_val, None, None, None
 
-        # No date from the calendar yet: take the first upcoming index date.
         if earnings_date_val is None:
             today = date.today()
             for idx in df.index:
@@ -101,21 +94,18 @@ def _eps_from_earnings_dates(
                     earnings_date_val = idx_date
                     break
 
-        # Prefer the row that matches our resolved earnings date.
         if earnings_date_val is not None:
             for idx, row in df.iterrows():
                 if _to_date(idx) == earnings_date_val:
                     eps_estimate, reported_eps, surprise_pct = _eps_row_values(row)
                     break
 
-        # Fallback: first row if nothing matched by date.
         if eps_estimate is None and reported_eps is None and not df.empty:
             eps_estimate, reported_eps, surprise_pct = _eps_row_values(df.iloc[0])
     except Exception as e:
         _logger.warning("get_earnings_dates failed: %s", e)
 
     return earnings_date_val, eps_estimate, reported_eps, surprise_pct
-
 
 def _compute_status(earnings_date_val: date | None) -> tuple[str | None, int | None, str]:
     """Derive (iso date string, days_until, status) from an earnings date."""
@@ -125,7 +115,6 @@ def _compute_status(earnings_date_val: date | None) -> tuple[str | None, int | N
     days_until = (earnings_date_val - today).days
     status = "upcoming" if days_until >= 0 else "reported"
     return earnings_date_val.isoformat(), days_until, status
-
 
 def fetch_earnings(ticker: str) -> EarningsEntry | None:
     """Blocking yfinance call — run in an executor.
@@ -158,7 +147,6 @@ def fetch_earnings(ticker: str) -> EarningsEntry | None:
         _logger.warning("Error fetching earnings for %s: %s", ticker, e)
         return None
 
-
 def _sort_key(r: dict) -> tuple:
     """Order results: upcoming first (soonest), then reported, then unknown."""
     d = r.get("days_until")
@@ -167,7 +155,6 @@ def _sort_key(r: dict) -> tuple:
     if d >= 0:
         return (0, d)
     return (1, -d)
-
 
 async def _resolve_tickers(db: AsyncSession, user: User, tickers: str | None) -> list[str]:
     """Resolve the request's ticker list (explicit, else the user's watchlist)."""
@@ -186,7 +173,6 @@ async def _resolve_tickers(db: AsyncSession, user: User, tickers: str | None) ->
         except Exception as _e:
             _logger.warning("Skipped invalid ticker component %r: %s", t, _e)
     return cleaned[:MAX_TICKERS]
-
 
 async def get_earnings_calendar(db: AsyncSession, user: User, tickers: str | None) -> list[dict]:
     """Return earnings data for the given tickers (or the user's watchlist)."""

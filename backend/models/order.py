@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from backend.models.portfolio import Portfolio
     from backend.models.trade_note import TradeNote
 
-
 class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (Index("ix_orders_portfolio_ticker", "portfolio_id", "ticker"),)
@@ -27,15 +26,8 @@ class Order(Base):
     status: Mapped[str] = mapped_column(String(30), default="PENDING", index=True)
     price_per_share: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
     total_value: Mapped[Decimal | None] = mapped_column(MONEY, nullable=True)
-    # ``commission`` is the commission charged by this fill.  Closing orders
-    # also persist the pro-rata commission paid when the position was opened,
-    # allowing P&L, statistics, and debriefs to remain all-in after partial
-    # closes.
     commission: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     entry_commission: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"), nullable=False)
-    # Leverage applied to this order (1.0 = spot/cash). 'side' records the
-    # position direction; 'realized_pnl' is populated when an order closes a
-    # position (SELL/liquidation), otherwise 0.
     leverage: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("1.0"))
     side: Mapped[str] = mapped_column(String(5), default="long")
     realized_pnl: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))

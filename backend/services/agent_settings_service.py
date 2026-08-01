@@ -9,7 +9,6 @@ from backend.models.user import User
 from backend.schemas.agent_settings import AgentSettingsRead, AgentSettingsUpdate, AgentSettingValue
 from backend.trading_agents.agent_catalog import AgentInfo, get_agent, list_agents
 
-
 def validate_agent_settings(agent: AgentInfo, incoming: dict[str, Any]) -> dict[str, Any]:
     schema_by_key = {field.key: field for field in agent.settings_schema}
     normalized = {}
@@ -27,7 +26,6 @@ def validate_agent_settings(agent: AgentInfo, incoming: dict[str, Any]) -> dict[
             normalized[field.key] = field.default
 
     return normalized
-
 
 async def get_agent_settings_by_scope(db: AsyncSession, scope: str, user_id: int | None = None) -> AgentSettingsRead:
     from backend.repositories.agent_settings import get_agent_settings_by_scope as _repo_get
@@ -50,14 +48,11 @@ async def get_agent_settings_by_scope(db: AsyncSession, scope: str, user_id: int
 
     return AgentSettingsRead(agents=agents_map)
 
-
 async def get_user_agent_settings(db: AsyncSession, user: User) -> AgentSettingsRead:
     return await get_agent_settings_by_scope(db, "user", user.id)
 
-
 async def get_server_agent_settings(db: AsyncSession) -> AgentSettingsRead:
     return await get_agent_settings_by_scope(db, "server")
-
 
 async def apply_agent_settings_update_by_scope(
     db: AsyncSession, scope: str, body: AgentSettingsUpdate, user_id: int | None = None
@@ -72,8 +67,6 @@ async def apply_agent_settings_update_by_scope(
         if not agent:
             raise ValueError(f"Unknown agent key '{agent_key}'.")
 
-        # Root agent (no parent) must always stay enabled — it is the global
-        # kill-switch and disabling it collapses every run to an automated Hold.
         if agent.parent_key is None and update.enabled is False:
             update = update.model_copy(update={"enabled": None})
 
@@ -108,14 +101,11 @@ async def apply_agent_settings_update_by_scope(
     await db.flush()
     return await get_agent_settings_by_scope(db, scope, user_id)
 
-
 async def apply_agent_settings_update(db: AsyncSession, user: User, body: AgentSettingsUpdate) -> AgentSettingsRead:
     return await apply_agent_settings_update_by_scope(db, "user", body, user.id)
 
-
 async def apply_server_agent_settings_update(db: AsyncSession, body: AgentSettingsUpdate) -> AgentSettingsRead:
     return await apply_agent_settings_update_by_scope(db, "server", body)
-
 
 def build_agent_runtime_state(
     agent: AgentInfo, server_row: AgentSetting | None, user_row: AgentSetting | None
@@ -131,9 +121,6 @@ def build_agent_runtime_state(
         if user_row.settings:
             user_settings.update(user_row.settings)
 
-    # Server enablement is a hard policy ceiling when explicitly disabled.
-    # A user may disable an agent that the server allows, but must not be
-    # able to revive an agent that the server admin explicitly set to disabled (enabled=False).
     if server_row is not None and server_row.enabled is False:
         effective_enabled = False
     elif user_row is not None and user_row.enabled is not None:
@@ -147,8 +134,6 @@ def build_agent_runtime_state(
         "enabled": effective_enabled,
         "settings": user_settings if user_row else server_settings,
     }
-
-
 
 async def build_agent_runtime_context(db: AsyncSession, user_id: int | None) -> dict[str, Any]:
     from backend.repositories.agent_settings import get_server_agent_settings as _repo_get_server
@@ -165,8 +150,6 @@ async def build_agent_runtime_context(db: AsyncSession, user_id: int | None) -> 
     context = {}
     for agent in list_agents():
         state = build_agent_runtime_state(agent, server_rows.get(agent.key), user_rows.get(agent.key))
-        # Root agents (no parent) can never be disabled — force enabled as a
-        # safety net in case the DB row was set incorrectly.
         if agent.parent_key is None and not state.get("enabled", True):
             state = {**state, "enabled": True}
         context[agent.key] = state

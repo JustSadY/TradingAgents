@@ -19,10 +19,8 @@ _logger = logging.getLogger(__name__)
 
 _arq_pool = None
 
-
 def queue_mode() -> str:
     return get_settings().ANALYSIS_QUEUE_MODE.strip().lower()
-
 
 async def get_arq_pool():
     global _arq_pool
@@ -33,7 +31,6 @@ async def get_arq_pool():
         _arq_pool = await create_pool(RedisSettings.from_dsn(get_settings().REDIS_URL))
     return _arq_pool
 
-
 async def close_arq_pool() -> None:
     global _arq_pool
     if _arq_pool is not None:
@@ -41,7 +38,6 @@ async def close_arq_pool() -> None:
 
         await close_pool_or_client(_arq_pool, _logger, "arq pool")
         _arq_pool = None
-
 
 async def dispatch_analysis(
     background_tasks,
@@ -60,7 +56,6 @@ async def dispatch_analysis(
     from backend.services.analysis_service import run_analysis_task
 
     background_tasks.add_task(run_analysis_task, ticker, trade_date, asset_type, settings, task_id, user)
-
 
 async def dispatch_portfolio_analysis(
     background_tasks,

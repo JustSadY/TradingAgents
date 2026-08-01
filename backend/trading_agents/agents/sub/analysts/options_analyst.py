@@ -13,7 +13,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
 
 _OPTIONS_TOOLS = [get_options_data]
 
-
 @register_analyst(
     key="options",
     agent_node="Options Analyst",

@@ -17,7 +17,6 @@ from collections.abc import Iterable
 
 _DEFAULT_LANGUAGE = "english"
 
-
 def normalize_output_language(language: str | None = None) -> str:
     """Return the configured language as a stable catalog key.
 
@@ -30,7 +29,7 @@ def normalize_output_language(language: str | None = None) -> str:
             from backend.trading_agents.dataflows.config import get_config
 
             language = get_config().get("output_language", "English")
-        except Exception:  # pragma: no cover - configuration is best effort here
+        except Exception:
             language = "English"
 
     normalized = str(language or "English").strip().casefold()
@@ -45,10 +44,6 @@ def normalize_output_language(language: str | None = None) -> str:
     }
     return aliases.get(normalized, normalized)
 
-
-# All keys intentionally use stable machine names.  Values are presentation
-# strings only; order execution and signal parsing keep using the structured
-# English enum values, never these translations.
 _TEXT: dict[str, dict[str, str]] = {
     "english": {
         "recommendation": "Recommendation",
@@ -356,7 +351,6 @@ _TEXT: dict[str, dict[str, str]] = {
     },
 }
 
-
 _RATINGS: dict[str, dict[str, str]] = {
     "english": {},
     "turkish": {
@@ -410,7 +404,6 @@ _RATINGS: dict[str, dict[str, str]] = {
     },
 }
 
-
 _RESEARCH_BIASES: dict[str, dict[str, str]] = {
     "english": {},
     "turkish": {"Bullish": "Olumlu", "Neutral": "Nötr", "Bearish": "Olumsuz"},
@@ -422,31 +415,26 @@ _RESEARCH_BIASES: dict[str, dict[str, str]] = {
     "arabic": {"Bullish": "إيجابي", "Neutral": "محايد", "Bearish": "سلبي"},
 }
 
-
 def report_text(key: str, language: str | None = None) -> str:
     """Return a localized, fixed report label for *key*."""
     lang = normalize_output_language(language)
     return _TEXT.get(lang, _TEXT[_DEFAULT_LANGUAGE]).get(key, _TEXT[_DEFAULT_LANGUAGE].get(key, key))
-
 
 def report_rating(value: str, language: str | None = None) -> str:
     """Return a display translation of a canonical structured rating/action."""
     lang = normalize_output_language(language)
     return _RATINGS.get(lang, {}).get(value, value)
 
-
 def report_bias(value: str, language: str | None = None) -> str:
     """Return a display translation for non-executable research posture."""
     lang = normalize_output_language(language)
     return _RESEARCH_BIASES.get(lang, {}).get(value, value)
-
 
 def executive_summary_headings() -> tuple[str, ...]:
     """Known localized executive-summary headings for prompt compaction."""
     return tuple(
         dict.fromkeys(values["executive_summary"] for values in _TEXT.values() if "executive_summary" in values)
     )
-
 
 def report_texts(keys: Iterable[str], language: str | None = None) -> dict[str, str]:
     """Fetch a small group of labels with one language resolution."""

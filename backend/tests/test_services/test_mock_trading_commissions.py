@@ -5,7 +5,6 @@ from decimal import Decimal
 from backend.models.portfolio import Holding, Portfolio
 from backend.services.mock_trading_service import _execute_close_position
 
-
 def _portfolio() -> Portfolio:
     return Portfolio(
         id=1,
@@ -16,7 +15,6 @@ def _portfolio() -> Portfolio:
         cash_available=Decimal("0"),
         margin_used=Decimal("1000"),
     )
-
 
 async def test_partial_long_close_reports_and_allocates_opening_commission():
     portfolio = _portfolio()
@@ -46,15 +44,11 @@ async def test_partial_long_close_reports_and_allocates_opening_commission():
         5.0,
     )
 
-    # Gross $50 - $0.50 allocated opening fee - $0.55 exit fee.
     assert realized_pnl == Decimal("48.9500")
     assert opening_fee == Decimal("0.5000")
-    # Cash receives exit proceeds less the close fee; the opening fee was
-    # already paid at entry and must not be debited again here.
     assert portfolio.cash_available == Decimal("549.4500")
     assert holding.quantity == Decimal("5")
     assert holding.entry_commission == Decimal("0.5000")
-
 
 async def test_partial_short_close_does_not_double_debit_opening_commission():
     portfolio = _portfolio()
@@ -84,11 +78,8 @@ async def test_partial_short_close_does_not_double_debit_opening_commission():
         5.0,
     )
 
-    # Gross $50 - $0.50 opening fee - $0.45 exit fee.
     assert realized_pnl == Decimal("49.0500")
     assert opening_fee == Decimal("0.5000")
-    # Closing a short releases its $500 margin plus gross P&L less only the
-    # exit fee.  The $0.50 entry fee is already out of cash.
     assert portfolio.cash_available == Decimal("549.5500")
     assert holding.quantity == Decimal("5")
     assert holding.entry_commission == Decimal("0.5000")

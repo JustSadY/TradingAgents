@@ -4,12 +4,8 @@ from httpx import AsyncClient
 
 from backend.models.user import User
 
-
 class TestUserApiKeysAPI:
     async def test_set_api_key_response_matches_schema(self, auth_client: AsyncClient):
-        # response_model=MessageResponse must actually match what the handler
-        # returns ({"detail": ...}), or FastAPI raises ResponseValidationError
-        # and every caller sees a 500 regardless of whether the write succeeded.
         resp = await auth_client.put("/api/users/me/api-keys", json={"provider": "openai", "api_key": "sk-test-123"})
         assert resp.status_code == 200
         assert resp.json() == {"detail": "API key for 'openai' saved"}

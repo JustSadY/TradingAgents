@@ -4,7 +4,6 @@ from langchain_core.tools import tool
 
 from backend.trading_agents.dataflows.interface import route_to_vendor
 
-
 @tool
 async def get_news(
     ticker: Annotated[str, "Ticker symbol"],
@@ -14,7 +13,6 @@ async def get_news(
     """Retrieve financial news articles and headlines for a given stock ticker and date range."""
     return await route_to_vendor("get_news", ticker, start_date, end_date)
 
-
 @tool
 async def get_global_news(
     curr_date: Annotated[str, "Current date in yyyy-mm-dd format"],
@@ -23,7 +21,6 @@ async def get_global_news(
 ) -> str:
     """Retrieve general/global market news articles and events around a given date."""
     return await route_to_vendor("get_global_news", curr_date, look_back_days, limit)
-
 
 @tool
 async def get_insider_transactions(

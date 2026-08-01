@@ -38,7 +38,6 @@ logger = logging.getLogger(__name__)
 
 MAIN_KEY = "research_manager"
 
-
 async def _safe(label: str, fn, state: dict, fallback: dict) -> dict:
     try:
         if inspect.iscoroutinefunction(fn):
@@ -47,7 +46,6 @@ async def _safe(label: str, fn, state: dict, fallback: dict) -> dict:
     except Exception as exc:
         logger.warning("[research_manager] sub '%s' failed: %s — using fallback.", label, exc, exc_info=True)
         return fallback
-
 
 def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
     async def research_manager_node(state) -> dict:

@@ -8,7 +8,6 @@ from .validators import validate_model
 
 logger = logging.getLogger(__name__)
 
-
 class NormalizedChatGoogleGenerativeAI(ChatGoogleGenerativeAI):
     def invoke(self, input, config=None, **kwargs):
         try:
@@ -26,7 +25,6 @@ class NormalizedChatGoogleGenerativeAI(ChatGoogleGenerativeAI):
             if is_quota_exhausted(exc):
                 logger.warning("Google Gemini quota exhausted: %s", exc)
             raise
-
 
 class GoogleClient(BaseLLMClient):
     def __init__(self, model: str, base_url: str | None = None, **kwargs):

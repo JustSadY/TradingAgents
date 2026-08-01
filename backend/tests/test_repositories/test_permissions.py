@@ -13,7 +13,6 @@ from backend.repositories.permissions import (
     set_user_setting_permission,
 )
 
-
 class TestPermissionsRepository:
     async def test_get_user_page_permission_default(self, db: AsyncSession, test_user):
         perm = await get_user_page_permission(db, test_user.id, "analysis")

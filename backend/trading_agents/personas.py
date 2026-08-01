@@ -16,7 +16,6 @@ from dataclasses import dataclass
 
 DEFAULT_PERSONA = "conservative"
 
-
 @dataclass(frozen=True)
 class InvestorPersona:
     key: str
@@ -24,17 +23,13 @@ class InvestorPersona:
     description: str
     instructions: str
 
-
 _PERSONAS: dict[str, InvestorPersona] = {}
-
 
 def register_persona(persona: InvestorPersona) -> None:
     _PERSONAS[persona.key] = persona
 
-
 def get_persona(key: str | None) -> InvestorPersona | None:
     return _PERSONAS.get(key or "")
-
 
 _INSTRUCTIONS_EN = {
     "conservative": (
@@ -88,7 +83,6 @@ _INSTRUCTIONS_TR = {
     ),
 }
 
-
 def get_persona_instructions(key: str | None) -> str:
     """Return the PM instruction block for ``key`` (empty string if unknown)."""
     key = key or ""
@@ -104,10 +98,8 @@ def get_persona_instructions(key: str | None) -> str:
         return _INSTRUCTIONS_TR.get(key, "")
     return _INSTRUCTIONS_EN.get(key, "")
 
-
 def list_personas() -> list[InvestorPersona]:
     return list(_PERSONAS.values())
-
 
 register_persona(
     InvestorPersona(

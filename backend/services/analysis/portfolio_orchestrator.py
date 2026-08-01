@@ -14,7 +14,6 @@ from .orchestrator import run_individual_analysis
 
 _logger = logging.getLogger(__name__)
 
-
 def _portfolio_overview_labels(output_language: str | None) -> dict[str, str]:
     """Fixed copy for the non-executing multi-ticker overview.
 
@@ -55,7 +54,6 @@ def _portfolio_overview_labels(output_language: str | None) -> dict[str, str]:
         ),
     }
 
-
 def build_portfolio_overview(
     ticker_reports: dict[str, dict],
     *,
@@ -85,7 +83,6 @@ def build_portfolio_overview(
 
     parts.extend((labels["rule"], labels["rule_text"]))
     return "\n\n".join(parts)
-
 
 async def run_portfolio_analysis(
     tickers: list[str],
@@ -179,7 +176,6 @@ async def run_portfolio_analysis(
         )
         await portfolio_emitter.close()
     return multi_row
-
 
 async def _generate_portfolio_overview(*, user, ticker_reports: dict[str, dict], output_language: str | None) -> str:
     """Build the report-only multi-ticker overview without a second decision LLM."""

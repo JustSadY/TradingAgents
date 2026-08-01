@@ -8,7 +8,6 @@ import pytest
 from backend.services.execution.base import OrderResult
 from backend.services.trading_orchestrator import _apply_portfolio_risk_caps, place_signal_order
 
-
 class _FakeTrader:
     def __init__(self):
         self.request = None
@@ -24,7 +23,6 @@ class _FakeTrader:
             filled_price=Decimal("100"),
             filled_quantity=request.quantity,
         )
-
 
 @pytest.mark.parametrize(
     ("signal", "holding_side", "expected_action"),
@@ -88,7 +86,6 @@ async def test_signal_exit_closes_the_entire_held_position_not_a_new_risk_sized_
     assert trader.request.stop_loss is None
     assert trader.request.take_profit is None
 
-
 async def test_portfolio_risk_snapshot_is_read_only(monkeypatch):
     from backend.services import mock_trading_service
 
@@ -116,7 +113,6 @@ async def test_portfolio_risk_snapshot_is_read_only(monkeypatch):
     assert quantity == 10.0
     assert received_kwargs == {"portfolio_id": 42, "read_only": True}
 
-
 async def test_portfolio_risk_snapshot_failure_fails_closed_for_new_exposure(monkeypatch):
     from backend.services import mock_trading_service
 
@@ -140,7 +136,6 @@ async def test_portfolio_risk_snapshot_failure_fails_closed_for_new_exposure(mon
 
     assert quantity == 0.0
 
-
 def _opening_settings(**overrides):
     values = {
         "quality_gate_enabled": False,
@@ -154,7 +149,6 @@ def _opening_settings(**overrides):
     }
     values.update(overrides)
     return SimpleNamespace(**values)
-
 
 async def test_drawdown_snapshot_error_blocks_a_new_position(monkeypatch):
     from backend.repositories import portfolio as portfolio_repo
@@ -193,7 +187,6 @@ async def test_drawdown_snapshot_error_blocks_a_new_position(monkeypatch):
     )
 
     assert result is None
-
 
 async def test_drawdown_snapshot_error_does_not_block_a_safe_exit(monkeypatch):
     from backend.repositories import portfolio as portfolio_repo
@@ -239,7 +232,6 @@ async def test_drawdown_snapshot_error_does_not_block_a_safe_exit(monkeypatch):
     assert result is not None
     assert trader.request.quantity == Decimal("7.25")
     assert snapshot_calls == 0
-
 
 async def test_zero_cash_never_falls_back_to_initial_capital_for_position_sizing(monkeypatch):
     from backend.repositories import portfolio as portfolio_repo

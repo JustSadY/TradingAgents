@@ -5,7 +5,6 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from backend.core.constants import WEBHOOK_EVENTS
 from backend.trading_agents.config import MAX_FALLBACK_LLM_CHAIN_LENGTH, FallbackLLMConfig
 
-
 def _validate_webhook_url_shape(v: str | None) -> str | None:
     """Shared shape check for the ``webhook_url`` field on both settings models.
 
@@ -26,7 +25,6 @@ def _validate_webhook_url_shape(v: str | None) -> str | None:
         raise ValueError("webhook_url must be a valid http or https URL") from exc
     return v
 
-
 def _normalize_webhook_events(events: list[str]) -> list[str]:
     """Validate the canonical webhook-event collection.
 
@@ -46,7 +44,6 @@ def _normalize_webhook_events(events: list[str]) -> list[str]:
     if unknown:
         raise ValueError(f"Unsupported webhook events: {', '.join(unknown)}")
     return normalized
-
 
 class SettingsBase(BaseModel):
     cron_enabled: bool = False
@@ -126,12 +123,10 @@ class SettingsBase(BaseModel):
     def validate_webhook_events(cls, value: list[str]) -> list[str]:
         return _normalize_webhook_events(value)
 
-
 class SettingsRead(SettingsBase):
     updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
-
 
 class MemoryStatusResponse(BaseModel):
     enabled: bool
@@ -142,21 +137,16 @@ class MemoryStatusResponse(BaseModel):
     needs_openai_key: bool
     agent_qa_enabled: bool
 
-
 class LLMModelOption(BaseModel):
     value: str
     label: str
     supported_output_languages: list[str] | None = None
 
-
 class LLMProviderCatalogEntry(BaseModel):
     label: str
     models: list[LLMModelOption]
 
-
 class SettingsUpdate(BaseModel):
-    # Reject retired/unknown keys explicitly.  Silently ignoring a legacy
-    # field makes clients believe a setting was saved when it was not.
     model_config = ConfigDict(extra="forbid")
 
     cron_enabled: bool | None = None
@@ -198,8 +188,6 @@ class SettingsUpdate(BaseModel):
     circuit_breaker_cooldown: int | None = Field(default=None, ge=10, le=600)
     stall_timeout_seconds: int | None = Field(default=None, ge=30, le=600)
     max_active_alerts: int | None = Field(default=None, ge=1, le=500)
-    # Zero is intentional for AI-only controls: it disables automatic alert
-    # creation or temporal spacing without affecting manual alerts.
     max_ai_alerts_per_run: int | None = Field(default=None, ge=0, le=20)
     ai_alert_cooldown_hours: int | None = Field(default=None, ge=0, le=720)
     webhook_url: str | None = None

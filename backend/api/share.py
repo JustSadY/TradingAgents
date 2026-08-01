@@ -12,7 +12,6 @@ from backend.services import share_service
 
 router = APIRouter(tags=["share"])
 
-
 @router.post(
     "/api/analysis/{analysis_id}/share",
     response_model=ShareCreateResponse,
@@ -35,7 +34,6 @@ async def create_share(
     )
 
     return {"token": share.token, "expires_at": share.expires_at.isoformat()}
-
 
 @router.get(
     "/api/share/{token}",

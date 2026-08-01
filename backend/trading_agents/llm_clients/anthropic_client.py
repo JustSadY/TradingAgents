@@ -11,7 +11,6 @@ _logger = logging.getLogger(__name__)
 
 _MIN_CACHEABLE_CHARS = 2000
 
-
 def _apply_cache_control(input_value: Any) -> Any:
     """Mark the system prompt with an ephemeral cache breakpoint.
 
@@ -42,7 +41,6 @@ def _apply_cache_control(input_value: Any) -> Any:
         _logger.debug("prompt caching skipped: %s", exc)
         return input_value
 
-
 _PASSTHROUGH_KWARGS = (
     "timeout",
     "max_retries",
@@ -58,11 +56,9 @@ _EFFORT_EXACT = {
 }
 _EFFORT_PATTERN = re.compile(r"^claude-(opus|sonnet)-\d+-\d+$")
 
-
 def _supports_effort(model: str) -> bool:
     model_lc = model.lower()
     return model_lc in _EFFORT_EXACT or bool(_EFFORT_PATTERN.match(model_lc))
-
 
 class NormalizedChatAnthropic(ChatAnthropic):
     prompt_caching: bool = False
@@ -87,7 +83,6 @@ class NormalizedChatAnthropic(ChatAnthropic):
             if is_quota_exhausted(exc):
                 _logger.warning("Anthropic quota exhausted: %s", exc)
             raise
-
 
 class AnthropicClient(BaseLLMClient):
     def __init__(self, model: str, base_url: str | None = None, **kwargs):

@@ -3,7 +3,6 @@ from typing import Annotated
 from langgraph.graph import MessagesState
 from typing_extensions import TypedDict
 
-
 class StateKeys:
     COMPANY = "company_of_interest"
     ASSET_TYPE = "asset_type"
@@ -54,7 +53,6 @@ class StateKeys:
         FINAL_TRADE_DECISION,
     )
 
-
 class InvestDebateState(TypedDict):
     bull_history: Annotated[str, "Bullish Conversation history"]
     bear_history: Annotated[str, "Bearish Conversation history"]
@@ -62,7 +60,6 @@ class InvestDebateState(TypedDict):
     current_response: Annotated[str, "Latest response"]
     judge_decision: Annotated[str, "Final judge decision"]
     count: Annotated[int, "Length of the current conversation"]
-
 
 class RiskDebateState(TypedDict):
     aggressive_history: Annotated[str, "Aggressive Agent's Conversation history"]
@@ -75,7 +72,6 @@ class RiskDebateState(TypedDict):
     current_neutral_response: Annotated[str, "Latest response by the neutral analyst"]
     judge_decision: Annotated[str, "Judge's decision"]
     count: Annotated[int, "Length of the current conversation"]
-
 
 class AgentState(MessagesState):
     company_of_interest: Annotated[str, "Company that we are interested in trading"]

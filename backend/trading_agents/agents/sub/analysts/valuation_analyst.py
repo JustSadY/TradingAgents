@@ -11,7 +11,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
 
 _VALUATION_TOOLS = [get_valuation_comparison]
 
-
 @register_analyst(
     key="valuation",
     agent_node="Valuation Analyst",

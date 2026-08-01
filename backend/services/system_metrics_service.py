@@ -8,11 +8,9 @@ from __future__ import annotations
 
 from typing import Any
 
-
 def _total_samples(metric) -> list:
     """Samples of a metric whose name ends in ``_total`` (the counter values)."""
     return [s for s in metric.samples if s.name.endswith("_total")]
-
 
 def _labeled_totals(metric, label: str) -> dict[str, int]:
     """Sum ``_total`` samples grouped by the value of ``label``."""
@@ -21,7 +19,6 @@ def _labeled_totals(metric, label: str) -> dict[str, int]:
         key = s.labels.get(label, "unknown")
         out[key] = out.get(key, 0) + int(s.value)
     return out
-
 
 def _read_duration(metric) -> dict[str, float]:
     """Extract count/sum from a histogram metric's ``_count``/``_sum`` samples."""
@@ -32,7 +29,6 @@ def _read_duration(metric) -> dict[str, float]:
         elif sample.name.endswith("_sum"):
             duration["sum_seconds"] = round(sample.value, 2)
     return duration
-
 
 def collect_system_metrics() -> dict[str, Any]:
     """Return key TradingAgents Prometheus metrics as JSON for the admin dashboard."""

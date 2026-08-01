@@ -17,7 +17,6 @@ router = APIRouter(prefix="/api/personas", tags=["personas"])
 
 _BUILTIN_KEYS: set[str] = set()
 
-
 def _builtin_list() -> list[dict[str, Any]]:
     global _BUILTIN_KEYS
     result = []
@@ -34,7 +33,6 @@ def _builtin_list() -> list[dict[str, Any]]:
         )
     return result
 
-
 async def _resolve_target_user(user_id: int | None, current_user: User, db: AsyncSession) -> User:
     if user_id is not None and current_user.is_admin:
         target_user = await get_user_by_id(db, user_id)
@@ -43,19 +41,16 @@ async def _resolve_target_user(user_id: int | None, current_user: User, db: Asyn
         return target_user
     return current_user
 
-
 class PersonaCreate(BaseModel):
     key: str = Field(min_length=1, max_length=50, pattern=r"^[a-z0-9_]+$")
     label: str = Field(min_length=1, max_length=100)
     description: str = Field(default="", max_length=500)
     instructions: str = Field(default="")
 
-
 class PersonaUpdate(BaseModel):
     label: str = Field(min_length=1, max_length=100)
     description: str = Field(default="", max_length=500)
     instructions: str = Field(default="")
-
 
 @router.get("", response_model=list[dict[str, Any]])
 async def list_all_personas(
@@ -77,7 +72,6 @@ async def list_all_personas(
         for r in rows
     ]
     return builtins + custom
-
 
 @router.post(
     "",
@@ -114,7 +108,6 @@ async def create_persona(
         "is_builtin": False,
     }
 
-
 @router.put(
     "/{key}",
     response_model=dict[str, Any],
@@ -149,7 +142,6 @@ async def update_persona(
         "instructions": persona.instructions,
         "is_builtin": False,
     }
-
 
 @router.delete(
     "/{key}",

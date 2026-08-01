@@ -10,7 +10,6 @@ from backend.repositories.persona import (
     update_user_persona,
 )
 
-
 class TestPersonaRepository:
     async def test_create_user_persona(self, db: AsyncSession, test_user):
         persona = await create_user_persona(

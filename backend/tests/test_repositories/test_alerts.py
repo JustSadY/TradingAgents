@@ -10,7 +10,6 @@ from backend.repositories.alerts import (
     list_alerts,
 )
 
-
 class TestAlertRepository:
     async def test_create_alert(self, db: AsyncSession, test_user: User):
         alert = await insert_alert(

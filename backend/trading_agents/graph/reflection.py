@@ -2,7 +2,6 @@ from typing import Any
 
 from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
 
-
 class Reflector:
     def __init__(self, llm: Any):
         self.llm = llm
@@ -28,9 +27,6 @@ class Reflector:
         benchmark_name: str = "SPY",
     ) -> str:
         messages = [
-            # Reflection is an older direct LLM path, so it does not inherit
-            # the graph-node prompt wrapper.  Use the same strict language
-            # block as the main analysts instead of a weak one-line request.
             ("system", self.log_reflection_prompt + get_general_settings_block()),
             (
                 "human",

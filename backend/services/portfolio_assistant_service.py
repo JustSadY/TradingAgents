@@ -49,7 +49,6 @@ Guidelines:
 - Today's date: {date}
 """
 
-
 async def get_assistant_history(db: AsyncSession, user) -> list[dict]:
     messages = await assistant_repo.get_messages(db, user.id, limit=50)
     return [
@@ -62,11 +61,9 @@ async def get_assistant_history(db: AsyncSession, user) -> list[dict]:
         for m in messages
     ]
 
-
 async def clear_assistant_history(db: AsyncSession, user) -> None:
     await assistant_repo.clear_messages(db, user.id)
     await db.commit()
-
 
 async def chat(db: AsyncSession, user: User, message: str) -> dict:
     from backend.services.agent_settings_service import build_agent_runtime_context
@@ -113,12 +110,10 @@ async def chat(db: AsyncSession, user: User, message: str) -> dict:
         "created_at": assistant_msg.created_at.isoformat(),
     }
 
-
 async def _get_allowed_pages(db: AsyncSession, user: User) -> set[str]:
     if user.is_admin:
         return {"analysis", "trading", "portfolio", "alerts", "watchlist"}
     return await list_allowed_page_keys(db, user.id)
-
 
 async def _prepare_lc_messages(db: AsyncSession, user: User, message: str, settings) -> list:
     from langchain_core.messages import AIMessage, HumanMessage, SystemMessage
@@ -133,7 +128,6 @@ async def _prepare_lc_messages(db: AsyncSession, user: User, message: str, setti
         lc_messages.append(HumanMessage(content=msg.content) if msg.role == "user" else AIMessage(content=msg.content))
     lc_messages.append(HumanMessage(content=message))
     return lc_messages
-
 
 async def _run_tool_loop(llm_with_tools, lc_messages: list, tool_map: dict) -> str:
     from langchain_core.messages import ToolMessage
@@ -163,7 +157,6 @@ async def _run_tool_loop(llm_with_tools, lc_messages: list, tool_map: dict) -> s
             lc_messages.append(ToolMessage(content=str(result_text), tool_call_id=tc["id"]))
 
     return "I could not complete the request within the allowed steps. Please try again."
-
 
 def _make_tools(db: AsyncSession, user: User, allowed_pages: set[str]) -> list:
     from langchain_core.tools import tool
@@ -224,21 +217,15 @@ def _make_tools(db: AsyncSession, user: User, allowed_pages: set[str]) -> list:
         (run_stock_analysis, "analysis"),
         (place_paper_order, "trading"),
     ]
-    # Do not expose an unavailable tool to the LLM at all.  Each underlying
-    # helper also enforces this condition as a defence-in-depth guard should a
-    # future call site bypass the list construction.
     return [tool_def for tool_def, page_key in tool_pages if _has_page_access(user, allowed_pages, page_key)]
-
 
 def _has_page_access(user: User, allowed_pages: set[str], page_key: str) -> bool:
     return bool(getattr(user, "is_admin", False)) or page_key in allowed_pages
-
 
 def _page_denied(user: User, allowed_pages: set[str], page_key: str, label: str) -> str | None:
     if _has_page_access(user, allowed_pages, page_key):
         return None
     return f"Permission denied: you do not have access to the {label} page."
-
 
 async def _tool_get_portfolio_summary(db: AsyncSession, user: User, allowed_pages: set[str]) -> str:
     denied = _page_denied(user, allowed_pages, "portfolio", "Portfolio")
@@ -275,7 +262,6 @@ async def _tool_get_portfolio_summary(db: AsyncSession, user: User, allowed_page
     except Exception as e:
         _logger.warning("Assistant failed to fetch portfolio summary: %s", e)
         return f"Could not fetch portfolio: {e}"
-
 
 async def _tool_get_analysis_history(
     db: AsyncSession, user: User, allowed_pages: set[str], ticker: str, limit: int
@@ -322,7 +308,6 @@ async def _tool_get_analysis_history(
         _logger.warning("Assistant failed to fetch analysis history: %s", e)
         return f"Could not fetch analysis history: {e}"
 
-
 async def _tool_get_analysis_report(db: AsyncSession, user: User, allowed_pages: set[str], analysis_id: int) -> str:
     denied = _page_denied(user, allowed_pages, "analysis", "Analysis")
     if denied:
@@ -359,7 +344,6 @@ async def _tool_get_analysis_report(db: AsyncSession, user: User, allowed_pages:
         _logger.warning("Assistant failed to fetch analysis report %s: %s", analysis_id, e)
         return f"Could not fetch report: {e}"
 
-
 async def _tool_get_live_price(user: User, allowed_pages: set[str], ticker: str) -> str:
     denied = _page_denied(user, allowed_pages, "chart", "Chart")
     if denied:
@@ -374,7 +358,6 @@ async def _tool_get_live_price(user: User, allowed_pages: set[str], ticker: str)
     except Exception as e:
         _logger.warning("Assistant live price lookup failed for %s: %s", ticker, e)
         return f"Price lookup failed: {e}"
-
 
 async def _tool_get_watchlist(db: AsyncSession, user: User, allowed_pages: set[str]) -> str:
     denied = _page_denied(user, allowed_pages, "watchlist", "Watchlist")
@@ -395,7 +378,6 @@ async def _tool_get_watchlist(db: AsyncSession, user: User, allowed_pages: set[s
         _logger.warning("Assistant failed to fetch watchlist: %s", e)
         return f"Could not fetch watchlist: {e}"
 
-
 async def _tool_get_alerts(db: AsyncSession, user: User, allowed_pages: set[str]) -> str:
     denied = _page_denied(user, allowed_pages, "alerts", "Alerts")
     if denied:
@@ -414,7 +396,6 @@ async def _tool_get_alerts(db: AsyncSession, user: User, allowed_pages: set[str]
     except Exception as e:
         _logger.warning("Assistant failed to fetch alerts: %s", e)
         return f"Could not fetch alerts: {e}"
-
 
 async def _tool_create_price_alert(
     user: User, allowed_pages: set[str], ticker: str, condition: str, target_price: float
@@ -449,7 +430,6 @@ async def _tool_create_price_alert(
         _logger.warning("Assistant alert creation failed for %s: %s", ticker, e)
         return f"Alert creation failed: {e}"
 
-
 async def _tool_run_stock_analysis(user: User, allowed_pages: set[str], ticker: str) -> str:
     denied = _page_denied(user, allowed_pages, "analysis", "Analysis")
     if denied:
@@ -478,7 +458,6 @@ async def _tool_run_stock_analysis(user: User, allowed_pages: set[str], ticker: 
         _logger.warning("Assistant analysis trigger failed for %s: %s", ticker, e)
         return f"Could not start analysis: {e}"
 
-
 async def _tool_place_paper_order(
     user: User, allowed_pages: set[str], ticker: str, action: str, quantity: float
 ) -> str:
@@ -499,9 +478,6 @@ async def _tool_place_paper_order(
                 order_db, ticker=ticker.strip().upper(), action=act, quantity=quantity, user=user
             )
             await order_db.commit()
-        # ``execute_order`` returns the transport-neutral execution keys
-        # ``quantity`` and ``price``.  Do not use ORM field names here: doing
-        # so silently rendered every successful assistant order as $0.00.
         filled = result.get("quantity", quantity)
         price = result.get("price", 0)
         return f"Order placed: {act} {filled:.4f} shares of {ticker.upper()} @ ${float(price):,.2f}. Total: ${float(filled) * float(price):,.2f}."

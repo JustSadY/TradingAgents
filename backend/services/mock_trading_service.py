@@ -22,7 +22,6 @@ from backend.services.margin_engine import (
     margin_required,
 )
 
-
 def _liquidation_for_position(
     side: str, quantity: Decimal, entry_price: Decimal, borrowed: Decimal, margin: Decimal, leverage: Decimal
 ) -> Decimal:
@@ -31,14 +30,12 @@ def _liquidation_for_position(
         return liquidation_price_short(quantity, entry_price, margin, maintenance_rate)
     return liquidation_price_long(quantity, borrowed, maintenance_rate)
 
-
 from backend.services.market_data_service import get_live_price, get_live_prices_batch
 
 _logger = logging.getLogger(__name__)
 
 _DEFAULT_COMMISSION_RATE = Decimal("0.001")
 _DUST = Decimal("1e-6")
-
 
 def _opening_commission(holding: Holding) -> Decimal:
     """Return the unallocated opening commission carried by ``holding``.
@@ -49,7 +46,6 @@ def _opening_commission(holding: Holding) -> Decimal:
     """
     value = getattr(holding, "entry_commission", Decimal("0.0"))
     return value if value is not None else Decimal("0.0")
-
 
 async def get_or_create_sim_portfolio(
     db: AsyncSession,
@@ -88,7 +84,6 @@ async def get_or_create_sim_portfolio(
                 raise
         await db.refresh(portfolio, ["holdings"])
     return portfolio
-
 
 async def get_portfolio_with_live_prices(
     db: AsyncSession,
@@ -171,9 +166,6 @@ async def get_portfolio_with_live_prices(
             if is_short:
                 gross_pnl = (h.avg_buy_price - price) * h.quantity
                 realized = gross_pnl - entry_commission - commission
-                # Opening commission was deducted from cash when the short
-                # was opened.  Its all-in P&L must include that cost, but the
-                # close cash movement must not deduct it a second time.
                 cash_available_val += margin + gross_pnl - commission
             else:
                 realized = (price - h.avg_buy_price) * h.quantity - entry_commission - commission
@@ -276,7 +268,6 @@ async def get_portfolio_with_live_prices(
         "auto_closes": auto_closes,
         "liquidations": [c for c in auto_closes if c["reason"] == "LIQUIDATED"],
     }
-
 
 async def execute_order(
     db: AsyncSession,
@@ -382,9 +373,6 @@ async def execute_order(
         realized_pnl=realized_pnl,
         analysis_id=analysis_id,
         ai_signal=str(ai_signal or "")[:50],
-        # A decision can be long, but the order row is a lightweight audit
-        # record rather than a second copy of the whole report.  Keep enough
-        # context for the journal while keeping every automatic fill bounded.
         ai_reasoning=str(ai_reasoning or "")[:4_000],
         executed_at=datetime.now(UTC),
     )
@@ -404,7 +392,6 @@ async def execute_order(
         "status": status,
     }
 
-
 async def monitor_open_positions(db: AsyncSession) -> list[dict]:
     result = await db.execute(select(Portfolio))
     portfolios = result.scalars().all()
@@ -420,7 +407,6 @@ async def monitor_open_positions(db: AsyncSession) -> list[dict]:
             _logger.warning("Position monitor failed for portfolio %s: %s", p.id, exc)
     return closed
 
-
 def _performance_start_date(portfolio: Portfolio, now: datetime | None = None) -> str:
     """Return the portfolio inception date in UTC for benchmark comparison."""
     now = now or datetime.now(UTC)
@@ -430,7 +416,6 @@ def _performance_start_date(portfolio: Portfolio, now: datetime | None = None) -
     if created_at > now:
         created_at = now
     return created_at.date().isoformat()
-
 
 async def get_performance(db: AsyncSession, user=None) -> dict:
     portfolio = await get_or_create_sim_portfolio(db, user=user)
@@ -449,7 +434,6 @@ async def get_performance(db: AsyncSession, user=None) -> dict:
         else None,
     }
 
-
 def _parse_exit_level(value) -> Decimal:
     if value is None:
         return Decimal("0.0")
@@ -458,7 +442,6 @@ def _parse_exit_level(value) -> Decimal:
     except (TypeError, ValueError, InvalidOperation):
         return Decimal("0.0")
     return dec if dec.is_finite() and dec > 0 else Decimal("0.0")
-
 
 def _determine_order_intent(action: str, holding: Any, allow_short: bool, lang: str, quantity: float) -> str:
     from backend.core.l10n import get_message
@@ -475,7 +458,6 @@ def _determine_order_intent(action: str, holding: Any, allow_short: bool, lang: 
 
     available = holding.quantity if holding else Decimal("0.0")
     raise ValueError(get_message("insufficient_position", lang, available=float(available), requested=quantity))
-
 
 def _execute_open_position(
     db: AsyncSession,
@@ -547,7 +529,6 @@ def _execute_open_position(
             )
         )
 
-
 async def _execute_close_position(
     db: AsyncSession,
     portfolio: Portfolio,
@@ -570,8 +551,6 @@ async def _execute_close_position(
     released_margin = (holding.margin_used or Decimal("0.0")) * fraction
     borrowed_portion = (holding.borrowed_amount or Decimal("0.0")) * fraction
     opening_commission = _opening_commission(holding)
-    # Use the exact remainder for a full close.  That avoids leaving a
-    # sub-cent Decimal residue after one or more proportional partial closes.
     entry_commission = opening_commission if qty_dec == holding.quantity else opening_commission * fraction
 
     if pos_side == "long":
@@ -580,8 +559,6 @@ async def _execute_close_position(
     else:
         gross_pnl = (holding.avg_buy_price - price) * qty_dec
         realized_pnl = gross_pnl - entry_commission - commission
-        # The opening commission has already reduced cash.  It belongs in
-        # reported realized P&L, not in the close-leg cash movement again.
         portfolio.cash_available += released_margin + gross_pnl - commission
     portfolio.margin_used = (portfolio.margin_used or Decimal("0.0")) - released_margin
 
@@ -603,7 +580,6 @@ async def _execute_close_position(
         holding.current_price = price
 
     return realized_pnl, entry_commission
-
 
 async def reset_portfolio(db: AsyncSession, initial_capital: float = 100_000.0, user=None) -> dict:
     from backend.repositories.portfolio import get_simulation_portfolio

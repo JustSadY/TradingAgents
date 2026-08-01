@@ -9,7 +9,6 @@ logger = logging.getLogger(__name__)
 
 _CANONICAL_SIGNALS = frozenset({"Buy", "Overweight", "Hold", "Underweight", "Sell"})
 
-
 def _validated_signal(value: object) -> str | None:
     """Expose only the canonical analysis signal enum through the API.
 
@@ -24,19 +23,16 @@ def _validated_signal(value: object) -> str | None:
     logger.warning("Analysis signal: unexpected value %r — coercing to None", value)
     return None
 
-
 class AnalysisRunRequest(BaseModel):
     ticker: str
     trade_date: str
     asset_type: str = "stock"
-
 
 class AnalysisRunResponse(BaseModel):
     task_id: str
     ticker: str
     trade_date: str
     message: str = "Analysis started"
-
 
 class AnalysisResultRead(BaseModel):
     id: int
@@ -110,7 +106,6 @@ class AnalysisResultRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
 class AnalysisListItem(BaseModel):
     id: int
     ticker: str
@@ -132,7 +127,6 @@ class AnalysisListItem(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
 class ChatMessageRead(BaseModel):
     id: int
     role: str
@@ -141,10 +135,8 @@ class ChatMessageRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-
 class ChatMessageCreate(BaseModel):
     message: str
-
 
 class ActiveTaskRead(BaseModel):
     task_id: str
@@ -155,11 +147,9 @@ class ActiveTaskRead(BaseModel):
     started_at: float | None = None
     status: str | None = None
 
-
 class CancelTaskResponse(BaseModel):
     cancelled: bool
     task_id: str
-
 
 class CostEstimateResponse(BaseModel):
     analyst_count: int
@@ -168,7 +158,6 @@ class CostEstimateResponse(BaseModel):
     estimated_duration_min: float
     pricing_source: str
     pricing_is_fallback: bool
-
 
 class ABComparisonItem(BaseModel):
     preset_name: str
@@ -183,13 +172,11 @@ class ABComparisonItem(BaseModel):
     avg_raw_return_last_50: float
     total_graded_last_50: int
 
-
 class BySignalItem(BaseModel):
     count: int
     wins: int
     avg_return: float
     win_rate: float
-
 
 class PerformanceResponse(BaseModel):
     total: int
@@ -197,7 +184,6 @@ class PerformanceResponse(BaseModel):
     avg_raw_return: float | None
     avg_alpha_return: float | None
     by_signal: dict[str, BySignalItem]
-
 
 class AnalystAttributionItem(BaseModel):
     key: str
@@ -208,11 +194,9 @@ class AnalystAttributionItem(BaseModel):
     weight: float
     chronic_underperformer: bool
 
-
 class PerformanceAttributionResponse(BaseModel):
     attribution: list[AnalystAttributionItem]
     total_evaluated_runs: int
-
 
 class CheckpointItem(BaseModel):
     checkpoint_id: str
@@ -221,11 +205,9 @@ class CheckpointItem(BaseModel):
     label: str
     ts: str
 
-
 class TimeTravelRequest(BaseModel):
     checkpoint_id: str
     update_state: dict
-
 
 class TimeTravelResponse(BaseModel):
     task_id: str

@@ -5,7 +5,6 @@ from backend.trading_agents.agents.runtime.agent_states import (
     RiskDebateState,
 )
 
-
 class Propagator:
     def __init__(self, max_recur_limit=100):
         self.max_recur_limit = max_recur_limit

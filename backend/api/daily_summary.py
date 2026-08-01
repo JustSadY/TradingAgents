@@ -13,7 +13,6 @@ from backend.services.daily_summary_service import generate_daily_summary, get_l
 router = APIRouter(prefix="/api/market", tags=["daily-summary"])
 _logger = logging.getLogger(__name__)
 
-
 @router.get("/daily-summary", response_model=DailySummaryResponse)
 async def fetch_daily_summary(
     current_user: Annotated[User, Depends(require_page("dashboard"))],
@@ -21,7 +20,6 @@ async def fetch_daily_summary(
 ):
     summary = await get_latest_summary(db, current_user.id)
     return DailySummaryResponse(**summary) if summary else DailySummaryResponse()
-
 
 @router.post(
     "/daily-summary/generate",

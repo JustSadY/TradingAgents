@@ -11,7 +11,6 @@ from backend.core.database import Base
 if TYPE_CHECKING:
     from backend.models.order import Order
 
-
 class TradeNote(Base):
     __tablename__ = "trade_notes"
 

@@ -14,7 +14,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
 
 _NEWS_TOOLS = [get_news, get_global_news, get_insider_transactions, get_crypto_fear_and_greed_index, search_web]
 
-
 @register_analyst(
     key="news",
     agent_node="News Analyst",
@@ -84,9 +83,7 @@ Your final report MUST follow this structure:
 
         except Exception as _e:
 
-
             _logger.warning("Data fetch failed in news_analyst: %s", _e)
-
 
             start_date_str = trade_date
 
@@ -95,9 +92,7 @@ Your final report MUST follow this structure:
 
         except Exception as _e:
 
-
             _logger.warning("Data fetch failed in news_analyst: %s", _e)
-
 
             news_data = ""
 
@@ -106,9 +101,7 @@ Your final report MUST follow this structure:
 
         except Exception as _e:
 
-
             _logger.warning("Data fetch failed in news_analyst: %s", _e)
-
 
             global_news_data = ""
 
@@ -120,9 +113,7 @@ Your final report MUST follow this structure:
 
             except Exception as _e:
 
-
                 _logger.warning("Data fetch failed in news_analyst: %s", _e)
-
 
                 insider_data = ""
 
@@ -140,9 +131,7 @@ Your final report MUST follow this structure:
 
             except Exception as _e:
 
-
                 _logger.warning("Data fetch failed in news_analyst: %s", _e)
-
 
                 crypto_data = ""
 

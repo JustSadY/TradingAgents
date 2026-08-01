@@ -12,10 +12,8 @@ _BATCH_PRICE_TIMEOUT_SEC = 10.0
 _SINGLE_PRICE_TIMEOUT_SEC = 6.0
 _YAHOO_HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
-
 async def get_live_price(ticker: str) -> float | None:
     """Fetch live price for a single ticker. Falls back to history if Yahoo REST query fails."""
-    # 1. Try direct REST query (fast, free, API key-less)
     url = f"https://query2.finance.yahoo.com/v7/finance/quote?symbols={ticker.upper()}"
     try:
         async with httpx.AsyncClient() as client:
@@ -36,7 +34,6 @@ async def get_live_price(ticker: str) -> float | None:
     except Exception as e:
         _logger.warning("Direct Yahoo quote fetch failed for %s: %s", ticker, e)
 
-    # 2. Fallback to Ticker.history (safe, yfinance-native)
     def _fallback():
         try:
             t = yf.Ticker(ticker)
@@ -54,7 +51,6 @@ async def get_live_price(ticker: str) -> float | None:
     except TimeoutError:
         _logger.warning("Price fetch fallback timed out for %s after %.1fs", ticker, _SINGLE_PRICE_TIMEOUT_SEC)
         return None
-
 
 async def get_live_prices_batch(tickers: list[str]) -> dict[str, float]:
     """Fetch live prices for multiple tickers in a single batch call."""
@@ -74,7 +70,6 @@ async def get_live_prices_batch(tickers: list[str]) -> dict[str, float]:
             prices.update(await _fetch_individual_fallbacks(still_missing))
 
     return prices
-
 
 async def _fetch_yahoo_quotes_rest(unique_tickers: list[str]) -> dict[str, float]:
     """Fetch multiple quotes from Yahoo REST API."""
@@ -98,7 +93,6 @@ async def _fetch_yahoo_quotes_rest(unique_tickers: list[str]) -> dict[str, float
     except Exception as exc:
         _logger.warning("Direct batch query failed for %s: %s", unique_tickers, exc)
     return prices
-
 
 async def _fetch_yfinance_download_fallback(missing: list[str]) -> dict[str, float]:
     """Fallback batch yfinance download."""
@@ -127,7 +121,6 @@ async def _fetch_yfinance_download_fallback(missing: list[str]) -> dict[str, flo
         _logger.warning("Batch fallback download timed out for %s", missing)
         return {}
 
-
 def _parse_yfinance_batch_data(close_data, missing_symbols: list[str]) -> dict[str, float]:
     """Parse pandas data from yf.download."""
     parsed = {}
@@ -150,7 +143,6 @@ def _parse_yfinance_batch_data(close_data, missing_symbols: list[str]) -> dict[s
             parsed[missing_symbols[0]] = val
     return parsed
 
-
 async def _fetch_individual_fallbacks(still_missing: list[str]) -> dict[str, float]:
     """Final individual fallback for any remaining missing tickers."""
     prices = {}
@@ -162,7 +154,6 @@ async def _fetch_individual_fallbacks(still_missing: list[str]) -> dict[str, flo
         if math.isfinite(val) and val > 0:
             prices[symbol] = val
     return prices
-
 
 async def get_historical_data(ticker: str, start_date: str, end_date: str):
     """Fetch historical OHLCV data for a ticker."""
@@ -176,14 +167,12 @@ async def get_historical_data(ticker: str, start_date: str, end_date: str):
                 if data.empty:
                     return data
 
-                # Handle MultiIndex columns (common in newer yfinance versions)
                 if isinstance(data.columns, pd.MultiIndex):
                     data.columns = data.columns.get_level_values(0)
 
                 if data.index.tz is not None:
                     data.index = data.index.tz_localize(None)
 
-                # Ensure data is sorted by date and remove any duplicates
                 data = data[~data.index.duplicated(keep="last")]
                 data = data.sort_index()
                 return data
@@ -204,7 +193,6 @@ async def get_historical_data(ticker: str, start_date: str, end_date: str):
                 _logger.exception("Historical data fetch for %s failed after %d attempts", ticker, max_retries)
                 raise
 
-
 async def calculate_returns(
     ticker: str, start_date: str, holding_days: int = 5, benchmark: str = "SPY"
 ) -> tuple[float | None, float | None, int | None]:
@@ -218,7 +206,6 @@ async def calculate_returns(
             from datetime import datetime, timedelta
 
             start = datetime.strptime(start_date, "%Y-%m-%d")
-            # Buffer for weekends/holidays
             end = start + timedelta(days=holding_days + 7)
             end_str = end.strftime("%Y-%m-%d")
 
@@ -228,7 +215,6 @@ async def calculate_returns(
             if stock.empty or bench.empty:
                 return None, None, None
 
-            # Drop NaNs to prevent returning NaN if last/current day has NaN values
             stock_close = stock["Close"].dropna()
             bench_close = bench["Close"].dropna()
 
@@ -250,7 +236,6 @@ async def calculate_returns(
             return None, None, None
 
     return await asyncio.to_thread(_fetch)
-
 
 async def get_benchmark_return(
     benchmark: str = "SPY",
@@ -276,7 +261,6 @@ async def get_benchmark_return(
                     history_args["end"] = end_date
             spy = yf.Ticker(benchmark).history(**history_args)
             if not spy.empty:
-                # Drop NaNs to prevent returning NaN if last/current day has NaN values
                 close_series = spy["Close"].dropna()
                 if len(close_series) >= 2:
                     ret = float((close_series.iloc[-1] - close_series.iloc[0]) / close_series.iloc[0] * 100)
@@ -297,7 +281,6 @@ async def get_benchmark_return(
             return None
 
     return await asyncio.to_thread(_fetch)
-
 
 async def get_live_prices_details_batch(tickers: list[str]) -> dict[str, dict[str, float]]:
     """Fetch live prices and daily change percentage for multiple tickers in a single batch call."""
@@ -328,7 +311,6 @@ async def get_live_prices_details_batch(tickers: list[str]) -> dict[str, dict[st
     except Exception as exc:
         _logger.warning("Direct batch details query failed for %s: %s", unique, exc)
 
-    # Fallback to standard price batch helper for any missing tickers
     missing = [symbol for symbol in unique if symbol not in details]
     if missing:
         fallback_prices = await get_live_prices_batch(missing)

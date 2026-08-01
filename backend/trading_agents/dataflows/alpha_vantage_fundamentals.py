@@ -3,7 +3,6 @@ from datetime import UTC, datetime
 
 from .alpha_vantage_common import _make_api_request
 
-
 def _filter_reports_by_date(result, curr_date: str):
     """Drop reports dated after ``curr_date`` to avoid look-ahead bias.
 
@@ -32,7 +31,6 @@ def _filter_reports_by_date(result, curr_date: str):
 
     return json.dumps(parsed) if was_str else parsed
 
-
 def get_fundamentals(ticker: str, curr_date: str = None) -> str:
     params = {
         "symbol": ticker,
@@ -49,18 +47,15 @@ def get_fundamentals(ticker: str, curr_date: str = None) -> str:
         return warning + (result if isinstance(result, str) else json.dumps(result))
     return result
 
-
 def get_balance_sheet(ticker: str, freq: str = "quarterly", curr_date: str = None):
     _ = freq
     result = _make_api_request("BALANCE_SHEET", {"symbol": ticker})
     return _filter_reports_by_date(result, curr_date)
 
-
 def get_cashflow(ticker: str, freq: str = "quarterly", curr_date: str = None):
     _ = freq
     result = _make_api_request("CASH_FLOW", {"symbol": ticker})
     return _filter_reports_by_date(result, curr_date)
-
 
 def get_income_statement(ticker: str, freq: str = "quarterly", curr_date: str = None):
     _ = freq

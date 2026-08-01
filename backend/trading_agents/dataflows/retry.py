@@ -9,10 +9,8 @@ T = TypeVar("T")
 
 _logger = logging.getLogger(__name__)
 
-
 def _jitter(delay: float, jitter_factor: float = 0.1) -> float:
     return delay * (1.0 + jitter_factor * (2.0 * random.random() - 1.0))
-
 
 def retry_sync(
     func: Callable[[], T],
@@ -43,7 +41,6 @@ def retry_sync(
                 time.sleep(sleep_time)
             else:
                 raise
-
 
 async def retry_async(
     coro_factory: Callable[[], Awaitable[T]],

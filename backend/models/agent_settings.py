@@ -5,7 +5,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
 
-
 class AgentSetting(Base):
     __tablename__ = "agent_settings"
 

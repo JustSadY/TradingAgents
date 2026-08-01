@@ -26,11 +26,6 @@ _logger = logging.getLogger(__name__)
 
 MONEY = Numeric(20, 8, asdecimal=True)
 
-# Tables created by the Alembic baseline revision (89f1a049b357).  An older
-# installation created through ``create_all`` has no alembic_version row, so
-# it must be stamped before it can receive later revisions.  Never stamp a
-# partial schema: that would record a baseline it does not actually satisfy
-# and turn missing-table failures into a much harder recovery problem.
 _BASELINE_APP_TABLES = frozenset(
     {
         "agent_settings",
@@ -64,10 +59,8 @@ _BASELINE_APP_TABLES = frozenset(
     }
 )
 
-
 class Base(DeclarativeBase):
     pass
-
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
@@ -78,7 +71,6 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.rollback()
             raise
 
-
 async def _has_alembic_version(conn) -> bool:
     if conn.dialect.name == "sqlite":
         row = (
@@ -88,19 +80,13 @@ async def _has_alembic_version(conn) -> bool:
     row = (await conn.execute(text("SELECT to_regclass('public.alembic_version')"))).scalar_one_or_none()
     return row is not None
 
-
 def _alembic_config():
     from alembic.config import Config
 
     ini_path = Path(__file__).resolve().parent.parent / "alembic.ini"
     cfg = Config(str(ini_path))
-    # Alembic stores options in a configparser that performs %-interpolation, so
-    # a percent sign in the URL (a percent-encoded password, typically) is read
-    # as a broken placeholder.  Doubling it is how configparser escapes a literal
-    # percent; get_main_option() hands the original URL back.
     cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
     return cfg
-
 
 async def _run_alembic(command_name: str, revision: str) -> None:
     """Run Alembic's synchronous command API off the event loop."""
@@ -108,7 +94,6 @@ async def _run_alembic(command_name: str, revision: str) -> None:
 
     fn = getattr(command, command_name)
     await asyncio.to_thread(fn, _alembic_config(), revision)
-
 
 def _is_complete_unversioned_app_schema(table_names: set[str]) -> bool:
     """Return whether *table_names* can safely be stamped at the baseline.
@@ -132,7 +117,6 @@ def _is_complete_unversioned_app_schema(table_names: set[str]) -> bool:
         )
     return True
 
-
 async def _has_complete_unversioned_app_schema(conn) -> bool:
     """Inspect the active PostgreSQL schema before an automatic baseline stamp."""
     rows = await conn.execute(
@@ -142,7 +126,6 @@ async def _has_complete_unversioned_app_schema(conn) -> bool:
         )
     )
     return _is_complete_unversioned_app_schema(set(rows.scalars()))
-
 
 async def create_all_tables():
     """Bring the schema to the current Alembic head before serving requests.
@@ -177,10 +160,6 @@ async def create_all_tables():
         legacy_schema = not has_version and await _has_complete_unversioned_app_schema(conn)
 
     if legacy_schema:
-        # Older installations were created with create_all and never had a
-        # migration history.  Stamp the baseline only; upgrading from there
-        # still runs every subsequent migration instead of pretending they
-        # were already applied.
         _logger.warning("Detected unversioned legacy schema; stamping Alembic baseline before upgrade.")
         await _run_alembic("stamp", "89f1a049b357")
 

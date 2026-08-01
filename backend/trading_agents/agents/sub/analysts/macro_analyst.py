@@ -12,7 +12,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
 
 _MACRO_TOOLS = [get_macro_data, search_web]
 
-
 @register_analyst(
     key="macro",
     agent_node="Macro Analyst",

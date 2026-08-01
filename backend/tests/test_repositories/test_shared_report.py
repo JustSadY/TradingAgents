@@ -13,7 +13,6 @@ from backend.repositories.shared_report import (
     get_user_analysis_by_id,
 )
 
-
 class TestSharedReportRepository:
     async def test_create_shared_report(self, db: AsyncSession, test_user):
         analysis = AnalysisResult(

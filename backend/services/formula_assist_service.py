@@ -53,7 +53,6 @@ Examples:
 If the request cannot be expressed in this DSL, reply with exactly: UNSUPPORTED
 """
 
-
 def _synthetic_ohlcv(rows: int = 120) -> pd.DataFrame:
     """Deterministic OHLCV frame used to validate formulas without network IO."""
     rng = np.random.default_rng(42)
@@ -69,20 +68,17 @@ def _synthetic_ohlcv(rows: int = 120) -> pd.DataFrame:
         }
     )
 
-
 def _extract_formula(raw: str) -> str:
     """Pull the bare formula out of an LLM reply (strip fences/quotes/prose)."""
     text = raw.strip()
     fence = re.search(r"```(?:\w+)?\s*(.+?)\s*```", text, flags=re.DOTALL)
     if fence:
         text = fence.group(1).strip()
-    # Keep the first non-empty line; models sometimes append commentary.
     for line in text.splitlines():
         line = line.strip().strip("`'\"")
         if line:
             return line
     return ""
-
 
 async def generate_formula(db: AsyncSession, prompt: str, user) -> str:
     """Return a validated DSL formula for *prompt* using the user's LLM."""
@@ -115,7 +111,6 @@ async def generate_formula(db: AsyncSession, prompt: str, user) -> str:
     if len(formula) > _MAX_FORMULA_CHARS:
         raise ValueError("Generated formula is too long; try a simpler description.")
 
-    # Never hand the client a formula that does not actually compute.
     try:
         evaluate_formula_safely(_synthetic_ohlcv(), formula)
     except ValueError as exc:

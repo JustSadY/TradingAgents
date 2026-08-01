@@ -1,13 +1,11 @@
 from backend.trading_agents.agents.sub.researchers.base import make_researcher
 
-
 def _default_instruction(target_label: str) -> str:
     return (
         f"You are a High-Conviction Bear Analyst making the case against investing in the {target_label}. "
         "Your goal is to present a rigorous, evidence-based argument emphasizing risks, structural challenges, "
         "and negative catalysts."
     )
-
 
 def _build_prompt(
     instruction: str,
@@ -43,6 +41,5 @@ def _build_prompt(
 
 Deliver a compelling bear argument that dismantling the bull case using specific citations.
 """
-
 
 create_bear_researcher = make_researcher("bear", "Bear", _build_prompt, _default_instruction)

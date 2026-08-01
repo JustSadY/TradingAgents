@@ -14,7 +14,6 @@ from backend.trading_agents.agents.schemas import (
 )
 from backend.trading_agents.graph.reflection import Reflector
 
-
 def test_structured_renderers_localize_turkish_scaffolding_and_actions():
     plan = render_research_plan(
         ResearchPlan(
@@ -39,7 +38,6 @@ def test_structured_renderers_localize_turkish_scaffolding_and_actions():
     assert "Recommendation" not in plan
     assert "Executive Summary" not in decision
 
-
 def test_summary_extraction_understands_turkish_heading_without_cutting_bold_metrics():
     report = """1. **Yönetici Özeti:**
 - Trend olumlu.
@@ -50,7 +48,6 @@ Bu bölüm özet promptuna girmemelidir.
 """
 
     assert extract_executive_summary(report) == "- Trend olumlu.\n- **Güven:** yüksek."
-
 
 def test_algorithmic_chart_fallback_uses_configured_output_language(monkeypatch):
     from backend.trading_agents.dataflows import config
@@ -70,7 +67,6 @@ def test_algorithmic_chart_fallback_uses_configured_output_language(monkeypatch)
     assert "Tespit Edilen Formasyon" in rendered
     assert "Çizilen Destek Seviyeleri" in rendered
     assert "Detected Pattern" not in rendered
-
 
 def test_reflector_uses_the_shared_strict_language_block(monkeypatch):
     from backend.trading_agents.dataflows import config

@@ -50,7 +50,6 @@ _RESEARCH_MANAGER = "Research Manager"
 _RISK_DEBATE = "Risk Debate"
 _PORTFOLIO_MANAGER = "Portfolio Manager"
 
-
 def _market_timeout_multiplier(selected_analysts: list[str] | set[str]) -> float:
     """Return a bounded-by-work timeout multiplier for analyst orchestration.
 
@@ -64,12 +63,10 @@ def _market_timeout_multiplier(selected_analysts: list[str] | set[str]) -> float
     """
     return float(max(2, len(selected_analysts)))
 
-
 def _research_timeout_multiplier(max_debate_rounds: int) -> float:
     """Budget synthesis, each bull/bear turn, audit, and final judgement."""
     rounds = max(1, int(max_debate_rounds or 1))
     return float(max(2, 3 + (2 * rounds)))
-
 
 class GraphSetup:
     def __init__(

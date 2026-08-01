@@ -9,10 +9,8 @@ import pytest
 from backend.core import task_store
 from backend.services import analysis_service
 
-
 async def _noop(*_args, **_kwargs) -> None:
     return None
-
 
 class _Emitter:
     instances: list[_Emitter] = []
@@ -29,7 +27,6 @@ class _Emitter:
     async def close(self) -> None:
         self.closed = True
 
-
 async def test_cancel_marker_survives_without_redis(monkeypatch):
     """Inline BackgroundTasks need a local durable intent marker as well."""
     task_id = "local-marker-regression"
@@ -40,7 +37,6 @@ async def test_cancel_marker_survives_without_redis(monkeypatch):
         assert await task_store.is_cancel_requested(task_id) is True
     finally:
         await task_store.clear_cancel_request(task_id)
-
 
 async def test_cancel_local_task_keeps_tracking_until_runner_acknowledges():
     """A queued/start race must not erase the record before the task stops."""
@@ -64,7 +60,6 @@ async def test_cancel_local_task_keeps_tracking_until_runner_acknowledges():
         analysis_service._TASK_REGISTRY.pop(task_id, None)
         analysis_service._TASK_OWNERS.pop(task_id, None)
 
-
 async def test_cancel_analysis_persists_intent_before_publish(monkeypatch):
     task_id = "queued-cancel-regression"
     calls: list[tuple[str, str]] = []
@@ -80,7 +75,6 @@ async def test_cancel_analysis_persists_intent_before_publish(monkeypatch):
 
     assert await analysis_service.cancel_analysis(task_id) is True
     assert calls == [("request", task_id), ("publish", task_id)]
-
 
 async def test_queued_analysis_never_enters_graph_after_cancel_marker(monkeypatch):
     """A worker/background task beginning after Stop must terminate pre-graph."""
@@ -105,7 +99,6 @@ async def test_queued_analysis_never_enters_graph_after_cancel_marker(monkeypatc
     assert graph_started is False
     assert _Emitter.instances[0].errors == ["Analysis cancelled."]
     assert _Emitter.instances[0].closed is True
-
 
 async def test_cancelled_incremental_update_rolls_back_before_terminal_write(monkeypatch):
     """Cancellation cleanup must not dereference an ORM row after a bad flush."""
@@ -168,7 +161,6 @@ async def test_cancelled_incremental_update_rolls_back_before_terminal_write(mon
     assert db.events == ["rollback", "mark_cancelled"]
     assert emitter.errors == ["Analysis cancelled."]
 
-
 async def test_cancelled_status_cleanup_does_not_mask_cancellation(monkeypatch):
     """A DB cleanup fault must propagate the original cancellation, not a failure."""
     from backend.services.analysis import orchestrator
@@ -202,12 +194,8 @@ async def test_cancelled_status_cleanup_does_not_mask_cancellation(monkeypatch):
     monkeypatch.setattr(orchestrator, "get_system_settings", cancelled_settings)
     monkeypatch.setattr(orchestrator, "mark_as_cancelled", broken_mark)
 
-    # The persistence helper is deliberately best effort, allowing the outer
-    # handler to re-raise its original CancelledError instead of entering the
-    # generic background-failure path.
     with pytest.raises(asyncio.CancelledError):
         await orchestrator.run_individual_analysis("NVDA", "2026-07-28", "stock", None, _Db(), _RunEmitter())
-
 
 async def test_portfolio_parent_is_registered_and_cancelled_with_children(monkeypatch):
     """Portfolio jobs need the same parent registry lifecycle as single runs."""
@@ -256,7 +244,6 @@ async def test_portfolio_parent_is_registered_and_cancelled_with_children(monkey
         analysis_service._RUNNING_TASKS.pop(task_id, None)
         analysis_service._TASK_REGISTRY.pop(task_id, None)
         analysis_service._TASK_OWNERS.pop(task_id, None)
-
 
 async def test_worker_treats_cancelled_analysis_as_terminal(monkeypatch):
     """ARQ must see a normal return instead of requeueing CancelledError."""

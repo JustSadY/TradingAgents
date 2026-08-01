@@ -14,7 +14,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
-
 @dataclass
 class MemoryRecord:
     """A single item to store. ``text`` is what gets embedded; ``metadata`` is
@@ -23,7 +22,6 @@ class MemoryRecord:
     id: str
     text: str
     metadata: dict[str, Any] = field(default_factory=dict)
-
 
 @dataclass
 class MemoryHit:
@@ -34,7 +32,6 @@ class MemoryHit:
     text: str
     metadata: dict[str, Any] = field(default_factory=dict)
 
-
 @runtime_checkable
 class Embedder(Protocol):
     """Turns text into vectors. Optional: a store may embed server-side instead
@@ -44,7 +41,6 @@ class Embedder(Protocol):
     def dimension(self) -> int: ...
 
     async def embed(self, texts: list[str]) -> list[list[float]]: ...
-
 
 @runtime_checkable
 class MemoryStore(Protocol):

@@ -2,7 +2,6 @@ import re
 
 _TICKER_PATH_RE = re.compile(r"^[A-Za-z0-9._\-\^]+$")
 
-
 def safe_ticker_component(value: str, *, max_len: int = 32) -> str:
     """Validate *value* for safe use as a filesystem path component."""
     if not isinstance(value, str) or not value:
@@ -14,7 +13,6 @@ def safe_ticker_component(value: str, *, max_len: int = 32) -> str:
     if set(value) == {"."}:
         raise ValueError(f"Ticker must not consist entirely of dots: {value!r}")
     return value
-
 
 def resolve_benchmark(ticker: str, config: dict | None = None) -> str:
     """Return the appropriate benchmark ticker for *ticker*.
@@ -38,7 +36,6 @@ def resolve_benchmark(ticker: str, config: dict | None = None) -> str:
         except Exception:
             config = {}
 
-    # Explicit override wins first.
     explicit = config.get("benchmark_ticker")
     if explicit:
         return str(explicit)
@@ -46,10 +43,8 @@ def resolve_benchmark(ticker: str, config: dict | None = None) -> str:
     benchmark_map: dict = config.get("benchmark_map", {})
     ticker_upper = ticker.upper()
 
-    # Suffix-based resolution (longest-suffix-first for determinism).
     for suffix in sorted(benchmark_map.keys(), key=len, reverse=True):
         if suffix and ticker_upper.endswith(suffix.upper()):
             return benchmark_map[suffix]
 
-    # Default entry (empty-string key) or hard fallback.
     return benchmark_map.get("", "SPY")

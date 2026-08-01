@@ -9,7 +9,6 @@ from backend.models.preset import ConfigPreset
 from backend.schemas.settings import SettingsUpdate
 from backend.services import settings_service
 
-
 def test_settings_update_allows_omission_but_rejects_null_for_non_nullable_field() -> None:
     assert SettingsUpdate().model_dump(exclude_unset=True) == {}
     assert SettingsUpdate(benchmark_ticker=None).model_dump(exclude_unset=True) == {"benchmark_ticker": None}
@@ -19,7 +18,6 @@ def test_settings_update_allows_omission_but_rejects_null_for_non_nullable_field
 
     with pytest.raises(ValidationError, match="active_preset_name"):
         SettingsUpdate(active_preset_name="manually-selected")
-
 
 async def test_preset_can_clear_nullable_settings(monkeypatch) -> None:
     class Settings:

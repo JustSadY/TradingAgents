@@ -11,7 +11,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
 
 _INSIDER_TOOLS = [get_insider_transactions]
 
-
 @register_analyst(
     key="insider",
     agent_node="Insider Activity Analyst",

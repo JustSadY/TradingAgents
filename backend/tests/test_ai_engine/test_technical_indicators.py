@@ -5,7 +5,6 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
-
 @pytest.mark.asyncio
 async def test_collect_indicators_sends_one_identifier_per_vendor_call(monkeypatch):
     from backend.trading_agents.agents.data import technical_indicators_tools
@@ -32,7 +31,6 @@ async def test_collect_indicators_sends_one_identifier_per_vendor_call(monkeypat
         ("AAPL", "atr", "2024-05-31", 45),
     ]
     assert result == "macd-result\n\nrsi-result\n\natr-result"
-
 
 def test_yfinance_indicator_backend_covers_market_prefetch_indicators(monkeypatch):
     import backend.trading_agents.dataflows.y_finance as y_finance

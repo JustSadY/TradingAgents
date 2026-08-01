@@ -14,7 +14,6 @@ from backend.repositories.portfolio import get_simulation_portfolio
 
 _CLOSING_STATUSES = frozenset({"FILLED", "STOP_LOSS", "TAKE_PROFIT", "LIQUIDATED"})
 
-
 def _is_closing_order(order: Order) -> bool:
     """Whether an order represents a completed position exit.
 
@@ -28,11 +27,9 @@ def _is_closing_order(order: Order) -> bool:
     action = (order.action or "").upper()
     return (side == "long" and action == "SELL") or (side == "short" and action == "BUY")
 
-
 def _closing_orders(orders: list[Order]) -> list[Order]:
     """Keep only terminal orders that actually close a long or short."""
     return [order for order in orders if _is_closing_order(order)]
-
 
 def _equity_max_drawdown_pct(initial_capital: Decimal, orders: list[Order]) -> float | None:
     """Return the negative peak-to-trough drawdown for realized trade equity.
@@ -56,7 +53,6 @@ def _equity_max_drawdown_pct(initial_capital: Decimal, orders: list[Order]) -> f
                 max_drawdown = drawdown
     return -float(max_drawdown)
 
-
 def _closing_cost_basis(order: Order, pnl: Decimal) -> Decimal:
     """Derive all-in entry capital from a closing order's fill and P&L.
 
@@ -74,7 +70,6 @@ def _closing_cost_basis(order: Order, pnl: Decimal) -> Decimal:
     else:
         entry_notional = exit_notional - pnl - entry_commission - exit_commission
     return entry_notional + entry_commission
-
 
 async def get_portfolio_stats(db: AsyncSession, user: User) -> dict:
     portfolio: Portfolio | None = await get_simulation_portfolio(db, user_id=user.id)

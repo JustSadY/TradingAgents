@@ -19,7 +19,6 @@ from backend.services.trading_orchestrator import auto_execute_signals_enabled, 
 _logger = logging.getLogger(__name__)
 _cron_service: Optional["CronService"] = None
 
-
 @asynccontextmanager
 async def _job_lock(job_name: str):
     """Acquire a PostgreSQL advisory lock for a scheduler job.
@@ -56,7 +55,6 @@ async def _job_lock(job_name: str):
     except Exception as exc:
         _logger.warning("Advisory lock execution error for %s: %s", job_name, exc)
         yield False
-
 
 class CronService:
     def __init__(self):
@@ -192,7 +190,6 @@ class CronService:
             "next_run_time": job.next_run_time.isoformat() if job and job.next_run_time else None,
         }
 
-
 async def _place_actionable_signal_order(db, *, ticker: str, row, settings, user) -> bool:
     """Place cron orders through the orchestrator's single signal mapping."""
     if not auto_execute_signals_enabled(settings):
@@ -208,7 +205,6 @@ async def _place_actionable_signal_order(db, *, ticker: str, row, settings, user
     await db.commit()
     return True
 
-
 async def _run_alert_checker():
     try:
         async with _job_lock("alert_checker") as acquired:
@@ -216,7 +212,6 @@ async def _run_alert_checker():
                 await check_price_alerts()
     except Exception:
         _logger.exception("Alert checker error")
-
 
 async def _run_performance_backfill():
     try:
@@ -227,7 +222,6 @@ async def _run_performance_backfill():
                 await backfill_returns(db)
     except Exception:
         _logger.exception("Performance backfill error")
-
 
 async def _run_position_monitor():
     """Periodically enforce stop-loss / take-profit / liquidation on open positions."""
@@ -244,7 +238,6 @@ async def _run_position_monitor():
                     _logger.info("Position monitor auto-closed %d position(s): %s", len(closed), closed)
     except Exception:
         _logger.exception("Position monitor error")
-
 
 def init_cron_service() -> CronService:
     global _cron_service
@@ -265,7 +258,6 @@ def init_cron_service() -> CronService:
     subscribe("user_deleted", _on_user_deleted)
 
     return _cron_service
-
 
 def get_cron_service() -> CronService | None:
     return _cron_service

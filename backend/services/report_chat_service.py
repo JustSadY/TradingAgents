@@ -20,7 +20,6 @@ from backend.services.user_service import resolve_user_api_key
 
 _logger = logging.getLogger(__name__)
 
-# (heading, attribute) pairs assembled into the LLM's grounding context.
 _REPORT_SECTIONS = [
     ("MARKET REPORT", "market_report"),
     ("SENTIMENT REPORT", "sentiment_report"),
@@ -38,18 +37,13 @@ _REPORT_SECTIONS = [
     ("UPCOMING CATALYSTS REPORT", "catalyst_report"),
 ]
 
-# Per-section cap for the chat grounding context. The full system prompt is
-# re-sent on EVERY chat message, so uncapped reports make each follow-up
-# question cost as much as re-reading the entire analysis.
 _MAX_SECTION_CHARS = 5000
-
 
 def _capped(text: str) -> str:
     text = (text or "").strip()
     if len(text) <= _MAX_SECTION_CHARS:
         return text
     return text[:_MAX_SECTION_CHARS].rstrip() + "\n…[section truncated to conserve tokens]"
-
 
 async def _get_owned_analysis(db: AsyncSession, analysis_id: int, user) -> AnalysisResult:
     q = select(AnalysisResult).where(AnalysisResult.id == analysis_id)
@@ -60,14 +54,12 @@ async def _get_owned_analysis(db: AsyncSession, analysis_id: int, user) -> Analy
         raise HTTPException(status_code=404, detail="Analysis report not found")
     return analysis
 
-
 async def get_chat_history(db: AsyncSession, analysis_id: int, user) -> list[AnalysisChat]:
     await _get_owned_analysis(db, analysis_id, user)
     result = await db.execute(
         select(AnalysisChat).where(AnalysisChat.analysis_id == analysis_id).order_by(AnalysisChat.created_at.asc())
     )
     return list(result.scalars().all())
-
 
 def _build_report_context(analysis: AnalysisResult) -> str:
     parts = [
@@ -76,10 +68,8 @@ def _build_report_context(analysis: AnalysisResult) -> str:
         if getattr(analysis, attr, None)
     ]
     if analysis.final_decision:
-        # The final decision is what users ask about most — never truncate it.
         parts.append(f"### FINAL PORTFOLIO DECISION & SIGNAL ({analysis.signal})\n{analysis.final_decision}")
     return "\n\n".join(parts)
-
 
 def _build_system_prompt(analysis: AnalysisResult, output_language: str | None) -> str:
     lang = (output_language or "English").strip()
@@ -94,7 +84,6 @@ def _build_system_prompt(analysis: AnalysisResult, output_language: str | None) 
         "concisely. Ground your replies only in the details provided in the report. If they ask "
         f"about something not covered in the report, say so politely.{lang_inst}"
     )
-
 
 async def answer_report_question(
     db: AsyncSession,
@@ -115,13 +104,11 @@ async def answer_report_question(
         payload.append(HumanMessage(content=msg.content) if msg.role == "user" else AIMessage(content=msg.content))
     payload.append(HumanMessage(content=message))
 
-    # Determine LLM Provider/Model based on the portfolio_manager agent settings.
     from backend.services.agent_settings_service import build_agent_runtime_context
 
     agent_ctx = await build_agent_runtime_context(db, user.id if user else None)
     pm_settings = agent_ctx.get("portfolio_manager", {}).get("settings", {})
 
-    # Prioritize the Portfolio Manager's specific settings, then global fallback
     active_provider = pm_settings.get("llm_provider") or settings.llm_provider
     active_model = pm_settings.get("llm_model") or settings.llm_model
 

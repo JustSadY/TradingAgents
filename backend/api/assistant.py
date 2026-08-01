@@ -10,10 +10,8 @@ from backend.services import portfolio_assistant_service as svc
 
 router = APIRouter(prefix="/api/assistant", tags=["assistant"])
 
-
 class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
-
 
 @router.get("/history", response_model=list[AssistantHistoryItem])
 async def get_history(
@@ -22,7 +20,6 @@ async def get_history(
 ):
     return await svc.get_assistant_history(db, current_user)
 
-
 @router.post("/chat", response_model=AssistantChatResponse)
 async def chat(
     body: ChatRequest,
@@ -30,7 +27,6 @@ async def chat(
     current_user: User = Depends(get_current_user),
 ):
     return await svc.chat(db, current_user, body.message)
-
 
 @router.delete("/history", status_code=204)
 async def clear_history(

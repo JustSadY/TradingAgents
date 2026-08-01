@@ -7,7 +7,6 @@ from backend.core.metrics import render_latest
 
 router = APIRouter(tags=["metrics"])
 
-
 @router.get(
     "/metrics",
     include_in_schema=False,

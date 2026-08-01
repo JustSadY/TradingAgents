@@ -2,19 +2,16 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 class MultiTickerRunRequest(BaseModel):
     tickers: list[str] = Field(..., min_length=2, max_length=10)
     trade_date: str
     asset_type: str = "stock"
-
 
 class MultiTickerRunResponse(BaseModel):
     task_id: str
     tickers: list[str]
     trade_date: str
     message: str = "Portfolio analysis started"
-
 
 class MultiTickerListItem(BaseModel):
     id: int
@@ -25,7 +22,6 @@ class MultiTickerListItem(BaseModel):
     created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-
 
 class MultiTickerResultRead(BaseModel):
     id: int

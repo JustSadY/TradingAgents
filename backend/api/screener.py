@@ -11,7 +11,6 @@ from backend.services.screener_service import MAX_UNIVERSE, run_screen
 
 router = APIRouter(prefix="/api/screener", tags=["screener"])
 
-
 class ScreenRequest(BaseModel):
     tickers: list[str] | None = Field(default=None, max_length=MAX_UNIVERSE)
     top_n: int = Field(default=10, ge=1, le=MAX_UNIVERSE)
@@ -26,7 +25,6 @@ class ScreenRequest(BaseModel):
             cleaned.append(safe_ticker_component(t.strip().upper(), max_len=20))
         return cleaned
 
-
 @router.post("/scan", response_model=ScreenResponse)
 @limiter.limit("10/minute")
 async def scan(
@@ -36,7 +34,6 @@ async def scan(
 ):
     """Score a ticker universe and return the strongest candidates."""
     return ScreenResponse(results=await run_screen(universe=body.tickers, top_n=body.top_n))
-
 
 @router.post("/scan-watchlist", response_model=ScreenResponse, responses={400: {"description": "Watchlist is empty"}})
 @limiter.limit("10/minute")

@@ -13,8 +13,6 @@ _TEMP_KEY = None
 _TEMP_FERNET = None
 _TEMP_KEY_LOCK = threading.Lock()
 
-# Sync SQLAlchemy schemes an operator may reasonably write in .env, mapped onto
-# the async drivers this app actually ships (asyncpg / aiosqlite).
 _ASYNC_DB_DRIVERS = {
     "postgres": "postgresql+asyncpg",
     "postgresql": "postgresql+asyncpg",
@@ -23,7 +21,6 @@ _ASYNC_DB_DRIVERS = {
     "sqlite": "sqlite+aiosqlite",
     "sqlite+pysqlite": "sqlite+aiosqlite",
 }
-
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=str(_ROOT_ENV), env_file_encoding="utf-8", extra="ignore")
@@ -34,43 +31,18 @@ class Settings(BaseSettings):
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
     ADMIN_USERNAME: str = "admin"
     ADMIN_PASSWORD_HASH: str = ""
-    DATABASE_URL: str = "postgresql+asyncpg://tradingagents:tradingagents@localhost:5432/tradingagents"  # NOSONAR
+    DATABASE_URL: str = "postgresql+asyncpg://tradingagents:tradingagents@localhost:5432/tradingagents"
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 5
     ENCRYPTION_KEY: str = ""
     CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://localhost:3000"]
-    # Bearer token for GET /metrics (Prometheus). Endpoint returns 404 while unset.
     METRICS_TOKEN: str = ""
-    # Maximum accepted HTTP request body size in bytes (0 disables the check).
     MAX_REQUEST_BODY_BYTES: int = 2_000_000
-    # Optional Redis (e.g. redis://localhost:6379/0). When set, analysis
-    # WebSocket events fan out over pub/sub and the task registry becomes
-    # cross-process. Empty = original single-process in-memory behaviour.
     REDIS_URL: str = ""
-    # "inline" runs analyses in the web process (default). "worker" enqueues
-    # them onto arq (requires REDIS_URL and a running `arq backend.worker.WorkerSettings`).
     ANALYSIS_QUEUE_MODE: str = "inline"
-    # Ollama is a server-managed integration.  It deliberately cannot be
-    # overridden by a user's encrypted API-key value: that value is otherwise
-    # an authenticated SSRF primitive.  The operator may point this at a
-    # trusted local/reverse-proxied Ollama endpoint.
     OLLAMA_BASE_URL: str = "http://localhost:11434"
-    # Off by default: request.client.host is the only trustworthy source of the
-    # caller's IP for rate-limiting unless this app sits behind a reverse proxy
-    # that YOU control and that overwrites (not appends to) X-Forwarded-For.
-    # Turning this on without a matching trusted-proxy network lets any client
-    # forge the header and get its own private rate-limit bucket (or blame
-    # another IP for its abuse).
     TRUST_PROXY_HEADERS: bool = False
-    # Comma-separated CIDRs for reverse proxies allowed to supply
-    # X-Forwarded-For.  This deliberately remains a simple string so operators
-    # can set it naturally in .env files; parsing/validation happens in the
-    # limiter and an empty value fails closed to request.client.host.
     TRUSTED_PROXY_CIDRS: str = ""
-    # Real-money broker orders are an operator-controlled capability.  They
-    # remain disabled unless the server environment explicitly opts in; a
-    # database setting or a compromised administrator account must not be
-    # enough to activate a live brokerage account on its own.
     ENABLE_LIVE_TRADING: bool = False
 
     @model_validator(mode="after")
@@ -150,11 +122,9 @@ class Settings(BaseSettings):
                 _TEMP_FERNET = Fernet(_TEMP_KEY.encode() if isinstance(_TEMP_KEY, str) else _TEMP_KEY)
             return _TEMP_FERNET
 
-
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
-
 
 def is_live_trading_enabled() -> bool:
     """Whether this server has explicitly opted in to real-money orders."""

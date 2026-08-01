@@ -10,7 +10,6 @@ from backend.services import token_analytics_service
 from backend.services.analysis_stats_service import _calc_base
 from backend.services.analysis_stats_service import estimate_cost as estimate_pre_run_cost
 
-
 def test_versioned_mini_model_uses_mini_rate_not_gpt_4o_prefix():
     resolution = resolve_model_pricing("openai", "gpt-4o-mini-2024-07-18")
 
@@ -18,7 +17,6 @@ def test_versioned_mini_model_uses_mini_rate_not_gpt_4o_prefix():
     assert resolution.pricing.input_per_million_usd == 0.15
     assert resolution.pricing.output_per_million_usd == 0.60
     assert estimate_token_cost("openai", "gpt-4o-mini-2024-07-18", 1_000_000, 1_000_000) == 0.75
-
 
 def test_pre_run_and_analytics_paths_share_the_same_catalogue():
     estimate = estimate_pre_run_cost("market,news", 1, "gpt-4o-mini", "openai")
@@ -40,7 +38,6 @@ def test_pre_run_and_analytics_paths_share_the_same_catalogue():
     )
     assert _calc_base([row])["avg_cost_usd"] == 0.75
 
-
 def test_unknown_cloud_model_is_labelled_as_a_conservative_fallback():
     resolution = resolve_model_pricing("groq", "a-newly-released-model")
 
@@ -48,14 +45,12 @@ def test_unknown_cloud_model_is_labelled_as_a_conservative_fallback():
     assert resolution.is_fallback is True
     assert resolution.pricing == DEFAULT_CLOUD_PRICING
 
-
 def test_local_ollama_model_has_no_provider_token_charge():
     resolution = resolve_model_pricing("ollama", "custom-local-model")
 
     assert resolution.source == "local"
     assert resolution.is_fallback is False
     assert estimate_token_cost("ollama", "custom-local-model", 1_000_000, 1_000_000) == 0.0
-
 
 async def test_token_usage_breakdown_exposes_fallback_pricing(monkeypatch):
     row = SimpleNamespace(

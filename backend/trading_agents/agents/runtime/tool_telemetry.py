@@ -22,7 +22,6 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
-
 @dataclass(frozen=True)
 class ToolCallContext:
     """The safe identifiers associated with one in-flight tool call."""
@@ -30,7 +29,6 @@ class ToolCallContext:
     tool: str
     analyst: str | None
     call_id: str | None
-
 
 _active_tool_call: contextvars.ContextVar[ToolCallContext | None] = contextvars.ContextVar(
     "active_tool_call", default=None
@@ -42,14 +40,12 @@ _FALLBACK_SECRET_RE = re.compile(
     r"\s*([:=])\s*(?:bearer\s+)?[^\s,;]+"
 )
 
-
 def _safe_identifier(value: Any, *, fallback: str = "unknown") -> str:
     """Make model-supplied tool names safe to display and use as metric labels."""
     if value is None:
         return fallback
     clean = _IDENTIFIER_RE.sub("_", str(value).strip())
     return clean[:96] or fallback
-
 
 def safe_tool_error(exc: BaseException, *, limit: int = 300) -> str:
     """Return an error summary safe for both the database log and the LLM.
@@ -69,7 +65,6 @@ def safe_tool_error(exc: BaseException, *, limit: int = 300) -> str:
     message = " ".join(message.split())
     return message[:limit] or type(exc).__name__
 
-
 def _context_for_exception(exc: BaseException) -> ToolCallContext:
     context = _active_tool_call.get()
     if context is not None:
@@ -80,7 +75,6 @@ def _context_for_exception(exc: BaseException) -> ToolCallContext:
         analyst=None,
         call_id=None,
     )
-
 
 def tool_error_handler(exc: Exception) -> str:
     """Log a contextual tool failure and return ToolNode's safe fallback text."""
@@ -113,7 +107,6 @@ def tool_error_handler(exc: Exception) -> str:
         "use a different tool or continue your analysis with the data already gathered."
     )
 
-
 def make_async_tool_call_wrapper(analyst: str) -> Callable[[Any, Callable[[Any], Awaitable[Any]]], Awaitable[Any]]:
     """Build a ToolNode ``awrap_tool_call`` callback scoped to one analyst."""
 
@@ -133,7 +126,6 @@ def make_async_tool_call_wrapper(analyst: str) -> Callable[[Any, Callable[[Any],
             _active_tool_call.reset(token)
 
     return wrapped
-
 
 def pending_tool_calls(state: Any) -> list[dict[str, str]]:
     """Return safe ``name``/``id`` pairs for the ToolNode currently executing."""
@@ -159,7 +151,6 @@ def pending_tool_calls(state: Any) -> list[dict[str, str]]:
             pending.append({"name": tool, "id": call_id})
     return pending
 
-
 def tool_timeout_messages(state: Any, timeout_seconds: float) -> list[Any]:
     """Build one valid error response for every timed-out tool call.
 
@@ -175,7 +166,6 @@ def tool_timeout_messages(state: Any, timeout_seconds: float) -> list[Any]:
         ToolMessage(content=content, name=call["name"], tool_call_id=call["id"], status="error")
         for call in pending_tool_calls(state)
     ]
-
 
 def log_tool_timeout(state: Any, *, analyst: str, timeout_seconds: float) -> list[Any]:
     """Record a batch timeout with the affected calls, then build fallbacks."""

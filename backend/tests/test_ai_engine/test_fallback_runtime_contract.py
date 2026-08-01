@@ -10,14 +10,12 @@ from backend.services.analysis.config_builder import build_analysis_config
 from backend.trading_agents.config import FallbackLLMConfig, TradingAgentsConfig, normalize_fallback_llm_chain
 from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
 
-
 def _graph_with_config(config: dict) -> TradingAgentsGraph:
     """Create the small graph shell needed by ``_with_fallback`` tests."""
     graph = object.__new__(TradingAgentsGraph)
     graph.config = config
     graph.callbacks = []
     return graph
-
 
 def test_fallback_chain_is_normalized_in_default_runtime_config():
     config = TradingAgentsConfig(
@@ -36,7 +34,6 @@ def test_fallback_chain_is_normalized_in_default_runtime_config():
         {"provider": "nvidia", "model": "nemotron"}
     ]
 
-
 @pytest.mark.parametrize(
     "value",
     [
@@ -54,20 +51,17 @@ def test_fallback_chain_rejects_noncanonical_entries(value):
     with pytest.raises(ValueError):
         normalize_fallback_llm_chain(value)
 
-
 def test_graph_without_a_canonical_chain_leaves_primary_unwrapped():
     primary = object()
     graph = _graph_with_config({})
 
     assert graph._with_fallback(primary, "openai", "gpt-4o-mini") is primary
 
-
 def test_graph_rejects_an_invalid_canonical_chain():
     graph = _graph_with_config({"fallback_llm_chain": {"provider": "nvidia", "model": "nemotron"}})
 
     with pytest.raises(ValueError, match="fallback_llm_chain"):
         graph._with_fallback(object(), "openai", "gpt-4o-mini")
-
 
 def test_analysis_config_emits_only_the_canonical_fallback_chain():
     settings = AppSettings(
@@ -81,7 +75,6 @@ def test_analysis_config_emits_only_the_canonical_fallback_chain():
     assert config["fallback_llm_chain"] == [{"provider": "nvidia", "model": "nvidia/nemotron"}]
     assert "fallback_llm_provider" not in config
     assert "fallback_llm_model" not in config
-
 
 def test_graph_builds_fallbacks_only_from_ordered_chain(monkeypatch):
     from backend.trading_agents.graph import trading_graph
@@ -127,7 +120,6 @@ def test_graph_builds_fallbacks_only_from_ordered_chain(monkeypatch):
     assert result.primary is primary
     assert result.fallbacks == ["nvidia/nvidia/nemotron"]
     assert created == [("nvidia", "nvidia/nemotron", {"api_key": "nv-key"})]
-
 
 def test_ollama_never_receives_a_tenant_api_value():
     graph = _graph_with_config(

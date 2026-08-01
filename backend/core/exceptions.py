@@ -17,7 +17,6 @@ from fastapi.responses import JSONResponse
 
 _logger = logging.getLogger(__name__)
 
-
 class ServiceError(Exception):
     """Base exception for all service-layer errors."""
 
@@ -31,21 +30,17 @@ class ServiceError(Exception):
             self.status_code = status_code
         super().__init__(self.detail)
 
-
 class NotFoundError(ServiceError):
     status_code: int = 404
     detail: str = "Resource not found"
-
 
 class ValidationError(ServiceError, ValueError):
     status_code: int = 400
     detail: str = "Validation error"
 
-
 class ExternalServiceError(ServiceError):
     status_code: int = 502
     detail: str = "External service error"
-
 
 def register_exception_handlers(app: FastAPI) -> None:
     @app.exception_handler(ValueError)

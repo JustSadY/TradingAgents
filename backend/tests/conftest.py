@@ -17,9 +17,6 @@ os.environ["SECRET_KEY"] = "test-secret-key-not-for-production"
 os.environ["METRICS_TOKEN"] = "test-metrics-token"
 os.environ["ADMIN_USERNAME"] = "admin"
 os.environ["ADMIN_PASSWORD_HASH"] = ""
-# Tests must never inherit a developer's Redis/worker configuration.  Besides
-# making the suite depend on an external service, a configured but unavailable
-# Redis instance turns otherwise local API tests into connection failures.
 os.environ["REDIS_URL"] = ""
 os.environ["ANALYSIS_QUEUE_MODE"] = "inline"
 
@@ -52,10 +49,6 @@ from backend.core.security import create_access_token, hash_password  # noqa: E4
 from backend.main import app  # noqa: E402
 from backend.models.user import User  # noqa: E402
 
-
-# The engine is session-scoped for fast metadata setup.  ``NullPool`` keeps
-# each test transaction on its own SQLite connection; the ``db`` fixture below
-# makes all fixtures in a test share that one transaction.
 @pytest_asyncio.fixture(scope="session")
 async def test_engine():
     engine = create_async_engine(
@@ -79,7 +72,6 @@ async def test_engine():
 
     await engine.dispose()
 
-
 @pytest_asyncio.fixture
 async def db_session(test_engine) -> AsyncGenerator[AsyncSession, Any]:
     connection = await test_engine.connect()
@@ -91,7 +83,6 @@ async def db_session(test_engine) -> AsyncGenerator[AsyncSession, Any]:
     await session.close()
     await transaction.rollback()
     await connection.close()
-
 
 @pytest_asyncio.fixture
 async def db(db_session: AsyncSession) -> AsyncGenerator[AsyncSession, None]:
@@ -106,7 +97,6 @@ async def db(db_session: AsyncSession) -> AsyncGenerator[AsyncSession, None]:
     """
     yield db_session
 
-
 @pytest_asyncio.fixture
 async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, Any]:
     async def _override_get_db():
@@ -119,12 +109,6 @@ async def async_client(db_session: AsyncSession) -> AsyncGenerator[AsyncClient, 
         yield client
 
     app.dependency_overrides.clear()
-
-
-# ---------------------------------------------------------------------------
-# Auth fixtures
-# ---------------------------------------------------------------------------
-
 
 @pytest_asyncio.fixture
 async def test_user(db_session: AsyncSession) -> User:
@@ -139,7 +123,6 @@ async def test_user(db_session: AsyncSession) -> User:
     await db_session.refresh(user)
     return user
 
-
 @pytest_asyncio.fixture
 async def admin_user(db_session: AsyncSession) -> User:
     user = User(
@@ -153,26 +136,21 @@ async def admin_user(db_session: AsyncSession) -> User:
     await db_session.refresh(user)
     return user
 
-
 @pytest.fixture
 def auth_token(test_user: User) -> str:
     return create_access_token(username=test_user.username, role=test_user.role, token_version=0)
-
 
 @pytest.fixture
 def admin_token(admin_user: User) -> str:
     return create_access_token(username=admin_user.username, role=admin_user.role, token_version=0)
 
-
 @pytest.fixture
 def auth_headers(auth_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {auth_token}"}
 
-
 @pytest.fixture
 def admin_headers(admin_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {admin_token}"}
-
 
 @pytest_asyncio.fixture
 async def authenticated_client(
@@ -200,14 +178,7 @@ async def authenticated_client(
     async_client.headers.update(auth_headers)
     return async_client
 
-
 auth_client = authenticated_client
-
-
-# ---------------------------------------------------------------------------
-# Mock LLM fixture (prevents external API calls during tests)
-# ---------------------------------------------------------------------------
-
 
 @pytest.fixture
 def mock_llm(mocker):

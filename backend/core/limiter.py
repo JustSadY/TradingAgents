@@ -7,7 +7,6 @@ from slowapi.util import get_remote_address
 
 from backend.core.config import get_settings
 
-
 @lru_cache(maxsize=32)
 def _trusted_proxy_networks(raw_cidrs: str) -> tuple:
     """Parse the configured reverse-proxy CIDRs, failing closed on typos.
@@ -28,14 +27,12 @@ def _trusted_proxy_networks(raw_cidrs: str) -> tuple:
             continue
     return tuple(networks)
 
-
 def _is_trusted_proxy(peer: str, raw_cidrs: str) -> bool:
     try:
         peer_ip = ip_address(peer)
     except ValueError:
         return False
     return any(peer_ip in network for network in _trusted_proxy_networks(raw_cidrs))
-
 
 def _forwarded_client_ip(forwarded: str) -> str | None:
     """Return a sanitized client address from a trusted proxy header.
@@ -54,13 +51,9 @@ def _forwarded_client_ip(forwarded: str) -> str | None:
         try:
             candidates.append(str(ip_address(value)))
         except ValueError:
-            # A malformed chain is not a safe identity source.  Fall back to
-            # the directly connected peer rather than giving attacker text a
-            # persistent rate-limit key.
             return None
 
     return candidates[0] if candidates else None
-
 
 def _client_ip(request: Request) -> str:
     """Rate-limit key: the caller's IP.
@@ -82,6 +75,5 @@ def _client_ip(request: Request) -> str:
             if client_ip:
                 return client_ip
     return peer
-
 
 limiter = Limiter(key_func=_client_ip)

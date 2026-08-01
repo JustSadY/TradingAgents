@@ -41,13 +41,11 @@ TOOLS_CATEGORIES = {
     },
 }
 
-
 def get_category_for_method(method: str) -> str:
     for category, info in TOOLS_CATEGORIES.items():
         if method in info["tools"]:
             return category
     raise ValueError(f"Method '{method}' not found in any category")
-
 
 class APICache:
     _init_lock = threading.Lock()

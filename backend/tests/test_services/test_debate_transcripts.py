@@ -8,7 +8,6 @@ import pytest
 
 from backend.trading_agents.agents.runtime.debate_history import debate_messages, format_debate_argument
 
-
 def test_debate_messages_keep_multiline_markdown_in_one_speaker_turn():
     history = (
         "Bull Analyst: **Catalyst:** Earnings improved.\n"
@@ -25,7 +24,6 @@ def test_debate_messages_keep_multiline_markdown_in_one_speaker_turn():
         {"sender": "Bear Analyst", "content": "Valuation still prices in execution perfection."},
     ]
 
-
 def test_debate_argument_strips_repeated_provider_role_heading():
     argument = format_debate_argument(
         "Aggressive Analyst",
@@ -33,7 +31,6 @@ def test_debate_argument_strips_repeated_provider_role_heading():
     )
 
     assert argument == "Aggressive Analyst: **Upside:** Momentum is improving."
-
 
 def test_debate_argument_strips_dangling_markdown_delimiter_before_response():
     argument = format_debate_argument(
@@ -43,14 +40,12 @@ def test_debate_argument_strips_dangling_markdown_delimiter_before_response():
 
     assert argument == "Aggressive Analyst: The upside case remains well supported by earnings growth."
 
-
 def test_debate_messages_accept_legacy_markdown_headings():
     history = "### Aggressive Risk Analyst\n**Upside:** Breakout volume supports upside."
 
     assert debate_messages(history) == [
         {"sender": "Aggressive Analyst", "content": "**Upside:** Breakout volume supports upside."}
     ]
-
 
 def test_risk_parser_accepts_markdown_role_headings():
     from backend.trading_agents.agents.main.risk import _parse_perspectives
@@ -69,7 +64,6 @@ Use a smaller initial position and reassess after earnings."""
         "conservative": "**Risk:** A defined stop is necessary before adding exposure.",
         "neutral": "Use a smaller initial position and reassess after earnings.",
     }
-
 
 @pytest.mark.asyncio
 async def test_merged_risk_debate_preserves_all_perspectives_and_language_settings(monkeypatch):

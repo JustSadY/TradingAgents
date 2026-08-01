@@ -22,35 +22,25 @@ from backend.core.redis_bus import CONTROL_CHANNEL, get_redis, redis_enabled, su
 
 _logger = logging.getLogger(__name__)
 
-# Analyses run minutes; entries outliving this are leftovers from a crash.
 _TTL_SECONDS = 2 * 60 * 60
 
-# Redis is optional for single-process deployments.  Keep cancellation intent
-# in-process in that mode so a request that lands just before a BackgroundTask
-# starts cannot be lost between the HTTP handler and task registration.
 _LOCAL_CANCEL_REQUESTS: set[str] = set()
-
 
 def _log_redis_failure(operation: str, exc: RedisError) -> None:
     """Keep Redis an optional cross-process enhancement, never an API SPOF."""
     _logger.warning("Analysis task store %s skipped because Redis is unavailable: %s", operation, exc)
 
-
 def _owner_key(task_id: str) -> str:
     return f"analysis:owner:{task_id}"
-
 
 def _meta_key(task_id: str) -> str:
     return f"analysis:meta:{task_id}"
 
-
 def _user_tasks_key(user_id: int) -> str:
     return f"analysis:user_tasks:{user_id}"
 
-
 def _cancel_key(task_id: str) -> str:
     return f"analysis:cancel:{task_id}"
-
 
 async def set_owner(task_id: str, user_id: int | None) -> None:
     if not redis_enabled():
@@ -59,7 +49,6 @@ async def set_owner(task_id: str, user_id: int | None) -> None:
         await get_redis().set(_owner_key(task_id), "" if user_id is None else str(user_id), ex=_TTL_SECONDS)
     except RedisError as exc:
         _log_redis_failure("set_owner", exc)
-
 
 async def get_owner(task_id: str) -> int | None:
     """Owner user id, or ``None`` when unknown or system-owned."""
@@ -78,7 +67,6 @@ async def get_owner(task_id: str) -> int | None:
         _logger.warning("Invalid owner value for task=%s: %r", task_id, raw)
         return None
 
-
 async def clear_owner(task_id: str) -> None:
     if not redis_enabled():
         return
@@ -86,7 +74,6 @@ async def clear_owner(task_id: str) -> None:
         await get_redis().delete(_owner_key(task_id))
     except RedisError as exc:
         _log_redis_failure("clear_owner", exc)
-
 
 async def get_meta(task_id: str) -> dict | None:
     """Return task meta dict, or None when unknown."""
@@ -104,7 +91,6 @@ async def get_meta(task_id: str) -> dict | None:
     except (TypeError, ValueError):
         return None
 
-
 async def set_meta(task_id: str, meta: dict) -> None:
     if not redis_enabled():
         return
@@ -119,7 +105,6 @@ async def set_meta(task_id: str, meta: dict) -> None:
     except RedisError as exc:
         _log_redis_failure("set_meta", exc)
 
-
 async def clear_meta(task_id: str, user_id: int | None = None) -> None:
     if not redis_enabled():
         return
@@ -130,7 +115,6 @@ async def clear_meta(task_id: str, user_id: int | None = None) -> None:
             await redis.srem(_user_tasks_key(user_id), task_id)
     except RedisError as exc:
         _log_redis_failure("clear_meta", exc)
-
 
 async def request_cancel(task_id: str) -> None:
     """Persist a cancellation request before publishing the transient signal.
@@ -146,12 +130,8 @@ async def request_cancel(task_id: str) -> None:
     try:
         await get_redis().set(_cancel_key(task_id), "1", ex=_TTL_SECONDS)
     except RedisError as exc:
-        # Local cancellation remains useful if a Redis outage happens after a
-        # task was accepted by this process.  Cross-process cancellation will
-        # recover once Redis is available again rather than crashing the API.
         _LOCAL_CANCEL_REQUESTS.add(task_id)
         _log_redis_failure("request_cancel", exc)
-
 
 async def is_cancel_requested(task_id: str) -> bool:
     """Return whether a runner must terminate before doing more work."""
@@ -165,7 +145,6 @@ async def is_cancel_requested(task_id: str) -> bool:
         _log_redis_failure("is_cancel_requested", exc)
         return False
 
-
 async def clear_cancel_request(task_id: str) -> None:
     """Acknowledge terminal handling of a cancellation request."""
     _LOCAL_CANCEL_REQUESTS.discard(task_id)
@@ -175,7 +154,6 @@ async def clear_cancel_request(task_id: str) -> None:
         await get_redis().delete(_cancel_key(task_id))
     except RedisError as exc:
         _log_redis_failure("clear_cancel_request", exc)
-
 
 async def list_tasks_for_user(user_id: int) -> list[dict]:
     """Active tasks for ``user_id`` as ``{"task_id": ..., **meta}`` dicts."""
@@ -195,7 +173,6 @@ async def list_tasks_for_user(user_id: int) -> list[dict]:
             _log_redis_failure("list_tasks_for_user", exc)
             return tasks
         if raw is None:
-            # Meta expired or cleaned up; drop the stale index entry.
             try:
                 await redis.srem(_user_tasks_key(user_id), task_id)
             except RedisError as exc:
@@ -208,7 +185,6 @@ async def list_tasks_for_user(user_id: int) -> list[dict]:
             continue
     return tasks
 
-
 async def publish_cancel(task_id: str) -> None:
     """Ask whichever process is running ``task_id`` to cancel it."""
     if not redis_enabled():
@@ -217,7 +193,6 @@ async def publish_cancel(task_id: str) -> None:
         await get_redis().publish(CONTROL_CHANNEL, json.dumps({"action": "cancel", "task_id": task_id}))
     except RedisError as exc:
         _log_redis_failure("publish_cancel", exc)
-
 
 async def control_listener(cancel_local) -> None:
     """Listen for control messages and apply them to this process.

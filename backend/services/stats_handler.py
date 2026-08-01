@@ -7,7 +7,6 @@ from langchain_core.callbacks import BaseCallbackHandler
 
 _logger = logging.getLogger(__name__)
 
-
 class StatsCallbackHandler(BaseCallbackHandler):
     def __init__(self) -> None:
         self.llm_calls = 0
@@ -68,8 +67,6 @@ class StatsCallbackHandler(BaseCallbackHandler):
         if usage is None:
             return None
 
-        # Providers hand usage back either as a dict (LangChain-normalized) or
-        # as an SDK object with attributes; read both through one getter.
         if isinstance(usage, dict) or hasattr(usage, "get"):
             getter = usage.get
         else:
@@ -83,12 +80,6 @@ class StatsCallbackHandler(BaseCallbackHandler):
             or getter("prompt_token_count")
             or getter("input_token_count")
         )
-        # Anthropic's RAW usage reports cached prompt tokens separately: its
-        # input_tokens covers only the uncached remainder, so with prompt
-        # caching enabled the counters under-report massively unless the cache
-        # buckets are added back. (LangChain's normalized usage_metadata already
-        # includes them in input_tokens under different detail keys, so these
-        # raw key names never double-count.)
         input_tokens += cls._to_int(getter("cache_read_input_tokens"))
         input_tokens += cls._to_int(getter("cache_creation_input_tokens"))
         output_tokens = cls._to_int(
@@ -103,23 +94,16 @@ class StatsCallbackHandler(BaseCallbackHandler):
 
     @classmethod
     def _extract_usage(cls, response: Any) -> dict[str, int] | None:
-        # Prefer the standardized usage_metadata (on the result or its
-        # messages): LangChain normalizes provider quirks there — e.g. Anthropic
-        # cache reads/creations are already folded into input_tokens. The raw
-        # llm_output dict is checked LAST because for some providers it
-        # under-reports (Anthropic raw input_tokens excludes cached tokens).
         direct_usage = cls._parse_usage_dict(getattr(response, "usage_metadata", None))
         if direct_usage is not None:
             return direct_usage
 
-        # Check generations list for message-level usage
         for gen_list in getattr(response, "generations", []) or []:
             for gen in gen_list:
                 usage = cls._extract_from_generation(gen)
                 if usage:
                     return usage
 
-        # Fallback to top-level llm_output
         llm_output = getattr(response, "llm_output", None)
         if isinstance(llm_output, dict):
             return cls._parse_usage_dict(llm_output.get("token_usage")) or cls._parse_usage_dict(
@@ -135,12 +119,10 @@ class StatsCallbackHandler(BaseCallbackHandler):
         if not message:
             return None
 
-        # Check standard usage_metadata on the message
         usage = cls._parse_usage_dict(getattr(message, "usage_metadata", None))
         if usage:
             return usage
 
-        # Check response_metadata dict
         meta = getattr(message, "response_metadata", None)
         if isinstance(meta, dict):
             return cls._parse_usage_dict(meta.get("token_usage")) or cls._parse_usage_dict(meta.get("usage"))

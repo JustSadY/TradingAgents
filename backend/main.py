@@ -1,5 +1,3 @@
-# Bootstrap must run before any import that transitively pulls in the
-# backend.trading_agents engine (sets engine env defaults + logging stub).
 import logging
 import os
 from contextlib import asynccontextmanager
@@ -11,11 +9,6 @@ from fastapi.staticfiles import StaticFiles
 
 import backend.bootstrap  # noqa: F401  (import side-effect: see backend/bootstrap.py)
 
-# Console logging must be configured BEFORE the router imports below: they
-# transitively import the backend.trading_agents engine, whose logging setup
-# only preserves console output that already exists (see
-# agents/runtime/logging_config.py). Configuring it later leaves the app
-# without console/journalctl logs.
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
 from backend.api.alerts import router as alerts_router
@@ -58,12 +51,10 @@ from backend.core.log_redaction import install_redaction
 
 install_redaction(*logging.getLogger().handlers)
 
-
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _logger.info("Starting TradingAgents Web API...")
 
-    # Register all tools during startup
     import backend.trading_agents.agents.tools.bootstrap  # noqa: F401
     from backend.services.update_service import reset_stuck_update
 
@@ -74,7 +65,6 @@ async def lifespan(app: FastAPI):
     await _seed_setting_permissions()
     await _migrate_analysis_subpage_permissions()
 
-    # PERSISTENCE: Cleanup analyses that were interrupted by a crash/restart
     try:
         from backend.core.database import AsyncSessionLocal
         from backend.repositories.analysis import cleanup_stale_analyses
@@ -88,7 +78,6 @@ async def lifespan(app: FastAPI):
 
     await db_log_handler.start()
 
-    # Recover any lost alert analyses from crash/abrupt shutdown
     from backend.services.alert_service import check_and_recover_lost_alerts
 
     try:
@@ -96,8 +85,6 @@ async def lifespan(app: FastAPI):
     except Exception as e:
         _logger.warning("Failed to recover lost alerts: %s", e)
 
-    # With Redis enabled, forward pub/sub analysis events to local WebSockets
-    # and listen for cross-process cancel requests (arq worker mode).
     redis_tasks: list = []
     from backend.core.redis_bus import redis_enabled
 
@@ -122,7 +109,6 @@ async def lifespan(app: FastAPI):
     for task in redis_tasks:
         task.cancel()
 
-    # Gracefully await any running analyses or alert tasks on shutdown
     import asyncio
 
     from backend.services.alert_service import _BACKGROUND_TASKS
@@ -144,7 +130,6 @@ async def lifespan(app: FastAPI):
 
     _logger.info("Application stopped.")
     db_log_handler.stop()
-
 
 async def _seed_admin_user():
     from sqlalchemy import select
@@ -177,7 +162,6 @@ async def _seed_admin_user():
             await db.commit()
             _logger.info("Owner role set for existing user: %s", settings.ADMIN_USERNAME)
 
-
 async def _seed_setting_permissions():
     from sqlalchemy import select
 
@@ -200,7 +184,6 @@ async def _seed_setting_permissions():
                 if not existing:
                     db.add(UserSettingPermission(user_id=u.id, setting_key=s_key, allowed=True))
         await db.commit()
-
 
 async def _migrate_analysis_subpage_permissions():
     """One-time backfill for the "screener"/"sector-rotation"/"earnings" page
@@ -241,7 +224,6 @@ async def _migrate_analysis_subpage_permissions():
                     db.add(UserPagePermission(user_id=u.id, page_key=key, allowed=True))
         await db.commit()
 
-
 async def _load_cron_settings(cron):
     try:
         from sqlalchemy import select
@@ -255,7 +237,6 @@ async def _load_cron_settings(cron):
                 await cron.apply_user_settings(app_settings)
     except Exception as e:
         _logger.warning("Could not load cron settings: %s", e)
-
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -312,14 +293,8 @@ app.include_router(earnings_router)
 app.include_router(correlation_router)
 app.include_router(personas_api_router)
 
-
 _WS_KEEPALIVE_MESSAGE = "__tradingagents_keepalive__"
-# Re-check an accepted stream even when the browser is idle. A JWT is checked
-# during the handshake, but logout/password changes can bump token_version
-# while a long analysis is still streaming. The frontend also sends explicit
-# keepalives, which trigger the same check sooner.
 _WS_AUTH_REVALIDATION_SECONDS = 30.0
-
 
 async def _reject_websocket(
     websocket: WebSocket,
@@ -337,7 +312,6 @@ async def _reject_websocket(
     """
     await websocket.accept(subprotocol=subprotocol)
     await websocket.close(code=code, reason=reason)
-
 
 async def _analysis_websocket_access_is_current(access_token: str, expected_user_id: int) -> bool:
     """Re-check a connected analysis socket's token and page entitlement.
@@ -360,7 +334,6 @@ async def _analysis_websocket_access_is_current(access_token: str, expected_user
             return False
         return await has_page_access(db, user, "analysis")
 
-
 @app.websocket("/ws/analysis/{task_id}")
 async def websocket_analysis(
     websocket: WebSocket,
@@ -375,9 +348,6 @@ async def websocket_analysis(
     from backend.core.database import AsyncSessionLocal
     from backend.services.analysis_service import is_task_owner
 
-    # Browser WebSockets cannot send an Authorization header.  The client must
-    # therefore offer both the fixed application protocol and its private JWT
-    # protocol during the handshake; query-string credentials are not allowed.
     offered_subprotocols = websocket.headers.get("sec-websocket-protocol")
     selected_subprotocol = get_websocket_application_subprotocol(offered_subprotocols)
     if selected_subprotocol is None:
@@ -403,8 +373,6 @@ async def websocket_analysis(
             try:
                 user = await get_user_from_access_token(access_token, db)
             except HTTPException:
-                # The helper includes active-user and token-version checks,
-                # which makes logout revoke WebSocket credentials immediately.
                 await _reject_websocket(
                     websocket,
                     code=4001,
@@ -421,9 +389,6 @@ async def websocket_analysis(
                 subprotocol=selected_subprotocol,
             )
             return
-        # Only the user who started the run (or an admin) may stream its
-        # events; otherwise any authenticated user could read another user's
-        # analysis.
         if not await is_task_owner(task_id, user.id, user.is_admin):
             await _reject_websocket(
                 websocket,
@@ -433,10 +398,6 @@ async def websocket_analysis(
             )
             return
     except Exception:
-        # A database/Redis failure before ``accept`` otherwise becomes an
-        # opaque browser 1006. Emit a diagnosable application close whenever
-        # the transport is still available, and preserve the traceback server
-        # side for the actual root cause.
         _logger.exception("Analysis WebSocket initialization failed task=%s", task_id)
         try:
             await _reject_websocket(
@@ -486,14 +447,9 @@ async def websocket_analysis(
             try:
                 message = await asyncio.wait_for(websocket.receive_text(), timeout=_WS_AUTH_REVALIDATION_SECONDS)
             except TimeoutError:
-                # Multi-ticker streams do not send application keepalives, so
-                # idle sockets still receive a bounded revocation check.
                 if not await _revalidate_or_close():
                     return
                 continue
-            # Browser-side keepalives make the stream resilient to proxies
-            # that require bidirectional activity while a queued worker has
-            # not yet emitted graph progress.
             if message == _WS_KEEPALIVE_MESSAGE:
                 if not await _revalidate_or_close():
                     return
@@ -510,20 +466,14 @@ async def websocket_analysis(
         except Exception:
             _logger.debug("Could not close failed WebSocket task=%s", task_id, exc_info=True)
 
-
 @app.get("/health")
 async def health():
     return {"status": "ok"}
-
 
 _static_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.isdir(_static_dir):
     app.mount("/assets", StaticFiles(directory=os.path.join(_static_dir, "assets")), name="assets")
 
-    # Paths under these prefixes are always backend routes. If none of the
-    # routers above matched, the request is a genuinely unknown/misspelled
-    # endpoint — it must 404, not silently fall through to index.html (which
-    # previously masked bugs like a frontend calling the wrong API path).
     _NOT_FOUND_PREFIXES = ("api/", "auth/", "ws/")
     _NOT_FOUND_ROOTS = {"api", "auth", "ws"}
 
@@ -531,10 +481,6 @@ if os.path.isdir(_static_dir):
     async def serve_spa(full_path: str):
         if full_path in _NOT_FOUND_ROOTS or full_path.startswith(_NOT_FOUND_PREFIXES):
             raise HTTPException(status_code=404)
-        # Serve real static files (manifest.json, favicon.svg, icons.svg, ...)
-        # literally instead of masking them with the SPA shell. Resolve and
-        # confirm the path stays inside _static_dir first — full_path is
-        # attacker-controlled and must not be able to escape via "..".
         static_root = os.path.realpath(_static_dir)
         candidate = os.path.realpath(os.path.join(static_root, full_path))
         if full_path and os.path.commonpath([static_root, candidate]) == static_root and os.path.isfile(candidate):

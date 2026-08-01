@@ -16,7 +16,6 @@ from backend.trading_agents.llm_clients.registry import provider_requires_api_ke
 
 _logger = logging.getLogger(__name__)
 
-
 def _decrypt_tool_secret(value: str | None) -> str | None:
     """Decrypt a tool-settings secret field for actual use.
 
@@ -30,7 +29,6 @@ def _decrypt_tool_secret(value: str | None) -> str | None:
         return decrypt_secret(value)
     except Exception:
         return value
-
 
 def _fallback_llm_chain(settings: AppSettings) -> list[dict[str, str]]:
     """Read the canonical ordered LLM failover settings defensively.
@@ -50,7 +48,6 @@ def _fallback_llm_chain(settings: AppSettings) -> list[dict[str, str]]:
         )
         return []
 
-
 def inject_tool_credentials(config: dict) -> None:
     runtime_tool_context = config.get("runtime_tool_context")
     if not runtime_tool_context:
@@ -68,7 +65,6 @@ def inject_tool_credentials(config: dict) -> None:
 
     stock_server = server_settings.get("core_stock_data", {}).get("settings", {})
     config["alpha_vantage_api_key"] = _decrypt_tool_secret(stock_server.get("alpha_vantage_api_key"))
-
 
 def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
     _vendor_default = getattr(sys_settings, "active_data_vendor", None) or "yfinance"
@@ -145,8 +141,6 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         try:
             fernet = _cfg().get_fernet()
             current_provider = str(cfg.get("llm_provider", "openai")).strip().lower()
-            # Server-managed providers never receive tenant credentials. This
-            # drops stale pre-contract values before they enter graph config.
             user_key = get_user_api_key(user, current_provider, fernet)
             if user.api_keys_enc:
                 cfg["user_api_keys"] = {
@@ -164,7 +158,6 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
             cfg["api_key"] = user_key
     return cfg
 
-
 def history_json_from(value):
     if not value:
         return None
@@ -178,7 +171,6 @@ def history_json_from(value):
             except Exception as e:
                 _logger.debug("Failed parsing history JSON string: %s", e)
     return value
-
 
 async def prepare_graph_config(db: AsyncSession, user_id: int | None, config: dict) -> list[str]:
     """Resolve the user's permitted analysts and inject runtime tool/agent

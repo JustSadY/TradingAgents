@@ -26,10 +26,8 @@ from backend.trading_agents.agents.runtime.rating import parse_rating
 
 _logger = logging.getLogger(__name__)
 
-# Analysts that anchor every run; never pre-screened out even with a bad record.
 _PROTECTED_ANALYSTS = frozenset({"market", "news", "fundamentals", "social"})
-_HOLD_BAND = 0.02  # |return| <= 2% counts a Hold as correct
-
+_HOLD_BAND = 0.02
 
 def _graded_correct(prediction: str, raw_return: float) -> bool | None:
     """True/False if the call can be graded, None if not actionable."""
@@ -40,7 +38,6 @@ def _graded_correct(prediction: str, raw_return: float) -> bool | None:
     if prediction == "Hold":
         return abs(raw_return) <= _HOLD_BAND
     return None
-
 
 def grade_analyst_winrates(rows, report_fields: dict[str, str]) -> dict[str, dict]:
     """Return ``{analyst_key: {"samples": n, "win_rate": pct}}`` over ``rows``.
@@ -77,7 +74,6 @@ def grade_analyst_winrates(rows, report_fields: dict[str, str]) -> dict[str, dic
         }
     return out
 
-
 def select_underperformers(
     winrates: dict[str, dict],
     *,
@@ -94,7 +90,6 @@ def select_underperformers(
         if s["win_rate"] < max_win_rate:
             drop.add(key)
     return drop
-
 
 async def filter_analysts_by_history(
     db: AsyncSession,
@@ -116,9 +111,6 @@ async def filter_analysts_by_history(
             .where(AnalysisResult.raw_return.is_not(None))
         )
         if user_id is None:
-            # System-owned runs form their own scope; using all tenant rows
-            # here would alter the active analyst set with another user's
-            # realized history.
             q = q.where(AnalysisResult.user_id.is_(None))
         else:
             q = q.where(AnalysisResult.user_id == user_id)
@@ -136,7 +128,6 @@ async def filter_analysts_by_history(
 
     kept = [a for a in permitted if a not in drop]
     dropped = [a for a in permitted if a in drop]
-    # Safety net: never leave the run with no analysts.
     if not kept:
         return permitted, []
     if dropped:

@@ -11,7 +11,6 @@ from .stockstats_utils import filter_financials_by_date, load_ohlcv, yf_retry
 
 _logger = logging.getLogger(__name__)
 
-
 def _format_usd_amount(value: object) -> str:
     """Render Yahoo's raw monetary fields with an unambiguous USD unit.
 
@@ -32,7 +31,6 @@ def _format_usd_amount(value: object) -> str:
             return f"${float(value) / divisor:,.2f}{suffix} USD"
     return f"${float(value):,.2f} USD"
 
-
 _MONETARY_FUNDAMENTAL_LABELS = frozenset(
     {
         "Market Cap",
@@ -43,7 +41,6 @@ _MONETARY_FUNDAMENTAL_LABELS = frozenset(
         "Free Cash Flow",
     }
 )
-
 
 def get_yfin_data_online(
     symbol: Annotated[str, "ticker symbol of the company"],
@@ -70,7 +67,6 @@ def get_yfin_data_online(
     header += f"# Total records: {len(data)}\n"
     header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
     return header + csv_string
-
 
 def get_stock_stats_indicators_window(
     symbol: Annotated[str, "ticker symbol of the company"],
@@ -139,7 +135,6 @@ def get_stock_stats_indicators_window(
 
     return f"## {indicator} values for {symbol} (back to {start_dt.strftime('%Y-%m-%d')}):\n\n{ind_string}"
 
-
 def get_fundamentals(
     ticker: Annotated[str, "ticker symbol of the company"],
     curr_date: Annotated[str, "current date (not used for yfinance)"] = None,
@@ -199,7 +194,6 @@ def get_fundamentals(
     except Exception:
         raise
 
-
 def get_balance_sheet(
     ticker: Annotated[str, "ticker symbol of the company"],
     freq: Annotated[str, "frequency of data: 'annual' or 'quarterly'"] = "quarterly",
@@ -221,7 +215,6 @@ def get_balance_sheet(
         return header + csv_string
     except Exception:
         raise
-
 
 def get_cashflow(
     ticker: Annotated[str, "ticker symbol of the company"],
@@ -245,7 +238,6 @@ def get_cashflow(
     except Exception:
         raise
 
-
 def get_income_statement(
     ticker: Annotated[str, "ticker symbol of the company"],
     freq: Annotated[str, "frequency of data: 'annual' or 'quarterly'"] = "quarterly",
@@ -268,7 +260,6 @@ def get_income_statement(
     except Exception:
         raise
 
-
 def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the company"]):
     try:
         ticker_obj = yf.Ticker(ticker.upper())
@@ -281,7 +272,6 @@ def get_insider_transactions(ticker: Annotated[str, "ticker symbol of the compan
         return header + csv_string
     except Exception:
         raise
-
 
 def get_short_interest(ticker: Annotated[str, "ticker symbol of the company"]):
     """Short-interest snapshot: shares short, short ratio (days-to-cover), and
@@ -308,7 +298,6 @@ def get_short_interest(ticker: Annotated[str, "ticker symbol of the company"]):
     except Exception:
         raise
 
-
 _SECTOR_ETF_BY_LABEL = {
     "technology": "XLK",
     "financial": "XLF",
@@ -334,7 +323,6 @@ _VALUATION_FIELDS = {
     "Profit Margin": "profitMargins",
 }
 
-
 def _sector_etf_for(sector: str | None) -> str | None:
     """Best-effort match of a yfinance sector label to a SPDR sector ETF ticker."""
     if not sector:
@@ -345,7 +333,6 @@ def _sector_etf_for(sector: str | None) -> str | None:
             return etf
     return None
 
-
 def _valuation_lines(info: dict) -> list[str]:
     lines = []
     for label, field in _VALUATION_FIELDS.items():
@@ -353,7 +340,6 @@ def _valuation_lines(info: dict) -> list[str]:
         if val is not None:
             lines.append(f"- {label}: {val:.2f}" if isinstance(val, (int, float)) else f"- {label}: {val}")
     return lines
-
 
 def get_valuation_comparison(ticker: Annotated[str, "ticker symbol of the company"]):
     """Compare a stock's valuation multiples against its sector ETF as a peer proxy."""
@@ -381,7 +367,6 @@ def get_valuation_comparison(ticker: Annotated[str, "ticker symbol of the compan
         return "\n".join(parts)
     except Exception:
         raise
-
 
 def get_analyst_ratings(ticker: Annotated[str, "ticker symbol of the company"]):
     """Wall Street analyst consensus: recommendation trend + price targets."""
@@ -429,7 +414,6 @@ def get_analyst_ratings(ticker: Annotated[str, "ticker symbol of the company"]):
         return "\n".join(parts)
     except Exception:
         raise
-
 
 def get_options_data(ticker: Annotated[str, "ticker symbol of the company"]):
     """Retrieve options chain summary metrics (Put/Call ratios, IV, Open Interest)."""
@@ -504,7 +488,6 @@ def get_options_data(ticker: Annotated[str, "ticker symbol of the company"]):
     except Exception as exc:
         return f"Options data currently unavailable for '{ticker}': {exc}"
 
-
 def get_macro_data(curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None):
     """Retrieve numerical macroeconomic indicators (VIX, 10-Yr Yield, Oil, Gold, DXY, S&P 500)."""
     try:
@@ -549,7 +532,6 @@ def get_macro_data(curr_date: Annotated[str, "current date in YYYY-MM-DD format"
     except Exception as exc:
         return f"Macro indicator data currently unavailable: {exc}"
 
-
 def get_catalyst_calendar(
     ticker: Annotated[str, "ticker symbol of the company"],
     curr_date: Annotated[str | None, "analysis reference date in YYYY-MM-DD format"] = None,
@@ -587,7 +569,6 @@ def get_catalyst_calendar(
     except Exception:
         raise
 
-
 def get_institutional_holdings(ticker: Annotated[str, "ticker symbol of the company"]):
     """Institutional (13F) and major-holder breakdown for a company."""
     try:
@@ -615,7 +596,6 @@ def get_institutional_holdings(ticker: Annotated[str, "ticker symbol of the comp
         return "\n".join(parts)
     except Exception:
         raise
-
 
 def get_sec_filings(ticker: Annotated[str, "ticker symbol of the company"]):
     try:

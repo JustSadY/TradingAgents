@@ -175,7 +175,6 @@ VENDOR_METHODS = {
     },
 }
 
-
 def get_vendor(category: str, method: str = None) -> str:
     config = get_config()
     if method:
@@ -184,9 +183,7 @@ def get_vendor(category: str, method: str = None) -> str:
             return tool_vendors[method]
     return config.get("data_vendors", {}).get(category, "default")
 
-
 _VENDOR_CALL_TIMEOUT = 60
-
 
 async def route_to_vendor(method: str, *args, **kwargs):
     if method in _TICKER_FIRST_METHODS and args:

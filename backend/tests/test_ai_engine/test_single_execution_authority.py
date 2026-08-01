@@ -15,7 +15,6 @@ from backend.trading_agents.agents.schemas import (
     render_research_plan,
 )
 
-
 def test_research_plan_is_evidence_only_not_an_executable_rating():
     schema = ResearchPlan.model_json_schema()
     properties = schema["properties"]
@@ -34,7 +33,6 @@ def test_research_plan_is_evidence_only_not_an_executable_rating():
     )
     assert "Research Bias" in rendered
     assert "Recommendation" not in rendered
-
 
 def test_portfolio_decision_exposes_the_complete_canonical_execution_contract():
     decision = PortfolioDecision(
@@ -66,7 +64,6 @@ def test_portfolio_decision_exposes_the_complete_canonical_execution_contract():
         "time_horizon": None,
     }
 
-
 def test_active_graph_state_excludes_retired_trader_execution_fields():
     from backend.trading_agents.agents.runtime.agent_states import AgentState, StateKeys
 
@@ -74,7 +71,6 @@ def test_active_graph_state_excludes_retired_trader_execution_fields():
     assert "trader_proposal_json" not in AgentState.__annotations__
     assert not hasattr(StateKeys, "TRADER_INVESTMENT_PLAN")
     assert not hasattr(StateKeys, "TRADER_PROPOSAL_JSON")
-
 
 def test_multi_ticker_overview_is_deterministic_and_non_executing():
     from backend.services.analysis.portfolio_orchestrator import build_portfolio_overview
@@ -93,7 +89,6 @@ def test_multi_ticker_overview_is_deterministic_and_non_executing():
     assert "**Rating**: Buy" in overview
     assert "this multi-ticker overview cannot place an order or change a quantity" in overview
 
-
 def test_performance_review_prefers_the_prior_final_pm_decision_over_legacy_trader_text():
     from backend.trading_agents.agents.data.review_tools import _past_decision_for_review
 
@@ -106,7 +101,6 @@ def test_performance_review_prefers_the_prior_final_pm_decision_over_legacy_trad
 
     assert decision == "**Rating**: Hold"
     assert label == "PAST FINAL PORTFOLIO MANAGER DECISION"
-
 
 def test_portfolio_manager_evidence_tracks_registry_reports_and_supplemental_artifacts(monkeypatch):
     from backend.trading_agents.agents import analyst_registry
@@ -127,7 +121,6 @@ def test_portfolio_manager_evidence_tracks_registry_reports_and_supplemental_art
     assert "Synthesis Manager Conflict Map" in packet
     assert "Auditor Fact Check" in packet
     assert "Analyst Cross-Examination" in packet
-
 
 @pytest.mark.asyncio
 async def test_portfolio_manager_ignores_legacy_trader_plan_and_emits_canonical_json(monkeypatch):
@@ -177,7 +170,6 @@ async def test_portfolio_manager_ignores_legacy_trader_plan_and_emits_canonical_
             "company_of_interest": "NVDA",
             "asset_type": "stock",
             "investment_plan": "Research posture: bullish, with an earnings invalidation condition.",
-            # Deliberately dangerous legacy advice: it must not reach the PM prompt.
             "trader_investment_plan": "SELL ALL NVDA AT ANY PRICE.",
             "new_plugin_report": "## Executive Summary\nNew active analyst supports a measured entry.",
             "risk_debate_state": {

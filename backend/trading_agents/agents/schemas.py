@@ -6,14 +6,12 @@ from pydantic import BaseModel, Field
 
 from backend.trading_agents.agents.utils.report_localization import report_bias, report_rating, report_texts
 
-
 class PortfolioRating(str, Enum):
     BUY = "Buy"
     OVERWEIGHT = "Overweight"
     HOLD = "Hold"
     UNDERWEIGHT = "Underweight"
     SELL = "Sell"
-
 
 class ResearchBias(str, Enum):
     """Non-executable research posture used by upstream research agents.
@@ -26,7 +24,6 @@ class ResearchBias(str, Enum):
     BULLISH = "Bullish"
     NEUTRAL = "Neutral"
     BEARISH = "Bearish"
-
 
 class ResearchPlan(BaseModel):
     research_bias: ResearchBias = Field(
@@ -57,7 +54,6 @@ class ResearchPlan(BaseModel):
         ),
     )
 
-
 def render_research_plan(plan: ResearchPlan, output_language: str | None = None) -> str:
     labels = report_texts(("research_bias", "rationale", "key_evidence", "risk_conditions"), output_language)
     return "\n".join(
@@ -71,7 +67,6 @@ def render_research_plan(plan: ResearchPlan, output_language: str | None = None)
             f"**{labels['risk_conditions']}**: {plan.risk_conditions}",
         ]
     )
-
 
 class PortfolioDecision(BaseModel):
     rating: PortfolioRating = Field(
@@ -171,7 +166,6 @@ class PortfolioDecision(BaseModel):
         description="Optional recommended holding period, e.g. '3-6 months'.",
     )
 
-
 def render_pm_decision(decision: PortfolioDecision, output_language: str | None = None) -> str:
     labels = report_texts(
         (
@@ -219,7 +213,6 @@ def render_pm_decision(decision: PortfolioDecision, output_language: str | None 
     if decision.time_horizon:
         parts.extend(["", f"**{labels['time_horizon']}**: {decision.time_horizon}"])
     return "\n".join(parts)
-
 
 class PropagateResult(BaseModel):
     ticker: str

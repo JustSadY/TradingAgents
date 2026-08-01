@@ -12,7 +12,6 @@ from backend.services.analysis.emitter import AnalysisEmitter
 from backend.services.analysis.orchestrator import _emit_system_status, _heartbeat_monitor
 from backend.services.trade_journal_service import _realized_cost_basis, _realized_pnl_pct
 
-
 class _AsyncSessionContext:
     async def __aenter__(self):
         return self
@@ -22,7 +21,6 @@ class _AsyncSessionContext:
 
     async def commit(self):
         return None
-
 
 async def test_portfolio_assistant_uses_execute_order_result_keys(monkeypatch):
     from backend.core import database
@@ -40,7 +38,6 @@ async def test_portfolio_assistant_uses_execute_order_result_keys(monkeypatch):
 
     assert message == "Order placed: BUY 2.0000 shares of AAPL @ $12.50. Total: $25.00."
 
-
 class _RecordingAnalysisEmitter(AnalysisEmitter):
     def __init__(self):
         super().__init__("task-1")
@@ -48,7 +45,6 @@ class _RecordingAnalysisEmitter(AnalysisEmitter):
 
     async def emit(self, event: dict):
         self.events.append(event)
-
 
 async def test_orchestrator_system_status_keeps_message_out_of_agent_field():
     emitter = _RecordingAnalysisEmitter()
@@ -64,7 +60,6 @@ async def test_orchestrator_system_status_keeps_message_out_of_agent_field():
         }
     ]
 
-
 class _HeartbeatEmitter:
     task_id = "task-1"
 
@@ -77,7 +72,6 @@ class _HeartbeatEmitter:
 
     async def emit_progress(self, label: str, stage: str, node: str):
         self.progress.append((label, stage, node))
-
 
 async def test_heartbeat_continues_after_a_stall_without_repeating_the_warning():
     emitter = _HeartbeatEmitter()
@@ -111,7 +105,6 @@ async def test_heartbeat_continues_after_a_stall_without_repeating_the_warning()
         ("heartbeat", "stalled", "system"),
     ]
 
-
 async def test_performance_compares_spy_over_the_portfolio_lifetime(monkeypatch):
     from backend.services import market_data_service, mock_trading_service
 
@@ -143,7 +136,6 @@ async def test_performance_compares_spy_over_the_portfolio_lifetime(monkeypatch)
     assert benchmark_calls == [{"benchmark": "SPY", "period": "1y", "start_date": "2024-05-10", "end_date": None}]
     assert result["alpha_pct"] == 1.75
 
-
 async def test_explicit_benchmark_dates_are_forwarded_to_the_market_provider(monkeypatch):
     from backend.services import market_data_service
 
@@ -164,7 +156,6 @@ async def test_explicit_benchmark_dates_are_forwarded_to_the_market_provider(mon
 
     assert received == [{"start": "2024-05-10", "end": "2024-05-20"}]
     assert result == 10.0
-
 
 @pytest.mark.parametrize(
     ("side", "total_value", "commission", "pnl", "expected_cost_basis", "expected_pct"),
@@ -192,7 +183,6 @@ def test_trade_journal_uses_entry_cost_basis_for_long_and_short_returns(
 
     assert _realized_cost_basis(order) == Decimal(expected_cost_basis)
     assert _realized_pnl_pct(order) == pytest.approx(expected_pct)
-
 
 @pytest.mark.parametrize(
     ("side", "total_value", "exit_commission", "entry_commission", "pnl", "expected_cost", "expected_pct"),
@@ -222,7 +212,6 @@ def test_trade_journal_uses_all_in_entry_fee_for_current_closing_orders(
 
     assert _realized_cost_basis(order) == Decimal(expected_cost)
     assert _realized_pnl_pct(order) == pytest.approx(expected_pct)
-
 
 async def test_cron_uses_the_orchestrator_signal_mapping(monkeypatch):
     from backend.services import cron_service

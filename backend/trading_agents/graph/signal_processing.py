@@ -7,7 +7,6 @@ from backend.trading_agents.agents.runtime.rating import parse_rating_matched
 
 _logger = logging.getLogger(__name__)
 
-
 class SignalProcessor:
     def __init__(self, llm: Any = None):
         self.llm = llm

@@ -2,18 +2,14 @@ import pytest
 
 from backend.trading_agents.dataflows.retry import retry_async, retry_sync
 
-
 class _RetryableError(ValueError):
     pass
-
 
 class _FatalError(RuntimeError):
     pass
 
-
 def test_retry_sync_success_on_first_try():
     assert retry_sync(lambda: 42) == 42
-
 
 def test_retry_sync_retries_then_succeeds():
     call_count = 0
@@ -34,7 +30,6 @@ def test_retry_sync_retries_then_succeeds():
     assert result == "ok"
     assert call_count == 3
 
-
 def test_retry_sync_exhausts_retries():
     def _always_fails():
         raise _RetryableError("always")
@@ -46,7 +41,6 @@ def test_retry_sync_exhausts_retries():
             base_delay=0.01,
             retryable_exceptions=(_RetryableError,),
         )
-
 
 def test_retry_sync_non_retryable_exception_propagates():
     def _fatal():
@@ -60,12 +54,10 @@ def test_retry_sync_non_retryable_exception_propagates():
             retryable_exceptions=(_RetryableError,),
         )
 
-
 @pytest.mark.asyncio
 async def test_retry_async_success_on_first_try():
     result = await retry_async(lambda: _async_val(42))
     assert result == 42
-
 
 @pytest.mark.asyncio
 async def test_retry_async_exhausts():
@@ -79,7 +71,6 @@ async def test_retry_async_exhausts():
             base_delay=0.01,
             retryable_exceptions=(_RetryableError,),
         )
-
 
 async def _async_val(v):
     return v

@@ -7,7 +7,6 @@ import pytest
 
 from backend.services.execution.base import OrderRequest
 
-
 async def test_live_alpaca_executor_rejects_before_constructing_an_http_client(monkeypatch):
     """The executor boundary must be safe even without the orchestrator."""
     from backend.services.execution import alpaca
@@ -31,7 +30,6 @@ async def test_live_alpaca_executor_rejects_before_constructing_an_http_client(m
 
     assert result.status == "REJECTED"
     assert "disabled" in result.message.lower()
-
 
 async def test_orchestrator_skips_live_order_when_server_flag_is_disabled(monkeypatch):
     from backend.repositories import system_settings as system_settings_repo
@@ -61,7 +59,6 @@ async def test_orchestrator_skips_live_order_when_server_flag_is_disabled(monkey
 
     assert result is None
 
-
 def test_system_settings_reject_live_mode_while_feature_is_disabled(monkeypatch):
     from backend.services import system_settings_service
 
@@ -69,7 +66,6 @@ def test_system_settings_reject_live_mode_while_feature_is_disabled(monkeypatch)
 
     with pytest.raises(system_settings_service.InvalidTradingConfiguration, match="disabled"):
         system_settings_service.validate_trading_configuration("live", "alpaca")
-
 
 def test_metadata_filters_live_options_without_server_opt_in(monkeypatch):
     from backend.core import catalog

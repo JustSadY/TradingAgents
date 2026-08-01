@@ -15,12 +15,10 @@ ToolSettingType = Literal[
     "secret",
 ]
 
-
 @dataclass(frozen=True)
 class ToolSettingOption:
     value: str
     label_key: str
-
 
 @dataclass(frozen=True)
 class ToolSettingField:
@@ -39,7 +37,6 @@ class ToolSettingField:
     secret: bool = False
     advanced: bool = False
 
-
 @dataclass(frozen=True)
 class ToolContext:
     user_id: int | None
@@ -47,7 +44,6 @@ class ToolContext:
     ticker: str | None = None
     asset_type: str = "stock"
     run_id: str | None = None
-
 
 class BaseAgentTool(ABC):
     key: str

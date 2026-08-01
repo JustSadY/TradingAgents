@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 from backend.services import analysis_service
 
-
 class _Emitter:
     events: list[str] = []
 
@@ -19,7 +18,6 @@ class _Emitter:
 
     async def close(self) -> None:
         self.events.append("close")
-
 
 async def test_deferred_run_keeps_owner_and_socket_until_background_runner_finalizes(monkeypatch):
     """The post-graph commit/order window must remain cancellable."""
@@ -63,7 +61,6 @@ async def test_deferred_run_keeps_owner_and_socket_until_background_runner_final
         analysis_service._RUNNING_TASKS.pop(task_id, None)
         analysis_service._TASK_REGISTRY.pop(task_id, None)
         analysis_service._TASK_OWNERS.pop(task_id, None)
-
 
 async def test_cancel_marker_emits_terminal_error_before_deferred_socket_close(monkeypatch):
     """A cancelled DB flush must not close the WS before its error event."""
@@ -110,7 +107,6 @@ async def test_cancel_marker_emits_terminal_error_before_deferred_socket_close(m
 
     assert timeline == ["rollback", "error", "clear", "close"]
 
-
 async def test_terminal_orchestrator_error_is_not_retried(monkeypatch):
     """Never launch a retry after the inner run may have told the UI it failed."""
     task_id = "terminal-error-no-retry"
@@ -155,7 +151,6 @@ async def test_terminal_orchestrator_error_is_not_retried(monkeypatch):
     assert retry_calls == 0
     assert cleared == 1
     assert _Emitter.events == ["close"]
-
 
 async def test_unscheduled_retry_clears_tracking_and_sends_terminal_error(monkeypatch):
     """A retry-budget/enqueue failure cannot leave a ghost active task behind."""

@@ -14,7 +14,6 @@ from backend.core.utils import safe_ticker_component
 
 _logger = logging.getLogger(__name__)
 
-
 def checkpoint_scope(user_id: int | None, analysis_id: int | str) -> str:
     """Return the stable namespace for one persisted analysis run.
 
@@ -29,12 +28,10 @@ def checkpoint_scope(user_id: int | None, analysis_id: int | str) -> str:
     owner = "system" if user_id is None else str(user_id)
     return f"user:{owner}:analysis:{analysis_id}"
 
-
 def _scope_component(scope: str) -> str:
     if not isinstance(scope, str) or not scope:
         raise ValueError("checkpoint scope is required")
     return hashlib.sha256(scope.encode()).hexdigest()[:24]
-
 
 def _db_path(data_dir: str | Path, ticker: str, scope: str) -> Path:
     safe = safe_ticker_component(ticker).upper()
@@ -42,11 +39,9 @@ def _db_path(data_dir: str | Path, ticker: str, scope: str) -> Path:
     p.mkdir(parents=True, exist_ok=True)
     return p / f"{safe}.db"
 
-
 def thread_id(ticker: str, date: str, scope: str) -> str:
     """Return a LangGraph thread id isolated to one persisted analysis."""
     return hashlib.sha256(f"{scope}:{ticker.upper()}:{date}".encode()).hexdigest()[:24]
-
 
 @contextmanager
 def get_checkpointer(data_dir: str | Path, ticker: str, scope: str) -> Generator[SqliteSaver, None, None]:
@@ -59,7 +54,6 @@ def get_checkpointer(data_dir: str | Path, ticker: str, scope: str) -> Generator
     finally:
         conn.close()
 
-
 @asynccontextmanager
 async def get_async_checkpointer(
     data_dir: str | Path, ticker: str, scope: str
@@ -68,7 +62,6 @@ async def get_async_checkpointer(
     async with AsyncSqliteSaver.from_conn_string(str(db)) as saver:
         await saver.setup()
         yield saver
-
 
 def checkpoint_step(data_dir: str | Path, ticker: str, date: str, scope: str) -> int | None:
     db = _db_path(data_dir, ticker, scope)
@@ -82,7 +75,6 @@ def checkpoint_step(data_dir: str | Path, ticker: str, date: str, scope: str) ->
             return None
         return cp.metadata.get("step")
 
-
 async def async_checkpoint_step(data_dir: str | Path, ticker: str, date: str, scope: str) -> int | None:
     db = _db_path(data_dir, ticker, scope)
     if not db.exists():
@@ -94,7 +86,6 @@ async def async_checkpoint_step(data_dir: str | Path, ticker: str, date: str, sc
         if cp is None:
             return None
         return cp.metadata.get("step")
-
 
 def clear_checkpoint(data_dir: str | Path, ticker: str, date: str, scope: str) -> None:
     db = _db_path(data_dir, ticker, scope)
@@ -110,7 +101,6 @@ def clear_checkpoint(data_dir: str | Path, ticker: str, date: str, scope: str) -
         _logger.debug("clear_checkpoint skipped for %s/%s: %s", ticker, date, exc)
     finally:
         conn.close()
-
 
 async def list_checkpoints_for_thread(data_dir: str | Path, ticker: str, date: str, scope: str) -> list[dict]:
     """Retrieve all checkpoints for a thread from the saver database, ordered by step."""

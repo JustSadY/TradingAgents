@@ -15,18 +15,10 @@ from backend.services.tool_access_service import get_user_tool_access, get_user_
 from backend.trading_agents.agents.tools.base import BaseAgentTool
 from backend.trading_agents.agents.tools.registry import registry
 
-# Sentinel returned in place of a configured secret's real value in API
-# responses (never expose reddit_client_secret / alpha_vantage_api_key etc.
-# in plaintext, matching the policy already applied to per-user LLM keys).
-# The frontend round-trips the whole settings object on every save, so this
-# same sentinel doubles as the "field untouched" signal on write: only a
-# value that differs from it is treated as a real secret update.
 SECRET_UNCHANGED_SENTINEL = "__SECRET_UNCHANGED__"
-
 
 def _secret_field_keys(tool: BaseAgentTool) -> set[str]:
     return {f.key for f in tool.settings_schema if f.type == "secret"}
-
 
 def _mask_secrets(tool: BaseAgentTool, settings: dict[str, Any]) -> dict[str, Any]:
     """Replace configured secret values with a sentinel before they leave the
@@ -41,7 +33,6 @@ def _mask_secrets(tool: BaseAgentTool, settings: dict[str, Any]) -> dict[str, An
             masked[key] = SECRET_UNCHANGED_SENTINEL
     return masked
 
-
 def _get_pydantic_type(field_type: str) -> Any:
     mapping = {
         "boolean": bool,
@@ -55,7 +46,6 @@ def _get_pydantic_type(field_type: str) -> Any:
     }
     return mapping.get(field_type, Any)
 
-
 def validate_tool_settings(tool: BaseAgentTool, incoming: dict[str, Any]) -> dict[str, Any]:
     """Validate incoming settings against the tool's schema using dynamic Pydantic models."""
     fields = {}
@@ -63,7 +53,6 @@ def validate_tool_settings(tool: BaseAgentTool, incoming: dict[str, Any]) -> dic
         f_type = _get_pydantic_type(field.type)
         default = field.default
 
-        # Build field constraints
         extra_kwargs = {}
         if field.type == "number":
             if field.min is not None:
@@ -71,24 +60,14 @@ def validate_tool_settings(tool: BaseAgentTool, incoming: dict[str, Any]) -> dic
             if field.max is not None:
                 extra_kwargs["le"] = field.max
 
-        # For selects, we could add Literal or Validator, but keeping it simple for now
-        # with basic type check + manual check if needed.
-
         fields[field.key] = (f_type, PydanticField(default=default, **extra_kwargs))
 
-    # Create a dynamic Pydantic model for this tool
     ToolModel = create_model(f"Dynamic{tool.key}Model", **fields)
 
     try:
         validated_obj = ToolModel(**incoming)
-        # A tool update is a PATCH, not a replacement. ``model_dump()`` would
-        # materialise every schema default for fields the caller did not send.
-        # That silently reset admin-hidden/locked fields whenever the frontend
-        # saved the subset it was allowed to view. Preserve only explicit keys
-        # so field-level permission checks and stored overrides remain intact.
         normalized = validated_obj.model_dump(exclude_unset=True)
 
-        # Manual check for selects/options which are harder to do purely with create_model dynamic types
         for field in tool.settings_schema:
             if field.type in ("select", "multi_select") and field.options:
                 allowed = {opt.value for opt in field.options}
@@ -101,9 +80,7 @@ def validate_tool_settings(tool: BaseAgentTool, incoming: dict[str, Any]) -> dic
 
         return normalized
     except Exception as e:
-        # Re-wrap Pydantic errors for consistency
         raise ValueError(str(e)) from e
-
 
 async def _check_tool_availability(db: AsyncSession, user_id: int, tool: BaseAgentTool) -> bool:
     """Helper to check if a tool is available based on the agent hierarchy."""
@@ -118,19 +95,15 @@ async def _check_tool_availability(db: AsyncSession, user_id: int, tool: BaseAge
 
     return any(hierarchy.is_enabled(a) for a in tool.allowed_analysts)
 
-
 async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRead:
-    # 1. Fetch DB overrides for this user
     from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
 
     user_rows_list = await _repo_get_user(db, user.id)
     user_rows = {row.tool_key: row for row in user_rows_list}
 
-    # Also load tool access and field-level access
     tool_access_map = await get_user_tool_access(db, user.id)
     field_access_map = {} if user.is_admin else await get_user_tool_field_access(db, user.id)
 
-    # 2. Build map of all registered tools
     tools_map = {}
     for tool in registry.list():
         if not user.is_admin:
@@ -158,7 +131,6 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
 
     return ToolSettingsRead(tools=tools_map)
 
-
 async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
     from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
 
@@ -181,14 +153,12 @@ async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
 
     return ToolSettingsRead(tools=tools_map)
 
-
 async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSettingsUpdate) -> ToolSettingsRead:
     from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
 
     user_rows_list = await _repo_get_user(db, user.id)
     user_rows = {row.tool_key: row for row in user_rows_list}
 
-    # Also load agent settings
     from backend.services.agent_settings_service import build_agent_runtime_context
 
     agent_ctx = await build_agent_runtime_context(db, user.id)
@@ -212,14 +182,12 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
     await db.flush()
     return await get_user_tool_settings(db, user)
 
-
 def _validate_tool_availability(tool: BaseAgentTool, tool_key: str, agent_ctx: dict):
     """Raise ValueError if tool is not available due to disabled agents."""
     if tool.allowed_analysts:
         is_any_agent_enabled = any(agent_ctx.get(a, {}).get("enabled", True) for a in tool.allowed_analysts)
         if not is_any_agent_enabled:
             raise ValueError(f"Tool '{tool_key}' is not available because none of its associated agents are enabled.")
-
 
 def _apply_tool_setting_row_update(row: AgentToolSetting, update: Any, tool: BaseAgentTool):
     """Apply enablement and settings updates to an AgentToolSetting row."""
@@ -231,9 +199,6 @@ def _apply_tool_setting_row_update(row: AgentToolSetting, update: Any, tool: Bas
     current_settings = row.settings.copy()
     if update.reset_settings:
         for k in update.reset_settings:
-            # Reset means "remove this override". Persisting a local default
-            # masks a future server/default-schema change and previously let a
-            # partial form overwrite fields the user could not see.
             current_settings.pop(k, None)
     elif update.settings is not None:
         validated = validate_tool_settings(tool, update.settings)
@@ -242,18 +207,13 @@ def _apply_tool_setting_row_update(row: AgentToolSetting, update: Any, tool: Bas
         for key in secret_keys & validated.keys():
             value = validated[key]
             if value == SECRET_UNCHANGED_SENTINEL:
-                # Frontend round-trips the whole settings object on every
-                # save; this means "the user never touched this field" —
-                # keep whatever is already encrypted in the DB.
                 validated.pop(key)
             elif value:
                 validated[key] = encrypt_secret(value)
-            # else: falsy/empty value is an explicit clear — store as-is.
 
         current_settings.update(validated)
 
     row.settings = current_settings
-
 
 async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettingsUpdate) -> ToolSettingsRead:
     from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
@@ -277,7 +237,6 @@ async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettings
 
     await db.flush()
     return await get_server_tool_settings(db)
-
 
 def build_tool_runtime_state(
     tool: BaseAgentTool, server_row: AgentToolSetting | None, user_row: AgentToolSetting | None
@@ -309,22 +268,18 @@ def build_tool_runtime_state(
         },
     }
 
-
 async def build_global_runtime_context(db: AsyncSession, user_id: int | None) -> dict[str, Any]:
-    # 1. Load Server Tool Settings
     from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
     from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
 
     server_rows_list = await _repo_get_server(db)
     server_rows = {row.tool_key: row for row in server_rows_list}
 
-    # 2. Load User Tool Settings
     user_rows = {}
     if user_id is not None:
         user_rows_list = await _repo_get_user(db, user_id)
         user_rows = {row.tool_key: row for row in user_rows_list}
 
-    # 3. Build merged active tool settings namespaces
     server_settings_map = {}
     user_settings_map = {}
     for tool in registry.list():
@@ -332,18 +287,15 @@ async def build_global_runtime_context(db: AsyncSession, user_id: int | None) ->
         server_settings_map[tool.key] = state["server"]
         user_settings_map[tool.key] = state["user"]
 
-    # 4. Load access control states
     agent_access = {}
     tool_access = {}
     field_access = {}
 
     if user_id is not None:
-        # Load agent access
         res = await db.execute(select(UserAgentAccess).where(UserAgentAccess.user_id == user_id))
         for row in res.scalars().all():
             agent_access[row.agent_key] = row.can_run
 
-        # Load tool access
         res = await db.execute(select(UserToolAccess).where(UserToolAccess.user_id == user_id))
         for row in res.scalars().all():
             tool_access[row.tool_key] = {
@@ -353,7 +305,6 @@ async def build_global_runtime_context(db: AsyncSession, user_id: int | None) ->
                 "can_enable": row.can_enable,
             }
 
-        # Load field access
         res = await db.execute(select(UserToolFieldAccess).where(UserToolFieldAccess.user_id == user_id))
         for row in res.scalars().all():
             field_access.setdefault(row.tool_key, {})[row.field_key] = {

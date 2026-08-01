@@ -19,7 +19,6 @@ SCENARIOS = [
     },
 ]
 
-
 def get_active_scenarios() -> str:
     """Return a Markdown summary of current 'What-If' scenarios for agent analysis."""
     md = "=== 'WHAT-IF' STRESS TEST SCENARIOS ===\n"

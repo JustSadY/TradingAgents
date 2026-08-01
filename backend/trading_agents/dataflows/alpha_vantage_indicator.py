@@ -5,7 +5,6 @@ from .alpha_vantage_common import _make_api_request
 
 _logger = logging.getLogger(__name__)
 
-
 def get_indicator(
     symbol: str,
     indicator: str,
@@ -54,7 +53,6 @@ def get_indicator(
         _logger.warning("Alpha Vantage indicator error for %s: %s", indicator, e)
         raise
 
-
 def _get_vwma_description(symbol: str) -> str:
     return (
         f"## VWMA (Volume Weighted Moving Average) for {symbol}:\n\n"
@@ -63,7 +61,6 @@ def _get_vwma_description(symbol: str) -> str:
         "VWMA: A moving average weighted by volume. Usage: Confirm trends by integrating price action with volume data. "
         "Tips: Watch for skewed results from volume spikes; use in combination with other volume analyses."
     )
-
 
 def _fetch_alpha_vantage_indicator_data(
     indicator: str, symbol: str, interval: str, time_period: int, series_type: str
@@ -134,7 +131,6 @@ def _fetch_alpha_vantage_indicator_data(
         )
     raise ValueError(f"Indicator {indicator} not implemented yet.")
 
-
 def _parse_alpha_vantage_response(indicator: str, symbol: str, data: str, before: Any, curr_date_dt: Any) -> str:
     """Parse CSV response and format results."""
     _ = symbol
@@ -183,7 +179,6 @@ def _parse_alpha_vantage_response(indicator: str, symbol: str, data: str, before
 
     desc = _INDICATOR_DESCRIPTIONS.get(indicator, "No description available.")
     return f"## {indicator.upper()} values from {before.strftime('%Y-%m-%d')} to {curr_date_dt.strftime('%Y-%m-%d')}:\n\n{rows}\n\n{desc}"
-
 
 _INDICATOR_DESCRIPTIONS = {
     "close_50_sma": "50 SMA: A medium-term trend indicator. Usage: Identify trend direction and serve as dynamic support/resistance. Tips: It lags price; combine with faster indicators for timely signals.",

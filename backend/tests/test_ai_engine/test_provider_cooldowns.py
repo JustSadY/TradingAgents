@@ -23,7 +23,6 @@ from backend.trading_agents.dataflows.stocktwits import (
     reset_stocktwits_cooldown,
 )
 
-
 @pytest.fixture(autouse=True)
 def _reset_provider_state(tmp_path):
     old_get_path = APICache.get_cache_path
@@ -39,10 +38,8 @@ def _reset_provider_state(tmp_path):
     APICache.get_cache_path = old_get_path
     APICache._initialized_paths.clear()
 
-
 def _http_error(code: int) -> HTTPError:
     return HTTPError("https://api.stocktwits.com/test", code, "test error", hdrs=None, fp=None)
-
 
 def test_stocktwits_403_is_logged_once_then_cooldown_skips_network(monkeypatch, caplog):
     import backend.trading_agents.dataflows.stocktwits as stocktwits
@@ -68,7 +65,6 @@ def test_stocktwits_403_is_logged_once_then_cooldown_skips_network(monkeypatch, 
     warnings = [record for record in caplog.records if record.levelno >= logging.WARNING]
     assert len(warnings) == 1
 
-
 def test_yfinance_missing_ticker_is_cooled_down_without_reinvoking_provider():
     calls = 0
 
@@ -89,7 +85,6 @@ def test_yfinance_missing_ticker_is_cooled_down_without_reinvoking_provider():
     assert cached.value.from_cooldown is True
     assert calls == 1
 
-
 def test_yfinance_price_range_gap_does_not_poison_ticker_cooldown():
     with pytest.raises(YFPricesMissingError):
         yf_retry(
@@ -99,7 +94,6 @@ def test_yfinance_price_range_gap_does_not_poison_ticker_cooldown():
         )
 
     assert yf_retry(lambda: "available now", ticker="NEWIPO") == "available now"
-
 
 def test_load_ohlcv_uses_single_ticker_history_with_typed_errors(monkeypatch):
     import backend.trading_agents.dataflows.stockstats_utils as stockstats_utils
@@ -143,7 +137,6 @@ def test_load_ohlcv_uses_single_ticker_history_with_typed_errors(monkeypatch):
         )
     ]
 
-
 def test_load_ohlcv_normalizes_exchange_timezone_before_date_filter(monkeypatch):
     """Fresh Yahoo history must compare safely with a date-only trade date."""
     import backend.trading_agents.dataflows.stockstats_utils as stockstats_utils
@@ -177,7 +170,6 @@ def test_load_ohlcv_normalizes_exchange_timezone_before_date_filter(monkeypatch)
 
     assert data["Date"].dt.tz is None
     assert data["Date"].max() == pd.Timestamp("2024-01-09")
-
 
 def test_direct_yfinance_stock_data_uses_typed_history_errors(monkeypatch):
     import backend.trading_agents.dataflows.y_finance as y_finance
@@ -220,7 +212,6 @@ def test_direct_yfinance_stock_data_uses_typed_history_errors(monkeypatch):
         )
     ]
 
-
 @pytest.mark.asyncio
 async def test_unavailable_yfinance_ticker_falls_through_to_next_vendor():
     from backend.trading_agents.dataflows.interface import VENDOR_METHODS, route_to_vendor
@@ -249,7 +240,6 @@ async def test_unavailable_yfinance_ticker_falls_through_to_next_vendor():
     assert result == "alternate vendor data"
     assert yfinance_calls == 1
     assert alternate_calls == 1
-
 
 @pytest.mark.asyncio
 async def test_stocktwits_unavailable_marker_is_not_cached():

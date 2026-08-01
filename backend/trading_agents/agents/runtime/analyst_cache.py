@@ -33,7 +33,6 @@ _logger = logging.getLogger(__name__)
 
 _CACHE_STALE_DAYS = 7
 
-
 def _usable_report(value: object) -> str | None:
     """Return a non-blank report, or ``None`` for an invalid cache entry.
 
@@ -46,7 +45,6 @@ def _usable_report(value: object) -> str | None:
     report = value.strip()
     return report or None
 
-
 def _current_run_context() -> dict | None:
     try:
         from backend.trading_agents.agents.data.chart_tools import active_run_context
@@ -54,7 +52,6 @@ def _current_run_context() -> dict | None:
         return active_run_context.get(None)
     except Exception:
         return None
-
 
 def _current_user_id() -> int | None:
     """The requesting user's id for the active run, or ``None`` for a
@@ -64,7 +61,6 @@ def _current_user_id() -> int | None:
     another user."""
     ctx = _current_run_context()
     return ctx.get("user_id") if ctx else None
-
 
 def _config_meta(analyst_key: str) -> dict:
     config_meta: dict = {}
@@ -86,7 +82,6 @@ def _config_meta(analyst_key: str) -> dict:
                         config_meta["agent_settings"] = agent_settings
     return config_meta
 
-
 def _compute_config_fingerprint(analyst_key: str) -> str:
     """SHA-256 of just the provider/model/persona/language/agent-settings
     slice of the config — independent of the fetched data. Stored alongside
@@ -100,7 +95,6 @@ def _compute_config_fingerprint(analyst_key: str) -> str:
     except Exception:
         config_meta = {}
     return hashlib.sha256(json.dumps(config_meta, sort_keys=True).encode("utf-8")).hexdigest()
-
 
 def compute_data_hash(analyst_key: str, ticker: str, trade_date: str, *data_blocks: str) -> str:
     """Build a SHA-256 digest from the analyst key, ticker, trade date, and
@@ -116,7 +110,6 @@ def compute_data_hash(analyst_key: str, ticker: str, trade_date: str, *data_bloc
     config_str = json.dumps(config_meta, sort_keys=True)
     combined = "|".join([analyst_key, ticker, trade_date, config_str, *(str(b) for b in data_blocks)])
     return hashlib.sha256(combined.encode("utf-8")).hexdigest()
-
 
 async def check_analyst_cache(
     analyst_key: str,
@@ -226,7 +219,6 @@ async def check_analyst_cache(
             return report
     return None
 
-
 async def store_analyst_cache(analyst_key: str, ticker: str, data_hash: str, report_text: str) -> None:
     """Persist a new cache entry so future runs with the same data can skip
     the LLM call."""
@@ -260,7 +252,6 @@ async def store_analyst_cache(analyst_key: str, ticker: str, data_hash: str, rep
             )
         db.add(entry)
         await db.commit()
-
 
 async def emit_cache_hit(analyst_key: str, ticker: str) -> None:
     """Emit a mental-model event telling the user that the cached report is

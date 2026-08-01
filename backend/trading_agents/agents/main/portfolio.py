@@ -26,7 +26,6 @@ MAIN_KEY = "portfolio_manager"
 
 _HOLD = "Hold — automated fallback: Portfolio Manager disabled or unavailable."
 
-
 def create_portfolio_manager_node(ctx: AgentRunContext) -> NodeFn:
     async def portfolio_manager_node(state) -> dict:
         if not ctx.is_branch_enabled(MAIN_KEY):

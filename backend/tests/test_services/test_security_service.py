@@ -11,7 +11,6 @@ from backend.core.security import (
     verify_password,
 )
 
-
 class TestSecurityService:
     def test_hash_password(self):
         hashed = hash_password("testpassword")

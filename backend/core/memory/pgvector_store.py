@@ -38,10 +38,8 @@ _SCHEMA_STATEMENTS = (
     ")",
 )
 
-
 def _vector_literal(values: list[float]) -> str:
     return "[" + ",".join(str(float(v)) for v in values) + "]"
-
 
 class PgVectorMemoryStore:
     def __init__(self, embedder: Embedder, *, engine=None):

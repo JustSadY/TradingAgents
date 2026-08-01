@@ -5,7 +5,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     run_macd_rsi_backtests,
 )
 
-
 def create_synthesis_manager(llm):
     async def synthesis_manager_node(state) -> dict:
         from backend.trading_agents.dataflows.config import get_config

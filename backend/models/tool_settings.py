@@ -7,7 +7,6 @@ from backend.core.database import Base
 
 _USERS_ID_FK = "users.id"
 
-
 class AgentToolSetting(Base):
     __tablename__ = "agent_tool_settings"
 
@@ -28,7 +27,6 @@ class AgentToolSetting(Base):
 
     __table_args__ = (UniqueConstraint("scope", "user_id", "tool_key", name="uq_agent_tool_settings_scope_user_tool"),)
 
-
 class UserAgentAccess(Base):
     __tablename__ = "user_agent_access"
 
@@ -46,7 +44,6 @@ class UserAgentAccess(Base):
     )
 
     __table_args__ = (UniqueConstraint("user_id", "agent_key", name="uq_user_agent_access_user_agent"),)
-
 
 class UserToolAccess(Base):
     __tablename__ = "user_tool_access"
@@ -68,7 +65,6 @@ class UserToolAccess(Base):
     )
 
     __table_args__ = (UniqueConstraint("user_id", "tool_key", name="uq_user_tool_access_user_tool"),)
-
 
 class UserToolFieldAccess(Base):
     __tablename__ = "user_tool_field_access"

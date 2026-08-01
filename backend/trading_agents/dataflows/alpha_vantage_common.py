@@ -20,7 +20,6 @@ _AV_RATE_LIMITERS: dict[tuple[str, int, float], TokenBucketRateLimiter] = {}
 _AV_KEY_INDICES: dict[str, int] = {}
 _AV_STATE_LOCK = threading.Lock()
 
-
 def reset_state() -> None:
     """Clear cached rate limiters and key indices (primarily test support).
 
@@ -30,11 +29,9 @@ def reset_state() -> None:
         _AV_RATE_LIMITERS.clear()
         _AV_KEY_INDICES.clear()
 
-
 def _credential_scope() -> str:
     raw = get_config().get("alpha_vantage_api_key") or os.getenv("ALPHA_VANTAGE_API_KEY", "")
     return hashlib.sha256(raw.encode("utf-8")).hexdigest()
-
 
 def _load_rate_limiter() -> TokenBucketRateLimiter:
     cfg = get_config()
@@ -48,13 +45,11 @@ def _load_rate_limiter() -> TokenBucketRateLimiter:
             _AV_RATE_LIMITERS[key] = limiter
         return limiter
 
-
 def _read_api_keys() -> list[str]:
     raw = get_config().get("alpha_vantage_api_key") or os.getenv("ALPHA_VANTAGE_API_KEY", "")
     if not raw:
         return []
     return [k.strip() for k in raw.split(",") if k.strip()]
-
 
 def _rotate_api_key() -> str | None:
     keys = _read_api_keys()
@@ -67,7 +62,6 @@ def _rotate_api_key() -> str | None:
     _logger.info("Rotated to Alpha Vantage API key %d/%d", index + 1, len(keys))
     return keys[index]
 
-
 def get_api_key() -> str:
     keys = _read_api_keys()
     if not keys:
@@ -77,7 +71,6 @@ def get_api_key() -> str:
     with _AV_STATE_LOCK:
         index = _AV_KEY_INDICES.get(_credential_scope(), 0)
     return keys[index % len(keys)]
-
 
 def format_datetime_for_api(date_input) -> str:
     if isinstance(date_input, str):
@@ -97,13 +90,10 @@ def format_datetime_for_api(date_input) -> str:
     else:
         raise ValueError(f"Date must be string or datetime object, got {type(date_input)}")
 
-
 class AlphaVantageRateLimitError(Exception):
     pass
 
-
 _REQUEST_TIMEOUT = 30
-
 
 def _make_api_request(function_name: str, params: dict) -> dict | str:
     _load_rate_limiter().acquire_sync()
@@ -140,7 +130,6 @@ def _make_api_request(function_name: str, params: dict) -> dict | str:
         base_delay=cfg.get("alpha_vantage_retry_delay", 2.0),
         retryable_exceptions=(requests.RequestException, AlphaVantageRateLimitError, ConnectionError),
     )
-
 
 def _filter_csv_by_date_range(csv_data: str, start_date: str, end_date: str) -> str:
     if not csv_data or csv_data.strip() == "":

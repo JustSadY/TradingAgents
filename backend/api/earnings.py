@@ -9,7 +9,6 @@ from backend.services.earnings_service import get_earnings_calendar
 
 router = APIRouter(prefix="/api/market", tags=["earnings"])
 
-
 @router.get("/earnings-calendar", response_model=EarningsCalendarResponse)
 @limiter.limit("20/minute")
 async def earnings_calendar(

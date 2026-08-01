@@ -7,7 +7,6 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
 
-
 class WebhookDelivery(Base):
     __tablename__ = "webhook_deliveries"
     __table_args__ = (Index("ix_webhook_deliveries_user_created", "user_id", "created_at"),)

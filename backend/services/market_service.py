@@ -21,14 +21,12 @@ from backend.services.market_data_service import get_historical_data
 
 _logger = logging.getLogger(__name__)
 
-
 class MarketDataError(Exception):
     """Raised for client-correctable problems (bad ticker/date/no data)."""
 
     def __init__(self, message: str, status_code: int = 400):
         super().__init__(message)
         self.status_code = status_code
-
 
 def _clean_ticker(ticker: str) -> str:
     ticker = (ticker or "").upper().strip()
@@ -37,7 +35,6 @@ def _clean_ticker(ticker: str) -> str:
     except ValueError as exc:
         raise MarketDataError(str(exc), status_code=422) from exc
     return ticker
-
 
 def _resolve_dates(period: str, start_date: str | None, end_date: str | None) -> tuple[str, str]:
     if start_date and end_date:
@@ -53,11 +50,9 @@ def _resolve_dates(period: str, start_date: str | None, end_date: str | None) ->
         raise MarketDataError("Date format must be YYYY-MM-DD") from exc
     return s, e
 
-
 def _compute_candles(data) -> list[dict]:
     import numpy as np
 
-    # Ensure we have required columns and skip rows with missing OHLC data
     data = data.dropna(subset=["Open", "High", "Low", "Close"])
 
     if data.empty:
@@ -95,7 +90,6 @@ def _compute_candles(data) -> list[dict]:
         )
     return candles
 
-
 async def get_ohlcv(ticker: str, period: str, start_date: str | None, end_date: str | None) -> dict:
     ticker = _clean_ticker(ticker)
     s, e = _resolve_dates(period, start_date, end_date)
@@ -106,7 +100,6 @@ async def get_ohlcv(ticker: str, period: str, start_date: str | None, end_date: 
 
     candles = _compute_candles(data)
     return {"ticker": ticker, "start_date": s, "end_date": e, "candles": candles}
-
 
 async def get_custom_indicator_series(
     ticker: str,
@@ -131,7 +124,6 @@ async def get_custom_indicator_series(
     ]
 
     return {"ticker": ticker, "formula": formula, "series": results}
-
 
 async def get_sentiment_history(db: AsyncSession, ticker: str, user=None) -> dict:
     ticker = _clean_ticker(ticker)

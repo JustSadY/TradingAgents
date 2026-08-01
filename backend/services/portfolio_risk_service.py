@@ -18,17 +18,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-DEFAULT_MAX_CONCENTRATION_PCT = 25.0  # max % of equity in a single ticker
-DEFAULT_MAX_GROSS_EXPOSURE = 3.0  # max sum(notional) / equity across positions
-DEFAULT_MAX_CORRELATED_PCT = 40.0  # max % of equity in a correlated cluster (this name + correlated holdings)
-
+DEFAULT_MAX_CONCENTRATION_PCT = 25.0
+DEFAULT_MAX_GROSS_EXPOSURE = 3.0
+DEFAULT_MAX_CORRELATED_PCT = 40.0
 
 @dataclass
 class RiskAssessment:
     allowed_notional: float
     capped: bool
     reason: str = ""
-
 
 def cap_order_notional(
     *,
@@ -55,15 +53,12 @@ def cap_order_notional(
     if equity <= 0 or proposed_notional <= 0:
         return RiskAssessment(allowed_notional=0.0, capped=proposed_notional > 0, reason="no_equity")
 
-    # Headroom under the single-name concentration cap.
     conc_ceiling = (max_concentration_pct / 100.0) * equity
     conc_headroom = max(0.0, conc_ceiling - existing_ticker_notional)
 
-    # Headroom under the gross-exposure cap.
     gross_ceiling = max_gross_exposure * equity
     gross_headroom = max(0.0, gross_ceiling - existing_gross_notional)
 
-    # Headroom under the correlated-cluster cap (this name + correlated holdings).
     corr_ceiling = (max_correlated_pct / 100.0) * equity
     corr_headroom = max(0.0, corr_ceiling - existing_ticker_notional - correlated_notional)
 

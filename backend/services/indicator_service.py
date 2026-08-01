@@ -5,11 +5,9 @@ import pandas as pd
 
 _logger = logging.getLogger(__name__)
 
-
 def calculate_ema(prices: pd.Series, span: int = 20) -> pd.Series:
     """Compute Exponential Moving Average."""
     return prices.ewm(span=span, adjust=False).mean()
-
 
 def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
     """Compute RSI using Wilder's smoothed-average method.
@@ -26,7 +24,6 @@ def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
     rs = avg_gain / avg_loss.replace(0, 1e-9)
     return 100 - (100 / (1 + rs))
 
-
 def calculate_macd(
     prices: pd.Series,
     fast: int = 12,
@@ -39,7 +36,6 @@ def calculate_macd(
     macd_line = ema_fast - ema_slow
     signal_line = calculate_ema(macd_line, signal)
     return macd_line, signal_line
-
 
 def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """Compute Average Directional Index (ADX)."""
@@ -59,7 +55,6 @@ def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
     dx = 100 * ((plus_di - minus_di).abs() / (plus_di + minus_di))
     adx = dx.rolling(window=period).mean()
     return adx
-
 
 def calculate_ichimoku(df: pd.DataFrame) -> dict[str, pd.Series]:
     """Compute Ichimoku Cloud components."""
@@ -87,7 +82,6 @@ def calculate_ichimoku(df: pd.DataFrame) -> dict[str, pd.Series]:
         "chikou_span": chikou_span,
     }
 
-
 def calculate_fibonacci_levels(df: pd.DataFrame, period: int = 100) -> dict[str, float]:
     """Calculate Fibonacci Retracement levels based on a period high/low."""
     recent_df = df.tail(period)
@@ -105,7 +99,6 @@ def calculate_fibonacci_levels(df: pd.DataFrame, period: int = 100) -> dict[str,
         "level_100": low,
     }
 
-
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """Compute Average True Range."""
     high = df["High"]
@@ -114,13 +107,11 @@ def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     tr = pd.concat([high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()], axis=1).max(axis=1)
     return tr.rolling(window=period).mean()
 
-
 def calculate_vwap(df: pd.DataFrame, period: int = 20) -> pd.Series:
     """Compute rolling Volume-Weighted Average Price over *period* bars."""
     typical_price = (df["High"] + df["Low"] + df["Close"]) / 3
     price_volume = (typical_price * df["Volume"]).rolling(window=period).sum()
     return price_volume / df["Volume"].rolling(window=period).sum()
-
 
 _FORMULA_FUNCS: dict = {
     "VOLSMA": lambda df, n: df["Volume"].rolling(window=n).mean(),
@@ -135,7 +126,6 @@ _FORMULA_FUNCS: dict = {
     "MAX": lambda df, n: df["High"].rolling(window=n).max(),
     "MIN": lambda df, n: df["Low"].rolling(window=n).min(),
 }
-
 
 def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
     """Evaluates a mathematical formula containing technical indicators."""
@@ -165,7 +155,6 @@ def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
     except Exception as e:
         _logger.exception("Error evaluating formula %s", formula)
         raise ValueError(f"Formula could not be calculated: {str(e)}") from e
-
 
 async def fetch_sector(ticker: str) -> str:
     import asyncio

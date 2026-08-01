@@ -17,10 +17,8 @@ _cooldown_lock = threading.Lock()
 _cooldown_until = 0.0
 _cooldown_reason: str | None = None
 
-
 class StockTwitsUnavailable(str):
     """A visible provider-failure result that must not be cached as data."""
-
 
 def _active_cooldown() -> tuple[float, str] | None:
     global _cooldown_until, _cooldown_reason
@@ -32,7 +30,6 @@ def _active_cooldown() -> tuple[float, str] | None:
             _cooldown_reason = None
             return None
         return _cooldown_until - now, _cooldown_reason or "provider unavailable"
-
 
 def _start_cooldown(reason: str, seconds: float) -> bool:
     """Start a provider-wide cooldown and return whether this call created it."""
@@ -46,7 +43,6 @@ def _start_cooldown(reason: str, seconds: float) -> bool:
         _cooldown_reason = reason
         return True
 
-
 def reset_stocktwits_cooldown() -> None:
     """Clear process-local cooldown state (primarily useful in tests)."""
     global _cooldown_until, _cooldown_reason
@@ -55,10 +51,8 @@ def reset_stocktwits_cooldown() -> None:
         _cooldown_until = 0.0
         _cooldown_reason = None
 
-
 def _unavailable_message(reason: str, retry_after: float) -> StockTwitsUnavailable:
     return StockTwitsUnavailable(f"<stocktwits unavailable: {reason}; retry after roughly {math.ceil(retry_after)}s>")
-
 
 def fetch_stocktwits_messages(ticker: str, limit: int = 30, timeout: float = 10.0) -> str:
     cooldown = _active_cooldown()
@@ -113,7 +107,6 @@ def fetch_stocktwits_messages(ticker: str, limit: int = 30, timeout: float = 10.
 
     return summary + "\n\n" + "\n".join(parsed_lines)
 
-
 def _parse_stocktwits_messages(messages: list, limit: int) -> tuple[list[str], dict[str, int]]:
     """Parse raw messages and track sentiment counts."""
     lines = []
@@ -138,7 +131,6 @@ def _parse_stocktwits_messages(messages: list, limit: int) -> tuple[list[str], d
         lines.append(f"[{created} · @{user} · {tag}] {body}")
 
     return lines, stats
-
 
 def _format_stocktwits_summary(stats: dict[str, int]) -> str:
     """Format the sentiment summary line."""

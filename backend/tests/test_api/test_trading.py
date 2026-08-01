@@ -5,7 +5,6 @@ from decimal import Decimal
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-
 class TestTradingAPI:
     """Tests for the trading API endpoints."""
 
@@ -66,7 +65,6 @@ class TestTradingAPI:
         resp = await auth_client.get("/api/trading/performance")
         assert resp.status_code == 200
         data = resp.json()
-        # Should return performance stats
         assert isinstance(data, dict)
 
     async def test_get_portfolio_stats_no_auth(self, async_client: AsyncClient):

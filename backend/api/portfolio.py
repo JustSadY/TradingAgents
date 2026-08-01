@@ -9,14 +9,12 @@ from backend.services import portfolio_service
 
 router = APIRouter(prefix="/api/portfolio", tags=["portfolio"])
 
-
 @router.get("", response_model=list[PortfolioRead])
 async def list_portfolios(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_page("portfolio")),
 ):
     return await portfolio_service.list_user_portfolios(db, current_user)
-
 
 @router.get("/holdings", response_model=list[HoldingRead])
 async def list_holdings(
@@ -25,7 +23,6 @@ async def list_holdings(
     current_user: User = Depends(require_page("portfolio")),
 ):
     return await portfolio_service.list_user_holdings(db, current_user, mode)
-
 
 @router.get("/orders", response_model=list[OrderRead])
 async def list_orders(

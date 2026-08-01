@@ -17,11 +17,6 @@ from backend.trading_agents.llm_clients.base_client import is_quota_exhausted, i
 from backend.trading_agents.llm_clients.factory import create_llm_client
 from backend.trading_agents.llm_clients.registry import llm_registry, provider_requires_api_key
 
-# ---------------------------------------------------------------------------
-# TokenUsage
-# ---------------------------------------------------------------------------
-
-
 class TestTokenUsage:
     def test_default_zeros(self):
         u = TokenUsage()
@@ -54,12 +49,6 @@ class TestTokenUsage:
         assert u.input_tokens == 0
         assert u.output_tokens == 0
         assert u.total_tokens == 0
-
-
-# ---------------------------------------------------------------------------
-# TokenUsageTracker
-# ---------------------------------------------------------------------------
-
 
 class TestTokenUsageTracker:
     def test_record_accumulates(self):
@@ -105,12 +94,6 @@ class TestTokenUsageTracker:
         assert snap["total_tokens"] == 10
         assert snap["llm_calls"] == 1
 
-
-# ---------------------------------------------------------------------------
-# Error classification
-# ---------------------------------------------------------------------------
-
-
 class TestErrorClassification:
     @pytest.mark.parametrize(
         "msg",
@@ -139,18 +122,11 @@ class TestErrorClassification:
             ("invalid_api_key", "auth"),
             ("timeout after 30s", "timeout"),
             ("some random error", "unknown"),
-            # "429" and "rate limit" hit is_quota_exhausted first
             ("try again later", "rate_limited"),
         ],
     )
     def test_classify_error(self, msg, expected):
         assert classify_error(Exception(msg)) == expected
-
-
-# ---------------------------------------------------------------------------
-# FallbackLLM
-# ---------------------------------------------------------------------------
-
 
 class StubLLM:
     """Minimal stub that mimics the BaseChatModel interface needed by FallbackLLM."""
@@ -192,7 +168,6 @@ class StubLLM:
     def astream_events(self, *args, **kwargs):
         return iter([{"event": "on_chunk", "data": f"{self.model_name} event"}])
 
-
 class _BoundStub:
     def __init__(self, llm: StubLLM):
         self._llm = llm
@@ -202,7 +177,6 @@ class _BoundStub:
         for fb in fallbacks:
             extracted.append(fb._llm if hasattr(fb, "_llm") else fb)
         return _FallbackRunnable(self._llm, extracted)
-
 
 class _FallbackRunnable:
     def __init__(self, primary, fallbacks):
@@ -223,7 +197,6 @@ class _FallbackRunnable:
 
     def astream_events(self, *args, **kwargs):
         return self._primary.astream_events(*args, **kwargs)
-
 
 class TestFallbackLLM:
     def test_repr(self):
@@ -263,12 +236,6 @@ class TestFallbackLLM:
         assert len(events) == 1
         assert events[0]["event"] == "on_chunk"
 
-
-# ---------------------------------------------------------------------------
-# Registry
-# ---------------------------------------------------------------------------
-
-
 class TestRegistry:
     def test_all_providers_registered(self):
         providers = llm_registry.list_providers()
@@ -305,12 +272,6 @@ class TestRegistry:
         assert provider_requires_api_key("ollama") is False
         assert provider_requires_api_key("openai") is True
         assert provider_requires_api_key("unknown-provider") is True
-
-
-# ---------------------------------------------------------------------------
-# Factory
-# ---------------------------------------------------------------------------
-
 
 class TestFactory:
     def test_create_openai_client(self):
@@ -359,12 +320,6 @@ class TestFactory:
         client = create_llm_client("anthropic", "claude-3-5-sonnet-latest")
         with pytest.raises(ValueError, match="API key"):
             client.get_llm()
-
-
-# ---------------------------------------------------------------------------
-# Model validation
-# ---------------------------------------------------------------------------
-
 
 class TestModelValidation:
     def test_validate_known_model(self):

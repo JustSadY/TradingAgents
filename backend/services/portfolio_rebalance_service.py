@@ -27,7 +27,6 @@ _FALLBACK = {
     "suggestions": [],
 }
 
-
 async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
     from backend.services.mock_trading_service import get_portfolio_with_live_prices
 
@@ -49,7 +48,6 @@ async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
     prompt = _build_prompt(portfolio, sectors, recent_signals)
     return await _call_llm(db, user, prompt)
 
-
 async def _fetch_sectors(tickers: list[str]) -> dict[str, str]:
     async def _one(ticker: str) -> tuple[str, str]:
         sector = await fetch_sector(ticker)
@@ -57,7 +55,6 @@ async def _fetch_sectors(tickers: list[str]) -> dict[str, str]:
 
     pairs = await asyncio.gather(*[_one(t) for t in tickers], return_exceptions=False)
     return dict(pairs)
-
 
 async def _get_recent_signals(db: AsyncSession, user: User, tickers: list[str]) -> list:
     from sqlalchemy import select
@@ -75,7 +72,6 @@ async def _get_recent_signals(db: AsyncSession, user: User, tickers: list[str]) 
     q = scope_to_user(q, AnalysisResult, user)
     rows = (await db.execute(q)).fetchall()
     return list(rows)
-
 
 def _build_prompt(portfolio: dict, sectors: dict[str, str], signals: list) -> str:
     total: float = portfolio.get("total_value") or 1.0
@@ -132,7 +128,6 @@ Rules:
 - Only suggest BUY for tickers the user already owns or well-known stocks.
 - Keep suggestions to a maximum of 5.
 - Quantities must be realistic given portfolio size."""
-
 
 async def _call_llm(db: AsyncSession, user: User, prompt: str) -> dict:
     from langchain_core.messages import HumanMessage

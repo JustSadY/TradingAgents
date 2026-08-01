@@ -16,7 +16,6 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 WEBSOCKET_APPLICATION_SUBPROTOCOL = "tradingagents.v1"
 WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX = "tradingagents.jwt."
 
-
 def get_websocket_application_subprotocol(offered_subprotocols: str | None) -> str | None:
     """Return the fixed response protocol when the client offered it.
 
@@ -28,7 +27,6 @@ def get_websocket_application_subprotocol(offered_subprotocols: str | None) -> s
     if WEBSOCKET_APPLICATION_SUBPROTOCOL in offered:
         return WEBSOCKET_APPLICATION_SUBPROTOCOL
     return None
-
 
 def get_websocket_access_token(
     offered_subprotocols: str | None,
@@ -48,14 +46,12 @@ def get_websocket_access_token(
                 return token
     return None
 
-
 def _credentials_exception() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="Could not validate credentials",
         headers={"WWW-Authenticate": "Bearer"},
     )
-
 
 async def get_user_from_access_token(token: str, db: AsyncSession) -> User:
     """Resolve an active user from an access token, including revocation.
@@ -79,7 +75,6 @@ async def get_user_from_access_token(token: str, db: AsyncSession) -> User:
         raise credentials_exc
     return user
 
-
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
     db: AsyncSession = Depends(get_db),
@@ -90,14 +85,12 @@ async def get_current_user(
     current_user_id.set(user.id)
     return user
 
-
 def require_admin(
     current_user: User = Depends(get_current_user),
 ) -> User:
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
-
 
 async def has_page_access(db: AsyncSession, user: User, page_key: str) -> bool:
     """Return whether ``user`` may use a page-backed capability.
@@ -110,7 +103,6 @@ async def has_page_access(db: AsyncSession, user: User, page_key: str) -> bool:
         return True
     perm = await get_user_page_permission(db, user.id, page_key)
     return bool(perm and perm.allowed)
-
 
 def require_page(page_key: str):
     async def _check(
@@ -125,7 +117,6 @@ def require_page(page_key: str):
         return current_user
 
     return _check
-
 
 def require_any_page(*page_keys: str):
     """Require at least one page entitlement for shared read endpoints."""
@@ -147,7 +138,6 @@ def require_any_page(*page_keys: str):
 
     return _check
 
-
 async def enforce_setting_section_permission(db: AsyncSession, user: User, section: str) -> None:
     """Require a non-admin to hold the named settings-section entitlement.
 
@@ -163,7 +153,6 @@ async def enforce_setting_section_permission(db: AsyncSession, user: User, secti
             status_code=status.HTTP_403_FORBIDDEN,
             detail=f"You do not have permission to modify settings in section: {section}",
         )
-
 
 async def enforce_tool_settings_permission(
     db: AsyncSession,

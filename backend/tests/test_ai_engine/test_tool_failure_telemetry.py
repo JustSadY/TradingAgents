@@ -6,12 +6,10 @@ from langchain_core.tools import tool
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 
-
 @tool
 async def _unavailable_tool(ticker: str) -> str:
     """A deterministic external-data failure for ToolNode telemetry tests."""
     raise RuntimeError("vendor timed out token=super-secret-tool-token")
-
 
 @pytest.mark.asyncio
 async def test_tool_failure_keeps_identity_redacts_secrets_and_returns_tool_message(monkeypatch):
@@ -68,7 +66,6 @@ async def test_tool_failure_keeps_identity_redacts_secrets_and_returns_tool_mess
             },
         )
     ]
-
 
 def test_tool_timeout_builds_one_valid_response_for_each_pending_call(monkeypatch):
     from backend.trading_agents.agents.runtime import resilience

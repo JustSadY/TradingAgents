@@ -19,7 +19,6 @@ _logger = logging.getLogger(__name__)
 
 active_run_context: contextvars.ContextVar[dict] = contextvars.ContextVar("active_run_context")
 
-
 async def _load_ohlcv_via_interface_async(symbol: str, curr_date: str) -> pd.DataFrame:
     start_date = (pd.to_datetime(curr_date) - pd.DateOffset(years=5)).strftime("%Y-%m-%d")
     csv_payload = await route_to_vendor("get_stock_data", symbol, start_date, curr_date)
@@ -40,7 +39,6 @@ async def _load_ohlcv_via_interface_async(symbol: str, curr_date: str) -> pd.Dat
     if price_cols:
         df[price_cols] = df[price_cols].ffill().bfill()
     return df[df["Date"] <= pd.to_datetime(curr_date)] if "Date" in df.columns else df
-
 
 @tool
 async def add_chart_annotation(
@@ -73,7 +71,6 @@ async def add_chart_annotation(
     ctx["visual_annotations"].append(annotation)
     return f"Visual annotation ({type}) successfully registered at {time} / ${price}."
 
-
 @tool
 async def add_custom_indicator(
     name: Annotated[str, "A short unique name for the custom indicator, e.g., 'NormalizedSpread'"],
@@ -94,7 +91,6 @@ async def add_custom_indicator(
     indicator = {"name": name, "formula": formula, "label": label or name}
     ctx["custom_indicators"].append(indicator)
     return f"Custom indicator '{name}' with formula '{formula}' registered successfully. It will be rendered on the user interface."
-
 
 @tool
 async def get_vision_chart_analysis(
@@ -129,9 +125,6 @@ async def get_vision_chart_analysis(
             type="candle",
             style="charles",
             volume=True,
-            # Keep chart-internal text language-neutral.  The analysis returned
-            # to the user is localized below; a fixed English chart title used
-            # to leak into vision-model responses for non-English runs.
             title=f"{symbol.upper()} — {curr_date}",
             savefig={"fname": buf, "format": "png", "dpi": 100},
         )
@@ -176,7 +169,6 @@ async def get_vision_chart_analysis(
         _logger.exception("Vision chart analysis failed: %s", e)
         return _algorithmic_pattern_detection(df_plot, symbol)
 
-
 def _algorithmic_pattern_detection(df_plot: pd.DataFrame, symbol: str) -> str:
     labels = report_texts(
         (
@@ -214,7 +206,6 @@ def _algorithmic_pattern_detection(df_plot: pd.DataFrame, symbol: str) -> str:
         f"{labels['current_price_position']}: ${curr_close:.2f} ({labels['testing_upper_range']})"
     )
 
-
 def _local_find_support_resistance(
     df: pd.DataFrame, current_price: float, window: int = 5
 ) -> tuple[list[float], list[float]]:
@@ -236,7 +227,6 @@ def _local_find_support_resistance(
 
     return valid_supports[-3:], valid_resistances[:3]
 
-
 def _scan_levels(df: pd.DataFrame, window: int) -> tuple[list[float], list[float]]:
     supports = []
     resistances = []
@@ -251,7 +241,6 @@ def _scan_levels(df: pd.DataFrame, window: int) -> tuple[list[float], list[float
         if high_val >= window_highs.max():
             resistances.append(round(float(high_val), 2))
     return supports, resistances
-
 
 @tool
 async def get_mtf_trend(
@@ -297,7 +286,6 @@ async def get_mtf_trend(
         _logger.exception("MTF Trend calculation failed: %s", e)
         return f"Error calculating MTF trend: {str(e)}"
 
-
 async def _prep_daily_data(symbol: str, curr_date: str) -> tuple[pd.DataFrame, str]:
     df_daily = await _load_ohlcv_via_interface_async(symbol, curr_date)
     if df_daily.empty:
@@ -310,7 +298,6 @@ async def _prep_daily_data(symbol: str, curr_date: str) -> tuple[pd.DataFrame, s
     start_date = (df_daily["Date"].min() - pd.DateOffset(days=90)).strftime("%Y-%m-%d")
     return df_daily, start_date
 
-
 async def _download_mtf_data(symbol: str, start_date: str, curr_date: str, timeframe: str) -> pd.DataFrame:
     ticker = yf.Ticker(symbol.upper())
     df_mtf = await asyncio.to_thread(ticker.history, start=start_date, end=curr_date, interval=timeframe)
@@ -319,7 +306,6 @@ async def _download_mtf_data(symbol: str, start_date: str, curr_date: str, timef
     if df_mtf.index.tz is not None:
         df_mtf.index = df_mtf.index.tz_localize(None)
     return df_mtf.dropna(subset=["Close", "High", "Low"])
-
 
 def _calc_mtf_indicators(df_mtf: pd.DataFrame) -> dict:
     import pandas as pd
@@ -339,7 +325,6 @@ def _calc_mtf_indicators(df_mtf: pd.DataFrame) -> dict:
         "macd_sig": float(df_mtf["MACD_Signal"].iloc[-1]),
         "macd_hist": float(df_mtf["MACD_Hist"].iloc[-1]),
     }
-
 
 def _register_mtf_overlay(ctx: dict, df_daily: pd.DataFrame, df_mtf: pd.DataFrame, timeframe: str) -> None:
     import pandas as pd
@@ -371,7 +356,6 @@ def _register_mtf_overlay(ctx: dict, df_daily: pd.DataFrame, df_mtf: pd.DataFram
             },
         }
     )
-
 
 def _format_mtf_summary(
     symbol: str,

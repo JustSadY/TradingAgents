@@ -11,7 +11,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
 
 _RATINGS_TOOLS = [get_analyst_ratings]
 
-
 @register_analyst(
     key="ratings",
     agent_node="Analyst Ratings Analyst",

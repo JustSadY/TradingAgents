@@ -8,16 +8,13 @@ import pytest
 
 from backend.services import formula_assist_service
 
-
 class _FormulaLLM:
     async def ainvoke(self, _messages):
         return SimpleNamespace(content="SMA(20)")
 
-
 class _FormulaClient:
     def get_llm(self):
         return _FormulaLLM()
-
 
 @pytest.mark.asyncio
 async def test_formula_assist_allows_server_managed_ollama_without_tenant_key(monkeypatch):
@@ -40,7 +37,6 @@ async def test_formula_assist_allows_server_managed_ollama_without_tenant_key(mo
 
     assert result == "SMA(20)"
     assert captured == {"provider": "ollama", "model": "llama3.2", "api_key": None}
-
 
 @pytest.mark.asyncio
 async def test_formula_assist_rejects_cloud_provider_without_tenant_key(monkeypatch):

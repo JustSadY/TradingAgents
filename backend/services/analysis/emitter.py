@@ -5,17 +5,12 @@ from typing import Any
 
 from backend.core.event_bus import publish_close, publish_event
 
-
 class AnalysisEmitter:
     """Handles real-time event emission for analysis tasks."""
 
     def __init__(self, task_id: str, loop: asyncio.AbstractEventLoop | None = None):
         self.task_id = task_id
         self.loop = loop or asyncio.get_running_loop()
-        # This is deliberately local to one runner/emitter instance.  It lets
-        # the outer task wrapper distinguish an error that was already shown
-        # to the client from an early infrastructure failure that is still
-        # eligible for its bounded retry.
         self.terminal_event_emitted = False
 
     async def emit(self, event: dict[str, Any]) -> None:
@@ -115,8 +110,6 @@ class AnalysisEmitter:
             "ticker": ticker,
             "action": action,
             "signal": signal,
-            # ``status`` is retained as the compact conventional field; the
-            # more explicit ``outcome`` makes event consumers self-documenting.
             "status": outcome,
             "outcome": outcome,
             "broker_status": broker_status,

@@ -7,7 +7,6 @@ from langchain_core.tools import tool
 
 _logger = logging.getLogger(__name__)
 
-
 def _past_decision_for_review(analysis) -> tuple[str, str]:
     """Choose the prior run's single final decision for a performance review.
 
@@ -23,7 +22,6 @@ def _past_decision_for_review(analysis) -> tuple[str, str]:
     if legacy_plan:
         return legacy_plan, "PAST LEGACY TRADER PLAN (historical only)"
     return "", ""
-
 
 @tool
 async def get_past_performance_data(ticker: str, curr_date: str | None = None) -> str:

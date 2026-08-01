@@ -5,7 +5,6 @@ import time
 
 _logger = logging.getLogger(__name__)
 
-
 class TokenBucketRateLimiter:
     def __init__(
         self,

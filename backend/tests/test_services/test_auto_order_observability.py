@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 from backend.services.execution.base import OrderRequest, OrderResult
 
-
 async def test_simulation_trader_forwards_analysis_provenance_to_persisted_order(monkeypatch):
     from backend.services.execution import simulation
 
@@ -42,7 +41,6 @@ async def test_simulation_trader_forwards_analysis_provenance_to_persisted_order
     assert received["analysis_id"] == 19
     assert received["ai_signal"] == "Buy"
     assert received["ai_reasoning"] == "Final Portfolio Manager rationale"
-
 
 async def test_final_portfolio_decision_constrains_auto_order_and_provenance(monkeypatch):
     """A historical Trader proposal must not override the final PM decision."""
@@ -101,8 +99,6 @@ async def test_final_portfolio_decision_constrains_auto_order_and_provenance(mon
                 "suggested_capital": 300,
                 "recommended_leverage": 2.5,
             },
-            # This is intentionally much larger and must not affect a new
-            # decision once Portfolio Manager output exists.
             "trader_proposal": {"stop_loss": 80, "take_profit_price": 140, "position_size_pct": 90},
         },
     )
@@ -123,9 +119,6 @@ async def test_final_portfolio_decision_constrains_auto_order_and_provenance(mon
 
     assert result is not None and result.status == "FILLED"
     assert trader.request is not None
-    # Existing $200 long grows only by the delta to the PM's 5%/$500 total
-    # target: $300 (three shares). The historical Trader's incompatible 90%
-    # suggestion cannot affect a new final decision.
     assert trader.request.quantity == Decimal("3.0")
     assert trader.request.stop_loss == Decimal("95.0")
     assert trader.request.take_profit == Decimal("110.0")
@@ -133,7 +126,6 @@ async def test_final_portfolio_decision_constrains_auto_order_and_provenance(mon
     assert trader.request.analysis_id == 19
     assert trader.request.ai_signal == "Buy"
     assert "Portfolio Manager" in trader.request.ai_reasoning
-
 
 async def test_legacy_trader_proposal_is_display_only_and_cannot_open_an_order():
     from backend.services import trading_orchestrator
@@ -160,7 +152,6 @@ async def test_legacy_trader_proposal_is_display_only_and_cannot_open_an_order()
     assert result is not None
     assert result.status == "SKIPPED"
     assert result.reason_code == "portfolio_decision_missing"
-
 
 async def test_underweight_reduces_only_to_final_target_allocation(monkeypatch):
     from backend.repositories import portfolio as portfolio_repo
@@ -228,10 +219,8 @@ async def test_underweight_reduces_only_to_final_target_allocation(monkeypatch):
 
     assert result is not None and result.status == "FILLED"
     assert trader.request is not None
-    # Existing $1,000 long minus the 6% of $10,000 ($600) target = sell $400.
     assert trader.request.action == "SELL"
     assert trader.request.quantity == Decimal("4.0")
-
 
 async def test_background_analysis_emits_filled_order_result_after_durable_commit(monkeypatch):
     from backend.services import analysis_service
@@ -324,7 +313,6 @@ async def test_background_analysis_emits_filled_order_result_after_durable_commi
         }
     ]
 
-
 async def test_background_analysis_reports_disabled_auto_execution_as_skip(monkeypatch):
     from backend.services import analysis_service
 
@@ -384,7 +372,6 @@ async def test_background_analysis_reports_disabled_auto_execution_as_skip(monke
 
     assert events[0]["outcome"] == "skipped"
     assert events[0]["reason_code"] == "auto_execution_disabled"
-
 
 async def test_background_analysis_reports_persistence_failure_without_attempting_order(monkeypatch):
     """A complete event must not hide a failed final analysis commit."""

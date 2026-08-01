@@ -7,7 +7,6 @@ _REGISTRY: dict[str, type[BaseTraderInterface]] = {
     "alpaca": AlpacaTrader,
 }
 
-
 def get_trader(
     mode: str,
     broker: str,

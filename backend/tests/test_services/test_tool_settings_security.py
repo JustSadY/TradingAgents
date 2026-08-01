@@ -6,7 +6,6 @@ from fastapi import HTTPException
 from backend.schemas.tool_settings import ToolSettingsUpdate, ToolSettingUpdateValue
 from backend.services.tool_settings_service import _apply_tool_setting_row_update, validate_tool_settings
 
-
 def _tool():
     return SimpleNamespace(
         key="test_tool",
@@ -17,10 +16,8 @@ def _tool():
         ],
     )
 
-
 def test_partial_tool_settings_validation_does_not_materialize_missing_defaults():
     assert validate_tool_settings(_tool(), {"visible": 20}) == {"visible": 20.0}
-
 
 def test_reset_tool_setting_removes_only_that_override():
     row = SimpleNamespace(enabled=True, settings={"visible": 20, "locked": "admin-value"})
@@ -28,7 +25,6 @@ def test_reset_tool_setting_removes_only_that_override():
     _apply_tool_setting_row_update(row, ToolSettingUpdateValue(reset_settings=["visible"]), _tool())
 
     assert row.settings == {"locked": "admin-value"}
-
 
 @pytest.mark.asyncio
 async def test_hidden_tool_field_cannot_be_changed_by_direct_request(monkeypatch):

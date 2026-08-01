@@ -21,7 +21,6 @@ _DEFAULT_INSTRUCTION = (
     "of debate and deliver an evidence brief for the Portfolio Manager. You are not an execution agent."
 )
 
-
 def create_research_manager(llm):
     structured_llm = bind_structured(llm, ResearchPlan, "Research Manager")
 

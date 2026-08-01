@@ -10,10 +10,8 @@ _TRADING_MODES = {"simulation", "live"}
 _BROKERS = {"simulation", "alpaca"}
 _TRADING_FIELDS = {"trading_mode", "active_broker"}
 
-
 class InvalidTradingConfiguration(ValueError):
     """Raised when a server trading configuration cannot safely execute."""
-
 
 def validate_trading_configuration(trading_mode: str, active_broker: str) -> None:
     """Validate the effective mode/broker pair before persisting it.
@@ -31,13 +29,11 @@ def validate_trading_configuration(trading_mode: str, active_broker: str) -> Non
     if trading_mode == "live" and not is_live_trading_enabled():
         raise InvalidTradingConfiguration("Live trading is disabled by server configuration.")
 
-
 async def get_or_create_system_settings(db: AsyncSession) -> SystemSettings:
     ss = await repo.get_system_settings_by_id(db, 1)
     if ss is None:
         ss = await repo.create_system_settings(db, 1)
     return ss
-
 
 async def update_system_settings(db: AsyncSession, fields: dict) -> SystemSettings:
     ss = await get_or_create_system_settings(db)

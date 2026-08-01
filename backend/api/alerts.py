@@ -12,7 +12,6 @@ from backend.schemas.common import DeleteResponse
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 _logger = logging.getLogger(__name__)
 
-
 @router.get("", response_model=list[AlertRead])
 async def list_alerts_run(
     db: AsyncSession = Depends(get_db),
@@ -21,7 +20,6 @@ async def list_alerts_run(
     from backend.repositories.alerts import list_alerts as _repo_list
 
     return await _repo_list(db, user=current_user)
-
 
 @router.post("", response_model=AlertRead, responses={409: {"description": "Alert limit reached"}})
 async def create_alert_run(
@@ -45,7 +43,6 @@ async def create_alert_run(
         raise HTTPException(status_code=409, detail=exc.detail) from exc
     assert alert is not None
     return alert
-
 
 @router.patch(
     "/{alert_id}",
@@ -75,7 +72,6 @@ async def update_alert(
     for field, value in changes.items():
         setattr(alert, field, value)
     return alert
-
 
 @router.delete("/{alert_id}", response_model=DeleteResponse, responses={404: {"description": "Alert not found"}})
 async def delete_alert(

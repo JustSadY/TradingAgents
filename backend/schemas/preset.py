@@ -2,21 +2,17 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field
 
-
 class PresetCreate(BaseModel):
     name: str = Field(..., min_length=1, max_length=100)
     description: str = Field(default="", max_length=300)
     settings_json: str
 
-
 class PresetDeleteResponse(BaseModel):
     deleted: bool
-
 
 class PresetApplyResponse(BaseModel):
     applied: bool
     preset_name: str
-
 
 class PresetRead(BaseModel):
     id: int

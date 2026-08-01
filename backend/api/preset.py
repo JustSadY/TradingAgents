@@ -10,7 +10,6 @@ from backend.services.preset_service import PresetError
 
 router = APIRouter(prefix="/api/presets", tags=["presets"])
 
-
 @router.get("", response_model=list[PresetRead])
 async def list_presets_run(
     user_id: int | None = Query(default=None),
@@ -21,7 +20,6 @@ async def list_presets_run(
         return await preset_service.list_user_presets(db, user_id, current_user)
     except PresetError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-
 
 @router.post(
     "",
@@ -46,7 +44,6 @@ async def create_preset_run(
     except PresetError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-
 @router.delete(
     "/{preset_id}",
     response_model=PresetDeleteResponse,
@@ -64,7 +61,6 @@ async def delete_preset(
     except PresetError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
     return {"deleted": True}
-
 
 @router.post(
     "/{preset_id}/apply",

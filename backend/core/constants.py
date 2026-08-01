@@ -1,6 +1,5 @@
 from datetime import timedelta
 
-# Application Structure
 PAGE_KEYS = [
     "dashboard",
     "analysis",
@@ -35,9 +34,6 @@ SETTING_KEYS = [
     "personas",
 ]
 
-# Notification events are an API/storage contract.  Keep this list beside the
-# rest of the public application constants so the settings schema, metadata
-# endpoint, and delivery service cannot drift into accepting different names.
 WEBHOOK_EVENTS: tuple[str, ...] = (
     "analysis_complete",
     "trade_executed",
@@ -54,19 +50,13 @@ PERIOD_DELTAS = {
     "5y": timedelta(days=1825),
 }
 
-# Analysis Signals
 BUY_SIGNALS: set[str] = {"Buy", "Overweight"}
 SELL_SIGNALS: set[str] = {"Sell", "Underweight"}
 HOLD_SIGNALS: set[str] = {"Hold"}
 
-# Analysis Constants
 DEFAULT_HOLDING_DAYS: int = 5
 TOKENS_PER_ANALYST: int = 8000
 
-# Model pricing lives in core/model_pricing.py.  It is shared by post-run token
-# analytics and pre-run/AB estimates so cost paths cannot drift apart.
-
-# Sentiment values for charting and analytics
 SIGNAL_SENTIMENT_VALUES = {
     "Buy": 0.85,
     "Overweight": 0.45,
@@ -76,7 +66,6 @@ SIGNAL_SENTIMENT_VALUES = {
     "Sell": -0.85,
 }
 
-# Tone mappings
 SIGNAL_TONES = {
     "Buy": "positive",
     "Overweight": "positive",
@@ -85,7 +74,6 @@ SIGNAL_TONES = {
     "Sell": "negative",
 }
 
-# Signal → trade action mapping
 SIGNAL_TO_ACTION: dict[str, str] = {
     "Buy": "BUY",
     "Overweight": "BUY",
@@ -95,7 +83,6 @@ SIGNAL_TO_ACTION: dict[str, str] = {
 
 BULLISH_SIGNALS: set[str] = {"buy", "overweight"}
 BEARISH_SIGNALS: set[str] = {"sell", "underweight"}
-
 
 def signal_direction(signal: str | None) -> str:
     s = (signal or "").strip().lower()

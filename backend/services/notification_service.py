@@ -9,7 +9,6 @@ _logger = logging.getLogger(__name__)
 
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
 
-
 @dataclass(frozen=True)
 class WebhookTarget:
     """A URL plus the public IPs vetted for this individual delivery.
@@ -26,7 +25,6 @@ class WebhookTarget:
     host: str
     port: int
     addresses: tuple[str, ...]
-
 
 async def _log_delivery(
     user_id: int,
@@ -54,8 +52,7 @@ async def _log_delivery(
             )
             await db.commit()
     except Exception:
-        pass  # never crash the caller
-
+        pass
 
 def _build_payload(url: str, event: str, data: dict) -> dict:
     text = _format_text(event, data)
@@ -67,12 +64,8 @@ def _build_payload(url: str, event: str, data: dict) -> dict:
         )
         return {"embeds": [{"title": _event_title(event), "description": text, "color": color}]}
     if "api.telegram.org" in url:
-        # Telegram Bot API sendMessage. Configure the URL as
-        # https://api.telegram.org/bot<TOKEN>/sendMessage?chat_id=<CHAT_ID>
-        # — chat_id rides in the query string; the message body carries the text.
         return {"text": f"{_event_title(event)}\n\n{text}", "disable_web_page_preview": True}
     return {"event": event, "data": data, "text": text}
-
 
 def _event_title(event: str) -> str:
     return {
@@ -82,10 +75,8 @@ def _event_title(event: str) -> str:
         "signal_flip": "🔄 Signal Reversal",
     }.get(event, event)
 
-
 def _signal_direction(signal: str | None) -> str:
     return signal_direction(signal)
-
 
 def is_signal_flip(prev_signal: str | None, new_signal: str | None) -> bool:
     """True when the directional stance reversed (bullish↔bearish) or
@@ -95,7 +86,6 @@ def is_signal_flip(prev_signal: str | None, new_signal: str | None) -> bool:
     if prev_dir == new_dir:
         return False
     return prev_dir == "neutral" or new_dir == "neutral" or {prev_dir, new_dir} == {"bullish", "bearish"}
-
 
 def _format_text(event: str, data: dict) -> str:
     if event == "analysis_complete":
@@ -126,7 +116,6 @@ def _format_text(event: str, data: dict) -> str:
                 f"Price {cond_str} target of **${data.get('target_price', 0):.2f}**"
             )
     return json.dumps(data)[:500]
-
 
 async def resolve_webhook_target(url: str) -> WebhookTarget:
     """Validate *url* and resolve it once to a set of public IP addresses."""
@@ -165,10 +154,6 @@ async def resolve_webhook_target(url: str) -> WebhookTarget:
             ip = ipaddress.ip_address(info[4][0])
         except ValueError as exc:
             raise ValueError("Webhook host resolved to an invalid address") from exc
-        # ``is_global`` excludes every local/private/special-use range,
-        # including shared carrier-grade NAT addresses that ``is_private``
-        # alone would miss.  Webhooks are outbound Internet integrations, so
-        # private network destinations are never valid here.
         if not ip.is_global:
             raise ValueError("Webhook URL resolves to a disallowed internal address")
         normalized = str(ip)
@@ -179,7 +164,6 @@ async def resolve_webhook_target(url: str) -> WebhookTarget:
         raise ValueError("Webhook host could not be resolved")
     return WebhookTarget(url=url, host=host, port=port, addresses=tuple(addresses))
 
-
 async def validate_webhook_url(url: str) -> WebhookTarget:
     """Compatibility-facing validation helper returning the pinned target.
 
@@ -188,10 +172,8 @@ async def validate_webhook_url(url: str) -> WebhookTarget:
     """
     return await resolve_webhook_target(url)
 
-
 def _normalized_host(host: str) -> str:
     return host.rstrip(".").lower()
-
 
 class _PinnedWebhookNetworkBackend:
     """httpcore network backend that dials only a pre-vetted address list."""
@@ -214,9 +196,6 @@ class _PinnedWebhookNetworkBackend:
         import httpcore
 
         if _normalized_host(host) != _normalized_host(self._target.host) or port != self._target.port:
-            # This transport is never a generic proxy. Reject unexpected
-            # destinations rather than accidentally allowing a future request
-            # redirect/proxy path to bypass the pin.
             raise httpcore.ConnectError("Pinned webhook transport rejected an unexpected destination")
         address = self._target.addresses[self._next_address % len(self._target.addresses)]
         self._next_address += 1
@@ -236,7 +215,6 @@ class _PinnedWebhookNetworkBackend:
     async def sleep(self, seconds: float) -> None:
         await self._backend.sleep(seconds)
 
-
 def _pinned_webhook_transport(target: WebhookTarget):
     """Return an httpx transport that preserves Host/SNI but pins TCP IPs.
 
@@ -255,12 +233,8 @@ def _pinned_webhook_transport(target: WebhookTarget):
     pool = getattr(transport, "_pool", None)
     if pool is None or not hasattr(pool, "_network_backend"):
         raise RuntimeError("Installed httpx/httpcore does not support pinned webhook transport")
-    # httpx 0.28/httpcore 1.x expose this extension point on the connection
-    # pool. requirements.txt pins the compatible major API; fail closed above
-    # if an incompatible future dependency removes it.
     pool._network_backend = _PinnedWebhookNetworkBackend(target)
     return transport
-
 
 def _webhook_client(target: WebhookTarget):
     import httpx
@@ -271,7 +245,6 @@ def _webhook_client(target: WebhookTarget):
         follow_redirects=False,
         trust_env=False,
     )
-
 
 async def test_webhook_url(url: str) -> bool:
     import httpx
@@ -293,7 +266,6 @@ async def test_webhook_url(url: str) -> bool:
     except (httpx.RequestError, ValueError):
         return False
 
-
 async def send_webhook(
     url: str,
     event: str,
@@ -303,8 +275,6 @@ async def send_webhook(
 ) -> bool:
     if not url:
         return False
-    # Manual/legacy rows may not have gone through settings_service's
-    # registration path. Register before any error can include this URL.
     from backend.core.log_redaction import register_sensitive_literal
 
     register_sensitive_literal(url)
@@ -314,9 +284,6 @@ async def send_webhook(
     try:
         import httpx
 
-        # Validate at delivery time as well as at save time. The returned
-        # target pins the actual TCP connection to this specific DNS answer,
-        # closing the DNS-rebinding gap between validation and httpx's send.
         target = await validate_webhook_url(url)
         payload = _build_payload(url, event, data)
         async with _webhook_client(target) as client:
@@ -344,7 +311,6 @@ async def send_webhook(
 
     return result
 
-
 async def notify_analysis_complete(
     ticker: str, signal: str | None, trade_date: str, final_decision: str, settings
 ) -> None:
@@ -367,7 +333,6 @@ async def notify_analysis_complete(
         user_id=user_id,
     )
 
-
 async def notify_trade_executed(ticker: str, action: str, quantity: float, price: float, settings) -> None:
     if not getattr(settings, "webhook_enabled", False):
         return
@@ -383,7 +348,6 @@ async def notify_trade_executed(ticker: str, action: str, quantity: float, price
         user_id=user_id,
     )
 
-
 async def notify_alert_triggered(
     ticker: str, condition: str, target_price: float, settings, alert_type: str = "price", market_summary: str = ""
 ) -> None:
@@ -398,7 +362,6 @@ async def notify_alert_triggered(
     if market_summary:
         payload["market_summary"] = market_summary
     await send_webhook(url, "alert_triggered", payload, user_id=user_id)
-
 
 async def notify_signal_flip(ticker: str, prev_signal: str | None, new_signal: str | None, settings) -> None:
     if not getattr(settings, "webhook_enabled", False):
@@ -416,7 +379,6 @@ async def notify_signal_flip(ticker: str, prev_signal: str | None, new_signal: s
         {"ticker": ticker, "prev_signal": prev_signal, "new_signal": new_signal},
         user_id=user_id,
     )
-
 
 def _enabled_webhook_events(settings) -> list[str]:
     """Return a validated native event list, failing closed for corrupt rows.

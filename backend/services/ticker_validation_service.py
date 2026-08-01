@@ -29,7 +29,6 @@ _VALID_CACHE_TTL_SECONDS = 15 * 60
 _INVALID_CACHE_TTL_SECONDS = 5 * 60
 _MAX_SUGGESTIONS = 3
 
-
 @dataclass(frozen=True)
 class TickerSuggestion:
     """A user-selectable alternative returned by Yahoo's symbol search."""
@@ -41,13 +40,11 @@ class TickerSuggestion:
     def as_dict(self) -> dict[str, str | None]:
         return {"symbol": self.symbol, "name": self.name, "quote_type": self.quote_type}
 
-
 @dataclass(frozen=True)
 class TickerValidationResult:
     """A confirmed symbol in canonical (upper-case) form."""
 
     ticker: str
-
 
 class TickerNotFoundError(ValueError):
     """Raised when the quote provider confirms that a symbol is unknown."""
@@ -57,29 +54,21 @@ class TickerNotFoundError(ValueError):
         self.suggestions = suggestions
         super().__init__(f"Unknown symbol: {ticker}")
 
-
 class TickerValidationUnavailableError(RuntimeError):
     """Raised when symbol validation cannot obtain a trustworthy answer."""
-
 
 @dataclass(frozen=True)
 class _CachedValidation:
     expires_at: float
     suggestions: tuple[TickerSuggestion, ...] | None
 
-
-# Caching has two purposes: normal repeat submissions do not add latency, and
-# repeated typo clicks do not repeatedly query Yahoo.  Availability failures
-# are intentionally not cached so recovery is immediate.
 _VALIDATION_CACHE: dict[str, _CachedValidation] = {}
-
 
 def _normalize_ticker(ticker: str) -> str:
     if not isinstance(ticker, str):
         raise ValueError("Ticker must be a non-empty string.")
     normalized = ticker.strip().upper()
     return safe_ticker_component(normalized)
-
 
 async def _request_yahoo_json(url: str, *, params: dict[str, str]) -> dict[str, Any] | None:
     """Fetch one Yahoo payload and classify transport failures distinctly."""
@@ -91,8 +80,6 @@ async def _request_yahoo_json(url: str, *, params: dict[str, str]) -> dict[str, 
     except httpx.RequestError as exc:
         raise TickerValidationUnavailableError("Symbol validation request failed") from exc
 
-    # A quote lookup can return 404 for an unknown symbol.  The search endpoint
-    # is then authoritative for both the invalid verdict and suggestions.
     if response.status_code == 404:
         return None
     if response.status_code >= 400:
@@ -106,7 +93,6 @@ async def _request_yahoo_json(url: str, *, params: dict[str, str]) -> dict[str, 
         raise TickerValidationUnavailableError("Symbol validation returned invalid data")
     return payload
 
-
 async def _fetch_quote_candidates(ticker: str) -> list[dict[str, Any]]:
     payload = await _request_yahoo_json(_YAHOO_QUOTE_URL, params={"symbols": ticker})
     if payload is None:
@@ -116,7 +102,6 @@ async def _fetch_quote_candidates(ticker: str) -> list[dict[str, Any]]:
         return []
     results = response.get("result")
     return [item for item in results if isinstance(item, dict)] if isinstance(results, list) else []
-
 
 async def _fetch_search_candidates(ticker: str) -> list[dict[str, Any]]:
     payload = await _request_yahoo_json(
@@ -128,11 +113,9 @@ async def _fetch_search_candidates(ticker: str) -> list[dict[str, Any]]:
     quotes = payload.get("quotes")
     return [item for item in quotes if isinstance(item, dict)] if isinstance(quotes, list) else []
 
-
 def _candidate_symbol(candidate: dict[str, Any]) -> str | None:
     symbol = candidate.get("symbol")
     return symbol.strip().upper() if isinstance(symbol, str) and symbol.strip() else None
-
 
 def _suggestions_from_candidates(candidates: list[dict[str, Any]], ticker: str) -> tuple[TickerSuggestion, ...]:
     suggestions: list[TickerSuggestion] = []
@@ -155,11 +138,9 @@ def _suggestions_from_candidates(candidates: list[dict[str, Any]], ticker: str) 
             break
     return tuple(suggestions)
 
-
 def _cache_result(ticker: str, suggestions: tuple[TickerSuggestion, ...] | None) -> None:
     ttl = _VALID_CACHE_TTL_SECONDS if suggestions is None else _INVALID_CACHE_TTL_SECONDS
     _VALIDATION_CACHE[ticker] = _CachedValidation(expires_at=time.monotonic() + ttl, suggestions=suggestions)
-
 
 async def _validate_normalized_ticker(normalized: str) -> TickerValidationResult:
     cached = _VALIDATION_CACHE.get(normalized)
@@ -174,9 +155,6 @@ async def _validate_normalized_ticker(normalized: str) -> TickerValidationResult
     try:
         quote_candidates = await _fetch_quote_candidates(normalized)
     except TickerValidationUnavailableError as exc:
-        # Yahoo can temporarily protect the quote endpoint while still serving
-        # search.  Do not fail an otherwise valid symbol before trying that
-        # independent endpoint.
         quote_failure = exc
         quote_candidates = []
     if any(_candidate_symbol(candidate) == normalized for candidate in quote_candidates):
@@ -188,13 +166,8 @@ async def _validate_normalized_ticker(normalized: str) -> TickerValidationResult
     except TickerValidationUnavailableError:
         if quote_failure is not None:
             raise quote_failure from None
-        # A successful quote response with no exact symbol is still a
-        # confirmed unknown-symbol verdict; suggestions are simply unavailable.
         _cache_result(normalized, ())
         raise TickerNotFoundError(normalized) from None
-    # Some Yahoo instruments appear in search but not in the quote endpoint.
-    # This remains an exact-match validation; a different search hit is only a
-    # suggestion and can never change the submitted symbol automatically.
     if any(_candidate_symbol(candidate) == normalized for candidate in search_candidates):
         _cache_result(normalized, None)
         return TickerValidationResult(ticker=normalized)
@@ -202,7 +175,6 @@ async def _validate_normalized_ticker(normalized: str) -> TickerValidationResult
     suggestions = _suggestions_from_candidates(search_candidates, normalized)
     _cache_result(normalized, suggestions)
     raise TickerNotFoundError(normalized, suggestions)
-
 
 async def validate_analysis_ticker(ticker: str, *, asset_type: str = "stock") -> TickerValidationResult:
     """Confirm that *ticker* exists before it can enter an analysis queue.
@@ -212,9 +184,8 @@ async def validate_analysis_ticker(ticker: str, *, asset_type: str = "stock") ->
     a valid ETF, index, or token solely because Yahoo labels it differently
     would turn this guard into a false-negative source.
     """
-    del asset_type  # Semantic existence is independent of the UI prompt type.
+    del asset_type
     return await _validate_normalized_ticker(_normalize_ticker(ticker))
-
 
 async def validate_analysis_tickers(tickers: list[str], *, asset_type: str = "stock") -> list[TickerValidationResult]:
     """Validate a portfolio batch with bounded lookup concurrency.
@@ -223,9 +194,6 @@ async def validate_analysis_tickers(tickers: list[str], *, asset_type: str = "st
     the first invalid symbol deterministically while never enqueueing a partial
     portfolio analysis.
     """
-    # Reject malformed input before starting *any* remote lookup.  In
-    # particular, a bad item in a 10-symbol portfolio must not create nine
-    # avoidable requests while the API is about to return 422.
     normalized_tickers = [_normalize_ticker(ticker) for ticker in tickers]
     semaphore = asyncio.Semaphore(4)
 
@@ -233,8 +201,6 @@ async def validate_analysis_tickers(tickers: list[str], *, asset_type: str = "st
         async with semaphore:
             return await _validate_normalized_ticker(ticker)
 
-    # See ``validate_analysis_ticker`` for why the type is accepted but does
-    # not constrain Yahoo's broader instrument taxonomy.
     del asset_type
     results = await asyncio.gather(*(_validate_one(ticker) for ticker in normalized_tickers), return_exceptions=True)
     validated: list[TickerValidationResult] = []

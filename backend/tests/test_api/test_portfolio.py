@@ -10,7 +10,6 @@ from backend.models.order import Order
 from backend.models.portfolio import Holding, Portfolio
 from backend.models.user import User
 
-
 def _make_portfolio(user_id: int, **overrides) -> Portfolio:
     defaults = {
         "user_id": user_id,
@@ -22,7 +21,6 @@ def _make_portfolio(user_id: int, **overrides) -> Portfolio:
     }
     defaults.update(overrides)
     return Portfolio(**defaults)
-
 
 class TestPortfolioAPI:
     """Tests for the portfolio API endpoints."""

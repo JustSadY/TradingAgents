@@ -17,11 +17,7 @@ from backend.core.memory import MemoryRecord, MemoryStore, build_pgvector_store,
 
 _logger = logging.getLogger(__name__)
 
-# Cache built stores by their resolved config so we don't rebuild a Pinecone
-# client on every record/recall. Keyed by the full config tuple, so a user
-# changing their settings transparently gets a new store.
 _store_cache: dict[tuple, MemoryStore | None] = {}
-
 
 async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
     """Build the calling user's own memory store from their settings + encrypted
@@ -60,9 +56,6 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
             openai_embed_model = getattr(row, "memory_openai_embed_model", None) or "text-embedding-3-small"
             ollama_embed_model = getattr(row, "memory_ollama_embed_model", None) or "nomic-embed-text"
 
-            # The Ollama endpoint is server-managed.  A user-controlled API
-            # key must never become a network destination (SSRF); stale URL
-            # values stored in that slot are intentionally ignored.
             ollama_base_url = get_settings().OLLAMA_BASE_URL.rstrip("/")
 
             if store_kind == "pgvector":
@@ -72,12 +65,12 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
                 else:
                     openai_key = get_user_api_key(user, "openai", fernet)
                     if not openai_key:
-                        return None  # pgvector needs OpenAI key when not using Ollama
+                        return None
                     pinecone_key = None
             else:
                 pinecone_key = get_user_api_key(user, "pinecone", fernet)
                 if not pinecone_key:
-                    return None  # this user hasn't enabled memory
+                    return None
                 openai_key = get_user_api_key(user, "openai", fernet) if embedder_kind == "openai" else None
                 if embedder_kind == "openai" and not openai_key:
                     return None
@@ -129,21 +122,15 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
         )
     return _store_cache[cache_key]
 
-
-# Episodes are isolated per owner so one user's trading history never leaks into
-# another's recall.
 _SYSTEM_OWNER = "system"
 _SITUATION_MAX_CHARS = 4000
-
 
 def _namespace(user_id: int | None) -> str:
     return f"ep_user_{user_id}" if user_id else f"ep_{_SYSTEM_OWNER}"
 
-
 def _episode_id(user_id: int | None, ticker: str, trade_date: str) -> str:
     owner = user_id if user_id else _SYSTEM_OWNER
     return f"{owner}:{ticker}:{trade_date}"
-
 
 async def record_episode(
     *,
@@ -165,8 +152,6 @@ async def record_episode(
         return False
 
     outcome = "loss" if (alpha_return is not None and alpha_return < 0) else "gain"
-    # The embedded text is the *situation* plus its lesson, so recall matches on
-    # market context and surfaces the outcome/lesson together.
     text = (situation_text or decision or "")[:_SITUATION_MAX_CHARS]
     if reflection:
         text = f"{text}\n\nLesson: {reflection}"
@@ -191,7 +176,6 @@ async def record_episode(
     except Exception as exc:  # noqa: BLE001 — memory must never break the pipeline
         _logger.warning("record_episode failed for %s %s: %s", ticker, trade_date, exc)
         return False
-
 
 async def recall_episode_lessons(
     *,
@@ -229,7 +213,6 @@ async def recall_episode_lessons(
 
     return "\n".join(parts)
 
-
 def _format_hit(h) -> str:
     m = h.metadata
     alpha = m.get("alpha_return", 0.0)
@@ -240,17 +223,10 @@ def _format_hit(h) -> str:
     reflection = m.get("reflection")
     return f"{header}\n  {reflection}" if reflection else header
 
-
-# ---------------------------------------------------------------------------
-# Inter-agent Q&A memory: cross-examination transcripts so future runs can see
-# how analysts reconciled a similar set of conflicting reports.
-# ---------------------------------------------------------------------------
 _QA_MAX_CHARS = 6000
-
 
 def _qa_namespace(user_id: int | None) -> str:
     return f"qa_user_{user_id}" if user_id else f"qa_{_SYSTEM_OWNER}"
-
 
 async def record_agent_qa(
     *,
@@ -275,7 +251,6 @@ async def record_agent_qa(
     except Exception as exc:  # noqa: BLE001
         _logger.warning("record_agent_qa failed for %s %s: %s", ticker, trade_date, exc)
         return False
-
 
 async def recall_agent_qa(
     *,

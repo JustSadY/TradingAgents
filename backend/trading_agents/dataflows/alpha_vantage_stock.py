@@ -2,7 +2,6 @@ from datetime import datetime, timezone
 
 from .alpha_vantage_common import _filter_csv_by_date_range, _make_api_request
 
-
 def get_stock(symbol: str, start_date: str, end_date: str) -> str:
     start_dt = datetime.strptime(start_date, "%Y-%m-%d").replace(tzinfo=timezone.utc)
     today = datetime.now(timezone.utc)

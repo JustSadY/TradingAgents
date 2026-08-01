@@ -2,7 +2,6 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from time import monotonic
 
-
 @dataclass(frozen=True)
 class AnalystNodeSpec:
     key: str
@@ -11,12 +10,10 @@ class AnalystNodeSpec:
     tool_node: str
     report_key: str
 
-
 @dataclass(frozen=True)
 class AnalystExecutionPlan:
     specs: list[AnalystNodeSpec]
     concurrency_limit: int
-
 
 ANALYST_NODE_SPECS: dict[str, AnalystNodeSpec] = {
     "market": AnalystNodeSpec(
@@ -126,7 +123,6 @@ ANALYST_NODE_SPECS: dict[str, AnalystNodeSpec] = {
     ),
 }
 
-
 def build_analyst_execution_plan(
     selected_analysts: Iterable[str],
     concurrency_limit: int = 1,
@@ -143,10 +139,8 @@ def build_analyst_execution_plan(
         raise ValueError("at least one analyst must be selected")
     return AnalystExecutionPlan(specs=specs, concurrency_limit=concurrency_limit)
 
-
 def get_initial_analyst_node(plan: AnalystExecutionPlan) -> str:
     return plan.specs[0].agent_node
-
 
 class AnalystWallTimeTracker:
     def __init__(self, plan: AnalystExecutionPlan):
@@ -187,7 +181,6 @@ class AnalystWallTimeTracker:
         if not parts:
             return "Analyst wall time: pending"
         return "Analyst wall time: " + " | ".join(parts)
-
 
 def sync_analyst_tracker_from_chunk(
     tracker: AnalystWallTimeTracker,

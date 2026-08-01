@@ -6,7 +6,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.security import create_refresh_token, hash_password
 from backend.models.user import User
 
-
 class TestAuthAPI:
     async def test_login_success(self, async_client: AsyncClient, db: AsyncSession):
         user = User(
@@ -19,7 +18,6 @@ class TestAuthAPI:
         db.add(user)
         await db.flush()
 
-        # Verify user is in DB
         from backend.repositories.users import get_user_by_username
 
         found = await get_user_by_username(db, "logintest")

@@ -7,7 +7,6 @@ from types import SimpleNamespace
 
 from backend.api import share as share_api
 
-
 async def test_shared_report_exposes_only_canonical_report_fields(monkeypatch) -> None:
     report_text_fields = (
         "market_report",
@@ -78,10 +77,6 @@ async def test_shared_report_exposes_only_canonical_report_fields(monkeypatch) -
 
     payload = await share_api.get_shared_report("share-token", object())
 
-    # A public link is deliberately a read-only view, but it must still carry
-    # every analysis report that the public frontend can render.  The previous
-    # UI bug was particularly easy to miss because the backend already sent
-    # this data while rendering only three decision sections.
     for field in report_text_fields:
         assert field in payload
 

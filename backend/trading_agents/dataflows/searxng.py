@@ -8,7 +8,6 @@ from urllib.request import Request, urlopen
 logger = logging.getLogger(__name__)
 _UA = "tradingagents/0.2 (+https://github.com/TauricResearch/TradingAgents)"
 
-
 def fetch_searxng_results(query: str, base_url: str, limit: int = 10, timeout: float = 8.0) -> str:
     """Query a user-configured SearXNG instance for live web results.
 

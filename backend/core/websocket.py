@@ -14,7 +14,6 @@ _BACKGROUND_TASKS: set[asyncio.Task] = set()
 _BUFFER_SIZE = 10000
 _BUFFER_TTL = 30
 
-
 class _TaskLock:
     """An asyncio.Lock plus a count of coroutines currently holding a
     reference to it, so it's only safe to drop from the registry once no one
@@ -25,7 +24,6 @@ class _TaskLock:
     def __init__(self) -> None:
         self.lock = asyncio.Lock()
         self.waiters = 0
-
 
 class WebSocketManager:
     """Manages WebSocket connections with per-task locking for race safety.
@@ -82,10 +80,6 @@ class WebSocketManager:
                 buffered = list(self._buffers.get(task_id, []))
                 _logger.debug("WS connected: task=%s", task_id)
                 if buffered:
-                    # Replay happens *inside* the lock so a concurrent send()
-                    # for this task can't slip a live event to this same
-                    # socket before the historical replay finishes — that
-                    # would otherwise deliver events out of order.
                     _logger.debug("Replaying %d buffered events for task=%s", len(buffered), task_id)
                     for event in buffered:
                         try:
@@ -163,9 +157,6 @@ class WebSocketManager:
 
     def _cleanup_buffer(self, task_id: str):
         if task_id in self._task_locks:
-            # Someone is currently connecting/sending/disconnecting/closing
-            # for this task — retry shortly rather than mutating state out
-            # from under them.
             _logger.debug("Skipping buffer cleanup for task=%s — lock in use, will retry", task_id)
             handle = asyncio.get_running_loop().call_later(1.0, self._cleanup_buffer, task_id)
             self._cleanup_handles[task_id] = handle
@@ -184,6 +175,5 @@ class WebSocketManager:
                 except Exception:
                     _logger.debug("Lingering WS close task creation failed for task=%s", task_id)
         _logger.debug("Buffer cleaned up for task=%s", task_id)
-
 
 ws_manager = WebSocketManager()

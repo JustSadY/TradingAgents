@@ -13,7 +13,6 @@ from .base import BaseTraderInterface, OrderRequest, OrderResult
 
 _logger = logging.getLogger(__name__)
 
-
 class AlpacaTrader(BaseTraderInterface):
     def __init__(self, portfolio_id: int = 1, initial_capital: float = 100_000.0, db=None, mode: str = "simulation"):
         if db is None:
@@ -24,7 +23,7 @@ class AlpacaTrader(BaseTraderInterface):
         self._db = db
         self._portfolio_id = portfolio_id
         self._initial_capital = initial_capital
-        self._mode = mode  # "simulation" (for paper trading) or "live"
+        self._mode = mode
 
     @property
     def mode(self) -> str:
@@ -77,9 +76,6 @@ class AlpacaTrader(BaseTraderInterface):
         return await _get_price(ticker)
 
     async def place_order(self, request: OrderRequest) -> OrderResult:
-        # Never trust only the database/UI trading-mode choice for a real
-        # brokerage order.  This check deliberately sits at the executor
-        # boundary too, so a future caller cannot bypass the orchestrator.
         if self._mode == "live" and not is_live_trading_enabled():
             _logger.warning("Blocked live Alpaca order because ENABLE_LIVE_TRADING is disabled")
             return OrderResult(
@@ -113,7 +109,7 @@ class AlpacaTrader(BaseTraderInterface):
         body = {
             "symbol": request.ticker.upper(),
             "qty": qty_str,
-            "side": request.action.lower(),  # "buy" or "sell"
+            "side": request.action.lower(),
             "type": "market",
             "time_in_force": "day",
         }
@@ -155,7 +151,7 @@ class AlpacaTrader(BaseTraderInterface):
                     filled_qty = float(data["filled_qty"])
                 for _ in range(6):
                     if status in ("FILLED", "PARTIALLY_FILLED", "CANCELED", "REJECTED", "EXPIRED"):
-                        if filled_price:  # only break if we actually got the price/qty
+                        if filled_price:
                             break
                     await asyncio.sleep(0.5)
                     chk_resp = await client.get(f"{url}/{order_id}", headers=headers, timeout=5.0)

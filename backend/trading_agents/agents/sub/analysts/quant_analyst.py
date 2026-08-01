@@ -25,7 +25,6 @@ _QUANT_TOOLS = [
     get_mtf_trend,
 ]
 
-
 @register_analyst(
     key="quant",
     agent_node="Quant Analyst",

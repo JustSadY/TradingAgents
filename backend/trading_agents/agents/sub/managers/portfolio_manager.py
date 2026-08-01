@@ -31,7 +31,6 @@ _DEFAULT_INSTRUCTION = (
 _MAX_FALLBACK_REPORT_CHARS = 2_400
 _MAX_DECISION_CONTEXT_CHARS = 3_500
 
-
 def _prompt_report_limit() -> int:
     """Return a bounded fallback budget for reports without an executive summary."""
     try:
@@ -42,7 +41,6 @@ def _prompt_report_limit() -> int:
         configured = _MAX_FALLBACK_REPORT_CHARS
     return max(800, min(configured, _MAX_FALLBACK_REPORT_CHARS))
 
-
 def _optional_context_section(label: str, content: object, *, limit: int = _MAX_DECISION_CONTEXT_CHARS) -> str:
     """Render one bounded supplemental evidence section when it exists."""
     text = str(content or "").strip()
@@ -52,7 +50,6 @@ def _optional_context_section(label: str, content: object, *, limit: int = _MAX_
     from backend.trading_agents.agents.runtime.report_aggregator import middle_truncate
 
     return f"### {label}\n{middle_truncate(text, limit)}"
-
 
 def build_portfolio_manager_evidence(state: dict) -> str:
     """Build the PM's dynamic evidence packet from every active analyst report.
@@ -87,7 +84,6 @@ def build_portfolio_manager_evidence(state: dict) -> str:
             sections.append(section)
 
     return "\n\n".join(sections) or "No analyst evidence was available for this run."
-
 
 def create_portfolio_manager(llm):
     structured_llm = bind_structured(llm, PortfolioDecision, "Portfolio Manager")

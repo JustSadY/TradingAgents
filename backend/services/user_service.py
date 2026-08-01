@@ -8,21 +8,15 @@ from backend.models.user import User
 
 _logger = logging.getLogger(__name__)
 
-
 def encrypt_api_keys(keys: dict[str, str], fernet: Fernet) -> str:
     return fernet.encrypt(json.dumps(keys).encode()).decode()
-
 
 def decrypt_api_keys(enc: str, fernet: Fernet) -> dict[str, str]:
     return json.loads(fernet.decrypt(enc.encode()).decode())
 
-
 def get_user_api_key(user: User, provider: str, fernet: Fernet) -> str | None:
     from backend.trading_agents.llm_clients.registry import provider_requires_api_key
 
-    # Local/server-managed providers do not consume a tenant credential. This
-    # also prevents stale values written by pre-contract releases from being
-    # carried into any LLM call path.
     if not provider_requires_api_key(provider):
         return None
     if not user.api_keys_enc:
@@ -35,7 +29,6 @@ def get_user_api_key(user: User, provider: str, fernet: Fernet) -> str | None:
             "Failed to decrypt user %s API keys for provider %s: %s", getattr(user, "id", "unknown"), provider, e
         )
         return None
-
 
 def resolve_user_api_key(user: User, provider: str) -> str | None:
     """Decrypt the user's stored key for ``provider`` using the app Fernet.
@@ -52,7 +45,6 @@ def resolve_user_api_key(user: User, provider: str) -> str | None:
     except Exception as exc:
         _logger.debug("Failed to resolve user API key for provider %s: %s", provider, exc)
         return None
-
 
 def set_user_api_key(user: User, provider: str, api_key: str, fernet: Fernet) -> None:
     from backend.trading_agents.llm_clients.registry import provider_requires_api_key
@@ -73,7 +65,6 @@ def set_user_api_key(user: User, provider: str, api_key: str, fernet: Fernet) ->
     existing[provider.lower()] = api_key
     user.api_keys_enc = encrypt_api_keys(existing, fernet)
 
-
 def delete_user_api_key(user: User, provider: str, fernet: Fernet) -> bool:
     if not user.api_keys_enc:
         return False
@@ -87,7 +78,6 @@ def delete_user_api_key(user: User, provider: str, fernet: Fernet) -> bool:
     del existing[provider.lower()]
     user.api_keys_enc = encrypt_api_keys(existing, fernet) if existing else None
     return True
-
 
 def list_user_api_key_providers(user: User, fernet: Fernet) -> list[str]:
     if not user.api_keys_enc:
@@ -104,7 +94,6 @@ def list_user_api_key_providers(user: User, fernet: Fernet) -> list[str]:
             e,
         )
         return []
-
 
 async def delete_user_and_emit(db: AsyncSession, user: User) -> None:
     from backend.core.events import emit

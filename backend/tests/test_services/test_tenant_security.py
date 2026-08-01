@@ -20,7 +20,6 @@ from backend.services.preset_service import PresetError, create_user_preset
 from backend.services.settings_service import apply_preset_to_settings, apply_settings_update, get_or_create_settings
 from backend.trading_agents.graph.checkpointer import _db_path, checkpoint_scope, thread_id
 
-
 class TestCheckpointTenantIsolation:
     def test_checkpoint_paths_and_threads_include_analysis_scope(self, tmp_path):
         first = checkpoint_scope(user_id=101, analysis_id=501)
@@ -74,7 +73,6 @@ class TestCheckpointTenantIsolation:
         assert captured["analysis_id"] == 123
         assert captured["user"].id is not None
 
-
 class TestPresetHardening:
     async def test_legacy_preset_cannot_mass_assign_settings_owner(self, db: AsyncSession, test_user: User):
         settings = await get_or_create_settings(db, test_user)
@@ -91,7 +89,6 @@ class TestPresetHardening:
         assert settings.llm_provider == "openai"
 
     async def test_preset_respects_settings_section_permissions(self, db: AsyncSession, test_user: User):
-        # This user may manage templates but not the LLM section.
         db.add(UserSettingPermission(user_id=test_user.id, setting_key="presets", allowed=True))
         await db.flush()
 
@@ -104,7 +101,6 @@ class TestPresetHardening:
                 description="",
                 settings_json='{"llm_provider": "anthropic"}',
             )
-
 
 class TestAssistantTenantIsolation:
     async def test_admin_history_and_clear_are_still_self_scoped(
@@ -128,7 +124,6 @@ class TestAssistantTenantIsolation:
 
         assert response.status_code == 200
         assert [item["content"] for item in response.json()] == ["hello"]
-
 
 class TestOllamaEndpointHardening:
     @pytest.mark.parametrize("api_key", ["http://169.254.169.254/latest/meta-data", "not-a-url-secret"])
@@ -160,7 +155,6 @@ class TestOllamaEndpointHardening:
         assert client.base_url is None
         assert "api_key" not in client.kwargs
 
-
 class TestPagePermissionEnforcement:
     async def test_page_backed_analysis_route_denies_user_without_entitlement(self, async_client, auth_headers):
         response = await async_client.get("/api/analysis/latest", headers=auth_headers)
@@ -188,7 +182,6 @@ class TestPagePermissionEnforcement:
 
         assert response.status_code == 401
 
-
 class TestProfileMutationPermission:
     async def test_profile_reads_remain_available_for_auth_bootstrap(self, async_client, auth_headers):
         response = await async_client.get("/api/users/me", headers=auth_headers)
@@ -208,7 +201,6 @@ class TestProfileMutationPermission:
                 kwargs["json"] = payload
             response = await getattr(async_client, method)(path, **kwargs)
             assert response.status_code == 403, path
-
 
 class TestWebhookSsrFHardening:
     async def test_settings_service_rejects_private_webhook_url(self, db: AsyncSession, test_user: User):
@@ -234,7 +226,6 @@ class TestWebhookSsrFHardening:
         assert await send_webhook("http://127.0.0.1/hooks", "analysis_complete", {}) is False
         assert called is False
 
-
 class TestSettingsSectionMutationEnforcement:
     async def test_hidden_setting_sections_cannot_be_mutated_directly(self, async_client, auth_headers):
         mutations = [
@@ -248,7 +239,6 @@ class TestSettingsSectionMutationEnforcement:
         for method, path, body in mutations:
             response = await getattr(async_client, method)(path, json=body, headers=auth_headers)
             assert response.status_code == 403, path
-
 
 class TestAssistantPagePermissionEnforcement:
     async def test_assistant_exposes_only_tools_for_allowed_pages(self):
@@ -279,7 +269,6 @@ class TestAssistantPagePermissionEnforcement:
 
         for call, label in checks:
             assert await call == f"Permission denied: you do not have access to the {label} page."
-
 
 class TestTenantPerformanceContext:
     async def test_performance_context_forwards_user_scope(self, monkeypatch):
@@ -337,7 +326,6 @@ class TestTenantPerformanceContext:
                 "chronic_underperformer": False,
             }
         ]
-
 
 class TestProxyAwareRateLimiting:
     @staticmethod

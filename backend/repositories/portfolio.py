@@ -6,13 +6,11 @@ from backend.models.order import Order
 from backend.models.portfolio import Holding, Portfolio
 from backend.repositories.common import scope_to_user
 
-
 async def get_portfolio_by_id(db: AsyncSession, portfolio_id: int, user=None) -> Portfolio | None:
     q = select(Portfolio).where(Portfolio.id == portfolio_id).options(selectinload(Portfolio.holdings))
     q = scope_to_user(q, Portfolio, user)
     result = await db.execute(q)
     return result.scalar_one_or_none()
-
 
 async def get_simulation_portfolio(db: AsyncSession, user_id: int | None = None) -> Portfolio | None:
     q = select(Portfolio).where(Portfolio.mode == "simulation").options(selectinload(Portfolio.holdings))
@@ -23,7 +21,6 @@ async def get_simulation_portfolio(db: AsyncSession, user_id: int | None = None)
     result = await db.execute(q)
     return result.scalar_one_or_none()
 
-
 async def get_holding(db: AsyncSession, portfolio_id: int, ticker: str) -> Holding | None:
     result = await db.execute(
         select(Holding).where(
@@ -33,13 +30,11 @@ async def get_holding(db: AsyncSession, portfolio_id: int, ticker: str) -> Holdi
     )
     return result.scalar_one_or_none()
 
-
 async def list_portfolios(db: AsyncSession, user=None) -> list[Portfolio]:
     q = select(Portfolio).options(selectinload(Portfolio.holdings))
     q = scope_to_user(q, Portfolio, user)
     result = await db.execute(q)
     return list(result.scalars().all())
-
 
 async def list_holdings(db: AsyncSession, user=None, mode: str | None = None) -> list[Holding]:
     q = select(Holding).join(Portfolio)
@@ -48,7 +43,6 @@ async def list_holdings(db: AsyncSession, user=None, mode: str | None = None) ->
         q = q.where(Portfolio.mode == mode)
     result = await db.execute(q)
     return list(result.scalars().all())
-
 
 async def get_order_by_id(db: AsyncSession, order_id: int, user=None) -> Order | None:
     """Fetch an order by id, scoped to the requesting user's portfolios.
@@ -63,7 +57,6 @@ async def get_order_by_id(db: AsyncSession, order_id: int, user=None) -> Order |
     q = scope_to_user(q, Portfolio, user)
     result = await db.execute(q)
     return result.scalar_one_or_none()
-
 
 async def list_orders(
     db: AsyncSession,
@@ -84,7 +77,6 @@ async def list_orders(
         q = q.where(Order.ticker == ticker.upper())
     result = await db.execute(q)
     return list(result.scalars().all())
-
 
 async def get_active_holdings_by_portfolio_id(db: AsyncSession, portfolio_id: int) -> list[Holding]:
     result = await db.execute(

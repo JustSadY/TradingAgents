@@ -53,8 +53,6 @@ SECTION_FIELDS = {
         "analyst_prefilter_enabled",
         "analyst_prefilter_min_samples",
         "analyst_prefilter_max_win_rate",
-        # Kept here until the dedicated risk settings schema is loaded; this
-        # makes permission checks deny-by-default during rolling upgrades.
         "allow_short_selling",
         "max_concentration_pct",
         "max_gross_exposure",
@@ -85,12 +83,7 @@ SECTION_FIELDS = {
         "agent_qa_enabled",
         "memory_recall_count",
     ],
-    # Agent and tool settings live in their own endpoints and schemas.  They
-    # intentionally have no AppSettings field mapping. Presets also have their
-    # own endpoints; ``active_preset_name`` is server-managed metadata, not a
-    # writable application setting.
 }
-
 
 class UserPagePermission(Base):
     __tablename__ = "user_page_permissions"
@@ -99,7 +92,6 @@ class UserPagePermission(Base):
     page_key: Mapped[str] = mapped_column(String(50), nullable=False)
     allowed: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     __table_args__ = (UniqueConstraint("user_id", "page_key", name="uq_user_page"),)
-
 
 class UserSettingPermission(Base):
     __tablename__ = "user_setting_permissions"

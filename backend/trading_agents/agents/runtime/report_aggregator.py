@@ -19,14 +19,9 @@ _SUMMARY_HEADING = re.compile(
     re.IGNORECASE,
 )
 _NEXT_HEADING = re.compile(
-    # Prompts prescribe numbered Markdown sections.  Keeping the numbered
-    # branch prevents bold metric labels inside summary bullets from being
-    # mistaken for a new section, while still accepting an ordinary Markdown
-    # heading produced by a model.
     r"\n\s{0,3}(?:#{1,4}\s+|(?:\d+[.)]\s*)?\*\*[^*\n]{2,120}(?::\*\*|\*\*\s*:|：\*\*|\*\*\s*：))",
     re.UNICODE,
 )
-
 
 def extract_executive_summary(report: str, max_chars: int = 1200) -> str | None:
     """Return just the Executive Summary section of an analyst report, or None
@@ -45,7 +40,6 @@ def extract_executive_summary(report: str, max_chars: int = 1200) -> str | None:
     if not summary:
         return None
     return summary[:max_chars].rstrip() + ("…" if len(summary) > max_chars else "")
-
 
 def build_report_fields(news_label: str, fundamentals_label: str) -> dict[str, str]:
     """The standard ``{state_field: label}`` mapping shared by the bull/bear
@@ -69,7 +63,6 @@ def build_report_fields(news_label: str, fundamentals_label: str) -> dict[str, s
         "review_report": "Hindsight Performance Review Report",
     }
 
-
 def tail_history(history: str, limit: int | None = None) -> str:
     """Keep only the most recent ``limit`` chars of an accumulating debate
     transcript. Each researcher/debator re-sends the whole growing history on
@@ -90,7 +83,6 @@ def tail_history(history: str, limit: int | None = None) -> str:
     if first_newline != -1:
         truncated = truncated[first_newline + 1 :]
     return "…[earlier debate turns omitted]\n" + truncated
-
 
 def middle_truncate(text: str, limit: int) -> str:
     """Trim oversized text while keeping both the head and the tail.
@@ -117,7 +109,6 @@ def middle_truncate(text: str, limit: int) -> str:
 
     return head_text.rstrip() + "\n\n…[middle truncated to conserve tokens]…\n\n" + tail_text.lstrip()
 
-
 def _truncate_report(content: str, limit: int) -> str:
     """Trim a single report to ``limit`` chars, keeping the head (where analysts
     put the executive summary) and flagging the cut so the LLM knows it's partial."""
@@ -129,7 +120,6 @@ def _truncate_report(content: str, limit: int) -> str:
     if last_nl != -1:
         truncated = truncated[:last_nl]
     return truncated.rstrip() + "\n…[report truncated to conserve tokens]"
-
 
 def build_resources(
     state,

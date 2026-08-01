@@ -19,18 +19,15 @@ from typing import Any, Protocol
 StateUpdate = dict[str, Any]
 NodeFn = Callable[[dict], StateUpdate]
 
-
 class MainAgentNode(Protocol):
     """A Tier-1 main agent: one graph node that orchestrates its sub-agents."""
 
     def __call__(self, state: dict) -> StateUpdate: ...
 
-
 class SubAgentRunner(Protocol):
     """A Tier-2 sub-agent runner invoked inside a main node."""
 
     def __call__(self, state: dict) -> StateUpdate: ...
-
 
 @dataclass
 class AgentRunContext:
@@ -59,7 +56,6 @@ class AgentRunContext:
     def is_branch_enabled(self, key: str) -> bool:
         return self.hierarchy.is_branch_enabled(key)
 
-
 def neutral_invest_debate_state(note: str = "") -> dict:
     """A valid-but-empty InvestDebateState (used by kill-switch stubs)."""
     return {
@@ -70,7 +66,6 @@ def neutral_invest_debate_state(note: str = "") -> dict:
         "judge_decision": note,
         "count": 0,
     }
-
 
 def neutral_risk_debate_state(note: str = "") -> dict:
     """A valid-but-empty RiskDebateState (used by kill-switch stubs)."""

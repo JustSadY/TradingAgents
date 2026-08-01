@@ -20,10 +20,8 @@ router = APIRouter(prefix="/api/market", tags=["market"])
 
 _TICKER_DESCRIPTION = "Ticker symbol, e.g. AAPL"
 
-
 class FormulaAssistRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=500, description="Plain-language indicator description")
-
 
 @router.get("/ohlcv", response_model=dict[str, Any])
 async def ohlcv(
@@ -38,7 +36,6 @@ async def ohlcv(
     except MarketDataError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-
 @router.get("/custom-indicator", response_model=dict[str, Any])
 async def custom_indicator(
     ticker: str = Query(..., description=_TICKER_DESCRIPTION),
@@ -52,7 +49,6 @@ async def custom_indicator(
         return await get_custom_indicator_series(ticker, formula, period, start_date, end_date)
     except MarketDataError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
-
 
 @router.post("/formula-assist", response_model=FormulaAssistResponse)
 @limiter.limit("10/minute")
@@ -71,7 +67,6 @@ async def formula_assist(
 
     formula = await generate_formula(db, body.prompt, current_user)
     return {"formula": formula}
-
 
 @router.get("/sentiment-history", response_model=SentimentHistoryResponse)
 async def sentiment_history(

@@ -8,11 +8,9 @@ a vector store without hosted inference.
 
 from __future__ import annotations
 
-
 class OpenAIEmbedder:
     """Embeds text with the OpenAI embeddings API."""
 
-    # Known output dimensions for OpenAI's current embedding models.
     _DIMENSIONS = {
         "text-embedding-3-small": 1536,
         "text-embedding-3-large": 3072,
@@ -20,7 +18,7 @@ class OpenAIEmbedder:
     }
 
     def __init__(self, api_key: str, model: str = "text-embedding-3-small", dimension: int | None = None):
-        from openai import AsyncOpenAI  # lazy: only needed when this embedder is used
+        from openai import AsyncOpenAI
 
         self._client = AsyncOpenAI(api_key=api_key)
         self._model = model
@@ -35,7 +33,6 @@ class OpenAIEmbedder:
             return []
         resp = await self._client.embeddings.create(model=self._model, input=texts)
         return [item.embedding for item in resp.data]
-
 
 class OllamaEmbedder:
     """Embeds text via a local (or remote) Ollama instance.
@@ -63,9 +60,8 @@ class OllamaEmbedder:
         model: str = "nomic-embed-text",
         dimension: int | None = None,
     ):
-        from openai import AsyncOpenAI  # reuse openai client against Ollama's compat endpoint
+        from openai import AsyncOpenAI
 
-        # Normalise: strip trailing slash and /v1 suffix so we can append /v1 cleanly
         url = base_url.rstrip("/")
         if not url.endswith("/v1"):
             url = url + "/v1"

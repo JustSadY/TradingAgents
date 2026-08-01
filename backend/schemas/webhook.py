@@ -1,6 +1,5 @@
 from pydantic import BaseModel
 
-
 class WebhookDeliveryRead(BaseModel):
     id: int
     event: str

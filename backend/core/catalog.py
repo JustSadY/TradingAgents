@@ -9,7 +9,6 @@ from backend.trading_agents.llm_clients.registry import llm_registry
 
 _RISK_DEBATE = "Risk Debate"
 
-
 def _node_specs() -> dict:
     try:
         from backend.trading_agents.agents.runtime.analyst_execution import ANALYST_NODE_SPECS
@@ -17,7 +16,6 @@ def _node_specs() -> dict:
         return ANALYST_NODE_SPECS
     except Exception:
         return {}
-
 
 async def available_analysts(db=None, user=None) -> list[dict]:
     """Single source: the engine analyst catalog.
@@ -49,10 +47,8 @@ async def available_analysts(db=None, user=None) -> list[dict]:
             )
     return out
 
-
 def _analyst_label(key: str) -> str:
     return label_for(key)
-
 
 SECTION_LABELS: dict[str, str] = {
     "market_report": "Market Analysis",
@@ -72,8 +68,6 @@ SECTION_LABELS: dict[str, str] = {
     "review_report": "Performance Review",
     "agent_qa_report": "Analyst Cross-Examination",
     "investment_plan": "Research Evidence Summary",
-    # Retained only for reports created before the single Portfolio Manager
-    # execution authority. New analyses leave these fields empty.
     "trader_investment_plan": "Legacy Trader Proposal (historical only)",
     "trader_plan": "Legacy Trader Proposal (historical only)",
     "final_trade_decision": "Final Decision (Portfolio Manager)",
@@ -121,7 +115,6 @@ PROVIDER_LABELS: dict[str, str] = llm_registry.get_provider_labels()
 
 EFFORT_OPTIONS: dict[str, list[dict]] = llm_registry.get_effort_options()
 
-# Per-provider model dropdown, served via GET /api/settings/llm-catalog.
 LLM_CATALOG: dict[str, dict] = {
     p.key: {
         "label": p.label,
@@ -136,7 +129,6 @@ LLM_CATALOG: dict[str, dict] = {
     }
     for p in llm_registry.list_providers()
 }
-
 
 def trading_options_for_user(user=None) -> tuple[list[dict], list[dict]]:
     """Return only brokerage choices the requesting user may safely configure.
@@ -157,7 +149,6 @@ def trading_options_for_user(user=None) -> tuple[list[dict], list[dict]]:
         simulation_brokers[0],
         {"value": "alpaca", "label": "Alpaca (Paper)"},
     ]
-
 
 MEMORY_STORES: list[dict] = [
     {"value": "pinecone", "label": "Pinecone"},
@@ -217,7 +208,6 @@ SECTIONS: list[dict] = [
     {"key": "final_decision", "label": "Final Decision", "category": "decision", "order": 26, "icon": "CheckCircle"},
 ]
 
-
 async def investor_personas(db=None, user=None) -> list[dict]:
     from backend.trading_agents.personas import list_personas
 
@@ -232,7 +222,6 @@ async def investor_personas(db=None, user=None) -> list[dict]:
         except Exception:
             pass
     return builtins
-
 
 ORDER_STATUSES: list[dict] = [
     {"value": "FILLED", "label": "Filled", "tone": "positive"},
@@ -252,7 +241,6 @@ CHART_PERIODS: list[dict] = [
     {"value": "2y", "label": "2Y"},
     {"value": "5y", "label": "5Y"},
 ]
-
 
 async def build_meta(db=None, user=None) -> dict:
     from backend.services.agent_settings_service import build_agent_runtime_context
@@ -302,16 +290,12 @@ async def build_meta(db=None, user=None) -> dict:
         "order_actions": ORDER_ACTIONS,
         "chart_periods": CHART_PERIODS,
         "page_keys": PAGE_KEYS,
-        # The frontend permission editor consumes choices, not bare strings.
-        # Keeping the API shape aligned with ``Meta.setting_keys`` also makes
-        # newly added sections (such as alert guardrails) administrable.
         "setting_keys": [{"value": key, "label": key} for key in SETTING_KEYS],
         "sections": SECTIONS,
         "webhook_events": WEBHOOK_EVENTS,
         "memory_stores": MEMORY_STORES,
         "embedders": EMBEDDERS,
     }
-
 
 _STATIC_NODE_LABELS: dict[str, tuple[str, str]] = {
     "Market Intelligence": ("Market Intelligence", "analyst"),
@@ -328,7 +312,6 @@ _STATIC_NODE_LABELS: dict[str, tuple[str, str]] = {
 }
 _ANALYST_NODE_LABELS: dict[str, tuple[str, str]] | None = None
 
-
 def _analyst_node_labels() -> dict[str, tuple[str, str]]:
     global _ANALYST_NODE_LABELS
     if _ANALYST_NODE_LABELS is None:
@@ -339,7 +322,6 @@ def _analyst_node_labels() -> dict[str, tuple[str, str]]:
             mapping[spec.tool_node] = (f"{label} — fetching data", "tool")
         _ANALYST_NODE_LABELS = mapping
     return _ANALYST_NODE_LABELS
-
 
 def node_progress(node_name: str) -> dict | None:
     hit = _analyst_node_labels().get(node_name) or _STATIC_NODE_LABELS.get(node_name)

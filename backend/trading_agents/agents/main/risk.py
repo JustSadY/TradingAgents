@@ -32,7 +32,6 @@ logger = logging.getLogger(__name__)
 
 MAIN_KEY = "risk_debate"
 
-
 def _build_merged_prompt(
     research_evidence: str,
     resources_text: str,
@@ -71,7 +70,6 @@ and market data directly. Do not issue Buy, Overweight, Hold, Underweight, or
 Sell; do not prescribe a quantity, allocation, entry, stop, target, or leverage.
 The Portfolio Manager is the sole final decision and execution authority.{custom_instruction_block}"""
 
-
 def _parse_perspectives(text: str) -> dict[str, str]:
     """Extract risk panel sections from strict and common provider variants.
 
@@ -97,7 +95,6 @@ def _parse_perspectives(text: str) -> dict[str, str]:
         end = matches[index + 1].start() if index + 1 < len(matches) else len(text)
         sections[key] = text[match.end() : end].strip(" \t\n:—–-")
     return sections
-
 
 def create_risk_debate_node(ctx: AgentRunContext) -> NodeFn:
     from backend.trading_agents.agents.analyst_registry import get_report_fields
@@ -127,9 +124,6 @@ def create_risk_debate_node(ctx: AgentRunContext) -> NodeFn:
         conservative_arg = format_debate_argument("Conservative Analyst", sections["conservative"])
         neutral_arg = format_debate_argument("Neutral Analyst", sections["neutral"])
 
-        # If a provider disregards all section labels, preserve its response as
-        # a clearly marked neutral assessment instead of silently persisting an
-        # empty Risk Debate panel.
         if not any((aggressive_arg, conservative_arg, neutral_arg)):
             neutral_arg = format_debate_argument(
                 "Neutral Analyst",

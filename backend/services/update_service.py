@@ -13,7 +13,6 @@ _logger = logging.getLogger(__name__)
 
 _ISO_FORMAT = "%Y-%m-%dT%H:%M:%SZ"
 
-
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 STATUS_FILE = PROJECT_ROOT / ".update.json"
 UPDATE_UNIT = os.environ.get("TRADINGAGENTS_UPDATE_UNIT", "")
@@ -23,7 +22,6 @@ _FETCH_TTL = 60.0
 _last_fetch = 0.0
 _fetch_lock = threading.Lock()
 _fetching = False
-
 
 def _git(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
     env = os.environ.copy()
@@ -45,7 +43,6 @@ def _git(*args: str, timeout: int = 30) -> subprocess.CompletedProcess:
 
         return MockCompletedProcess()
 
-
 def _bg_fetch():
     global _last_fetch, _fetching
     try:
@@ -57,7 +54,6 @@ def _bg_fetch():
         with _fetch_lock:
             _fetching = False
 
-
 def _read_status() -> dict | None:
     try:
         return json.loads(STATUS_FILE.read_text(encoding="utf-8"))
@@ -67,13 +63,11 @@ def _read_status() -> dict | None:
         _logger.warning("Could not read update status file %s: %s", STATUS_FILE, exc)
         return None
 
-
 def _write_status(data: dict) -> None:
     try:
         STATUS_FILE.write_text(json.dumps(data), encoding="utf-8")
     except Exception as exc:
         _logger.warning("Could not write update status file %s: %s", STATUS_FILE, exc)
-
 
 def get_status(do_fetch: bool = True) -> dict:
     global _last_fetch, _fetching
@@ -131,7 +125,6 @@ def get_status(do_fetch: bool = True) -> dict:
                 commits = [line for line in lg.stdout.splitlines() if line.strip()]
     status = _read_status() or {}
 
-    # Eğer "running" durumu çok uzun sürüyorsa otomatik olarak "failed" yap
     if status.get("state") == "running":
         at_str = status.get("at", "")
         if at_str:
@@ -163,7 +156,6 @@ def get_status(do_fetch: bool = True) -> dict:
         "commits": commits,
     }
 
-
 def request_update() -> dict:
     if not UPDATE_SUPPORTED:
         raise RuntimeError(
@@ -188,9 +180,7 @@ def request_update() -> dict:
         raise RuntimeError(f"Could not start update: {detail}") from exc
     return {"started": True}
 
-
-_UPDATE_STUCK_TIMEOUT = 15 * 60  # 15 dakika
-
+_UPDATE_STUCK_TIMEOUT = 15 * 60
 
 def reset_stuck_update() -> None:
     """Reset the update state if it was left in 'running' state on server startup or timed out."""
@@ -198,7 +188,6 @@ def reset_stuck_update() -> None:
     if not status or status.get("state") != "running":
         return
 
-    # Zaman damgasına bakarak gerçekten takılıp takılmadığını kontrol et
     stuck_reason = "Server restarted during update."
     at_str = status.get("at", "")
     if at_str:
@@ -208,7 +197,6 @@ def reset_stuck_update() -> None:
             started = datetime.datetime.fromisoformat(at_str.replace("Z", "+00:00"))
             elapsed = (datetime.datetime.now(datetime.UTC) - started).total_seconds()
             if elapsed < _UPDATE_STUCK_TIMEOUT:
-                # Henüz çok yeni, belki hâlâ devam ediyor — dokunma
                 return
             stuck_reason = f"Update timed out after {int(elapsed // 60)} minutes."
         except Exception:

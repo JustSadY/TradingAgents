@@ -32,7 +32,6 @@ _COLLAB_SYSTEM = (
 
 _logger = logging.getLogger(__name__)
 
-
 def _report_text(content: Any) -> str:
     """Return displayable text from a final model response.
 
@@ -51,7 +50,6 @@ def _report_text(content: Any) -> str:
                 parts.append(item["text"])
         return "\n".join(parts).strip()
     return ""
-
 
 async def _recover_empty_report(
     *,
@@ -95,14 +93,12 @@ async def _recover_empty_report(
         return ""
     return _report_text(getattr(response, "content", ""))
 
-
 def _empty_report_notice(analyst: str) -> str:
     """Return a visible degraded report instead of a silently blank UI card."""
     return (
         f"⚠️ {analyst.title()} analysis unavailable: the selected model returned no readable final report "
         "after data collection. No conclusion was inferred; retry this analysis or choose another model."
     )
-
 
 async def run_tool_analyst(
     llm,
@@ -211,8 +207,6 @@ async def run_tool_analyst(
             report_key: f"{analyst.title()} analysis unavailable (agent error: {exc}).",
         }
 
-    # A non-empty tool-call list must go through ToolNode.  Only a terminal
-    # no-tool response can become the analyst report.
     tool_calls = getattr(result, "tool_calls", None) or []
     if tool_calls:
         return {"messages": [result], report_key: ""}

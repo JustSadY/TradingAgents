@@ -12,7 +12,6 @@ router = APIRouter(prefix="/api/market", tags=["patterns"])
 _TICKER_RE = re.compile(r"^[A-Z]{1,5}$")
 _VALID_PERIODS = {"3m", "6m", "1y", "2y"}
 
-
 @router.get("/patterns/{ticker}", response_model=PatternsResponse, responses={422: {"description": "Invalid ticker"}})
 async def get_patterns(
     ticker: str,

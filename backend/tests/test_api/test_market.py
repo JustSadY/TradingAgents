@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from httpx import AsyncClient
 
-
 class TestMarketAPI:
     async def test_sentiment_history_returns_the_documented_object_shape(self, auth_client: AsyncClient, monkeypatch):
         async def fake_sentiment_history(db, ticker: str, user):

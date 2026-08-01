@@ -10,7 +10,6 @@ if TYPE_CHECKING:
 
 _logger = logging.getLogger(__name__)
 
-
 async def create_skeleton_result(
     db: AsyncSession,
     task_id: str,
@@ -34,24 +33,20 @@ async def create_skeleton_result(
         triggered_by=triggered_by,
     )
 
-
 async def update_result_fields(db: AsyncSession, row_id: int, **fields) -> None:
     """Incrementally update an analysis result record."""
     from backend.repositories.analysis import update_analysis_result
 
     await update_analysis_result(db, row_id, **fields)
 
-
 async def finalize_result(db: AsyncSession, row_id: int, **final_data) -> None:
     """Mark the analysis as completed and save final reports/stats."""
     final_data["status"] = "completed"
     await update_result_fields(db, row_id, **final_data)
 
-
 async def mark_as_failed(db: AsyncSession, row_id: int) -> None:
     """Mark the analysis as failed."""
     await update_result_fields(db, row_id, status="failed")
-
 
 async def mark_as_cancelled(db: AsyncSession, row_id: int) -> None:
     """Mark the analysis as cancelled."""

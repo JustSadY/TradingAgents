@@ -7,9 +7,6 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
-
-
-
 @dataclass
 class TokenUsage:
     """Mutable accumulator for per-call token usage across providers."""
@@ -32,7 +29,6 @@ class TokenUsage:
             output_tokens=usage_meta.get("output_tokens", 0),
             total_tokens=usage_meta.get("total_tokens", 0),
         )
-
 
 class TokenUsageTracker:
     """Per-analysis token usage accumulator.
@@ -66,9 +62,6 @@ class TokenUsageTracker:
             "llm_calls": self._call_count,
         }
 
-
-
-
 def is_quota_exhausted(exc: Exception) -> bool:
     """Detect permanent quota/resource exhaustion across providers.
 
@@ -87,7 +80,6 @@ def is_quota_exhausted(exc: Exception) -> bool:
     ]
     return any(signal in err_msg for signal in signals)
 
-
 def is_rate_limited(exc: Exception) -> bool:
     """Detect transient rate-limit errors that may succeed on retry."""
     err_msg = str(exc).lower()
@@ -100,7 +92,6 @@ def is_rate_limited(exc: Exception) -> bool:
         "retry after",
     ]
     return any(signal in err_msg for signal in signals)
-
 
 def is_provider_function_degraded(exc: BaseException) -> bool:
     """Return whether a hosted model deployment has been marked unavailable.
@@ -115,7 +106,6 @@ def is_provider_function_degraded(exc: BaseException) -> bool:
     return "degraded function cannot be invoked" in err_msg or (
         "function id" in err_msg and "degraded" in err_msg and "cannot be invoked" in err_msg
     )
-
 
 def classify_error(exc: Exception) -> str:
     """Classify an LLM error into a category for structured handling.
@@ -137,9 +127,6 @@ def classify_error(exc: Exception) -> str:
     if any(s in err_msg for s in timeout_signals):
         return "timeout"
     return "unknown"
-
-
-
 
 async def retry_with_exponential_backoff(
     coro_factory,
@@ -191,9 +178,6 @@ async def retry_with_exponential_backoff(
             await asyncio.sleep(delay)
     raise last_exc
 
-
-
-
 def normalize_content(response):
     content = response.content
     if isinstance(content, list):
@@ -207,9 +191,6 @@ def normalize_content(response):
         ]
         response.content = "\n".join(t for t in texts if t)
     return response
-
-
-
 
 class BaseLLMClient(ABC):
     def __init__(self, model: str, base_url: str | None = None, **kwargs):

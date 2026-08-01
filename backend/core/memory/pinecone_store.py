@@ -22,7 +22,6 @@ from .base import Embedder, MemoryHit, MemoryRecord
 
 _logger = logging.getLogger(__name__)
 
-
 class PineconeMemoryStore:
     def __init__(
         self,
@@ -34,7 +33,7 @@ class PineconeMemoryStore:
         cloud: str = "aws",
         region: str = "us-east-1",
     ):
-        from pinecone import Pinecone  # lazy: only import the SDK when actually used
+        from pinecone import Pinecone
 
         self._pc = Pinecone(api_key=api_key)
         self._index_name = index_name
@@ -45,9 +44,6 @@ class PineconeMemoryStore:
         self._index = None
         self._index_lock = asyncio.Lock()
 
-    # ------------------------------------------------------------------
-    # Index lifecycle
-    # ------------------------------------------------------------------
     async def _get_index(self):
         if self._index is not None:
             return self._index
@@ -60,7 +56,6 @@ class PineconeMemoryStore:
         """Create the index if it doesn't exist (idempotent), return a handle."""
         if not self._pc.has_index(self._index_name):
             if self._embedder is None:
-                # Hosted inference: Pinecone embeds the ``text`` field server-side.
                 self._pc.create_index_for_model(
                     name=self._index_name,
                     cloud=self._cloud,
@@ -78,9 +73,6 @@ class PineconeMemoryStore:
                 )
         return self._pc.Index(self._index_name)
 
-    # ------------------------------------------------------------------
-    # Writes
-    # ------------------------------------------------------------------
     async def upsert(self, namespace: str, records: list[MemoryRecord]) -> None:
         if not records:
             return
@@ -96,9 +88,6 @@ class PineconeMemoryStore:
             ]
             await asyncio.to_thread(lambda: index.upsert(vectors=items, namespace=namespace))
 
-    # ------------------------------------------------------------------
-    # Reads
-    # ------------------------------------------------------------------
     async def query(
         self,
         namespace: str,
@@ -149,7 +138,6 @@ class PineconeMemoryStore:
             text_val = meta.pop("text", "")
             out.append(MemoryHit(id=mid, score=float(score or 0.0), text=text_val, metadata=meta))
         return out
-
 
 def _clean_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     """Pinecone metadata values must be str/number/bool/list[str]; drop None and

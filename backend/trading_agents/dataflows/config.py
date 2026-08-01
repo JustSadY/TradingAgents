@@ -9,7 +9,6 @@ _config_lock = threading.RLock()
 
 _run_config: contextvars.ContextVar[dict | None] = contextvars.ContextVar("trading_agents_run_config", default=None)
 
-
 def _merge_into(target: dict, incoming: dict) -> None:
     """Shallow-merge ``incoming`` into ``target``, recursing one level for
     nested dicts (matching the historical merge semantics)."""
@@ -19,13 +18,11 @@ def _merge_into(target: dict, incoming: dict) -> None:
         else:
             target[key] = value
 
-
 def initialize_config():
     global _config
     with _config_lock:
         if _config is None:
             _config = deepcopy(default_config.DEFAULT_CONFIG)
-
 
 def set_config(config):
     if hasattr(config, "to_dict"):
@@ -40,7 +37,6 @@ def set_config(config):
         initialize_config()
         _merge_into(_config, deepcopy(incoming))
 
-
 def get_config() -> dict:
     run_config = _run_config.get()
     if run_config is not None:
@@ -49,6 +45,5 @@ def get_config() -> dict:
         if _config is None:
             initialize_config()
         return deepcopy(_config)
-
 
 initialize_config()

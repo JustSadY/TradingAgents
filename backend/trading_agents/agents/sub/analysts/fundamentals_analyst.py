@@ -23,7 +23,6 @@ _FUNDAMENTALS_TOOLS = [
     get_insider_transactions_deep,
 ]
 
-
 @register_analyst(
     key="fundamentals",
     agent_node="Fundamentals Analyst",
@@ -94,9 +93,7 @@ Your final report MUST follow this structure:
 
         except Exception as _e:
 
-
             _logger.warning("Data fetch failed in fundamentals_analyst: %s", _e)
-
 
             fund_data = ""
 
@@ -105,9 +102,7 @@ Your final report MUST follow this structure:
 
         except Exception as _e:
 
-
             _logger.warning("Data fetch failed in fundamentals_analyst: %s", _e)
-
 
             bs_data = ""
 
@@ -116,9 +111,7 @@ Your final report MUST follow this structure:
 
         except Exception as _e:
 
-
             _logger.warning("Data fetch failed in fundamentals_analyst: %s", _e)
-
 
             cf_data = ""
 
@@ -127,9 +120,7 @@ Your final report MUST follow this structure:
 
         except Exception as _e:
 
-
             _logger.warning("Data fetch failed in fundamentals_analyst: %s", _e)
-
 
             is_data = ""
 
@@ -138,9 +129,7 @@ Your final report MUST follow this structure:
 
         except Exception as _e:
 
-
             _logger.warning("Data fetch failed in fundamentals_analyst: %s", _e)
-
 
             sec_data = ""
 
@@ -149,9 +138,7 @@ Your final report MUST follow this structure:
 
         except Exception as _e:
 
-
             _logger.warning("Data fetch failed in fundamentals_analyst: %s", _e)
-
 
             insider_data = ""
 

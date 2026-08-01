@@ -8,7 +8,6 @@ from backend.services.news_service import get_news_feed
 
 router = APIRouter(prefix="/api/news", tags=["news"])
 
-
 @router.get("/feed", response_model=list[dict[str, Any]])
 async def news_feed(
     tickers: str = Query(..., description="Comma-separated ticker list, e.g. AAPL,TSLA"),

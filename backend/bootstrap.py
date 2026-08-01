@@ -22,7 +22,6 @@ import tempfile
 _BACKEND_DIR = os.path.dirname(os.path.abspath(__file__))
 _PROJECT_ROOT = os.path.dirname(_BACKEND_DIR)
 
-
 def _configure_env() -> None:
     """Point the engine's cache/results/log paths at the system temp dir."""
     tmp = tempfile.gettempdir()
@@ -30,14 +29,11 @@ def _configure_env() -> None:
     os.environ.setdefault("TRADINGAGENTS_DATA_CACHE_DIR", os.path.join(tmp, "ta_cache"))
     os.environ.setdefault("TRADINGAGENTS_RESULTS_DIR", os.path.join(tmp, "ta_results"))
 
-
 def _ensure_project_on_path() -> None:
     if _PROJECT_ROOT not in sys.path:
         sys.path.insert(0, _PROJECT_ROOT)
 
-
 _INITIALISED = False
-
 
 def init() -> None:
     """Apply all bootstrap steps exactly once (safe to call repeatedly)."""
@@ -48,6 +44,4 @@ def init() -> None:
     _ensure_project_on_path()
     _INITIALISED = True
 
-
-# Apply on import so a bare ``import backend.bootstrap`` is enough.
 init()

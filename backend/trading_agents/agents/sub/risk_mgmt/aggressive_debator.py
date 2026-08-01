@@ -1,6 +1,5 @@
 from backend.trading_agents.agents.sub.risk_mgmt.base import make_risk_debator
 
-
 def _default_instruction() -> str:
     return (
         "As the Aggressive Risk Analyst, your role is to actively champion high-reward, high-risk "
@@ -13,7 +12,6 @@ def _default_instruction() -> str:
         "opportunities or where their assumptions may be overly conservative."
     )
 
-
 def _build_prompt(
     instruction: str, research_evidence: str, resources_text: str, recent_history: str, risk_debate_state: dict
 ) -> str:
@@ -25,6 +23,5 @@ Your task is to create a compelling upside-risk case by questioning and critiqui
 {resources_text}
 Here is the current conversation history: {recent_history} Here are the last arguments from the conservative analyst: {current_conservative_response} Here are the last arguments from the neutral analyst: {current_neutral_response}. If there are no responses from the other viewpoints yet, present your own argument based on the available data.
 Engage actively by addressing any specific concerns raised, refuting the weaknesses in their logic, and asserting the benefits of risk-taking to outpace market norms. Maintain a focus on debating and persuading, not just presenting data. Do not issue Buy/Sell/Hold/Overweight/Underweight or prescribe entry, stop, target, leverage, or quantity: the Portfolio Manager alone makes those decisions. Output conversationally as if you are speaking without any special formatting."""
-
 
 create_aggressive_debator = make_risk_debator("aggressive", "Aggressive", _build_prompt, _default_instruction)

@@ -50,7 +50,6 @@ _TRANSIENT_HINTS = (
 
 _circuit_state: dict[str, dict] = {}
 
-
 def _circuit_key(name: str, kind: str) -> str:
     try:
         from backend.trading_agents.agents.data.chart_tools import active_run_context
@@ -65,11 +64,9 @@ def _circuit_key(name: str, kind: str) -> str:
     except Exception:
         return f"{kind}:{name}:user=unknown:provider=default"
 
-
 _run_report_card: contextvars.ContextVar[dict[str, dict] | None] = contextvars.ContextVar(
     "agent_report_card", default=None
 )
-
 
 def init_report_card() -> dict[str, dict]:
     """Create (or reset) the per-run report card and return it."""
@@ -77,18 +74,15 @@ def init_report_card() -> dict[str, dict]:
     _run_report_card.set(card)
     return card
 
-
 def get_report_card() -> dict[str, dict]:
     card = _run_report_card.get()
     if card is None:
         card = init_report_card()
     return card
 
-
 def record_agent_result(agent_key: str, *, retries: int = 0, fallback: bool = False, error: str | None = None) -> None:
     card = get_report_card()
     card[agent_key] = {"retries": retries, "fallback": fallback, "error": error[:200] if error else None}
-
 
 def _cfg(key: str, default, runtime_config: dict | None = None):
     try:
@@ -102,7 +96,6 @@ def _cfg(key: str, default, runtime_config: dict | None = None):
     except Exception:
         return default
 
-
 def _metrics():
     """Prometheus metrics module, or None — metrics must never break a run."""
     try:
@@ -112,12 +105,10 @@ def _metrics():
     except Exception:
         return None
 
-
 def log_event(event: str, *, level: int = logging.INFO, **fields) -> None:
     """Emit one structured run event to the dedicated run logger."""
     payload = {"event": event, **{k: v for k, v in fields.items() if v is not None}}
     run_logger.log(level, "run_event %s", payload)
-
 
 def _active_runtime_config() -> dict | None:
     """Read graph config from the current task instead of process-global state."""
@@ -131,7 +122,6 @@ def _active_runtime_config() -> dict | None:
     except Exception:
         return None
 
-
 def _touch_activity() -> None:
     """Record node/retry/tool lifecycle activity for this task, best-effort."""
     try:
@@ -140,7 +130,6 @@ def _touch_activity() -> None:
         touch_current_analysis()
     except Exception:
         return
-
 
 def _message_type(message: Any) -> str:
     """Return a LangChain message type without requiring a concrete class.
@@ -156,7 +145,6 @@ def _message_type(message: Any) -> str:
         value = getattr(message, "type", None)
     return str(value or "").lower()
 
-
 def _message_has_tool_calls(message: Any) -> bool:
     """Whether *message* is an assistant request that opened a tool round."""
     if isinstance(message, dict):
@@ -164,7 +152,6 @@ def _message_has_tool_calls(message: Any) -> bool:
     else:
         calls = getattr(message, "tool_calls", None)
     return bool(calls)
-
 
 def _analyst_turn_fields(state: Any, kind: str) -> dict[str, Any]:
     """Describe one analyst invocation without altering its execution.
@@ -204,16 +191,13 @@ def _analyst_turn_fields(state: Any, kind: str) -> dict[str, Any]:
         "tool_results": tool_results,
     }
 
-
 def _is_timeout_error(exc: BaseException) -> bool:
     return isinstance(exc, (TimeoutError, asyncio.TimeoutError))
-
 
 def is_transient(exc: BaseException) -> bool:
     if _is_timeout_error(exc) or isinstance(exc, ConnectionError):
         return True
     return any(hint in str(exc).lower() for hint in _TRANSIENT_HINTS)
-
 
 def classify_error(exc: BaseException) -> str:
     """Classify an exception into a high-level error category.
@@ -235,7 +219,6 @@ def classify_error(exc: BaseException) -> str:
         return "transient"
     return "bug"
 
-
 async def _execute_fn(fn: Callable[[], Any], run_in_thread: bool) -> Any:
     import asyncio
     import inspect
@@ -246,7 +229,6 @@ async def _execute_fn(fn: Callable[[], Any], run_in_thread: bool) -> Any:
     if inspect.iscoroutine(res):
         return await res
     return res
-
 
 async def retry_call(
     fn: Callable[[], Any],
@@ -320,7 +302,6 @@ async def retry_call(
     assert last is not None
     raise last
 
-
 def _log_retry_metrics(label: str, i: int, attempts: int, delay: float, exc: Exception):
     log_event(
         "retry",
@@ -334,7 +315,6 @@ def _log_retry_metrics(label: str, i: int, attempts: int, delay: float, exc: Exc
     m = _metrics()
     if m:
         m.NODE_RETRIES.labels(label=label).inc()
-
 
 async def _emit_retry_progress(label: str, i: int, attempts: int, exc: Exception):
     from backend.trading_agents.agents.data.chart_tools import active_run_context
@@ -369,7 +349,6 @@ async def _emit_retry_progress(label: str, i: int, attempts: int, exc: Exception
         await emitter.emit_retry(clean_label, i + 1, attempts, err_msg)
     except Exception:
         pass
-
 
 def guard_node(
     fn: Callable,
@@ -459,14 +438,12 @@ def guard_node(
     wrapped.__name__ = getattr(fn, "__name__", name)
     return wrapped
 
-
 def _log_node_success(name: str, kind: str, start_time: float, **turn_fields: Any):
     ms = int((time.time() - start_time) * 1000)
     log_event("node_end", node=name, kind=kind, ms=ms, **turn_fields)
     m = _metrics()
     if m:
         m.NODE_DURATION.labels(node=name, kind=kind).observe(time.time() - start_time)
-
 
 async def _log_node_error(name: str, kind: str, exc: Exception, **turn_fields: Any):
     log_event(
@@ -483,7 +460,6 @@ async def _log_node_error(name: str, kind: str, exc: Exception, **turn_fields: A
         m.NODE_ERRORS.labels(node=name, kind=kind).inc()
         m.NODE_ERRORS_BY_TYPE.labels(node=name, kind=kind, error_type=classify_error(exc)).inc()
     _emit_node_error_ws(name, kind, exc)
-
 
 async def _handle_node_fallback(name: str, kind: str, fallback: Callable, state: dict, exc: Exception) -> dict:
     import inspect
@@ -504,14 +480,12 @@ async def _handle_node_fallback(name: str, kind: str, fallback: Callable, state:
     _emit_fallback_ws(name, kind, exc)
     return update
 
-
 def _spawn_ws_task(coro):
     """Create a tracked fire-and-forget WS task so GC doesn't collect it mid-flight."""
     task = asyncio.create_task(coro)
     _WS_BG_TASKS.add(task)
     task.add_done_callback(_WS_BG_TASKS.discard)
     return task
-
 
 def _emit_circuit_open_ws(node: str, kind: str, elapsed: float):
     """Fire-and-forget WS event for circuit-open state, best-effort."""
@@ -524,7 +498,6 @@ def _emit_circuit_open_ws(node: str, kind: str, elapsed: float):
     except Exception:
         pass
 
-
 def _emit_node_error_ws(node: str, kind: str, exc: Exception):
     """Fire-and-forget WS event for node error, best-effort."""
     try:
@@ -535,7 +508,6 @@ def _emit_node_error_ws(node: str, kind: str, exc: Exception):
             _spawn_ws_task(ctx["emitter"].emit_node_error(node, kind, str(exc)[:200], classify_error(exc)))
     except Exception:
         pass
-
 
 def _emit_fallback_ws(node: str, kind: str, exc: Exception):
     """Fire-and-forget WS event for fallback activation, best-effort."""

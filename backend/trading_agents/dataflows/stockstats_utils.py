@@ -16,7 +16,6 @@ _MISSING_TICKER_COOLDOWN_SECONDS = 300.0
 _missing_ticker_lock = threading.Lock()
 _missing_tickers: dict[str, tuple[float, str]] = {}
 
-
 class YFinanceTickerUnavailableError(RuntimeError):
     """Yahoo reported a ticker as unavailable, or its short cooldown is active."""
 
@@ -30,13 +29,11 @@ class YFinanceTickerUnavailableError(RuntimeError):
             f"Yahoo Finance {source} for '{ticker}' ({reason}); retry after roughly {self.retry_after:.0f}s."
         )
 
-
 def _ticker_key(ticker: str | None) -> str | None:
     if not isinstance(ticker, str):
         return None
     normalized = ticker.strip().upper()
     return normalized or None
-
 
 def _get_missing_ticker_cooldown(ticker: str) -> tuple[float, str] | None:
     now = time.monotonic()
@@ -50,17 +47,14 @@ def _get_missing_ticker_cooldown(ticker: str) -> tuple[float, str] | None:
             return None
         return expires_at - now, reason
 
-
 def _remember_missing_ticker(ticker: str, reason: str) -> None:
     with _missing_ticker_lock:
         _missing_tickers[ticker] = (time.monotonic() + _MISSING_TICKER_COOLDOWN_SECONDS, reason)
-
 
 def reset_yfinance_ticker_cooldowns() -> None:
     """Clear process-local unavailable-ticker state (primarily useful in tests)."""
     with _missing_ticker_lock:
         _missing_tickers.clear()
-
 
 def yf_retry(func, max_retries=3, base_delay=2.0, *, ticker: str | None = None):
     """Run a Yahoo request with transient retries and ticker-missing cooldown.
@@ -113,7 +107,6 @@ def yf_retry(func, max_retries=3, base_delay=2.0, *, ticker: str | None = None):
             else:
                 raise
 
-
 def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     dates = pd.to_datetime(data["Date"], errors="coerce")
     if getattr(dates.dt, "tz", None) is not None:
@@ -125,7 +118,6 @@ def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     data = data.dropna(subset=["Close"])
     data[price_cols] = data[price_cols].ffill().bfill()
     return data
-
 
 def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     safe_ticker_component(symbol)
@@ -159,7 +151,6 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     payload["Date"] = payload["Date"].dt.strftime("%Y-%m-%d")
     APICache.set("stockstats_load_ohlcv", {"rows": payload.to_dict(orient="records")}, symbol, curr_date)
     return data
-
 
 def filter_financials_by_date(data: pd.DataFrame, curr_date: str) -> pd.DataFrame:
     if not curr_date or data.empty:

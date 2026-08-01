@@ -12,7 +12,6 @@ from backend.services.portfolio_service import get_active_holdings, get_user_sim
 
 router = APIRouter(prefix="/api/trading", tags=["trading"])
 
-
 @router.get("/correlation", response_model=CorrelationResponse)
 async def get_correlation(
     period: str = Query(default="90d", pattern=r"^(30d|90d|180d|1y)$", description="Data period: 30d, 90d, 180d, 1y"),

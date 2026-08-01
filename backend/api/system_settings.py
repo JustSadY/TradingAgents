@@ -9,14 +9,12 @@ from backend.services import system_settings_service
 
 router = APIRouter(prefix="/api/system-settings", tags=["system-settings"])
 
-
 @router.get("", response_model=SystemSettingsRead)
 async def get_system_settings(
     _: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db),
 ):
     return await system_settings_service.get_or_create_system_settings(db)
-
 
 @router.put("", response_model=SystemSettingsRead)
 async def update_system_settings(
@@ -35,7 +33,6 @@ async def update_system_settings(
     except system_settings_service.InvalidTradingConfiguration as exc:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
-
 @router.get("/tools", response_model=ToolSettingsRead)
 async def get_server_tools(
     _: User = Depends(require_admin),
@@ -44,7 +41,6 @@ async def get_server_tools(
     from backend.services.tool_settings_service import get_server_tool_settings
 
     return await get_server_tool_settings(db)
-
 
 @router.put("/tools", response_model=ToolSettingsRead)
 async def update_server_tools(

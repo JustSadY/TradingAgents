@@ -10,7 +10,6 @@ from __future__ import annotations
 
 _FALLBACK_MARKER = "automated fallback"
 
-
 def _is_degraded(text) -> bool:
     """A report is degraded when it is empty or carries a guard fallback note.
 
@@ -23,7 +22,6 @@ def _is_degraded(text) -> bool:
     if not text.strip():
         return True
     return "⚠️" in text or "unavailable" in text.lower()
-
 
 def assess_run_quality(
     final_state: dict,
@@ -64,7 +62,6 @@ def assess_run_quality(
         "reports_degraded": degraded,
         "fallback_used": fallback_used,
     }
-
 
 async def get_recent_quality_summary(db, days: int = 7) -> dict:
     """Aggregate ``AnalysisResult.quality`` over the last ``days`` for the health panel.

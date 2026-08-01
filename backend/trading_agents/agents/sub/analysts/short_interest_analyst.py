@@ -11,7 +11,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
 
 _SHORT_INTEREST_TOOLS = [get_short_interest]
 
-
 @register_analyst(
     key="short_interest",
     agent_node="Short Interest Analyst",

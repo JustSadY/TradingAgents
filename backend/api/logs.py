@@ -9,7 +9,6 @@ from backend.services.system_log_service import get_all_logs, get_user_logs
 
 router = APIRouter(prefix="/api/logs", tags=["logs"])
 
-
 @router.get("/me", response_model=list[LogRead])
 async def list_my_logs(
     level: str | None = Query(default=None, description="Filter by level: INFO, WARNING, ERROR, CRITICAL"),
@@ -19,7 +18,6 @@ async def list_my_logs(
     current_user: User = Depends(require_page("logs")),
 ):
     return await get_user_logs(db, current_user, level, limit, offset)
-
 
 @router.get("", response_model=list[LogRead])
 async def list_logs(

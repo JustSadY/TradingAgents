@@ -31,16 +31,10 @@ from __future__ import annotations
 
 from decimal import Decimal, InvalidOperation
 
-# Sensible defaults; overridable per call from runtime config.
 DEFAULT_MAX_LEVERAGE = Decimal("10")
-DEFAULT_ANNUAL_INTEREST_RATE = Decimal("0.08")  # 8% APR on borrowed funds
-# Maintenance margin as a fraction of the *initial* margin (1/leverage). It must
-# be strictly below the initial margin, otherwise a position would be
-# liquidatable the instant it opens. 0.5 → liquidation buffer is half the posted
-# margin (e.g. 5x has 20% initial margin, 10% maintenance).
+DEFAULT_ANNUAL_INTEREST_RATE = Decimal("0.08")
 DEFAULT_MAINTENANCE_FRACTION = Decimal("0.5")
 _SECONDS_PER_YEAR = Decimal(str(365 * 24 * 60 * 60))
-
 
 def maintenance_rate_for_leverage(leverage: Decimal, fraction: Decimal = DEFAULT_MAINTENANCE_FRACTION) -> Decimal:
     """Maintenance margin rate (as a fraction of notional) for a leverage level.
@@ -53,7 +47,6 @@ def maintenance_rate_for_leverage(leverage: Decimal, fraction: Decimal = DEFAULT
         return Decimal("0")
     return (Decimal("1") / leverage) * fraction
 
-
 def clamp_leverage(leverage, max_leverage: Decimal = DEFAULT_MAX_LEVERAGE) -> Decimal:
     """Coerce an arbitrary leverage value into the valid ``[1, max]`` range."""
     try:
@@ -64,13 +57,11 @@ def clamp_leverage(leverage, max_leverage: Decimal = DEFAULT_MAX_LEVERAGE) -> De
         return Decimal("1")
     return min(lev, max_leverage)
 
-
 def margin_required(notional: Decimal, leverage: Decimal) -> Decimal:
     """Equity the trader must post to open ``notional`` exposure at ``leverage``."""
     if leverage <= 0:
         leverage = Decimal("1")
     return notional / leverage
-
 
 def liquidation_price_long(
     quantity: Decimal,
@@ -92,11 +83,9 @@ def liquidation_price_long(
         return Decimal("0")
     return borrowed / denom
 
-
 def position_equity_long(quantity: Decimal, price: Decimal, borrowed: Decimal) -> Decimal:
     """Trader's equity in a long position at the given mark price."""
     return quantity * price - borrowed
-
 
 def accrue_interest(
     borrowed: Decimal,
@@ -108,17 +97,9 @@ def accrue_interest(
         return Decimal("0")
     return borrowed * annual_rate * (elapsed_seconds / _SECONDS_PER_YEAR)
 
-
 def is_liquidatable_long(price: Decimal, liquidation_price: Decimal) -> bool:
     """True when a long's mark price has reached/breached its liquidation level."""
     return liquidation_price > 0 and price <= liquidation_price
-
-
-# ── Short positions ───────────────────────────────────────────────────────────
-# A short borrows shares and sells them, owing the shares back. The trader posts
-# ``margin`` collateral; profit accrues as the price falls and loss as it rises,
-# so a short is liquidated when the price rises far enough to eat the margin.
-
 
 def liquidation_price_short(
     quantity: Decimal,
@@ -142,11 +123,9 @@ def liquidation_price_short(
         return Decimal("0")
     return (margin + entry_price * quantity) / denom
 
-
 def position_equity_short(quantity: Decimal, entry_price: Decimal, price: Decimal, margin: Decimal) -> Decimal:
     """Trader's equity in a short position at the given mark price."""
     return margin + (entry_price - price) * quantity
-
 
 def is_liquidatable_short(price: Decimal, liquidation_price: Decimal) -> bool:
     """True when a short's mark price has risen to/through its liquidation level."""

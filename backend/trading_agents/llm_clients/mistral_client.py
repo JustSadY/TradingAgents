@@ -10,7 +10,6 @@ from .validators import validate_model
 
 logger = logging.getLogger(__name__)
 
-
 _PASSTHROUGH_KWARGS = (
     "timeout",
     "max_retries",
@@ -25,7 +24,6 @@ _PASSTHROUGH_KWARGS = (
     "frequency_penalty",
     "presence_penalty",
 )
-
 
 class NormalizedChatMistralAI(ChatMistralAI):
     def invoke(self, input_value, config=None, **kwargs):
@@ -44,7 +42,6 @@ class NormalizedChatMistralAI(ChatMistralAI):
             if is_quota_exhausted(exc):
                 logger.warning("Mistral AI quota exhausted: %s", exc)
             raise
-
 
 class MistralClient(BaseLLMClient):
     def __init__(self, model: str, base_url: str | None = None, **kwargs):

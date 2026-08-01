@@ -14,7 +14,6 @@ from .base import BaseTraderInterface, OrderRequest, OrderResult
 
 _logger = logging.getLogger(__name__)
 
-
 class SimulationTrader(BaseTraderInterface):
     def __init__(self, portfolio_id: int = 1, initial_capital: float = 100_000.0, db=None):
         if db is None:

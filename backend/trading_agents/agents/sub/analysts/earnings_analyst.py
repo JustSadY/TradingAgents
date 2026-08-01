@@ -15,7 +15,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
 
 _EARNINGS_TOOLS = [search_web, get_catalyst_calendar, run_strategy_backtest]
 
-
 @register_analyst(
     key="earnings",
     agent_node="Earnings Analyst",

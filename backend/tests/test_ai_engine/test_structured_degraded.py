@@ -16,20 +16,16 @@ from backend.trading_agents.llm_clients.fallback import FallbackLLM
 
 _DEGRADED = "Function id 'ac74040f-9fc9-4c5e-ac74-279ba5161d69': DEGRADED function cannot be invoked"
 
-
 class _Decision(BaseModel):
     rating: str
-
 
 def test_structured_schema_helpers_use_pydantic_v2_contract():
     assert validate_schema(_Decision, {"rating": "Hold"}) == _Decision(rating="Hold")
     assert '"rating"' in get_json_schema(_Decision)
 
-
 class _Response:
     def __init__(self, content: str):
         self.content = content
-
 
 class _DegradedLLM:
     def __init__(self):
@@ -40,7 +36,6 @@ class _DegradedLLM:
         self.calls += 1
         raise RuntimeError(_DEGRADED)
 
-
 class _UnsupportedStructuredLLM:
     def __init__(self):
         self.calls = 0
@@ -48,7 +43,6 @@ class _UnsupportedStructuredLLM:
     async def ainvoke(self, _prompt):
         self.calls += 1
         raise RuntimeError("This model does not support function calling.")
-
 
 class _FreeTextThenDegradedLLM:
     def __init__(self):
@@ -59,7 +53,6 @@ class _FreeTextThenDegradedLLM:
         if self.calls == 1:
             return _Response("This is valid free-text, but not JSON.")
         raise RuntimeError(_DEGRADED)
-
 
 class _SuccessfulFallbackLLM:
     model_name = "healthy-fallback-model"
@@ -74,14 +67,12 @@ class _SuccessfulFallbackLLM:
         self.calls += 1
         return _Response('{"rating": "Hold"}')
 
-
 def test_degraded_function_is_classified_precisely():
     exc = RuntimeError(_DEGRADED)
 
     assert is_provider_function_degraded(exc) is True
     assert classify_error(exc) == "provider_degraded"
     assert is_provider_function_degraded(RuntimeError("The portfolio is degraded.")) is False
-
 
 async def test_degraded_structured_call_skips_same_model_freetext_and_correction():
     structured_llm = _DegradedLLM()
@@ -99,7 +90,6 @@ async def test_degraded_structured_call_skips_same_model_freetext_and_correction
     assert structured_llm.calls == 1
     assert plain_llm.calls == 0
 
-
 async def test_non_degraded_structured_error_still_uses_freetext_fallback():
     structured_llm = _UnsupportedStructuredLLM()
     plain_llm = _SuccessfulFallbackLLM()
@@ -116,7 +106,6 @@ async def test_non_degraded_structured_error_still_uses_freetext_fallback():
     assert structured_llm.calls == 1
     assert plain_llm.calls == 1
 
-
 async def test_configured_fallback_is_used_for_a_degraded_primary():
     primary = _DegradedLLM()
     fallback = _SuccessfulFallbackLLM()
@@ -126,7 +115,6 @@ async def test_configured_fallback_is_used_for_a_degraded_primary():
     assert response.content == '{"rating": "Hold"}'
     assert primary.calls == 1
     assert fallback.calls == 1
-
 
 async def test_degraded_during_correction_stops_second_correction_and_keeps_free_text():
     llm = _FreeTextThenDegradedLLM()
@@ -140,10 +128,7 @@ async def test_degraded_during_correction_stops_second_correction_and_keeps_free
     )
 
     assert result == "This is valid free-text, but not JSON."
-    # One free-text generation plus one failed correction.  The old path made
-    # a third request for correction attempt 2.
     assert llm.calls == 2
-
 
 async def test_node_retry_does_not_repeat_a_degraded_provider_call():
     calls = 0
@@ -157,7 +142,6 @@ async def test_node_retry_does_not_repeat_a_degraded_provider_call():
         await retry_call(invoke, label="decision:Portfolio Manager", attempts=3)
 
     assert calls == 1
-
 
 async def test_llm_retry_does_not_repeat_a_degraded_provider_call():
     calls = 0

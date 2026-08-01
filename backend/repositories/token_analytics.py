@@ -3,7 +3,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.analysis import AnalysisResult
 
-
 async def get_token_usage_rows(db: AsyncSession, user_id: int) -> list:
     q = (
         select(
@@ -21,7 +20,6 @@ async def get_token_usage_rows(db: AsyncSession, user_id: int) -> list:
     )
     result = await db.execute(q)
     return result.all()
-
 
 async def get_daily_token_usage_rows(db: AsyncSession, user_id: int, limit: int = 30) -> list:
     q = (

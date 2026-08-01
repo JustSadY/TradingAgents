@@ -25,7 +25,6 @@ SECTORS: dict[str, str] = {
 _cache: dict[str, Any] = {}
 _CACHE_TTL = 1800
 
-
 def _rsi(prices: list[float], period: int = 14) -> float:
     if len(prices) < period + 1:
         return 50.0
@@ -35,7 +34,6 @@ def _rsi(prices: list[float], period: int = 14) -> float:
         return 50.0
     value = rsi_series.iloc[-1]
     return float(value) if not np.isnan(value) else 50.0
-
 
 async def get_sector_rotation() -> list[dict[str, Any]]:
     now = time.time()
@@ -63,9 +61,6 @@ async def get_sector_rotation() -> list[dict[str, Any]]:
             raw = await loop.run_in_executor(None, _fetch)
             if raw is not None and not getattr(raw, "empty", False):
                 break
-            # Empty upstream payloads are transient just like exceptions. Do
-            # not spin through all attempts immediately and then cache an
-            # outage as a valid empty sector ranking.
             if attempt < max_retries - 1:
                 await asyncio.sleep(delay)
                 delay *= 2
@@ -123,8 +118,6 @@ async def get_sector_rotation() -> list[dict[str, Any]]:
             continue
 
     results.sort(key=lambda x: x["momentum_score"], reverse=True)
-    # A valid but empty result is possible in principle, but cache only a
-    # populated response so a vendor outage cannot hide data for 30 minutes.
     if results:
         _cache["sector_rotation"] = {"ts": now, "data": results}
     return results

@@ -2,7 +2,6 @@ from __future__ import annotations
 
 from .base import BaseAgentTool
 
-
 class ToolRegistry:
     def __init__(self):
         self._tools: dict[str, BaseAgentTool] = {}
@@ -27,7 +26,6 @@ class ToolRegistry:
 
     def get_agent_tool_key_for_langchain_tool(self, langchain_tool_name: str) -> str | None:
         return self._langchain_tool_to_agent_tool_key.get(langchain_tool_name)
-
 
 registry = ToolRegistry()
 

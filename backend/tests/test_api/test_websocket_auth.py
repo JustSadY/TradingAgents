@@ -7,30 +7,23 @@ from backend.api.deps import (
     get_websocket_application_subprotocol,
 )
 
-
 def test_websocket_auth_reads_private_subprotocol_token():
     token = get_websocket_access_token(f"chat.v1, {WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX}header-token")
 
     assert token == "header-token"
 
-
 def test_websocket_auth_requires_a_private_subprotocol_token():
     assert get_websocket_access_token(None) is None
     assert get_websocket_access_token("chat.v1") is None
 
-
 def test_websocket_auth_rejects_empty_private_protocol_token():
     assert get_websocket_access_token(WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX) is None
-
 
 def test_websocket_selects_only_fixed_application_subprotocol():
     offered = f"{WEBSOCKET_APPLICATION_SUBPROTOCOL}, {WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX}header-token"
 
     assert get_websocket_application_subprotocol(offered) == WEBSOCKET_APPLICATION_SUBPROTOCOL
-    # The JWT-bearing offer is request-only and must never appear in the 101
-    # response header where a proxy/browser could retain it.
     assert get_websocket_application_subprotocol(f"{WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX}header-token") is None
-
 
 @pytest.mark.asyncio
 async def test_websocket_rejects_a_handshake_without_the_application_protocol():
@@ -57,7 +50,6 @@ async def test_websocket_rejects_a_handshake_without_the_application_protocol():
         ("close", 1002, "Unsupported WebSocket protocol"),
     ]
 
-
 @pytest.mark.asyncio
 async def test_websocket_rejects_an_application_protocol_without_a_private_jwt():
     from backend.main import websocket_analysis
@@ -81,7 +73,6 @@ async def test_websocket_rejects_an_application_protocol_without_a_private_jwt()
         ("accept", WEBSOCKET_APPLICATION_SUBPROTOCOL),
         ("close", 4001, "Unauthorized"),
     ]
-
 
 @pytest.mark.asyncio
 async def test_websocket_rejection_sends_a_diagnostic_close_frame():
@@ -110,7 +101,6 @@ async def test_websocket_rejection_sends_a_diagnostic_close_frame():
         ("accept", WEBSOCKET_APPLICATION_SUBPROTOCOL),
         ("close", 4001, "Unauthorized"),
     ]
-
 
 @pytest.mark.asyncio
 async def test_connected_websocket_revalidation_checks_current_token_and_page_access(monkeypatch):
@@ -141,7 +131,6 @@ async def test_connected_websocket_revalidation_checks_current_token_and_page_ac
 
     assert await _analysis_websocket_access_is_current("header-token", 7) is True
     assert await _analysis_websocket_access_is_current("header-token", 8) is False
-
 
 @pytest.mark.asyncio
 async def test_connected_websocket_closes_when_periodic_revalidation_is_revoked(monkeypatch):

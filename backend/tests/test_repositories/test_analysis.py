@@ -20,7 +20,6 @@ from backend.repositories.analysis import (
     update_analysis_result,
 )
 
-
 class TestAnalysisRepository:
     async def _create_analysis(
         self, db: AsyncSession, user_id: int, ticker: str = "AAPL", status: str = "completed", **overrides
@@ -79,8 +78,6 @@ class TestAnalysisRepository:
         assert user_results[0].ticker == "AAPL"
 
         admin_results = await list_analyses(db, user=admin_user)
-        # Administrators deliberately have cross-user visibility; ordinary
-        # users above remain scoped to their own records.
         assert {result.ticker for result in admin_results} == {"AAPL", "GOOGL"}
 
     async def test_list_analyses_filter_by_ticker(self, db: AsyncSession, test_user: User):

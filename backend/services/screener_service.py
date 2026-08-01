@@ -20,7 +20,6 @@ from backend.services.indicator_service import calculate_rsi
 
 _logger = logging.getLogger(__name__)
 
-
 DEFAULT_UNIVERSE = [
     "AAPL",
     "MSFT",
@@ -45,7 +44,6 @@ DEFAULT_UNIVERSE = [
 ]
 MAX_UNIVERSE = 50
 
-
 @dataclass
 class ScreenResult:
     ticker: str
@@ -56,7 +54,6 @@ class ScreenResult:
     rsi_14: float
     signals: list[str]
 
-
 def _rsi(closes: pd.Series, period: int = 14) -> float:
     if closes.empty:
         return 50.0
@@ -65,7 +62,6 @@ def _rsi(closes: pd.Series, period: int = 14) -> float:
         return 50.0
     value = rsi_series.iloc[-1]
     return float(value) if not math.isnan(value) else 50.0
-
 
 def _score_ticker(ticker: str, df: pd.DataFrame) -> ScreenResult | None:
     closes = df["Close"].dropna()
@@ -120,7 +116,6 @@ def _score_ticker(ticker: str, df: pd.DataFrame) -> ScreenResult | None:
         rsi_14=round(rsi, 1),
         signals=signals,
     )
-
 
 async def run_screen(universe: list[str] | None = None, top_n: int = 10) -> list[dict]:
     """Score ``universe`` (default: liquid large caps) and return the top candidates."""

@@ -16,10 +16,9 @@ _logger = logging.getLogger(__name__)
 _COMMISSION_RATE = Decimal("0.001")
 _MAX_HOLDING_DAYS = 10
 _ALLOCATION_PCT = Decimal("0.95")
-_DEFAULT_SLIPPAGE_BPS = Decimal("5.0")  # 0.05% — worsens every fill against the trader
+_DEFAULT_SLIPPAGE_BPS = Decimal("5.0")
 _MONEY_QUANTUM = Decimal("0.0001")
 _ZERO = Decimal("0")
-
 
 def _decimal(value) -> Decimal:
     """Convert an external numeric value to a finite Decimal exactly once."""
@@ -31,16 +30,13 @@ def _decimal(value) -> Decimal:
         raise ValueError(f"Expected a finite numeric value, got {value!r}")
     return result
 
-
 def _money(value: Decimal) -> Decimal:
     """Keep simulated fees at the same precision as the paper broker."""
     return value.quantize(_MONEY_QUANTUM)
 
-
 def _apply_slippage_decimal(price: Decimal, action: str, slippage_bps: Decimal) -> Decimal:
     factor = slippage_bps / Decimal(10_000)
     return price * (Decimal(1) + factor) if action == "BUY" else price * (Decimal(1) - factor)
-
 
 def _apply_slippage(price: float, action: str, slippage_bps: float) -> float:
     """Worsen a fill price by ``slippage_bps`` in the trader's disadvantage.
@@ -53,7 +49,6 @@ def _apply_slippage(price: float, action: str, slippage_bps: float) -> float:
     into its cash or equity calculations.
     """
     return float(_apply_slippage_decimal(_decimal(price), action, _decimal(slippage_bps)))
-
 
 def _trade_pnl_decimal(
     side: str,
@@ -68,7 +63,6 @@ def _trade_pnl_decimal(
     exit_commission = _money(exit_price * size * rate)
     return gross - entry_commission - exit_commission
 
-
 def _trade_pnl(side: str, entry_price: float, exit_price: float, size: float, rate: float) -> float:
     """Realized P&L for closing ``size`` units, charging commission on both legs.
 
@@ -76,7 +70,6 @@ def _trade_pnl(side: str, entry_price: float, exit_price: float, size: float, ra
     simulator.
     """
     return float(_trade_pnl_decimal(side, _decimal(entry_price), _decimal(exit_price), _decimal(size), _decimal(rate)))
-
 
 def _close_position_decimal(
     side: str,
@@ -115,7 +108,6 @@ def _close_position_decimal(
     }
     return cash_delta, trade
 
-
 def _close_position(
     side: str,
     entry_price: float,
@@ -139,7 +131,6 @@ def _close_position(
     )
     return float(cash_delta), trade
 
-
 def _prepare_data(data: pd.DataFrame, strategy_type: str) -> pd.DataFrame:
     """Sort by date and attach the indicator columns the strategy needs."""
     data["Date"] = pd.to_datetime(data["Date"])
@@ -153,7 +144,6 @@ def _prepare_data(data: pd.DataFrame, strategy_type: str) -> pd.DataFrame:
     elif strategy_type == "rsi_oversold":
         data["rsi"] = calculate_rsi(close_series)
     return data
-
 
 def _generate_signal(
     data: pd.DataFrame,
@@ -189,10 +179,6 @@ def _generate_signal(
             elif curr_rsi > 70 and prev_rsi <= 70:
                 signal = "SELL"
     elif strategy_type == "consensus":
-        # A consensus report generated for a trading day cannot be filled at
-        # that day's close: the report may itself use that close/that day's
-        # full OHLCV data.  The caller supplies the preceding trading date so
-        # this bar only acts on information known before its open.
         analysis = analyses_map.get(consensus_signal_date) if consensus_signal_date else None
         if analysis:
             sig = (analysis.signal or "").strip().lower()
@@ -213,7 +199,6 @@ def _generate_signal(
                 rec_take_profit = ann.get("target_price")
 
     return signal, rec_stop_loss, rec_take_profit
-
 
 def _normalise_exit_levels(
     side: str,
@@ -247,7 +232,6 @@ def _normalise_exit_levels(
         valid_target = target if target is not None and target > entry_price else entry_price * Decimal("1.10")
     return valid_stop, valid_target
 
-
 def _exit_reason_and_price(
     side: str,
     open_price: Decimal,
@@ -272,7 +256,6 @@ def _exit_reason_and_price(
     if holding_days >= _MAX_HOLDING_DAYS:
         return "MAX_HOLDING_DAYS", close_price
     return None, close_price
-
 
 def _compute_metrics(daily_values: list[Decimal], trades: list[dict], initial_capital: Decimal) -> dict:
     """Summary performance stats using exact money/equity values.
@@ -300,8 +283,6 @@ def _compute_metrics(daily_values: list[Decimal], trades: list[dict], initial_ca
     variance = (
         sum(((r - mean_return) ** 2 for r in daily_returns), _ZERO) / len(daily_returns) if daily_returns else _ZERO
     )
-    # This is the single intentional float boundary in the accounting path:
-    # Sharpe is a statistical display metric, not a monetary ledger field.
     std_return = math.sqrt(float(variance))
     sharpe_ratio = float(mean_return) / std_return * math.sqrt(252) if std_return > 0 else 0.0
 
@@ -321,7 +302,6 @@ def _compute_metrics(daily_values: list[Decimal], trades: list[dict], initial_ca
         "max_drawdown": round(float(max_dd * Decimal(100)), 2),
         "sharpe_ratio": round(sharpe_ratio, 2),
     }
-
 
 async def _benchmark_return(benchmark_ticker: str | None, start_date: str, end_date: str) -> dict | None:
     """Buy-and-hold return of ``benchmark_ticker`` over the same date range.
@@ -353,7 +333,6 @@ async def _benchmark_return(benchmark_ticker: str | None, start_date: str, end_d
         _logger.warning("Benchmark fetch failed for %s: %s", benchmark_ticker, exc)
         return None
 
-
 async def _load_consensus_analyses(db, ticker: str, start_date: str, end_date: str, user) -> dict:
     """Map usable trade-date reports for the user-scoped consensus strategy.
 
@@ -364,8 +343,6 @@ async def _load_consensus_analyses(db, ticker: str, start_date: str, end_date: s
     analyses_map: dict = {}
     if not user:
         return analyses_map
-    # Include a short calendar buffer so a Friday report can be consumed on
-    # the first Monday inside the requested range.
     query_start = (pd.Timestamp(start_date) - pd.Timedelta(days=7)).strftime("%Y-%m-%d")
     stmt = (
         select(AnalysisResult)
@@ -380,8 +357,6 @@ async def _load_consensus_analyses(db, ticker: str, start_date: str, end_date: s
     )
     res = await db.execute(stmt)
     for row in res.scalars().all():
-        # ``trade_date`` is stored as ISO text.  Treat a missing timestamp as
-        # unavailable rather than silently granting a future-data exception.
         try:
             created_at = getattr(row, "created_at", None)
             if created_at is None or pd.Timestamp(created_at).date() > pd.Timestamp(row.trade_date).date():
@@ -390,7 +365,6 @@ async def _load_consensus_analyses(db, ticker: str, start_date: str, end_date: s
             continue
         analyses_map[row.trade_date] = row
     return analyses_map
-
 
 async def run_backtest_simulation(
     db,
@@ -440,10 +414,6 @@ async def run_backtest_simulation(
         equity_curve = []
         daily_values: list[Decimal] = []
 
-        # Signals are evaluated only after a bar is complete and are filled on
-        # the following bar's open.  Seed the first requested bar from the
-        # preceding market bar when the data source provides one, so a Friday
-        # signal may be acted on at Monday's open without peeking at Monday.
         preceding_data = data[data["Date"] < start_dt]
         previous_row = preceding_data.iloc[-1] if not preceding_data.empty else None
         previous_trade_date: str | None = (
@@ -498,9 +468,6 @@ async def run_backtest_simulation(
                         analyses_map,
                         consensus_signal_date=previous_trade_date,
                     )
-                # Every strategy consumes information from a completed prior
-                # bar and fills at this bar's open.  Trading at the same close
-                # that generated MACD/RSI/consensus input is look-ahead bias.
                 execution_price = open_price if open_price > 0 else close_price
 
                 if signal == "BUY" and position_side != "long":

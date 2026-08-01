@@ -18,10 +18,8 @@ from backend.trading_agents.agents.utils.agent_utils import (
 )
 from backend.trading_agents.dataflows.interface import fetch_reddit_posts, fetch_stocktwits_messages, route_to_vendor
 
-
 def _seven_days_back(trade_date: str) -> str:
     return (datetime.strptime(trade_date, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
-
 
 @register_analyst(
     key="social",
@@ -50,9 +48,6 @@ def create_sentiment_analyst(llm):
 
         news_block = await route_to_vendor("get_news", ticker, start_date, end_date)
 
-        # Tool settings (limit) are configurable per user/server but were
-        # previously never read here — fetch them so the saved value actually
-        # changes behavior instead of just sitting in the settings UI.
         from backend.trading_agents.dataflows.config import get_config
 
         user_tool_settings = get_config().get("runtime_tool_context", {}).get("user_settings", {})
@@ -94,8 +89,6 @@ def create_sentiment_analyst(llm):
             [
                 (
                     "system",
-                    # The sentiment analyst produces a sentiment report only — it does not
-                    # issue BUY/HOLD/SELL calls (that's the trader/PM's job downstream).
                     "{system_message}\nFor your reference, the current date is {current_date}. {instrument_context}",
                 ),
                 MessagesPlaceholder(variable_name="messages"),
@@ -115,7 +108,6 @@ def create_sentiment_analyst(llm):
         }
 
     return sentiment_analyst_node
-
 
 def _build_system_message(
     *,

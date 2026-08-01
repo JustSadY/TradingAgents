@@ -19,11 +19,9 @@ _RATING_LABEL_RE = re.compile(
 _RATING_TOKEN_RE = re.compile(r"\b(buy|overweight|hold|underweight|sell)\b", re.IGNORECASE)
 _DECISION_PREFIXES = ("final", "decision", "signal", "rating", "recommendation", "action")
 
-
 def parse_rating(text: str, default: str | None = "Hold") -> str | None:
     """Extract a Buy/Overweight/Hold/Underweight/Sell rating, or ``default``."""
     return parse_rating_matched(text, default)[0]
-
 
 def parse_rating_matched(text: str, default: str | None = "Hold") -> tuple[str | None, bool]:
     """Like :func:`parse_rating` but also report whether a rating was actually found.

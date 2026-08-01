@@ -1,6 +1,5 @@
 from pydantic import BaseModel
 
-
 class ScreenResultItem(BaseModel):
     ticker: str
     score: float
@@ -9,7 +8,6 @@ class ScreenResultItem(BaseModel):
     volume_surge: float
     rsi_14: float
     signals: list[str] = []
-
 
 class ScreenResponse(BaseModel):
     results: list[ScreenResultItem]

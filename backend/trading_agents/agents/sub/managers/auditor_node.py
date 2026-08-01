@@ -4,7 +4,6 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_system_instruction_override,
 )
 
-
 def create_auditor_node(llm):
     async def auditor_node(state) -> dict:
         from backend.trading_agents.dataflows.config import get_config

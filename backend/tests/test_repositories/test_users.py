@@ -16,7 +16,6 @@ from backend.repositories.users import (
     username_exists,
 )
 
-
 class TestUserRepository:
     async def test_create_user(self, db: AsyncSession):
         user = await create_user_with_permissions(
