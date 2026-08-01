@@ -3,7 +3,9 @@ from typing import Any
 from backend.trading_agents.agents.runtime.agent_states import (
     InvestDebateState,
     RiskDebateState,
+    StateKeys,
 )
+
 
 class Propagator:
     def __init__(self, max_recur_limit=100):
@@ -16,7 +18,7 @@ class Propagator:
         asset_type: str = "stock",
         past_context: str = "",
     ) -> dict[str, Any]:
-        return {
+        state = {
             "messages": [("human", company_name)],
             "company_of_interest": company_name,
             "asset_type": asset_type,
@@ -47,16 +49,15 @@ class Propagator:
                 }
             ),
             "portfolio_decision_json": "{}",
-            "market_report": "",
-            "fundamentals_report": "",
-            "sentiment_report": "",
-            "news_report": "",
-            "macro_report": "",
-            "options_report": "",
-            "quant_report": "",
-            "earnings_report": "",
-            "review_report": "",
         }
+        # Keep the state schema and its initial values in lockstep.  The
+        # previous hand-written subset predated several optional analysts, so
+        # their report fields only existed after a successful node update.
+        # Starting every report field explicitly means a disabled, failed, or
+        # dynamically registered analyst is distinguishable from a missing
+        # state key throughout streaming and persistence.
+        state.update(dict.fromkeys(StateKeys.ALL_REPORT_KEYS, ""))
+        return state
 
     def get_graph_args(self, callbacks: list | None = None) -> dict[str, Any]:
         config = {"recursion_limit": self.max_recur_limit}

@@ -38,6 +38,7 @@ from backend.trading_agents.agents.main import (
     create_research_manager_node,
     create_risk_debate_node,
 )
+from backend.trading_agents.agents.main.market_intelligence import market_intelligence_failure_update
 from backend.trading_agents.agents.runtime.resilience import guard_node
 
 from .conditional_logic import ConditionalLogic
@@ -49,6 +50,7 @@ _AGENT_QA = "Agent Q&A"
 _RESEARCH_MANAGER = "Research Manager"
 _RISK_DEBATE = "Risk Debate"
 _PORTFOLIO_MANAGER = "Portfolio Manager"
+
 
 def _market_timeout_multiplier(selected_analysts: list[str] | set[str]) -> float:
     """Return a bounded-by-work timeout multiplier for analyst orchestration.
@@ -63,10 +65,12 @@ def _market_timeout_multiplier(selected_analysts: list[str] | set[str]) -> float
     """
     return float(max(2, len(selected_analysts)))
 
+
 def _research_timeout_multiplier(max_debate_rounds: int) -> float:
     """Budget synthesis, each bull/bear turn, audit, and final judgement."""
     rounds = max(1, int(max_debate_rounds or 1))
     return float(max(2, 3 + (2 * rounds)))
+
 
 class GraphSetup:
     def __init__(
@@ -93,6 +97,7 @@ class GraphSetup:
     ) -> StateGraph:
         if selected_analysts is None:
             selected_analysts = ["market", "social", "news", "fundamentals"]
+        selected_analysts = list(selected_analysts)
 
         sync_registry_to_graph()
 
@@ -112,7 +117,7 @@ class GraphSetup:
             create_market_intelligence_node(ctx),
             name=_MARKET_INTELLIGENCE,
             kind="main",
-            fallback=lambda state, exc: {},
+            fallback=lambda state, exc: market_intelligence_failure_update(selected_analysts, exc),
             timeout_multiplier=_market_timeout_multiplier(selected_analysts),
             retry_timeouts=False,
         )

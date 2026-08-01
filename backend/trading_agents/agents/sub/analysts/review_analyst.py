@@ -1,4 +1,4 @@
-from langchain_core.messages import AIMessage, SystemMessage
+from langchain_core.messages import AIMessage
 
 from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.data.backtest_tools import run_strategy_backtest
@@ -10,13 +10,14 @@ from backend.trading_agents.agents.runtime.analyst_cache import (
     emit_cache_hit,
     store_analyst_cache,
 )
+from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
-    get_general_settings_block,
     get_system_instruction_override,
 )
 
 _REVIEW_TOOLS = [get_past_performance_data, run_strategy_backtest]
+
 
 @register_analyst(
     key="review",
@@ -27,8 +28,6 @@ _REVIEW_TOOLS = [get_past_performance_data, run_strategy_backtest]
     tools=_REVIEW_TOOLS,
 )
 def create_review_analyst(llm):
-    llm_with_tools = llm.bind_tools(_REVIEW_TOOLS)
-
     async def review_analyst(state: AgentState):
         ticker = state.get("company_of_interest", "Unknown")
         asset_type = state.get("asset_type", "stock")
@@ -71,17 +70,22 @@ def create_review_analyst(llm):
                 f"{context_str}\n"
             )
 
-        system_message += get_general_settings_block()
-
-        messages = [
-            SystemMessage(content=system_message),
-            *state["messages"],
-        ]
-
-        response = await llm_with_tools.ainvoke(messages)
-        report_text = response.content
-        if "unavailable" not in report_text[:50].lower():
+        # Do not bypass the shared report boundary.  A direct ``response.content``
+        # assignment used to let blank/block-shaped provider output become a
+        # silently empty report.  The common runner also retains the ToolNode
+        # loop, retries transient LLM failures, and emits a visible degraded
+        # report if its bounded recovery cannot obtain readable text.
+        result = await run_tool_analyst(
+            llm,
+            state,
+            tools=_REVIEW_TOOLS,
+            system_message=system_message,
+            report_key="review_report",
+            instrument_context=context_str,
+        )
+        report_text = result.get("review_report", "")
+        if report_text and "unavailable" not in report_text[:50].lower():
             await store_analyst_cache("review", ticker, data_hash, report_text)
-        return {"messages": [response], "review_report": report_text}
+        return result
 
     return review_analyst

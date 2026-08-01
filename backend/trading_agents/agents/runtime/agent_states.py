@@ -3,6 +3,7 @@ from typing import Annotated
 from langgraph.graph import MessagesState
 from typing_extensions import TypedDict
 
+
 class StateKeys:
     COMPANY = "company_of_interest"
     ASSET_TYPE = "asset_type"
@@ -26,6 +27,7 @@ class StateKeys:
     REVIEW_REPORT = "review_report"
     SYNTHESIS_REPORT = "synthesis_report"
     AUDIT_REPORT = "audit_report"
+    AGENT_QA_REPORT = "agent_qa_report"
     INVESTMENT_DEBATE_STATE = "investment_debate_state"
     INVESTMENT_PLAN = "investment_plan"
     RISK_DEBATE_STATE = "risk_debate_state"
@@ -49,6 +51,7 @@ class StateKeys:
         REVIEW_REPORT,
         SYNTHESIS_REPORT,
         AUDIT_REPORT,
+        AGENT_QA_REPORT,
         INVESTMENT_PLAN,
         FINAL_TRADE_DECISION,
     )

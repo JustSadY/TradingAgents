@@ -246,6 +246,115 @@ function stringRecord(value: unknown): Record<string, string> {
   return reports
 }
 
+/**
+ * The backend's analyst registry can add report fields without a frontend
+ * release.  Keep the familiar built-in order, then expose any additional
+ * ``*_report`` field instead of silently dropping it from the Reports tab.
+ */
+const KNOWN_REPORT_KEYS = [
+  'market_report', 'sentiment_report', 'news_report',
+  'fundamentals_report', 'macro_report', 'options_report',
+  'quant_report', 'earnings_report', 'insider_report',
+  'ownership_report', 'ratings_report', 'short_interest_report',
+  'valuation_report', 'catalyst_report', 'review_report',
+  'synthesis_report', 'audit_report', 'agent_qa_report',
+] as const
+
+function visibleReportEntries(value: unknown): Array<[string, string]> {
+  if (!isRecord(value)) return []
+
+  const readable = (key: string): string | null => {
+    const report = value[key]
+    return typeof report === 'string' && report.trim() ? report : null
+  }
+  const known = KNOWN_REPORT_KEYS.flatMap(key => {
+    const report = readable(key)
+    return report === null ? [] : [[key, report] as [string, string]]
+  })
+  const knownKeys = new Set<string>(KNOWN_REPORT_KEYS)
+  const extra = Object.keys(value)
+    .filter(key => key.endsWith('_report') && !knownKeys.has(key))
+    .sort()
+    .flatMap(key => {
+      const report = readable(key)
+      return report === null ? [] : [[key, report] as [string, string]]
+    })
+  return [...known, ...extra]
+}
+
+function readableSectionLabel(sectionLabels: Record<string, string>, key: string): string {
+  const configured = sectionLabels[key]
+  if (configured) return configured
+  // Preserve the existing fallback for built-in API fields while metadata is
+  // still loading. New registry fields get a readable fallback below.
+  if ((KNOWN_REPORT_KEYS as readonly string[]).includes(key)) return key
+  return key
+    .replace(/_report$/, '')
+    .split('_')
+    .filter(Boolean)
+    .map(part => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
+    .join(' ')
+}
+
+/** Map streaming callback names to their persisted report fields. */
+const STREAMING_REPORT_KEYS: Record<string, string> = {
+  market: 'market_report',
+  market_analyst: 'market_report',
+  social: 'sentiment_report',
+  sentiment: 'sentiment_report',
+  sentiment_analyst: 'sentiment_report',
+  news: 'news_report',
+  news_analyst: 'news_report',
+  fundamentals: 'fundamentals_report',
+  fundamentals_analyst: 'fundamentals_report',
+  macro: 'macro_report',
+  macro_analyst: 'macro_report',
+  options: 'options_report',
+  options_analyst: 'options_report',
+  quant: 'quant_report',
+  quant_analyst: 'quant_report',
+  earnings: 'earnings_report',
+  earnings_analyst: 'earnings_report',
+  insider: 'insider_report',
+  insider_activity: 'insider_report',
+  insider_activity_analyst: 'insider_report',
+  ownership: 'ownership_report',
+  institutional_ownership: 'ownership_report',
+  institutional_ownership_analyst: 'ownership_report',
+  ratings: 'ratings_report',
+  analyst_ratings: 'ratings_report',
+  analyst_ratings_analyst: 'ratings_report',
+  short_interest: 'short_interest_report',
+  short_interest_analyst: 'short_interest_report',
+  valuation: 'valuation_report',
+  valuation_analyst: 'valuation_report',
+  catalyst: 'catalyst_report',
+  catalyst_calendar: 'catalyst_report',
+  catalyst_calendar_analyst: 'catalyst_report',
+  review: 'review_report',
+  performance_review: 'review_report',
+  performance_review_analyst: 'review_report',
+  synthesis_manager: 'synthesis_report',
+  auditor: 'audit_report',
+  agent_qa: 'agent_qa_report',
+  portfolio_manager: 'final_decision',
+  research_manager: 'investment_plan',
+  trader: 'trader_plan',
+}
+
+function reportKeyForStreamingAgent(agent: string): string | null {
+  const normalized = agent
+    .trim()
+    .replace(/([a-z])([A-Z])/g, '$1_$2')
+    .toLowerCase()
+    .replace(/[\s-]+/g, '_')
+    .replace(/_+/g, '_')
+    .replace(/^_|_$/g, '')
+  if (!normalized || normalized === 'thinking' || normalized === 'system') return null
+  return STREAMING_REPORT_KEYS[normalized]
+    ?? (normalized.endsWith('_report') ? normalized : null)
+}
+
 function liveDebateMessages(value: unknown): LiveDebateMessage[] {
   if (!Array.isArray(value)) return []
   return value.flatMap(item => {
@@ -739,24 +848,7 @@ function RunTab() {
         setAnalysisId(a.id)
         setRunStatus('done')
         setReports({
-          market_report: a.market_report || '',
-          sentiment_report: a.sentiment_report || '',
-          news_report: a.news_report || '',
-          fundamentals_report: a.fundamentals_report || '',
-          macro_report: a.macro_report || '',
-          options_report: a.options_report || '',
-          quant_report: a.quant_report || '',
-          earnings_report: a.earnings_report || '',
-          insider_report: a.insider_report || '',
-          ownership_report: a.ownership_report || '',
-          ratings_report: a.ratings_report || '',
-          short_interest_report: a.short_interest_report || '',
-          valuation_report: a.valuation_report || '',
-          catalyst_report: a.catalyst_report || '',
-          review_report: a.review_report || '',
-          synthesis_report: a.synthesis_report || '',
-          audit_report: a.audit_report || '',
-          agent_qa_report: a.agent_qa_report || '',
+          ...Object.fromEntries(visibleReportEntries(a)),
           investment_plan: a.investment_plan || '',
           trader_plan: a.trader_plan || '',
           final_decision: a.final_decision || '',
@@ -928,21 +1020,8 @@ function RunTab() {
         setCurrentStep(prev => prev?.label === ev.label && prev?.stage === ev.stage ? prev : { label: ev.label || '', stage: ev.stage || '' })
         appendLog(`Progress: ${ev.label}`)
       } else if (ev.type === 'token' && ev.agent && ev.token) {
-        let reportKey = ev.agent
-        if (ev.agent === 'portfolio_manager') {
-          reportKey = 'final_decision'
-        } else if (ev.agent === 'trader') {
-          reportKey = 'trader_plan'
-        } else if (ev.agent === 'research_manager') {
-          reportKey = 'investment_plan'
-        } else if (ev.agent === 'synthesis_manager') {
-          reportKey = 'synthesis_report'
-        } else if (ev.agent === 'auditor') {
-          reportKey = 'audit_report'
-        } else if (!ev.agent.endsWith('_report')) {
-          reportKey = `${ev.agent}_report`
-        }
-
+        const reportKey = reportKeyForStreamingAgent(ev.agent)
+        if (!reportKey) return
         setReports(r => {
           const prevContent = r[reportKey] || ''
           return { ...r, [reportKey]: prevContent + ev.token }
@@ -1389,18 +1468,9 @@ function RunTab() {
           final_decision: reports.final_decision || '',
         };
 
-        const analystReportKeys = [
-          'market_report', 'sentiment_report', 'news_report',
-          'fundamentals_report', 'macro_report', 'options_report',
-          'quant_report', 'earnings_report', 'insider_report',
-          'ownership_report', 'ratings_report', 'short_interest_report',
-          'valuation_report', 'catalyst_report', 'review_report',
-          'synthesis_report', 'audit_report', 'agent_qa_report',
-        ];
-
-        const activeReports = analystReportKeys
-          .map(k => [k, detail ? detail[k as keyof AnalysisResultRead] : reports[k]] as [string, string])
-          .filter(entry => !!entry[1]);
+        const activeReports = visibleReportEntries(
+          detail ? detail as unknown as Record<string, unknown> : reports,
+        );
 
         const filteredLiveMessages = liveDebate.filter(m => {
           if (liveDebateTab === 'inv') {
@@ -1641,7 +1711,7 @@ function RunTab() {
                         activeReports.map(([key, content]) => (
                           <ReportCard
                             key={key}
-                            label={sectionLabels[key] || key}
+                            label={readableSectionLabel(sectionLabels, key)}
                             content={content}
                             defaultOpen={key === activeSection}
                             isStreaming={running && key === activeSection}
@@ -2249,6 +2319,9 @@ function HistoryTab({
     ? readPortfolioDecision(detail.chart_annotations, detail.trader_proposal_json)
     : null
   const historyHasPortfolioManagerDecision = historyPortfolioDecision?.source === 'portfolio_manager'
+  const historyReportEntries = detail
+    ? visibleReportEntries(detail as unknown as Record<string, unknown>)
+    : []
 
   if (loading) return <div className="p-8 text-slate-500 text-xs">{t('analysis.history.loading')}</div>
 
@@ -2483,29 +2556,12 @@ function HistoryTab({
                         legacyTraderJson={detail.trader_proposal_json}
                       />
                       {([
-                        ['market_report', detail.market_report],
-                        ['sentiment_report', detail.sentiment_report],
-                        ['news_report', detail.news_report],
-                        ['fundamentals_report', detail.fundamentals_report],
-                        ['macro_report', detail.macro_report],
-                        ['options_report', detail.options_report],
-                        ['quant_report', detail.quant_report],
-                        ['earnings_report', detail.earnings_report],
-                        ['insider_report', detail.insider_report],
-                        ['ownership_report', detail.ownership_report],
-                        ['ratings_report', detail.ratings_report],
-                        ['short_interest_report', detail.short_interest_report],
-                        ['valuation_report', detail.valuation_report],
-                        ['catalyst_report', detail.catalyst_report],
-                        ['review_report', detail.review_report],
-                        ['synthesis_report', detail.synthesis_report],
-                        ['audit_report', detail.audit_report],
-                        ['agent_qa_report', detail.agent_qa_report],
+                        ...historyReportEntries,
                         ['investment_plan', detail.investment_plan],
                         ...(historyHasPortfolioManagerDecision ? [] : [['trader_plan', detail.trader_plan] as [string, string]]),
                         ['final_decision', detail.final_decision],
                       ] as [string, string][]).filter(entry => !!entry[1]).map(([k, v]) => (
-                        <ReportCard key={k} label={sectionLabels[k] || k} content={v} />
+                        <ReportCard key={k} label={readableSectionLabel(sectionLabels, k)} content={v} />
                       ))}
                       {(detail.bull_history || detail.bear_history || detail.judge_decision) && (
                         <div className="border-t border-white/[0.04] pt-3 mt-4">

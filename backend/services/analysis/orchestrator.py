@@ -30,14 +30,25 @@ from .persistence import (
     mark_as_failed,
     update_result_fields,
 )
+from .reports import (
+    analysis_result_report_columns,
+    normalise_selected_analyst_reports,
+    persisted_registered_report_fields,
+    persistence_column_for_report,
+    report_stream_fields,
+    report_text,
+    terminal_report_column_values,
+)
 
 _logger = logging.getLogger(__name__)
 
 _OWNER_UNSET = object()
 
+
 async def _emit_system_status(emitter: AnalysisEmitter, message: str, status: str = "starting") -> None:
     """Emit a lifecycle message without treating the message as an agent name."""
     await emitter.emit_status(agent="system", status=status, message=message)
+
 
 async def _persist_terminal_status(db: AsyncSession, row_id: int, *, status: str) -> None:
     """Reset an interrupted transaction before writing a terminal state.
@@ -60,6 +71,7 @@ async def _persist_terminal_status(db: AsyncSession, row_id: int, *, status: str
         raise
     except Exception:
         _logger.exception("Could not persist terminal analysis status=%s row_id=%s", status, row_id)
+
 
 async def _heartbeat_monitor(
     emitter: AnalysisEmitter,
@@ -102,29 +114,6 @@ async def _heartbeat_monitor(
         stall_warning_sent = False
         await emitter.emit_progress("heartbeat", "running", "system")
 
-REPORT_FIELDS = (
-    "market_report",
-    "sentiment_report",
-    "news_report",
-    "fundamentals_report",
-    "macro_report",
-    "options_report",
-    "quant_report",
-    "earnings_report",
-    "insider_report",
-    "ownership_report",
-    "ratings_report",
-    "short_interest_report",
-    "valuation_report",
-    "catalyst_report",
-    "review_report",
-    "synthesis_report",
-    "audit_report",
-    "agent_qa_report",
-    "investment_plan",
-    "portfolio_decision_json",
-    "final_trade_decision",
-)
 
 async def run_individual_analysis(
     ticker: str,
@@ -169,7 +158,7 @@ async def run_individual_analysis(
 
         from backend.trading_agents.graph.checkpointer import checkpoint_scope
 
-        config["checkpoint_scope"] = checkpoint_namespace or checkpoint_scope(row.user_id, row.id)
+        config["checkpoint_scope"] = checkpoint_namespace or checkpoint_scope(row.user_id, row_id)
 
         persona_key = config.get("investor_persona")
 
@@ -257,6 +246,15 @@ async def run_individual_analysis(
 
         prev_state = {}
 
+        # Keep report streaming tied to the live registry.  The fixed
+        # AnalysisResult schema is still the persistence contract, so a custom
+        # analyst without a declared column is surfaced to operators instead
+        # of being silently passed to ``update_analysis_result`` and dropped by
+        # its ``hasattr`` guard.
+        stream_report_keys = set(report_stream_fields())
+        analysis_result_columns = analysis_result_report_columns()
+        persisted_analyst_keys = set(persisted_registered_report_fields())
+
         prev_inv_count = 0
 
         prev_risk_count = 0
@@ -315,7 +313,7 @@ async def run_individual_analysis(
                         if d_type == "investment":
                             await update_result_fields(
                                 db,
-                                row.id,
+                                row_id,
                                 investment_debate_history=messages or None,
                                 bull_history=history_json_from(d_state.get("bull_history", "")),
                                 bear_history=history_json_from(d_state.get("bear_history", "")),
@@ -325,17 +323,40 @@ async def run_individual_analysis(
                         else:
                             await update_result_fields(
                                 db,
-                                row.id,
+                                row_id,
                                 risk_debate_history=messages or None,
                             )
 
             for key, value in chunk.items():
-                if key in REPORT_FIELDS and value and value != prev_state.get(key):
-                    await update_result_fields(db, row.id, **{key: value})
+                if key not in stream_report_keys:
+                    continue
 
-                    await emitter.emit_report(key, value)
+                # Text columns must never receive provider content blocks,
+                # Pydantic objects, or whitespace-only responses.  The latter
+                # is an intermediate tool-call turn and must not be announced
+                # as a completed report.
+                content = report_text(value)
+                if not content or content == prev_state.get(key):
+                    continue
 
-                    prev_state[key] = value
+                column_key = persistence_column_for_report(key)
+                if column_key in analysis_result_columns:
+                    # Use the captured scalar id.  A prior incremental commit
+                    # can expire ``row`` in an async SQLAlchemy session.
+                    await update_result_fields(db, row_id, **{column_key: content})
+                elif key != "portfolio_decision_json":
+                    # This should only be possible for a plugin whose schema
+                    # migration/API contract has not been added yet.  It still
+                    # streams for the live run, but cannot pretend to have
+                    # been persisted.
+                    _logger.warning(
+                        "Streaming non-persisted analyst report key=%s task=%s",
+                        key,
+                        emitter.task_id,
+                    )
+
+                await emitter.emit_report(key, content)
+                prev_state[key] = content
 
         heartbeat_task = asyncio.create_task(
             _heartbeat_monitor(
@@ -385,6 +406,38 @@ async def run_individual_analysis(
         except Exception as risk_exc:
             _logger.warning("Could not calculate risk metrics for %s: %s", ticker, risk_exc)
 
+        # A successful node can still end with a provider-specific empty
+        # content shape.  Convert that into an explicit degraded report before
+        # quality scoring and final persistence; do not let an empty final
+        # state erase a report that was already incrementally saved.
+        final_analyst_reports = normalise_selected_analyst_reports(
+            final_state,
+            permitted_analysts,
+            is_enabled=ta.hierarchy.is_enabled,
+        )
+        for report_key, content in final_analyst_reports.items():
+            final_state[report_key] = content
+
+        # These report-like coordinator artifacts do not all pass through the
+        # common analyst factory.  Normalise them before ``PropagateResult``
+        # validates its text fields so a content-block response cannot turn a
+        # completed run into a persistence failure.
+        for report_key in (
+            "agent_qa_report",
+            "synthesis_report",
+            "audit_report",
+            "investment_plan",
+            "final_trade_decision",
+        ):
+            final_state[report_key] = report_text(final_state.get(report_key))
+
+        non_persistable_final_reports = set(final_analyst_reports) - persisted_analyst_keys
+        if non_persistable_final_reports:
+            _logger.warning(
+                "Selected analyst reports have no AnalysisResult persistence column: %s",
+                sorted(non_persistable_final_reports),
+            )
+
         result = PropagateResult.from_state(final_state, signal)
 
         try:
@@ -430,28 +483,14 @@ async def run_individual_analysis(
                 result.ticker,
             )
             raw_signal = "Hold"
+        # Only non-empty report values are included in the terminal update.
+        # Earlier stream updates are durable and must not be overwritten by an
+        # empty/malformed value missing from a resumed graph's final state.
+        final_report_values = terminal_report_column_values(final_state, final_analyst_reports)
+
         final_payload = {
             "signal": raw_signal,
-            "market_report": result.market_report,
-            "sentiment_report": result.sentiment_report,
-            "news_report": result.news_report,
-            "fundamentals_report": result.fundamentals_report,
-            "macro_report": result.macro_report,
-            "options_report": result.options_report,
-            "quant_report": result.quant_report,
-            "earnings_report": result.earnings_report,
-            "insider_report": result.insider_report,
-            "ownership_report": result.ownership_report,
-            "ratings_report": result.ratings_report,
-            "short_interest_report": result.short_interest_report,
-            "valuation_report": result.valuation_report,
-            "catalyst_report": result.catalyst_report,
-            "review_report": result.review_report,
-            "synthesis_report": result.synthesis_report,
-            "audit_report": result.audit_report,
-            "agent_qa_report": final_state.get("agent_qa_report", ""),
-            "investment_plan": result.investment_plan,
-            "final_decision": result.final_decision,
+            **final_report_values,
             "bull_history": history_json_from(inv_debate.get("bull_history", "")),
             "bear_history": history_json_from(inv_debate.get("bear_history", "")),
             "investment_debate_history": debate_messages(inv_debate.get("history", "")) or None,
@@ -460,7 +499,10 @@ async def run_individual_analysis(
             "chart_annotations": structured_data,
             "risk_metrics": risk_metrics,
             "quality": quality,
-            "degraded": any(v.get("fallback") for v in (get_report_card() or {}).values()),
+            "degraded": (
+                any(v.get("fallback") for v in (get_report_card() or {}).values())
+                or bool(quality and quality.get("reports_degraded"))
+            ),
             "failed_agents": [k for k, v in (get_report_card() or {}).items() if v.get("fallback")] or None,
             "llm_calls": stats.get("llm_calls", 0),
             "tool_calls": stats.get("tool_calls", 0),
@@ -479,7 +521,7 @@ async def run_individual_analysis(
             ),
         }
 
-        await finalize_result(db, row.id, **final_payload)
+        await finalize_result(db, row_id, **final_payload)
 
         await emitter.emit({"type": "risk_metrics", "metrics": risk_metrics})
 
@@ -494,14 +536,14 @@ async def run_individual_analysis(
         try:
             from backend.repositories.analysis import get_previous_signal
 
-            prev_signal = await get_previous_signal(db, user_id=user_id, ticker=ticker, exclude_id=row.id)
+            prev_signal = await get_previous_signal(db, user_id=user_id, ticker=ticker, exclude_id=row_id)
         except Exception as prev_signal_exc:  # noqa: BLE001 — never fail a run over signal-flip lookup
             _logger.debug("Previous-signal lookup failed for %s: %s", ticker, prev_signal_exc)
             prev_signal = None
 
         track_background_task(
             extract_and_save_annotations(
-                row.id,
+                row_id,
                 result.market_report,
                 result.final_decision,
                 ta.thinking_llm,
@@ -530,7 +572,7 @@ async def run_individual_analysis(
             int(stats.get("tokens_in", 0)),
             int(stats.get("tokens_out", 0)),
         )
-        await emitter.emit_complete(row.id, signal, duration, stats.get("llm_calls", 0), estimated_cost_usd=cost)
+        await emitter.emit_complete(row_id, signal, duration, stats.get("llm_calls", 0), estimated_cost_usd=cost)
 
         ANALYSIS_RUNS.labels(status="completed").inc()
 

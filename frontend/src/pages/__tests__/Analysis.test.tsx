@@ -851,6 +851,53 @@ describe('Analysis', () => {
     expect(screen.getByTestId('report-sentiment_report')).toHaveAttribute('data-default-open', 'false')
   })
 
+  it('normalizes analyst stream aliases and keeps dynamically added reports visible', async () => {
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+      onmessage: ((event: MessageEvent) => void) | null = null
+      onclose: ((event: CloseEvent) => void) | null = null
+      onerror: ((event: Event) => void) | null = null
+
+      constructor() {
+        MockWebSocket.instances.push(this)
+      }
+
+      close() {
+        this.onclose?.(new CloseEvent('close'))
+      }
+
+      emit(event: Record<string, unknown>) {
+        this.onmessage?.({ data: JSON.stringify(event) } as MessageEvent)
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket)
+
+    const axios = await import('axios')
+    vi.mocked(axios.default.post).mockImplementation((url: string) => {
+      if (url === '/api/analysis/run') return Promise.resolve({ data: { task_id: 'dynamic-report-task' } })
+      return Promise.resolve({ data: {} })
+    })
+    localStorage.setItem('ta_last_run', JSON.stringify({
+      ticker: 'AAPL', date: '2026-07-26', assetType: 'stock', runStatus: 'idle',
+      signal: null, reports: {}, log: [], activeSection: null, analysisId: null, liveDebate: [],
+    }))
+    render(<Analysis />)
+
+    const user = userEvent.setup()
+    await user.click(screen.getByRole('button', { name: 'Start analysis' }))
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+
+    await act(async () => {
+      MockWebSocket.instances[0].emit({ type: 'token', agent: 'social', token: 'sentiment update' })
+      MockWebSocket.instances[0].emit({ type: 'report', section: 'sector_rotation_report', content: 'Sector result' })
+    })
+    await user.click(screen.getByRole('button', { name: /Reports/ }))
+
+    expect(screen.getByTestId('report-sentiment_report')).toBeInTheDocument()
+    expect(screen.queryByTestId('report-social_report')).not.toBeInTheDocument()
+    expect(screen.getByTestId('report-Sector Rotation')).toBeInTheDocument()
+  })
+
   it('does not reconnect a socket after Stop clears an already-scheduled retry', async () => {
     class MockWebSocket {
       static instances: MockWebSocket[] = []

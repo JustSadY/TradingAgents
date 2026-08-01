@@ -23,7 +23,12 @@ import logging
 
 from langgraph.graph import END, START, StateGraph
 
-from backend.trading_agents.agents.analyst_registry import all_report_keys, get_factory, sync_registry_to_graph
+from backend.trading_agents.agents.analyst_registry import (
+    all_report_keys,
+    get_factory,
+    report_key_for,
+    sync_registry_to_graph,
+)
 from backend.trading_agents.agents.base import AgentRunContext, NodeFn
 from backend.trading_agents.agents.runtime.agent_states import AgentState
 from backend.trading_agents.agents.runtime.analyst_execution import build_analyst_execution_plan
@@ -41,6 +46,7 @@ ANALYST_TEAMS: dict[str, list[str]] = {
     "catalyst_options": ["options", "catalyst"],
 }
 
+
 def _report_keys() -> tuple[str, ...]:
     """Analyst report keys, derived from the live registry at call time.
 
@@ -48,6 +54,7 @@ def _report_keys() -> tuple[str, ...]:
     insider/ownership/catalyst — is covered, instead of a stale hardcoded list.
     """
     return all_report_keys()
+
 
 def _fb_analyst(report_key: str):
     def fb(state, exc):
@@ -60,6 +67,67 @@ def _fb_analyst(report_key: str):
         }
 
     return fb
+
+
+def market_intelligence_failure_update(selected_analysts: list[str] | set[str], exc: BaseException) -> dict[str, str]:
+    """Return a visible fallback for every selected analyst report.
+
+    Individual analyst nodes already have their own guard fallback.  This is
+    the last-resort boundary for failures *around* those nodes: a malformed
+    subgraph, a coordinator timeout, or an unexpected graph-runtime error.
+    Without this update the outer Market Intelligence guard returned ``{}``,
+    which made every affected selected report look like it never existed.
+
+    Keep the message deliberately generic.  Provider exceptions can contain
+    request metadata, so they belong in the server log rather than a report
+    shown to the user or placed in a shareable link.
+    """
+    from backend.trading_agents.agent_catalog import label_for
+
+    error_kind = type(exc).__name__
+    updates: dict[str, str] = {}
+    for analyst_key in selected_analysts:
+        report_key = report_key_for(analyst_key)
+        if not report_key:
+            continue
+        label = label_for(analyst_key)
+        updates[report_key] = (
+            f"⚠️ {label} analysis unavailable: the Market Intelligence coordinator could not run this "
+            f"analyst group ({error_kind}). No conclusion was inferred."
+        )
+    return updates
+
+
+async def _run_analyst_subgraph(
+    analyst_keys: list[str],
+    ctx: AgentRunContext,
+    state: dict,
+    *,
+    recursion_limit: int,
+) -> dict:
+    """Run one isolated analyst group without erasing its sibling groups.
+
+    Parallel mode intentionally uses several LangGraph subgraphs.  ``gather``
+    normally propagates one group's construction/runtime exception and causes
+    the outer Market Intelligence guard to return an empty update, which loses
+    healthy reports from every other group.  Turn a group-local failure into
+    visible report fallbacks here; cancellation remains cancellation.
+    """
+    try:
+        subgraph = _build_analyst_subgraph(analyst_keys, ctx)
+        result = await subgraph.ainvoke(state, config={"recursion_limit": recursion_limit})
+    except asyncio.CancelledError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - this is the per-group resilience boundary
+        logger.exception(
+            "[market_intelligence] analyst group failed keys=%s; keeping other groups running.",
+            analyst_keys,
+        )
+        return market_intelligence_failure_update(analyst_keys, exc)
+
+    report_keys = _report_keys()
+    return {report_key: result.get(report_key, "") for report_key in report_keys if report_key in result}
+
 
 def _build_analyst_subgraph(enabled_keys: list[str], ctx: AgentRunContext):
     """
@@ -97,6 +165,7 @@ def _build_analyst_subgraph(enabled_keys: list[str], ctx: AgentRunContext):
 
     return workflow.compile()
 
+
 def _add_analyst_nodes(workflow, spec, ctx: AgentRunContext) -> None:
     """Register one analyst's agent/clear/tool nodes on *workflow*."""
     factory = get_factory(spec.key)
@@ -109,6 +178,7 @@ def _add_analyst_nodes(workflow, spec, ctx: AgentRunContext) -> None:
     workflow.add_node(spec.agent_node, node)
     workflow.add_node(spec.clear_node, create_msg_delete())
     workflow.add_node(spec.tool_node, ctx.tool_nodes[spec.key])
+
 
 def create_market_intelligence_node(ctx: AgentRunContext) -> NodeFn:
     async def market_intelligence_node(state) -> dict:
@@ -127,12 +197,8 @@ def create_market_intelligence_node(ctx: AgentRunContext) -> NodeFn:
         recur = ctx.config.get("max_recur_limit", 100)
         concurrency = ctx.config.get("analyst_concurrency_limit", 1)
 
-        report_keys = _report_keys()
-
         if concurrency <= 1 or len(enabled) <= 1:
-            subgraph = _build_analyst_subgraph(enabled, ctx)
-            result = await subgraph.ainvoke(state, config={"recursion_limit": recur})
-            return {rk: result.get(rk, "") for rk in report_keys if rk in result}
+            return await _run_analyst_subgraph(enabled, ctx, state, recursion_limit=recur)
 
         active_teams: dict[str, list[str]] = {}
         assigned: set[str] = set()
@@ -150,10 +216,8 @@ def create_market_intelligence_node(ctx: AgentRunContext) -> NodeFn:
 
         async def _run_team(team_keys: list[str]) -> dict:
             async with semaphore:
-                sub = _build_analyst_subgraph(team_keys, ctx)
                 analyst_state = {**state, "messages": list(state.get("messages", []))}
-                res = await sub.ainvoke(analyst_state, config={"recursion_limit": recur})
-                return {rk: res.get(rk, "") for rk in report_keys if rk in res}
+                return await _run_analyst_subgraph(team_keys, ctx, analyst_state, recursion_limit=recur)
 
         results = await asyncio.gather(*[_run_team(keys) for keys in active_teams.values()])
         merged: dict = {}

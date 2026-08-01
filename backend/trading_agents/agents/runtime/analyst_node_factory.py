@@ -32,6 +32,7 @@ _COLLAB_SYSTEM = (
 
 _logger = logging.getLogger(__name__)
 
+
 def _report_text(content: Any) -> str:
     """Return displayable text from a final model response.
 
@@ -50,6 +51,7 @@ def _report_text(content: Any) -> str:
                 parts.append(item["text"])
         return "\n".join(parts).strip()
     return ""
+
 
 async def _recover_empty_report(
     *,
@@ -93,12 +95,14 @@ async def _recover_empty_report(
         return ""
     return _report_text(getattr(response, "content", ""))
 
+
 def _empty_report_notice(analyst: str) -> str:
     """Return a visible degraded report instead of a silently blank UI card."""
     return (
         f"⚠️ {analyst.title()} analysis unavailable: the selected model returned no readable final report "
         "after data collection. No conclusion was inferred; retry this analysis or choose another model."
     )
+
 
 async def run_tool_analyst(
     llm,
@@ -111,21 +115,26 @@ async def run_tool_analyst(
     collab_system: str | None = None,
 ):
     """Run the standard tool-using analyst turn and return its state update."""
+    from backend.trading_agents.agents.analyst_registry import analyst_key_for_report
     from backend.trading_agents.agents.data.chart_tools import active_run_context
+
+    # ``sentiment_report`` is produced by the runtime key ``social``. Do not
+    # derive policy/telemetry keys from report-field spelling: doing so bypasses
+    # the user's Social Analyst model override and can apply the wrong tool
+    # access rule after this shared runner is used by that analyst.
+    analyst = analyst_key_for_report(report_key) or report_key.replace("_report", "")
 
     ctx = active_run_context.get(None)
     if ctx and "graph" in ctx:
         graph = ctx["graph"]
-        analyst_key = report_key.replace("_report", "")
-        tools = graph._filter_tools_for_analyst(analyst_key, tools)
+        tools = graph._filter_tools_for_analyst(analyst, tools)
 
     effective_collab_system = collab_system
     effective_system_message = system_message
     if ctx and "graph" in ctx:
         graph = ctx["graph"]
         runtime_agent_ctx = (getattr(graph, "config", {}) or {}).get("runtime_agent_context", {})
-        analyst_key = report_key.replace("_report", "")
-        agent_state = runtime_agent_ctx.get(analyst_key, {}) if isinstance(runtime_agent_ctx, dict) else {}
+        agent_state = runtime_agent_ctx.get(analyst, {}) if isinstance(runtime_agent_ctx, dict) else {}
         settings = agent_state.get("settings", {}) if isinstance(agent_state, dict) else {}
         if isinstance(settings, dict):
             if not effective_collab_system:
@@ -157,8 +166,6 @@ async def run_tool_analyst(
         bound_llm = llm
 
     from backend.trading_agents.agents.runtime.resilience import log_event, retry_call
-
-    analyst = report_key.replace("_report", "")
 
     if ctx and "emitter" in ctx:
         emitter = ctx["emitter"]

@@ -1,7 +1,6 @@
 from datetime import datetime, timedelta
 
 from langchain_core.messages import AIMessage
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 from backend.trading_agents.agents.analyst_registry import register_analyst
 from backend.trading_agents.agents.data.search_tools import get_crypto_fear_and_greed_index
@@ -11,15 +10,17 @@ from backend.trading_agents.agents.runtime.analyst_cache import (
     emit_cache_hit,
     store_analyst_cache,
 )
+from backend.trading_agents.agents.runtime.analyst_node_factory import run_tool_analyst
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
-    get_general_settings_block,
     get_system_instruction_override,
 )
 from backend.trading_agents.dataflows.interface import fetch_reddit_posts, fetch_stocktwits_messages, route_to_vendor
 
+
 def _seven_days_back(trade_date: str) -> str:
     return (datetime.strptime(trade_date, "%Y-%m-%d") - timedelta(days=7)).strftime("%Y-%m-%d")
+
 
 @register_analyst(
     key="social",
@@ -85,29 +86,26 @@ def create_sentiment_analyst(llm):
                 stocktwits_block=stocktwits_block,
                 reddit_block=reddit_block,
             )
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                (
-                    "system",
-                    "{system_message}\nFor your reference, the current date is {current_date}. {instrument_context}",
-                ),
-                MessagesPlaceholder(variable_name="messages"),
-            ]
+        # Keep the pre-fetched social sources, but route the final LLM turn through
+        # the same report boundary as every other analyst.  Some providers can
+        # return ``None``/content blocks/whitespace after a successful request;
+        # the shared runner normalizes that and makes one bounded text-only
+        # recovery attempt instead of persisting an empty Sentiment panel.
+        result = await run_tool_analyst(
+            llm,
+            state,
+            tools=[],
+            system_message=system_message,
+            report_key="sentiment_report",
+            instrument_context=instrument_context,
         )
-        prompt = prompt.partial(system_message=system_message + get_general_settings_block())
-        prompt = prompt.partial(current_date=end_date)
-        prompt = prompt.partial(instrument_context=instrument_context)
-        chain = prompt | llm
-        result = await chain.ainvoke(state["messages"])
-        report_text = result.content
-        if "unavailable" not in report_text[:50].lower():
+        report_text = result.get("sentiment_report", "")
+        if report_text and "unavailable" not in report_text[:50].lower():
             await store_analyst_cache("social", ticker, data_hash, report_text)
-        return {
-            "messages": [result],
-            "sentiment_report": report_text,
-        }
+        return result
 
     return sentiment_analyst_node
+
 
 def _build_system_message(
     *,
