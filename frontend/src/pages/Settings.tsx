@@ -79,6 +79,75 @@ function Row({ label, children }: { label: string; children: React.ReactNode }) 
   )
 }
 
+const CompactInputStyle = "w-24 text-right bg-slate-950/90 border border-white/10 hover:border-violet-500/40 focus:border-violet-500 focus:ring-2 focus:ring-violet-500/20 rounded-lg px-2.5 py-1 text-xs font-mono font-semibold text-violet-200 outline-none transition-all shadow-inner"
+
+function RiskRowItem({
+  label,
+  hint,
+  unit,
+  children,
+  className,
+}: {
+  label: string
+  hint?: string
+  unit?: string
+  children: React.ReactNode
+  className?: string
+}) {
+  return (
+    <div className={`flex items-center justify-between gap-3 p-3 rounded-xl bg-slate-900/60 hover:bg-slate-900/90 border border-white/[0.04] transition-all group ${className || ''}`}>
+      <div className="flex flex-col min-w-0 pr-1">
+        <span className="text-xs font-semibold text-slate-200 group-hover:text-white transition-colors">{label}</span>
+        {hint && <span className="text-[10px] text-slate-400 mt-0.5 leading-tight">{hint}</span>}
+      </div>
+      <div className="flex items-center gap-1.5 shrink-0">
+        {children}
+        {unit && (
+          <span className="text-[11px] font-bold text-violet-400/90 bg-violet-500/10 border border-violet-500/20 rounded-md px-1.5 py-0.5 min-w-[24px] text-center select-none">
+            {unit}
+          </span>
+        )}
+      </div>
+    </div>
+  )
+}
+
+function ToggleItem({
+  label,
+  hint,
+  checked,
+  onChange,
+  warning,
+  className,
+}: {
+  label: string
+  hint?: string
+  checked: boolean
+  onChange: (checked: boolean) => void
+  warning?: string
+  className?: string
+}) {
+  return (
+    <div className={`flex flex-col gap-1.5 p-3 rounded-xl bg-slate-900/60 hover:bg-slate-900/90 border border-white/[0.04] transition-all group ${className || ''}`}>
+      <label className="flex items-center justify-between gap-3 cursor-pointer">
+        <span className="text-xs font-semibold text-slate-200 group-hover:text-white transition-colors min-w-0 pr-2">{label}</span>
+        <div className="relative inline-flex items-center shrink-0">
+          <input
+            type="checkbox"
+            className="sr-only peer"
+            checked={checked}
+            onChange={e => onChange(e.target.checked)}
+          />
+          <div className="w-9 h-5 bg-slate-800 peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-violet-500/30 rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-4 after:w-4 after:transition-all peer-checked:bg-gradient-to-r peer-checked:from-violet-600 peer-checked:to-indigo-600 shadow-inner" />
+        </div>
+      </label>
+      {hint && <span className="text-[10px] text-slate-400 leading-tight">{hint}</span>}
+      {warning && <span className="text-[10px] text-amber-300/80 leading-tight font-medium mt-0.5">{warning}</span>}
+    </div>
+  )
+}
+
+
 export default function Settings({ userId }: { userId?: number } = {}) {
   const { t } = useTranslation()
   const { isAdmin } = useAuth()
@@ -544,141 +613,419 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           {/* Risk Management */}
           {activeTab === 'risk' && (
             <ErrorBoundary name="SettingsRisk">
-              <Section title={t('settings.section_risk') || 'Risk Management'}>
-                <Row label={t('settings.row_risk_per_trade')}>
-                  <input type="number" step="0.1" min="0.1" max="50" className={Input} value={s.max_risk_per_trade_pct} onChange={e => update('max_risk_per_trade_pct', Number.parseFloat(e.target.value))} />
-                </Row>
-                <Row label={t('settings.row_max_position_size')}>
-                  <input type="number" step="1" min="1" max="100" className={Input} value={s.max_position_size_pct} onChange={e => update('max_position_size_pct', Number.parseFloat(e.target.value))} />
-                </Row>
-                <Row label={t('settings.row_max_concentration')}>
-                  <input type="number" step="1" min="1" max="100" className={Input} value={s.max_concentration_pct} onChange={e => update('max_concentration_pct', Number.parseFloat(e.target.value))} />
-                </Row>
-                <Row label={t('settings.row_max_gross_exposure')}>
-                  <input type="number" step="0.1" min="1" max="10" className={Input} value={s.max_gross_exposure} onChange={e => update('max_gross_exposure', Number.parseFloat(e.target.value))} />
-                </Row>
-                <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                  <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_allow_short_selling')}</span>
-                  <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.allow_short_selling} onChange={e => update('allow_short_selling', e.target.checked)} />
-                </label>
-                <Row label={t('settings.row_debate_rounds')}>
-                  <input type="number" min="1" max="10" className={Input} value={s.max_debate_rounds} onChange={e => update('max_debate_rounds', Number.parseInt(e.target.value))} />
-                </Row>
-                <Row label={t('settings.row_risk_rounds')}>
-                  <input type="number" min="1" max="10" className={Input} value={s.max_risk_rounds} onChange={e => update('max_risk_rounds', Number.parseInt(e.target.value))} />
-                </Row>
-                <Row label={t('settings.row_price_tolerance')}>
-                  <input type="number" step="0.1" min="0" max="10" className={Input} value={s.price_tolerance_pct} onChange={e => update('price_tolerance_pct', Number.parseFloat(e.target.value))} />
-                </Row>
-                <Row label={t('settings.row_parallel_analysts')}>
-                  <input type="number" min="1" max="16" className={Input} value={s.analyst_concurrency_limit} onChange={e => update('analyst_concurrency_limit', Number.parseInt(e.target.value))} />
-                </Row>
-
-                <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
-                  <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">{t('settings.section_agent_resilience')}</h4>
-                  <Row label={t('settings.row_node_retry_attempts') || 'Node Retry Attempts'}>
-                    <input type="number" min="1" max="10" className={Input} value={s.node_retry_attempts ?? 2} onChange={e => update('node_retry_attempts', Number.parseInt(e.target.value))} />
-                  </Row>
-                  <Row label={t('settings.row_node_retry_base_delay') || 'Retry Base Delay (s)'}>
-                    <input type="number" step="0.1" min="0.1" max="10" className={Input} value={s.node_retry_base_delay ?? 1.0} onChange={e => update('node_retry_base_delay', Number.parseFloat(e.target.value))} />
-                  </Row>
-                  <Row label={t('settings.row_node_timeout_seconds') || 'Node Timeout (s)'}>
-                    <input type="number" step="10" min="30" max="600" className={Input} value={s.node_timeout_seconds ?? 120} onChange={e => update('node_timeout_seconds', Number.parseInt(e.target.value) || 120)} />
-                  </Row>
-                  <Row label={t('settings.row_tool_timeout_seconds') || 'Tool Timeout (s)'}>
-                    <input type="number" step="5" min="15" max="300" className={Input} value={s.tool_timeout_seconds ?? 60} onChange={e => update('tool_timeout_seconds', Number.parseInt(e.target.value) || 60)} />
-                  </Row>
-                  <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.hard_timeout_hint') || 'Hard wall-clock limits per node / tool. If exceeded the call is treated as a transient error and retried automatically.'}</p>
-                </div>
-
-                <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
-                  <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">{t('settings.section_circuit_stall')}</h4>
-                  <Row label={t('settings.row_circuit_breaker_threshold') || 'Circuit Breaker Threshold'}>
-                    <input type="number" min="1" max="20" className={Input} value={s.circuit_breaker_threshold ?? 3} onChange={e => update('circuit_breaker_threshold', Number.parseInt(e.target.value))} />
-                  </Row>
-                  <Row label={t('settings.row_circuit_breaker_cooldown') || 'Circuit Breaker Cooldown (s)'}>
-                    <input type="number" step="10" min="10" max="600" className={Input} value={s.circuit_breaker_cooldown ?? 60} onChange={e => update('circuit_breaker_cooldown', Number.parseInt(e.target.value) || 60)} />
-                  </Row>
-                  <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.circuit_breaker_hint') || 'After N consecutive failures of the same node, short-circuit it and skip directly to fallback for a cooldown period.'}</p>
-                  <Row label={t('settings.row_stall_timeout_seconds') || 'Stall Timeout (s)'}>
-                    <input type="number" step="10" min="30" max="600" className={Input} value={s.stall_timeout_seconds ?? 120} onChange={e => update('stall_timeout_seconds', Number.parseInt(e.target.value) || 120)} />
-                  </Row>
-                  <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.stall_hint') || 'If no node produces output for this many seconds, emit a stall warning via WebSocket.'}</p>
-                </div>
-
-                <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
-                  <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">{t('settings.token_budget') || 'Token Budget'}</h4>
-                  <p className="text-[10px] text-slate-500 px-1 leading-snug">{t('settings.token_budget_hint') || 'Lower values reduce LLM token cost per analysis at the expense of how much detail each agent re-reads.'}</p>
-
-                  <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_prompt_caching') || 'Anthropic Prompt Caching'}</span>
-                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.anthropic_prompt_caching ?? true} onChange={e => update('anthropic_prompt_caching', e.target.checked)} />
-                  </label>
-                  <Row label={t('settings.row_max_report_chars') || 'Max Report Chars / Prompt'}>
-                    <input type="number" min="500" max="50000" step="500" className={Input} value={s.max_report_chars_in_prompts ?? 6000} onChange={e => update('max_report_chars_in_prompts', Number.parseInt(e.target.value) || 6000)} />
-                  </Row>
-                  <Row label={t('settings.row_max_debate_history') || 'Max Debate History Chars'}>
-                    <input type="number" min="1000" max="100000" step="1000" className={Input} value={s.max_debate_history_chars ?? 8000} onChange={e => update('max_debate_history_chars', Number.parseInt(e.target.value) || 8000)} />
-                  </Row>
-                  <Row label={t('settings.row_max_tool_output') || 'Max Tool Output Chars'}>
-                    <input type="number" min="1000" max="100000" step="1000" className={Input} value={s.max_tool_output_chars ?? 12000} onChange={e => update('max_tool_output_chars', Number.parseInt(e.target.value) || 12000)} />
-                  </Row>
-
-                  <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group mt-1">
-                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_summary_only_mode') || 'Summary-Only Reports'}</span>
-                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.summary_only_mode ?? false} onChange={e => update('summary_only_mode', e.target.checked)} />
-                  </label>
-                  <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.summary_only_mode_hint') || 'When enabled, downstream agents only see executive summaries — reducing token usage significantly.'}</p>
-
-                  <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group mt-1">
-                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_prefilter_enabled') || 'Pre-screen Weak Analysts'}</span>
-                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.analyst_prefilter_enabled ?? false} onChange={e => update('analyst_prefilter_enabled', e.target.checked)} />
-                  </label>
-                  <p className="text-[10px] text-slate-500 px-1 leading-snug -mt-1">{t('settings.prefilter_hint') || 'Skip analysts whose past calls on the analysed ticker have a poor hit rate. Needs realized history; core analysts are always kept.'}</p>
-                  {s.analyst_prefilter_enabled && (
-                    <>
-                      <Row label={t('settings.row_prefilter_min_samples') || 'Min. Graded Calls'}>
-                        <input type="number" min="1" max="100" className={Input} value={s.analyst_prefilter_min_samples ?? 5} onChange={e => update('analyst_prefilter_min_samples', Number.parseInt(e.target.value) || 5)} />
-                      </Row>
-                      <Row label={t('settings.row_prefilter_max_win_rate') || 'Drop Below Win Rate (%)'}>
-                        <input type="number" min="0" max="100" step="1" className={Input} value={s.analyst_prefilter_max_win_rate ?? 40} onChange={e => update('analyst_prefilter_max_win_rate', Number.parseFloat(e.target.value) || 40)} />
-                      </Row>
-                    </>
-                  )}
-                </div>
-
-                <div className="border-t border-white/[0.04] pt-4 mt-2 space-y-3">
-                  <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest px-1">{t('settings.section_institutional_features')}</h4>
-
-                  <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_strict_stop_loss')}</span>
-                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.strict_stop_loss_mode} onChange={e => update('strict_stop_loss_mode', e.target.checked)} />
-                  </label>
-                  <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_correlation_risk')}</span>
-                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.correlation_risk_enabled} onChange={e => update('correlation_risk_enabled', e.target.checked)} />
-                  </label>
-                  <label className="flex items-center justify-between gap-4 p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_auto_execute_signals')}</span>
-                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.auto_execute_signals ?? false} onChange={e => update('auto_execute_signals', e.target.checked)} />
-                  </label>
-                  <p className="text-[10px] text-amber-300/70 px-1 leading-snug -mt-1">{t('settings.auto_execute_signals_hint')}</p>
-                  <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_quality_gate')}</span>
-                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.quality_gate_enabled} onChange={e => update('quality_gate_enabled', e.target.checked)} />
-                  </label>
-                  <label className="flex items-center justify-between p-2 rounded-xl hover:bg-white/[0.02] cursor-pointer transition-colors group">
-                    <span className="text-xs font-semibold text-slate-300 group-hover:text-white transition-colors">{t('settings.row_drawdown_breaker')}</span>
-                    <input type="checkbox" className="w-5 h-5 accent-violet-600 rounded cursor-pointer" checked={s.drawdown_breaker_enabled} onChange={e => update('drawdown_breaker_enabled', e.target.checked)} />
-                  </label>
-                  {s.drawdown_breaker_enabled && (
-                    <div className="flex items-center justify-between p-2">
-                      <span className="text-xs font-semibold text-slate-400">{t('settings.row_max_drawdown_pct')}</span>
-                      <input type="number" min={1} max={100} className={`${Input} w-24 text-right`} value={s.max_portfolio_drawdown_pct} onChange={e => update('max_portfolio_drawdown_pct', Number(e.target.value))} />
+              <div className="space-y-6">
+                {/* 1. Risk & Capital Limits */}
+                <div className="glass-panel rounded-2xl p-4 md:p-5 space-y-4 border border-white/[0.06] shadow-xl backdrop-blur-md">
+                  <div className="flex items-center gap-2.5 border-b border-white/[0.06] pb-3">
+                    <div className="p-1.5 rounded-lg bg-rose-500/10 border border-rose-500/20 text-rose-400">
+                      <ShieldAlert className="w-4 h-4" />
                     </div>
-                  )}
+                    <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
+                      {t('settings.section_risk') || 'Risk & Capital Limits'}
+                    </h3>
                   </div>
-              </Section>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <RiskRowItem label={t('settings.row_risk_per_trade')} unit="%">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0.1"
+                        max="50"
+                        className={CompactInputStyle}
+                        value={s.max_risk_per_trade_pct}
+                        onChange={e => update('max_risk_per_trade_pct', Number.parseFloat(e.target.value))}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_max_position_size')} unit="%">
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        max="100"
+                        className={CompactInputStyle}
+                        value={s.max_position_size_pct}
+                        onChange={e => update('max_position_size_pct', Number.parseFloat(e.target.value))}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_max_concentration')} unit="%">
+                      <input
+                        type="number"
+                        step="1"
+                        min="1"
+                        max="100"
+                        className={CompactInputStyle}
+                        value={s.max_concentration_pct}
+                        onChange={e => update('max_concentration_pct', Number.parseFloat(e.target.value))}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_max_gross_exposure')} unit="×">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="1"
+                        max="10"
+                        className={CompactInputStyle}
+                        value={s.max_gross_exposure}
+                        onChange={e => update('max_gross_exposure', Number.parseFloat(e.target.value))}
+                      />
+                    </RiskRowItem>
+
+                    <ToggleItem
+                      label={t('settings.row_allow_short_selling')}
+                      checked={s.allow_short_selling}
+                      onChange={v => update('allow_short_selling', v)}
+                      className="md:col-span-2"
+                    />
+                  </div>
+                </div>
+
+                {/* 2. Debate & Execution Rules */}
+                <div className="glass-panel rounded-2xl p-4 md:p-5 space-y-4 border border-white/[0.06] shadow-xl backdrop-blur-md">
+                  <div className="flex items-center gap-2.5 border-b border-white/[0.06] pb-3">
+                    <div className="p-1.5 rounded-lg bg-violet-500/10 border border-violet-500/20 text-violet-400">
+                      <Brain className="w-4 h-4" />
+                    </div>
+                    <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
+                      {t('settings.section_execution_rules') || 'Debate & Execution Rules'}
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <RiskRowItem label={t('settings.row_debate_rounds')} unit="tur">
+                      <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        className={CompactInputStyle}
+                        value={s.max_debate_rounds}
+                        onChange={e => update('max_debate_rounds', Number.parseInt(e.target.value))}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_risk_rounds')} unit="tur">
+                      <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        className={CompactInputStyle}
+                        value={s.max_risk_rounds}
+                        onChange={e => update('max_risk_rounds', Number.parseInt(e.target.value))}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_price_tolerance')} unit="%">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0"
+                        max="10"
+                        className={CompactInputStyle}
+                        value={s.price_tolerance_pct}
+                        onChange={e => update('price_tolerance_pct', Number.parseFloat(e.target.value))}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_parallel_analysts')} unit="analist">
+                      <input
+                        type="number"
+                        min="1"
+                        max="16"
+                        className={CompactInputStyle}
+                        value={s.analyst_concurrency_limit}
+                        onChange={e => update('analyst_concurrency_limit', Number.parseInt(e.target.value))}
+                      />
+                    </RiskRowItem>
+                  </div>
+                </div>
+
+                {/* 3. Agent Resilience & Timeouts */}
+                <div className="glass-panel rounded-2xl p-4 md:p-5 space-y-4 border border-white/[0.06] shadow-xl backdrop-blur-md">
+                  <div className="flex items-center gap-2.5 border-b border-white/[0.06] pb-3">
+                    <div className="p-1.5 rounded-lg bg-emerald-500/10 border border-emerald-500/20 text-emerald-400">
+                      <RefreshCw className="w-4 h-4" />
+                    </div>
+                    <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
+                      {t('settings.section_agent_resilience') || 'Agent Resilience & Timeouts'}
+                    </h3>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 leading-relaxed -mt-1">
+                    {t('settings.hard_timeout_hint') || 'Hard wall-clock limits per node / tool. If exceeded the call is treated as a transient error and retried automatically.'}
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <RiskRowItem label={t('settings.row_node_retry_attempts') || 'Node Retry Attempts'} unit="deneme">
+                      <input
+                        type="number"
+                        min="1"
+                        max="10"
+                        className={CompactInputStyle}
+                        value={s.node_retry_attempts ?? 2}
+                        onChange={e => update('node_retry_attempts', Number.parseInt(e.target.value))}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_node_retry_base_delay') || 'Retry Base Delay'} unit="sn">
+                      <input
+                        type="number"
+                        step="0.1"
+                        min="0.1"
+                        max="10"
+                        className={CompactInputStyle}
+                        value={s.node_retry_base_delay ?? 1.0}
+                        onChange={e => update('node_retry_base_delay', Number.parseFloat(e.target.value))}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_node_timeout_seconds') || 'Node Timeout'} unit="sn">
+                      <input
+                        type="number"
+                        step="10"
+                        min="30"
+                        max="600"
+                        className={CompactInputStyle}
+                        value={s.node_timeout_seconds ?? 120}
+                        onChange={e => update('node_timeout_seconds', Number.parseInt(e.target.value) || 120)}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_tool_timeout_seconds') || 'Tool Timeout'} unit="sn">
+                      <input
+                        type="number"
+                        step="5"
+                        min="15"
+                        max="300"
+                        className={CompactInputStyle}
+                        value={s.tool_timeout_seconds ?? 60}
+                        onChange={e => update('tool_timeout_seconds', Number.parseInt(e.target.value) || 60)}
+                      />
+                    </RiskRowItem>
+                  </div>
+                </div>
+
+                {/* 4. Circuit Breaker & Stall Protection */}
+                <div className="glass-panel rounded-2xl p-4 md:p-5 space-y-4 border border-white/[0.06] shadow-xl backdrop-blur-md">
+                  <div className="flex items-center gap-2.5 border-b border-white/[0.06] pb-3">
+                    <div className="p-1.5 rounded-lg bg-amber-500/10 border border-amber-500/20 text-amber-400">
+                      <Clock className="w-4 h-4" />
+                    </div>
+                    <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
+                      {t('settings.section_circuit_stall') || 'Circuit Breaker & Stall Protection'}
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <RiskRowItem
+                      label={t('settings.row_circuit_breaker_threshold') || 'Circuit Breaker Threshold'}
+                      hint={t('settings.circuit_breaker_hint') || 'After N consecutive failures, skip to fallback.'}
+                      unit="hata"
+                      className="md:col-span-2"
+                    >
+                      <input
+                        type="number"
+                        min="1"
+                        max="20"
+                        className={CompactInputStyle}
+                        value={s.circuit_breaker_threshold ?? 3}
+                        onChange={e => update('circuit_breaker_threshold', Number.parseInt(e.target.value))}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_circuit_breaker_cooldown') || 'Circuit Breaker Cooldown'} unit="sn">
+                      <input
+                        type="number"
+                        step="10"
+                        min="10"
+                        max="600"
+                        className={CompactInputStyle}
+                        value={s.circuit_breaker_cooldown ?? 60}
+                        onChange={e => update('circuit_breaker_cooldown', Number.parseInt(e.target.value) || 60)}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem
+                      label={t('settings.row_stall_timeout_seconds') || 'Stall Timeout'}
+                      hint={t('settings.stall_hint') || 'Warning if no output emitted for N seconds.'}
+                      unit="sn"
+                    >
+                      <input
+                        type="number"
+                        step="10"
+                        min="30"
+                        max="600"
+                        className={CompactInputStyle}
+                        value={s.stall_timeout_seconds ?? 120}
+                        onChange={e => update('stall_timeout_seconds', Number.parseInt(e.target.value) || 120)}
+                      />
+                    </RiskRowItem>
+                  </div>
+                </div>
+
+                {/* 5. Token Budget & Optimization */}
+                <div className="glass-panel rounded-2xl p-4 md:p-5 space-y-4 border border-white/[0.06] shadow-xl backdrop-blur-md">
+                  <div className="flex items-center gap-2.5 border-b border-white/[0.06] pb-3">
+                    <div className="p-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20 text-cyan-400">
+                      <Database className="w-4 h-4" />
+                    </div>
+                    <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
+                      {t('settings.token_budget') || 'Token Budget & Optimization'}
+                    </h3>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 leading-relaxed -mt-1">
+                    {t('settings.token_budget_hint') || 'Lower values reduce LLM token cost per analysis.'}
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <ToggleItem
+                      label={t('settings.row_prompt_caching') || 'Anthropic Prompt Caching'}
+                      checked={s.anthropic_prompt_caching ?? true}
+                      onChange={v => update('anthropic_prompt_caching', v)}
+                      className="md:col-span-2"
+                    />
+
+                    <RiskRowItem label={t('settings.row_max_report_chars') || 'Max Report Chars'} unit="karakter">
+                      <input
+                        type="number"
+                        min="500"
+                        max="50000"
+                        step="500"
+                        className={CompactInputStyle}
+                        value={s.max_report_chars_in_prompts ?? 6000}
+                        onChange={e => update('max_report_chars_in_prompts', Number.parseInt(e.target.value) || 6000)}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_max_debate_history') || 'Max Debate History'} unit="karakter">
+                      <input
+                        type="number"
+                        min="1000"
+                        max="100000"
+                        step="1000"
+                        className={CompactInputStyle}
+                        value={s.max_debate_history_chars ?? 8000}
+                        onChange={e => update('max_debate_history_chars', Number.parseInt(e.target.value) || 8000)}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_max_tool_output') || 'Max Tool Output'} unit="karakter" className="md:col-span-2">
+                      <input
+                        type="number"
+                        min="1000"
+                        max="100000"
+                        step="1000"
+                        className={CompactInputStyle}
+                        value={s.max_tool_output_chars ?? 12000}
+                        onChange={e => update('max_tool_output_chars', Number.parseInt(e.target.value) || 12000)}
+                      />
+                    </RiskRowItem>
+
+                    <ToggleItem
+                      label={t('settings.row_summary_only_mode') || 'Summary-Only Reports'}
+                      hint={t('settings.summary_only_mode_hint') || 'Downstream agents only see executive summaries.'}
+                      checked={s.summary_only_mode ?? false}
+                      onChange={v => update('summary_only_mode', v)}
+                    />
+
+                    <ToggleItem
+                      label={t('settings.row_prefilter_enabled') || 'Pre-screen Weak Analysts'}
+                      hint={t('settings.prefilter_hint') || 'Skip analysts with poor past hit rate on this ticker.'}
+                      checked={s.analyst_prefilter_enabled ?? false}
+                      onChange={v => update('analyst_prefilter_enabled', v)}
+                    />
+
+                    {s.analyst_prefilter_enabled && (
+                      <>
+                        <RiskRowItem label={t('settings.row_prefilter_min_samples') || 'Min. Graded Calls'} unit="çağrı">
+                          <input
+                            type="number"
+                            min="1"
+                            max="100"
+                            className={CompactInputStyle}
+                            value={s.analyst_prefilter_min_samples ?? 5}
+                            onChange={e => update('analyst_prefilter_min_samples', Number.parseInt(e.target.value) || 5)}
+                          />
+                        </RiskRowItem>
+
+                        <RiskRowItem label={t('settings.row_prefilter_max_win_rate') || 'Drop Below Win Rate'} unit="%">
+                          <input
+                            type="number"
+                            min="0"
+                            max="100"
+                            step="1"
+                            className={CompactInputStyle}
+                            value={s.analyst_prefilter_max_win_rate ?? 40}
+                            onChange={e => update('analyst_prefilter_max_win_rate', Number.parseFloat(e.target.value) || 40)}
+                          />
+                        </RiskRowItem>
+                      </>
+                    )}
+                  </div>
+                </div>
+
+                {/* 6. Institutional Risk Features */}
+                <div className="glass-panel rounded-2xl p-4 md:p-5 space-y-4 border border-white/[0.06] shadow-xl backdrop-blur-md">
+                  <div className="flex items-center gap-2.5 border-b border-white/[0.06] pb-3">
+                    <div className="p-1.5 rounded-lg bg-indigo-500/10 border border-indigo-500/20 text-indigo-400">
+                      <Wrench className="w-4 h-4" />
+                    </div>
+                    <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
+                      {t('settings.section_institutional_features') || 'Institutional Risk Features'}
+                    </h3>
+                  </div>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <ToggleItem
+                      label={t('settings.row_strict_stop_loss')}
+                      checked={s.strict_stop_loss_mode}
+                      onChange={v => update('strict_stop_loss_mode', v)}
+                    />
+
+                    <ToggleItem
+                      label={t('settings.row_correlation_risk')}
+                      checked={s.correlation_risk_enabled}
+                      onChange={v => update('correlation_risk_enabled', v)}
+                    />
+
+                    <ToggleItem
+                      label={t('settings.row_auto_execute_signals')}
+                      warning={t('settings.auto_execute_signals_hint')}
+                      checked={s.auto_execute_signals ?? false}
+                      onChange={v => update('auto_execute_signals', v)}
+                      className="md:col-span-2"
+                    />
+
+                    <ToggleItem
+                      label={t('settings.row_quality_gate')}
+                      checked={s.quality_gate_enabled}
+                      onChange={v => update('quality_gate_enabled', v)}
+                    />
+
+                    <ToggleItem
+                      label={t('settings.row_drawdown_breaker')}
+                      checked={s.drawdown_breaker_enabled}
+                      onChange={v => update('drawdown_breaker_enabled', v)}
+                    />
+
+                    {s.drawdown_breaker_enabled && (
+                      <RiskRowItem label={t('settings.row_max_drawdown_pct')} unit="%" className="md:col-span-2">
+                        <input
+                          type="number"
+                          min={1}
+                          max={100}
+                          className={CompactInputStyle}
+                          value={s.max_portfolio_drawdown_pct}
+                          onChange={e => update('max_portfolio_drawdown_pct', Number(e.target.value))}
+                        />
+                      </RiskRowItem>
+                    )}
+                  </div>
+                </div>
+              </div>
             </ErrorBoundary>
           )}
 
