@@ -1615,7 +1615,7 @@ function RunTab() {
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                       {activePlans.investment_plan && (
                         <div className="glass-panel p-4 rounded-xl space-y-2 bg-slate-900/30">
-                          <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{sectionLabels.investment_plan || 'Investment Plan'}</h5>
+                          <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{sectionLabels.investment_plan || 'Research Evidence Summary'}</h5>
                           <div className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed select-text font-sans">{activePlans.investment_plan}</div>
                         </div>
                       )}
