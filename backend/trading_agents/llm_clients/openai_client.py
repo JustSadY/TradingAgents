@@ -5,7 +5,7 @@ from langchain_core.messages import AIMessageChunk
 from langchain_core.outputs import ChatGenerationChunk
 from langchain_openai import ChatOpenAI
 
-from .base_client import BaseLLMClient, is_quota_exhausted, normalize_content
+from .base_client import BaseLLMClient, global_llm_concurrency_guard, is_quota_exhausted, normalize_content
 from .capabilities import get_capabilities
 from .validators import validate_model
 
@@ -73,19 +73,20 @@ class NormalizedChatOpenAI(ChatOpenAI):
             yield _final_usage_chunk(last_usage)
 
     async def _astream(self, *args, **kwargs):
-        last_usage = None
-        try:
-            async for chunk in super()._astream(*args, **kwargs):
-                usage = _strip_chunk_usage(chunk)
-                if usage is not None:
-                    last_usage = usage
-                yield chunk
-        except Exception as exc:
-            if is_quota_exhausted(exc):
-                logger.warning("Quota exhausted: %s", exc)
-            raise
-        if last_usage is not None:
-            yield _final_usage_chunk(last_usage)
+        async with global_llm_concurrency_guard():
+            last_usage = None
+            try:
+                async for chunk in super()._astream(*args, **kwargs):
+                    usage = _strip_chunk_usage(chunk)
+                    if usage is not None:
+                        last_usage = usage
+                    yield chunk
+            except Exception as exc:
+                if is_quota_exhausted(exc):
+                    logger.warning("Quota exhausted: %s", exc)
+                raise
+            if last_usage is not None:
+                yield _final_usage_chunk(last_usage)
 
     def invoke(self, input, config=None, **kwargs):
         try:
@@ -96,13 +97,14 @@ class NormalizedChatOpenAI(ChatOpenAI):
             raise
 
     async def ainvoke(self, input, config=None, **kwargs):
-        try:
-            result = await super().ainvoke(input, config, **kwargs)
-            return normalize_content(result)
-        except Exception as exc:
-            if is_quota_exhausted(exc):
-                logger.warning("Quota exhausted: %s", exc)
-            raise
+        async with global_llm_concurrency_guard():
+            try:
+                result = await super().ainvoke(input, config, **kwargs)
+                return normalize_content(result)
+            except Exception as exc:
+                if is_quota_exhausted(exc):
+                    logger.warning("Quota exhausted: %s", exc)
+                raise
 
     def _use_responses_api(self, payload: dict) -> bool:
         return False

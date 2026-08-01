@@ -37,6 +37,7 @@ def create_synthesis_manager(llm):
 2. **Conflicts:** Contradictory signals that require careful debate.
 3. **Historical Context:** Use the backtest data below to set a performance baseline. If backtests show poor performance (< 50% win rate), flag this as a 'Critical Risk' for the upcoming debate.
 4. **Primary Narrative:** The dominant story currently driving the asset's price action.
+5. **Strict Grounding:** Do NOT invent data for reports marked 'unavailable'. If an analyst report is missing, state clearly that analysis for that domain is unavailable.
 
 ### Historical Baseline (Backtests):
 {macd_results}

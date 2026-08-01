@@ -19,6 +19,7 @@ def _build_prompt(
 
 ### Objective:
 - **Evidence-Based Case:** You MUST cite specific analyst reports and metrics (e.g., "According to the Market Analyst, the 50 SMA...") for every claim you make.
+- **Strict Grounding:** You MUST ONLY cite data that actually exists in the provided Resources or Synthesis Report. If an Analyst Report is marked 'unavailable' or missing, DO NOT invent metrics, backtest statistics (such as MACD/RSI win rates or returns), or quote non-existent report sections. Explicitly state that data for that section was unavailable.
 - **Address Conflicts:** Review the **Synthesis Report** below. You must directly address the 'Critical Conflicts' identified and explain why the bullish perspective is more compelling despite these risks.
 - **Adversarial Debate:** Critically analyze the Bear Analyst's points. Do not just list data; dismantle their logic with specific data points.
 

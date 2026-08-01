@@ -7,6 +7,39 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+# --- Global LLM Concurrency Control ---
+_GLOBAL_LLM_SEMAPHORE: asyncio.Semaphore | None = None
+_GLOBAL_LLM_SEMAPHORE_LOCK = asyncio.Lock()
+DEFAULT_GLOBAL_LLM_CONCURRENCY = 16
+
+
+def get_global_llm_semaphore(limit: int = DEFAULT_GLOBAL_LLM_CONCURRENCY) -> asyncio.Semaphore:
+    """Return the process-wide LLM concurrency semaphore.
+
+    Caps concurrent active LLM HTTP requests across all subgraphs and agents to
+    prevent provider worker request limits (e.g. 32/32) from being exceeded.
+    """
+    global _GLOBAL_LLM_SEMAPHORE
+    if _GLOBAL_LLM_SEMAPHORE is None:
+        _GLOBAL_LLM_SEMAPHORE = asyncio.Semaphore(limit)
+    return _GLOBAL_LLM_SEMAPHORE
+
+
+class global_llm_concurrency_guard:
+    """Async context manager to throttle concurrent LLM requests globally."""
+
+    def __init__(self, limit: int = DEFAULT_GLOBAL_LLM_CONCURRENCY):
+        self.limit = limit
+
+    async def __aenter__(self):
+        sem = get_global_llm_semaphore(self.limit)
+        await sem.acquire()
+        return sem
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb):
+        sem = get_global_llm_semaphore(self.limit)
+        sem.release()
+
 @dataclass
 class TokenUsage:
     """Mutable accumulator for per-call token usage across providers."""
@@ -160,7 +193,8 @@ async def retry_with_exponential_backoff(
     last_exc = None
     for attempt in range(max_retries + 1):
         try:
-            return await coro_factory()
+            async with global_llm_concurrency_guard():
+                return await coro_factory()
         except Exception as exc:
             last_exc = exc
             category = classify_error(exc)
