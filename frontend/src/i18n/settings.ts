@@ -64,6 +64,14 @@ const translations = {
     'settings.persona_delete_title': 'Delete',
 
 
+    'settings.title': 'Settings',
+    'settings.subtitle': 'System configuration & preferences',
+    'settings.general': 'General Preferences',
+    'settings.saving': 'Saving...',
+    'settings.cron_settings': 'Cron Scheduler',
+    'settings.llm_settings': 'Core Engine Configuration',
+    'settings.llm_settings_description': 'Configure LLM models and fallback providers',
+    'settings.section_execution_rules': 'Debate & Execution Rules',
     'settings.section_working_mode': 'Trading Mode Preferences',
     'settings.section_cron': 'Cron / Auto Scan',
     'settings.section_risk': 'Risk & Safety',
@@ -299,6 +307,14 @@ const translations = {
     'settings.persona_delete_title': 'Sil',
 
 
+    'settings.title': 'Ayarlar',
+    'settings.subtitle': 'Sistem yapılandırması ve tercihler',
+    'settings.general': 'Genel Tercihler',
+    'settings.saving': 'Kaydediliyor...',
+    'settings.cron_settings': 'Cron Zamanlayıcı',
+    'settings.llm_settings': 'Çekirdek Motor Yapılandırması',
+    'settings.llm_settings_description': 'LLM modellerini ve yedek sağlayıcıları yapılandırın',
+    'settings.section_execution_rules': 'Tartışma ve Yürütme Kuralları',
     'settings.section_working_mode': 'İşlem Modu Tercihleri',
     'settings.section_cron': 'Cron / Otomatik Tarama',
     'settings.section_risk': 'Risk ve Güvenlik Limitleri',

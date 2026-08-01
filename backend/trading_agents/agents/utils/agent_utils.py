@@ -60,19 +60,35 @@ __all__ = [
 ]
 
 def _get_language_instruction() -> str:
+    from backend.trading_agents.agents.data.chart_tools import active_run_context
     from backend.trading_agents.dataflows.config import get_config
 
-    lang = get_config().get("output_language", "English")
-    if lang.strip().lower() == "english":
+    lang = None
+    ctx = active_run_context.get(None)
+    if ctx and "graph" in ctx:
+        graph = ctx["graph"]
+        cfg = getattr(graph, "config", {}) or {}
+        lang = cfg.get("output_language") or (cfg.get("runtime_agent_context") or {}).get("output_language")
+
+    if not lang:
+        try:
+            lang = get_config().get("output_language", "English")
+        except Exception:
+            lang = "English"
+
+    lang_str = str(lang or "English").strip()
+    if lang_str.lower() == "english":
         return ""
+
     return (
-        f"\n\n**CRITICAL LANGUAGE REQUIREMENT:** You MUST write your ENTIRE response in {lang}. "
+        f"\n\n**CRITICAL LANGUAGE REQUIREMENT:** You MUST write your ENTIRE response in {lang_str}. "
         f"This is a strict, non-negotiable requirement. Do NOT use any other language under any circumstances. "
         f"Even if source data, tool outputs, or retrieved content are in a different language, "
-        f"all of your analysis, commentary, headings, role labels, tables, and narrative text MUST be written in {lang}. "
+        f"all of your analysis, commentary, headings, role labels, tables, and narrative text MUST be written in {lang_str}. "
         "Do not mix languages or writing systems. The only exceptions are exact ticker symbols, official company or "
         "product names, standard financial abbreviations, and short verbatim source quotes explicitly marked as quotes."
     )
+
 
 def get_system_instruction_override(agent_key: str) -> str | None:
     """Return *agent_key*'s Settings → Agents "System Prompt Override" text.
