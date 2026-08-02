@@ -56,6 +56,24 @@ def _report_keys() -> tuple[str, ...]:
     return all_report_keys()
 
 
+def _group_report_keys(analyst_keys: list[str] | set[str]) -> tuple[str, ...]:
+    """Return only the report keys the given analyst group actually writes.
+
+    A subgraph runs on a copy of the *whole* run state, whose schema seeds
+    every registered report field with ``""``.  Its result therefore carries
+    each sibling group's report key as an empty string.  Returning those
+    foreign keys let one group's blanks overwrite another group's finished
+    report when the parallel results were merged, so scope the update to the
+    group's own analysts.
+    """
+    keys: list[str] = []
+    for analyst_key in analyst_keys:
+        report_key = report_key_for(analyst_key)
+        if report_key:
+            keys.append(report_key)
+    return tuple(dict.fromkeys(keys))
+
+
 def _fb_analyst(report_key: str):
     def fb(state, exc):
         from langchain_core.messages import AIMessage
@@ -125,7 +143,7 @@ async def _run_analyst_subgraph(
         )
         return market_intelligence_failure_update(analyst_keys, exc)
 
-    report_keys = _report_keys()
+    report_keys = _group_report_keys(analyst_keys) or _report_keys()
     return {report_key: result.get(report_key, "") for report_key in report_keys if report_key in result}
 
 
@@ -222,7 +240,11 @@ def create_market_intelligence_node(ctx: AgentRunContext) -> NodeFn:
         results = await asyncio.gather(*[_run_team(keys) for keys in active_teams.values()])
         merged: dict = {}
         for r in results:
-            merged.update(r)
+            for report_key, report in r.items():
+                # Teams now return disjoint key sets; never let a stray blank
+                # win over a report another team already produced.
+                if report or report_key not in merged:
+                    merged[report_key] = report
         return merged
 
     return market_intelligence_node

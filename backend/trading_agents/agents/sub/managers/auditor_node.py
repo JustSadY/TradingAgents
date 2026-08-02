@@ -4,6 +4,28 @@ from backend.trading_agents.agents.utils.agent_utils import (
     get_system_instruction_override,
 )
 
+# The bull/bear researchers are handed these two documents alongside the
+# analyst reports and are explicitly instructed to cite them.  Auditing the
+# debate against the analyst reports alone therefore flagged every legitimate
+# citation of them as a hallucination, and the resulting Final Auditor Note
+# told the Research Manager to discard sound, grounded arguments.  The auditor
+# must see exactly the same ground truth the debaters were given.
+_DEBATE_SOURCE_DOCUMENTS: tuple[tuple[str, str], ...] = (
+    ("Synthesis Report (Conflicts & Alignments)", "synthesis_report"),
+    ("Analyst Cross-Examination (peer Q&A)", "agent_qa_report"),
+)
+
+
+def _with_debate_source_documents(state, resources_text: str) -> str:
+    """Append the non-analyst documents the debaters were allowed to cite."""
+    sections = [resources_text] if resources_text.strip() else []
+    for label, field in _DEBATE_SOURCE_DOCUMENTS:
+        content = (state.get(field) or "").strip()
+        if content:
+            sections.append(f"### {label}:\n{content}")
+    return "\n\n".join(sections)
+
+
 def create_auditor_node(llm):
     async def auditor_node(state) -> dict:
         from backend.trading_agents.dataflows.config import get_config
@@ -23,6 +45,7 @@ def create_auditor_node(llm):
 
         summary_only = get_config().get("summary_only_mode", False)
         resources_text = build_resources(state, get_report_fields(), prefix="### ", summary_only=summary_only)
+        resources_text = _with_debate_source_documents(state, resources_text)
 
         default_instruction = (
             f"You are a Senior Compliance Auditor and Fact-Checker. Your goal is to review the investment "

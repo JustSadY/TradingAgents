@@ -55,6 +55,38 @@ async def test_parallel_team_failure_keeps_healthy_team_report_and_marks_only_fa
 
 
 @pytest.mark.asyncio
+async def test_parallel_teams_do_not_blank_each_other_with_unowned_report_keys(monkeypatch):
+    """A team's result must not carry — and overwrite — a sibling's report key.
+
+    Every subgraph runs on a copy of the full run state, whose schema seeds all
+    report fields with ``""``.  Merging those foreign blanks used to leave only
+    the last team's reports, silently wiping every earlier team's analysis.
+    """
+    from backend.trading_agents.agents.analyst_registry import all_report_keys
+    from backend.trading_agents.agents.main import market_intelligence
+
+    def build_subgraph(keys, _ctx):
+        # Mirror LangGraph: the result echoes the whole seeded state schema.
+        result = dict.fromkeys(all_report_keys(), "")
+        for key in keys:
+            result[market_intelligence.report_key_for(key)] = f"{key} report"
+        return _Subgraph(result)
+
+    monkeypatch.setattr(market_intelligence, "_build_analyst_subgraph", build_subgraph)
+
+    # market → "technical", news → "macro_sentiment", ratings → "extra" (last).
+    selected = ["market", "news", "ratings"]
+    node = market_intelligence.create_market_intelligence_node(_MarketContext(selected, concurrency=3))
+    result = await node({"messages": []})
+
+    assert result == {
+        "market_report": "market report",
+        "news_report": "news report",
+        "ratings_report": "ratings report",
+    }
+
+
+@pytest.mark.asyncio
 async def test_sequential_subgraph_failure_is_visible_instead_of_silent_blank(monkeypatch):
     from backend.trading_agents.agents.main import market_intelligence
 
