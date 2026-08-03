@@ -128,7 +128,12 @@ class PortfolioDecision(BaseModel):
         le=100.0,
         description=(
             "Desired total allocation after the action as a percentage of current portfolio equity. "
-            "Use 0 for a full exit, a lower target allocation for Underweight, and null for Hold. "
+            "REQUIRED and non-null for Buy, Overweight, and Underweight: the execution engine sizes "
+            "the order from this number alone and skips the order entirely when it is null, so "
+            "omitting it silently cancels the trade you just recommended. "
+            "Use the full intended target weight for Buy/Overweight, a target below the current "
+            "weight for Underweight, and 0 for a full exit (Sell). "
+            "Null is correct ONLY for Hold, where no order is placed. "
             "This is the sole AI sizing recommendation; the execution engine still applies hard risk caps."
         ),
     )
