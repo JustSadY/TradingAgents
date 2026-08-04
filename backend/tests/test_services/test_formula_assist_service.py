@@ -1,4 +1,4 @@
-"""Credential-policy coverage for the formula-assist LLM entry point."""
+"""Credential and resilience coverage for the formula-assist LLM entry point."""
 
 from __future__ import annotations
 
@@ -6,15 +6,35 @@ from types import SimpleNamespace
 
 import pytest
 
+from backend.core.exceptions import ExternalServiceError
 from backend.services import formula_assist_service
+
 
 class _FormulaLLM:
     async def ainvoke(self, _messages):
         return SimpleNamespace(content="SMA(20)")
 
+
 class _FormulaClient:
+    def __init__(self, llm=None):
+        self._llm = llm or _FormulaLLM()
+
     def get_llm(self):
-        return _FormulaLLM()
+        return self._llm
+
+
+class _SequenceFormulaLLM:
+    def __init__(self, outcomes):
+        self._outcomes = list(outcomes)
+        self.calls = 0
+
+    async def ainvoke(self, _messages):
+        outcome = self._outcomes[self.calls]
+        self.calls += 1
+        if isinstance(outcome, BaseException):
+            raise outcome
+        return outcome
+
 
 @pytest.mark.asyncio
 async def test_formula_assist_allows_server_managed_ollama_without_tenant_key(monkeypatch):
@@ -38,6 +58,7 @@ async def test_formula_assist_allows_server_managed_ollama_without_tenant_key(mo
     assert result == "SMA(20)"
     assert captured == {"provider": "ollama", "model": "llama3.2", "api_key": None}
 
+
 @pytest.mark.asyncio
 async def test_formula_assist_rejects_cloud_provider_without_tenant_key(monkeypatch):
     async def get_settings(_db, _user):
@@ -52,3 +73,65 @@ async def test_formula_assist_rejects_cloud_provider_without_tenant_key(monkeypa
 
     with pytest.raises(ValueError, match="No API key set for provider 'openai'"):
         await formula_assist_service.generate_formula(object(), "20 day moving average", object())
+
+
+@pytest.mark.asyncio
+async def test_formula_assist_retries_transient_worker_capacity_error(monkeypatch):
+    llm = _SequenceFormulaLLM(
+        [
+            RuntimeError("ResourceExhausted: Worker local total request limit reached (33/32)"),
+            SimpleNamespace(content="SMA(20)"),
+        ]
+    )
+    delays: list[float] = []
+
+    async def fake_sleep(delay: float):
+        delays.append(delay)
+
+    async def get_settings(_db, _user):
+        return SimpleNamespace(llm_provider="nvidia", llm_model="test-model")
+
+    monkeypatch.setattr(formula_assist_service, "get_or_create_settings", get_settings)
+    monkeypatch.setattr("backend.services.user_service.resolve_user_api_key", lambda _user, _provider: "key")
+    monkeypatch.setattr(
+        "backend.trading_agents.llm_clients.factory.create_llm_client",
+        lambda **_kwargs: _FormulaClient(llm),
+    )
+    monkeypatch.setattr(formula_assist_service, "_synthetic_ohlcv", lambda: object())
+    monkeypatch.setattr(formula_assist_service, "evaluate_formula_safely", lambda _frame, _formula: None)
+    monkeypatch.setattr(formula_assist_service.asyncio, "sleep", fake_sleep)
+
+    result = await formula_assist_service.generate_formula(object(), "20 day moving average", object())
+
+    assert result == "SMA(20)"
+    assert llm.calls == 2
+    assert delays == [0.5]
+
+
+@pytest.mark.asyncio
+async def test_formula_assist_returns_503_when_worker_capacity_stays_exhausted(monkeypatch):
+    error = RuntimeError("ResourceExhausted: Worker local total request limit reached (33/32)")
+    llm = _SequenceFormulaLLM([error, error, error])
+    delays: list[float] = []
+
+    async def fake_sleep(delay: float):
+        delays.append(delay)
+
+    async def get_settings(_db, _user):
+        return SimpleNamespace(llm_provider="nvidia", llm_model="test-model")
+
+    monkeypatch.setattr(formula_assist_service, "get_or_create_settings", get_settings)
+    monkeypatch.setattr("backend.services.user_service.resolve_user_api_key", lambda _user, _provider: "key")
+    monkeypatch.setattr(
+        "backend.trading_agents.llm_clients.factory.create_llm_client",
+        lambda **_kwargs: _FormulaClient(llm),
+    )
+    monkeypatch.setattr(formula_assist_service.asyncio, "sleep", fake_sleep)
+
+    with pytest.raises(ExternalServiceError) as exc_info:
+        await formula_assist_service.generate_formula(object(), "20 day moving average", object())
+
+    assert exc_info.value.status_code == 503
+    assert "temporarily at capacity" in exc_info.value.detail
+    assert llm.calls == 3
+    assert delays == [0.5, 1.0]
