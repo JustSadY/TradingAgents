@@ -61,7 +61,7 @@ cat > "$BACKUP_TIMER" <<EOF
 Description=Daily TradingAgents database backup at $BACKUP_TIME
 
 [Timer]
-OnCalendar=daily
+OnCalendar=*-*-* ${HOUR}:${MINUTE}:00
 Persistent=true
 
 [Install]

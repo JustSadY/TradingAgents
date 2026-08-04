@@ -4,13 +4,13 @@ import uuid
 from datetime import UTC, datetime
 
 import pandas as pd
-from sqlalchemy import select
+from sqlalchemy import or_, select, update
 
 from backend.core.database import AsyncSessionLocal
 from backend.models.alert import PriceAlert
+from backend.models.alert_outbox import AlertOutbox
 from backend.models.analysis import AnalysisResult
 from backend.models.user import User
-from backend.services.analysis_service import run_analysis
 from backend.services.market_data_service import get_live_prices_batch
 from backend.services.notification_service import notify_alert_triggered
 from backend.services.settings_service import get_or_create_settings
@@ -28,7 +28,7 @@ async def _fetch_alert_market_summary(ticker: str) -> str:
         import yfinance as yf
 
         info = await asyncio.to_thread(lambda: yf.Ticker(ticker).info)
-        hist = await asyncio.to_thread(lambda: yf.Ticker(ticker).history(period="5d"))
+        hist = await asyncio.to_thread(lambda: yf.Ticker(ticker).history(period="3mo"))
 
         parts = []
         price = info.get("regularMarketPrice") or info.get("currentPrice")
@@ -106,16 +106,14 @@ async def _check_indicator_alert(alert: PriceAlert) -> tuple[bool, str]:
 
     return False, ""
 
-async def _notify_and_maybe_analyze(db, alert: PriceAlert, settings, current_value: float | None) -> None:
-    """Shared trigger side-effects: mark triggered, notify, optionally auto-analyze."""
-    alert.triggered_at = datetime.now(UTC)
-
+async def _deliver_alert_side_effects(db, alert: PriceAlert, settings, current_value: float | None) -> None:
+    """Deliver an already-committed outbox item."""
     summary = await _fetch_alert_market_summary(alert.ticker)
     if summary:
         _logger.info("Alert market summary for %s: %s", alert.ticker, summary)
 
-    if settings:
-        user = await db.get(User, alert.user_id)
+    user = await db.get(User, alert.user_id) if alert.user_id is not None else None
+    if settings and user:
         user_settings = await get_or_create_settings(db, user)
         await notify_alert_triggered(
             alert.ticker,
@@ -126,11 +124,113 @@ async def _notify_and_maybe_analyze(db, alert: PriceAlert, settings, current_val
             market_summary=summary,
         )
 
-    if alert.auto_analyze:
+    if alert.auto_analyze and user:
+        from backend.services.analysis_queue import dispatch_analysis
+        from backend.services.analysis_service import register_queued_task
+
         today = datetime.now(UTC).strftime("%Y-%m-%d")
-        task = asyncio.create_task(_throttled_analyze(alert.ticker, today, alert.user_id, _ALERT_SEMAPHORE))
-        _BACKGROUND_TASKS.add(task)
-        task.add_done_callback(_BACKGROUND_TASKS.discard)
+        task_id = str(uuid.uuid4())
+        user_settings = await get_or_create_settings(db, user)
+        from backend.repositories.analysis import create_analysis_result
+
+        await create_analysis_result(
+            db, task_id=task_id, user_id=user.id, ticker=alert.ticker, trade_date=today,
+            asset_type="stock", status="queued", heartbeat_at=datetime.now(UTC), triggered_by="alert",
+        )
+        await register_queued_task(
+            task_id, ticker=alert.ticker, trade_date=today, asset_type="stock", user_id=user.id
+        )
+        await dispatch_analysis(
+            None,
+            ticker=alert.ticker,
+            trade_date=today,
+            asset_type="stock",
+            settings=user_settings,
+            task_id=task_id,
+            user=user,
+            triggered_by="alert",
+        )
+
+
+async def _claim_alert(db, alert: PriceAlert, current_value: float | None) -> bool:
+    """Atomically mark one alert and create durable side-effect work."""
+    now = datetime.now(UTC)
+    result = await db.execute(
+        update(PriceAlert)
+        .where(PriceAlert.id == alert.id, PriceAlert.enabled.is_(True), PriceAlert.triggered_at.is_(None))
+        .values(triggered_at=now, enabled=False)
+    )
+    if not result.rowcount:
+        await db.rollback()
+        return False
+    db.add(
+        AlertOutbox(
+            alert_id=alert.id,
+            user_id=alert.user_id,
+            current_value=str(current_value) if current_value is not None else None,
+            status="pending",
+        )
+    )
+    await db.commit()
+    return True
+
+
+async def process_alert_outbox(limit: int = 50) -> None:
+    """Retry durable alert deliveries; safe after process crashes."""
+    async with AsyncSessionLocal() as db:
+        stale_cutoff = datetime.now(UTC).timestamp() - 300
+        rows = await db.execute(
+            select(AlertOutbox)
+            .where(
+                or_(
+                    AlertOutbox.status == "pending",
+                    (AlertOutbox.status == "processing") & (AlertOutbox.claimed_at < datetime.fromtimestamp(stale_cutoff, UTC)),
+                )
+            )
+            .order_by(AlertOutbox.created_at)
+            .limit(limit)
+            .with_for_update(skip_locked=True)
+        )
+        items = list(rows.scalars().all())
+        for item in items:
+            item.status = "processing"
+            item.claimed_at = datetime.now(UTC)
+            item.attempts = (item.attempts or 0) + 1
+        await db.commit()
+
+    for item_id in [item.id for item in items]:
+        async with AsyncSessionLocal() as delivery_db:
+            row = await delivery_db.execute(
+                select(AlertOutbox).where(AlertOutbox.id == item_id).with_for_update()
+            )
+            item = row.scalar_one_or_none()
+            if not item or item.status != "processing":
+                continue
+            alert = await delivery_db.get(PriceAlert, item.alert_id)
+            try:
+                if not alert:
+                    item.status = "completed"
+                    item.completed_at = datetime.now(UTC)
+                else:
+                    from backend.repositories.system_settings import get_system_settings
+
+                    settings = await get_system_settings(delivery_db)
+                    value = float(item.current_value) if item.current_value is not None else None
+                    await _deliver_alert_side_effects(delivery_db, alert, settings, value)
+                    item.status = "completed"
+                    item.completed_at = datetime.now(UTC)
+                    item.last_error = None
+                await delivery_db.commit()
+            except Exception as exc:
+                await delivery_db.rollback()
+                async with AsyncSessionLocal() as failure_db:
+                    failed = await failure_db.get(AlertOutbox, item_id)
+                    if failed:
+                        failed.status = "pending" if failed.attempts < 10 else "failed"
+                        failed.last_error = str(exc)[:1000]
+                        await failure_db.commit()
+                _logger.exception("Alert outbox delivery failed id=%s", item_id)
+
 
 async def check_price_alerts() -> None:
     async with AsyncSessionLocal() as db:
@@ -167,7 +267,7 @@ async def check_price_alerts() -> None:
                 alert.target_price,
                 price,
             )
-            await _notify_and_maybe_analyze(db, alert, settings, float(price))
+            await _claim_alert(db, alert, float(price))
 
         for alert in indicator_alerts:
             try:
@@ -179,9 +279,9 @@ async def check_price_alerts() -> None:
                 continue
 
             _logger.info("Indicator alert triggered: %s %s (%s)", alert.ticker, alert.alert_type, detail)
-            await _notify_and_maybe_analyze(db, alert, settings, None)
+            await _claim_alert(db, alert, None)
 
-        await db.commit()
+    await process_alert_outbox()
 
 async def _throttled_analyze(ticker: str, trade_date: str, user_id: int | None, semaphore: asyncio.Semaphore) -> None:
     """Acquire *semaphore* before running ``_auto_analyze`` to cap concurrency."""
@@ -197,18 +297,36 @@ async def _auto_analyze(ticker: str, trade_date: str, user_id: int | None) -> No
                 return
             settings = await get_or_create_settings(new_db, user)
             task_id = str(uuid.uuid4())
-            await run_analysis(
-                ticker, trade_date, "stock", settings, new_db, triggered_by="alert", task_id=task_id, user=user
+            from backend.services.analysis_queue import dispatch_analysis
+            from backend.services.analysis_service import register_queued_task
+
+            from backend.repositories.analysis import create_analysis_result
+
+            await create_analysis_result(
+                new_db, task_id=task_id, user_id=user.id, ticker=ticker, trade_date=trade_date,
+                asset_type="stock", status="queued", heartbeat_at=datetime.now(UTC), triggered_by="alert",
             )
-            await new_db.commit()
+            await register_queued_task(
+                task_id, ticker=ticker, trade_date=trade_date, asset_type="stock", user_id=user.id
+            )
+            await dispatch_analysis(
+                None,
+                ticker=ticker,
+                trade_date=trade_date,
+                asset_type="stock",
+                settings=settings,
+                task_id=task_id,
+                user=user,
+                triggered_by="alert",
+            )
     except Exception:
         _logger.exception("Auto-analyze from alert failed %s", ticker)
 
 async def check_and_recover_lost_alerts() -> None:
+    await process_alert_outbox()
     async with AsyncSessionLocal() as db:
         result = await db.execute(
             select(PriceAlert)
-            .where(PriceAlert.enabled.is_(True))
             .where(PriceAlert.triggered_at.isnot(None))
             .where(PriceAlert.auto_analyze.is_(True))
         )

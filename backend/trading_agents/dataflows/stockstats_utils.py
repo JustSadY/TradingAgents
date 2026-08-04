@@ -115,8 +115,19 @@ def _clean_dataframe(data: pd.DataFrame) -> pd.DataFrame:
     data = data.dropna(subset=["Date"])
     price_cols = [c for c in ["Open", "High", "Low", "Close", "Volume"] if c in data.columns]
     data[price_cols] = data[price_cols].apply(pd.to_numeric, errors="coerce")
+    # Never back-fill market bars: bfill would copy a future observation into
+    # an earlier timestamp and introduce look-ahead bias in historical runs.
+    # Close is mandatory; other fields may only inherit information from a
+    # previous bar. Rows still missing OHLC after that conservative fill are
+    # discarded, while missing volume is treated as zero.
     data = data.dropna(subset=["Close"])
-    data[price_cols] = data[price_cols].ffill().bfill()
+    if price_cols:
+        data[price_cols] = data[price_cols].ffill()
+    required = [c for c in ["Open", "High", "Low", "Close"] if c in data.columns]
+    if required:
+        data = data.dropna(subset=required)
+    if "Volume" in data.columns:
+        data["Volume"] = data["Volume"].fillna(0)
     return data
 
 def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:

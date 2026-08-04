@@ -14,6 +14,41 @@ _logger = logging.getLogger(__name__)
 _TTL_SECONDS = 900
 _MAX_TICKERS = 10
 
+
+def _aware_utc(value: datetime) -> datetime:
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+async def _upsert_cache(db, ticker: str, parsed: list[dict], now: datetime) -> None:
+    """Atomic cache write across PostgreSQL and SQLite."""
+    from backend.models.news_cache import NewsCache
+
+    values = {"ticker": ticker, "news_json": parsed, "updated_at": now}
+    dialect = db.bind.dialect.name
+    if dialect == "postgresql":
+        from sqlalchemy.dialects.postgresql import insert
+
+        stmt = insert(NewsCache).values(**values).on_conflict_do_update(
+            index_elements=[NewsCache.ticker],
+            set_={"news_json": parsed, "updated_at": now},
+        )
+    elif dialect == "sqlite":
+        from sqlalchemy.dialects.sqlite import insert
+
+        stmt = insert(NewsCache).values(**values).on_conflict_do_update(
+            index_elements=[NewsCache.ticker],
+            set_={"news_json": parsed, "updated_at": now},
+        )
+    else:
+        existing = await db.get(NewsCache, ticker)
+        if existing:
+            existing.news_json = parsed
+            existing.updated_at = now
+            return
+        db.add(NewsCache(**values))
+        return
+    await db.execute(stmt)
+
 def _fetch_news_sync(ticker: str) -> list[dict]:
     import yfinance as yf
 
@@ -41,7 +76,7 @@ async def get_news_feed(tickers: str, limit: int) -> list[dict]:
 
         for ticker in ticker_list:
             cached = cache_map.get(ticker)
-            if cached and cached.updated_at >= cutoff:
+            if cached and _aware_utc(cached.updated_at) >= cutoff:
                 collected.extend(cached.news_json[:limit])
             else:
                 items = await asyncio.to_thread(_fetch_news_sync, ticker)
@@ -63,13 +98,7 @@ async def get_news_feed(tickers: str, limit: int) -> list[dict]:
                         }
                     )
 
-                if cached:
-                    cached.news_json = parsed
-                    cached.updated_at = now
-                else:
-                    cached = NewsCache(ticker=ticker, news_json=parsed, updated_at=now)
-                    db.add(cached)
-
+                await _upsert_cache(db, ticker, parsed, now)
                 collected.extend(parsed[:limit])
 
         await db.commit()

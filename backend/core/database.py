@@ -30,6 +30,7 @@ _BASELINE_APP_TABLES = frozenset(
     {
         "agent_settings",
         "agent_tool_settings",
+        "alert_outbox",
         "analysis_chats",
         "analysis_results",
         "analyst_report_cache",
@@ -44,6 +45,7 @@ _BASELINE_APP_TABLES = frozenset(
         "orders",
         "portfolios",
         "price_alerts",
+        "refresh_sessions",
         "shared_reports",
         "system_logs",
         "system_settings",

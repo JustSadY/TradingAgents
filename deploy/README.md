@@ -12,7 +12,7 @@ Upon completion, navigate your browser to `http://SERVER_IP:8000` and log in usi
 
 ## What does it do?
 
-1.  **System Packages:** Installs Python 3.10–3.13, Node.js 20 (for Vite builds), PostgreSQL, git, and curl.
+1.  **System Packages:** Installs Python 3.11–3.13, Node.js 20 (for Vite builds), PostgreSQL, git, and curl.
 2.  **Python Virtual Environment (`.venv`):** Configures a virtual environment and installs dependencies from `backend/requirements.txt`.
     *(No need for the pip `tradingagents` package — it imports the local copy at `backend/trading_agents` directly).*
 3.  **Frontend Compilation:** Compiles the React UI using `npm run build` and outputs to `frontend/dist`. The static files are served directly by the FastAPI backend (no separate web server required).
@@ -70,7 +70,7 @@ The installer configures a self-updating mechanism accessible from the web UI se
 *   The backend regularly checks the remote Git repository (`origin/main`).
 *   If new commits are detected, a notification banner is displayed on the UI for logged-in users.
 *   Clicking **Update** starts a detached one-shot systemd service `tradingagents-update.service`.
-*   This updater service runs `git pull`, `pip install`, and compiles the React frontend as the unprivileged `RUN_USER`, then restarts the main service under root.
+*   This updater builds and validates an isolated worktree, stops the optional worker and web services together, applies migrations, atomically switches the release, and rolls code/schema back on restart failure.
 *   Once updated, the browser client automatically refreshes.
 
 > **Requirements:** The project directory must be owned by the `RUN_USER` (set up automatically by the installer), and the Git repository must be public or configure saved access credentials for `RUN_USER`.

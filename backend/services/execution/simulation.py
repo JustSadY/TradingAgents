@@ -67,7 +67,7 @@ class SimulationTrader(BaseTraderInterface):
                 status="REJECTED",
                 filled_price=None,
                 filled_quantity=None,
-                message=str(e),
+                message="Simulation order could not be executed.",
             )
 
     async def cancel_order(self, order_id: str) -> bool:
@@ -80,7 +80,7 @@ class SimulationTrader(BaseTraderInterface):
         return portfolio.cash_available
 
     async def get_positions(self) -> dict[str, dict]:
-        portfolio_data = await get_portfolio_with_live_prices(self._db, portfolio_id=self._portfolio_id)
+        portfolio_data = await get_portfolio_with_live_prices(self._db, portfolio_id=self._portfolio_id, read_only=True)
         res = {}
         for h in portfolio_data.get("holdings", []):
             res[h["ticker"]] = {

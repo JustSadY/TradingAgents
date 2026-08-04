@@ -22,7 +22,7 @@ from backend.core.redis_bus import CONTROL_CHANNEL, get_redis, redis_enabled, su
 
 _logger = logging.getLogger(__name__)
 
-_TTL_SECONDS = 2 * 60 * 60
+_TTL_SECONDS = 3 * 60 * 60
 
 _LOCAL_CANCEL_REQUESTS: set[str] = set()
 
@@ -104,6 +104,22 @@ async def set_meta(task_id: str, meta: dict) -> None:
             await redis.expire(key, _TTL_SECONDS)
     except RedisError as exc:
         _log_redis_failure("set_meta", exc)
+
+async def touch_task(task_id: str, user_id: int | None = None) -> None:
+    """Refresh the sliding lease for a queued/running task."""
+    if not redis_enabled():
+        return
+    try:
+        redis = get_redis()
+        keys = [_owner_key(task_id), _meta_key(task_id), _cancel_key(task_id)]
+        for key in keys:
+            if await redis.exists(key):
+                await redis.expire(key, _TTL_SECONDS)
+        if user_id is not None:
+            await redis.expire(_user_tasks_key(user_id), _TTL_SECONDS)
+    except RedisError as exc:
+        _log_redis_failure("touch_task", exc)
+
 
 async def clear_meta(task_id: str, user_id: int | None = None) -> None:
     if not redis_enabled():

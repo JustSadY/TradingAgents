@@ -1,4 +1,6 @@
 from datetime import UTC, datetime, timedelta
+import hashlib
+import secrets
 
 import bcrypt as _bcrypt
 from jose import JWTError, jwt
@@ -40,9 +42,25 @@ def create_access_token(username: str, role: str = "user", token_version: int = 
         timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
 
-def create_refresh_token(username: str, token_version: int = 0) -> str:
+def new_token_id() -> str:
+    return secrets.token_urlsafe(32)
+
+
+def token_id_hash(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def create_refresh_token(
+    username: str, token_version: int = 0, *, session_id: str, token_id: str
+) -> str:
     return _make_token(
-        {"sub": username, "type": "refresh", "ver": token_version},
+        {
+            "sub": username,
+            "type": "refresh",
+            "ver": token_version,
+            "sid": session_id,
+            "jti": token_id,
+        },
         timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
 

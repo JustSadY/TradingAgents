@@ -14,7 +14,7 @@ class MultiTickerAnalysis(Base):
     )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     trade_date: Mapped[str] = mapped_column(String(20), nullable=False)
     asset_type: Mapped[str] = mapped_column(String(20), default="stock")

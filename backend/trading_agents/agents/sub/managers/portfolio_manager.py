@@ -43,7 +43,9 @@ def _prompt_report_limit() -> int:
 
 def _optional_context_section(label: str, content: object, *, limit: int = _MAX_DECISION_CONTEXT_CHARS) -> str:
     """Render one bounded supplemental evidence section when it exists."""
-    text = str(content or "").strip()
+    from backend.services.llm_content import llm_text
+
+    text = llm_text(content).strip()
     if not text:
         return ""
 

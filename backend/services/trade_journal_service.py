@@ -141,10 +141,11 @@ Give a direct, honest assessment."""
         client = create_llm_client(provider=provider, model=model, api_key=user_key)
         llm = client.get_llm()
         response = await llm.ainvoke([HumanMessage(content=prompt)])
-        content = (response.content or "").strip()
+        from backend.services.llm_content import llm_text
+        content = llm_text(response)
     except Exception as e:
         _logger.warning("Trade debrief LLM error: %s", e)
-        raise TradeJournalError(f"LLM error: {e}", status_code=500) from e
+        raise TradeJournalError("The model request failed", status_code=500) from e
 
     await repo.set_debrief(db, order_id=order_id, user_id=user.id, debrief=content)
     await db.commit()

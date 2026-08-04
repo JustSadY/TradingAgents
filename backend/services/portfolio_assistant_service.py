@@ -145,7 +145,8 @@ async def _run_tool_loop(llm_with_tools, lc_messages: list, tool_map: dict) -> s
         lc_messages.append(response)
 
         if not response.tool_calls:
-            return response.content if isinstance(response.content, str) else str(response.content)
+            from backend.services.llm_content import llm_text
+            return llm_text(response)
 
         for tc in response.tool_calls:
             tool = tool_map.get(tc["name"])
@@ -499,8 +500,9 @@ async def _tool_run_stock_analysis(user: User, allowed_pages: set[str], ticker: 
 
     try:
         from backend.core.database import AsyncSessionLocal
+        from backend.repositories.analysis import create_analysis_result, update_analysis_result
         from backend.services.analysis_queue import dispatch_analysis
-        from backend.services.analysis_service import clear_task_owner, register_task_owner
+        from backend.services.analysis_service import discard_queued_task, register_queued_task
         from backend.services.settings_service import get_or_create_settings as _get_settings
         from backend.services.ticker_validation_service import validate_analysis_ticker
 
@@ -508,9 +510,25 @@ async def _tool_run_stock_analysis(user: User, allowed_pages: set[str], ticker: 
         clean_ticker = validated.ticker
         async with AsyncSessionLocal() as settings_db:
             bg_settings = await _get_settings(settings_db, user)
-            await settings_db.commit()
+            queued_row = await create_analysis_result(
+                settings_db,
+                task_id=task_id,
+                user_id=user.id,
+                ticker=clean_ticker,
+                trade_date=trade_date,
+                asset_type="stock",
+                status="queued",
+                heartbeat_at=datetime.now(UTC),
+                triggered_by="assistant",
+            )
 
-        await register_task_owner(task_id, user.id)
+        await register_queued_task(
+            task_id,
+            ticker=clean_ticker,
+            trade_date=trade_date,
+            asset_type="stock",
+            user_id=user.id,
+        )
         try:
             await dispatch_analysis(
                 None,
@@ -520,9 +538,17 @@ async def _tool_run_stock_analysis(user: User, allowed_pages: set[str], ticker: 
                 settings=bg_settings,
                 task_id=task_id,
                 user=user,
+                triggered_by="assistant",
             )
         except Exception:
-            await clear_task_owner(task_id)
+            async with AsyncSessionLocal() as failure_db:
+                await update_analysis_result(
+                    failure_db,
+                    queued_row.id,
+                    status="failed",
+                    heartbeat_at=datetime.now(UTC),
+                )
+            await discard_queued_task(task_id, user.id)
             raise
         return (
             f"Analysis started for {clean_ticker} (date: {trade_date}, task_id: {task_id}). "

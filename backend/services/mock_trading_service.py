@@ -47,6 +47,39 @@ def _opening_commission(holding: Holding) -> Decimal:
     value = getattr(holding, "entry_commission", Decimal("0.0"))
     return value if value is not None else Decimal("0.0")
 
+
+def _aware_utc(value: datetime | None, fallback: datetime) -> datetime:
+    value = value or fallback
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
+def _accrue_holding_interest(portfolio: Portfolio, holding: Holding, now: datetime) -> Decimal:
+    """Accrue financing exactly once and return the newly charged amount."""
+    borrowed = holding.borrowed_amount or Decimal("0.0")
+    if borrowed <= 0:
+        holding.interest_updated_at = now
+        return Decimal("0.0")
+    last_marked = _aware_utc(
+        getattr(holding, "interest_updated_at", None) or holding.opened_at, now
+    )
+    elapsed = Decimal(str(max(0.0, (now - last_marked).total_seconds())))
+    interest = accrue_interest(borrowed, elapsed)
+    holding.interest_updated_at = now
+    if interest > 0:
+        holding.interest_accrued = (holding.interest_accrued or Decimal("0.0")) + interest
+        portfolio.cash_available -= interest
+    return interest
+
+
+def _empty_portfolio_snapshot(initial_capital: Decimal = Decimal("100000")) -> dict:
+    value = round(float(initial_capital), 2)
+    return {
+        "id": 0, "mode": "simulation", "initial_capital": value,
+        "cash_available": value, "margin_used": 0.0, "positions_value": 0.0,
+        "total_value": value, "total_pnl": 0.0, "total_pnl_pct": 0.0,
+        "holdings": [], "auto_closes": [], "liquidations": [],
+    }
+
 async def get_or_create_sim_portfolio(
     db: AsyncSession,
     initial_capital: float = 100_000.0,
@@ -101,6 +134,8 @@ async def get_portfolio_with_live_prices(
         portfolio = await get_simulation_portfolio(db, user_id=user_id)
 
     if portfolio is None:
+        if read_only:
+            return _empty_portfolio_snapshot()
         portfolio = await get_or_create_sim_portfolio(db, user=user, portfolio_id=portfolio_id)
 
     tickers = [h.ticker for h in portfolio.holdings]
@@ -117,7 +152,8 @@ async def get_portfolio_with_live_prices(
 
     for h in list(portfolio.holdings):
         fetched = prices.get(h.ticker)
-        if fetched is not None:
+        has_fresh_price = fetched is not None and math.isfinite(float(fetched)) and float(fetched) > 0
+        if has_fresh_price:
             price = Decimal(str(fetched))
         elif h.current_price is not None and h.current_price > 0:
             price = h.current_price
@@ -125,17 +161,14 @@ async def get_portfolio_with_live_prices(
             price = h.avg_buy_price
 
         borrowed = h.borrowed_amount or Decimal("0.0")
-
-        if borrowed > 0:
-            last_marked = h.updated_at or h.opened_at or now
-            if last_marked.tzinfo is None:
-                last_marked = last_marked.replace(tzinfo=UTC)
-            elapsed = Decimal(str(max(0.0, (now - last_marked).total_seconds())))
-            interest = accrue_interest(borrowed, elapsed)
-            if interest > 0:
-                cash_available_val -= interest
-                if not read_only:
-                    h.interest_accrued = (h.interest_accrued or Decimal("0.0")) + interest
+        if not read_only:
+            _accrue_holding_interest(portfolio, h, now)
+            cash_available_val = portfolio.cash_available
+        elif borrowed > 0:
+            # Read paths may show projected financing without mutating storage.
+            last_marked = _aware_utc(getattr(h, "interest_updated_at", None) or h.opened_at, now)
+            projected = accrue_interest(borrowed, Decimal(str(max(0.0, (now - last_marked).total_seconds()))))
+            cash_available_val -= projected
 
         is_short = h.side == "short"
         margin = h.margin_used or Decimal("0.0")
@@ -144,14 +177,16 @@ async def get_portfolio_with_live_prices(
         target = h.take_profit or Decimal("0.0")
         liq = h.liquidation_price or Decimal("0.0")
         close_status = None
-        if is_short:
+        # Automatic execution is a write concern and requires a fresh quote.
+        # Read-only snapshots and stale fallback prices must never close trades.
+        if not read_only and has_fresh_price and is_short:
             if is_liquidatable_short(price, liq):
                 close_status = "LIQUIDATED"
             elif stop > 0 and price >= stop:
                 close_status = "STOP_LOSS"
             elif target > 0 and price <= target:
                 close_status = "TAKE_PROFIT"
-        else:
+        elif not read_only and has_fresh_price:
             if is_liquidatable_long(price, liq):
                 close_status = "LIQUIDATED"
             elif stop > 0 and price <= stop:
@@ -163,12 +198,13 @@ async def get_portfolio_with_live_prices(
             notional_now = price * h.quantity
             commission = (notional_now * _DEFAULT_COMMISSION_RATE).quantize(Decimal("0.0001"))
             entry_commission = _opening_commission(h)
+            financing_cost = h.interest_accrued or Decimal("0.0")
             if is_short:
                 gross_pnl = (h.avg_buy_price - price) * h.quantity
-                realized = gross_pnl - entry_commission - commission
+                realized = gross_pnl - entry_commission - commission - financing_cost
                 cash_available_val += margin + gross_pnl - commission
             else:
-                realized = (price - h.avg_buy_price) * h.quantity - entry_commission - commission
+                realized = (price - h.avg_buy_price) * h.quantity - entry_commission - commission - financing_cost
                 cash_available_val += notional_now - borrowed - commission
 
             if not read_only:
@@ -189,6 +225,7 @@ async def get_portfolio_with_live_prices(
                         commission=commission,
                         entry_commission=entry_commission,
                         realized_pnl=realized,
+                        financing_cost=financing_cost,
                         executed_at=now,
                     )
                 )
@@ -314,6 +351,7 @@ async def execute_order(
     notional = price * qty_dec
     commission = (notional * _DEFAULT_COMMISSION_RATE).quantize(Decimal("0.0001"))
     realized_pnl = Decimal("0.0")
+    financing_cost = Decimal("0.0")
     entry_commission = commission
     status = "FILLED"
 
@@ -352,7 +390,9 @@ async def execute_order(
             lang,
         )
     else:
-        realized_pnl, entry_commission = await _execute_close_position(
+        if holding is not None:
+            _accrue_holding_interest(portfolio, holding, datetime.now(UTC))
+        realized_pnl, entry_commission, financing_cost = await _execute_close_position(
             db, portfolio, holding, price, qty_dec, notional, commission, pos_side, lang, quantity
         )
 
@@ -371,6 +411,7 @@ async def execute_order(
         commission=commission,
         entry_commission=entry_commission,
         realized_pnl=realized_pnl,
+        financing_cost=financing_cost,
         analysis_id=analysis_id,
         ai_signal=str(ai_signal or "")[:50],
         ai_reasoning=str(ai_reasoning or "")[:4_000],
@@ -393,7 +434,9 @@ async def execute_order(
     }
 
 async def monitor_open_positions(db: AsyncSession) -> list[dict]:
-    result = await db.execute(select(Portfolio))
+    result = await db.execute(
+        select(Portfolio).where(Portfolio.mode == "simulation").with_for_update(skip_locked=True)
+    )
     portfolios = result.scalars().all()
     closed = []
     for p in portfolios:
@@ -419,7 +462,7 @@ def _performance_start_date(portfolio: Portfolio, now: datetime | None = None) -
 
 async def get_performance(db: AsyncSession, user=None) -> dict:
     portfolio = await get_or_create_sim_portfolio(db, user=user)
-    portfolio_data = await get_portfolio_with_live_prices(db, user=user, portfolio_id=portfolio.id)
+    portfolio_data = await get_portfolio_with_live_prices(db, user=user, portfolio_id=portfolio.id, read_only=True)
 
     from backend.services.market_data_service import get_benchmark_return
 
@@ -523,6 +566,7 @@ def _execute_open_position(
                 leverage=lev,
                 margin_used=margin,
                 borrowed_amount=borrowed,
+                interest_updated_at=datetime.now(UTC),
                 liquidation_price=_liquidation_for_position(pos_side, qty_dec, price, borrowed, margin, lev),
                 stop_loss=stop_dec,
                 take_profit=target_dec,
@@ -540,7 +584,7 @@ async def _execute_close_position(
     pos_side: str,
     lang: str,
     quantity: float,
-) -> tuple[Decimal, Decimal]:
+) -> tuple[Decimal, Decimal, Decimal]:
     from backend.core.l10n import get_message
 
     if holding is None or holding.quantity < qty_dec:
@@ -552,19 +596,22 @@ async def _execute_close_position(
     borrowed_portion = (holding.borrowed_amount or Decimal("0.0")) * fraction
     opening_commission = _opening_commission(holding)
     entry_commission = opening_commission if qty_dec == holding.quantity else opening_commission * fraction
+    total_financing = holding.interest_accrued or Decimal("0.0")
+    financing_cost = total_financing if qty_dec == holding.quantity else total_financing * fraction
 
     if pos_side == "long":
-        realized_pnl = (price - holding.avg_buy_price) * qty_dec - entry_commission - commission
+        realized_pnl = (price - holding.avg_buy_price) * qty_dec - entry_commission - commission - financing_cost
         portfolio.cash_available += notional - borrowed_portion - commission
     else:
         gross_pnl = (holding.avg_buy_price - price) * qty_dec
-        realized_pnl = gross_pnl - entry_commission - commission
+        realized_pnl = gross_pnl - entry_commission - commission - financing_cost
         portfolio.cash_available += released_margin + gross_pnl - commission
     portfolio.margin_used = (portfolio.margin_used or Decimal("0.0")) - released_margin
 
     holding.quantity -= qty_dec
     holding.entry_commission = max(Decimal("0.0"), opening_commission - entry_commission)
     holding.borrowed_amount = (holding.borrowed_amount or Decimal("0.0")) - borrowed_portion
+    holding.interest_accrued = max(Decimal("0.0"), total_financing - financing_cost)
     holding.margin_used = (holding.margin_used or Decimal("0.0")) - released_margin
     if holding.quantity < _DUST:
         await db.delete(holding)
@@ -579,7 +626,7 @@ async def _execute_close_position(
         )
         holding.current_price = price
 
-    return realized_pnl, entry_commission
+    return realized_pnl, entry_commission, financing_cost
 
 async def reset_portfolio(db: AsyncSession, initial_capital: float = 100_000.0, user=None) -> dict:
     from backend.repositories.portfolio import get_simulation_portfolio
@@ -589,6 +636,8 @@ async def reset_portfolio(db: AsyncSession, initial_capital: float = 100_000.0, 
 
     initial_capital_dec = Decimal(str(initial_capital))
     if portfolio:
+        locked = await db.execute(select(Portfolio).where(Portfolio.id == portfolio.id).with_for_update())
+        portfolio = locked.scalar_one()
         await db.execute(delete(Order).where(Order.portfolio_id == portfolio.id))
         await db.execute(delete(Holding).where(Holding.portfolio_id == portfolio.id))
         portfolio.cash_available = initial_capital_dec

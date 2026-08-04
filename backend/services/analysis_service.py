@@ -20,7 +20,10 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import socket
 import time
+from datetime import UTC, datetime
 from types import SimpleNamespace
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -41,6 +44,8 @@ _logger = logging.getLogger(__name__)
 _RUNNING_TASKS: dict[str, asyncio.Task] = {}
 _TASK_REGISTRY: dict[str, dict] = {}
 _TASK_OWNERS: dict[str, int | None] = {}
+_HEARTBEAT_TASKS: dict[str, asyncio.Task] = {}
+_WORKER_ID = f"{socket.gethostname()}:{os.getpid()}"
 
 async def register_task_owner(task_id: str, user_id: int | None) -> None:
     _TASK_OWNERS[task_id] = user_id
@@ -92,6 +97,64 @@ async def get_active_tasks_for_user(user_id: int | None) -> list[dict]:
         tasks.extend(t for t in await task_store.list_tasks_for_user(user_id) if t["task_id"] not in seen)
     return tasks
 
+async def register_queued_task(
+    task_id: str, *, ticker: str, trade_date: str, asset_type: str, user_id: int | None
+) -> None:
+    meta = {
+        "ticker": ticker,
+        "trade_date": trade_date,
+        "asset_type": asset_type,
+        "user_id": user_id,
+        "started_at": time.time(),
+        "status": "queued",
+        "retry_count": 0,
+    }
+    # In worker mode the web process is not the task owner.  Keeping a local
+    # registry entry there would survive the worker's terminal cleanup and
+    # make completed jobs appear permanently active.  Redis is the shared
+    # source of truth until the worker starts and registers locally itself.
+    from backend.core.config import get_settings
+
+    if get_settings().ANALYSIS_QUEUE_MODE.strip().lower() != "worker":
+        _TASK_REGISTRY[task_id] = meta
+        _TASK_OWNERS[task_id] = user_id
+    await task_store.set_meta(task_id, meta)
+    await task_store.set_owner(task_id, user_id)
+
+
+async def discard_queued_task(task_id: str, user_id: int | None) -> None:
+    """Remove a task registration when dispatch fails before execution."""
+    _TASK_REGISTRY.pop(task_id, None)
+    _TASK_OWNERS.pop(task_id, None)
+    await task_store.clear_meta(task_id, user_id)
+    await task_store.clear_owner(task_id)
+    await task_store.clear_cancel_request(task_id)
+
+
+async def _heartbeat_loop(task_id: str, user_id: int | None) -> None:
+    """Renew Redis and database task leases until terminal cleanup."""
+    try:
+        while True:
+            await task_store.touch_task(task_id, user_id)
+            try:
+                from sqlalchemy import update
+                from backend.models.analysis import AnalysisResult
+
+                async with AsyncSessionLocal() as db:
+                    await db.execute(
+                        update(AnalysisResult)
+                        .where(AnalysisResult.task_id == task_id)
+                        .where(AnalysisResult.status.in_(("queued", "running")))
+                        .values(heartbeat_at=datetime.now(UTC), worker_id=_WORKER_ID)
+                    )
+                    await db.commit()
+            except Exception:
+                _logger.warning("Could not renew analysis DB lease task=%s", task_id, exc_info=True)
+            await asyncio.sleep(60)
+    except asyncio.CancelledError:
+        raise
+
+
 async def _track_running_task(
     task_id: str,
     *,
@@ -110,7 +173,7 @@ async def _track_running_task(
         "trade_date": trade_date,
         "asset_type": asset_type,
         "user_id": user_id,
-        "started_at": time.time(),
+        "started_at": existing.get("started_at", time.time()),
         "status": "running",
         "retry_count": existing.get("retry_count", 0),
     }
@@ -118,11 +181,18 @@ async def _track_running_task(
     _TASK_REGISTRY[task_id] = meta
     await task_store.set_meta(task_id, meta)
     await register_task_owner(task_id, user_id)
+    old_heartbeat = _HEARTBEAT_TASKS.pop(task_id, None)
+    if old_heartbeat:
+        old_heartbeat.cancel()
+    _HEARTBEAT_TASKS[task_id] = asyncio.create_task(_heartbeat_loop(task_id, user_id))
 
 async def _clear_terminal_task_state(task_id: str, user_id: int | None) -> None:
     """Remove tracking only after the runner reached a terminal state."""
     _RUNNING_TASKS.pop(task_id, None)
     _TASK_REGISTRY.pop(task_id, None)
+    heartbeat = _HEARTBEAT_TASKS.pop(task_id, None)
+    if heartbeat:
+        heartbeat.cancel()
     await task_store.clear_meta(task_id, user_id)
     await clear_task_owner(task_id)
     await task_store.clear_cancel_request(task_id)
@@ -271,8 +341,9 @@ async def run_analysis_task(
     settings: AppSettings,
     task_id: str,
     user=None,
+    triggered_by: str = "manual",
 ) -> None:
-    """Background entrypoint for a manual analysis run."""
+    """Background entrypoint for a queued or inline analysis run."""
     if user:
         from backend.core.log_handler import current_user_id
 
@@ -287,7 +358,7 @@ async def run_analysis_task(
                 asset_type,
                 settings,
                 db,
-                "manual",
+                triggered_by,
                 task_id=task_id,
                 user=user,
                 defer_terminal_cleanup=True,

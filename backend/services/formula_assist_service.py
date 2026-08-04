@@ -105,7 +105,8 @@ async def generate_formula(db: AsyncSession, prompt: str, user) -> str:
     client = create_llm_client(provider=provider, model=model, api_key=api_key)
     response = await client.get_llm().ainvoke([SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=prompt)])
 
-    formula = _extract_formula(str(response.content))
+    from backend.services.llm_content import llm_text
+    formula = _extract_formula(llm_text(response))
     if not formula or formula.upper() == "UNSUPPORTED":
         raise ValueError("That indicator cannot be expressed with the available functions (SMA/EMA/STD/RSI/ADX).")
     if len(formula) > _MAX_FORMULA_CHARS:

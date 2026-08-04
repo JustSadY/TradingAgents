@@ -4,7 +4,11 @@ import asyncio
 import logging
 import time
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends, Request
+
+from backend.api.deps import require_any_page
+from backend.core.limiter import limiter
+from backend.models.user import User
 
 router = APIRouter(prefix="/api/market", tags=["market"])
 _logger = logging.getLogger(__name__)
@@ -54,7 +58,11 @@ async def _fetch_rates() -> dict[str, float]:
     return rates
 
 @router.get("/fx-rates", response_model=dict[str, float | None])
-async def get_fx_rates():
+@limiter.limit("30/minute")
+async def get_fx_rates(
+    request: Request,
+    _: User = Depends(require_any_page("dashboard", "portfolio", "chart")),
+):
     """
     Returns exchange rates vs USD for supported currencies.
     Response: {"USD": 1.0, "EUR": 1.085, "GBP": 1.27, ...}

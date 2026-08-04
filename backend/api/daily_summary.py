@@ -1,11 +1,12 @@
 import logging
 from typing import Annotated
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import require_page
 from backend.core.database import get_db
+from backend.core.limiter import limiter
 from backend.models.user import User
 from backend.schemas.daily_summary import DailySummaryResponse
 from backend.services.daily_summary_service import generate_daily_summary, get_latest_summary
@@ -29,7 +30,9 @@ async def fetch_daily_summary(
         500: {"description": "Summary generation failed"},
     },
 )
+@limiter.limit("5/hour")
 async def trigger_daily_summary(
+    request: Request,
     current_user: Annotated[User, Depends(require_page("dashboard"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
@@ -40,4 +43,4 @@ async def trigger_daily_summary(
         raise HTTPException(status_code=400, detail=str(e)) from e
     except Exception as e:
         _logger.exception("Daily summary generation failed for user=%s", current_user.id)
-        raise HTTPException(status_code=500, detail=f"Summary generation failed: {e}") from e
+        raise HTTPException(status_code=500, detail="Summary generation failed") from e

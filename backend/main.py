@@ -150,8 +150,10 @@ async def _seed_admin_user():
                     import bcrypt
 
                     bcrypt.checkpw(b"test", raw_hash.encode())
-                except Exception:
-                    _logger.warning("ADMIN_PASSWORD_HASH in .env is not a valid bcrypt hash; using fallback.")
+                except Exception as exc:
+                    if settings.ENVIRONMENT.strip().lower() == "production":
+                        raise RuntimeError("ADMIN_PASSWORD_HASH is not a valid bcrypt hash") from exc
+                    _logger.warning("ADMIN_PASSWORD_HASH in .env is not a valid bcrypt hash; using development fallback.")
                     raw_hash = None
             if raw_hash:
                 hashed = raw_hash
@@ -164,9 +166,11 @@ async def _seed_admin_user():
             db.add(User(username=settings.ADMIN_USERNAME, hashed_password=hashed, role="owner"))
             await db.commit()
             if bootstrap_password:
+                # Development-only fallback. Production configuration validation
+                # requires an operator-controlled bcrypt hash before boot.
                 _logger.warning(
-                    "Owner user %s created with one-time bootstrap password: %s. "
-                    "Sign in locally and change it immediately.",
+                    "Owner user %s created with a one-time development bootstrap password: %s. "
+                    "Change it immediately.",
                     settings.ADMIN_USERNAME,
                     bootstrap_password,
                 )
@@ -269,8 +273,13 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 from backend.core.body_limit import BodySizeLimitMiddleware
 from backend.core.exceptions import register_exception_handlers
+from backend.core.security_headers import SecurityHeadersMiddleware
 
 register_exception_handlers(app)
+app.add_middleware(
+    SecurityHeadersMiddleware,
+    production=settings.ENVIRONMENT.strip().lower() == "production",
+)
 app.add_middleware(BodySizeLimitMiddleware, max_body_size=settings.MAX_REQUEST_BODY_BYTES)
 app.add_middleware(
     CORSMiddleware,

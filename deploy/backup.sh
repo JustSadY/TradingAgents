@@ -13,17 +13,46 @@
 #   RETENTION_DAYS — how long to keep backups (default: 30)
 #
 set -euo pipefail
+umask 077
 
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/tradingagents}"
 RETENTION_DAYS="${RETENTION_DAYS:-30}"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$PROJECT_ROOT/.env"
+HOOK_DIR="$PROJECT_ROOT/deploy/backup.d"
+SERVICE_NAME="${SERVICE_NAME:-tradingagents}"
+WORKER_SERVICE_NAME="${WORKER_SERVICE_NAME:-tradingagents-worker}"
 
 now() { date -u +%Y%m%dT%H%M%SZ; }
 info() { printf '\033[1;34m[*]\033[0m %s\n' "$*"; }
 ok()   { printf '\033[1;32m[+]\033[0m %s\n' "$*"; }
 err()  { printf '\033[1;31m[x]\033[0m %s\n' "$*" >&2; }
 die()  { err "$*"; exit 1; }
+
+load_backup_env() {
+    if [ -f "$HOOK_DIR/backup.env" ]; then
+        # Site-owned root configuration; export values to hooks and pg tools.
+        set -a
+        # shellcheck disable=SC1090
+        . "$HOOK_DIR/backup.env"
+        set +a
+    fi
+}
+
+run_hooks() {
+    local suffix="$1" hook
+    [ -d "$HOOK_DIR" ] || return 0
+    shopt -s nullglob
+    for hook in "$HOOK_DIR"/*".$suffix"; do
+        [ -f "$hook" ] || continue
+        info "Running backup hook: $(basename "$hook")"
+        # shellcheck disable=SC1090
+        . "$hook"
+    done
+    shopt -u nullglob
+}
+
+service_exists() { systemctl list-unit-files "$1.service" --no-legend 2>/dev/null | grep -q "^$1.service"; }
 
 require_root() {
     [ "$(id -u)" -eq 0 ] || die "Root required: sudo bash deploy/backup.sh"
@@ -67,7 +96,10 @@ read_db_config() {
 do_backup() {
     require_root
     read_db_config
+    load_backup_env
     mkdir -p "$BACKUP_DIR"
+    chmod 0700 "$BACKUP_DIR"
+    run_hooks pre
     local stamp
     stamp="$(now)"
     local filename="${BACKUP_DIR}/${DB_NAME}_${stamp}.sql.gz"
@@ -82,8 +114,10 @@ do_backup() {
         --compress=9 \
         --format=custom \
         --file="$filename.tmp"
+    chmod 0600 "$filename.tmp"
     mv "$filename.tmp" "$filename"
-    ln -sf "$filename" "$BACKUP_DIR/${DB_NAME}_latest.sql.gz"
+    ln -sfn "$filename" "$BACKUP_DIR/${DB_NAME}_latest.sql.gz"
+    run_hooks post
     ok "Backup created: $filename"
 }
 
@@ -92,21 +126,36 @@ do_restore() {
     local restore_file="${1:-}"
     [ -n "$restore_file" ] || die "Usage: deploy/backup.sh --restore <file>"
     [ -f "$restore_file" ] || die "Restore file not found: $restore_file"
+    load_backup_env
     read_db_config
+    [[ "$DB_NAME" =~ ^[A-Za-z0-9_]+$ ]] || die "Unsafe database name: $DB_NAME"
     info "Restoring $DB_NAME from $restore_file"
-    info "This will DROP the current database and recreate it from backup."
+    info "Application and worker services will be stopped during restore."
     info "Press Ctrl+C within 5 seconds to abort..."
     sleep 5
+
+    local restart_web=0 restart_worker=0
+    if service_exists "$SERVICE_NAME" && systemctl is-active --quiet "$SERVICE_NAME"; then
+        systemctl stop "$SERVICE_NAME"
+        restart_web=1
+    fi
+    if service_exists "$WORKER_SERVICE_NAME" && systemctl is-active --quiet "$WORKER_SERVICE_NAME"; then
+        systemctl stop "$WORKER_SERVICE_NAME"
+        restart_worker=1
+    fi
+    restore_services() {
+        [ "$restart_worker" -eq 1 ] && systemctl start "$WORKER_SERVICE_NAME" || true
+        [ "$restart_web" -eq 1 ] && systemctl start "$SERVICE_NAME" || true
+    }
+    trap restore_services RETURN
+
+    PGPASSWORD="$DB_PASS" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d postgres \
+        -v ON_ERROR_STOP=1 -c "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = '$DB_NAME' AND pid <> pg_backend_pid();"
     PGPASSWORD="$DB_PASS" pg_restore \
-        -h "$DB_HOST" \
-        -p "$DB_PORT" \
-        -U "$DB_USER" \
-        -d "$DB_NAME" \
-        --clean \
-        --no-owner \
-        --no-acl \
-        --verbose \
-        "$restore_file"
+        -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+        --clean --if-exists --exit-on-error --no-owner --no-acl --verbose "$restore_file"
+    restore_services
+    trap - RETURN
     ok "Restore completed from: $restore_file"
 }
 

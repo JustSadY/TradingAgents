@@ -170,10 +170,15 @@ async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
     return preset.name
 
 async def add_ticker_to_watchlist(db: AsyncSession, user, ticker: str) -> list[str]:
-    """Add ``ticker`` (already validated/normalized) to ``user``'s watchlist."""
+    """Add a normalized ticker while enforcing the global watchlist limit."""
+    normalized = ticker.strip().upper()
     settings = await get_or_create_settings(db, user)
-    if ticker not in settings.watchlist:
-        settings.watchlist = [*settings.watchlist, ticker]
+    current = list(settings.watchlist or [])
+    if normalized in current:
+        return current
+    if len(current) >= 100:
+        raise ValueError("watchlist cannot contain more than 100 symbols")
+    settings.watchlist = [*current, normalized]
     await db.flush()
     return settings.watchlist
 

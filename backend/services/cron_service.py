@@ -1,7 +1,8 @@
 import logging
 from contextlib import asynccontextmanager
-from datetime import date
+from datetime import UTC, datetime
 from typing import Optional
+from zoneinfo import ZoneInfo
 
 from apscheduler.jobstores.base import JobLookupError
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
@@ -12,9 +13,7 @@ from backend.core.database import AsyncSessionLocal, engine
 from backend.models.settings import AppSettings
 from backend.models.user import User
 from backend.services.alert_service import check_price_alerts
-from backend.services.analysis_service import run_analysis
 from backend.services.performance_service import backfill_returns
-from backend.services.trading_orchestrator import auto_execute_signals_enabled, is_actionable, place_signal_order
 
 _logger = logging.getLogger(__name__)
 _cron_service: Optional["CronService"] = None
@@ -67,9 +66,17 @@ async def _run_transient_cleanup():
         if any(counts.values()):
             _logger.info("Transient-data cleanup removed rows: %s", counts)
 
+def _trade_date_for_asset(asset_type: str) -> str:
+    timezone = ZoneInfo("UTC") if asset_type.lower() == "crypto" else ZoneInfo("America/New_York")
+    return datetime.now(timezone).date().isoformat()
+
+
 class CronService:
     def __init__(self):
-        self.scheduler = AsyncIOScheduler(timezone="UTC")
+        from backend.core.config import get_settings
+
+        self.timezone = get_settings().APP_TIMEZONE
+        self.scheduler = AsyncIOScheduler(timezone=self.timezone)
         self._running = False
 
     def start(self):
@@ -137,7 +144,7 @@ class CronService:
             _logger.debug("Failed to fetch username for logging user_id=%s: %s", settings.user_id, e)
         if cron_enabled and watchlist:
             try:
-                trigger = CronTrigger.from_crontab(cron_schedule, timezone="UTC")
+                trigger = CronTrigger.from_crontab(cron_schedule, timezone=self.timezone)
                 self.scheduler.add_job(
                     self._run_user_watchlist_scan,
                     trigger,
@@ -160,42 +167,62 @@ class CronService:
         from backend.core.log_handler import current_user_id
 
         current_user_id.set(user_id)
-        today = date.today().strftime("%Y-%m-%d")
         async with AsyncSessionLocal() as db:
             u_res = await db.execute(select(User).where(User.id == user_id))
             user = u_res.scalar_one_or_none()
             if not user or not user.is_active:
                 _logger.warning("User with id=%d not found or inactive, skipping cron scan", user_id)
                 return
-            _logger.info("User cron watchlist scan started for user=%s (id=%d), date=%s", user.username, user_id, today)
             app_res = await db.execute(select(AppSettings).where(AppSettings.user_id == user_id))
             app_settings = app_res.scalar_one_or_none()
             if not app_settings or not app_settings.cron_enabled:
                 return
 
+            trade_date = _trade_date_for_asset("stock")
+            _logger.info(
+                "User cron watchlist scan started for user=%s (id=%d), date=%s",
+                user.username, user_id, trade_date,
+            )
+            from uuid import uuid4
+
+            from backend.repositories.analysis import create_analysis_result
+            from backend.services.analysis_queue import dispatch_analysis
+            from backend.services.analysis_service import register_queued_task
+
             for ticker in app_settings.watchlist:
+                task_id = str(uuid4())
+                queued_row = None
                 try:
-                    _logger.info("User=%s scanning ticker=%s", user.username, ticker)
-                    task_id, row = await run_analysis(
+                    _logger.info("User=%s queueing ticker=%s", user.username, ticker)
+                    queued_row = await create_analysis_result(
+                        db,
+                        task_id=task_id,
+                        user_id=user.id,
                         ticker=ticker,
-                        trade_date=today,
+                        trade_date=trade_date,
                         asset_type="stock",
-                        settings=app_settings,
-                        user=user,
-                        db=db,
+                        status="queued",
+                        heartbeat_at=datetime.now(UTC),
                         triggered_by="cron",
                     )
                     await db.commit()
-                    await _place_actionable_signal_order(
-                        db,
-                        ticker=ticker,
-                        row=row,
-                        settings=app_settings,
-                        user=user,
+                    await register_queued_task(
+                        task_id, ticker=ticker, trade_date=trade_date, asset_type="stock", user_id=user.id
+                    )
+                    await dispatch_analysis(
+                        None, ticker=ticker, trade_date=trade_date, asset_type="stock",
+                        settings=app_settings, task_id=task_id, user=user, triggered_by="cron",
                     )
                 except Exception:
                     _logger.exception("User cron scan failed for user=%s, ticker=%s", user.username, ticker)
                     await db.rollback()
+                    from backend.repositories.analysis import update_analysis_result
+                    from backend.services.analysis_service import clear_task_owner
+                    if queued_row is not None:
+                        await update_analysis_result(
+                            db, queued_row.id, status="failed", heartbeat_at=datetime.now(UTC)
+                        )
+                    await clear_task_owner(task_id)
             _logger.info("User cron watchlist scan completed for user=%s (id=%d)", user.username, user_id)
 
     def get_status(self, user_id: int | None = None) -> dict:
@@ -208,21 +235,6 @@ class CronService:
             "job_configured": job is not None,
             "next_run_time": job.next_run_time.isoformat() if job and job.next_run_time else None,
         }
-
-async def _place_actionable_signal_order(db, *, ticker: str, row, settings, user) -> bool:
-    """Place cron orders through the orchestrator's single signal mapping."""
-    if not auto_execute_signals_enabled(settings):
-        _logger.info(
-            "Automatic signal execution is disabled for user=%s; cron will not trade %s",
-            getattr(user, "id", None),
-            ticker,
-        )
-        return False
-    if not is_actionable(getattr(row, "signal", None)):
-        return False
-    await place_signal_order(db, ticker=ticker, row=row, settings=settings, user=user)
-    await db.commit()
-    return True
 
 async def _run_alert_checker():
     try:

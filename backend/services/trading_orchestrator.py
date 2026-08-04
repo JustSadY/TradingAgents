@@ -14,8 +14,11 @@ from __future__ import annotations
 import json
 import logging
 import math
+from datetime import UTC, datetime
 from decimal import Decimal
+from types import SimpleNamespace
 
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import is_live_trading_enabled
@@ -343,6 +346,99 @@ async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, 
         )
     return assessment.allowed_notional / price if price > 0 else 0.0
 
+async def _get_or_create_broker_audit_portfolio(db: AsyncSession, *, user, mode: str, account: dict):
+    """Maintain a local audit container while the broker remains source of truth."""
+    from backend.models.portfolio import Portfolio
+
+    audit_mode = "live" if mode == "live" else "alpaca_paper"
+    row = await db.execute(
+        select(Portfolio).where(Portfolio.user_id == user.id, Portfolio.mode == audit_mode).with_for_update()
+    )
+    portfolio = row.scalar_one_or_none()
+    equity = safe_decimal(account.get("equity") or account.get("portfolio_value") or 0)
+    cash = safe_decimal(account.get("cash") or 0)
+    if portfolio is None:
+        portfolio = Portfolio(
+            user_id=user.id,
+            mode=audit_mode,
+            broker="alpaca",
+            initial_capital=equity if equity > 0 else cash,
+            current_balance=equity,
+            cash_available=cash,
+            margin_used=Decimal("0"),
+            status="active",
+        )
+        db.add(portfolio)
+        await db.flush()
+    else:
+        portfolio.current_balance = equity
+        portfolio.cash_available = cash
+        portfolio.status = "active"
+    return portfolio
+
+
+def _broker_risk_snapshot(account: dict, positions: dict[str, dict]) -> dict:
+    holdings = []
+    for position in positions.values():
+        market_value = abs(float(position.get("market_value") or 0.0))
+        holdings.append(
+            {
+                "ticker": str(position.get("ticker") or "").upper(),
+                "side": str(position.get("side") or "long"),
+                "quantity": abs(float(position.get("quantity") or 0.0)),
+                "market_value": market_value,
+                "current_price": float(position.get("current_price") or 0.0),
+            }
+        )
+    return {
+        "total_value": float(account.get("equity") or account.get("portfolio_value") or 0.0),
+        "cash_available": float(account.get("cash") or 0.0),
+        "buying_power": float(account.get("buying_power") or 0.0),
+        "holdings": holdings,
+    }
+
+
+async def _persist_broker_order(
+    db: AsyncSession,
+    *,
+    portfolio,
+    request: OrderRequest,
+    result: OrderResult,
+    side: str,
+) -> None:
+    """Persist every broker submission/result for reconciliation and audit."""
+    from backend.models.order import Order
+
+    filled_qty = safe_decimal(result.filled_quantity or 0)
+    filled_price = safe_decimal(result.filled_price) if result.filled_price is not None else None
+    total_value = filled_qty * filled_price if filled_price is not None else None
+    db.add(
+        Order(
+            portfolio_id=portfolio.id,
+            broker="alpaca",
+            ticker=request.ticker,
+            action=request.action,
+            side=side,
+            leverage=safe_decimal(request.leverage),
+            quantity_requested=request.quantity,
+            quantity_filled=filled_qty,
+            status=result.status,
+            price_per_share=filled_price,
+            total_value=total_value,
+            commission=safe_decimal(result.commission),
+            entry_commission=Decimal("0"),
+            realized_pnl=Decimal("0"),
+            financing_cost=Decimal("0"),
+            external_order_id=result.order_id or None,
+            analysis_id=request.analysis_id,
+            ai_signal=request.ai_signal[:50],
+            ai_reasoning=request.ai_reasoning[:4_000],
+            executed_at=result.executed_at if filled_qty > 0 else None,
+        )
+    )
+    await db.flush()
+
+
 async def place_signal_order(
     db: AsyncSession,
     *,
@@ -450,11 +546,45 @@ async def place_signal_order(
                 include_skip_result=include_skip_result,
             )
 
-    portfolio = await get_or_create_sim_portfolio(db, user=user)
+    broker_snapshot: dict | None = None
+    broker_account: dict | None = None
+    broker_positions: dict[str, dict] = {}
+    trader = None
 
-    from backend.repositories.portfolio import get_holding
+    if sys_broker == "alpaca":
+        # Alpaca account state is authoritative for cash, equity and positions.
+        # The local portfolio is only an immutable/auditable order container.
+        trader = get_trader(mode=sys_mode, broker=sys_broker, portfolio_id=0, initial_capital=0, db=db)
+        get_snapshot = getattr(trader, "get_account_snapshot", None)
+        broker_account = await get_snapshot() if callable(get_snapshot) else {}
+        if not broker_account or broker_account.get("trading_blocked") or broker_account.get("account_blocked"):
+            return _skipped_order(
+                reason_code="broker_account_unavailable",
+                message="The broker account is unavailable or blocked; no order was sent.",
+                include_skip_result=include_skip_result,
+            )
+        if float(broker_account.get("equity") or 0.0) <= 0:
+            return _skipped_order(
+                reason_code="broker_equity_unavailable",
+                message="The broker did not report positive account equity; no order was sent.",
+                include_skip_result=include_skip_result,
+            )
+        broker_positions = await trader.get_positions()
+        broker_snapshot = _broker_risk_snapshot(broker_account, broker_positions)
+        portfolio = await _get_or_create_broker_audit_portfolio(db, user=user, mode=sys_mode, account=broker_account)
+        position = broker_positions.get(ticker.upper())
+        holding = None
+        if position and float(position.get("quantity") or 0.0) > 0:
+            holding = SimpleNamespace(
+                quantity=safe_decimal(position.get("quantity")),
+                side=str(position.get("side") or "long"),
+                avg_buy_price=safe_decimal(position.get("avg_price")),
+            )
+    else:
+        portfolio = await get_or_create_sim_portfolio(db, user=user)
+        from backend.repositories.portfolio import get_holding
 
-    holding = await get_holding(db, portfolio.id, ticker)
+        holding = await get_holding(db, portfolio.id, ticker)
     allow_short = bool(getattr(settings, "allow_short_selling", False))
     if signal == "Underweight":
         if holding is None or getattr(holding, "side", None) != "long":
@@ -483,9 +613,12 @@ async def place_signal_order(
             if initial_capital is None or initial_capital <= 0 or max_drawdown_pct is None or max_drawdown_pct < 0:
                 raise ValueError("invalid portfolio capital or drawdown threshold")
 
-            from backend.services.mock_trading_service import get_portfolio_with_live_prices
+            if broker_snapshot is not None:
+                snapshot = broker_snapshot
+            else:
+                from backend.services.mock_trading_service import get_portfolio_with_live_prices
 
-            snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id, read_only=True)
+                snapshot = await get_portfolio_with_live_prices(db, portfolio_id=portfolio.id, read_only=True)
             current_equity = _safe_float(snapshot.get("total_value")) if isinstance(snapshot, dict) else None
             if current_equity is None:
                 raise ValueError("snapshot has no finite total_value")
@@ -510,13 +643,14 @@ async def place_signal_order(
                 include_skip_result=include_skip_result,
             )
 
-    trader = get_trader(
-        mode=sys_mode,
-        broker=sys_broker,
-        portfolio_id=portfolio.id,
-        initial_capital=float(safe_decimal(portfolio.initial_capital)),
-        db=db,
-    )
+    if trader is None:
+        trader = get_trader(
+            mode=sys_mode,
+            broker=sys_broker,
+            portfolio_id=portfolio.id,
+            initial_capital=float(safe_decimal(portfolio.initial_capital)),
+            db=db,
+        )
     price = float(safe_decimal(await trader.get_current_price(ticker)))
     if price <= 0:
         _logger.warning("No price available for %s; skipping order execution", ticker)
@@ -548,7 +682,9 @@ async def place_signal_order(
             stop_loss = stop_loss if stop_loss is not None else default_stop
             take_profit = take_profit if take_profit is not None else default_target
 
-        available_cash = safe_decimal(portfolio.cash_available)
+        available_cash = safe_decimal(
+            (broker_account or {}).get("cash") if broker_account is not None else portfolio.cash_available
+        )
         if available_cash <= 0:
             _logger.info("No available cash for a new %s position in %s; skipping order", position_side, ticker)
             return _skipped_order(
@@ -573,7 +709,7 @@ async def place_signal_order(
                 message="A new position needs a final Portfolio Manager target allocation.",
                 include_skip_result=include_skip_result,
             )
-        allocation_snapshot = await _allocation_snapshot(db, portfolio=portfolio)
+        allocation_snapshot = broker_snapshot or await _allocation_snapshot(db, portfolio=portfolio)
         if allocation_snapshot is None:
             return _skipped_order(
                 reason_code="portfolio_equity_unavailable",
@@ -664,7 +800,7 @@ async def place_signal_order(
                     message="Underweight needs a final target allocation before an order can be sent.",
                     include_skip_result=include_skip_result,
                 )
-            allocation_snapshot = await _allocation_snapshot(db, portfolio=portfolio)
+            allocation_snapshot = broker_snapshot or await _allocation_snapshot(db, portfolio=portfolio)
             if allocation_snapshot is None:
                 return _skipped_order(
                     reason_code="portfolio_equity_unavailable",
@@ -720,6 +856,15 @@ async def place_signal_order(
         allow_short=allow_short,
     )
     result = await trader.place_order(request)
+    if sys_broker == "alpaca":
+        await _persist_broker_order(db, portfolio=portfolio, request=request, result=result, side=position_side)
+        # Refresh the local audit balances from the broker after submission when possible.
+        get_snapshot = getattr(trader, "get_account_snapshot", None)
+        if callable(get_snapshot):
+            refreshed = await get_snapshot()
+            if refreshed:
+                portfolio.cash_available = safe_decimal(refreshed.get("cash") or portfolio.cash_available)
+                portfolio.current_balance = safe_decimal(refreshed.get("equity") or portfolio.current_balance)
     _logger.info("Order placed: %s %s %s -> %s", action, quantity, ticker, result.status)
     if result.filled_quantity and result.filled_price:
         try:

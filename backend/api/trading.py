@@ -1,11 +1,13 @@
 from typing import Literal
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator, model_validator
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db, require_page
 from backend.core.utils import safe_ticker_component
+from backend.core.limiter import limiter
 from backend.models.user import User
 from backend.schemas.trading import (
     BacktestResponse,
@@ -90,6 +92,18 @@ async def create_order(
     _=Depends(require_page("trading")),
 ):
 
+    if req.analysis_id is not None:
+        from backend.models.analysis import AnalysisResult
+
+        ownership = await db.execute(
+            select(AnalysisResult.id).where(
+                AnalysisResult.id == req.analysis_id,
+                AnalysisResult.user_id == _.id,
+            )
+        )
+        if ownership.scalar_one_or_none() is None:
+            raise HTTPException(status_code=404, detail="Analysis not found")
+
     result = await svc.execute_order(
         db,
         ticker=req.ticker,
@@ -167,7 +181,9 @@ async def get_risk_dashboard(
     return await get_risk_dashboard(db, _)
 
 @router.post("/rebalance", response_model=RebalanceResponse)
+@limiter.limit("5/hour")
 async def rebalance_portfolio(
+    request: Request,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_page("portfolio")),
 ):
@@ -200,7 +216,9 @@ async def get_trade_note(
     return result or {"order_id": order_id, "note": "", "ai_debrief": None, "has_debrief": False}
 
 @router.post("/journal/{order_id}/debrief", response_model=JournalDebriefResponse)
+@limiter.limit("10/hour")
 async def generate_trade_debrief(
+    request: Request,
     order_id: int,
     db: AsyncSession = Depends(get_db),
     _: User = Depends(require_page("orders")),

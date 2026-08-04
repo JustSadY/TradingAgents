@@ -52,6 +52,7 @@ function activateUserScope(username: string) {
 }
 
 let _onForceLogout: (() => void) | null = null
+let _authEpoch = 0
 
 interface JwtPayload {
   sub: string
@@ -106,6 +107,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const initAuth = useCallback(async () => {
+    const epoch = _authEpoch
     try {
       const current = getAccessToken()
       if (current && applyAccessToken(current)) return
@@ -114,6 +116,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       // Restore a server-side session using the HttpOnly refresh cookie.
       const res = await axios.post('/auth/refresh', {})
       const token = res.data?.access_token
+      if (epoch !== _authEpoch) return
       if (typeof token !== 'string' || !applyAccessToken(token)) {
         clearLocalAuthState()
       }
@@ -137,10 +140,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [applyAccessToken])
 
   const logout = useCallback(() => {
-    // Always ask the server to clear the HttpOnly refresh cookie, even when the
-    // in-memory access token has already expired or was cleared.
-    axios.post('/auth/logout').catch(() => {})
+    // Invalidate every in-flight init/refresh before clearing local state.
+    _authEpoch += 1
+    _queue.forEach(({ reject }) => reject(new Error('Session ended')))
+    _queue = []
     clearLocalAuthState()
+    // The server call is intentionally best-effort after local invalidation.
+    void axios.post('/auth/logout').catch(() => {})
   }, [clearLocalAuthState])
 
   useEffect(() => {
@@ -212,9 +218,11 @@ axios.interceptors.response.use(
     }
 
     _refreshing = true
+    const refreshEpoch = _authEpoch
     try {
       const res = await axios.post('/auth/refresh', {})
       const newToken = res.data?.access_token
+      if (refreshEpoch !== _authEpoch) throw new Error('Session changed during refresh')
       if (typeof newToken !== 'string') throw new Error('No access token returned')
       setAccessToken(newToken)
       _queue.forEach(({ resolve }) => resolve(newToken))

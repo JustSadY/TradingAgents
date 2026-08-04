@@ -196,6 +196,9 @@ async def update_user(
         if admin.role != "owner":
             raise HTTPException(status_code=403, detail="Only Server Owner can promote/demote admins.")
 
+    if body.email is not None and await email_exists(db, body.email, exclude_user_id=user.id):
+        raise HTTPException(status_code=409, detail="Email already in use")
+
     from backend.repositories.users import update_user_admin
 
     return await update_user_admin(
@@ -235,6 +238,9 @@ async def get_user_permissions(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    user = await get_user_by_id(db, user_id)
+    if not user:
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     from backend.models.page_permission import ALL_PAGE_KEYS
     from backend.repositories.permissions import get_user_page_permissions_map
 
@@ -256,9 +262,10 @@ async def set_user_permissions(
     from backend.models.page_permission import ALL_PAGE_KEYS
     from backend.repositories.permissions import set_user_page_permission
 
+    unknown = sorted(set(body.permissions) - set(ALL_PAGE_KEYS))
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Unknown page permission keys: {', '.join(unknown)}")
     for page_key, allowed in body.permissions.items():
-        if page_key not in ALL_PAGE_KEYS:
-            continue
         await set_user_page_permission(db, user_id, page_key, allowed)
 
     await db.flush()
@@ -354,9 +361,10 @@ async def set_user_setting_permissions(
     from backend.core.constants import SETTING_KEYS
     from backend.repositories.permissions import set_user_setting_permission
 
+    unknown = sorted(set(body.permissions) - set(SETTING_KEYS))
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Unknown setting permission keys: {', '.join(unknown)}")
     for setting_key, allowed in body.permissions.items():
-        if setting_key not in SETTING_KEYS:
-            continue
         await set_user_setting_permission(db, user_id, setting_key, allowed)
 
     await db.flush()
@@ -368,6 +376,8 @@ async def get_agent_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    if not await get_user_by_id(db, user_id):
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     from backend.services.tool_access_service import get_user_agent_access
 
     return await get_user_agent_access(db, user_id)
@@ -382,6 +392,8 @@ async def set_agent_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    if not await get_user_by_id(db, user_id):
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     from backend.services.tool_access_service import update_user_agent_access
 
     updated = await update_user_agent_access(db, user_id, body.agents)
@@ -393,6 +405,8 @@ async def get_tool_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    if not await get_user_by_id(db, user_id):
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     from backend.services.tool_access_service import get_user_tool_access
 
     return await get_user_tool_access(db, user_id)
@@ -407,6 +421,8 @@ async def set_tool_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    if not await get_user_by_id(db, user_id):
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     from backend.services.tool_access_service import update_user_tool_access
 
     updated = await update_user_tool_access(db, user_id, body.tools)
@@ -418,6 +434,8 @@ async def get_tool_field_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    if not await get_user_by_id(db, user_id):
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     from backend.services.tool_access_service import get_user_tool_field_access
 
     return await get_user_tool_field_access(db, user_id)
@@ -432,6 +450,8 @@ async def set_tool_field_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
+    if not await get_user_by_id(db, user_id):
+        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     from backend.services.tool_access_service import update_user_tool_field_access
 
     updated = await update_user_tool_field_access(db, user_id, body.fields)

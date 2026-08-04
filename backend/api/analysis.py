@@ -1,4 +1,5 @@
 import uuid
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -92,10 +93,28 @@ async def run_analysis(
     ticker = await _preflight_ticker(body.ticker, body.asset_type)
     settings = await get_or_create_settings(db, current_user)
     task_id = str(uuid.uuid4())
+    from backend.repositories.analysis import create_analysis_result
     from backend.services.analysis_queue import dispatch_analysis
-    from backend.services.analysis_service import register_task_owner
+    from backend.services.analysis_service import register_queued_task
 
-    await register_task_owner(task_id, current_user.id)
+    queued_row = await create_analysis_result(
+        db,
+        task_id=task_id,
+        user_id=current_user.id,
+        ticker=ticker,
+        trade_date=body.trade_date,
+        asset_type=body.asset_type,
+        status="queued",
+        heartbeat_at=datetime.now(UTC),
+        triggered_by="manual",
+    )
+    await register_queued_task(
+        task_id,
+        ticker=ticker,
+        trade_date=body.trade_date,
+        asset_type=body.asset_type,
+        user_id=current_user.id,
+    )
     try:
         await dispatch_analysis(
             background_tasks,
@@ -107,9 +126,11 @@ async def run_analysis(
             user=current_user,
         )
     except Exception:
-        from backend.services.analysis_service import clear_task_owner
+        from backend.repositories.analysis import update_analysis_result
+        from backend.services.analysis_service import discard_queued_task
 
-        await clear_task_owner(task_id)
+        await update_analysis_result(db, queued_row.id, status="failed", heartbeat_at=datetime.now(UTC))
+        await discard_queued_task(task_id, current_user.id)
         raise
     return AnalysisRunResponse(task_id=task_id, ticker=ticker, trade_date=body.trade_date)
 
@@ -248,9 +269,15 @@ async def run_portfolio_run(
     settings = await get_or_create_settings(db, current_user)
     task_id = str(uuid.uuid4())
     from backend.services.analysis_queue import dispatch_portfolio_analysis
-    from backend.services.analysis_service import register_task_owner
+    from backend.services.analysis_service import register_queued_task
 
-    await register_task_owner(task_id, current_user.id)
+    await register_queued_task(
+        task_id,
+        ticker=", ".join(tickers),
+        trade_date=body.trade_date,
+        asset_type=body.asset_type,
+        user_id=current_user.id,
+    )
     try:
         await dispatch_portfolio_analysis(
             background_tasks,
@@ -262,9 +289,9 @@ async def run_portfolio_run(
             user=current_user,
         )
     except Exception:
-        from backend.services.analysis_service import clear_task_owner
+        from backend.services.analysis_service import discard_queued_task
 
-        await clear_task_owner(task_id)
+        await discard_queued_task(task_id, current_user.id)
         raise
     return MultiTickerRunResponse(task_id=task_id, tickers=tickers, trade_date=body.trade_date)
 
@@ -410,8 +437,6 @@ async def time_travel_resume(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_page("analysis")),
 ):
-    import uuid
-
     from backend.repositories.analysis import get_analysis_by_id
     from backend.services.analysis_service import rollback_and_resume_analysis
 

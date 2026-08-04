@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models import AnalysisChat
 from backend.models.analysis import AnalysisResult
+from backend.services.llm_content import llm_text
 from backend.services.settings_service import get_or_create_settings
 from backend.services.user_service import resolve_user_api_key
 
@@ -131,10 +132,11 @@ async def answer_report_question(
         llm = client.get_llm()
         response = await llm.ainvoke(payload)
     except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        _logger.warning("Report chat model request rejected: %s", e)
+        raise HTTPException(status_code=400, detail="The model request or configuration is invalid") from e
 
     db.add(AnalysisChat(analysis_id=analysis_id, role="user", content=message))
-    assistant_chat = AnalysisChat(analysis_id=analysis_id, role="assistant", content=response.content)
+    assistant_chat = AnalysisChat(analysis_id=analysis_id, role="assistant", content=llm_text(response))
     db.add(assistant_chat)
     await db.flush()
     return assistant_chat

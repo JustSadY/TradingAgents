@@ -94,17 +94,17 @@ else
 fi
 ok "System packages ready."
 
-# ── Select Python 3.10–3.13 ────────────────────────────────────────────────────
+# ── Select Python 3.11–3.13 ────────────────────────────────────────────────────
 pick_python() {
     local c v
-    for c in python3.13 python3.12 python3.11 python3.10 python3; do
+    for c in python3.13 python3.12 python3.11 python3; do
         command -v "$c" >/dev/null || continue
         v=$("$c" -c 'import sys;print(sys.version_info[0]*100+sys.version_info[1])' 2>/dev/null || echo 0)
-        if [ "$v" -ge 310 ] && [ "$v" -lt 314 ]; then echo "$c"; return 0; fi
+        if [ "$v" -ge 311 ] && [ "$v" -lt 314 ]; then echo "$c"; return 0; fi
     done
     return 1
 }
-PYTHON="$(pick_python)" || die "No supported Python 3.10–3.13 interpreter found. Please install python3.10–3.13."
+PYTHON="$(pick_python)" || die "No supported Python 3.11–3.13 interpreter found. Please install python3.11–3.13."
 info "Python: $PYTHON ($("$PYTHON" --version 2>&1))"
 
 # ── 2. Node 20 (Required for Vite 8) ───────────────────────────────────────────

@@ -19,9 +19,10 @@ async def get_user_agent_access(db: AsyncSession, user_id: int) -> dict[str, boo
 
 async def update_user_agent_access(db: AsyncSession, user_id: int, access_map: dict[str, bool]) -> dict[str, bool]:
     analysts = set(list_analysts())
+    unknown = sorted(set(access_map) - analysts)
+    if unknown:
+        raise ValueError(f"Unknown agent keys: {', '.join(unknown)}")
     for agent_key, can_run in access_map.items():
-        if agent_key not in analysts:
-            continue
         result = await db.execute(
             select(UserAgentAccess)
             .where(UserAgentAccess.user_id == user_id)
@@ -62,9 +63,15 @@ async def get_user_tool_access(db: AsyncSession, user_id: int) -> dict[str, dict
     return access_map
 
 async def update_user_tool_access(db: AsyncSession, user_id: int, updates: dict[str, dict]) -> dict[str, dict]:
+    known = {tool.key for tool in registry.list()}
+    unknown = sorted(set(updates) - known)
+    if unknown:
+        raise ValueError(f"Unknown tool keys: {', '.join(unknown)}")
+    allowed_perm_keys = {"can_view", "can_use", "can_edit", "can_enable"}
     for tool_key, perms in updates.items():
-        if not registry.get(tool_key):
-            continue
+        extra = sorted(set(perms) - allowed_perm_keys)
+        if extra:
+            raise ValueError(f"Unknown permissions for {tool_key}: {', '.join(extra)}")
         result = await db.execute(
             select(UserToolAccess).where(UserToolAccess.user_id == user_id).where(UserToolAccess.tool_key == tool_key)
         )
@@ -117,15 +124,21 @@ async def get_user_tool_field_access(db: AsyncSession, user_id: int) -> dict[str
 async def update_user_tool_field_access(
     db: AsyncSession, user_id: int, updates: dict[str, dict[str, dict]]
 ) -> dict[str, dict[str, dict]]:
+    known_tools = {tool.key for tool in registry.list()}
+    unknown_tools = sorted(set(updates) - known_tools)
+    if unknown_tools:
+        raise ValueError(f"Unknown tool keys: {', '.join(unknown_tools)}")
     for tool_key, fields in updates.items():
         tool = registry.get(tool_key)
-        if not tool:
-            continue
         field_keys = {f.key for f in tool.settings_schema}
+        unknown_fields = sorted(set(fields) - field_keys)
+        if unknown_fields:
+            raise ValueError(f"Unknown fields for {tool_key}: {', '.join(unknown_fields)}")
 
         for field_key, perms in fields.items():
-            if field_key not in field_keys:
-                continue
+            extra = sorted(set(perms) - {"can_view", "can_edit"})
+            if extra:
+                raise ValueError(f"Unknown field permissions for {tool_key}.{field_key}: {', '.join(extra)}")
             result = await db.execute(
                 select(UserToolFieldAccess)
                 .where(UserToolFieldAccess.user_id == user_id)

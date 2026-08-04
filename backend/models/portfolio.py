@@ -15,7 +15,7 @@ class Portfolio(Base):
     __table_args__ = (UniqueConstraint("user_id", "mode", name="uq_portfolio_user_mode"),)
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     mode: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
     broker: Mapped[str] = mapped_column(String(50), nullable=False)
@@ -55,6 +55,7 @@ class Holding(Base):
     borrowed_amount: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     liquidation_price: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     interest_accrued: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    interest_updated_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     stop_loss: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     take_profit: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
     opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC))

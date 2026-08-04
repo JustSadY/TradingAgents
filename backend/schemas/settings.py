@@ -5,6 +5,25 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 from backend.core.constants import WEBHOOK_EVENTS
 from backend.trading_agents.config import MAX_FALLBACK_LLM_CHAIN_LENGTH, FallbackLLMConfig
 
+_MAX_WATCHLIST_ITEMS = 100
+_MAX_TICKER_LENGTH = 20
+
+def _normalize_watchlist(value: list[str] | None) -> list[str] | None:
+    if value is None:
+        return None
+    if len(value) > _MAX_WATCHLIST_ITEMS:
+        raise ValueError(f"watchlist cannot contain more than {_MAX_WATCHLIST_ITEMS} symbols")
+    normalized: list[str] = []
+    for raw in value:
+        ticker = str(raw).strip().upper()
+        if not ticker or len(ticker) > _MAX_TICKER_LENGTH:
+            raise ValueError("watchlist contains an invalid ticker")
+        if not all(ch.isalnum() or ch in ".-^=" for ch in ticker):
+            raise ValueError(f"Unsupported ticker format: {ticker}")
+        if ticker not in normalized:
+            normalized.append(ticker)
+    return normalized
+
 def _validate_webhook_url_shape(v: str | None) -> str | None:
     """Shared shape check for the ``webhook_url`` field on both settings models.
 
@@ -49,7 +68,7 @@ class SettingsBase(BaseModel):
     cron_enabled: bool = False
     cron_schedule: str = "0 9 * * 1-5"
     price_tolerance_pct: float = 0.5
-    watchlist: list[str] = []
+    watchlist: list[str] = Field(default_factory=list, max_length=_MAX_WATCHLIST_ITEMS)
     output_language: str = "English"
     llm_provider: str = "openai"
     llm_model: str = "gpt-4o-mini"
@@ -113,6 +132,11 @@ class SettingsBase(BaseModel):
     global_news_article_limit: int = 10
     global_news_lookback_days: int = 7
 
+    @field_validator("watchlist")
+    @classmethod
+    def validate_watchlist(cls, value: list[str] | None) -> list[str] | None:
+        return _normalize_watchlist(value)
+
     @field_validator("webhook_url")
     @classmethod
     def validate_webhook_url(cls, v: str | None) -> str | None:
@@ -152,7 +176,7 @@ class SettingsUpdate(BaseModel):
     cron_enabled: bool | None = None
     cron_schedule: str | None = None
     price_tolerance_pct: float | None = Field(default=None, ge=0, le=50)
-    watchlist: list[str] | None = None
+    watchlist: list[str] | None = Field(default=None, max_length=_MAX_WATCHLIST_ITEMS)
     output_language: str | None = None
     llm_provider: str | None = None
     llm_model: str | None = None
@@ -214,6 +238,11 @@ class SettingsUpdate(BaseModel):
     news_article_limit: int | None = Field(default=None, ge=1, le=100)
     global_news_article_limit: int | None = Field(default=None, ge=1, le=100)
     global_news_lookback_days: int | None = Field(default=None, ge=1, le=90)
+
+    @field_validator("watchlist")
+    @classmethod
+    def validate_watchlist(cls, value: list[str] | None) -> list[str] | None:
+        return _normalize_watchlist(value)
 
     @field_validator("webhook_url")
     @classmethod

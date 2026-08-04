@@ -17,7 +17,37 @@ from backend.core.config import get_settings
 
 _logger = logging.getLogger(__name__)
 
-async def run_analysis_job(ctx, ticker: str, trade_date: str, asset_type: str, user_id: int | None, task_id: str):
+
+async def _mark_analysis_terminal(task_id: str, status: str) -> None:
+    """Persist worker preparation failures for the pre-created queue row."""
+    from datetime import UTC, datetime
+
+    from sqlalchemy import update
+
+    from backend.core.database import AsyncSessionLocal
+    from backend.models.analysis import AnalysisResult
+
+    try:
+        async with AsyncSessionLocal() as db:
+            await db.execute(
+                update(AnalysisResult)
+                .where(AnalysisResult.task_id == task_id)
+                .where(AnalysisResult.status.in_(("queued", "running")))
+                .values(status=status, heartbeat_at=datetime.now(UTC), worker_id=None)
+            )
+            await db.commit()
+    except Exception:
+        _logger.exception("Could not persist terminal worker state task=%s status=%s", task_id, status)
+
+async def run_analysis_job(
+    ctx,
+    ticker: str,
+    trade_date: str,
+    asset_type: str,
+    user_id: int | None,
+    task_id: str,
+    triggered_by: str = "manual",
+):
     from backend.core.database import AsyncSessionLocal
     from backend.models.user import User
     from backend.services.analysis_service import run_analysis_task
@@ -37,14 +67,27 @@ async def run_analysis_job(ctx, ticker: str, trade_date: str, asset_type: str, u
                 await task_store.clear_meta(task_id, user_id)
                 await task_store.clear_owner(task_id)
                 await task_store.clear_cancel_request(task_id)
+                await _mark_analysis_terminal(task_id, "failed")
                 return
             settings = await get_or_create_settings(db, user)
             await db.commit()
 
-        await run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user)
+        await run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user, triggered_by)
     except asyncio.CancelledError:
         _logger.info("Analysis worker job cancelled task=%s", task_id)
-        return
+        from backend.core import task_store
+        from backend.services.analysis.emitter import AnalysisEmitter
+
+        try:
+            emitter = AnalysisEmitter(task_id)
+            await emitter.emit_error("Analysis cancelled.")
+            await emitter.close()
+            await _mark_analysis_terminal(task_id, "cancelled")
+        finally:
+            await task_store.clear_meta(task_id, user_id)
+            await task_store.clear_owner(task_id)
+            await task_store.clear_cancel_request(task_id)
+        raise
     except Exception:
         _logger.exception("Analysis worker preparation failed task=%s", task_id)
         from backend.core import task_store
@@ -53,6 +96,7 @@ async def run_analysis_job(ctx, ticker: str, trade_date: str, asset_type: str, u
         emitter = AnalysisEmitter(task_id)
         try:
             await emitter.emit_error("Analysis failed before execution. Please try again.")
+            await _mark_analysis_terminal(task_id, "failed")
         finally:
             await emitter.close()
             await task_store.clear_meta(task_id, user_id)
@@ -88,7 +132,18 @@ async def run_portfolio_job(
         await run_portfolio_task(tickers, trade_date, asset_type, settings, user, task_id)
     except asyncio.CancelledError:
         _logger.info("Portfolio worker job cancelled task=%s", task_id)
-        return
+        from backend.core import task_store
+        from backend.services.analysis.emitter import AnalysisEmitter
+
+        try:
+            emitter = AnalysisEmitter(task_id)
+            await emitter.emit_error("Portfolio analysis cancelled.")
+            await emitter.close()
+        finally:
+            await task_store.clear_meta(task_id, user_id)
+            await task_store.clear_owner(task_id)
+            await task_store.clear_cancel_request(task_id)
+        raise
     except Exception:
         _logger.exception("Portfolio worker preparation failed task=%s", task_id)
         from backend.core import task_store

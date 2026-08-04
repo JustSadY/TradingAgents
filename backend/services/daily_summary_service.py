@@ -73,7 +73,10 @@ async def generate_daily_summary(db: AsyncSession, user: User) -> dict:
     client = create_llm_client(provider=provider, model=model, api_key=user_key)
     llm = client.get_llm()
     response = await llm.ainvoke([HumanMessage(content=prompt)])
-    summary_text = str(response.content)
+    from backend.services.llm_content import llm_text
+    summary_text = llm_text(response)
+    if not summary_text:
+        raise ValueError("The model returned an empty daily summary")
 
     record = MarketDailySummary(
         user_id=user.id,

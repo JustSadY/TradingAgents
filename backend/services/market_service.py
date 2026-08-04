@@ -117,11 +117,16 @@ async def get_custom_indicator_series(
     if data.empty:
         raise MarketDataError(f"No data found for {ticker}", status_code=404)
 
-    series = evaluate_formula_safely(data, formula).replace({np.nan: None})
-    results = [
-        {"time": ts.strftime("%Y-%m-%d"), "value": round(float(val), 4) if val is not None else None}
-        for ts, val in series.items()
-    ]
+    series = evaluate_formula_safely(data, formula)
+    results = []
+    for ts, val in series.items():
+        numeric = float(val) if val is not None else float("nan")
+        results.append(
+            {
+                "time": ts.strftime("%Y-%m-%d"),
+                "value": round(numeric, 4) if np.isfinite(numeric) else None,
+            }
+        )
 
     return {"ticker": ticker, "formula": formula, "series": results}
 

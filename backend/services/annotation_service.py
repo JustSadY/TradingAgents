@@ -68,7 +68,9 @@ async def _call_llm_async(llm, text: str, system_prompt: str) -> str:
             HumanMessage(content=text),
         ]
         result = llm.invoke(messages)
-        return result.content if hasattr(result, "content") else str(result)
+        from backend.services.llm_content import llm_text
+
+        return llm_text(result)
 
     return await asyncio.to_thread(_sync_call)
 

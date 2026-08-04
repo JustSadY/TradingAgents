@@ -13,7 +13,7 @@ class AnalysisResult(Base):
     )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     trade_date: Mapped[str] = mapped_column(String(20), nullable=False)
@@ -62,6 +62,8 @@ class AnalysisResult(Base):
     preset_name: Mapped[str | None] = mapped_column(String(100), nullable=True)
     triggered_by: Mapped[str] = mapped_column(String(20), default="manual")
     task_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True, unique=True)
+    heartbeat_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)
+    worker_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
     status: Mapped[str] = mapped_column(String(20), default="completed", index=True)
     raw_return: Mapped[float | None] = mapped_column(Float, nullable=True)
     alpha_return: Mapped[float | None] = mapped_column(Float, nullable=True)

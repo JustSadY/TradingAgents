@@ -31,6 +31,8 @@ class Order(Base):
     leverage: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("1.0"))
     side: Mapped[str] = mapped_column(String(5), default="long")
     realized_pnl: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"))
+    financing_cost: Mapped[Decimal] = mapped_column(MONEY, default=Decimal("0.0"), nullable=False)
+    external_order_id: Mapped[str | None] = mapped_column(String(100), nullable=True, index=True)
     analysis_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("analysis_results.id", ondelete="SET NULL"), nullable=True, index=True
     )

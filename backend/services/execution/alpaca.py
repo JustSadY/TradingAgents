@@ -72,7 +72,27 @@ class AlpacaTrader(BaseTraderInterface):
         }
 
     async def get_current_price(self, ticker: str) -> float | None:
-        """Get live price for ticker. Falls back to Yahoo Finance provider."""
+        """Get a broker-side latest trade for sizing live/paper orders.
+
+        A broker order must not be sized from an unrelated delayed provider.
+        Paper mode may use Yahoo only when the Alpaca market-data endpoint is
+        temporarily unavailable; live mode fails closed.
+        """
+        try:
+            headers = await self._get_headers()
+            url = f"https://data.alpaca.markets/v2/stocks/{ticker.upper()}/trades/latest"
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(url, headers=headers, params={"feed": "iex"}, timeout=5.0)
+                if resp.status_code == 200:
+                    trade = (resp.json() or {}).get("trade") or {}
+                    price = float(trade.get("p") or 0.0)
+                    if price > 0:
+                        return price
+                _logger.warning("Alpaca latest-trade request failed for %s (HTTP %s)", ticker, resp.status_code)
+        except Exception as exc:
+            _logger.warning("Alpaca latest-trade request failed for %s: %s", ticker, exc)
+        if self._mode == "live":
+            return None
         return await _get_price(ticker)
 
     async def place_order(self, request: OrderRequest) -> OrderResult:
@@ -130,8 +150,8 @@ class AlpacaTrader(BaseTraderInterface):
             async with httpx.AsyncClient() as client:
                 resp = await client.post(url, json=body, headers=headers, timeout=10.0)
                 if resp.status_code != 200:
-                    err_msg = f"Alpaca API error {resp.status_code}: {resp.text}"
-                    _logger.error(err_msg)
+                    _logger.error("Alpaca API error %s: %s", resp.status_code, resp.text)
+                    err_msg = f"Alpaca rejected the order (HTTP {resp.status_code})"
                     return OrderResult(
                         order_id="",
                         status="REJECTED",
@@ -149,10 +169,13 @@ class AlpacaTrader(BaseTraderInterface):
                     filled_price = float(data["filled_avg_price"])
                 if data.get("filled_qty"):
                     filled_qty = float(data["filled_qty"])
-                for _ in range(6):
-                    if status in ("FILLED", "PARTIALLY_FILLED", "CANCELED", "REJECTED", "EXPIRED"):
-                        if filled_price:
-                            break
+                terminal = {"FILLED", "CANCELED", "REJECTED", "EXPIRED"}
+                # PARTIALLY_FILLED is not terminal. Keep following the broker
+                # order; if our bounded wait expires, cancel the remainder and
+                # persist only the actual broker-reported fill.
+                for _ in range(20):
+                    if status in terminal:
+                        break
                     await asyncio.sleep(0.5)
                     chk_resp = await client.get(f"{url}/{order_id}", headers=headers, timeout=5.0)
                     if chk_resp.status_code == 200:
@@ -162,17 +185,26 @@ class AlpacaTrader(BaseTraderInterface):
                             filled_price = float(chk_data["filled_avg_price"])
                         if chk_data.get("filled_qty"):
                             filled_qty = float(chk_data["filled_qty"])
-                if not filled_price and status == "FILLED":
+
+                if status not in terminal:
+                    cancel_resp = await client.delete(f"{url}/{order_id}", headers=headers, timeout=5.0)
+                    if cancel_resp.status_code not in (204, 404, 422):
+                        _logger.warning("Could not cancel uncompleted Alpaca order %s: %s", order_id, cancel_resp.text)
+                    await asyncio.sleep(0.25)
                     chk_resp = await client.get(f"{url}/{order_id}", headers=headers, timeout=5.0)
                     if chk_resp.status_code == 200:
                         chk_data = chk_resp.json()
+                        status = (chk_data.get("status") or status).upper()
                         if chk_data.get("filled_avg_price"):
                             filled_price = float(chk_data["filled_avg_price"])
                         if chk_data.get("filled_qty"):
                             filled_qty = float(chk_data["filled_qty"])
-                if status == "FILLED" and not filled_price:
-                    filled_price = request.reference_price
-                    filled_qty = request.quantity
+
+                if status == "FILLED" and (not filled_price or not filled_qty):
+                    # Never synthesize a fill price/quantity. Missing broker
+                    # execution data is an indeterminate result that must be
+                    # reconciled, not silently replaced by the quote/request.
+                    status = "RECONCILIATION_REQUIRED"
 
                 return OrderResult(
                     order_id=order_id,
@@ -189,7 +221,7 @@ class AlpacaTrader(BaseTraderInterface):
                 status="REJECTED",
                 filled_price=None,
                 filled_quantity=None,
-                message=str(e),
+                message="Broker order request failed. Review server logs and reconcile the broker account.",
             )
 
     async def cancel_order(self, order_id: str) -> bool:
@@ -206,7 +238,7 @@ class AlpacaTrader(BaseTraderInterface):
             _logger.warning("Failed to cancel Alpaca order %s: %s", order_id, e)
             return False
 
-    async def get_balance(self) -> float:
+    async def get_account_snapshot(self) -> dict[str, float | str | bool]:
         try:
             headers = await self._get_headers()
             url = f"{self.base_url}/v2/account"
@@ -214,11 +246,24 @@ class AlpacaTrader(BaseTraderInterface):
                 resp = await client.get(url, headers=headers, timeout=5.0)
                 if resp.status_code == 200:
                     data = resp.json()
-                    return float(data.get("cash", 0.0))
-            return 0.0
+                    return {
+                        "cash": float(data.get("cash") or 0.0),
+                        "buying_power": float(data.get("buying_power") or 0.0),
+                        "equity": float(data.get("equity") or data.get("portfolio_value") or 0.0),
+                        "portfolio_value": float(data.get("portfolio_value") or data.get("equity") or 0.0),
+                        "status": str(data.get("status") or ""),
+                        "trading_blocked": bool(data.get("trading_blocked", False)),
+                        "account_blocked": bool(data.get("account_blocked", False)),
+                    }
+                _logger.warning("Alpaca account request failed with HTTP %s", resp.status_code)
+            return {}
         except Exception as e:
-            _logger.warning("Failed to get Alpaca account balance: %s", e)
-            return 0.0
+            _logger.warning("Failed to get Alpaca account snapshot: %s", e)
+            return {}
+
+    async def get_balance(self) -> float:
+        snapshot = await self.get_account_snapshot()
+        return float(snapshot.get("cash") or 0.0)
 
     async def get_positions(self) -> dict[str, dict]:
         try:
@@ -231,10 +276,17 @@ class AlpacaTrader(BaseTraderInterface):
                     res = {}
                     for pos in data:
                         symbol = pos["symbol"].upper()
+                        qty = float(pos.get("qty") or 0.0)
+                        side = str(pos.get("side") or ("short" if qty < 0 else "long")).lower()
                         res[symbol] = {
                             "ticker": symbol,
-                            "quantity": float(pos["qty"]),
-                            "avg_price": float(pos["avg_entry_price"]),
+                            "quantity": abs(qty),
+                            "signed_quantity": qty,
+                            "side": side,
+                            "avg_price": float(pos.get("avg_entry_price") or 0.0),
+                            "current_price": float(pos.get("current_price") or 0.0),
+                            "market_value": abs(float(pos.get("market_value") or 0.0)),
+                            "unrealized_pnl": float(pos.get("unrealized_pl") or 0.0),
                         }
                     return res
             return {}

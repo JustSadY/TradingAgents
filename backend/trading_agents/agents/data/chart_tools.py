@@ -37,7 +37,14 @@ async def _load_ohlcv_via_interface_async(symbol: str, curr_date: str) -> pd.Dat
     if "Close" in df.columns:
         df = df.dropna(subset=["Close"])
     if price_cols:
-        df[price_cols] = df[price_cols].ffill().bfill()
+        # Forward-fill only. Back-filling would leak future prices into older
+        # chart bars and invalidate historical/vision analysis.
+        df[price_cols] = df[price_cols].ffill()
+    required = [c for c in ["Open", "High", "Low", "Close"] if c in df.columns]
+    if required:
+        df = df.dropna(subset=required)
+    if "Volume" in df.columns:
+        df["Volume"] = df["Volume"].fillna(0)
     return df[df["Date"] <= pd.to_datetime(curr_date)] if "Date" in df.columns else df
 
 @tool
@@ -157,7 +164,9 @@ async def get_vision_chart_analysis(
         )
 
         res = await llm.ainvoke([message])
-        content = res.content if hasattr(res, "content") else str(res)
+        from backend.services.llm_content import llm_text
+
+        content = llm_text(res)
 
         labels = report_texts(("vision_chart_analysis",))
         return f"--- {labels['vision_chart_analysis']} — {symbol.upper()} ---\nIMAGE_DATA:data:image/png;base64,{base64_image}\n\n{content}"

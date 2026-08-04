@@ -61,6 +61,14 @@ async def update_alert(
     if not alert:
         raise HTTPException(status_code=404, detail="Alert not found")
     changes = body.model_dump(exclude_none=True)
+    if "target_price" in changes:
+        target = float(changes["target_price"])
+        if alert.alert_type == "rsi" and not 0 <= target <= 100:
+            raise HTTPException(status_code=422, detail="RSI threshold must be between 0 and 100")
+        if alert.alert_type == "price" and target <= 0:
+            raise HTTPException(status_code=422, detail="Price alerts require a positive target")
+        if alert.alert_type == "macd_cross":
+            changes["target_price"] = 0.0
     if changes.get("enabled") is True:
         from backend.services.alert_creation_service import AlertGuardrailViolation, rearm_alert_with_guardrails
 

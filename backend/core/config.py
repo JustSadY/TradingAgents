@@ -44,6 +44,7 @@ class Settings(BaseSettings):
     TRUST_PROXY_HEADERS: bool = False
     TRUSTED_PROXY_CIDRS: str = ""
     ENABLE_LIVE_TRADING: bool = False
+    APP_TIMEZONE: str = "UTC"
 
     @model_validator(mode="after")
     def _force_async_db_driver(self) -> "Settings":
@@ -78,6 +79,16 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _validate_timezone(self) -> "Settings":
+        from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+        try:
+            ZoneInfo(self.APP_TIMEZONE)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError(f"APP_TIMEZONE is not a valid IANA timezone: {self.APP_TIMEZONE}") from exc
+        return self
+
+    @model_validator(mode="after")
     def _reject_insecure_production_defaults(self) -> "Settings":
         """Refuse to boot in production with shipped-default secrets.
 
@@ -94,6 +105,15 @@ class Settings(BaseSettings):
                 problems.append("ENCRYPTION_KEY must be set (encrypted data is lost on restart otherwise)")
             if not self.ADMIN_PASSWORD_HASH:
                 problems.append("ADMIN_PASSWORD_HASH must be set to a durable, operator-controlled password hash")
+            else:
+                try:
+                    import bcrypt
+
+                    if not self.ADMIN_PASSWORD_HASH.startswith(("$2a$", "$2b$", "$2y$")):
+                        raise ValueError("unsupported hash prefix")
+                    bcrypt.checkpw(b"configuration-validation", self.ADMIN_PASSWORD_HASH.encode())
+                except Exception:
+                    problems.append("ADMIN_PASSWORD_HASH must be a valid bcrypt hash")
             if problems:
                 raise ValueError("Insecure configuration for ENVIRONMENT=production: " + "; ".join(problems))
         return self

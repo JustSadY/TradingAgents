@@ -25,7 +25,7 @@ class PriceAlert(Base):
     )
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     user_id: Mapped[int | None] = mapped_column(
-        Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True
+        Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     ticker: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
     alert_type: Mapped[str] = mapped_column(String(20), default="price", server_default="price")

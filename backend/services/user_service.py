@@ -56,12 +56,14 @@ def set_user_api_key(user: User, provider: str, api_key: str, fernet: Fernet) ->
         try:
             existing = decrypt_api_keys(user.api_keys_enc, fernet)
         except Exception as e:
-            _logger.warning(
-                "Failed to decrypt existing API keys during set for user %s: %s (initializing empty)",
+            _logger.error(
+                "Refusing to overwrite undecryptable API keys for user %s: %s",
                 getattr(user, "id", "unknown"),
                 e,
             )
-            existing = {}
+            raise RuntimeError(
+                "Stored API credentials cannot be decrypted. Restore the configured encryption key before changing credentials."
+            ) from e
     existing[provider.lower()] = api_key
     user.api_keys_enc = encrypt_api_keys(existing, fernet)
 
@@ -96,8 +98,46 @@ def list_user_api_key_providers(user: User, fernet: Fernet) -> list[str]:
         return []
 
 async def delete_user_and_emit(db: AsyncSession, user: User) -> None:
-    from backend.core.events import emit
+    """Delete a tenant without leaving active tasks, alerts or portfolios behind.
 
+    Existing installations may still have historical ``SET NULL`` foreign keys,
+    so deletion is explicit rather than relying only on schema-level cascades.
+    """
+    from sqlalchemy import delete, select
+
+    from backend.core import task_store
+    from backend.core.events import emit
+    from backend.models.alert import PriceAlert
+    from backend.models.alert_outbox import AlertOutbox
+    from backend.models.analysis import AnalysisResult
+    from backend.models.portfolio import Portfolio
+    from backend.models.portfolio_analysis import MultiTickerAnalysis
+    from backend.models.webhook_delivery import WebhookDelivery
+
+    active = await db.execute(
+        select(AnalysisResult.task_id).where(
+            AnalysisResult.user_id == user.id,
+            AnalysisResult.status.in_(("queued", "running")),
+            AnalysisResult.task_id.is_not(None),
+        )
+    )
+    task_ids = [task_id for task_id in active.scalars().all() if task_id]
+    for task_id in task_ids:
+        await task_store.request_cancel(task_id)
+        await task_store.publish_cancel(task_id)
+
+    # Delete child/outbox rows first for databases created with older FK rules.
+    await db.execute(delete(AlertOutbox).where(AlertOutbox.user_id == user.id))
+    await db.execute(delete(PriceAlert).where(PriceAlert.user_id == user.id))
+    await db.execute(delete(WebhookDelivery).where(WebhookDelivery.user_id == user.id))
+    await db.execute(delete(MultiTickerAnalysis).where(MultiTickerAnalysis.user_id == user.id))
+    await db.execute(delete(Portfolio).where(Portfolio.user_id == user.id))
+    await db.execute(delete(AnalysisResult).where(AnalysisResult.user_id == user.id))
     await db.delete(user)
     await db.commit()
+
+    for task_id in task_ids:
+        await task_store.clear_meta(task_id, user.id)
+        await task_store.clear_owner(task_id)
+        await task_store.clear_cancel_request(task_id)
     await emit("user_deleted", user_id=user.id)

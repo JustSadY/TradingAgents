@@ -30,7 +30,7 @@ _FALLBACK = {
 async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
     from backend.services.mock_trading_service import get_portfolio_with_live_prices
 
-    portfolio = await get_portfolio_with_live_prices(db, user=user)
+    portfolio = await get_portfolio_with_live_prices(db, user=user, read_only=True)
     holdings = portfolio.get("holdings") or []
 
     if not holdings:
@@ -165,10 +165,11 @@ async def _call_llm(db: AsyncSession, user: User, prompt: str) -> dict:
         client = create_llm_client(provider=provider, model=model, api_key=user_key)
         llm = client.get_llm()
         response = await llm.ainvoke([HumanMessage(content=prompt)])
-        content = (response.content or "").strip()
+        from backend.services.llm_content import llm_text
+        content = llm_text(response)
     except Exception as e:
         _logger.warning("Rebalance LLM error: %s", e)
-        raise HTTPException(status_code=500, detail=f"LLM error: {e}") from e
+        raise HTTPException(status_code=500, detail="The model request failed") from e
 
     if content.startswith("```"):
         content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()

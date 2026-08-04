@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete
 from sqlalchemy import desc as _desc
@@ -167,12 +168,21 @@ async def get_multi_ticker_analysis_by_id(
     result = await db.execute(q)
     return result.scalar_one_or_none()
 
-async def cleanup_stale_analyses(db: AsyncSession) -> int:
-    """Mark analyses that were 'running' when the server last stopped as 'failed'."""
-    stmt = update(AnalysisResult).where(AnalysisResult.status == "running").values(status="failed")
+async def cleanup_stale_analyses(db: AsyncSession, *, stale_after_minutes: int = 10) -> int:
+    """Fail only expired analysis leases, never every active run on web boot."""
+    cutoff = datetime.now(UTC) - timedelta(minutes=max(1, stale_after_minutes))
+    stmt = (
+        update(AnalysisResult)
+        .where(AnalysisResult.status.in_(("running", "queued")))
+        .where(
+            (AnalysisResult.heartbeat_at.is_(None) & (AnalysisResult.created_at < cutoff))
+            | (AnalysisResult.heartbeat_at < cutoff)
+        )
+        .values(status="failed", worker_id=None)
+    )
     res = await db.execute(stmt)
     await db.commit()
-    return res.rowcount
+    return int(res.rowcount or 0)
 
 async def create_analysis_result(db: AsyncSession, **kwargs) -> AnalysisResult:
     task_id = kwargs.get("task_id")

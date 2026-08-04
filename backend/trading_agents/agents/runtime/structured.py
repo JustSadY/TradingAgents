@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from backend.services.llm_content import llm_text
+
 import asyncio
 import json
 import logging
@@ -119,7 +121,7 @@ async def self_correct_structured(
 
     try:
         response = await plain_llm.ainvoke(correction_messages)
-        text = response.content if hasattr(response, "content") else str(response)
+        text = llm_text(response)
         return parse_and_validate(text, schema)
     except Exception as exc:
         if is_provider_function_degraded(exc):
@@ -238,7 +240,7 @@ async def ainvoke_structured_or_freetext(
             )
 
     response = await _retry_llm_call(plain_llm, prompt, agent_name)
-    raw_text = response.content if hasattr(response, "content") else str(response)
+    raw_text = llm_text(response)
 
     if schema is None:
         return raw_text

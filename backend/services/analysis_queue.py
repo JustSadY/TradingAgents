@@ -50,17 +50,24 @@ async def dispatch_analysis(
     settings,
     task_id: str,
     user,
+    triggered_by: str = "manual",
 ) -> None:
     if queue_mode() == "worker":
         pool = await get_arq_pool()
-        await pool.enqueue_job("run_analysis_job", ticker, trade_date, asset_type, user.id if user else None, task_id)
+        await pool.enqueue_job(
+            "run_analysis_job", ticker, trade_date, asset_type, user.id if user else None, task_id, triggered_by
+        )
         return
     from backend.services.analysis_service import run_analysis_task
 
     if background_tasks is not None:
-        background_tasks.add_task(run_analysis_task, ticker, trade_date, asset_type, settings, task_id, user)
+        background_tasks.add_task(
+            run_analysis_task, ticker, trade_date, asset_type, settings, task_id, user, triggered_by
+        )
     else:
-        task = asyncio.create_task(run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user))
+        task = asyncio.create_task(
+            run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user, triggered_by)
+        )
         _INLINE_TASKS.add(task)
         task.add_done_callback(_INLINE_TASKS.discard)
 

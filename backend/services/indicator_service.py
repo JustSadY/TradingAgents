@@ -22,8 +22,15 @@ def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
     loss = -delta.where(delta < 0, 0.0)
     avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
     avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
-    rs = avg_gain / avg_loss.replace(0, 1e-9)
-    return 100 - (100 / (1 + rs))
+    # RSI edge cases need explicit treatment: no gains and no losses is a
+    # flat, neutral market (50), while gains without losses is 100 and losses
+    # without gains is 0.
+    both_zero = (avg_gain == 0) & (avg_loss == 0)
+    no_losses = (avg_loss == 0) & (avg_gain > 0)
+    no_gains = (avg_gain == 0) & (avg_loss > 0)
+    rs = avg_gain / avg_loss.where(avg_loss != 0)
+    rsi = 100 - (100 / (1 + rs))
+    return rsi.mask(both_zero, 50.0).mask(no_losses, 100.0).mask(no_gains, 0.0)
 
 def calculate_macd(
     prices: pd.Series,
@@ -199,8 +206,18 @@ def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
     try:
         res = pd.eval(processed_formula, local_dict=local_dict, engine="python")
         if isinstance(res, (int, float)):
-            return pd.Series([res] * len(df), index=df.index)
-        return pd.Series(res, index=df.index)
+            series = pd.Series([res] * len(df), index=df.index, dtype="float64")
+        else:
+            series = pd.to_numeric(pd.Series(res, index=df.index), errors="coerce")
+        import numpy as np
+
+        finite = np.isfinite(series.to_numpy(dtype="float64", na_value=np.nan))
+        if not bool(finite.all()):
+            raise ValueError("Formula result contains non-finite values")
+        # Prevent huge finite values from later overflowing JSON/plotting code.
+        if bool((series.abs() > 1e100).any()):
+            raise ValueError("Formula result is outside the supported numeric range")
+        return series
     except Exception as exc:
         _logger.warning("Custom formula evaluation failed: %s", exc)
         raise ValueError("Formula could not be calculated") from exc
