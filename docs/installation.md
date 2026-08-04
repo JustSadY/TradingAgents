@@ -7,7 +7,7 @@ TradingAgents can be deployed in multiple environments depending on your use cas
 ## 🚀 1. Production Linux Server Deployment (One-Click Setup)
 
 This is the recommended method for Linux environments (Ubuntu, Debian, CentOS, AlmaLinux, Rocky Linux, Fedora, etc.). The installer script automatically handles:
-1.  System packages installation (Python 3.10+, Node.js 20, PostgreSQL, git, curl).
+1.  System packages installation (Python 3.11+, Node.js 20, PostgreSQL, git, curl).
 2.  Setting up a PostgreSQL user and database with secure random credentials.
 3.  Generating a Python Virtual Environment (`.venv`) and installing `backend/requirements.txt`.
 4.  Compiling the React frontend bundle (`npm run build`).

@@ -261,10 +261,7 @@ async def run_analysis(
         raise
     finally:
         if not defer_terminal_cleanup:
-            _RUNNING_TASKS.pop(task_id, None)
-            _TASK_REGISTRY.pop(task_id, None)
-            _TASK_OWNERS.pop(task_id, None)
-            await task_store.clear_owner(task_id)
+            await _clear_terminal_task_state(task_id, user_id)
             await emitter.close()
 
 async def run_analysis_task(
@@ -509,6 +506,11 @@ async def rollback_and_resume_analysis(
     settings = await get_or_create_settings(db, current_user)
     sys_settings = await get_system_settings(db)
     config = build_analysis_config(settings, user=current_user, sys_settings=sys_settings)
+    from backend.core.temporal import is_historical_trade_date
+
+    config["trade_date"] = str(analysis.trade_date)
+    config["historical_mode"] = is_historical_trade_date(str(analysis.trade_date))
+    config["allow_live_data_in_historical"] = False
     permitted_analysts = await prepare_graph_config(db, current_user.id if current_user else None, config)
 
     checkpoint_namespace = checkpoint_scope(analysis.user_id, analysis.id)
@@ -540,46 +542,62 @@ async def rollback_and_resume_analysis(
 
     await register_task_owner(task_id, current_user.id if current_user else None)
 
+    resume_ticker = str(analysis.ticker)
+    resume_trade_date = str(analysis.trade_date)
+    resume_asset_type = str(analysis.asset_type)
+    resume_user_id = current_user.id if current_user else None
+    result_owner_user_id = analysis.user_id
+
     async def run_resume():
         if current_user:
             from backend.core.log_handler import current_user_id
 
             current_user_id.set(current_user.id)
-        async with AsyncSessionLocal() as session:
-            try:
-                from backend.services.analysis.emitter import AnalysisEmitter
-                from backend.services.analysis.orchestrator import run_individual_analysis
-
-                emitter = AnalysisEmitter(task_id)
-                _TASK_REGISTRY[task_id] = {
-                    "ticker": analysis.ticker,
-                    "trade_date": analysis.trade_date,
-                    "asset_type": analysis.asset_type,
-                    "user_id": current_user.id if current_user else None,
-                    "started_at": time.time(),
-                    "status": "running",
-                }
-
+        emitter = AnalysisEmitter(task_id)
+        try:
+            await _track_running_task(
+                task_id,
+                ticker=resume_ticker,
+                trade_date=resume_trade_date,
+                asset_type=resume_asset_type,
+                user_id=resume_user_id,
+            )
+            async with AsyncSessionLocal() as session:
                 try:
+                    from backend.services.analysis.orchestrator import run_individual_analysis
+
                     await run_individual_analysis(
-                        analysis.ticker,
-                        analysis.trade_date,
-                        analysis.asset_type,
+                        resume_ticker,
+                        resume_trade_date,
+                        resume_asset_type,
                         settings,
                         session,
                         emitter,
                         triggered_by="time-travel",
                         user=current_user,
                         checkpoint_namespace=checkpoint_namespace,
-                        result_owner_user_id=analysis.user_id,
+                        result_owner_user_id=result_owner_user_id,
+                        existing_result_id=analysis_id,
                     )
-                finally:
-                    _RUNNING_TASKS.pop(task_id, None)
-                    _TASK_REGISTRY.pop(task_id, None)
-                    await clear_task_owner(task_id)
-                    await emitter.close()
-            except Exception:
-                _logger.exception("Time-travel resume task failed")
+                    await session.commit()
+                except asyncio.CancelledError:
+                    await session.rollback()
+                    raise
+                except Exception:
+                    await session.rollback()
+                    from backend.repositories.analysis import update_analysis_result
+
+                    await update_analysis_result(session, analysis_id, status="failed")
+                    raise
+        except asyncio.CancelledError:
+            await emitter.emit_error("Analysis resume was cancelled.")
+            raise
+        except Exception:
+            _logger.exception("Time-travel resume task failed task=%s", task_id)
+            await emitter.emit_error("Analysis resume failed before completion.")
+        finally:
+            await _clear_terminal_task_state(task_id, resume_user_id)
+            await emitter.close()
 
     task = asyncio.create_task(run_resume())
     _RUNNING_TASKS[task_id] = task

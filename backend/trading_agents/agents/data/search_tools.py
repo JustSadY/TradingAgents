@@ -17,8 +17,18 @@ async def search_web(
     from backend.trading_agents.dataflows.config import get_config
     from backend.trading_agents.dataflows.searxng import fetch_searxng_results
 
-    searxng_url = (get_config().get("searxng_url") or "").strip()
-    if searxng_url:
+    config = get_config()
+    historical_mode = bool(config.get("historical_mode", False))
+    try:
+        from backend.trading_agents.agents.data.chart_tools import active_run_context
+
+        ctx = active_run_context.get(None) or {}
+        historical_mode = bool(ctx.get("historical_mode", historical_mode))
+    except Exception:
+        ctx = {}
+
+    searxng_url = (config.get("searxng_url") or "").strip()
+    if searxng_url and not historical_mode:
         from backend.trading_agents.dataflows.searxng import _is_cooling_down, _start_cooldown
 
         if _is_cooling_down():
@@ -33,13 +43,7 @@ async def search_web(
 
     from datetime import UTC, datetime, timedelta
 
-    try:
-        from backend.trading_agents.agents.data.chart_tools import active_run_context
-
-        ctx = active_run_context.get(None)
-        trade_date_str = ctx.get("trade_date") if ctx else None
-    except Exception:
-        trade_date_str = None
+    trade_date_str = ctx.get("trade_date") if ctx else config.get("trade_date")
 
     end_dt = datetime.now(UTC)
     if trade_date_str:
@@ -63,6 +67,16 @@ async def get_crypto_fear_and_greed_index() -> str:
     """Retrieve the current Crypto Fear and Greed Index to gauge market sentiment."""
     import asyncio
 
+    from backend.trading_agents.agents.data.chart_tools import active_run_context
+    from backend.trading_agents.dataflows.config import get_config
     from backend.trading_agents.dataflows.crypto_fear_greed import fetch_crypto_fear_greed_index
 
+    ctx = active_run_context.get(None) or {}
+    historical_mode = bool(ctx.get("historical_mode", get_config().get("historical_mode", False)))
+    if historical_mode and not bool(ctx.get("allow_live_data_in_historical", False)):
+        return (
+            "# POINT-IN-TIME DATA UNAVAILABLE\n"
+            "The Crypto Fear and Greed Index endpoint is live-only and was not queried "
+            "for this historical run."
+        )
     return await asyncio.to_thread(fetch_crypto_fear_greed_index)

@@ -460,7 +460,7 @@ function orderResultLogLine(result: AnalysisOrderResult, t: (key: string) => str
 }
 
 function hasValidRunningTask(): boolean {
-  const raw = localStorage.getItem(TASK_KEY)
+  const raw = sessionStorage.getItem(TASK_KEY)
   if (!raw) return false
   try {
     const task = JSON.parse(raw)
@@ -468,22 +468,22 @@ function hasValidRunningTask(): boolean {
   } catch {
     // Fall through and remove the bad task marker below.
   }
-  localStorage.removeItem(TASK_KEY)
+  sessionStorage.removeItem(TASK_KEY)
   return false
 }
 
 // A late start response must never remove a newer task marker.  Only discard
 // the marker when it belongs to the response we are deliberately abandoning.
 function clearTaskMarkerFor(taskId: string): void {
-  const raw = localStorage.getItem(TASK_KEY)
+  const raw = sessionStorage.getItem(TASK_KEY)
   if (!raw) return
   try {
     const task = JSON.parse(raw)
     if (!isRecord(task) || task.taskId === taskId) {
-      localStorage.removeItem(TASK_KEY)
+      sessionStorage.removeItem(TASK_KEY)
     }
   } catch {
-    localStorage.removeItem(TASK_KEY)
+    sessionStorage.removeItem(TASK_KEY)
   }
 }
 
@@ -491,7 +491,7 @@ function loadRunState(): SavedRun {
   const fallback = emptyRun()
   try {
     const hasRunningTask = hasValidRunningTask()
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = sessionStorage.getItem(STORAGE_KEY)
     if (!raw) return hasRunningTask ? { ...fallback, runStatus: 'running' } : fallback
     const parsed: unknown = JSON.parse(raw)
     if (!isRecord(parsed)) return fallback
@@ -723,7 +723,7 @@ function AutomatedOrderResultCard({ result }: { result: AnalysisOrderResult | nu
 
 function RunTab() {
   const { t } = useTranslation()
-  // Loading from localStorage returns new object/array references. Keep the
+  // Loading from sessionStorage returns new object/array references. Keep the
   // initial snapshot stable for this mount so a streamed state update does not
   // retrigger the task-resume effect and replace the live WebSocket.
   const [saved] = useState<SavedRun>(() => loadRunState())
@@ -817,7 +817,7 @@ function RunTab() {
       const payload = runStatus === 'running'
         ? { ticker, date, assetType, runStatus, signal, reports: {}, log: [], liveDebate: [], orderResult, activeSection, analysisId }
         : { ticker, date, assetType, runStatus, signal, reports, log, liveDebate, orderResult, activeSection, analysisId }
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
+      sessionStorage.setItem(STORAGE_KEY, JSON.stringify(payload))
     } catch {
       // QuotaExceededError — ignore, state lives in memory
     }
@@ -862,7 +862,7 @@ function RunTab() {
     setRunning(v)
     if (!v) {
       setStopping(false)
-      localStorage.removeItem(TASK_KEY)
+      sessionStorage.removeItem(TASK_KEY)
       taskIdRef.current = null
       resumingTaskIdRef.current = null
     }
@@ -1158,7 +1158,7 @@ function RunTab() {
     setOrderResult(null)
     setAnalysisId(null)
     setDetail(null)
-    localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: task.ticker, taskId: task.task_id, startedAt: new Date(task.started_at * 1000).toISOString() }))
+    sessionStorage.setItem(TASK_KEY, JSON.stringify({ ticker: task.ticker, taskId: task.task_id, startedAt: new Date(task.started_at * 1000).toISOString() }))
     attachWs(task.task_id, 1)
   }, [activeTasks, running, attachWs])
 
@@ -1169,7 +1169,7 @@ function RunTab() {
     // before deciding whether the persisted task can be resumed.
     if (activeTasksLoading) return
 
-    const raw = localStorage.getItem(TASK_KEY)
+    const raw = sessionStorage.getItem(TASK_KEY)
     if (!raw) return
     let cancelled = false
     try {
@@ -1202,7 +1202,7 @@ function RunTab() {
         setRunStatus('idle')
       }
     } catch {
-      localStorage.removeItem(TASK_KEY)
+      sessionStorage.removeItem(TASK_KEY)
       resumingTaskIdRef.current = null
     }
     return () => { cancelled = true }
@@ -1341,7 +1341,7 @@ function RunTab() {
         try { await axios.post(`/api/analysis/${taskId}/cancel`) } catch { /* best-effort cancel */ }
         return
       }
-      localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: ticker.toUpperCase(), taskId, startedAt: new Date().toISOString() }))
+      sessionStorage.setItem(TASK_KEY, JSON.stringify({ ticker: ticker.toUpperCase(), taskId, startedAt: new Date().toISOString() }))
       attachWs(taskId, 0)
     } catch (err: any) {
       // A rejected start request after Stop is expected to leave the UI idle,
@@ -1385,7 +1385,7 @@ function RunTab() {
     preRefreshLogRef.current = null
     seenLogRef.current = new Set()
 
-    localStorage.setItem(TASK_KEY, JSON.stringify({ ticker: ticker.toUpperCase(), taskId, startedAt: new Date().toISOString() }))
+    sessionStorage.setItem(TASK_KEY, JSON.stringify({ ticker: ticker.toUpperCase(), taskId, startedAt: new Date().toISOString() }))
     attachWs(taskId, 0)
   }
 
@@ -2639,7 +2639,7 @@ export default function Analysis() {
         <HistoryTab
           initialDetailId={deepLinkId ? Number(deepLinkId) : undefined}
           onRollbackStart={(taskId, ticker) => {
-            localStorage.setItem(
+            sessionStorage.setItem(
               TASK_KEY,
               JSON.stringify({
                 ticker: ticker.toUpperCase(),
@@ -2647,7 +2647,7 @@ export default function Analysis() {
                 startedAt: new Date().toISOString(),
               })
             )
-            localStorage.setItem(
+            sessionStorage.setItem(
               STORAGE_KEY,
               JSON.stringify({
                 ticker: ticker.toUpperCase(),

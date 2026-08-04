@@ -4,25 +4,46 @@ import { clearMetaCache } from '../hooks/useMeta'
 import { formatErrorDetail, notify } from '../utils/notify'
 
 const TOKEN_KEY = 'ta_access'
-const REFRESH_KEY = 'ta_refresh'
+const LEGACY_REFRESH_KEY = 'ta_refresh'
 const USER_SCOPE_KEY = 'ta_user_scope'
 const USER_SCOPED_STORAGE_KEYS = ['ta_last_run', 'ta_task_running']
 
+axios.defaults.withCredentials = true
+
+/**
+ * Access tokens are scoped to the current browser tab/session. Refresh tokens
+ * are HttpOnly cookies and are never exposed to JavaScript.
+ */
 export function getAccessToken() {
-  return localStorage.getItem(TOKEN_KEY)
+  const current = sessionStorage.getItem(TOKEN_KEY)
+  if (current) return current
+
+  // One-time migration from older releases that persisted access tokens.
+  const legacy = localStorage.getItem(TOKEN_KEY)
+  if (legacy) {
+    localStorage.removeItem(TOKEN_KEY)
+    sessionStorage.setItem(TOKEN_KEY, legacy)
+    return legacy
+  }
+  return null
+}
+
+function setAccessToken(token: string | null) {
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(LEGACY_REFRESH_KEY)
+  if (token) sessionStorage.setItem(TOKEN_KEY, token)
+  else sessionStorage.removeItem(TOKEN_KEY)
 }
 
 function clearUserScopedBrowserState() {
-  USER_SCOPED_STORAGE_KEYS.forEach(key => localStorage.removeItem(key))
+  USER_SCOPED_STORAGE_KEYS.forEach(key => {
+    sessionStorage.removeItem(key)
+    localStorage.removeItem(key) // purge data written by older releases
+  })
   localStorage.removeItem(USER_SCOPE_KEY)
   clearMetaCache()
 }
 
-/**
- * Keep browser state that contains reports or user-specific metadata tied to
- * the account that created it. Older installs have no owner marker, so their
- * persisted state is deliberately discarded on first authenticated load.
- */
 function activateUserScope(username: string) {
   if (localStorage.getItem(USER_SCOPE_KEY) !== username) {
     clearUserScopedBrowserState()
@@ -30,28 +51,17 @@ function activateUserScope(username: string) {
   }
 }
 
-// The response interceptor below is registered once at module scope (axios
-// has no per-component interceptor concept), so it has no direct access to
-// the mounted AuthProvider's React state. When a refresh fails, it clears
-// localStorage but — without this bridge — the UI still renders as logged in
-// until a manual reload re-runs initAuth(). AuthProvider registers a listener
-// here on mount; the interceptor calls it to clear React state immediately,
-// which lets App.tsx's existing `isAuthenticated ? ... : <Navigate to="/login">`
-// take over right away.
 let _onForceLogout: (() => void) | null = null
 
 interface JwtPayload {
   sub: string
   role?: string
-  type: string
+  type?: string
   exp: number
 }
 
 function decodeToken(token: string): JwtPayload | null {
   try {
-    // JWT segments are base64url; normalize to base64 (+ padding) before atob,
-    // otherwise tokens whose payload contains '-' or '_' fail to decode and the
-    // user is silently logged out.
     let b64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/')
     b64 += '='.repeat((4 - (b64.length % 4)) % 4)
     return JSON.parse(atob(b64)) as JwtPayload
@@ -78,60 +88,61 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [role, setRole] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
 
-  const initAuth = useCallback(() => {
-    const t = localStorage.getItem(TOKEN_KEY)
-    if (t) {
-      const payload = decodeToken(t)
-      if (payload?.sub && payload.exp * 1000 > Date.now()) {
-        activateUserScope(payload.sub)
-        setUser(payload.sub)
-        setRole(payload.role || 'user')
-      } else {
-        localStorage.removeItem(TOKEN_KEY)
-        localStorage.removeItem(REFRESH_KEY)
-        clearUserScopedBrowserState()
-      }
-    }
-    setLoading(false)
-  }, [])
-
-  useEffect(() => {
-    initAuth()
-  }, [initAuth])
-
-  const login = useCallback(async (username: string, password: string) => {
-    const res = await axios.post('/auth/login', { username, password })
-    const { access_token, refresh_token } = res.data
-    const payload = decodeToken(access_token)
-    const authenticatedUser = payload?.sub ?? username
-    activateUserScope(authenticatedUser)
-    localStorage.setItem(TOKEN_KEY, access_token)
-    localStorage.setItem(REFRESH_KEY, refresh_token)
-    setUser(authenticatedUser)
-    setRole(payload?.role ?? 'user')
+  const applyAccessToken = useCallback((token: string): boolean => {
+    const payload = decodeToken(token)
+    if (!payload?.sub || payload.exp * 1000 <= Date.now()) return false
+    setAccessToken(token)
+    activateUserScope(payload.sub)
+    setUser(payload.sub)
+    setRole(payload.role || 'user')
+    return true
   }, [])
 
   const clearLocalAuthState = useCallback(() => {
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(REFRESH_KEY)
+    setAccessToken(null)
     clearUserScopedBrowserState()
     setUser(null)
     setRole(null)
   }, [])
 
-  const logout = useCallback(() => {
-    // Revoke server-side first (bumps token_version, invalidating every
-    // outstanding access/refresh token), then clear local state. Fire-and-forget:
-    // local logout must succeed even if the server is unreachable.
-    const token = localStorage.getItem(TOKEN_KEY)
-    if (token) {
-      axios.post('/auth/logout').catch(() => {})
+  const initAuth = useCallback(async () => {
+    try {
+      const current = getAccessToken()
+      if (current && applyAccessToken(current)) return
+      setAccessToken(null)
+
+      // Restore a server-side session using the HttpOnly refresh cookie.
+      const res = await axios.post('/auth/refresh', {})
+      const token = res.data?.access_token
+      if (typeof token !== 'string' || !applyAccessToken(token)) {
+        clearLocalAuthState()
+      }
+    } catch {
+      clearLocalAuthState()
+    } finally {
+      setLoading(false)
     }
+  }, [applyAccessToken, clearLocalAuthState])
+
+  useEffect(() => {
+    void initAuth()
+  }, [initAuth])
+
+  const login = useCallback(async (username: string, password: string) => {
+    const res = await axios.post('/auth/login', { username, password })
+    const token = res.data?.access_token
+    if (typeof token !== 'string' || !applyAccessToken(token)) {
+      throw new Error('Sunucu geçerli bir erişim belirteci döndürmedi')
+    }
+  }, [applyAccessToken])
+
+  const logout = useCallback(() => {
+    // Always ask the server to clear the HttpOnly refresh cookie, even when the
+    // in-memory access token has already expired or was cleared.
+    axios.post('/auth/logout').catch(() => {})
     clearLocalAuthState()
   }, [clearLocalAuthState])
 
-  // Let the module-level response interceptor force this instance's auth
-  // state to clear (e.g. when a token refresh fails) without a page reload.
   useEffect(() => {
     _onForceLogout = clearLocalAuthState
     return () => {
@@ -147,7 +158,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAuthenticated: !!user,
     login,
     logout,
-    loading
+    loading,
   }
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>
@@ -155,15 +166,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
 export function useAuth() {
   const context = useContext(AuthContext)
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider')
-  }
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider')
   return context
 }
 
-// Global Axios Interceptors
 axios.interceptors.request.use(cfg => {
-  const token = localStorage.getItem(TOKEN_KEY)
+  const token = getAccessToken()
   if (token && cfg.headers) cfg.headers.Authorization = `Bearer ${token}`
   return cfg
 })
@@ -186,17 +194,12 @@ axios.interceptors.response.use(
       notify('error', detail, `HTTP ${status}`)
     }
 
-    // Never try to refresh the auth endpoints themselves (a 401 from /auth/refresh
-    // must not re-enter this branch and queue forever).
     const isAuthEndpoint = typeof original?.url === 'string' && original.url.startsWith('/auth/')
-    if (status !== 401 || original._retried || isAuthEndpoint) {
-      throw err
-    }
+    if (status !== 401 || original?._retried || isAuthEndpoint) throw err
     original._retried = true
+    original.headers = original.headers || {}
 
     if (_refreshing) {
-      // Queue behind the in-flight refresh; reject if it ultimately fails so
-      // callers don't hang on a promise that never settles.
       return new Promise((resolve, reject) => {
         _queue.push({
           resolve: (token: string) => {
@@ -210,16 +213,10 @@ axios.interceptors.response.use(
 
     _refreshing = true
     try {
-      const refreshToken = localStorage.getItem(REFRESH_KEY)
-      if (!refreshToken) throw new Error('No refresh token')
-      const res = await axios.post('/auth/refresh', { refresh_token: refreshToken })
-      const newToken: string = res.data.access_token
-      localStorage.setItem(TOKEN_KEY, newToken)
-      // The backend rotates the refresh token on every refresh; keep the newest
-      // one or the next refresh will use a stale token.
-      if (res.data.refresh_token) {
-        localStorage.setItem(REFRESH_KEY, res.data.refresh_token)
-      }
+      const res = await axios.post('/auth/refresh', {})
+      const newToken = res.data?.access_token
+      if (typeof newToken !== 'string') throw new Error('No access token returned')
+      setAccessToken(newToken)
       _queue.forEach(({ resolve }) => resolve(newToken))
       _queue = []
       original.headers.Authorization = `Bearer ${newToken}`
@@ -227,12 +224,11 @@ axios.interceptors.response.use(
     } catch (refreshErr) {
       _queue.forEach(({ reject }) => reject(refreshErr))
       _queue = []
-      localStorage.removeItem(TOKEN_KEY)
-      localStorage.removeItem(REFRESH_KEY)
+      setAccessToken(null)
       _onForceLogout?.()
       throw err
     } finally {
       _refreshing = false
     }
-  }
+  },
 )

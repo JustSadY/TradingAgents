@@ -153,10 +153,25 @@ async def _seed_admin_user():
                 except Exception:
                     _logger.warning("ADMIN_PASSWORD_HASH in .env is not a valid bcrypt hash; using fallback.")
                     raw_hash = None
-            hashed = raw_hash or hash_password("changeme")
+            if raw_hash:
+                hashed = raw_hash
+                bootstrap_password = None
+            else:
+                import secrets
+
+                bootstrap_password = secrets.token_urlsafe(18)
+                hashed = hash_password(bootstrap_password)
             db.add(User(username=settings.ADMIN_USERNAME, hashed_password=hashed, role="owner"))
             await db.commit()
-            _logger.info("Owner user created: %s", settings.ADMIN_USERNAME)
+            if bootstrap_password:
+                _logger.warning(
+                    "Owner user %s created with one-time bootstrap password: %s. "
+                    "Sign in locally and change it immediately.",
+                    settings.ADMIN_USERNAME,
+                    bootstrap_password,
+                )
+            else:
+                _logger.info("Owner user created: %s", settings.ADMIN_USERNAME)
         elif existing.role != "owner":
             existing.role = "owner"
             await db.commit()

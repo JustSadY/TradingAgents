@@ -1,8 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import axios from 'axios'
 import { AuthProvider, useAuth, getAccessToken } from '../AuthContext'
 import type { ReactNode } from 'react'
+
+function jwt(sub: string, role = 'user', seconds = 3600) {
+  const payload = { sub, role, exp: Math.floor(Date.now() / 1000) + seconds }
+  return `header.${btoa(JSON.stringify(payload))}.signature`
+}
 
 function TestConsumer() {
   const auth = useAuth()
@@ -26,61 +32,76 @@ function renderWithAuth(children: ReactNode) {
 
 beforeEach(() => {
   localStorage.clear()
-  vi.restoreAllMocks()
+  sessionStorage.clear()
+  vi.clearAllMocks()
+  vi.mocked(axios.post).mockRejectedValue(new Error('no refresh cookie'))
 })
 
 afterEach(() => {
   localStorage.clear()
+  sessionStorage.clear()
 })
 
 describe('AuthContext', () => {
-  it('renders with loading state initially', () => {
+  it('shows unauthenticated after refresh-cookie bootstrap fails', async () => {
     renderWithAuth(<TestConsumer />)
-    expect(screen.getByTestId('loading')).toHaveTextContent('false')
-  })
-
-  it('shows unauthenticated when no token', () => {
-    renderWithAuth(<TestConsumer />)
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
     expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('false')
-    expect(screen.getByTestId('user')).toHaveTextContent('null')
   })
 
-  it('loads user from valid token in localStorage', () => {
-    const payload = { sub: 'alice', role: 'admin', exp: Math.floor(Date.now() / 1000) + 3600 }
-    const token = `header.${btoa(JSON.stringify(payload))}.signature`
-    localStorage.setItem('ta_access', token)
+  it('restores a session from the HttpOnly refresh cookie', async () => {
+    vi.mocked(axios.post).mockResolvedValueOnce({ data: { access_token: jwt('alice', 'admin') } })
     renderWithAuth(<TestConsumer />)
-    expect(screen.getByTestId('user')).toHaveTextContent('alice')
-    expect(screen.getByTestId('role')).toHaveTextContent('admin')
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('alice'))
     expect(screen.getByTestId('isAdmin')).toHaveTextContent('true')
-    expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('true')
-  })
-
-  it('handles owner role', () => {
-    const payload = { sub: 'owner', role: 'owner', exp: Math.floor(Date.now() / 1000) + 3600 }
-    const token = `header.${btoa(JSON.stringify(payload))}.signature`
-    localStorage.setItem('ta_access', token)
-    renderWithAuth(<TestConsumer />)
-    expect(screen.getByTestId('isOwner')).toHaveTextContent('true')
-    expect(screen.getByTestId('isAdmin')).toHaveTextContent('true')
-  })
-
-  it('ignores expired token', () => {
-    const payload = { sub: 'bob', role: 'user', exp: Math.floor(Date.now() / 1000) - 3600 }
-    const token = `header.${btoa(JSON.stringify(payload))}.signature`
-    localStorage.setItem('ta_access', token)
-    renderWithAuth(<TestConsumer />)
-    expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('false')
+    expect(sessionStorage.getItem('ta_access')).toBeTruthy()
     expect(localStorage.getItem('ta_access')).toBeNull()
   })
 
-  it('handles token with base64url encoding (- and _)', () => {
-    const payload = { sub: 'alice_smith', role: 'user', exp: Math.floor(Date.now() / 1000) + 3600 }
-    const b64url = btoa(JSON.stringify(payload)).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-    const token = `header.${b64url}.signature`
-    localStorage.setItem('ta_access', token)
+  it('migrates a valid legacy localStorage access token into sessionStorage', async () => {
+    localStorage.setItem('ta_access', jwt('legacy'))
     renderWithAuth(<TestConsumer />)
-    expect(screen.getByTestId('user')).toHaveTextContent('alice_smith')
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('legacy'))
+    expect(localStorage.getItem('ta_access')).toBeNull()
+    expect(sessionStorage.getItem('ta_access')).toBeTruthy()
+  })
+
+  it('ignores an expired token and clears it', async () => {
+    sessionStorage.setItem('ta_access', jwt('expired', 'user', -3600))
+    renderWithAuth(<TestConsumer />)
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+    expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('false')
+    expect(sessionStorage.getItem('ta_access')).toBeNull()
+  })
+
+  it('logs in without exposing a refresh token to JavaScript storage', async () => {
+    renderWithAuth(<TestConsumer />)
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+    vi.mocked(axios.post).mockResolvedValueOnce({ data: { access_token: jwt('bob') } })
+    await userEvent.click(screen.getByTestId('login'))
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('bob'))
+    expect(sessionStorage.getItem('ta_access')).toBeTruthy()
+    expect(localStorage.getItem('ta_refresh')).toBeNull()
+  })
+
+  it('logout clears sensitive browser state and calls the server', async () => {
+    sessionStorage.setItem('ta_access', jwt('alice'))
+    sessionStorage.setItem('ta_last_run', JSON.stringify({ ticker: 'AAPL', reports: { market_report: 'private' } }))
+    sessionStorage.setItem('ta_task_running', JSON.stringify({ taskId: 'alice-task' }))
+    vi.mocked(axios.post).mockResolvedValue({ data: {} })
+    renderWithAuth(<TestConsumer />)
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('alice'))
+    await userEvent.click(screen.getByTestId('logout'))
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('null'))
+    expect(sessionStorage.getItem('ta_access')).toBeNull()
+    expect(sessionStorage.getItem('ta_last_run')).toBeNull()
+    expect(sessionStorage.getItem('ta_task_running')).toBeNull()
+    expect(vi.mocked(axios.post)).toHaveBeenCalledWith('/auth/logout')
+  })
+
+  it('getAccessToken reads session storage', () => {
+    sessionStorage.setItem('ta_access', 'my_token')
+    expect(getAccessToken()).toBe('my_token')
   })
 
   it('throws when useAuth is used outside provider', () => {
@@ -89,104 +110,16 @@ describe('AuthContext', () => {
     consoleError.mockRestore()
   })
 
-  it('login calls axios and stores tokens', async () => {
-    const axios = await import('axios')
-    const mockPost = vi.mocked(axios.default.post).mockResolvedValue({
-      data: { access_token: 'new_token', refresh_token: 'new_refresh' },
-    })
+  it('clears React auth state when cookie refresh fails', async () => {
+    sessionStorage.setItem('ta_access', jwt('alice'))
     renderWithAuth(<TestConsumer />)
-    await userEvent.click(screen.getByTestId('login'))
-    await waitFor(() => {
-      expect(mockPost).toHaveBeenCalledWith('/auth/login', { username: 'test', password: 'pass' })
-    })
-    expect(localStorage.getItem('ta_access')).toBe('new_token')
-  })
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('alice'))
 
-  it('logout clears state and calls /auth/logout', async () => {
-    const payload = { sub: 'alice', role: 'user', exp: Math.floor(Date.now() / 1000) + 3600 }
-    localStorage.setItem('ta_access', `header.${btoa(JSON.stringify(payload))}.signature`)
-    localStorage.setItem('ta_refresh', 'refresh_token')
-    localStorage.setItem('ta_user_scope', 'alice')
-    localStorage.setItem('ta_last_run', JSON.stringify({ ticker: 'AAPL', reports: { market_report: 'private report' } }))
-    localStorage.setItem('ta_task_running', JSON.stringify({ taskId: 'alice-task' }))
-    const axios = await import('axios')
-    vi.mocked(axios.default.post).mockResolvedValue({ data: {} })
-    renderWithAuth(<TestConsumer />)
-    expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('true')
-    await userEvent.click(screen.getByTestId('logout'))
-    await waitFor(() => {
-      expect(screen.getByTestId('user')).toHaveTextContent('null')
-    })
-    expect(localStorage.getItem('ta_access')).toBeNull()
-    expect(localStorage.getItem('ta_last_run')).toBeNull()
-    expect(localStorage.getItem('ta_task_running')).toBeNull()
-    expect(localStorage.getItem('ta_user_scope')).toBeNull()
-  })
-
-  it('discards another account\'s persisted analysis state on login', async () => {
-    localStorage.setItem('ta_user_scope', 'alice')
-    localStorage.setItem('ta_last_run', JSON.stringify({ ticker: 'AAPL', reports: { market_report: 'alice only' } }))
-    localStorage.setItem('ta_task_running', JSON.stringify({ taskId: 'alice-task' }))
-    const payload = { sub: 'bob', role: 'user', exp: Math.floor(Date.now() / 1000) + 3600 }
-
-    const axios = await import('axios')
-    vi.mocked(axios.default.post).mockResolvedValue({
-      data: { access_token: `header.${btoa(JSON.stringify(payload))}.signature`, refresh_token: 'bob-refresh' },
-    })
-
-    renderWithAuth(<TestConsumer />)
-    await userEvent.click(screen.getByTestId('login'))
-
-    await waitFor(() => {
-      expect(screen.getByTestId('user')).toHaveTextContent('bob')
-    })
-    expect(localStorage.getItem('ta_last_run')).toBeNull()
-    expect(localStorage.getItem('ta_task_running')).toBeNull()
-    expect(localStorage.getItem('ta_user_scope')).toBe('bob')
-  })
-
-  it('getAccessToken returns token from localStorage', () => {
-    localStorage.setItem('ta_access', 'my_token')
-    expect(getAccessToken()).toBe('my_token')
-  })
-
-  it('getAccessToken returns null when no token', () => {
-    expect(getAccessToken()).toBeNull()
-  })
-
-  it('clears React auth state (not just localStorage) when token refresh fails', async () => {
-    const payload = { sub: 'alice', role: 'user', exp: Math.floor(Date.now() / 1000) + 3600 }
-    localStorage.setItem('ta_access', `header.${btoa(JSON.stringify(payload))}.signature`)
-    localStorage.setItem('ta_refresh', 'stale_refresh_token')
-
-    const axios = await import('axios')
-    const mockedAxios = vi.mocked(axios.default)
-    // /auth/refresh itself fails (e.g. refresh token revoked/expired)
-    mockedAxios.post.mockImplementation((url: string) => {
-      if (url === '/auth/refresh') return Promise.reject(new Error('refresh rejected'))
-      return Promise.resolve({ data: {} })
-    })
-
-    renderWithAuth(<TestConsumer />)
-    expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('true')
-
-    // Grab the response error-handler AuthContext registered on the (mocked)
-    // axios.interceptors.response.use, and invoke it as axios would for a
-    // downstream 401 — this is what used to leave localStorage cleared but
-    // React state (and thus the UI) still showing "logged in".
-    const responseUseCalls = vi.mocked(mockedAxios.interceptors.response.use).mock.calls
+    vi.mocked(axios.post).mockRejectedValue(new Error('refresh rejected'))
+    const responseUseCalls = vi.mocked(axios.interceptors.response.use).mock.calls
     const errorHandler = responseUseCalls[responseUseCalls.length - 1][1]
-
-    const fakeError = {
-      config: { url: '/api/portfolio', headers: {} },
-      response: { status: 401, data: {} },
-    }
+    const fakeError = { config: { url: '/api/portfolio', headers: {} }, response: { status: 401, data: {} } }
     await expect(errorHandler(fakeError)).rejects.toBeTruthy()
-
-    await waitFor(() => {
-      expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('false')
-    })
-    expect(screen.getByTestId('user')).toHaveTextContent('null')
-    expect(localStorage.getItem('ta_access')).toBeNull()
+    await waitFor(() => expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('false'))
   })
 })

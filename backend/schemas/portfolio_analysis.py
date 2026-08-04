@@ -1,11 +1,18 @@
 from datetime import datetime
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 class MultiTickerRunRequest(BaseModel):
     tickers: list[str] = Field(..., min_length=2, max_length=10)
     trade_date: str
-    asset_type: str = "stock"
+    asset_type: str = Field(default="stock", pattern="^(stock|crypto)$")
+
+    @field_validator("trade_date")
+    @classmethod
+    def validate_trade_date(cls, value: str) -> str:
+        from backend.core.temporal import normalize_iso_date
+
+        return normalize_iso_date(value, field_name="trade_date")
 
 class MultiTickerRunResponse(BaseModel):
     task_id: str

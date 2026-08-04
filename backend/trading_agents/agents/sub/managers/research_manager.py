@@ -38,7 +38,11 @@ def create_research_manager(llm):
             from backend.services.memory_service import recall_episode_lessons
 
             situation = state.get("market_report") or state.get("synthesis_report") or ""
-            memory_lessons = await recall_episode_lessons(user_id=get_config().get("user_id"), situation_text=situation)
+            memory_lessons = await recall_episode_lessons(
+                user_id=get_config().get("user_id"),
+                situation_text=situation,
+                as_of=state.get("trade_date"),
+            )
         except Exception as _e:
             _logger.debug("Memory recall skipped in research_manager: %s", _e)
             memory_lessons = ""

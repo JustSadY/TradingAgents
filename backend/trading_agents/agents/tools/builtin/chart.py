@@ -9,6 +9,7 @@ from backend.trading_agents.agents.tools.registry import registry
 
 chart_annotation_tool = FunctionToolAdapter(
     key="chart_annotation",
+    temporal_semantics="point_in_time",
     category="chart",
     label_key="tools.chart_annotation.label",
     description_key="tools.chart_annotation.description",
@@ -19,6 +20,7 @@ chart_annotation_tool = FunctionToolAdapter(
 
 custom_indicator_tool = FunctionToolAdapter(
     key="custom_indicator",
+    temporal_semantics="point_in_time",
     category="chart",
     label_key="tools.custom_indicator.label",
     description_key="tools.custom_indicator.description",
@@ -29,6 +31,7 @@ custom_indicator_tool = FunctionToolAdapter(
 
 vision_chart_tool = FunctionToolAdapter(
     key="vision_chart_analysis",
+    temporal_semantics="point_in_time",
     category="chart",
     label_key="tools.vision_chart_analysis.label",
     description_key="tools.vision_chart_analysis.description",
@@ -39,6 +42,7 @@ vision_chart_tool = FunctionToolAdapter(
 
 mtf_trend_tool = FunctionToolAdapter(
     key="mtf_trend",
+    temporal_semantics="point_in_time",
     category="chart",
     label_key="tools.mtf_trend.label",
     description_key="tools.mtf_trend.description",

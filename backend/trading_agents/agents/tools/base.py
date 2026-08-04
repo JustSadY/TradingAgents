@@ -4,6 +4,8 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from typing import Any, Literal
 
+TemporalSemantics = Literal["point_in_time", "date_bounded", "live_only"]
+
 ToolSettingType = Literal[
     "boolean",
     "number",
@@ -58,6 +60,7 @@ class BaseAgentTool(ABC):
     requires_secret: bool = False
     requires_network: bool = True
     requires_db: bool = False
+    temporal_semantics: TemporalSemantics = "live_only"
 
     def metadata(self) -> dict[str, Any]:
         return {
@@ -88,6 +91,7 @@ class BaseAgentTool(ABC):
             "requires_secret": self.requires_secret,
             "requires_network": self.requires_network,
             "requires_db": self.requires_db,
+            "temporal_semantics": self.temporal_semantics,
         }
 
     def default_settings(self, scope: str | None = None) -> dict[str, Any]:

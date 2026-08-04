@@ -83,7 +83,7 @@ class Settings(BaseSettings):
 
         In development the defaults stay usable out of the box; with
         ENVIRONMENT=production an operator must provide real secrets, otherwise
-        JWTs are forgeable, the owner account password defaults to 'changeme',
+        JWTs are forgeable, no durable owner bootstrap credential exists,
         and encrypted API keys are silently lost on restart.
         """
         if self.ENVIRONMENT.strip().lower() == "production":
@@ -93,7 +93,7 @@ class Settings(BaseSettings):
             if not self.ENCRYPTION_KEY:
                 problems.append("ENCRYPTION_KEY must be set (encrypted data is lost on restart otherwise)")
             if not self.ADMIN_PASSWORD_HASH:
-                problems.append("ADMIN_PASSWORD_HASH must be set (the admin password defaults to 'changeme' otherwise)")
+                problems.append("ADMIN_PASSWORD_HASH must be set to a durable, operator-controlled password hash")
             if problems:
                 raise ValueError("Insecure configuration for ENVIRONMENT=production: " + "; ".join(problems))
         return self

@@ -2265,6 +2265,12 @@ export interface components {
             benchmark?: components["schemas"]["BacktestBenchmark"] | null;
             /** Alpha Pct */
             alpha_pct?: number | null;
+            consensus_report_stats?: components["schemas"]["ConsensusReportStats"] | null;
+            /**
+             * Assumptions
+             * @default []
+             */
+            assumptions: string[];
         };
         /** BacktestTradeRecord */
         BacktestTradeRecord: {
@@ -2282,8 +2288,26 @@ export interface components {
             return_pct: number;
             /** Pnl */
             pnl: number;
+            /**
+             * Financing Cost
+             * @default 0
+             */
+            financing_cost: number;
             /** Reason */
             reason: string;
+        };
+        /** ConsensusReportStats */
+        ConsensusReportStats: {
+            /** Considered */
+            considered: number;
+            /** Used */
+            used: number;
+            /** Excluded Created After Trade Date */
+            excluded_created_after_trade_date: number;
+            /** Excluded Invalid Timestamp */
+            excluded_invalid_timestamp: number;
+            /** Replaced Duplicate Trade Date */
+            replaced_duplicate_trade_date: number;
         };
         /** BySignalItem */
         BySignalItem: {
@@ -3007,7 +3031,7 @@ export interface components {
         /** RefreshRequest */
         RefreshRequest: {
             /** Refresh Token */
-            refresh_token: string;
+            refresh_token?: string | null;
         };
         /** ResetRequest */
         ResetRequest: {
@@ -3759,8 +3783,8 @@ export interface components {
         TokenResponse: {
             /** Access Token */
             access_token: string;
-            /** Refresh Token */
-            refresh_token: string;
+            /** Refresh Token (legacy non-browser clients only) */
+            refresh_token?: string | null;
             /**
              * Token Type
              * @default bearer

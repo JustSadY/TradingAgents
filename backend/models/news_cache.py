@@ -24,6 +24,8 @@ class NewsAnalysisCache(Base):
         Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=True, index=True
     )
     ticker: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    trade_date: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
+    temporal_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="live", index=True)
     articles_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     config_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     analysis_result: Mapped[str] = mapped_column(Text, nullable=False)
@@ -43,6 +45,8 @@ class AnalystReportCache(Base):
     )
     analyst_key: Mapped[str] = mapped_column(String(30), nullable=False, index=True)
     ticker: Mapped[str] = mapped_column(String(20), nullable=False, index=True)
+    trade_date: Mapped[str | None] = mapped_column(String(10), nullable=True, index=True)
+    temporal_mode: Mapped[str] = mapped_column(String(20), nullable=False, default="live", index=True)
     data_hash: Mapped[str] = mapped_column(String(64), nullable=False, index=True)
     config_fingerprint: Mapped[str | None] = mapped_column(String(64), nullable=True, index=True)
     analysis_result: Mapped[str] = mapped_column(Text, nullable=False)

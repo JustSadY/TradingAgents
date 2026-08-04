@@ -4,6 +4,7 @@ from backend.trading_agents.agents.tools.registry import registry
 
 options_tool = FunctionToolAdapter(
     key="options_data",
+    temporal_semantics="live_only",
     category="options",
     label_key="tools.options_data.label",
     description_key="tools.options_data.description",

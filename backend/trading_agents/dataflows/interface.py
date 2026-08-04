@@ -101,6 +101,49 @@ _TICKER_FIRST_METHODS = frozenset(
     }
 )
 
+
+_LIVE_ONLY_METHODS = frozenset(
+    {
+        "get_fundamentals",
+        "get_insider_transactions",
+        "get_sec_filings",
+        "get_institutional_holdings",
+        "get_catalyst_calendar",
+        "get_analyst_ratings",
+        "get_short_interest",
+        "get_valuation_comparison",
+        "get_options_data",
+        "fetch_reddit_posts",
+        "fetch_stocktwits_messages",
+    }
+)
+
+def _historical_live_data_block(method: str) -> str | None:
+    """Fail closed when a historical run reaches a live-only data source."""
+    config = get_config()
+    historical_mode = bool(config.get("historical_mode", False))
+    allow_live = bool(config.get("allow_live_data_in_historical", False))
+    trade_date = str(config.get("trade_date") or "")
+
+    try:
+        from backend.trading_agents.agents.data.chart_tools import active_run_context
+
+        ctx = active_run_context.get(None) or {}
+        historical_mode = bool(ctx.get("historical_mode", historical_mode))
+        allow_live = bool(ctx.get("allow_live_data_in_historical", allow_live))
+        trade_date = str(ctx.get("trade_date") or trade_date)
+    except Exception:
+        pass
+
+    if historical_mode and not allow_live and method in _LIVE_ONLY_METHODS:
+        label = trade_date or "the requested historical date"
+        return (
+            "# POINT-IN-TIME DATA UNAVAILABLE\n"
+            f"The data source for `{method}` is live-only and was not queried during "
+            f"the historical run for {label}. No current data was substituted."
+        )
+    return None
+
 VENDOR_LIST = [
     "yfinance",
     "alpha_vantage",
@@ -186,6 +229,10 @@ def get_vendor(category: str, method: str = None) -> str:
 _VENDOR_CALL_TIMEOUT = 60
 
 async def route_to_vendor(method: str, *args, **kwargs):
+    blocked = _historical_live_data_block(method)
+    if blocked is not None:
+        return blocked
+
     if method in _TICKER_FIRST_METHODS and args:
         safe_ticker_component(args[0])
 

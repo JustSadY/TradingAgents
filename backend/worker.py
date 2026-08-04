@@ -45,6 +45,19 @@ async def run_analysis_job(ctx, ticker: str, trade_date: str, asset_type: str, u
     except asyncio.CancelledError:
         _logger.info("Analysis worker job cancelled task=%s", task_id)
         return
+    except Exception:
+        _logger.exception("Analysis worker preparation failed task=%s", task_id)
+        from backend.core import task_store
+        from backend.services.analysis.emitter import AnalysisEmitter
+
+        emitter = AnalysisEmitter(task_id)
+        try:
+            await emitter.emit_error("Analysis failed before execution. Please try again.")
+        finally:
+            await emitter.close()
+            await task_store.clear_meta(task_id, user_id)
+            await task_store.clear_owner(task_id)
+            await task_store.clear_cancel_request(task_id)
 
 async def run_portfolio_job(
     ctx, tickers: list[str], trade_date: str, asset_type: str, user_id: int | None, task_id: str
@@ -76,6 +89,19 @@ async def run_portfolio_job(
     except asyncio.CancelledError:
         _logger.info("Portfolio worker job cancelled task=%s", task_id)
         return
+    except Exception:
+        _logger.exception("Portfolio worker preparation failed task=%s", task_id)
+        from backend.core import task_store
+        from backend.services.analysis.emitter import AnalysisEmitter
+
+        emitter = AnalysisEmitter(task_id)
+        try:
+            await emitter.emit_error("Portfolio analysis failed before execution. Please try again.")
+        finally:
+            await emitter.close()
+            await task_store.clear_meta(task_id, user_id)
+            await task_store.clear_owner(task_id)
+            await task_store.clear_cancel_request(task_id)
 
 async def startup(ctx):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")

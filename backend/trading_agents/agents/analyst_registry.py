@@ -70,29 +70,11 @@ def sync_registry_to_graph() -> None:
                 if not (hasattr(last, "tool_calls") and last.tool_calls):
                     return _clear_node
 
-                # Count tool-call turns to prevent infinite loops when tools
-                # keep failing (e.g. repeated 429 errors).
-                max_turns = 10
-                try:
-                    from backend.trading_agents.agents.data.chart_tools import active_run_context
-
-                    ctx = active_run_context.get(None)
-                    if ctx and "graph" in ctx:
-                        cfg = getattr(ctx["graph"], "config", {}) or {}
-                        max_turns = cfg.get("max_analyst_tool_turns", 10)
-                except Exception:
-                    pass
-
-                tool_turn_count = sum(
-                    1 for m in msgs
-                    if hasattr(m, "tool_calls") and m.tool_calls
-                )
-                if tool_turn_count >= max_turns:
-                    _logger.warning(
-                        "Analyst reached max tool turns (%d); forcing report generation.",
-                        max_turns,
-                    )
-                    return _clear_node
+                # Always execute a pending tool call.  The shared analyst runner
+                # counts completed tool turns and performs the next pass with a
+                # tool-free LLM once the configured limit is reached.  Routing
+                # directly to the clear node here used to discard gathered data
+                # before a final report could be written.
                 return _tool_node
 
             _condition.__name__ = method_name

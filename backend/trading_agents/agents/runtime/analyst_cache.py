@@ -62,6 +62,29 @@ def _current_user_id() -> int | None:
     ctx = _current_run_context()
     return ctx.get("user_id") if ctx else None
 
+
+
+def _current_trade_date() -> str | None:
+    ctx = _current_run_context()
+    value = ctx.get("trade_date") if ctx else None
+    return str(value) if value else None
+
+
+def _current_temporal_mode() -> str:
+    ctx = _current_run_context()
+    return "historical" if ctx and ctx.get("historical_mode") else "live"
+
+
+def _record_cache_hit(*, stale: bool, created_at=None) -> None:
+    ctx = _current_run_context()
+    if ctx is not None:
+        ctx["last_analyst_cache_hit"] = {
+            "stale": stale,
+            "created_at": created_at.isoformat() if hasattr(created_at, "isoformat") else None,
+            "trade_date": _current_trade_date(),
+            "temporal_mode": _current_temporal_mode(),
+        }
+
 def _config_meta(analyst_key: str) -> dict:
     config_meta: dict = {}
     ctx = _current_run_context()
@@ -129,6 +152,13 @@ async def check_analyst_cache(
     from backend.models.news_cache import AnalystReportCache, NewsAnalysisCache
 
     user_id = _current_user_id()
+    trade_date = _current_trade_date()
+    temporal_mode = _current_temporal_mode()
+    if temporal_mode == "historical":
+        # Exact hashes include the date.  Stale fallback is deliberately
+        # disabled because a transient fetch failure must not substitute a
+        # report produced with a different point-in-time evidence set.
+        fallback_to_stale = False
 
     def _user_filter(col):
         return col.is_(None) if user_id is None else col == user_id
@@ -140,6 +170,8 @@ async def check_analyst_cache(
                 .where(
                     _user_filter(NewsAnalysisCache.user_id),
                     NewsAnalysisCache.ticker == ticker,
+                    NewsAnalysisCache.trade_date == trade_date,
+                    NewsAnalysisCache.temporal_mode == temporal_mode,
                     NewsAnalysisCache.articles_hash == data_hash,
                 )
                 .order_by(NewsAnalysisCache.created_at.desc())
@@ -152,6 +184,8 @@ async def check_analyst_cache(
                     _user_filter(AnalystReportCache.user_id),
                     AnalystReportCache.analyst_key == analyst_key,
                     AnalystReportCache.ticker == ticker,
+                    AnalystReportCache.trade_date == trade_date,
+                    AnalystReportCache.temporal_mode == temporal_mode,
                     AnalystReportCache.data_hash == data_hash,
                 )
                 .order_by(AnalystReportCache.created_at.desc())
@@ -161,6 +195,7 @@ async def check_analyst_cache(
         for entry in res.scalars():
             report = _usable_report(entry.analysis_result)
             if report is not None:
+                _record_cache_hit(stale=False, created_at=getattr(entry, "created_at", None))
                 return report
             _logger.warning(
                 "Ignoring blank analyst cache entry id=%s for %s/%s.",
@@ -180,6 +215,8 @@ async def check_analyst_cache(
                 .where(
                     _user_filter(NewsAnalysisCache.user_id),
                     NewsAnalysisCache.ticker == ticker,
+                    NewsAnalysisCache.trade_date == trade_date,
+                    NewsAnalysisCache.temporal_mode == temporal_mode,
                     NewsAnalysisCache.config_fingerprint == config_fingerprint,
                     NewsAnalysisCache.created_at >= cutoff,
                 )
@@ -193,6 +230,8 @@ async def check_analyst_cache(
                     _user_filter(AnalystReportCache.user_id),
                     AnalystReportCache.analyst_key == analyst_key,
                     AnalystReportCache.ticker == ticker,
+                    AnalystReportCache.trade_date == trade_date,
+                    AnalystReportCache.temporal_mode == temporal_mode,
                     AnalystReportCache.config_fingerprint == config_fingerprint,
                     AnalystReportCache.created_at >= cutoff,
                 )
@@ -216,6 +255,7 @@ async def check_analyst_cache(
                 ticker,
                 fallback.created_at,
             )
+            _record_cache_hit(stale=True, created_at=getattr(fallback, "created_at", None))
             return report
     return None
 
@@ -230,6 +270,8 @@ async def store_analyst_cache(analyst_key: str, ticker: str, data_hash: str, rep
         return
 
     user_id = _current_user_id()
+    trade_date = _current_trade_date()
+    temporal_mode = _current_temporal_mode()
     config_fingerprint = _compute_config_fingerprint(analyst_key)
 
     async with AsyncSessionLocal() as db:
@@ -237,6 +279,8 @@ async def store_analyst_cache(analyst_key: str, ticker: str, data_hash: str, rep
             entry = NewsAnalysisCache(
                 user_id=user_id,
                 ticker=ticker,
+                trade_date=trade_date,
+                temporal_mode=temporal_mode,
                 articles_hash=data_hash,
                 config_fingerprint=config_fingerprint,
                 analysis_result=report,
@@ -246,6 +290,8 @@ async def store_analyst_cache(analyst_key: str, ticker: str, data_hash: str, rep
                 user_id=user_id,
                 analyst_key=analyst_key,
                 ticker=ticker,
+                trade_date=trade_date,
+                temporal_mode=temporal_mode,
                 data_hash=data_hash,
                 config_fingerprint=config_fingerprint,
                 analysis_result=report,
@@ -262,9 +308,13 @@ async def emit_cache_hit(analyst_key: str, ticker: str) -> None:
         ctx = active_run_context.get(None)
         if ctx and "emitter" in ctx:
             emitter = ctx["emitter"]
+            meta = ctx.get("last_analyst_cache_hit") or {}
+            age = f" generated {meta.get('created_at')}" if meta.get("created_at") else ""
+            freshness = "stale fallback" if meta.get("stale") else "exact cache hit"
+            date_note = f" for trade date {meta.get('trade_date')}" if meta.get("trade_date") else ""
             await emitter.emit_mental_model(
                 analyst_key,
-                f"Reusing cached {analyst_key} analysis for {ticker} (saved tokens).",
+                f"Reusing {freshness}{date_note}{age} for {ticker} (saved tokens).",
             )
     except Exception as _e:
         _logger.debug("emit_cache_hit skipped: %s", _e)

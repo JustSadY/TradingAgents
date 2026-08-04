@@ -1,3 +1,4 @@
+import ast
 import logging
 import re
 
@@ -128,7 +129,18 @@ _FORMULA_FUNCS: dict = {
 }
 
 def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
-    """Evaluates a mathematical formula containing technical indicators."""
+    """Evaluate a bounded, causal arithmetic indicator expression.
+
+    Only current/past series and whitelisted rolling functions are permitted.
+    Attribute access, subscripting, arbitrary function calls, and future shifts
+    are rejected before pandas evaluates the expression.
+    """
+    formula = (formula or "").strip()
+    if not formula or len(formula) > 300:
+        raise ValueError("Formula must contain between 1 and 300 characters")
+    if any(token in formula for token in (".", "[", "]", "{", "}", "'", '"', ";", "__")):
+        raise ValueError("Formula contains unsupported syntax")
+
     processed_formula = formula
     local_dict = {
         "Open": df["Open"],
@@ -139,22 +151,59 @@ def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
     }
 
     for name, func in _FORMULA_FUNCS.items():
-        pattern = rf"\b{name}\s*\(\s*(\d+)\s*\)"
-        for m in re.finditer(pattern, formula, re.IGNORECASE):
-            n = int(m.group(1))
+        pattern = rf"\b{name}\s*\(\s*([+-]?\d+)\s*\)"
+        for match in list(re.finditer(pattern, processed_formula, re.IGNORECASE)):
+            n = int(match.group(1))
+            if n < 1 or n > 500:
+                raise ValueError(f"{name} period must be between 1 and 500")
             col_name = f"{name}_{n}"
             if col_name not in local_dict:
                 local_dict[col_name] = func(df, n)
-            processed_formula = re.sub(re.escape(m.group(0)), col_name, processed_formula, flags=re.IGNORECASE)
+            processed_formula = re.sub(
+                re.escape(match.group(0)), col_name, processed_formula, flags=re.IGNORECASE
+            )
+
+    # Any letters followed by '(' are an unrecognized function call.
+    if re.search(r"[A-Za-z_]\w*\s*\(", processed_formula):
+        raise ValueError("Formula contains an unsupported function")
+
+    try:
+        tree = ast.parse(processed_formula, mode="eval")
+    except SyntaxError as exc:
+        raise ValueError("Formula syntax is invalid") from exc
+
+    allowed_nodes = (
+        ast.Expression,
+        ast.BinOp,
+        ast.UnaryOp,
+        ast.Name,
+        ast.Load,
+        ast.Constant,
+        ast.Add,
+        ast.Sub,
+        ast.Mult,
+        ast.Div,
+        ast.Mod,
+        ast.Pow,
+        ast.USub,
+        ast.UAdd,
+    )
+    for node in ast.walk(tree):
+        if not isinstance(node, allowed_nodes):
+            raise ValueError("Formula contains unsupported operations")
+        if isinstance(node, ast.Name) and node.id not in local_dict:
+            raise ValueError(f"Unknown formula symbol: {node.id}")
+        if isinstance(node, ast.Constant) and not isinstance(node.value, (int, float)):
+            raise ValueError("Formula constants must be numeric")
 
     try:
         res = pd.eval(processed_formula, local_dict=local_dict, engine="python")
         if isinstance(res, (int, float)):
             return pd.Series([res] * len(df), index=df.index)
         return pd.Series(res, index=df.index)
-    except Exception as e:
-        _logger.exception("Error evaluating formula %s", formula)
-        raise ValueError(f"Formula could not be calculated: {str(e)}") from e
+    except Exception as exc:
+        _logger.warning("Custom formula evaluation failed: %s", exc)
+        raise ValueError("Formula could not be calculated") from exc
 
 async def fetch_sector(ticker: str) -> str:
     import asyncio

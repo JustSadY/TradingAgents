@@ -121,13 +121,25 @@ Your final report MUST follow this structure:
 
         if asset_type == "crypto":
             try:
-                import asyncio
+                from backend.trading_agents.agents.data.chart_tools import active_run_context
 
-                from backend.trading_agents.dataflows.crypto_fear_greed import (
-                    fetch_crypto_fear_greed_index,
-                )
+                ctx = active_run_context.get(None) or {}
+                if bool(ctx.get("historical_mode", False)) and not bool(
+                    ctx.get("allow_live_data_in_historical", False)
+                ):
+                    crypto_data = (
+                        "# POINT-IN-TIME DATA UNAVAILABLE\n"
+                        "The Crypto Fear and Greed Index is live-only and was not queried "
+                        "for this historical run."
+                    )
+                else:
+                    import asyncio
 
-                crypto_data = await asyncio.to_thread(fetch_crypto_fear_greed_index)
+                    from backend.trading_agents.dataflows.crypto_fear_greed import (
+                        fetch_crypto_fear_greed_index,
+                    )
+
+                    crypto_data = await asyncio.to_thread(fetch_crypto_fear_greed_index)
 
             except Exception as _e:
 

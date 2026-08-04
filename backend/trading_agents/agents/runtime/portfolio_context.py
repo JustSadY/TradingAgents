@@ -15,9 +15,21 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-async def get_portfolio_context(user_id: int | None) -> str:
+async def get_portfolio_context(user_id: int | None, *, as_of: str | None = None) -> str:
     if not user_id:
         return ""
+    if as_of:
+        try:
+            from backend.core.temporal import is_historical_trade_date
+
+            if is_historical_trade_date(as_of):
+                return (
+                    "=== PORTFOLIO CONTEXT EXCLUDED ===\n"
+                    f"The current portfolio is not a point-in-time snapshot as of {as_of}; "
+                    "position sizing must not infer historical cash or holdings."
+                )
+        except ValueError:
+            return ""
     try:
         from backend.core.database import AsyncSessionLocal
         from backend.repositories.portfolio import get_simulation_portfolio

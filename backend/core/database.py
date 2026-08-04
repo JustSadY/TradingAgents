@@ -146,10 +146,12 @@ async def create_all_tables():
                 normalize_sqlite_analysis_signals,
                 normalize_sqlite_settings_collections,
                 normalize_sqlite_simulation_entry_commissions,
+                normalize_sqlite_temporal_and_share_schema,
             )
 
             await apply_column_migrations(conn)
             await apply_type_migrations(conn)
+            await normalize_sqlite_temporal_and_share_schema(conn)
             await normalize_sqlite_analysis_signals(conn)
             await normalize_sqlite_settings_collections(conn)
             await normalize_sqlite_simulation_entry_commissions(conn)

@@ -37,9 +37,14 @@ async def ohlcv(
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
 @router.get("/custom-indicator", response_model=dict[str, Any])
+@limiter.limit("20/minute")
 async def custom_indicator(
+    request: Request,
     ticker: str = Query(..., description=_TICKER_DESCRIPTION),
-    formula: str = Query(..., description="Mathematical formula, e.g. (Close - SMA(20)) / STD(20)"),
+    formula: str = Query(
+        ..., min_length=1, max_length=300,
+        description="Mathematical formula, e.g. (Close - SMA(20)) / STD(20)",
+    ),
     period: str = Query("1y", description="1m|3m|6m|1y|2y|5y"),
     start_date: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD"),
     end_date: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD"),

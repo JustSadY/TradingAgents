@@ -5,6 +5,7 @@ from backend.trading_agents.agents.tools.registry import registry
 
 technical_indicators_tool = FunctionToolAdapter(
     key="technical_indicators",
+    temporal_semantics="point_in_time",
     category="market",
     label_key="tools.technical_indicators.label",
     description_key="tools.technical_indicators.description",

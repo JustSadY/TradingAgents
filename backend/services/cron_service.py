@@ -56,6 +56,17 @@ async def _job_lock(job_name: str):
         _logger.warning("Advisory lock execution error for %s: %s", job_name, exc)
         yield False
 
+
+async def _run_transient_cleanup():
+    async with _job_lock("transient_cleanup") as acquired:
+        if not acquired:
+            return
+        from backend.services.maintenance_service import cleanup_transient_data
+
+        counts = await cleanup_transient_data()
+        if any(counts.values()):
+            _logger.info("Transient-data cleanup removed rows: %s", counts)
+
 class CronService:
     def __init__(self):
         self.scheduler = AsyncIOScheduler(timezone="UTC")
@@ -88,6 +99,14 @@ class CronService:
                 id="position_monitor",
                 replace_existing=True,
                 misfire_grace_time=120,
+            )
+            self.scheduler.add_job(
+                _run_transient_cleanup,
+                "interval",
+                hours=24,
+                id="transient_cleanup",
+                replace_existing=True,
+                misfire_grace_time=3600,
             )
             _logger.info("CronService started")
 

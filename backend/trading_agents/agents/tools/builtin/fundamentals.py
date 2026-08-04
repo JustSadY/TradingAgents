@@ -13,6 +13,7 @@ from backend.trading_agents.agents.tools.registry import registry
 
 fundamentals_tool = FunctionToolAdapter(
     key="fundamentals_data",
+    temporal_semantics="live_only",
     category="fundamentals",
     label_key="tools.fundamentals_data.label",
     description_key="tools.fundamentals_data.description",
@@ -23,6 +24,7 @@ fundamentals_tool = FunctionToolAdapter(
 
 balance_sheet_tool = FunctionToolAdapter(
     key="balance_sheet",
+    temporal_semantics="date_bounded",
     category="fundamentals",
     label_key="tools.balance_sheet.label",
     description_key="tools.balance_sheet.description",
@@ -33,6 +35,7 @@ balance_sheet_tool = FunctionToolAdapter(
 
 cashflow_tool = FunctionToolAdapter(
     key="cashflow",
+    temporal_semantics="date_bounded",
     category="fundamentals",
     label_key="tools.cashflow.label",
     description_key="tools.cashflow.description",
@@ -43,6 +46,7 @@ cashflow_tool = FunctionToolAdapter(
 
 income_statement_tool = FunctionToolAdapter(
     key="income_statement",
+    temporal_semantics="date_bounded",
     category="fundamentals",
     label_key="tools.income_statement.label",
     description_key="tools.income_statement.description",
@@ -53,6 +57,7 @@ income_statement_tool = FunctionToolAdapter(
 
 sec_filings_tool = FunctionToolAdapter(
     key="sec_filings",
+    temporal_semantics="live_only",
     category="fundamentals",
     label_key="tools.sec_filings.label",
     description_key="tools.sec_filings.description",
@@ -63,6 +68,7 @@ sec_filings_tool = FunctionToolAdapter(
 
 insider_transactions_deep_tool = FunctionToolAdapter(
     key="insider_transactions_deep",
+    temporal_semantics="live_only",
     category="fundamentals",
     label_key="tools.insider_transactions_deep.label",
     description_key="tools.insider_transactions_deep.description",

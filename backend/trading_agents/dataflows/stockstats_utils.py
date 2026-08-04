@@ -152,9 +152,23 @@ def load_ohlcv(symbol: str, curr_date: str) -> pd.DataFrame:
     APICache.set("stockstats_load_ohlcv", {"rows": payload.to_dict(orient="records")}, symbol, curr_date)
     return data
 
-def filter_financials_by_date(data: pd.DataFrame, curr_date: str) -> pd.DataFrame:
+def filter_financials_by_date(
+    data: pd.DataFrame,
+    curr_date: str,
+    *,
+    frequency: str = "quarterly",
+) -> pd.DataFrame:
+    """Apply a conservative information-availability cutoff.
+
+    Yahoo exposes period-end columns, not the date the statement became public.
+    Treating a March 31 quarter as known on March 31 is look-ahead bias.  Until
+    a provider supplies filing/accepted dates, use a conservative publication
+    lag (45 days quarterly, 90 days annual) and fail closed around the boundary.
+    """
     if not curr_date or data.empty:
         return data
-    cutoff = pd.Timestamp(curr_date)
-    mask = pd.to_datetime(data.columns, errors="coerce") <= cutoff
+    lag_days = 45 if str(frequency).lower() == "quarterly" else 90
+    cutoff = pd.Timestamp(curr_date) - pd.Timedelta(days=lag_days)
+    columns = pd.to_datetime(data.columns, errors="coerce")
+    mask = columns.notna() & (columns <= cutoff)
     return data.loc[:, mask]

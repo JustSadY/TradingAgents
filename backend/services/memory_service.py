@@ -14,6 +14,7 @@ from __future__ import annotations
 import logging
 
 from backend.core.memory import MemoryRecord, MemoryStore, build_pgvector_store, build_pinecone_store
+from datetime import UTC, datetime
 
 _logger = logging.getLogger(__name__)
 
@@ -168,6 +169,8 @@ async def record_episode(
             "raw_return": float(raw_return) if raw_return is not None else 0.0,
             "alpha_return": float(alpha_return) if alpha_return is not None else 0.0,
             "outcome": outcome,
+            "observed_at": datetime.now(UTC).isoformat(),
+            "outcome_available_at": datetime.now(UTC).isoformat(),
         },
     )
     try:
@@ -182,6 +185,7 @@ async def recall_episode_lessons(
     user_id: int | None,
     situation_text: str,
     top_k: int = 5,
+    as_of: str | None = None,
     store: MemoryStore | None = None,
 ) -> str:
     """Return a formatted block of the most similar past episodes for injection
@@ -193,7 +197,28 @@ async def recall_episode_lessons(
     if store is None or not situation_text.strip():
         return ""
 
-    hits = await store.query(_namespace(user_id), situation_text, top_k=top_k)
+    query_limit = max(top_k, top_k * 5 if as_of else top_k)
+    hits = await store.query(_namespace(user_id), situation_text, top_k=query_limit)
+    if as_of:
+        from backend.core.temporal import parse_iso_date
+
+        cutoff = parse_iso_date(as_of, field_name="as_of")
+        safe_hits = []
+        for hit in hits:
+            available = hit.metadata.get("outcome_available_at")
+            if not available:
+                # Legacy outcome memories have no trustworthy availability
+                # timestamp, so historical runs must not consume them.
+                continue
+            try:
+                available_date = datetime.fromisoformat(str(available).replace("Z", "+00:00")).date()
+            except ValueError:
+                continue
+            if available_date <= cutoff:
+                safe_hits.append(hit)
+        hits = safe_hits[:top_k]
+    else:
+        hits = hits[:top_k]
     if not hits:
         return ""
 
@@ -243,7 +268,11 @@ async def record_agent_qa(
     record = MemoryRecord(
         id=_episode_id(user_id, ticker, trade_date),
         text=f"{(situation_text or '')[:1500]}\n\n{transcript}"[:_QA_MAX_CHARS],
-        metadata={"ticker": ticker, "trade_date": trade_date},
+        metadata={
+            "ticker": ticker,
+            "trade_date": trade_date,
+            "observed_at": datetime.now(UTC).isoformat(),
+        },
     )
     try:
         await store.upsert(_qa_namespace(user_id), [record])
@@ -257,6 +286,7 @@ async def recall_agent_qa(
     user_id: int | None,
     situation_text: str,
     top_k: int = 2,
+    as_of: str | None = None,
     store: MemoryStore | None = None,
 ) -> str:
     """Return prior cross-examinations of similar situations, to seed the current
@@ -264,7 +294,26 @@ async def recall_agent_qa(
     store = store or await get_user_memory_store(user_id)
     if store is None or not situation_text.strip():
         return ""
-    hits = await store.query(_qa_namespace(user_id), situation_text, top_k=top_k)
+    query_limit = max(top_k, top_k * 5 if as_of else top_k)
+    hits = await store.query(_qa_namespace(user_id), situation_text, top_k=query_limit)
+    if as_of:
+        from backend.core.temporal import parse_iso_date
+
+        cutoff = parse_iso_date(as_of, field_name="as_of")
+        filtered = []
+        for hit in hits:
+            observed = hit.metadata.get("observed_at")
+            if not observed:
+                continue
+            try:
+                observed_date = datetime.fromisoformat(str(observed).replace("Z", "+00:00")).date()
+            except ValueError:
+                continue
+            if observed_date <= cutoff:
+                filtered.append(hit)
+        hits = filtered[:top_k]
+    else:
+        hits = hits[:top_k]
     if not hits:
         return ""
     parts = ["### How analysts reconciled similar situations before:"]

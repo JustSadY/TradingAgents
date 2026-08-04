@@ -11,6 +11,7 @@ def route_stocktwits_messages(*args, **kwargs):
 
 reddit_sentiment_tool = FunctionToolAdapter(
     key="reddit_sentiment",
+    temporal_semantics="live_only",
     category="sentiment",
     label_key="tools.reddit_sentiment.label",
     description_key="tools.reddit_sentiment.description",
@@ -54,6 +55,7 @@ reddit_sentiment_tool = FunctionToolAdapter(
 
 stocktwits_sentiment_tool = FunctionToolAdapter(
     key="stocktwits_sentiment",
+    temporal_semantics="live_only",
     category="sentiment",
     label_key="tools.stocktwits_sentiment.label",
     description_key="tools.stocktwits_sentiment.description",

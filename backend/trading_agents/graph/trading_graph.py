@@ -242,9 +242,7 @@ class TradingAgentsGraph:
         return kwargs
 
     def _filter_tools_for_analyst(self, analyst_key: str, raw_tools: list) -> list:
-        runtime_ctx = self.config.get("runtime_tool_context")
-        if not runtime_ctx:
-            return raw_tools
+        runtime_ctx = self.config.get("runtime_tool_context") or {}
 
         from backend.trading_agents.agents.tools.registry import registry
 
@@ -261,6 +259,13 @@ class TradingAgentsGraph:
     def _should_include_tool(self, analyst_key: str, tool_key: str | None, _tool_func: Any, runtime_ctx: dict) -> bool:
         """Helper to determine if a tool should be included for an analyst."""
         if tool_key is None:
+            # Unknown/unregistered tools have no temporal contract. Historical
+            # runs fail closed rather than assuming an arbitrary network tool
+            # is point-in-time safe.
+            if self.config.get("historical_mode") and not self.config.get("allow_live_data_in_historical", False):
+                tool_name = getattr(_tool_func, "name", getattr(_tool_func, "__name__", "unknown"))
+                logger.warning("Historical run: excluding unregistered tool '%s'.", tool_name)
+                return False
             return True
 
         from backend.trading_agents.agents.tools.registry import registry
@@ -268,6 +273,15 @@ class TradingAgentsGraph:
         agent_tool = registry.get(tool_key)
         if not agent_tool:
             return True
+
+        if self.config.get("historical_mode") and not self.config.get("allow_live_data_in_historical", False):
+            if getattr(agent_tool, "temporal_semantics", "live_only") == "live_only":
+                logger.info(
+                    "Historical run: excluding live-only tool '%s' from analyst '%s'.",
+                    tool_key,
+                    analyst_key,
+                )
+                return False
 
         if agent_tool.allowed_analysts and analyst_key not in agent_tool.allowed_analysts:
             logger.warning(
@@ -347,6 +361,8 @@ class TradingAgentsGraph:
                 "support_levels": self.support_levels,
                 "resistance_levels": self.resistance_levels,
                 "trade_date": str(trade_date),
+                "historical_mode": bool(self.config.get("historical_mode", False)),
+                "allow_live_data_in_historical": bool(self.config.get("allow_live_data_in_historical", False)),
                 "user_id": self.config.get("user_id"),
             }
         )
@@ -472,6 +488,8 @@ class TradingAgentsGraph:
                 "support_levels": self.support_levels,
                 "resistance_levels": self.resistance_levels,
                 "trade_date": str(trade_date),
+                "historical_mode": bool(self.config.get("historical_mode", False)),
+                "allow_live_data_in_historical": bool(self.config.get("allow_live_data_in_historical", False)),
                 "user_id": self.config.get("user_id"),
             }
         )

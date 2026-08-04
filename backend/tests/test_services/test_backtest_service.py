@@ -11,6 +11,7 @@ from backend.services.backtest_service import (
     _close_position,
     _close_position_decimal,
     _compute_metrics,
+    _exit_reason_and_price,
     _generate_signal,
     _normalise_exit_levels,
     _trade_pnl,
@@ -158,6 +159,39 @@ class TestClosePosition:
         assert isinstance(cash_delta, Decimal)
         assert cash_delta == Decimal("109.8900")
         assert trade["pnl"] == 9.79
+
+    def test_short_financing_is_reported_without_double_debiting_close_cash(self):
+        cash_delta, trade = _close_position_decimal(
+            "short",
+            Decimal("100"),
+            Decimal("90"),
+            Decimal("10"),
+            "2024-01-01",
+            "2024-01-05",
+            "SIGNAL",
+            Decimal("0"),
+            Decimal("2"),
+        )
+
+        assert cash_delta == Decimal("100")
+        assert trade["pnl"] == 98.0
+        assert trade["financing_cost"] == 2.0
+
+
+def test_intrabar_stop_is_conservatively_prioritized_over_target():
+    reason, price = _exit_reason_and_price(
+        "long",
+        Decimal("100"),
+        Decimal("112"),
+        Decimal("94"),
+        Decimal("105"),
+        Decimal("95"),
+        Decimal("110"),
+        1,
+    )
+
+    assert reason == "STOP_LOSS"
+    assert price == Decimal("95")
 
 def test_backtest_metrics_take_decimal_equity_curve_without_float_money_rounding():
     metrics = _compute_metrics(

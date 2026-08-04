@@ -5,6 +5,7 @@ from backend.trading_agents.agents.tools.registry import registry
 
 company_news_tool = FunctionToolAdapter(
     key="company_news",
+    temporal_semantics="date_bounded",
     category="news",
     label_key="tools.company_news.label",
     description_key="tools.company_news.description",
@@ -26,6 +27,7 @@ company_news_tool = FunctionToolAdapter(
 
 global_news_tool = FunctionToolAdapter(
     key="global_news",
+    temporal_semantics="date_bounded",
     category="news",
     label_key="tools.global_news.label",
     description_key="tools.global_news.description",
@@ -56,6 +58,7 @@ global_news_tool = FunctionToolAdapter(
 
 insider_transactions_tool = FunctionToolAdapter(
     key="insider_transactions",
+    temporal_semantics="live_only",
     category="news",
     label_key="tools.insider_transactions.label",
     description_key="tools.insider_transactions.description",

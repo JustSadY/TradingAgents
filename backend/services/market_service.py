@@ -44,11 +44,11 @@ def _resolve_dates(period: str, start_date: str | None, end_date: str | None) ->
         start = end - PERIOD_DELTAS.get(period, PERIOD_DELTAS["1y"])
         s, e = start.strftime("%Y-%m-%d"), end.strftime("%Y-%m-%d")
     try:
-        datetime.strptime(s, "%Y-%m-%d")
-        datetime.strptime(e, "%Y-%m-%d")
+        from backend.core.temporal import validate_date_range
+
+        return validate_date_range(s, e, max_days=3650)
     except ValueError as exc:
-        raise MarketDataError("Date format must be YYYY-MM-DD") from exc
-    return s, e
+        raise MarketDataError(str(exc)) from exc
 
 def _compute_candles(data) -> list[dict]:
     import numpy as np

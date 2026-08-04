@@ -11,6 +11,7 @@ identifiers and the worker re-loads the user and settings from the database.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 
 from backend.core.config import get_settings
@@ -18,6 +19,7 @@ from backend.core.config import get_settings
 _logger = logging.getLogger(__name__)
 
 _arq_pool = None
+_INLINE_TASKS: set[asyncio.Task] = set()
 
 def queue_mode() -> str:
     return get_settings().ANALYSIS_QUEUE_MODE.strip().lower()
@@ -55,7 +57,12 @@ async def dispatch_analysis(
         return
     from backend.services.analysis_service import run_analysis_task
 
-    background_tasks.add_task(run_analysis_task, ticker, trade_date, asset_type, settings, task_id, user)
+    if background_tasks is not None:
+        background_tasks.add_task(run_analysis_task, ticker, trade_date, asset_type, settings, task_id, user)
+    else:
+        task = asyncio.create_task(run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user))
+        _INLINE_TASKS.add(task)
+        task.add_done_callback(_INLINE_TASKS.discard)
 
 async def dispatch_portfolio_analysis(
     background_tasks,
@@ -73,4 +80,9 @@ async def dispatch_portfolio_analysis(
         return
     from backend.services.analysis_service import run_portfolio_task
 
-    background_tasks.add_task(run_portfolio_task, tickers, trade_date, asset_type, settings, user, task_id)
+    if background_tasks is not None:
+        background_tasks.add_task(run_portfolio_task, tickers, trade_date, asset_type, settings, user, task_id)
+    else:
+        task = asyncio.create_task(run_portfolio_task(tickers, trade_date, asset_type, settings, user, task_id))
+        _INLINE_TASKS.add(task)
+        task.add_done_callback(_INLINE_TASKS.discard)

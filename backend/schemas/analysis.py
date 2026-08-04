@@ -3,7 +3,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 logger = logging.getLogger(__name__)
 
@@ -24,9 +24,16 @@ def _validated_signal(value: object) -> str | None:
     return None
 
 class AnalysisRunRequest(BaseModel):
-    ticker: str
+    ticker: str = Field(..., min_length=1, max_length=20)
     trade_date: str
-    asset_type: str = "stock"
+    asset_type: str = Field(default="stock", pattern="^(stock|crypto)$")
+
+    @field_validator("trade_date")
+    @classmethod
+    def validate_trade_date(cls, value: str) -> str:
+        from backend.core.temporal import normalize_iso_date
+
+        return normalize_iso_date(value, field_name="trade_date")
 
 class AnalysisRunResponse(BaseModel):
     task_id: str
@@ -136,7 +143,7 @@ class ChatMessageRead(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 class ChatMessageCreate(BaseModel):
-    message: str
+    message: str = Field(..., min_length=1, max_length=8000)
 
 class ActiveTaskRead(BaseModel):
     task_id: str
@@ -205,9 +212,73 @@ class CheckpointItem(BaseModel):
     label: str
     ts: str
 
+_TIME_TRAVEL_ALLOWED_FIELDS = frozenset({
+    "messages",
+    "market_report",
+    "sentiment_report",
+    "news_report",
+    "fundamentals_report",
+    "macro_report",
+    "options_report",
+    "quant_report",
+    "earnings_report",
+    "insider_report",
+    "ownership_report",
+    "ratings_report",
+    "short_interest_report",
+    "valuation_report",
+    "catalyst_report",
+    "review_report",
+    "synthesis_report",
+    "audit_report",
+    "agent_qa_report",
+    "investment_plan",
+    "investment_debate_state",
+    "risk_debate_state",
+    "portfolio_decision_json",
+    "final_trade_decision",
+    "final_signal",
+    "trader_investment_plan",
+    "trader_proposal_json",
+})
+_TIME_TRAVEL_PROTECTED_FIELDS = frozenset({
+    "company_of_interest", "ticker", "trade_date", "asset_type", "user_id",
+    "task_id", "checkpoint_scope",
+})
+
+
 class TimeTravelRequest(BaseModel):
-    checkpoint_id: str
-    update_state: dict
+    checkpoint_id: str = Field(..., min_length=1, max_length=256)
+    update_state: dict = Field(default_factory=dict)
+
+    @field_validator("update_state")
+    @classmethod
+    def validate_update_state(cls, value: dict) -> dict:
+        import json
+
+        if not isinstance(value, dict):
+            raise ValueError("update_state must be an object")
+        protected = sorted(set(value) & _TIME_TRAVEL_PROTECTED_FIELDS)
+        if protected:
+            raise ValueError(f"protected state fields cannot be changed: {', '.join(protected)}")
+        unsupported = sorted(set(value) - _TIME_TRAVEL_ALLOWED_FIELDS)
+        if unsupported:
+            raise ValueError(f"unsupported state fields: {', '.join(unsupported)}")
+        # This endpoint is a rollback/reset control, not a generic state editor.
+        # Only empty values may clear stale downstream outputs before replay.
+        invalid_values = []
+        for key, item in value.items():
+            is_empty = item is None or item == "" or item == "{}" or item == [] or item == {}
+            if not is_empty:
+                invalid_values.append(key)
+        if invalid_values:
+            raise ValueError(
+                "time-travel fields may only be reset to empty values: " + ", ".join(sorted(invalid_values))
+            )
+        encoded = json.dumps(value, ensure_ascii=False, default=str)
+        if len(encoded.encode("utf-8")) > 128_000:
+            raise ValueError("update_state payload is too large")
+        return value
 
 class TimeTravelResponse(BaseModel):
     task_id: str

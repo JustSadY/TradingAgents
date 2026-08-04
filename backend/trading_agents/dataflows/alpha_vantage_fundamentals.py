@@ -1,16 +1,10 @@
 import json
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta
 
 from .alpha_vantage_common import _make_api_request
 
-def _filter_reports_by_date(result, curr_date: str):
-    """Drop reports dated after ``curr_date`` to avoid look-ahead bias.
-
-    ``_make_api_request`` returns the raw response *text* (a JSON string), so we
-    parse it before filtering and re-serialize, returning the same type we were
-    given. Previously this only handled ``dict`` and therefore never ran on the
-    string it actually received, leaking future-dated statements into backtests.
-    """
+def _filter_reports_by_date(result, curr_date: str, *, frequency: str = "quarterly"):
+    """Keep only reports that would conservatively have been public by curr_date."""
     if not curr_date:
         return result
 
@@ -24,12 +18,30 @@ def _filter_reports_by_date(result, curr_date: str):
     if not isinstance(parsed, dict):
         return result
 
-    for key in ("annualReports", "quarterlyReports"):
+    cutoff = date.fromisoformat(curr_date)
+    def available(report: dict, default_lag: int) -> bool:
+        for field in ("acceptedDate", "filingDate", "reportedDate", "reportDate"):
+            value = report.get(field)
+            if value:
+                try:
+                    return date.fromisoformat(str(value)[:10]) <= cutoff
+                except ValueError:
+                    continue
+        period_end = report.get("fiscalDateEnding")
+        if not period_end:
+            return False
+        try:
+            return date.fromisoformat(str(period_end)[:10]) + timedelta(days=default_lag) <= cutoff
+        except ValueError:
+            return False
+
+    for key, default_lag in (("annualReports", 90), ("quarterlyReports", 45)):
         reports = parsed.get(key)
         if isinstance(reports, list):
-            parsed[key] = [r for r in reports if r.get("fiscalDateEnding", "") <= curr_date]
+            parsed[key] = [r for r in reports if isinstance(r, dict) and available(r, default_lag)]
 
     return json.dumps(parsed) if was_str else parsed
+
 
 def get_fundamentals(ticker: str, curr_date: str = None) -> str:
     params = {
@@ -50,14 +62,14 @@ def get_fundamentals(ticker: str, curr_date: str = None) -> str:
 def get_balance_sheet(ticker: str, freq: str = "quarterly", curr_date: str = None):
     _ = freq
     result = _make_api_request("BALANCE_SHEET", {"symbol": ticker})
-    return _filter_reports_by_date(result, curr_date)
+    return _filter_reports_by_date(result, curr_date, frequency=freq)
 
 def get_cashflow(ticker: str, freq: str = "quarterly", curr_date: str = None):
     _ = freq
     result = _make_api_request("CASH_FLOW", {"symbol": ticker})
-    return _filter_reports_by_date(result, curr_date)
+    return _filter_reports_by_date(result, curr_date, frequency=freq)
 
 def get_income_statement(ticker: str, freq: str = "quarterly", curr_date: str = None):
     _ = freq
     result = _make_api_request("INCOME_STATEMENT", {"symbol": ticker})
-    return _filter_reports_by_date(result, curr_date)
+    return _filter_reports_by_date(result, curr_date, frequency=freq)

@@ -3,7 +3,7 @@ import logging
 
 from sqlalchemy import delete
 from sqlalchemy import desc as _desc
-from sqlalchemy import select, update
+from sqlalchemy import func, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import defer
@@ -35,7 +35,8 @@ async def list_historical_analyses(
     q = (
         q.where(AnalysisResult.ticker == ticker)
         .where(AnalysisResult.trade_date < before_trade_date)
-        .order_by(_desc(AnalysisResult.created_at))
+        .where(AnalysisResult.status == "completed")
+        .order_by(_desc(AnalysisResult.trade_date), _desc(AnalysisResult.created_at))
         .limit(limit)
     )
     result = await db.execute(q)
@@ -112,15 +113,13 @@ async def delete_analysis_by_id(db: AsyncSession, analysis_id: int, user=None) -
     return True
 
 async def clear_analysis_history(db: AsyncSession, user=None) -> int:
-    count_q = select(AnalysisResult)
-    count_q = scope_to_user(count_q, AnalysisResult, user)
-    count_res = await db.execute(count_q)
-    count = len(count_res.scalars().all())
+    # History deletion is always self-scoped. Administrative cross-user
+    # deletion must use a separate, explicitly audited maintenance path.
+    owner_filter = AnalysisResult.user_id.is_(None) if user is None else AnalysisResult.user_id == user.id
+    count_res = await db.execute(select(func.count()).select_from(AnalysisResult).where(owner_filter))
+    count = int(count_res.scalar_one())
     if count > 0:
-        del_q = delete(AnalysisResult)
-        if user is not None and not getattr(user, "is_admin", False):
-            del_q = del_q.where(AnalysisResult.user_id == user.id)
-        await db.execute(del_q)
+        await db.execute(delete(AnalysisResult).where(owner_filter))
         await db.commit()
     return count
 
@@ -139,6 +138,7 @@ async def get_sentiment_history_by_ticker(db: AsyncSession, ticker: str, user=No
     q = (
         select(AnalysisResult.trade_date, AnalysisResult.signal)
         .where(AnalysisResult.ticker == ticker)
+        .where(AnalysisResult.status == "completed")
         .order_by(AnalysisResult.trade_date.asc())
     )
     q = scope_to_user(q, AnalysisResult, user)

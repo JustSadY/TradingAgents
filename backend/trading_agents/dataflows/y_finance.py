@@ -1,6 +1,6 @@
 import logging
 import re
-from datetime import UTC, datetime, timezone
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Annotated
 
 import pandas as pd
@@ -205,13 +205,16 @@ def get_balance_sheet(
             data = yf_retry(lambda: ticker_obj.quarterly_balance_sheet, ticker=ticker)
         else:
             data = yf_retry(lambda: ticker_obj.balance_sheet, ticker=ticker)
-        data = filter_financials_by_date(data, curr_date)
+        data = filter_financials_by_date(data, curr_date, frequency=freq)
         if data.empty:
             return f"No balance sheet data found for symbol '{ticker}'"
         csv_string = data.to_csv()
         header = f"# Balance Sheet data for {ticker.upper()} ({freq})\n"
-        header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-        header += "# Monetary statement rows are raw USD: 1,000,000,000 = $1.00B and 1,000,000 = $1.00M. Preserve period labels.\n\n"
+        header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n"
+        if curr_date:
+            lag = 45 if freq.lower() == "quarterly" else 90
+            header += f"# Point-in-time safety: period-end columns are included only after a conservative {lag}-day publication lag.\n"
+        header += "\n# Monetary statement rows are raw USD: 1,000,000,000 = $1.00B and 1,000,000 = $1.00M. Preserve period labels.\n\n"
         return header + csv_string
     except Exception:
         raise
@@ -227,13 +230,16 @@ def get_cashflow(
             data = yf_retry(lambda: ticker_obj.quarterly_cashflow, ticker=ticker)
         else:
             data = yf_retry(lambda: ticker_obj.cashflow, ticker=ticker)
-        data = filter_financials_by_date(data, curr_date)
+        data = filter_financials_by_date(data, curr_date, frequency=freq)
         if data.empty:
             return f"No cash flow data found for symbol '{ticker}'"
         csv_string = data.to_csv()
         header = f"# Cash Flow data for {ticker.upper()} ({freq})\n"
-        header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-        header += "# Monetary statement rows are raw USD: 1,000,000,000 = $1.00B and 1,000,000 = $1.00M. Preserve period labels.\n\n"
+        header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n"
+        if curr_date:
+            lag = 45 if freq.lower() == "quarterly" else 90
+            header += f"# Point-in-time safety: period-end columns are included only after a conservative {lag}-day publication lag.\n"
+        header += "\n# Monetary statement rows are raw USD: 1,000,000,000 = $1.00B and 1,000,000 = $1.00M. Preserve period labels.\n\n"
         return header + csv_string
     except Exception:
         raise
@@ -249,13 +255,16 @@ def get_income_statement(
             data = yf_retry(lambda: ticker_obj.quarterly_income_stmt, ticker=ticker)
         else:
             data = yf_retry(lambda: ticker_obj.income_stmt, ticker=ticker)
-        data = filter_financials_by_date(data, curr_date)
+        data = filter_financials_by_date(data, curr_date, frequency=freq)
         if data.empty:
             return f"No income statement data found for symbol '{ticker}'"
         csv_string = data.to_csv()
         header = f"# Income Statement data for {ticker.upper()} ({freq})\n"
-        header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n\n"
-        header += "# Monetary statement rows are raw USD: 1,000,000,000 = $1.00B and 1,000,000 = $1.00M. Preserve period labels.\n\n"
+        header += f"# Data retrieved on: {datetime.now(timezone.utc).strftime('%Y-%m-%d %H:%M:%S')}\n"
+        if curr_date:
+            lag = 45 if freq.lower() == "quarterly" else 90
+            header += f"# Point-in-time safety: period-end columns are included only after a conservative {lag}-day publication lag.\n"
+        header += "\n# Monetary statement rows are raw USD: 1,000,000,000 = $1.00B and 1,000,000 = $1.00M. Preserve period labels.\n\n"
         return header + csv_string
     except Exception:
         raise
@@ -489,48 +498,72 @@ def get_options_data(ticker: Annotated[str, "ticker symbol of the company"]):
         return f"Options data currently unavailable for '{ticker}': {exc}"
 
 def get_macro_data(curr_date: Annotated[str, "current date in YYYY-MM-DD format"] = None):
-    """Retrieve numerical macroeconomic indicators (VIX, 10-Yr Yield, Oil, Gold, DXY, S&P 500)."""
+    """Retrieve macro benchmarks strictly as observed on or before ``curr_date``.
+
+    The returned trend and percentile are calculated only from observations
+    available by the requested date.  This keeps the macro prompt grounded and
+    avoids asking the model to invent historical context from a single quote.
+    """
     try:
+        target = datetime.strptime(curr_date, "%Y-%m-%d").date() if curr_date else datetime.now(UTC).date()
         macro_tickers = {
             "VIX Volatility Index": "^VIX",
             "10-Year Treasury Yield": "^TNX",
             "Crude Oil WTI": "CL=F",
             "Gold Futures": "GC=F",
-            "US Dollar Index": "UUP",
+            "US Dollar Index ETF": "UUP",
             "S&P 500 Index": "^GSPC",
         }
-        parts = ["# Macroeconomic Benchmark Indicators"]
-        retrieved_at = datetime.now(UTC)
-        today = retrieved_at.strftime("%Y-%m-%d")
-        parts.append(f"# Data retrieved on: {retrieved_at.strftime('%Y-%m-%d %H:%M:%S')}\n")
-        if curr_date and curr_date != today:
-            parts.append(
-                f"# WARNING: these are live values retrieved on {today}, not a historical macro snapshot for "
-                f"{curr_date}. Do not describe them as values observed on the analysis date.\n"
-            )
+        parts = [
+            "# Point-in-Time Macroeconomic Benchmark Indicators",
+            f"# Analysis as-of date: {target.isoformat()}",
+            "# Values, trends, and percentiles use only market closes on or before the as-of date.",
+            "| Indicator | Symbol | Last value | Observed | 20-session trend | 1-year percentile |",
+            "|---|---:|---:|---:|---:|---:|",
+        ]
+        start_date = (target - timedelta(days=400)).isoformat()
+        end_date = (target + timedelta(days=1)).isoformat()
 
+        observations = 0
         for label, symbol in macro_tickers.items():
             try:
-                t = yf.Ticker(symbol)
-                price = None
-                info = yf_retry(lambda: getattr(t, "fast_info", None), ticker=symbol)
-                if info:
-                    price = getattr(info, "last_price", None) or getattr(info, "previous_close", None)
-                if price is None:
-                    hist = yf_retry(lambda: t.history(period="5d"), ticker=symbol)
-                    if hist is not None and not hist.empty:
-                        price = float(hist["Close"].iloc[-1])
-                if price is not None:
-                    parts.append(f"- {label} ({symbol}): {price:.2f}")
-            except Exception as _e:
-                _logger.debug("Failed fetching macro symbol %s: %s", symbol, _e)
-                continue
+                ticker_obj = yf.Ticker(symbol)
+                hist = yf_retry(
+                    lambda t=ticker_obj: t.history(start=start_date, end=end_date, raise_errors=True),
+                    ticker=symbol,
+                )
+                if hist is None or hist.empty or "Close" not in hist:
+                    continue
+                if hist.index.tz is not None:
+                    hist.index = hist.index.tz_localize(None)
+                hist = hist[hist.index.date <= target]
+                close = hist["Close"].dropna()
+                if close.empty:
+                    continue
+                raw_value = float(close.iloc[-1])
+                display_value = raw_value / 10.0 if symbol == "^TNX" else raw_value
+                suffix = "%" if symbol == "^TNX" else ""
+                observed_on = close.index[-1].date().isoformat()
+                trailing = close.tail(252)
+                percentile = float((trailing <= raw_value).mean() * 100.0)
+                if len(close) >= 21 and float(close.iloc[-21]) != 0:
+                    trend_pct = (raw_value / float(close.iloc[-21]) - 1.0) * 100.0
+                    trend_text = f"{trend_pct:+.2f}%"
+                else:
+                    trend_text = "n/a"
+                parts.append(
+                    f"| {label} | {symbol} | {display_value:.2f}{suffix} | {observed_on} | "
+                    f"{trend_text} | {percentile:.1f}% |"
+                )
+                observations += 1
+            except Exception as exc:
+                _logger.debug("Failed fetching historical macro symbol %s: %s", symbol, exc)
 
-        if len(parts) <= 2:
-            return "No numerical macro indicator data retrieved."
+        if observations == 0:
+            return f"No point-in-time macro indicator data was available on or before {target.isoformat()}."
         return "\n".join(parts)
     except Exception as exc:
-        return f"Macro indicator data currently unavailable: {exc}"
+        return f"Point-in-time macro indicator data currently unavailable: {exc}"
 
 def get_catalyst_calendar(
     ticker: Annotated[str, "ticker symbol of the company"],

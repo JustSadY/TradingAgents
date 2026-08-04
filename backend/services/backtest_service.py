@@ -17,6 +17,7 @@ _COMMISSION_RATE = Decimal("0.001")
 _MAX_HOLDING_DAYS = 10
 _ALLOCATION_PCT = Decimal("0.95")
 _DEFAULT_SLIPPAGE_BPS = Decimal("5.0")
+_SHORT_BORROW_APR = Decimal("0.03")
 _MONEY_QUANTUM = Decimal("0.0001")
 _ZERO = Decimal("0")
 
@@ -56,12 +57,13 @@ def _trade_pnl_decimal(
     exit_price: Decimal,
     size: Decimal,
     rate: Decimal,
+    financing_cost: Decimal = _ZERO,
 ) -> Decimal:
-    """All-in trade P&L with the entry and exit fees charged once each."""
+    """All-in trade P&L with fees and any short financing charged once."""
     gross = (exit_price - entry_price) * size if side == "long" else (entry_price - exit_price) * size
     entry_commission = _money(entry_price * size * rate)
     exit_commission = _money(exit_price * size * rate)
-    return gross - entry_commission - exit_commission
+    return gross - entry_commission - exit_commission - financing_cost
 
 def _trade_pnl(side: str, entry_price: float, exit_price: float, size: float, rate: float) -> float:
     """Realized P&L for closing ``size`` units, charging commission on both legs.
@@ -80,6 +82,7 @@ def _close_position_decimal(
     exit_date: str,
     reason: str,
     rate: Decimal,
+    financing_cost: Decimal = _ZERO,
 ) -> tuple[Decimal, dict]:
     """Close a simulated position without losing Decimal precision.
 
@@ -87,7 +90,7 @@ def _close_position_decimal(
     all-in P&L, while close-leg cash only carries the exit fee to prevent a
     second debit.  This mirrors the simulation broker ledger.
     """
-    pnl = _trade_pnl_decimal(side, entry_price, exit_price, size, rate)
+    pnl = _trade_pnl_decimal(side, entry_price, exit_price, size, rate, financing_cost)
     entry_notional = entry_price * size
     exit_notional = exit_price * size
     exit_commission = _money(exit_notional * rate)
@@ -104,6 +107,7 @@ def _close_position_decimal(
         "exit_price": round(float(exit_price), 2),
         "return_pct": round(float(return_pct), 2),
         "pnl": round(float(pnl), 2),
+        "financing_cost": round(float(financing_cost), 2),
         "reason": reason,
     }
     return cash_delta, trade
@@ -303,7 +307,13 @@ def _compute_metrics(daily_values: list[Decimal], trades: list[dict], initial_ca
         "sharpe_ratio": round(sharpe_ratio, 2),
     }
 
-async def _benchmark_return(benchmark_ticker: str | None, start_date: str, end_date: str) -> dict | None:
+async def _benchmark_return(
+    benchmark_ticker: str | None,
+    start_date: str,
+    end_date: str,
+    *,
+    slippage_bps: Decimal = _DEFAULT_SLIPPAGE_BPS,
+) -> dict | None:
     """Buy-and-hold return of ``benchmark_ticker`` over the same date range.
 
     Returns ``None`` (never raises) when the benchmark can't be loaded — the
@@ -321,28 +331,40 @@ async def _benchmark_return(benchmark_ticker: str | None, start_date: str, end_d
         window = bench_data[(bench_data["Date"] >= start_dt) & (bench_data["Date"] <= end_dt)]
         if len(window) < 2:
             return None
-        first_close = float(window.iloc[0]["Close"])
-        last_close = float(window.iloc[-1]["Close"])
-        if first_close <= 0:
+        first_open = _decimal(window.iloc[0].get("Open", window.iloc[0]["Close"]))
+        if first_open <= 0:
+            first_open = _decimal(window.iloc[0]["Close"])
+        last_close = _decimal(window.iloc[-1]["Close"])
+        if first_open <= 0 or last_close <= 0:
             return None
+        # Apply the same adverse execution and commission assumptions as the
+        # strategy so alpha is not inflated by a frictionless benchmark.
+        buy_fill = _apply_slippage_decimal(first_open, "BUY", slippage_bps)
+        sell_fill = _apply_slippage_decimal(last_close, "SELL", slippage_bps)
+        entry_cost = buy_fill + _money(buy_fill * _COMMISSION_RATE)
+        exit_proceeds = sell_fill - _money(sell_fill * _COMMISSION_RATE)
         return {
             "ticker": benchmark_ticker,
-            "return_pct": round((last_close - first_close) / first_close * 100, 2),
+            "return_pct": round(float((exit_proceeds - entry_cost) / entry_cost * Decimal(100)), 2),
         }
     except Exception as exc:  # noqa: BLE001 — benchmark comparison is best-effort
         _logger.warning("Benchmark fetch failed for %s: %s", benchmark_ticker, exc)
         return None
 
-async def _load_consensus_analyses(db, ticker: str, start_date: str, end_date: str, user) -> dict:
-    """Map usable trade-date reports for the user-scoped consensus strategy.
-
-    A historical re-run must not let an analysis created *after* its stated
-    trade date influence that past bar.  The simulation consumes each report
-    on the next trading bar, so reports are keyed by their own trade date here.
-    """
+async def _load_consensus_analyses(
+    db, ticker: str, start_date: str, end_date: str, user
+) -> tuple[dict, dict[str, int]]:
+    """Return causal reports plus transparent inclusion/exclusion counts."""
     analyses_map: dict = {}
+    stats = {
+        "considered": 0,
+        "used": 0,
+        "excluded_created_after_trade_date": 0,
+        "excluded_invalid_timestamp": 0,
+        "replaced_duplicate_trade_date": 0,
+    }
     if not user:
-        return analyses_map
+        return analyses_map, stats
     query_start = (pd.Timestamp(start_date) - pd.Timedelta(days=7)).strftime("%Y-%m-%d")
     stmt = (
         select(AnalysisResult)
@@ -353,18 +375,27 @@ async def _load_consensus_analyses(db, ticker: str, start_date: str, end_date: s
             AnalysisResult.user_id == user.id,
             AnalysisResult.status == "completed",
         )
-        .order_by(AnalysisResult.created_at.asc())
+        .order_by(AnalysisResult.trade_date.asc(), AnalysisResult.created_at.asc())
     )
     res = await db.execute(stmt)
     for row in res.scalars().all():
+        stats["considered"] += 1
         try:
             created_at = getattr(row, "created_at", None)
-            if created_at is None or pd.Timestamp(created_at).date() > pd.Timestamp(row.trade_date).date():
+            if created_at is None:
+                stats["excluded_invalid_timestamp"] += 1
+                continue
+            if pd.Timestamp(created_at).date() > pd.Timestamp(row.trade_date).date():
+                stats["excluded_created_after_trade_date"] += 1
                 continue
         except (TypeError, ValueError):
+            stats["excluded_invalid_timestamp"] += 1
             continue
+        if row.trade_date in analyses_map:
+            stats["replaced_duplicate_trade_date"] += 1
         analyses_map[row.trade_date] = row
-    return analyses_map
+    stats["used"] = len(analyses_map)
+    return analyses_map, stats
 
 async def run_backtest_simulation(
     db,
@@ -391,8 +422,11 @@ async def run_backtest_simulation(
             return {"error": f"No trading days found in the range {start_date} to {end_date}."}
 
         analyses_map = {}
+        consensus_report_stats = None
         if strategy_type == "consensus":
-            analyses_map = await _load_consensus_analyses(db, ticker, start_date, end_date, user)
+            analyses_map, consensus_report_stats = await _load_consensus_analyses(
+                db, ticker, start_date, end_date, user
+            )
 
         initial_capital_decimal = _decimal(initial_capital)
         if initial_capital_decimal <= 0:
@@ -409,6 +443,7 @@ async def run_backtest_simulation(
         stop_loss = None
         take_profit = None
         holding_days = 0
+        short_financing_cost = _ZERO
 
         trades = []
         equity_curve = []
@@ -429,6 +464,12 @@ async def run_backtest_simulation(
             exited = False
             if position_side is not None:
                 holding_days += 1
+                if position_side == "short":
+                    daily_borrow_cost = _money(
+                        entry_price * position_size * _SHORT_BORROW_APR / Decimal(252)
+                    )
+                    cash -= daily_borrow_cost
+                    short_financing_cost += daily_borrow_cost
                 exit_reason, exit_price = _exit_reason_and_price(
                     position_side, open_price, high_price, low_price, close_price, stop_loss, take_profit, holding_days
                 )
@@ -447,6 +488,7 @@ async def run_backtest_simulation(
                         date_str,
                         exit_reason,
                         _COMMISSION_RATE,
+                        short_financing_cost,
                     )
                     cash += cash_delta
                     trades.append(trade)
@@ -455,6 +497,7 @@ async def run_backtest_simulation(
                     stop_loss = None
                     take_profit = None
                     holding_days = 0
+                    short_financing_cost = _ZERO
                     exited = True
 
             if not exited:
@@ -482,11 +525,13 @@ async def run_backtest_simulation(
                             date_str,
                             "SIGNAL",
                             _COMMISSION_RATE,
+                            short_financing_cost,
                         )
                         cash += cash_delta
                         trades.append(trade)
                         position_side = None
                         position_size = _ZERO
+                        short_financing_cost = _ZERO
 
                     fill_price = _apply_slippage_decimal(execution_price, "BUY", slippage_bps_decimal)
                     if cash > 0 and fill_price > 0:
@@ -498,6 +543,7 @@ async def run_backtest_simulation(
                         entry_date = date_str
                         position_side = "long"
                         holding_days = 0
+                        short_financing_cost = _ZERO
                         stop_loss, take_profit = _normalise_exit_levels(
                             "long", fill_price, rec_stop_loss, rec_take_profit
                         )
@@ -514,11 +560,13 @@ async def run_backtest_simulation(
                             date_str,
                             "SIGNAL",
                             _COMMISSION_RATE,
+                            short_financing_cost,
                         )
                         cash += cash_delta
                         trades.append(trade)
                         position_side = None
                         position_size = _ZERO
+                        short_financing_cost = _ZERO
 
                     fill_price = _apply_slippage_decimal(execution_price, "SELL", slippage_bps_decimal)
                     if cash > 0 and fill_price > 0:
@@ -530,6 +578,7 @@ async def run_backtest_simulation(
                         entry_date = date_str
                         position_side = "short"
                         holding_days = 0
+                        short_financing_cost = _ZERO
                         stop_loss, take_profit = _normalise_exit_levels(
                             "short", fill_price, rec_stop_loss, rec_take_profit
                         )
@@ -571,6 +620,7 @@ async def run_backtest_simulation(
                 date_str,
                 "END_OF_SIMULATION",
                 _COMMISSION_RATE,
+                short_financing_cost,
             )
             cash += cash_delta
             trades.append(trade)
@@ -584,7 +634,12 @@ async def run_backtest_simulation(
             daily_values[-1] = cash
 
         metrics = _compute_metrics(daily_values, trades, initial_capital_decimal)
-        benchmark = await _benchmark_return(benchmark_ticker, start_date, end_date)
+        benchmark = await _benchmark_return(
+            benchmark_ticker,
+            start_date,
+            end_date,
+            slippage_bps=slippage_bps_decimal,
+        )
         alpha_pct = round(metrics["total_return"] - benchmark["return_pct"], 2) if benchmark else None
         return {
             "initial_capital": float(initial_capital_decimal),
@@ -599,6 +654,14 @@ async def run_backtest_simulation(
             "slippage_bps": float(slippage_bps_decimal),
             "benchmark": benchmark,
             "alpha_pct": alpha_pct,
+            "consensus_report_stats": consensus_report_stats,
+            "assumptions": [
+                "Signals are evaluated with information available before execution; fills occur at the next eligible open.",
+                "When a bar touches both stop and target, the stop is assumed to execute first (conservative intrabar ordering).",
+                f"Short positions accrue a fixed {float(_SHORT_BORROW_APR * Decimal(100)):.2f}% annual borrow cost over 252 trading days.",
+                "Short locate availability, margin calls, dividends, taxes, and variable borrow rates are not modeled.",
+                "Benchmark return uses the same commission and slippage assumptions as the strategy.",
+            ],
         }
 
     except Exception as e:

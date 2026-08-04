@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any
 
-from .base import BaseAgentTool, ToolContext, ToolSettingField
+from .base import BaseAgentTool, TemporalSemantics, ToolContext, ToolSettingField
 
 class FunctionToolAdapter(BaseAgentTool):
     def __init__(
@@ -17,6 +17,7 @@ class FunctionToolAdapter(BaseAgentTool):
         default_enabled: bool = True,
         settings_schema: list[ToolSettingField] | None = None,
         langchain_tool_names: list[str] | None = None,
+        temporal_semantics: TemporalSemantics = "live_only",
     ):
         self.key = key
         self.category = category
@@ -27,6 +28,7 @@ class FunctionToolAdapter(BaseAgentTool):
         self.default_enabled = default_enabled
         self.settings_schema = settings_schema or []
         self.langchain_tool_names = langchain_tool_names or [func.name if hasattr(func, "name") else func.__name__]
+        self.temporal_semantics = temporal_semantics
 
     def get_langchain_tools(self, settings: dict[str, Any], context: ToolContext) -> list:
         return [self.func]

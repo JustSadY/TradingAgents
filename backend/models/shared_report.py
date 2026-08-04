@@ -3,7 +3,7 @@ from __future__ import annotations
 import uuid
 from datetime import UTC, datetime, timedelta
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String
+from sqlalchemy import DateTime, ForeignKey, Integer, String, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.schema import Index
 
@@ -14,6 +14,7 @@ class SharedReport(Base):
     __table_args__ = (
         Index("ix_shared_reports_expires_at", "expires_at"),
         Index("ix_shared_reports_user_id", "user_id"),
+        UniqueConstraint("user_id", "analysis_id", name="uq_shared_reports_user_analysis"),
     )
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
@@ -28,3 +29,4 @@ class SharedReport(Base):
         DateTime(timezone=True), default=lambda: datetime.now(UTC) + timedelta(hours=48)
     )
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=lambda: datetime.now(UTC), index=True)
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True, index=True)

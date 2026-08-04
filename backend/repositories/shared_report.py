@@ -11,23 +11,25 @@ async def get_user_analysis_by_id(db: AsyncSession, analysis_id: int, user_id: i
         select(AnalysisResult).where(
             AnalysisResult.id == analysis_id,
             AnalysisResult.user_id == user_id,
+            AnalysisResult.status == "completed",
         )
     )
     return result.scalar_one_or_none()
 
-async def get_active_shared_report_by_analysis(
+async def get_shared_report_by_analysis(
     db: AsyncSession,
     analysis_id: int,
     user_id: int,
-    current_time: datetime,
+    *,
+    for_update: bool = False,
 ) -> SharedReport | None:
-    result = await db.execute(
-        select(SharedReport).where(
-            SharedReport.analysis_id == analysis_id,
-            SharedReport.user_id == user_id,
-            SharedReport.expires_at > current_time,
-        )
+    statement = select(SharedReport).where(
+        SharedReport.analysis_id == analysis_id,
+        SharedReport.user_id == user_id,
     )
+    if for_update:
+        statement = statement.with_for_update()
+    result = await db.execute(statement)
     return result.scalar_one_or_none()
 
 async def create_shared_report(db: AsyncSession, user_id: int, analysis_id: int) -> SharedReport:
@@ -37,9 +39,16 @@ async def create_shared_report(db: AsyncSession, user_id: int, analysis_id: int)
     return share
 
 async def get_shared_report_by_token(db: AsyncSession, token: str) -> SharedReport | None:
-    result = await db.execute(select(SharedReport).where(SharedReport.token == token))
+    result = await db.execute(
+        select(SharedReport).where(SharedReport.token == token, SharedReport.revoked_at.is_(None))
+    )
     return result.scalar_one_or_none()
 
 async def get_analysis_by_id_public(db: AsyncSession, analysis_id: int) -> AnalysisResult | None:
-    result = await db.execute(select(AnalysisResult).where(AnalysisResult.id == analysis_id))
+    result = await db.execute(
+        select(AnalysisResult).where(
+            AnalysisResult.id == analysis_id,
+            AnalysisResult.status == "completed",
+        )
+    )
     return result.scalar_one_or_none()

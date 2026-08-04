@@ -7,10 +7,10 @@ with page-permission checks enforced per user.
 
 from __future__ import annotations
 
-import asyncio
 import logging
+import re
 import uuid
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -23,7 +23,6 @@ from backend.services.user_service import resolve_user_api_key
 
 _logger = logging.getLogger(__name__)
 
-_BACKGROUND_TASKS: set[asyncio.Task] = set()
 
 _MAX_TOOL_LOOP = 5
 _HISTORY_LIMIT = 20
@@ -37,14 +36,14 @@ You have access to tools that let you:
 - Get the full text of a specific analysis report
 - Look up current live stock prices
 - See the user's watchlist and price alerts
-- Create new price alerts
-- Trigger a new AI stock analysis (takes 2-3 minutes, runs in background)
-- Place paper trading orders (simulation mode only)
+- Prepare new price alerts for explicit user confirmation
+- Trigger a new AI stock analysis in the configured queue
+- Prepare paper trading orders for explicit user confirmation (simulation mode only)
 
 Guidelines:
 - Always fetch relevant data before answering a data question.
 - Be concise and professional. Use bullet points for lists.
-- When placing orders or creating alerts, confirm the details clearly.
+- Orders and alerts are two-step actions: prepare a preview first, then execute only after a later explicit user confirmation.
 - When an analysis is triggered, inform the user it runs in the background and they can track it on the Analysis page.
 - Today's date: {date}
 """
@@ -73,7 +72,8 @@ async def chat(db: AsyncSession, user: User, message: str) -> dict:
     settings = await get_or_create_settings(db, user)
     allowed_pages = await _get_allowed_pages(db, user)
 
-    tools = _make_tools(db, user, allowed_pages)
+    explicitly_confirmed_ids = _explicit_confirmation_ids(message)
+    tools = _make_tools(db, user, allowed_pages, confirmed_ids=explicitly_confirmed_ids)
     tool_map = {t.name: t for t in tools}
 
     lc_messages = await _prepare_lc_messages(db, user, message, settings)
@@ -95,7 +95,8 @@ async def chat(db: AsyncSession, user: User, message: str) -> dict:
         llm = client.get_llm()
         llm_with_tools = llm.bind_tools(tools)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+        _logger.warning("Assistant client initialization failed: %s", e)
+        raise HTTPException(status_code=400, detail="Assistant model could not be initialized.") from e
 
     final_content = await _run_tool_loop(llm_with_tools, lc_messages, tool_map)
 
@@ -132,12 +133,14 @@ async def _prepare_lc_messages(db: AsyncSession, user: User, message: str, setti
 async def _run_tool_loop(llm_with_tools, lc_messages: list, tool_map: dict) -> str:
     from langchain_core.messages import ToolMessage
 
+    action_tool_used = False
+    action_tools = {"run_stock_analysis", "create_price_alert", "place_paper_order", "confirm_pending_action"}
     for _ in range(_MAX_TOOL_LOOP):
         try:
             response = await llm_with_tools.ainvoke(lc_messages)
         except Exception as e:
             _logger.warning("Assistant LLM error: %s", e)
-            return f"I encountered an error: {e}"
+            return "The assistant model could not complete this request. Please try again."
 
         lc_messages.append(response)
 
@@ -148,17 +151,44 @@ async def _run_tool_loop(llm_with_tools, lc_messages: list, tool_map: dict) -> s
             tool = tool_map.get(tc["name"])
             if tool is None:
                 result_text = f"Unknown tool: {tc['name']}"
+            elif tc["name"] in action_tools and action_tool_used:
+                result_text = "Only one action or action preview may be requested per assistant message."
             else:
+                if tc["name"] in action_tools:
+                    action_tool_used = True
                 try:
                     result_text = await tool.ainvoke(tc["args"])
                 except Exception as e:
                     _logger.warning("Assistant tool execution failed for %s: %s", tc['name'], e)
-                    result_text = f"Tool error ({tc['name']}): {e}"
+                    result_text = f"Tool `{tc['name']}` could not complete safely."
             lc_messages.append(ToolMessage(content=str(result_text), tool_call_id=tc["id"]))
 
     return "I could not complete the request within the allowed steps. Please try again."
 
-def _make_tools(db: AsyncSession, user: User, allowed_pages: set[str]) -> list:
+def _explicit_confirmation_ids(message: str) -> set[str]:
+    """Return the one action ID the user explicitly and positively approved.
+
+    Merely mentioning the word "confirm" must not expose the execution tool;
+    negative phrases and messages containing multiple IDs are rejected.
+    """
+    normalized = " ".join((message or "").lower().split())
+    negative = (
+        "do not confirm", "don't confirm", "dont confirm", "not confirm", "reject", "cancel",
+        "onaylama", "onaylamıyorum", "onaylamiyorum", "iptal", "reddet",
+    )
+    if any(token in normalized for token in negative):
+        return set()
+    positive = ("confirm", "approve", "onayla", "onaylıyorum", "onayliyorum")
+    if not any(token in normalized for token in positive):
+        return set()
+    ids = set(re.findall(r"(?<![0-9a-f])[0-9a-f]{32}(?![0-9a-f])", normalized))
+    return ids if len(ids) == 1 else set()
+
+
+def _make_tools(
+    db: AsyncSession, user: User, allowed_pages: set[str], *, confirmed_ids: set[str] | None = None
+) -> list:
+    confirmed_ids = confirmed_ids or set()
     from langchain_core.tools import tool
 
     @tool
@@ -193,18 +223,26 @@ def _make_tools(db: AsyncSession, user: User, allowed_pages: set[str]) -> list:
 
     @tool
     async def create_price_alert(ticker: str, condition: str, target_price: float) -> str:
-        """Create a new price alert. condition must be 'above' or 'below'. target_price is the trigger price in USD."""
+        """Prepare a price-alert preview. This never creates the alert; it returns a confirmation ID for a later user-approved step."""
         return await _tool_create_price_alert(user, allowed_pages, ticker, condition, target_price)
 
     @tool
     async def run_stock_analysis(ticker: str) -> str:
-        """Trigger a new AI analysis for a stock ticker. Runs in the background (2-3 minutes). User can track progress on the Analysis page."""
+        """Trigger a new AI analysis for a validated stock ticker using the configured analysis queue."""
         return await _tool_run_stock_analysis(user, allowed_pages, ticker)
 
     @tool
     async def place_paper_order(ticker: str, action: str, quantity: float) -> str:
-        """Place a paper trading order. action must be 'BUY' or 'SELL'. quantity is number of shares (can be fractional)."""
+        """Prepare a paper-order preview. This never places the order; it returns a confirmation ID for a later user-approved step."""
         return await _tool_place_paper_order(user, allowed_pages, ticker, action, quantity)
+
+    @tool
+    async def confirm_pending_action(confirmation_id: str) -> str:
+        """Execute the exact pending action ID explicitly approved in this user message."""
+        normalized_id = (confirmation_id or "").strip().lower()
+        if normalized_id not in confirmed_ids:
+            return "This action ID was not explicitly approved in the current user message."
+        return await _tool_confirm_pending_action(user, allowed_pages, normalized_id)
 
     tool_pages = [
         (get_portfolio_summary, "portfolio"),
@@ -217,7 +255,13 @@ def _make_tools(db: AsyncSession, user: User, allowed_pages: set[str]) -> list:
         (run_stock_analysis, "analysis"),
         (place_paper_order, "trading"),
     ]
-    return [tool_def for tool_def, page_key in tool_pages if _has_page_access(user, allowed_pages, page_key)]
+    result = [tool_def for tool_def, page_key in tool_pages if _has_page_access(user, allowed_pages, page_key)]
+    if confirmed_ids and (
+        _has_page_access(user, allowed_pages, "alerts")
+        or _has_page_access(user, allowed_pages, "trading")
+    ):
+        result.append(confirm_pending_action)
+    return result
 
 def _has_page_access(user: User, allowed_pages: set[str], page_key: str) -> bool:
     return bool(getattr(user, "is_admin", False)) or page_key in allowed_pages
@@ -261,7 +305,7 @@ async def _tool_get_portfolio_summary(db: AsyncSession, user: User, allowed_page
         return "\n".join(lines)
     except Exception as e:
         _logger.warning("Assistant failed to fetch portfolio summary: %s", e)
-        return f"Could not fetch portfolio: {e}"
+        return "Portfolio data could not be loaded safely."
 
 async def _tool_get_analysis_history(
     db: AsyncSession, user: User, allowed_pages: set[str], ticker: str, limit: int
@@ -306,7 +350,7 @@ async def _tool_get_analysis_history(
         return "\n\n".join(lines)
     except Exception as e:
         _logger.warning("Assistant failed to fetch analysis history: %s", e)
-        return f"Could not fetch analysis history: {e}"
+        return "Analysis history could not be loaded safely."
 
 async def _tool_get_analysis_report(db: AsyncSession, user: User, allowed_pages: set[str], analysis_id: int) -> str:
     denied = _page_denied(user, allowed_pages, "analysis", "Analysis")
@@ -342,7 +386,7 @@ async def _tool_get_analysis_report(db: AsyncSession, user: User, allowed_pages:
         )
     except Exception as e:
         _logger.warning("Assistant failed to fetch analysis report %s: %s", analysis_id, e)
-        return f"Could not fetch report: {e}"
+        return "The analysis report could not be loaded safely."
 
 async def _tool_get_live_price(user: User, allowed_pages: set[str], ticker: str) -> str:
     denied = _page_denied(user, allowed_pages, "chart", "Chart")
@@ -357,7 +401,7 @@ async def _tool_get_live_price(user: User, allowed_pages: set[str], ticker: str)
         return f"{ticker.upper()}: ${price:,.2f}"
     except Exception as e:
         _logger.warning("Assistant live price lookup failed for %s: %s", ticker, e)
-        return f"Price lookup failed: {e}"
+        return "The live price could not be loaded safely."
 
 async def _tool_get_watchlist(db: AsyncSession, user: User, allowed_pages: set[str]) -> str:
     denied = _page_denied(user, allowed_pages, "watchlist", "Watchlist")
@@ -376,7 +420,7 @@ async def _tool_get_watchlist(db: AsyncSession, user: User, allowed_pages: set[s
         return "Watchlist:\n" + "\n".join(lines)
     except Exception as e:
         _logger.warning("Assistant failed to fetch watchlist: %s", e)
-        return f"Could not fetch watchlist: {e}"
+        return "The watchlist could not be loaded safely."
 
 async def _tool_get_alerts(db: AsyncSession, user: User, allowed_pages: set[str]) -> str:
     denied = _page_denied(user, allowed_pages, "alerts", "Alerts")
@@ -395,7 +439,25 @@ async def _tool_get_alerts(db: AsyncSession, user: User, allowed_pages: set[str]
         return "Price alerts:\n" + "\n".join(lines)
     except Exception as e:
         _logger.warning("Assistant failed to fetch alerts: %s", e)
-        return f"Could not fetch alerts: {e}"
+        return "Alerts could not be loaded safely."
+
+async def _create_pending_action(user_id: int, action: str, payload: dict) -> str:
+    from backend.core.database import AsyncSessionLocal
+    from backend.models.assistant import AssistantPendingAction
+
+    confirmation_id = uuid.uuid4().hex
+    async with AsyncSessionLocal() as action_db:
+        action_db.add(
+            AssistantPendingAction(
+                id=confirmation_id,
+                user_id=user_id,
+                action=action,
+                payload=payload,
+                expires_at=datetime.now(UTC) + timedelta(minutes=10),
+            )
+        )
+        await action_db.commit()
+    return confirmation_id
 
 async def _tool_create_price_alert(
     user: User, allowed_pages: set[str], ticker: str, condition: str, target_price: float
@@ -406,57 +468,69 @@ async def _tool_create_price_alert(
     cond = condition.lower().strip()
     if cond not in ("above", "below"):
         return "condition must be 'above' or 'below'."
+    if not (0 < float(target_price) <= 10_000_000):
+        return "target_price must be greater than zero and within the supported range."
     try:
-        from backend.core.database import AsyncSessionLocal
-        from backend.services.alert_creation_service import AlertGuardrailViolation, create_alert_with_guardrails
+        from backend.core.utils import safe_ticker_component
 
-        async with AsyncSessionLocal() as alert_db:
-            alert = await create_alert_with_guardrails(
-                alert_db,
-                user_id=user.id,
-                ticker=ticker.strip().upper(),
-                condition=cond,
-                target_price=target_price,
-                auto_analyze=False,
-                creation_source="assistant",
-            )
-            await alert_db.commit()
-        if alert is None:
-            return "Alert was not created because an alert limit is active."
-        return f"Alert created (ID {alert.id}): notify when {ticker.upper()} goes {cond} ${target_price:,.2f}."
-    except AlertGuardrailViolation as exc:
-        return f"Alert was not created: {exc.detail}"
-    except Exception as e:
-        _logger.warning("Assistant alert creation failed for %s: %s", ticker, e)
-        return f"Alert creation failed: {e}"
+        clean_ticker = safe_ticker_component(ticker.strip().upper(), max_len=20)
+        confirmation_id = await _create_pending_action(
+            user.id,
+            "create_price_alert",
+            {"ticker": clean_ticker, "condition": cond, "target_price": float(target_price)},
+        )
+        return (
+            f"Alert preview: notify when {clean_ticker} goes {cond} ${float(target_price):,.2f}. "
+            f"Nothing has been created. To approve, explicitly confirm action `{confirmation_id}` "
+            "within 10 minutes."
+        )
+    except ValueError as exc:
+        return f"Alert preview rejected: {exc}"
+    except Exception as exc:
+        _logger.warning("Assistant alert preview failed for %s: %s", ticker, exc)
+        return "Alert preview could not be created safely."
 
 async def _tool_run_stock_analysis(user: User, allowed_pages: set[str], ticker: str) -> str:
     denied = _page_denied(user, allowed_pages, "analysis", "Analysis")
     if denied:
         return denied
-    clean_ticker = ticker.strip().upper()
     task_id = str(uuid.uuid4())
     trade_date = datetime.now(UTC).strftime("%Y-%m-%d")
 
     try:
         from backend.core.database import AsyncSessionLocal
-        from backend.services.analysis_service import register_task_owner, run_analysis_task
+        from backend.services.analysis_queue import dispatch_analysis
+        from backend.services.analysis_service import clear_task_owner, register_task_owner
         from backend.services.settings_service import get_or_create_settings as _get_settings
+        from backend.services.ticker_validation_service import validate_analysis_ticker
+
+        validated = await validate_analysis_ticker(ticker.strip().upper(), asset_type="stock")
+        clean_ticker = validated.ticker
+        async with AsyncSessionLocal() as settings_db:
+            bg_settings = await _get_settings(settings_db, user)
+            await settings_db.commit()
 
         await register_task_owner(task_id, user.id)
-
-        async def _bg() -> None:
-            async with AsyncSessionLocal() as bg_db:
-                bg_settings = await _get_settings(bg_db, user)
-                await run_analysis_task(clean_ticker, trade_date, "stock", bg_settings, task_id, user)
-
-        task = asyncio.create_task(_bg())
-        _BACKGROUND_TASKS.add(task)
-        task.add_done_callback(_BACKGROUND_TASKS.discard)
-        return f"Analysis started for {clean_ticker} (date: {trade_date}, task_id: {task_id}). It will take about 2-3 minutes. Go to the Analysis page to track progress and see results."
-    except Exception as e:
-        _logger.warning("Assistant analysis trigger failed for %s: %s", ticker, e)
-        return f"Could not start analysis: {e}"
+        try:
+            await dispatch_analysis(
+                None,
+                ticker=clean_ticker,
+                trade_date=trade_date,
+                asset_type="stock",
+                settings=bg_settings,
+                task_id=task_id,
+                user=user,
+            )
+        except Exception:
+            await clear_task_owner(task_id)
+            raise
+        return (
+            f"Analysis started for {clean_ticker} (date: {trade_date}, task_id: {task_id}). "
+            "Track progress and results on the Analysis page."
+        )
+    except Exception as exc:
+        _logger.warning("Assistant analysis trigger failed for %s: %s", ticker, exc)
+        return "The analysis could not be started safely. Verify the symbol and try again."
 
 async def _tool_place_paper_order(
     user: User, allowed_pages: set[str], ticker: str, action: str, quantity: float
@@ -467,22 +541,143 @@ async def _tool_place_paper_order(
     act = action.strip().upper()
     if act not in ("BUY", "SELL"):
         return "action must be 'BUY' or 'SELL'."
-    if quantity <= 0:
-        return "quantity must be positive."
+    if not (0 < float(quantity) <= 100_000):
+        return "quantity must be greater than zero and no more than 100,000."
     try:
-        from backend.core.database import AsyncSessionLocal
-        from backend.services.mock_trading_service import execute_order
+        from backend.core.utils import safe_ticker_component
 
-        async with AsyncSessionLocal() as order_db:
-            result = await execute_order(
-                order_db, ticker=ticker.strip().upper(), action=act, quantity=quantity, user=user
+        clean_ticker = safe_ticker_component(ticker.strip().upper(), max_len=20)
+        confirmation_id = await _create_pending_action(
+            user.id,
+            "place_paper_order",
+            {"ticker": clean_ticker, "action": act, "quantity": float(quantity)},
+        )
+        return (
+            f"Paper-order preview: {act} {float(quantity):,.4f} shares of {clean_ticker}. "
+            f"No order has been placed. To approve, explicitly confirm action `{confirmation_id}` "
+            "within 10 minutes."
+        )
+    except ValueError as exc:
+        return f"Order preview rejected: {exc}"
+    except Exception as exc:
+        _logger.warning("Assistant paper-order preview failed for %s: %s", ticker, exc)
+        return "The paper-order preview could not be created safely."
+
+async def _tool_confirm_pending_action(
+    user: User, allowed_pages: set[str], confirmation_id: str
+) -> str:
+    confirmation_id = (confirmation_id or "").strip().lower()
+    if len(confirmation_id) != 32 or any(ch not in "0123456789abcdef" for ch in confirmation_id):
+        return "The confirmation ID is invalid."
+
+    from sqlalchemy import select, update
+
+    from backend.core.database import AsyncSessionLocal
+    from backend.models.assistant import AssistantPendingAction
+
+    async with AsyncSessionLocal() as action_db:
+        row = (
+            await action_db.execute(
+                select(AssistantPendingAction).where(
+                    AssistantPendingAction.id == confirmation_id,
+                    AssistantPendingAction.user_id == user.id,
+                )
             )
-            await order_db.commit()
-        filled = result.get("quantity", quantity)
-        price = result.get("price", 0)
-        return f"Order placed: {act} {filled:.4f} shares of {ticker.upper()} @ ${float(price):,.2f}. Total: ${float(filled) * float(price):,.2f}."
-    except ValueError as e:
-        return f"Order rejected: {e}"
-    except Exception as e:
-        _logger.warning("Assistant paper order failed for %s: %s", ticker, e)
-        return f"Order failed: {e}"
+        ).scalar_one_or_none()
+        now = datetime.now(UTC)
+        if row is None:
+            return "No pending action was found for that confirmation ID."
+        if row.consumed_at is not None:
+            return "That action has already been confirmed or cancelled."
+        expires_at = row.expires_at
+        if expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        if expires_at <= now:
+            await action_db.execute(
+                update(AssistantPendingAction)
+                .where(
+                    AssistantPendingAction.id == confirmation_id,
+                    AssistantPendingAction.user_id == user.id,
+                    AssistantPendingAction.consumed_at.is_(None),
+                )
+                .values(consumed_at=now)
+            )
+            await action_db.commit()
+            return "That confirmation expired. Prepare the action again."
+
+        payload = dict(row.payload or {})
+        if row.action == "create_price_alert":
+            denied = _page_denied(user, allowed_pages, "alerts", "Alerts")
+        elif row.action == "place_paper_order":
+            denied = _page_denied(user, allowed_pages, "trading", "Trading")
+        else:
+            denied = None
+        if denied:
+            return denied
+
+        # Claim and commit before executing the side effect.  PostgreSQL row
+        # locks already serialized this path, but SQLite ignores FOR UPDATE; a
+        # conditional update gives every supported database the same at-most-
+        # once semantics under concurrent confirmations.  A failed side effect
+        # remains consumed deliberately: the user must prepare a new preview
+        # rather than risk replaying an order whose outcome is uncertain.
+        claim = await action_db.execute(
+            update(AssistantPendingAction)
+            .where(
+                AssistantPendingAction.id == confirmation_id,
+                AssistantPendingAction.user_id == user.id,
+                AssistantPendingAction.consumed_at.is_(None),
+                AssistantPendingAction.expires_at > now,
+            )
+            .values(consumed_at=now)
+        )
+        if claim.rowcount != 1:
+            await action_db.rollback()
+            return "That action has already been confirmed, cancelled, or expired."
+        await action_db.commit()
+
+        try:
+            if row.action == "create_price_alert":
+                from backend.services.alert_creation_service import create_alert_with_guardrails
+
+                alert = await create_alert_with_guardrails(
+                    action_db,
+                    user_id=user.id,
+                    ticker=payload["ticker"],
+                    condition=payload["condition"],
+                    target_price=float(payload["target_price"]),
+                    auto_analyze=False,
+                    creation_source="assistant",
+                )
+                await action_db.commit()
+                if alert is None:
+                    return "The alert was not created because a configured alert limit is active."
+                return (
+                    f"Alert created (ID {alert.id}): notify when {payload['ticker']} goes "
+                    f"{payload['condition']} ${float(payload['target_price']):,.2f}."
+                )
+
+            if row.action == "place_paper_order":
+                from backend.services.mock_trading_service import execute_order
+
+                result = await execute_order(
+                    action_db,
+                    ticker=payload["ticker"],
+                    action=payload["action"],
+                    quantity=float(payload["quantity"]),
+                    user=user,
+                )
+                await action_db.commit()
+                filled = float(result.get("quantity", payload["quantity"]))
+                price = float(result.get("price", 0))
+                return (
+                    f"Paper order placed: {payload['action']} {filled:.4f} shares of "
+                    f"{payload['ticker']} @ ${price:,.2f}. Total: ${filled * price:,.2f}."
+                )
+
+            return "The pending action type is no longer supported."
+        except Exception as exc:
+            await action_db.rollback()
+            _logger.warning("Assistant confirmed action failed id=%s: %s", confirmation_id, exc)
+            return "The confirmed action was rejected or could not be completed safely."
+

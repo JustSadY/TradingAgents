@@ -32,6 +32,7 @@ _ALLOWED_TABLES = {
     "system_logs",
     "news_analysis_cache",
     "analyst_report_cache",
+    "shared_reports",
 }
 
 _ALLOWED_COLUMNS = {
@@ -152,6 +153,8 @@ _ALLOWED_COLUMNS = {
         "id",
         "user_id",
         "ticker",
+        "trade_date",
+        "temporal_mode",
         "articles_hash",
         "config_fingerprint",
         "analysis_result",
@@ -162,11 +165,14 @@ _ALLOWED_COLUMNS = {
         "user_id",
         "analyst_key",
         "ticker",
+        "trade_date",
+        "temporal_mode",
         "data_hash",
         "config_fingerprint",
         "analysis_result",
         "created_at",
     },
+    "shared_reports": {"revoked_at"},
     "portfolios": {"user_id", "initial_capital", "current_balance", "cash_available", "margin_used"},
     "config_presets": {"user_id"},
     "price_alerts": {"user_id", "target_price", "alert_type", "creation_source", "creation_run_id"},
@@ -298,6 +304,11 @@ _NEW_COLUMNS += [
     ("news_analysis_cache", "config_fingerprint", "VARCHAR(64)"),
     ("analyst_report_cache", "user_id", _USER_REF),
     ("analyst_report_cache", "config_fingerprint", "VARCHAR(64)"),
+    ("news_analysis_cache", "trade_date", "VARCHAR(10)"),
+    ("news_analysis_cache", "temporal_mode", "VARCHAR(20) NOT NULL DEFAULT 'live'"),
+    ("analyst_report_cache", "trade_date", "VARCHAR(10)"),
+    ("analyst_report_cache", "temporal_mode", "VARCHAR(20) NOT NULL DEFAULT 'live'"),
+    ("shared_reports", "revoked_at", _TYPE_TIMESTAMP_WITH_TZ),
 ]
 
 _NEW_COLUMNS += [
@@ -703,6 +714,33 @@ async def normalize_sqlite_simulation_entry_commissions(conn) -> None:
             """
         )
     )
+
+async def normalize_sqlite_temporal_and_share_schema(conn) -> None:
+    """Finish additive SQLite upgrades that ``create_all`` cannot express.
+
+    Existing SQLite databases need indexes and the shared-report uniqueness
+    rule created explicitly after missing columns are added.
+    """
+    if conn.dialect.name != "sqlite":
+        return
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_news_analysis_cache_trade_date ON news_analysis_cache (trade_date)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_news_analysis_cache_temporal_mode ON news_analysis_cache (temporal_mode)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_analyst_report_cache_trade_date ON analyst_report_cache (trade_date)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_analyst_report_cache_temporal_mode ON analyst_report_cache (temporal_mode)"))
+    await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_shared_reports_revoked_at ON shared_reports (revoked_at)"))
+    await conn.execute(
+        text(
+            "DELETE FROM shared_reports WHERE id NOT IN "
+            "(SELECT MAX(id) FROM shared_reports GROUP BY user_id, analysis_id)"
+        )
+    )
+    await conn.execute(
+        text(
+            "CREATE UNIQUE INDEX IF NOT EXISTS uq_shared_reports_user_analysis "
+            "ON shared_reports (user_id, analysis_id)"
+        )
+    )
+
 
 async def apply_column_migrations(conn) -> None:
     """Add any missing columns from ``_NEW_COLUMNS`` to the connected database."""

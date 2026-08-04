@@ -107,13 +107,17 @@ def create_portfolio_manager(llm):
                 user_id=get_config().get("user_id"),
                 situation_text=state.get("market_report") or research_plan,
                 top_k=get_config().get("memory_recall_count", 5),
+                as_of=state.get("trade_date"),
             )
         except Exception as exc:  # noqa: BLE001 - memory is advisory
             _logger.debug("Memory recall skipped: %s", exc)
 
         from backend.trading_agents.agents.runtime.portfolio_context import get_portfolio_context
 
-        portfolio_context = await get_portfolio_context(get_config().get("user_id"))
+        portfolio_context = await get_portfolio_context(
+            get_config().get("user_id"),
+            as_of=state.get("trade_date"),
+        )
         past_context = "\n\n".join(
             part for part in (memory_lessons, state.get("past_context", "")) if part
         )

@@ -181,7 +181,7 @@ describe('Analysis', () => {
   })
 
   it('ignores malformed persisted run state instead of crashing the run tab', async () => {
-    localStorage.setItem('ta_last_run', JSON.stringify({
+    sessionStorage.setItem('ta_last_run', JSON.stringify({
       ticker: null,
       date: 42,
       assetType: { unexpected: true },
@@ -192,12 +192,12 @@ describe('Analysis', () => {
       analysisId: 'not a number',
       liveDebate: { malformed: true },
     }))
-    localStorage.setItem('ta_task_running', '{malformed')
+    sessionStorage.setItem('ta_task_running', '{malformed')
 
     render(<Analysis />)
 
     await waitFor(() => expect(screen.getByText('Run')).toBeInTheDocument())
-    expect(localStorage.getItem('ta_task_running')).toBeNull()
+    expect(sessionStorage.getItem('ta_task_running')).toBeNull()
   })
 
   it('renders a status message instead of falling back to its technical agent key', async () => {
@@ -470,7 +470,7 @@ describe('Analysis', () => {
     localStorage.setItem('test_active_tasks', JSON.stringify([{
       task_id: 'resume-task', ticker: 'AAPL', trade_date: '2026-07-26', asset_type: 'stock', started_at: 0, status: 'running',
     }]))
-    localStorage.setItem('ta_task_running', JSON.stringify({
+    sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: 'AAPL', taskId: 'resume-task', startedAt: new Date().toISOString(),
     }))
     render(<Analysis />)
@@ -515,7 +515,7 @@ describe('Analysis', () => {
       task_id: 'connecting-stop-task', ticker: 'AAPL', trade_date: '2026-07-28', asset_type: 'stock', started_at: 0, status: 'running',
     }
     localStorage.setItem('test_active_tasks', JSON.stringify([task]))
-    localStorage.setItem('ta_task_running', JSON.stringify({
+    sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
     }))
     render(<Analysis />)
@@ -558,7 +558,7 @@ describe('Analysis', () => {
     localStorage.setItem('test_active_tasks', JSON.stringify([{
       task_id: 'strict-task', ticker: 'AAPL', trade_date: '2026-07-26', asset_type: 'stock', started_at: 0, status: 'running',
     }]))
-    localStorage.setItem('ta_task_running', JSON.stringify({
+    sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: 'AAPL', taskId: 'strict-task', startedAt: new Date().toISOString(),
     }))
     render(<StrictMode><Analysis /></StrictMode>)
@@ -596,7 +596,7 @@ describe('Analysis', () => {
 
     localStorage.setItem('ta_access', 'test-token')
     localStorage.setItem('test_active_tasks', JSON.stringify([task]))
-    localStorage.setItem('ta_task_running', JSON.stringify({
+    sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
     }))
     render(<Analysis />)
@@ -635,7 +635,7 @@ describe('Analysis', () => {
       return Promise.resolve({ data: {} })
     })
 
-    localStorage.setItem('ta_last_run', JSON.stringify({
+    sessionStorage.setItem('ta_last_run', JSON.stringify({
       ticker: 'AAPL', date: '2026-07-26', assetType: 'stock', runStatus: 'idle',
       signal: null, reports: {}, log: [], activeSection: null, analysisId: null, liveDebate: [],
     }))
@@ -654,7 +654,7 @@ describe('Analysis', () => {
     })
 
     await waitFor(() => expect(axios.default.post).toHaveBeenCalledWith('/api/analysis/late-task/cancel'))
-    expect(localStorage.getItem('ta_task_running')).toBeNull()
+    expect(sessionStorage.getItem('ta_task_running')).toBeNull()
     expect(screen.getByTestId('run-state')).toHaveTextContent('idle')
     expect(MockWebSocket.instances).toHaveLength(0)
   })
@@ -681,7 +681,7 @@ describe('Analysis', () => {
       if (url === '/api/analysis/cannot-stop-task/cancel') return Promise.reject(new Error('backend unavailable'))
       return Promise.resolve({ data: {} })
     })
-    localStorage.setItem('ta_last_run', JSON.stringify({
+    sessionStorage.setItem('ta_last_run', JSON.stringify({
       ticker: 'AAPL', date: '2026-07-26', assetType: 'stock', runStatus: 'idle',
       signal: null, reports: {}, log: [], activeSection: null, analysisId: null, liveDebate: [],
     }))
@@ -764,7 +764,7 @@ describe('Analysis', () => {
       if (url === '/api/analysis/run') return Promise.resolve({ data: { task_id: 'new-task' } })
       return Promise.resolve({ data: {} })
     })
-    localStorage.setItem('ta_last_run', JSON.stringify({
+    sessionStorage.setItem('ta_last_run', JSON.stringify({
       ticker: 'AAPL', date: '2026-07-26', assetType: 'stock', runStatus: 'idle',
       signal: null, reports: {}, log: [], activeSection: null, analysisId: null, liveDebate: [],
     }))
@@ -795,14 +795,14 @@ describe('Analysis', () => {
     }
     vi.stubGlobal('WebSocket', MockWebSocket)
 
-    localStorage.setItem('ta_task_running', JSON.stringify({
+    sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: 'AAPL', taskId: 'probe-task', startedAt: new Date().toISOString(),
     }))
     render(<Analysis />)
 
     expect(MockWebSocket.instances).toHaveLength(0)
     expect(screen.getByTestId('run-state')).toHaveTextContent('idle')
-    expect(localStorage.getItem('ta_task_running')).toBeNull()
+    expect(sessionStorage.getItem('ta_task_running')).toBeNull()
   })
 
   it('keeps the first streamed report selected instead of jumping to every agent', async () => {
@@ -831,7 +831,7 @@ describe('Analysis', () => {
       if (url === '/api/analysis/run') return Promise.resolve({ data: { task_id: 'section-task' } })
       return Promise.resolve({ data: {} })
     })
-    localStorage.setItem('ta_last_run', JSON.stringify({
+    sessionStorage.setItem('ta_last_run', JSON.stringify({
       ticker: 'AAPL', date: '2026-07-26', assetType: 'stock', runStatus: 'idle',
       signal: null, reports: {}, log: [], activeSection: null, analysisId: null, liveDebate: [],
     }))
@@ -877,7 +877,7 @@ describe('Analysis', () => {
       if (url === '/api/analysis/run') return Promise.resolve({ data: { task_id: 'dynamic-report-task' } })
       return Promise.resolve({ data: {} })
     })
-    localStorage.setItem('ta_last_run', JSON.stringify({
+    sessionStorage.setItem('ta_last_run', JSON.stringify({
       ticker: 'AAPL', date: '2026-07-26', assetType: 'stock', runStatus: 'idle',
       signal: null, reports: {}, log: [], activeSection: null, analysisId: null, liveDebate: [],
     }))
@@ -918,7 +918,7 @@ describe('Analysis', () => {
     localStorage.setItem('test_active_tasks', JSON.stringify([{
       task_id: 'retry-task', ticker: 'AAPL', trade_date: '2026-07-26', asset_type: 'stock', started_at: 0, status: 'running',
     }]))
-    localStorage.setItem('ta_task_running', JSON.stringify({
+    sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: 'AAPL', taskId: 'retry-task', startedAt: new Date().toISOString(),
     }))
     render(<Analysis />)
@@ -966,7 +966,7 @@ describe('Analysis', () => {
     })
 
     localStorage.setItem('test_active_tasks', JSON.stringify([task]))
-    localStorage.setItem('ta_task_running', JSON.stringify({
+    sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
     }))
     render(<Analysis />)
@@ -979,7 +979,7 @@ describe('Analysis', () => {
       expect(screen.getByTestId('run-status')).toHaveTextContent('error')
     })
     expect(MockWebSocket.instances).toHaveLength(1)
-    expect(localStorage.getItem('ta_task_running')).toBeNull()
+    expect(sessionStorage.getItem('ta_task_running')).toBeNull()
   })
 
   it('does not retry an explicitly unauthorized WebSocket close', async () => {
@@ -1004,7 +1004,7 @@ describe('Analysis', () => {
       status: 'running',
     }
     localStorage.setItem('test_active_tasks', JSON.stringify([task]))
-    localStorage.setItem('ta_task_running', JSON.stringify({
+    sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
     }))
     render(<Analysis />)
@@ -1047,7 +1047,7 @@ describe('Analysis', () => {
       return Promise.resolve({ data: {} })
     })
     localStorage.setItem('test_active_tasks', JSON.stringify([task]))
-    localStorage.setItem('ta_task_running', JSON.stringify({
+    sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
     }))
     render(<Analysis />)
@@ -1091,7 +1091,7 @@ describe('Analysis', () => {
     })
 
     localStorage.setItem('test_active_tasks', JSON.stringify([task]))
-    localStorage.setItem('ta_task_running', JSON.stringify({
+    sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
     }))
     render(<Analysis />)

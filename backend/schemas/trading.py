@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 class AutoCloseRecord(BaseModel):
     ticker: str
@@ -68,6 +68,7 @@ class BacktestTradeRecord(BaseModel):
     exit_price: float
     return_pct: float
     pnl: float
+    financing_cost: float = 0.0
     reason: str
 
 class BacktestEquityPoint(BaseModel):
@@ -80,6 +81,13 @@ class BacktestBenchmark(BaseModel):
     ticker: str
     return_pct: float
 
+class ConsensusReportStats(BaseModel):
+    considered: int = 0
+    used: int = 0
+    excluded_created_after_trade_date: int = 0
+    excluded_invalid_timestamp: int = 0
+    replaced_duplicate_trade_date: int = 0
+
 class BacktestResponse(BaseModel):
     initial_capital: float
     final_value: float
@@ -88,11 +96,13 @@ class BacktestResponse(BaseModel):
     max_drawdown: float
     sharpe_ratio: float
     trades_count: int
-    trades: list[BacktestTradeRecord] = []
-    equity_curve: list[BacktestEquityPoint] = []
+    trades: list[BacktestTradeRecord] = Field(default_factory=list)
+    equity_curve: list[BacktestEquityPoint] = Field(default_factory=list)
     slippage_bps: float
     benchmark: BacktestBenchmark | None = None
     alpha_pct: float | None = None
+    consensus_report_stats: ConsensusReportStats | None = None
+    assumptions: list[str] = Field(default_factory=list)
 
 class TradeSummaryRecord(BaseModel):
     ticker: str

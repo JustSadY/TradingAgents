@@ -153,8 +153,9 @@ def create_msg_delete():
     def delete_messages(state):
         messages = state["messages"]
         removal_operations = [RemoveMessage(id=m.id) for m in messages]
-        placeholder = HumanMessage(content="Continue")
-        return {"messages": removal_operations + [placeholder]}
+        # Do not expose a synthetic user message such as "Continue" to the next
+        # analyst.  Every analyst reconstructs its task from typed graph state.
+        return {"messages": removal_operations}
 
     return delete_messages
 

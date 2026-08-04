@@ -126,6 +126,7 @@ async def run_individual_analysis(
     user=None,
     checkpoint_namespace: str | None = None,
     result_owner_user_id: int | None | object = _OWNER_UNSET,
+    existing_result_id: int | None = None,
 ):
     """Orchestrates a single analysis run with incremental persistence and real-time updates."""
 
@@ -136,15 +137,82 @@ async def run_individual_analysis(
     user_id = user.id if user else None
     persisted_user_id = user_id if result_owner_user_id is _OWNER_UNSET else result_owner_user_id
 
-    row = await create_skeleton_result(
-        db,
-        emitter.task_id,
-        ticker,
-        trade_date,
-        asset_type,
-        triggered_by,
-        persisted_user_id,
-    )
+    if existing_result_id is not None:
+        # Time-travel resumes the selected analysis in place.  Creating a new
+        # skeleton here used to leave the original row permanently ``running``
+        # while a second hidden row completed under the new task id.
+        from backend.models.analysis import AnalysisResult
+        from backend.repositories.analysis import update_analysis_result
+
+        row = await db.get(AnalysisResult, existing_result_id)
+        if row is None:
+            raise ValueError("Analysis result no longer exists")
+        if str(row.ticker) != str(ticker) or str(row.trade_date) != str(trade_date):
+            raise ValueError("Analysis identity changed before resume")
+        reset_outputs = {
+            # A resumed checkpoint may skip nodes whose old database values
+            # would otherwise survive a replay.  Clear every derived artifact;
+            # the checkpoint state and rerun will repopulate the causal subset.
+            "market_report": "",
+            "sentiment_report": "",
+            "news_report": "",
+            "fundamentals_report": "",
+            "macro_report": "",
+            "options_report": "",
+            "quant_report": "",
+            "earnings_report": "",
+            "insider_report": "",
+            "ownership_report": "",
+            "ratings_report": "",
+            "short_interest_report": "",
+            "valuation_report": "",
+            "catalyst_report": "",
+            "review_report": "",
+            "synthesis_report": "",
+            "audit_report": "",
+            "agent_qa_report": "",
+            "investment_plan": "",
+            "trader_plan": "",
+            "final_decision": "",
+            "reflection": "",
+            "bull_history": None,
+            "bear_history": None,
+            "investment_debate_history": None,
+            "risk_debate_history": None,
+            "judge_decision": "",
+            "trader_proposal_json": "{}",
+            "chart_annotations": None,
+            "risk_metrics": None,
+            "quality": None,
+            "degraded": 0,
+            "failed_agents": None,
+            "llm_calls": 0,
+            "tool_calls": 0,
+            "tokens_in": 0,
+            "tokens_out": 0,
+            "duration_seconds": 0.0,
+        }
+        row = await update_analysis_result(
+            db,
+            existing_result_id,
+            task_id=emitter.task_id,
+            status="running",
+            triggered_by=triggered_by,
+            signal=None,
+            **reset_outputs,
+        )
+        if row is None:
+            raise ValueError("Analysis result no longer exists")
+    else:
+        row = await create_skeleton_result(
+            db,
+            emitter.task_id,
+            ticker,
+            trade_date,
+            asset_type,
+            triggered_by,
+            persisted_user_id,
+        )
     row_id = row.id
 
     try:
@@ -155,6 +223,14 @@ async def run_individual_analysis(
         await _emit_system_status(emitter, "Preparing engine...")
 
         config = build_analysis_config(settings, user=user, sys_settings=sys_settings)
+        from backend.core.temporal import is_historical_trade_date
+
+        historical_mode = is_historical_trade_date(trade_date)
+        config["trade_date"] = trade_date
+        config["historical_mode"] = historical_mode
+        # Point-in-time runs fail closed.  Operators may explicitly opt in for
+        # research-only comparisons, but historical/backtest paths never do.
+        config["allow_live_data_in_historical"] = False
 
         from backend.trading_agents.graph.checkpointer import checkpoint_scope
 
@@ -182,19 +258,29 @@ async def run_individual_analysis(
         from backend.services.performance_service import get_analyst_performance_context
         from backend.services.signal_backtest_service import get_signal_replay_context
 
-        attribution_md = await get_analyst_performance_context(db, user_id=user_id)
-
-        market_pulse_md = await get_market_pulse()
-
-        scenarios_md = get_active_scenarios()
-
-        signal_replay_md = await get_signal_replay_context(db, ticker, user_id)
-
-        config["historical_context"] = attribution_md + market_pulse_md + scenarios_md + signal_replay_md
+        if historical_mode:
+            # Learned weights, outcome replay, today's market pulse, and active
+            # scenarios are all knowledge created after the requested date.
+            # Excluding them is safer than pretending they are point-in-time.
+            attribution_md = ""
+            market_pulse_md = ""
+            scenarios_md = ""
+            signal_replay_md = ""
+            config["historical_context"] = (
+                "=== POINT-IN-TIME MODE ===\n"
+                f"Knowledge cutoff: {trade_date}. Live portfolio state, current market pulse, "
+                "future outcome attribution, replay statistics, and current scenarios were excluded.\n\n"
+            )
+        else:
+            attribution_md = await get_analyst_performance_context(db, user_id=user_id)
+            market_pulse_md = await get_market_pulse()
+            scenarios_md = get_active_scenarios()
+            signal_replay_md = await get_signal_replay_context(db, ticker, user_id)
+            config["historical_context"] = attribution_md + market_pulse_md + scenarios_md + signal_replay_md
 
         permitted_analysts = await prepare_graph_config(db, user_id, config)
 
-        if getattr(settings, "analyst_prefilter_enabled", False):
+        if getattr(settings, "analyst_prefilter_enabled", False) and not historical_mode:
             from backend.services.analyst_prefilter_service import filter_analysts_by_history
 
             permitted_analysts, dropped = await filter_analysts_by_history(
@@ -241,6 +327,10 @@ async def run_individual_analysis(
                 "support_levels": [],
                 "resistance_levels": [],
                 "activity_tracker": activity_tracker,
+                "trade_date": trade_date,
+                "historical_mode": historical_mode,
+                "allow_live_data_in_historical": False,
+                "user_id": user_id,
             }
         )
 

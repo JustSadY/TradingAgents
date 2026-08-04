@@ -1,9 +1,10 @@
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user
 from backend.core.database import get_db
+from backend.core.limiter import limiter
 from backend.models.user import User
 from backend.schemas.assistant import AssistantChatResponse, AssistantHistoryItem
 from backend.services import portfolio_assistant_service as svc
@@ -21,7 +22,9 @@ async def get_history(
     return await svc.get_assistant_history(db, current_user)
 
 @router.post("/chat", response_model=AssistantChatResponse)
+@limiter.limit("10/minute")
 async def chat(
+    request: Request,
     body: ChatRequest,
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),

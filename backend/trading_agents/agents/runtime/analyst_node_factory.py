@@ -34,23 +34,10 @@ _logger = logging.getLogger(__name__)
 
 
 def _report_text(content: Any) -> str:
-    """Return displayable text from a final model response.
+    """Normalize provider-specific content blocks through the shared parser."""
+    from backend.services.analysis.reports import report_text
 
-    Provider clients normalize the common content-list form, but an analyst
-    boundary still needs to reject a whitespace-only final message.  A blank
-    message is not a completed report.
-    """
-    if isinstance(content, str):
-        return content.strip()
-    if isinstance(content, list):
-        parts: list[str] = []
-        for item in content:
-            if isinstance(item, str):
-                parts.append(item)
-            elif isinstance(item, dict) and isinstance(item.get("text"), str):
-                parts.append(item["text"])
-        return "\n".join(parts).strip()
-    return ""
+    return report_text(content)
 
 
 async def _recover_empty_report(
@@ -124,6 +111,22 @@ def _empty_report_notice(analyst: str) -> str:
     )
 
 
+def _tool_turn_count(messages: object) -> int:
+    if not isinstance(messages, (list, tuple)):
+        return 0
+    return sum(1 for message in messages if getattr(message, "tool_calls", None))
+
+
+def _max_tool_turns(ctx: dict | None) -> int:
+    configured = 10
+    if ctx and "graph" in ctx:
+        try:
+            configured = int((getattr(ctx["graph"], "config", {}) or {}).get("max_analyst_tool_turns", 10))
+        except (TypeError, ValueError):
+            configured = 10
+    return max(1, min(configured, 50))
+
+
 async def run_tool_analyst(
     llm,
     state,
@@ -149,6 +152,17 @@ async def run_tool_analyst(
         graph = ctx["graph"]
         tools = graph._filter_tools_for_analyst(analyst, tools)
 
+    tool_turns = _tool_turn_count(state.get("messages"))
+    max_tool_turns = _max_tool_turns(ctx)
+    force_finalize = tool_turns >= max_tool_turns
+    if force_finalize:
+        _logger.warning(
+            "%s reached max tool turns (%d); running a tool-free final report pass.",
+            analyst,
+            max_tool_turns,
+        )
+        tools = []
+
     effective_collab_system = collab_system
     effective_system_message = system_message
     if ctx and "graph" in ctx:
@@ -166,6 +180,11 @@ async def run_tool_analyst(
                 effective_system_message = override.strip()
 
     effective_collab_system = effective_collab_system or _COLLAB_SYSTEM
+    if force_finalize:
+        effective_collab_system += (
+            "\nTool collection is complete. You MUST now return the final readable report using the tool "
+            "results already present in the conversation. Do not request or emit any additional tool call."
+        )
     runtime_retry_config = None
     if ctx and "graph" in ctx:
         runtime_retry_config = getattr(ctx["graph"], "config", {}) or {}
@@ -208,8 +227,19 @@ async def run_tool_analyst(
         await emitter.emit_mental_model(analyst, thought)
 
     try:
+        invoke_messages = state.get("messages") or []
+        if force_finalize:
+            invoke_messages = [
+                *list(invoke_messages),
+                HumanMessage(
+                    content=(
+                        "Produce the final analyst report now from the evidence above. "
+                        "Do not call tools. Explicitly identify unavailable data instead of guessing."
+                    )
+                ),
+            ]
         result = await retry_call(
-            lambda: (prompt | bound_llm).ainvoke(state["messages"]),
+            lambda: (prompt | bound_llm).ainvoke(invoke_messages),
             label=f"analyst:{analyst}",
             run_in_thread=False,
             runtime_config=runtime_retry_config,
@@ -239,11 +269,14 @@ async def run_tool_analyst(
 
         return {
             "messages": [AIMessage(content="")],
-            report_key: f"{analyst.title()} analysis unavailable (agent error: {exc}).",
+            report_key: (
+                f"{analyst.title()} analysis unavailable because the agent failed before "
+                "producing a report. Retry the analysis or choose another model."
+            ),
         }
 
     tool_calls = getattr(result, "tool_calls", None) or []
-    if tool_calls:
+    if tool_calls and not force_finalize:
         return {"messages": [result], report_key: ""}
 
     report = _report_text(getattr(result, "content", ""))
@@ -258,4 +291,8 @@ async def run_tool_analyst(
         )
     if not report:
         report = _empty_report_notice(analyst)
+    if force_finalize and tool_calls:
+        from langchain_core.messages import AIMessage
+
+        result = AIMessage(content=report)
     return {"messages": [result], report_key: report}

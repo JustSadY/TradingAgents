@@ -102,7 +102,9 @@ async def get_news_yfinance(
             if item_ticker and item_ticker != ticker.upper():
                 continue
             pub_date = _to_utc(_parse_news_datetime(item.get("published_at")))
-            if pub_date and not (start_boundary <= pub_date < end_boundary):
+            # Unknown publication timestamps cannot be proven to have existed
+            # inside the requested point-in-time window. Fail closed.
+            if pub_date is None or not (start_boundary <= pub_date < end_boundary):
                 continue
             title = item.get("title") or _NO_TITLE
             summary = item.get("summary") or ""
@@ -162,24 +164,23 @@ def get_global_news_yfinance(
         curr_dt = datetime.strptime(curr_date, "%Y-%m-%d")
         start_dt = curr_dt - relativedelta(days=look_back_days)
         start_date = start_dt.strftime("%Y-%m-%d")
+        start_boundary = start_dt.replace(tzinfo=UTC)
         end_boundary = curr_dt.replace(tzinfo=UTC) + relativedelta(days=1)
         news_str = ""
         for article in all_news[:limit]:
             if "content" in article:
                 data = _extract_article_data(article)
-                if data.get("pub_date"):
-                    pub_utc = _to_utc(data["pub_date"])
-                    if pub_utc and pub_utc >= end_boundary:
-                        continue
+                pub_utc = _to_utc(data.get("pub_date"))
+                if pub_utc is None or not (start_boundary <= pub_utc < end_boundary):
+                    continue
                 title = data["title"]
                 publisher = data["publisher"]
                 link = data["link"]
                 summary = data["summary"]
             else:
-                title = article.get("title", _NO_TITLE)
-                publisher = article.get("publisher", "Unknown")
-                link = article.get("link", "")
-                summary = ""
+                # Legacy Yahoo result shapes do not expose a reliable
+                # publication timestamp and are unsafe for dated analysis.
+                continue
             news_str += f"### {title} (source: {publisher})\n"
             if summary:
                 news_str += f"{summary}\n"

@@ -7,6 +7,7 @@ from backend.trading_agents.agents.tools.registry import registry
 
 strategy_backtest_tool = FunctionToolAdapter(
     key="strategy_backtest",
+    temporal_semantics="point_in_time",
     category="backtest",
     label_key="tools.strategy_backtest.label",
     description_key="tools.strategy_backtest.description",
@@ -17,6 +18,7 @@ strategy_backtest_tool = FunctionToolAdapter(
 
 search_web_tool = FunctionToolAdapter(
     key="search_web",
+    temporal_semantics="date_bounded",
     category="market",
     label_key="tools.search_web.label",
     description_key="tools.search_web.description",
@@ -36,6 +38,7 @@ search_web_tool = FunctionToolAdapter(
 
 crypto_fear_greed_tool = FunctionToolAdapter(
     key="crypto_fear_greed",
+    temporal_semantics="live_only",
     category="sentiment",
     label_key="tools.crypto_fear_greed.label",
     description_key="tools.crypto_fear_greed.description",
@@ -46,6 +49,7 @@ crypto_fear_greed_tool = FunctionToolAdapter(
 
 past_performance_tool = FunctionToolAdapter(
     key="past_performance",
+    temporal_semantics="point_in_time",
     category="backtest",
     label_key="tools.past_performance.label",
     description_key="tools.past_performance.description",

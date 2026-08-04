@@ -1,7 +1,7 @@
 from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db, require_page
@@ -64,6 +64,18 @@ class BacktestRequest(BaseModel):
         except ValueError as exc:
             raise ValueError(str(exc)) from exc
 
+
+    @model_validator(mode="after")
+    def validate_date_window(self):
+        from backend.core.temporal import validate_date_range
+
+        try:
+            self.start_date, self.end_date = validate_date_range(
+                self.start_date, self.end_date, max_days=3650
+            )
+        except ValueError as exc:
+            raise ValueError(str(exc)) from exc
+        return self
 @router.get("/portfolio", response_model=PortfolioResponse)
 async def get_portfolio(
     db: AsyncSession = Depends(get_db),

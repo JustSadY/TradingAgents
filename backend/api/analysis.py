@@ -96,15 +96,21 @@ async def run_analysis(
     from backend.services.analysis_service import register_task_owner
 
     await register_task_owner(task_id, current_user.id)
-    await dispatch_analysis(
-        background_tasks,
-        ticker=ticker,
-        trade_date=body.trade_date,
-        asset_type=body.asset_type,
-        settings=settings,
-        task_id=task_id,
-        user=current_user,
-    )
+    try:
+        await dispatch_analysis(
+            background_tasks,
+            ticker=ticker,
+            trade_date=body.trade_date,
+            asset_type=body.asset_type,
+            settings=settings,
+            task_id=task_id,
+            user=current_user,
+        )
+    except Exception:
+        from backend.services.analysis_service import clear_task_owner
+
+        await clear_task_owner(task_id)
+        raise
     return AnalysisRunResponse(task_id=task_id, ticker=ticker, trade_date=body.trade_date)
 
 @router.get("/active", response_model=list[ActiveTaskRead])
@@ -216,7 +222,9 @@ async def get_performance_attribution(
         503: {"description": "Ticker validation unavailable"},
     },
 )
+@limiter.limit("2/minute")
 async def run_portfolio_run(
+    request: Request,
     body: MultiTickerRunRequest,
     background_tasks: BackgroundTasks,
     db: AsyncSession = Depends(get_db),
@@ -243,15 +251,21 @@ async def run_portfolio_run(
     from backend.services.analysis_service import register_task_owner
 
     await register_task_owner(task_id, current_user.id)
-    await dispatch_portfolio_analysis(
-        background_tasks,
-        tickers=tickers,
-        trade_date=body.trade_date,
-        asset_type=body.asset_type,
-        settings=settings,
-        task_id=task_id,
-        user=current_user,
-    )
+    try:
+        await dispatch_portfolio_analysis(
+            background_tasks,
+            tickers=tickers,
+            trade_date=body.trade_date,
+            asset_type=body.asset_type,
+            settings=settings,
+            task_id=task_id,
+            user=current_user,
+        )
+    except Exception:
+        from backend.services.analysis_service import clear_task_owner
+
+        await clear_task_owner(task_id)
+        raise
     return MultiTickerRunResponse(task_id=task_id, tickers=tickers, trade_date=body.trade_date)
 
 @router.get("/portfolio-history", response_model=list[MultiTickerListItem])
@@ -354,7 +368,9 @@ async def get_analysis_chat(
     return await get_chat_history(db, analysis_id, current_user)
 
 @router.post("/{analysis_id}/chat", response_model=ChatMessageRead)
+@limiter.limit("10/minute")
 async def ask_analysis_report(
+    request: Request,
     analysis_id: int,
     body: ChatMessageCreate,
     db: AsyncSession = Depends(get_db),
@@ -386,7 +402,9 @@ async def list_checkpoints(
     response_model=TimeTravelResponse,
     responses={400: {"description": "Invalid checkpoint or state"}, 404: {"description": _ANALYSIS_NOT_FOUND}},
 )
+@limiter.limit("2/minute")
 async def time_travel_resume(
+    request: Request,
     analysis_id: int,
     body: TimeTravelRequest,
     db: AsyncSession = Depends(get_db),

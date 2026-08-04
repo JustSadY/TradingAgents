@@ -4,6 +4,7 @@ from backend.trading_agents.agents.tools.registry import registry
 
 quant_tool = FunctionToolAdapter(
     key="quant_data",
+    temporal_semantics="point_in_time",
     category="quant",
     label_key="tools.quant_data.label",
     description_key="tools.quant_data.description",

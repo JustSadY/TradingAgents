@@ -35,6 +35,35 @@ async def create_share(
 
     return {"token": share.token, "expires_at": share.expires_at.isoformat()}
 
+@router.post(
+    "/api/analysis/{analysis_id}/share/rotate",
+    response_model=ShareCreateResponse,
+    responses={404: {"description": "Analysis not found"}},
+)
+async def rotate_share(
+    analysis_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_page("analysis")),
+):
+    analysis = await share_service.get_user_analysis(db, analysis_id, current_user.id)
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    share = await share_service.get_or_create_shared_report(
+        db, analysis_id, current_user.id, datetime.now(UTC), rotate=True
+    )
+    return {"token": share.token, "expires_at": share.expires_at.isoformat()}
+
+@router.delete("/api/analysis/{analysis_id}/share", status_code=204)
+async def revoke_share(
+    analysis_id: int,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_page("analysis")),
+):
+    analysis = await share_service.get_user_analysis(db, analysis_id, current_user.id)
+    if not analysis:
+        raise HTTPException(status_code=404, detail="Analysis not found")
+    await share_service.revoke_shared_report(db, analysis_id, current_user.id, datetime.now(UTC))
+
 @router.get(
     "/api/share/{token}",
     response_model=SharedReportResponse,

@@ -1,13 +1,10 @@
 #!/usr/bin/env bash
 #
-# In-place updater — NOT executed standalone. install.sh copies this to
-# /usr/local/sbin/tradingagents-update (owned by root) and triggers it
-# via a oneshot systemd unit. Backend only starts that unit via
-# `sudo -n systemctl start --no-block`.
-#
-# Flow: git pull + dependencies + frontend build (as RUN_USER) ->
-# restart main service (root). Because pulled code is built as RUN_USER,
-# there is no privilege escalation; only systemctl restart runs as root.
+# Staged updater. The target revision is built and validated in an isolated
+# worktree/virtualenv before the running service is stopped. The live checkout
+# and venv are switched only after preflight succeeds; restart failures restore
+# the previous revision and environment. Database changes must follow the
+# expand/contract rule because schema downgrades are never automated.
 #
 set -euo pipefail
 
@@ -15,71 +12,154 @@ CONF="${TRADINGAGENTS_UPDATE_CONF:-/etc/tradingagents/update.env}"
 # shellcheck disable=SC1090
 [ -f "$CONF" ] && . "$CONF"
 
-# Fallback values to allow running manually without update.env
 PROJECT_ROOT="${PROJECT_ROOT:-$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)}"
 SERVICE_NAME="${SERVICE_NAME:-tradingagents}"
 RUN_USER="${RUN_USER:-${SUDO_USER:-root}}"
 VENV="${VENV:-$PROJECT_ROOT/.venv}"
 
-: "${PROJECT_ROOT:?update.env or default missing: PROJECT_ROOT}"
-: "${SERVICE_NAME:?update.env or default missing: SERVICE_NAME}"
-: "${RUN_USER:?update.env or default missing: RUN_USER}"
-: "${VENV:?update.env or default missing: VENV}"
+: "${PROJECT_ROOT:?missing PROJECT_ROOT}"
+: "${SERVICE_NAME:?missing SERVICE_NAME}"
+: "${RUN_USER:?missing RUN_USER}"
+: "${VENV:?missing VENV}"
 
 STATUS="$PROJECT_ROOT/.update.json"
 LOG="$PROJECT_ROOT/.update.log"
-
-# RUN_USER's HOME — write npm/pip/git caches here (to avoid permission errors in /root)
 RUN_HOME="$(getent passwd "$RUN_USER" | cut -d: -f6)"
 [ -n "$RUN_HOME" ] || RUN_HOME="/home/$RUN_USER"
 
-now()  { date -u +%Y-%m-%dT%H:%M:%SZ; }
+now() { date -u +%Y-%m-%dT%H:%M:%SZ; }
 asuser() { runuser -u "$RUN_USER" -- env "HOME=$RUN_HOME" "$@"; }
-
-write_status() { # state [error-message]
+log() { echo "[$(now)] $*" >>"$LOG" 2>/dev/null || true; chown "$RUN_USER":"$RUN_USER" "$LOG" 2>/dev/null || true; }
+write_status() {
     local err="null"
-    [ -n "${2:-}" ] && err="$(printf '%s' "$2" | python3 -c 'import json,sys;print(json.dumps(sys.stdin.read()))' 2>/dev/null || echo '"error"')"
+    [ -n "${2:-}" ] && err="$(printf '%s' "$2" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))' 2>/dev/null || echo '"error"')"
     printf '{"state":"%s","at":"%s","from":"%s","to":"%s","error":%s}\n' \
-        "$1" "$(now)" "${FROM:-?}" "${TO:-?}" "$err" > "$STATUS" 2>/dev/null || true
+        "$1" "$(now)" "${FROM:-?}" "${TO:-?}" "$err" >"$STATUS" 2>/dev/null || true
     chown "$RUN_USER":"$RUN_USER" "$STATUS" 2>/dev/null || true
 }
-log() { echo "[$(now)] $*" >> "$LOG" 2>/dev/null || true; chown "$RUN_USER":"$RUN_USER" "$LOG" 2>/dev/null || true; }
+fail() { log "ERROR: $1"; write_status failed "$1"; exit 1; }
+run_user() { log "+ $*"; asuser "$@" >>"$LOG" 2>&1 || fail "Command failed: $*"; }
 
-FROM="$(asuser git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo '?')"
+FROM="$(asuser git -C "$PROJECT_ROOT" rev-parse HEAD 2>/dev/null || echo '?')"
 TO="$FROM"
 write_status running
-log "=== Update started ($FROM) ==="
+log "=== Staged update started (${FROM:0:12}) ==="
 
-fail() { log "ERROR: $1"; TO="$(asuser git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo '?')"; write_status failed "$1"; exit 1; }
-run()  { log "+ $*"; if ! asuser "$@" >>"$LOG" 2>&1; then fail "Command failed: $*"; fi; }
-
-# 1. Pull code (fast-forward only — stops if local commits exist)
-run git -C "$PROJECT_ROOT" fetch --all --quiet
-asuser git -C "$PROJECT_ROOT" pull --ff-only >>"$LOG" 2>&1 || fail "git pull --ff-only failed (local changes/divergence may exist)"
-
-# 2. Backend dependencies (if requirements changed)
-run "$VENV/bin/pip" install -q -r "$PROJECT_ROOT/backend/requirements.txt"
-
-# 2a. Migrations are part of a deploy, not an optional startup side effect.
-# Run them before the new process is restarted so a failed schema change keeps
-# the currently running service alive and the updater reports a failure.
-run bash -c "cd '$PROJECT_ROOT' && '$VENV/bin/alembic' -c backend/alembic.ini upgrade head"
-
-# 3. Frontend build (if changed)
-if [ -d "$PROJECT_ROOT/frontend" ]; then
-    run bash -c "cd '$PROJECT_ROOT/frontend' && { npm ci || npm install; } && npm run build"
+if ! asuser git -C "$PROJECT_ROOT" diff --quiet --ignore-submodules -- || \
+   ! asuser git -C "$PROJECT_ROOT" diff --cached --quiet --ignore-submodules --; then
+    fail "Local tracked changes exist; refusing to overwrite the live checkout"
 fi
 
-TO="$(asuser git -C "$PROJECT_ROOT" rev-parse --short HEAD 2>/dev/null || echo '?')"
-log "Build complete: $FROM -> $TO. Restarting service."
+run_user git -C "$PROJECT_ROOT" fetch --all --prune --quiet
+UPSTREAM="$(asuser git -C "$PROJECT_ROOT" rev-parse --abbrev-ref --symbolic-full-name '@{upstream}' 2>/dev/null || true)"
+[ -n "$UPSTREAM" ] || fail "Current branch has no upstream"
+TO="$(asuser git -C "$PROJECT_ROOT" rev-parse "$UPSTREAM")"
+if [ "$TO" = "$FROM" ]; then
+    write_status done
+    log "Already up to date"
+    exit 0
+fi
 
-# 4. Restart main service (root — because this updater is in a separate cgroup,
-#    restart will not kill this process)
-if ! systemctl restart "$SERVICE_NAME"; then
-    fail "systemctl restart failed: $SERVICE_NAME"
+STAGE_ROOT="$(mktemp -d "${TMPDIR:-/tmp}/tradingagents-release.XXXXXX")"
+WORKTREE="$STAGE_ROOT/src"
+VENV_ROOT="$(dirname "$VENV")/.tradingagents-venvs"
+NEW_VENV="$VENV_ROOT/${TO:0:16}"
+DIST_ARCHIVE="$STAGE_ROOT/frontend-dist.tar"
+OLD_DIST_ARCHIVE="$STAGE_ROOT/old-frontend-dist.tar"
+OLD_VENV_TARGET=""
+SERVICE_STOPPED=0
+SWITCHED=0
+
+cleanup() {
+    asuser git -C "$PROJECT_ROOT" worktree remove --force "$WORKTREE" >/dev/null 2>&1 || true
+    rm -rf "$STAGE_ROOT" >/dev/null 2>&1 || true
+}
+trap cleanup EXIT
+
+rollback() {
+    local reason="$1"
+    log "Rollback requested: $reason"
+    if [ "$SWITCHED" -eq 1 ]; then
+        asuser git -C "$PROJECT_ROOT" reset --hard "$FROM" >>"$LOG" 2>&1 || true
+        if [ -f "$OLD_DIST_ARCHIVE" ]; then
+            rm -rf "$PROJECT_ROOT/frontend/dist"
+            mkdir -p "$PROJECT_ROOT/frontend/dist"
+            tar -xf "$OLD_DIST_ARCHIVE" -C "$PROJECT_ROOT/frontend/dist" 2>>"$LOG" || true
+            chown -R "$RUN_USER":"$RUN_USER" "$PROJECT_ROOT/frontend/dist" 2>/dev/null || true
+        fi
+        if [ -n "$OLD_VENV_TARGET" ]; then
+            rm -rf "$VENV"
+            if [ -L "$OLD_VENV_TARGET" ] || [ -d "$OLD_VENV_TARGET" ]; then
+                ln -s "$OLD_VENV_TARGET" "$VENV"
+            fi
+        fi
+    fi
+    if [ "$SERVICE_STOPPED" -eq 1 ]; then
+        systemctl start "$SERVICE_NAME" >>"$LOG" 2>&1 || true
+    fi
+    fail "$reason"
+}
+
+# Isolated preflight: source, dependencies, imports, tests, and frontend build.
+run_user git -C "$PROJECT_ROOT" worktree add --detach "$WORKTREE" "$TO"
+mkdir -p "$VENV_ROOT"
+chown -R "$RUN_USER":"$RUN_USER" "$VENV_ROOT"
+if [ ! -x "$NEW_VENV/bin/python" ]; then
+    run_user python3 -m venv "$NEW_VENV"
+fi
+run_user "$NEW_VENV/bin/python" -m pip install --upgrade pip wheel
+run_user "$NEW_VENV/bin/pip" install -r "$WORKTREE/backend/requirements.txt"
+run_user "$NEW_VENV/bin/python" -m compileall -q "$WORKTREE/backend"
+if [ -d "$WORKTREE/frontend" ]; then
+    run_user bash -c "cd '$WORKTREE/frontend' && npm ci && npm run lint && npm test && npm run build"
+    tar -cf "$DIST_ARCHIVE" -C "$WORKTREE/frontend/dist" .
+fi
+
+# Keep a reversible copy of browser assets and the existing venv target.
+if [ -d "$PROJECT_ROOT/frontend/dist" ]; then
+    tar -cf "$OLD_DIST_ARCHIVE" -C "$PROJECT_ROOT/frontend/dist" .
+fi
+if [ -L "$VENV" ]; then
+    OLD_VENV_TARGET="$(readlink -f "$VENV")"
+elif [ -d "$VENV" ]; then
+    OLD_VENV_TARGET="$VENV_ROOT/legacy-${FROM:0:16}"
+fi
+
+log "Preflight passed; stopping $SERVICE_NAME for migration and release switch"
+systemctl stop "$SERVICE_NAME" >>"$LOG" 2>&1 || rollback "Could not stop service: $SERVICE_NAME"
+SERVICE_STOPPED=1
+
+# PostgreSQL DDL migrations are transactional. Migrations in this repository
+# must remain backward-compatible with the previous release (expand/contract).
+if ! asuser bash -c "cd '$WORKTREE' && '$NEW_VENV/bin/alembic' -c backend/alembic.ini upgrade head" >>"$LOG" 2>&1; then
+    rollback "Database migration failed"
+fi
+
+if ! asuser git -C "$PROJECT_ROOT" reset --hard "$TO" >>"$LOG" 2>&1; then
+    rollback "Could not switch live checkout to target revision"
+fi
+if [ -f "$DIST_ARCHIVE" ]; then
+    rm -rf "$PROJECT_ROOT/frontend/dist"
+    mkdir -p "$PROJECT_ROOT/frontend/dist"
+    tar -xf "$DIST_ARCHIVE" -C "$PROJECT_ROOT/frontend/dist"
+    chown -R "$RUN_USER":"$RUN_USER" "$PROJECT_ROOT/frontend/dist" 2>/dev/null || true
+fi
+
+if [ -d "$VENV" ] && [ ! -L "$VENV" ]; then
+    rm -rf "$OLD_VENV_TARGET"
+    mv "$VENV" "$OLD_VENV_TARGET"
+fi
+rm -f "$VENV"
+ln -s "$NEW_VENV" "$VENV"
+SWITCHED=1
+
+if ! systemctl start "$SERVICE_NAME" >>"$LOG" 2>&1; then
+    rollback "Service restart failed"
 fi
 if ! systemctl is-active --quiet "$SERVICE_NAME"; then
-    fail "Service not active after restart: $SERVICE_NAME"
+    rollback "Service is not active after restart"
 fi
+SERVICE_STOPPED=0
+
 write_status done
-log "=== Update completed ($TO) ==="
+log "=== Staged update completed (${FROM:0:12} -> ${TO:0:12}) ==="

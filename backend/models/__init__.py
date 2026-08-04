@@ -1,7 +1,7 @@
 from .agent_settings import AgentSetting
 from .alert import PriceAlert
 from .analysis import AnalysisChat, AnalysisResult
-from .assistant import AssistantMessage
+from .assistant import AssistantMessage, AssistantPendingAction
 from .log import SystemLog
 from .market_summary import MarketDailySummary
 from .news_cache import AnalystReportCache, NewsAnalysisCache, NewsCache
@@ -21,6 +21,7 @@ from .webhook_delivery import WebhookDelivery
 
 __all__ = [
     "AssistantMessage",
+    "AssistantPendingAction",
     "User",
     "AppSettings",
     "Portfolio",

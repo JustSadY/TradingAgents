@@ -5,6 +5,7 @@ from backend.trading_agents.agents.tools.registry import registry
 
 core_stock_tool = FunctionToolAdapter(
     key="core_stock_data",
+    temporal_semantics="point_in_time",
     category="market",
     label_key="tools.core_stock_data.label",
     description_key="tools.core_stock_data.description",
