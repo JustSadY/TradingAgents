@@ -10,6 +10,7 @@ compute.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 
@@ -17,6 +18,7 @@ import numpy as np
 import pandas as pd
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.exceptions import ExternalServiceError
 from backend.services.indicator_service import evaluate_formula_safely
 from backend.services.settings_service import get_or_create_settings
 
@@ -24,6 +26,18 @@ _logger = logging.getLogger(__name__)
 
 _MAX_PROMPT_CHARS = 500
 _MAX_FORMULA_CHARS = 300
+_LLM_ATTEMPTS = 3
+_LLM_RETRY_BASE_DELAY_SECONDS = 0.5
+_TRANSIENT_PROVIDER_HINTS = (
+    "worker local total request limit reached",
+    "too many requests",
+    "rate limit",
+    "rate_limit",
+    "429",
+    "temporarily unavailable",
+    "service unavailable",
+    "overloaded",
+)
 
 _SYSTEM_PROMPT = """You translate a user's plain-language indicator request into ONE formula
 for a restricted charting DSL. Reply with the formula only — no explanations,
@@ -53,6 +67,7 @@ Examples:
 If the request cannot be expressed in this DSL, reply with exactly: UNSUPPORTED
 """
 
+
 def _synthetic_ohlcv(rows: int = 120) -> pd.DataFrame:
     """Deterministic OHLCV frame used to validate formulas without network IO."""
     rng = np.random.default_rng(42)
@@ -68,6 +83,7 @@ def _synthetic_ohlcv(rows: int = 120) -> pd.DataFrame:
         }
     )
 
+
 def _extract_formula(raw: str) -> str:
     """Pull the bare formula out of an LLM reply (strip fences/quotes/prose)."""
     text = raw.strip()
@@ -79,6 +95,41 @@ def _extract_formula(raw: str) -> str:
         if line:
             return line
     return ""
+
+
+def _is_transient_provider_error(exc: BaseException) -> bool:
+    """Return whether an upstream LLM failure is safe to retry briefly."""
+    message = str(exc).lower()
+    return any(hint in message for hint in _TRANSIENT_PROVIDER_HINTS)
+
+
+async def _invoke_formula_llm(llm, messages):
+    """Invoke the formula LLM with bounded backoff for provider saturation."""
+    for attempt in range(_LLM_ATTEMPTS):
+        try:
+            return await llm.ainvoke(messages)
+        except Exception as exc:
+            if not _is_transient_provider_error(exc):
+                raise
+
+            if attempt + 1 >= _LLM_ATTEMPTS:
+                raise ExternalServiceError(
+                    "The AI provider is temporarily at capacity. Please try again shortly.",
+                    status_code=503,
+                ) from exc
+
+            delay = _LLM_RETRY_BASE_DELAY_SECONDS * (2**attempt)
+            _logger.warning(
+                "Formula-assist provider capacity error; retrying in %.1fs (%d/%d): %s",
+                delay,
+                attempt + 1,
+                _LLM_ATTEMPTS,
+                exc,
+            )
+            await asyncio.sleep(delay)
+
+    raise AssertionError("unreachable")
+
 
 async def generate_formula(db: AsyncSession, prompt: str, user) -> str:
     """Return a validated DSL formula for *prompt* using the user's LLM."""
@@ -103,9 +154,11 @@ async def generate_formula(db: AsyncSession, prompt: str, user) -> str:
         raise ValueError(f"No API key set for provider '{provider}'. Please add your API key in Settings.")
 
     client = create_llm_client(provider=provider, model=model, api_key=api_key)
-    response = await client.get_llm().ainvoke([SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=prompt)])
+    messages = [SystemMessage(content=_SYSTEM_PROMPT), HumanMessage(content=prompt)]
+    response = await _invoke_formula_llm(client.get_llm(), messages)
 
     from backend.services.llm_content import llm_text
+
     formula = _extract_formula(llm_text(response))
     if not formula or formula.upper() == "UNSUPPORTED":
         raise ValueError("That indicator cannot be expressed with the available functions (SMA/EMA/STD/RSI/ADX).")
