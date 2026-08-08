@@ -10,7 +10,10 @@ plan). Orchestration order:
 
 The debate loop is run imperatively here, replicating the old
 ``ConditionalLogic.should_continue_debate`` routing (alternate speakers, stop
-at ``2 × max_debate_rounds``) instead of LangGraph conditional edges.
+at ``2 × max_debate_rounds``) instead of LangGraph conditional edges. Because
+an imperative loop is invisible to LangGraph streaming until this whole node
+returns, each completed turn is also published through the current run's live
+debate bridge.
 
 Kill-switch behaviour:
   • research_manager disabled  → emit a neutral investment plan and skip every
@@ -28,6 +31,7 @@ from backend.trading_agents.agents.base import (
     NodeFn,
     neutral_invest_debate_state,
 )
+from backend.trading_agents.agents.runtime.debate_stream import emit_live_debate_state
 from backend.trading_agents.agents.sub.managers.auditor_node import create_auditor_node
 from backend.trading_agents.agents.sub.managers.research_manager import create_research_manager
 from backend.trading_agents.agents.sub.managers.synthesis_manager import create_synthesis_manager
@@ -38,6 +42,7 @@ logger = logging.getLogger(__name__)
 
 MAIN_KEY = "research_manager"
 
+
 async def _safe(label: str, fn, state: dict, fallback: dict) -> dict:
     try:
         if inspect.iscoroutinefunction(fn):
@@ -46,6 +51,38 @@ async def _safe(label: str, fn, state: dict, fallback: dict) -> dict:
     except Exception as exc:
         logger.warning("[research_manager] sub '%s' failed: %s — using fallback.", label, exc, exc_info=True)
         return fallback
+
+
+def _debate_count(state: dict) -> int:
+    try:
+        return max(0, int(state.get("count", 0) or 0))
+    except (TypeError, ValueError):
+        return 0
+
+
+def _append_history(history: object, argument: str) -> str:
+    existing = str(history or "").strip()
+    return f"{existing}\n{argument}".strip() if existing else argument
+
+
+def _fallback_debate_update(label: str, debate_state: dict) -> dict:
+    """Create a canonical failed turn without breaking Bull/Bear alternation."""
+
+    side = "bear" if label == "bear_researcher" else "bull"
+    other = "bull" if side == "bear" else "bear"
+    sender = "Bear Analyst" if side == "bear" else "Bull Analyst"
+    argument = f"{sender}: This debate turn was unavailable; the panel will continue with the remaining evidence."
+    return {
+        "investment_debate_state": {
+            "history": _append_history(debate_state.get("history"), argument),
+            f"{side}_history": _append_history(debate_state.get(f"{side}_history"), argument),
+            f"{other}_history": str(debate_state.get(f"{other}_history", "") or ""),
+            "current_response": argument,
+            "judge_decision": str(debate_state.get("judge_decision", "") or ""),
+            "count": _debate_count(debate_state) + 1,
+        }
+    }
+
 
 def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
     async def research_manager_node(state) -> dict:
@@ -76,24 +113,27 @@ def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
         if bull_on and bear_on:
             bull = create_bull_researcher(ctx.llm_for("bull_researcher"))
             bear = create_bear_researcher(ctx.llm_for("bear_researcher"))
-            max_rounds = ctx.config.get("max_debate_rounds", 1)
+            try:
+                max_rounds = max(1, int(ctx.config.get("max_debate_rounds", 1) or 1))
+            except (TypeError, ValueError):
+                max_rounds = 1
             if not local.get("investment_debate_state"):
                 apply({"investment_debate_state": neutral_invest_debate_state()})
 
             guard = 0
-            while local["investment_debate_state"]["count"] < 2 * max_rounds and guard < 50:
+            while _debate_count(local["investment_debate_state"]) < 2 * max_rounds and guard < 50:
                 guard += 1
-                current = local["investment_debate_state"].get("current_response", "")
-                speaker = bear if current.startswith("Bull") else bull
-                label = "bear_researcher" if current.startswith("Bull") else "bull_researcher"
-                fb = {
-                    "investment_debate_state": {
-                        **local["investment_debate_state"],
-                        "count": local["investment_debate_state"]["count"] + 1,
-                        "current_response": f"({label} unavailable.)",
-                    }
-                }
-                apply(await _safe(label, speaker, local, fb))
+                current = str(local["investment_debate_state"].get("current_response", "") or "")
+                previous_was_bull = current.lstrip().lower().startswith("bull")
+                speaker = bear if previous_was_bull else bull
+                label = "bear_researcher" if previous_was_bull else "bull_researcher"
+                fallback = _fallback_debate_update(label, local["investment_debate_state"])
+                apply(await _safe(label, speaker, local, fallback))
+
+                # LangGraph cannot expose intermediate state from this
+                # imperative sub-loop. Emit the completed turn immediately;
+                # the outer observer will see the same count later and dedupe.
+                await emit_live_debate_state("investment", local.get("investment_debate_state"))
         else:
             logger.info("[research_manager] debate skipped (bull=%s bear=%s).", bull_on, bear_on)
             if not local.get("investment_debate_state"):
