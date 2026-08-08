@@ -1,111 +1,218 @@
 # Installation & Setup Guide
 
-TradingAgents can be deployed in multiple environments depending on your use case. Below are detailed guides for deploying on Linux production servers, using Docker Compose, or configuring a local manual development workspace.
+TradingAgents supports three deployment modes: a one-command Linux/systemd installation, Docker Compose, and a manual developer setup. This guide reflects the current `main` branch behavior.
 
 ---
 
-## 🚀 1. Production Linux Server Deployment (One-Click Setup)
+## 1. Production Linux Server Deployment
 
-This is the recommended method for Linux environments (Ubuntu, Debian, CentOS, AlmaLinux, Rocky Linux, Fedora, etc.). The installer script automatically handles:
-1.  System packages installation (Python 3.11+, Node.js 20, PostgreSQL, git, curl).
-2.  Setting up a PostgreSQL user and database with secure random credentials.
-3.  Generating a Python Virtual Environment (`.venv`) and installing `backend/requirements.txt`.
-4.  Compiling the React frontend bundle (`npm run build`).
-5.  Creating a secure, randomized `.env` configuration file.
-6.  Registering and starting a `systemd` background daemon to keep the application running.
-
-### Quick Start Installation Command:
-Execute the command below on your clean server:
+For Debian/Ubuntu and Fedora/RHEL-family servers, the supported production path is the installer in `deploy/install.sh`.
 
 ```bash
 sudo bash deploy/install.sh
 ```
 
-### Customizing Installer Parameters:
-You can control the installer's behavior by passing environment parameters:
+The installer provisions the supported Python runtime, Node.js 20, PostgreSQL, the project virtual environment, frontend production build, root `.env`, and the `systemd` service. It is designed to be idempotent and can be rerun after source updates.
+
+### Supported installer variables
 
 ```bash
 sudo APP_PORT=80 ADMIN_USERNAME=manager bash deploy/install.sh
 ```
 
-#### Supported Installer Variables:
-| Variable | Default Value | Description |
+| Variable | Default | Purpose |
 | :--- | :--- | :--- |
-| `APP_PORT` | `8000` | The port the application listens on. |
-| `SERVICE_NAME` | `tradingagents` | The name of the registered `systemd` daemon. |
-| `ADMIN_USERNAME` | `admin` | The initial administrator username. |
-| `ADMIN_PASSWORD` | *Random* | Custom password; if empty, a random password is generated and printed. |
-| `SKIP_DB` | `0` | If set to `1`, skips local PostgreSQL setup (useful if using an external DB). |
-| `BUILD_FRONTEND` | `1` | If set to `0`, skips React UI compilation (API-only setup). |
+| `APP_PORT` | `8000` | HTTP port used by the FastAPI service. |
+| `SERVICE_NAME` | `tradingagents` | `systemd` service name. |
+| `SERVICE_USER` | invoking user | OS user that runs the application. |
+| `ADMIN_USERNAME` | `admin` | Initial administrator username. |
+| `ADMIN_PASSWORD` | random | Optional initial administrator password. |
+| `NODE_MAJOR` | `20` | Node.js major version installed for frontend builds. |
+| `SKIP_DB` | `0` | Set to `1` when PostgreSQL is managed externally. |
+| `BUILD_FRONTEND` | `1` | Set to `0` for API-only installation. |
 
-### Post-Installation Key Configuration:
-To activate agent analysis, you can configure LLM provider keys (OpenAI, Anthropic, Gemini, etc.) directly in the Web UI under **Settings → API Keys** (or via the **Admin Panel → User API Keys** for specific users). 
+After installation, use the URL and administrator credentials printed by the installer. The production frontend is served directly by FastAPI from `frontend/dist`; a separate nginx instance is not required unless you want TLS/domain reverse proxying.
+
+### LLM and data-provider keys
+
+LLM and provider credentials are **not** configured in `.env`. Add them from the Web UI after logging in:
+
+- **Preferences / Settings → Account & API Keys** for per-user keys.
+- **Admin Panel → Global Settings** for server-wide defaults and server-scoped tools.
+
+Sensitive values are stored encrypted in PostgreSQL and take effect without restarting the service.
+
+### Optional worker mode
+
+The default Linux install runs analyses in the web process. For a separate analysis worker, configure Redis and worker mode in `.env`:
+
+```ini
+REDIS_URL=redis://localhost:6379/0
+ANALYSIS_QUEUE_MODE=worker
+```
+
+Then run an additional worker service using:
+
+```bash
+arq backend.worker.WorkerSettings
+```
+
+Redis is also used for cross-process analysis events, task ownership, cancellation, and WebSocket fan-out.
+
+For detailed systemd and updater behavior, see [`../deploy/README.md`](../deploy/README.md).
 
 ---
 
-## 🐳 2. Docker Compose Deployment
+## 2. Docker Compose Deployment
 
-Ensure you have Docker and Docker Compose installed.
+Docker Compose is the easiest way to run the complete multi-process stack.
 
-1.  Clone the repository and copy the environment variables example:
-    ```bash
-    cp .env.example .env
-    ```
-2.  Edit the `.env` file to set the infrastructure secrets (`SECRET_KEY`, `ENCRYPTION_KEY`, `ADMIN_PASSWORD_HASH`). LLM and data-provider keys are **not** environment variables — add them later in the Web UI (Settings → Account & API Keys).
-3.  Build and launch the container ecosystem:
-    ```bash
-    docker-compose up -d --build
-    ```
-    The compose file starts PostgreSQL, Redis, the backend, a dedicated **arq analysis worker** (`ANALYSIS_QUEUE_MODE=worker`), and the frontend.
-4.  Once running, you can connect to:
-    *   **Frontend Client:** `http://localhost:5173`
-    *   **FastAPI Backend Swagger Docs:** `http://localhost:8000/docs`
+### Prepare the environment
+
+```bash
+cp .env.example .env
+```
+
+At minimum, review and set the infrastructure values required by Compose and production security. In particular:
+
+```ini
+DB_PASSWORD=<strong-postgres-password>
+SECRET_KEY=<random-secret>
+ENCRYPTION_KEY=<fernet-key>
+ADMIN_PASSWORD_HASH=<bcrypt-hash>
+GRAFANA_ADMIN_PASSWORD=<strong-grafana-password>
+```
+
+`DB_PASSWORD` and `GRAFANA_ADMIN_PASSWORD` are required by the current `docker-compose.yml`. `METRICS_TOKEN` is optional; when empty, the backend `/metrics` endpoint stays disabled.
+
+Do not put LLM, Pinecone, Reddit, Alpha Vantage, or SearXNG credentials into `.env` unless a specific server-managed integration explicitly documents an environment variable. User/provider settings are normally configured in the Web UI.
+
+### Start the stack
+
+```bash
+docker compose up -d --build
+```
+
+The current Compose stack includes:
+
+| Service | Purpose |
+| :--- | :--- |
+| `postgres` | Primary PostgreSQL database. |
+| `redis` | Worker queue, task registry, and event fan-out. |
+| `backend` | FastAPI web/API process. |
+| `worker` | Dedicated `arq` analysis worker. |
+| `frontend` | nginx-served React production build and public reverse proxy. |
+| `prometheus` | Metrics collection. |
+| `grafana` | Monitoring dashboards. |
+| `postgres-exporter` | PostgreSQL Prometheus metrics. |
+| `redis-exporter` | Redis Prometheus metrics. |
+
+### Local endpoints
+
+- Frontend: `http://localhost:5173`
+- Backend/Swagger from the Docker host: `http://localhost:8000/docs`
+- Prometheus: `http://localhost:9090`
+- Grafana: `http://localhost:3001`
+- PostgreSQL exporter: `http://localhost:9187`
+- Redis exporter: `http://localhost:9121`
+
+The backend and monitoring ports are intentionally bound to loopback in the Compose file. Public application traffic should go through the frontend proxy. If remote monitoring access is required, put an authenticated reverse proxy or VPN in front of the monitoring endpoints rather than publishing them directly.
+
+Docker forces:
+
+```ini
+REDIS_URL=redis://redis:6379/0
+ANALYSIS_QUEUE_MODE=worker
+```
+
+so long-running analyses execute in the dedicated worker while progress events return to the backend over Redis.
 
 ---
 
-## 🛠️ 3. Local Developer Workspace Setup
+## 3. Manual Developer Setup
 
-To configure a local workspace on Windows, macOS, or Linux for active code contributions:
+### Prerequisites
 
-### Step A: Database Configuration
-1.  Install PostgreSQL 15+ locally.
-2.  Create a database named `tradingagents` and configure permissions.
-3.  Note your database connection URL (e.g. `postgresql+asyncpg://postgres:postgres@localhost:5432/tradingagents`).
+- Python 3.11–3.13 recommended for the backend.
+- Node.js 20+ for the frontend.
+- PostgreSQL running locally or remotely.
 
-### Step B: Backend Dependencies & Startup
-1.  Open your terminal inside the root project directory.
-2.  Create a virtual environment:
-    ```bash
-    python -m venv .venv
-    ```
-3.  Activate the virtual environment:
-    *   **Windows (PowerShell):** `.venv\Scripts\activate`
-    *   **Linux / macOS:** `source .venv/bin/activate`
-4.  Install the required packages:
-    ```bash
-    pip install -r backend/requirements.txt
-    ```
-5.  Create a `.env` file from the example and add your database URL:
-    ```ini
-    DATABASE_URL=postgresql+asyncpg://youruser:yourpass@localhost:5432/tradingagents
-    ```
-6.  Start the FastAPI application with reload enabled:
-    ```bash
-    uvicorn backend.main:app --reload --port 8000
-    ```
+### Backend
 
-### Step C: Frontend UI Compilation
-1.  Open a separate terminal window.
-2.  Navigate to the `frontend/` directory:
-    ```bash
-    cd frontend
-    ```
-3.  Install node modules:
-    ```bash
-    npm install
-    ```
-4.  Launch the Vite hot-reloading development server:
-    ```bash
-    npm run dev
-    ```
-5.  Access the developer client at `http://localhost:5173`.
+From the repository root:
+
+```bash
+python -m venv .venv
+```
+
+Activate it:
+
+```bash
+# Windows PowerShell
+.venv\Scripts\activate
+
+# Linux/macOS
+source .venv/bin/activate
+```
+
+Install dependencies:
+
+```bash
+pip install -r backend/requirements.txt
+```
+
+Create the root environment file:
+
+```bash
+cp .env.example .env
+```
+
+Set at least a valid PostgreSQL URL and secure development secrets as appropriate:
+
+```ini
+DATABASE_URL=postgresql+asyncpg://youruser:yourpass@localhost:5432/tradingagents
+```
+
+Start the API:
+
+```bash
+uvicorn backend.main:app --reload --port 8000
+```
+
+The application creates missing tables and applies supported additive startup migrations automatically. Databases explicitly managed by Alembic defer to Alembic; see `backend/alembic/README.md` for that workflow.
+
+Swagger is available at `http://localhost:8000/docs`.
+
+### Frontend
+
+In another terminal:
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+The Vite development server is available at `http://localhost:5173` and proxies `/api`, `/auth`, and `/ws` requests to the backend on port `8000`.
+
+### Configure provider credentials
+
+Once the UI is running, log in and configure LLM/provider credentials from the application settings. They are stored in the database, not in the developer `.env` file.
+
+---
+
+## 4. Updating an Installed Linux Server
+
+The Linux installer configures the dashboard self-updater. When a newer `origin/main` commit is detected, an administrator can start the update from the UI. The updater uses an isolated worktree, installs dependencies, builds the frontend, handles migrations, switches the release, and rolls back if the restarted service fails.
+
+To start the same update flow manually:
+
+```bash
+sudo bash deploy/update.sh
+```
+
+---
+
+## 5. Configuration Reference
+
+For environment variables, API/provider configuration, Redis worker mode, observability, and runtime settings, see [`configuration.md`](configuration.md).

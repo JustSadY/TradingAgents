@@ -1,117 +1,228 @@
 # Multi-Agent Decision Core
 
-The core value of TradingAgents lies in its decentralized multi-agent system. Instead of relying on a single prompt or agent, it splits the decision-making process into four distinct phases, organized via **LangGraph**.
+TradingAgents uses LangGraph to separate market evidence gathering, adversarial research, risk evaluation, and final portfolio intent. The architecture is deliberately structured so that no analyst or risk persona can independently become an execution authority.
 
 ---
 
-## 1. The Five Execution Phases
+## 1. Execution Flow
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Phase1_Analysts : Load Ticker & Date
-    
-    state Phase1_Analysts {
-        [*] --> Fetch_Data : yFinance / API
-        Fetch_Data --> Run_Plugins : Parallel Execution (with Chain-of-Thought)
-        Run_Plugins --> Compile_Reports : Save State Dicts
-    }
-    
-    Phase1_Analysts --> Phase1_Synthesis : Send Pre-Reports
-    
-    state Phase1_Synthesis {
-        [*] --> Synthesis_Manager : Detect Alignments & Conflicts
+    [*] --> Analysts
+
+    state Analysts {
+        [*] --> RunEnabledAnalysts
+        RunEnabledAnalysts --> AnalystReports
     }
 
-    Phase1_Synthesis --> Phase2_Debate : Send Synthesis Report
-    
-    state Phase2_Debate {
-        [*] --> Bull_Thesis : Argue Bull (with Citations)
-        Bull_Thesis --> Bear_Antithesis : Argue Bear (with Citations)
-        Bear_Antithesis --> Check_Rounds : Max rounds reached?
-        Check_Rounds --> Bull_Thesis : No
-        Check_Rounds --> Auditor_Node : Yes
-        Auditor_Node --> Research_Manager : Fact-Check Results
-        Research_Manager --> Generate_Consensus : Write Judge Decision
-    }
-    
-    Phase2_Debate --> Phase3_Risk : Send Research Evidence Brief
+    AnalystReports --> CrossExamination
+    CrossExamination --> Research
 
-    state Phase3_Risk {
-        [*] --> Risk_Panel : Surface upside, downside, and neutral guardrails
-        Risk_Panel --> PM_Decision : Non-executable evidence only
+    state Research {
+        [*] --> Synthesis
+        Synthesis --> BullBearDebate
+        BullBearDebate --> Audit
+        Audit --> ResearchManager
     }
-    
-    PM_Decision --> [*] : One final direction, sizing, stops, targets, and save state
+
+    ResearchManager --> RiskPanel
+
+    state RiskPanel {
+        [*] --> AggressiveRisk
+        [*] --> ConservativeRisk
+        [*] --> NeutralRisk
+        AggressiveRisk --> RiskEvidence
+        ConservativeRisk --> RiskEvidence
+        NeutralRisk --> RiskEvidence
+    }
+
+    RiskEvidence --> PortfolioManager
+    PortfolioManager --> Validation
+    Validation --> [*]
 ```
 
----
-
-## 2. Phase 1: Analyst Plugins & Synthesis
-
-Each active analyst node queries third-party libraries (e.g. `yFinance`, `AlphaVantage`, or web searches) and processes the raw data.
-*   **Chain-of-Thought (CoT):** Analysts are now instructed to follow a multi-step reasoning process (Data Extraction -> Metric Evaluation -> Contextual Synthesis) before producing their report.
-*   **Standardized Output:** All analyst reports follow a fixed structure: Executive Summary, Detailed Analysis, and a Data Table.
-*   **Data-Hash Caching:** Every analyst (except `review`) uses SHA-256 data-hash caching. Before calling the LLM, the analyst fetches its input data, computes a hash of `(analyst_key, ticker, trade_date, data)`, and checks the `AnalystReportCache` table. If a cached report exists with the same hash, it is returned immediately without an LLM call — saving tokens and latency. The hash changes automatically when underlying data changes (news, prices, fundamentals), so stale cache is impossible.
-*   **Synthesis Manager:** Before the debate begins, the Synthesis Manager reviews all analyst reports to identify **Alignments** (agreements) and **Conflicts** (contradictions). These conflicts set the primary agenda for the Bull vs. Bear debate.
+The exact graph node names and conditional routing live in `backend/trading_agents/graph/`; this document describes the responsibility boundaries rather than duplicating every implementation detail.
 
 ---
 
-## 3. Phase 2: The Investment Debate & Audit
+## 2. Analyst Stage
 
-To prevent confirmation bias and ensure factual accuracy, the system employs an adversarial debate and a final audit:
-1.  **Bull Researcher (`bull_researcher.py`):** Acts as a high-conviction investor. It MUST cite specific metrics from the analyst reports and address the conflicts identified by the Synthesis Manager.
-2.  **Bear Researcher (`bear_researcher.py`):** Acts as a short-seller. It highlights risks and dismantles bullish assumptions using specific evidence and citations.
-3.  **The Debate Loop:** The state machine alternates between the Bull and Bear nodes for a configurable number of rounds.
-4.  **Auditor Node (`auditor_node.py`):** A real-time fact-checker that reviews the debate transcript against the original analyst reports. It identifies hallucinations or unsupported claims before the final decision is made.
-5.  **Research Manager (`research_manager.py`):** Acts as the judge. It reads the debate transcript AND the Auditor's report to produce a final consolidated thesis document.
+The Market Intelligence portion of the graph executes the enabled analyst plugins. The current catalog contains 12 specialist roles:
+
+1. Market / Technical
+2. Social Sentiment
+3. News
+4. Fundamentals
+5. Macroeconomics
+6. Options Chain
+7. Quantitative Factor
+8. Earnings Call
+9. Performance Review
+10. Catalyst
+11. Insider Activity
+12. Institutional Ownership
+
+Analysts gather data through the tool/dataflow layer and produce structured evidence for downstream stages. They are not permitted to own the final portfolio direction or execution quantity.
+
+The active set of analysts is controlled by the agent catalog/hierarchy and user access/settings. Tool availability is resolved separately through the modular tool registry.
 
 ---
 
-## 4. Phase 3: Risk Debate and Single Final Execution Authority
+## 3. Synthesis, Cross-Examination, and Research Debate
 
-Once the investment thesis is finalized, the evidence flows to a risk panel and then to one execution authority:
-1.  **Research Manager:** Produces a non-executable Bullish / Neutral / Bearish evidence brief with key evidence and invalidation conditions.
-2.  **Risk Debate:** Aggressive, conservative, and neutral perspectives identify upside, downside, and guardrails. They do not emit Buy/Sell/Hold, quantities, prices, stops, or leverage.
-3.  **Portfolio Manager (`portfolio_manager.py`):** Receives every active analyst summary plus synthesis, audit, Q&A, the research brief, risk transcript, prior lessons, and the live portfolio. It is the only AI output allowed to set the final rating, confidence, entry, stop loss, take profit, allocation, capital, and leverage. The deterministic execution layer then applies hard portfolio controls before any optional simulated order.
+After analyst evidence is available, the system resolves agreement and conflict before final risk evaluation.
+
+The research layer can include:
+
+- synthesis of analyst reports
+- inter-agent/cross-examination context
+- Bull/Bear thesis debate
+- auditing/fact checking of claims against upstream evidence
+- Research Manager consolidation
+
+The purpose of this layer is to improve evidence quality and expose unsupported claims. Research agents do not bypass the final Portfolio Manager.
 
 ---
 
-## 5. Phase 5: Self-Correction (Deferred Reflection)
+## 4. Risk Debate
 
-TradingAgents includes a feedback loop that evaluates past decisions using historical data:
+The risk stage contains aggressive, conservative, and neutral perspectives.
+
+Their responsibility is to surface evidence such as:
+
+- downside and invalidation scenarios
+- upside conditions
+- liquidity or concentration concerns
+- exposure and portfolio constraints
+- unresolved uncertainty
+- risk/reward considerations
+
+Risk agents are **non-executable evidence producers**. They do not independently emit the final Buy/Sell/Hold action, final quantity, allocation, leverage, stop, target, or broker order.
+
+This boundary is intentional: risk personas influence the final decision but do not compete for execution authority.
+
+---
+
+## 5. Portfolio Manager
+
+The Portfolio Manager is the sole AI stage that produces the final structured investment decision.
+
+It consumes the available upstream context, which may include:
+
+- active analyst reports
+- synthesis/cross-examination output
+- Bull/Bear research transcript
+- audit/research-manager result
+- risk-panel evidence
+- relevant portfolio state
+- configured persona/settings
+- available historical lessons/memory context
+
+Its output can include the final rating, confidence, intended allocation/capital, entry, stop, target, and leverage fields supported by the current schema.
+
+This is still **portfolio intent**, not guaranteed execution.
+
+---
+
+## 6. Deterministic Execution Controls
+
+Any optional trade created from an analysis must pass application-side controls outside the LLM decision itself.
+
+Depending on the configured execution path, controls can include:
+
+- available cash
+- position/concentration limits
+- gross exposure limits
+- per-trade risk settings
+- stop/risk validation
+- broker/trading mode
+- user/server execution settings
+
+These controls can reduce, reject, or prevent the Portfolio Manager proposal. Code that places orders should consume the final structured Portfolio Manager decision, not intermediate analyst or risk-agent text.
+
+---
+
+## 7. Reflection and Historical Learning
+
+TradingAgents contains mechanisms for feeding historical outcomes and prior analysis context back into later runs. The exact behavior depends on enabled settings and configured memory components.
+
+Do not assume that every run has external/vector memory enabled. Memory/provider configuration is user/runtime dependent, and the graph must continue to work when those optional integrations are unavailable.
+
+Historical performance and review information should be treated as evidence for future decisions rather than as a hardcoded substitute for current market data.
+
+---
+
+## 8. Analyst Report Caching
+
+The runtime may cache analyst outputs when the relevant input-data identity matches a previous run. Caching is an optimization to reduce redundant model calls and latency; it is not a guarantee that external market data can never become stale.
+
+When extending caching logic:
+
+- include all material inputs in cache identity
+- preserve user/tool configuration boundaries where they affect output
+- avoid sharing user-sensitive context across users
+- make invalidation behavior explicit
+
+---
+
+## 9. LLM Resolution
+
+Agent LLM selection is resolved through the existing runtime hierarchy/settings rather than hardcoded per node.
+
+Provider/model metadata comes from:
 
 ```text
-Run Ticker "AAPL" on Day N
-   │
-   ├── 1. Read AAPL's past decisions from Memory Log
-   ├── 2. Are there pending decisions older than holding_days (e.g. 5 days)?
-   │      └── Yes:
-   │          ├── Query yFinance for AAPL's actual return over those 5 days
-   │          ├── Compare returns against the benchmark index (SPY) to calculate Alpha
-   │          ├── Spawns Reflector agent to evaluate the past decision's strengths/weaknesses
-   │          └── Write results & reflection back to Memory Log
-   │
-   └── 3. Prepend reflections as "past_context" to the Portfolio Manager's current prompt
+backend/trading_agents/llm_clients/registry.py
 ```
 
-This ensures the Portfolio Manager is aware of past errors (e.g., setting a stop-loss too tight during high volatility, or ignoring macroeconomic indicators) when making new decisions for that asset.
+and is exposed to the UI through:
+
+```text
+GET /api/settings/llm-catalog
+```
+
+Provider-specific reasoning controls belong in the LLM client/runtime layer.
 
 ---
 
-## 6. Advanced Institutional Features
+## 10. Tool Resolution
 
-To provide professional-grade analysis, the system includes several advanced modules:
+Analyst tools use the modular registry under:
 
-### SEC & Insider Intelligence
-The **Fundamentals Analyst** leverages specialized tools (`get_sec_filings`, `get_insider_transactions_deep`) to monitor regulatory filings and management sentiment. High-volume insider buying is treated as a high-conviction bullish signal, while delayed filings or excessive selling trigger caution flags.
+```text
+backend/trading_agents/agents/tools/
+```
 
-### Mathematical Risk Sizing (Kelly Criterion)
-The **Portfolio Manager** produces the only AI confidence and allocation recommendation; the deterministic execution layer applies mathematical risk sizing and hard portfolio caps.
-*   **Win Probability:** Derived from the Portfolio Manager's calibrated confidence score.
-*   **Risk/Reward:** Calculated from precise entry, stop-loss, and take-profit targets.
-*   **Sizing Formula:** `K% = W - [(1 - W) / R]`, capped by user settings to ensure portfolio safety.
+Tool activation can depend on global defaults, user settings, analyst reachability, and access permissions. The resolved tool context is injected into a run before analyst execution.
 
-### Continuous Learning & Backtest Loop
-The **Synthesis Manager** automatically runs historical backtests (`macd_crossover`, `rsi_oversold`) on the asset before the debate begins.
-*   **Strict Learning:** If the **Strict Backtest Learning** setting is enabled, the Research Manager MUST justify any recommendation that contradicts poor historical performance (< 50% win rate).
-*   **Hindsight Feedback:** Past failures identified by the Review Analyst are injected as hard constraints into the current analytical cycle.
+See [`modular_tool_system.md`](modular_tool_system.md) for tool registration and permission details.
+
+---
+
+## 11. Real-Time Events
+
+Analysis execution emits progress/report/debate events to the application event bus. In single-process mode they can be forwarded directly to connected WebSocket clients. With Redis enabled, the event bus can move those events across processes so the web process can stream work performed by an `arq` worker.
+
+The analysis WebSocket endpoint is:
+
+```text
+/ws/analysis/{task_id}
+```
+
+JWT authentication must remain outside the URL and follow the existing WebSocket subprotocol design.
+
+---
+
+## 12. Source-of-Truth Rule
+
+When this document conflicts with code, use the following implementation sources to resolve the mismatch:
+
+- `backend/trading_agents/agent_catalog.py`
+- `backend/trading_agents/agents/hierarchy.py`
+- `backend/trading_agents/agents/analyst_registry.py`
+- `backend/trading_agents/graph/`
+- `backend/trading_agents/agents/tools/`
+- `backend/trading_agents/llm_clients/registry.py`
+- the final decision schema consumed by the application execution layer
+
+Planned analysts, vendor integrations, or automated trading ideas should not be added here as implemented features until production code exists.
