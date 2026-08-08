@@ -15,16 +15,18 @@ from backend.trading_agents.llm_clients.base_client import is_provider_function_
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
+
 def bind_structured(llm: Any, schema: type[T], agent_name: str) -> Any | None:
     try:
         return llm.with_structured_output(schema)
-    except (NotImplementedError, AttributeError) as exc:
+    except (NotImplementedError, AttributeError, TypeError, ValueError) as exc:
         logger.warning(
             "%s: provider does not support with_structured_output (%s); falling back to free-text generation",
             agent_name,
             exc,
         )
         return None
+
 
 def extract_json_block(text: str) -> str | None:
     """Extract a JSON substring from text, supporting markdown blocks or raw bounds."""
@@ -44,13 +46,16 @@ def extract_json_block(text: str) -> str | None:
 
     return None
 
+
 def validate_schema(schema: type[T], parsed_dict: dict) -> T:
     """Validate structured output with the project's Pydantic v2 contract."""
     return schema.model_validate(parsed_dict)
 
+
 def get_json_schema(schema: type[T]) -> str:
     """Export the Pydantic v2 JSON schema used for self-correction prompts."""
     return json.dumps(schema.model_json_schema(), indent=2)
+
 
 def parse_and_validate(text: str, schema: type[T]) -> T:
     """Extract a JSON block from ``text`` and validate it against ``schema``.
@@ -62,24 +67,28 @@ def parse_and_validate(text: str, schema: type[T]) -> T:
     json_str = extract_json_block(text) or text.strip()
     return validate_schema(schema, json.loads(json_str))
 
-def _coerce_structured_result(result: Any, schema: type[T]) -> Any:
-    """Normalize a ``with_structured_output`` result into a validated model.
 
-    Handles the three shapes a provider may return: an already-built model, a
-    plain dict, or an AIMessage/string carrying JSON. Returns the raw ``result``
-    unchanged when it cannot be coerced.
+def _coerce_structured_result(result: Any, schema: type[T]) -> T:
+    """Normalize a structured provider result into a validated model.
+
+    A schema-bound call has a strict boundary: callers may only receive the
+    requested Pydantic model (or, after the outer fallback path, plain text).
+    Provider-specific ``AIMessage`` objects/content blocks must never escape
+    this helper as if they were a successfully validated result.
     """
     if isinstance(result, schema):
         return result
     if isinstance(result, dict):
         return validate_schema(schema, result)
-    content = getattr(result, "content", result)
-    if isinstance(content, str):
-        try:
-            return parse_and_validate(content, schema)
-        except Exception as _e:
-            logger.debug("parse_and_validate failed, returning raw result: %s", _e)
-    return result
+
+    text = llm_text(result).strip()
+    if not text:
+        raise ValueError(f"Structured provider returned no parseable text for {schema.__name__}")
+    try:
+        return parse_and_validate(text, schema)
+    except Exception as exc:
+        raise ValueError(f"Structured provider result did not match {schema.__name__}: {exc}") from exc
+
 
 async def self_correct_structured(
     plain_llm: Any,
@@ -138,6 +147,7 @@ async def self_correct_structured(
         )
         return None
 
+
 def _is_quota_exhausted(exc: Exception) -> bool:
     """Check if the error indicates a hard quota exhaustion (not a transient rate limit).
 
@@ -150,15 +160,18 @@ def _is_quota_exhausted(exc: Exception) -> bool:
         return True
     return "resourceexhausted" in err_msg and ("total" in err_msg or "quota" in err_msg)
 
+
 def _is_rate_limit(exc: Exception) -> bool:
     """Check if the error is a transient rate limit (429) worth retrying."""
     err_msg = str(exc).lower()
     return "429" in err_msg or "rate limit" in err_msg or "rate_limit" in err_msg
 
+
 def _is_server_error(exc: Exception) -> bool:
     """Check if the error is a transient server error worth retrying."""
     err_msg = str(exc).lower()
     return "503" in err_msg or "service unavailable" in err_msg or "502" in err_msg
+
 
 async def _retry_llm_call(
     llm: Any,
@@ -206,7 +219,9 @@ async def _retry_llm_call(
                     exc,
                 )
                 await asyncio.sleep(delay)
+    assert last_exc is not None
     raise last_exc
+
 
 async def ainvoke_structured_or_freetext(
     structured_llm: Any | None,
@@ -217,8 +232,10 @@ async def ainvoke_structured_or_freetext(
 ) -> Any:
     """Invoke with structured output, falling back to parsing/self-correction on failure.
 
-    If schema is provided, we guarantee validation of the returned Pydantic model
-    by extracting JSON from free text and running a self-correction loop if it fails.
+    With a schema, the return contract is deliberately narrow: a validated
+    instance of that schema, or plain text after every structured/parsing
+    recovery path has been exhausted. Arbitrary provider response objects are
+    never returned to callers.
     """
     if structured_llm is not None:
         try:
@@ -234,7 +251,7 @@ async def ainvoke_structured_or_freetext(
                 )
                 raise
             logger.warning(
-                "%s: structured-output ainvocation failed (%s); falling back to parsing free-text",
+                "%s: structured-output invocation/coercion failed (%s); falling back to parsing free-text",
                 agent_name,
                 exc,
             )
