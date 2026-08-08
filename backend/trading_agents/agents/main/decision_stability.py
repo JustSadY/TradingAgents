@@ -94,9 +94,6 @@ def _quality_from_state(state: Mapping[str, Any], selected_analysts: list[str]) 
     except Exception:
         report_score = 0.0
     if source_quality is not None:
-        # A very complete text run with only one evidence domain should not be
-        # treated as a high-quality reversal, and vice versa.  The lower score
-        # is a conservative shared gate.
         score = min(source_quality.score, report_score) if report_score else source_quality.score
         available = source_quality.available_evidence_groups
         unavailable = source_quality.unavailable_evidence_groups
@@ -131,8 +128,7 @@ def _evidence_for_controller(state: Mapping[str, Any]) -> tuple[dict[str, dict[s
         if not items:
             continue
         flattened.extend(items)
-        # Preserve one strongest independently usable source per evidence
-        # group.  The pure controller separately deduplicates source families.
+
         def strength(item: dict[str, Any]) -> float:
             raw = item.get("evidence_strength", item.get("strength", "none"))
             return _STRENGTH_VALUES.get(str(raw).lower(), 0.0)
@@ -153,36 +149,16 @@ def _invalidation_items(state: Mapping[str, Any]) -> list[dict[str, Any]]:
     return [_mapping(item) for item in raw] if isinstance(raw, list) else []
 
 
-def _hard_risk_from_state(
-    state: Mapping[str, Any],
-    invalidations: list[dict[str, Any]],
-) -> object:
-    """Return an explicit emergency input for the deterministic controller.
+def _hard_risk_from_state(state: Mapping[str, Any]) -> object:
+    """Return only an application-owned deterministic hard-risk event.
 
-    A caller may still supply a stop/drawdown/portfolio breach through the
-    reserved ``hard_risk_exit`` state field.  Independently, a *structured,
-    explicitly triggered critical* thesis invalidation has unambiguous
-    emergency semantics: it must be allowed to reduce or exit risk even while
-    stability enforcement is in shadow/off mode.  Ordinary material/watch
-    invalidations remain subject to normal hysteresis.
+    Thesis invalidations are research evidence. Even a validated CRITICAL
+    invalidation must pass normal stability/reversal policy and can never turn
+    shadow/off mode into live execution by itself. Emergency bypass is reserved
+    for deterministic application inputs such as stop breaches, drawdown or
+    portfolio/broker risk violations placed in ``hard_risk_exit``.
     """
-
-    explicit = state.get("hard_risk_exit")
-    if explicit:
-        return explicit
-
-    critical_ids = [
-        str(item.get("condition_id") or item.get("id") or "critical_invalidation")
-        for item in invalidations
-        if str(item.get("severity") or "").strip().lower() == "critical"
-    ]
-    if not critical_ids:
-        return None
-    return {
-        "triggered": True,
-        "reason_code": "critical_thesis_invalidation",
-        "invalidation_condition_ids": critical_ids,
-    }
+    return state.get("hard_risk_exit") or None
 
 
 def _thresholds(ctx: AgentRunContext) -> StabilityThresholds:
@@ -231,9 +207,6 @@ def _strategic_state(state: Mapping[str, Any]) -> StrategicState:
 def _tactical_action(rating: PortfolioRating, execution_action: str) -> TacticalAction:
     if execution_action == "reduce_only":
         if rating in {PortfolioRating.BUY, PortfolioRating.OVERWEIGHT}:
-            # A Buy-shaped order can be risk reducing only when it covers an
-            # existing short.  Keep that distinction explicit so the accepted
-            # decision never mislabels a forced cover as new long exposure.
             return TacticalAction.COVER_SHORT
         if rating is PortfolioRating.SELL:
             return TacticalAction.EXIT
@@ -271,7 +244,7 @@ async def _verify_major_reversal(
             rationale="Major reversal verifier is disabled; enforcement cannot approve this reversal.",
         )
     prompt = f"""You are a narrow reversal verifier. Do not make a new investment decision.
-Determine whether this major rating reversal has at least two independent evidence groups
+Determine whether this signed-exposure reversal has at least two independent evidence groups
 and an explicit thesis invalidation.
 
 Previous accepted decision: {_mapping(evaluation.get('previous_accepted_decision'))}
@@ -280,7 +253,7 @@ Independent evidence summary: {evidence}
 Triggered invalidations: {invalidations}
 
 Return only a ReversalVerification. APPROVE only when the evidence explicitly
-justifies abandoning the prior strategy."""
+justifies crossing from long to short or short to long exposure."""
     try:
         result = await ainvoke_structured_or_freetext(
             bind_structured(ctx.llm_for("strategy_reconciler"), ReversalVerification, "Reversal Verifier"),
@@ -393,9 +366,6 @@ def create_decision_stability_controller_node(ctx: AgentRunContext) -> NodeFn:
         quality = _quality_from_state(state, ctx.selected_analysts)
         controller_enabled = ctx.is_enabled(MAIN_KEY)
         mode = str(ctx.config.get("decision_stability_mode", "shadow") or "shadow").lower()
-        # The catalog switch must remain a true kill-switch.  Retain a
-        # deterministic counterfactual for auditability, but spend no verifier
-        # tokens and never enforce a non-emergency change while it is off.
         if not controller_enabled:
             mode = "off"
         calibration = calibrate_confidence(
@@ -407,7 +377,7 @@ def create_decision_stability_controller_node(ctx: AgentRunContext) -> NodeFn:
         )
         evidence_groups, evidence = _evidence_for_controller(state)
         invalidations = _invalidation_items(state)
-        hard_risk = _hard_risk_from_state(state, invalidations)
+        hard_risk = _hard_risk_from_state(state)
         candidate = _mapping(state.get("strategy_candidate_json"))
         evaluation = evaluate_decision_stability(
             proposal.proposed_decision.model_dump(mode="json"),
@@ -443,9 +413,8 @@ def create_decision_stability_controller_node(ctx: AgentRunContext) -> NodeFn:
         controller_json = transition.accepted_decision.decision.model_dump(mode="json")
         controller_json["execution_action"] = transition.accepted_decision.execution_action.value.lower()
         controller_json["tactical_action"] = transition.accepted_decision.tactical_action.value.lower()
-        # Shadow keeps historical PM execution semantics intact but stores the
-        # controller's counterfactual in the transition.  Hard safety exits are
-        # intentionally never shadowed.
+        # Shadow/off are strictly counterfactual. Only application-owned hard
+        # risk events bypass those rollout modes.
         enforce = (controller_enabled and mode == "enforce") or str(evaluation.get("status")) == "hard_risk_exit"
         canonical = controller_json if enforce else proposed_json
         canonical_text = transition.accepted_decision.decision if enforce else proposal.proposed_decision
