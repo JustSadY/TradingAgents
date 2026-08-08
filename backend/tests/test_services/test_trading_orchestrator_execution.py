@@ -24,6 +24,25 @@ class _FakeTrader:
             filled_quantity=request.quantity,
         )
 
+
+async def test_historical_or_time_travel_result_can_never_place_an_order():
+    result = await place_signal_order(
+        object(),
+        ticker="NVDA",
+        row=SimpleNamespace(
+            signal="Buy",
+            analysis_mode="historical",
+            portfolio_decision_json={"rating": "Buy", "position_size_pct": 10.0},
+            final_decision="",
+        ),
+        settings=_opening_settings(),
+        include_skip_result=True,
+    )
+
+    assert result is not None
+    assert result.status == "SKIPPED"
+    assert result.reason_code == "non_live_analysis"
+
 @pytest.mark.parametrize(
     ("signal", "holding_side", "expected_action"),
     [

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import axios from 'axios'
 import Settings from '../Settings'
 
@@ -27,6 +27,14 @@ vi.mock('../../contexts/LanguageContext', () => ({
         'settings.general': 'General',
         'settings.llm': 'AI Configuration',
         'settings.risk': 'Risk & Safety',
+        'settings.section_strategy_continuity': 'Strategy Continuity & Decision Stability',
+        'settings.row_decision_stability_mode': 'Decision Stability Mode',
+        'settings.decision_stability_off': 'Off',
+        'settings.decision_stability_shadow': 'Shadow — record only',
+        'settings.decision_stability_enforce': 'Enforce',
+        'settings.row_stability_min_quality': 'Min. Change Quality',
+        'settings.row_stability_min_confidence': 'Min. Calibrated Confidence',
+        'settings.row_stability_min_evidence_groups': 'Min. Independent Evidence Groups',
       }
       return map[key] || key
     },
@@ -131,5 +139,49 @@ describe('Settings', () => {
     expect(screen.getByDisplayValue('24')).toBeInTheDocument()
     expect(screen.getByText('settings.alert_ai_limit_hint')).toBeInTheDocument()
     expect(screen.getByText('settings.alert_cooldown_hint')).toBeInTheDocument()
+  })
+
+  it('renders and saves strategy continuity controls from the risk settings permission', async () => {
+    vi.mocked(axios.get).mockImplementation((url: string) => {
+      if (url === '/api/settings') {
+        return Promise.resolve({ data: {
+          strategy_learning_enabled: true,
+          decision_stability_mode: 'shadow',
+          decision_stability_min_quality: 70,
+          decision_stability_min_confidence: 0.65,
+          decision_stability_min_evidence_groups: 2,
+          reversal_verifier_enabled: true,
+          confidence_calibration_enabled: false,
+          regime_aware_weighting_enabled: false,
+          fallback_llm_chain: [],
+          webhook_events: [],
+        } })
+      }
+      if (url === '/api/presets') return Promise.resolve({ data: [] })
+      if (url === '/api/users/me/setting-permissions') return Promise.resolve({ data: { allowed_settings: ['risk'] } })
+      if (url === '/api/cron/status') return Promise.resolve({ data: null })
+      if (url === '/api/settings/llm-catalog') return Promise.resolve({ data: {} })
+      return Promise.resolve({ data: {} })
+    })
+
+    render(<Settings />)
+
+    const mode = await screen.findByRole('combobox', { name: 'Decision Stability Mode' })
+    expect(mode).toHaveValue('shadow')
+    expect(screen.getByLabelText('Min. Change Quality')).toHaveValue(70)
+    expect(screen.getByLabelText('Min. Calibrated Confidence')).toHaveValue(0.65)
+    expect(screen.getByLabelText('Min. Independent Evidence Groups')).toHaveValue(2)
+
+    fireEvent.change(mode, { target: { value: 'enforce' } })
+    fireEvent.click(screen.getByRole('button', { name: /Save/ }))
+
+    await waitFor(() => {
+      expect(axios.put).toHaveBeenCalledWith('/api/settings', expect.objectContaining({
+        decision_stability_mode: 'enforce',
+        decision_stability_min_quality: 70,
+        decision_stability_min_confidence: 0.65,
+        decision_stability_min_evidence_groups: 2,
+      }))
+    })
   })
 })

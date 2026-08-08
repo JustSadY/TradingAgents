@@ -36,7 +36,15 @@ def create_macro_analyst(llm):
         instrument_context = build_instrument_context(state["company_of_interest"])
         ticker = state.get("company_of_interest", "")
         trade_date = state.get("trade_date", "")
-        run_market_snapshot = state.get("past_context", "")
+        # ``past_context`` contains attribution and signal-replay history,
+        # including prior Buy/Sell outcomes.  Fresh analysts must not see the
+        # previous accepted decision or its directional proxies; only the
+        # neutral planner agenda is allowed into their prompt via the shared
+        # analyst runner below.  Macro data is re-fetched point-in-time here.
+        run_market_snapshot = (
+            "No prior directional decision, signal replay, or performance attribution is supplied. "
+            "Use the point-in-time macro tools for the current assessment."
+        )
 
         try:
             data = await route_to_vendor("get_global_news", trade_date, 1, 10)

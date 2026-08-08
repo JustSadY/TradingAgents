@@ -1,6 +1,7 @@
 from .agent_settings import AgentSetting
 from .alert import PriceAlert
 from .alert_outbox import AlertOutbox
+from .asset_strategy import ASSET_STRATEGY_ACTIVE, AssetStrategy, AssetStrategyVersion
 from .analysis import AnalysisChat, AnalysisResult
 from .assistant import AssistantMessage, AssistantPendingAction
 from .log import SystemLog
@@ -31,6 +32,9 @@ __all__ = [
     "Order",
     "AnalysisResult",
     "AnalysisChat",
+    "ASSET_STRATEGY_ACTIVE",
+    "AssetStrategy",
+    "AssetStrategyVersion",
     "SystemLog",
     "AgentToolSetting",
     "UserAgentAccess",

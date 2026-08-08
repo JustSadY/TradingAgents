@@ -14,7 +14,6 @@ from __future__ import annotations
 import json
 import logging
 import math
-from datetime import UTC, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -111,11 +110,12 @@ def _as_mapping(raw) -> dict:
     return {}
 
 def _portfolio_decision(row) -> dict:
-    """Return the Portfolio Manager's structured decision when available.
+    """Return the controller-accepted structured decision when available.
 
-    The Portfolio Manager is the only AI authority for entry, exits, leverage,
-    and requested allocation. Historical Trader fields are intentionally not
-    an execution fallback: those records remain display-only.
+    ``AnalysisResult.portfolio_decision_json`` is the physical canonical field
+    and is intentionally checked before the legacy chart-annotation fallback.
+    Raw ``pm_proposal_json`` and historical Trader fields are never execution
+    fallbacks.
     """
     annotations = _annotations(row)
     for raw in (
@@ -456,6 +456,21 @@ async def place_signal_order(
     outcome with a safe reason code (used by the live analysis stream).
     The caller is responsible for committing the transaction.
     """
+    analysis_mode = str(getattr(row, "analysis_mode", "live") or "live").lower()
+    if analysis_mode != "live":
+        return _skipped_order(
+            reason_code="non_live_analysis",
+            message="Historical and time-travel analyses are non-executing; no order was sent.",
+            include_skip_result=include_skip_result,
+        )
+
+    if str(getattr(row, "strategy_update_status", "") or "").lower() == "conflict":
+        return _skipped_order(
+            reason_code="strategy_conflict",
+            message="The asset strategy changed concurrently; this stale analysis cannot place an order.",
+            include_skip_result=include_skip_result,
+        )
+
     pm_decision = _portfolio_decision(row)
     if not pm_decision:
         return _skipped_order(
@@ -465,6 +480,13 @@ async def place_signal_order(
         )
 
     signal = str(pm_decision.get("rating", "") or "").strip()
+    execution_action = str(pm_decision.get("execution_action", "") or "").strip().lower()
+    if execution_action in {"no_new_order", "no_order", "freeze"}:
+        return _skipped_order(
+            reason_code="decision_stability_no_order",
+            message="The accepted decision stability contract prohibits a new order.",
+            include_skip_result=include_skip_result,
+        )
     action = SIGNAL_TO_ACTION.get(signal)
     if action is None:
         if signal == "Hold":
@@ -604,6 +626,12 @@ async def place_signal_order(
             include_skip_result=include_skip_result,
         )
     opening_exposure = intent in {"open_long", "open_short"}
+    if execution_action == "reduce_only" and opening_exposure:
+        return _skipped_order(
+            reason_code="decision_stability_reduce_only",
+            message="The accepted decision allows only risk reduction, not new exposure.",
+            include_skip_result=include_skip_result,
+        )
     position_side = "short" if intent in {"open_short", "close_short"} else "long"
 
     if opening_exposure and getattr(settings, "drawdown_breaker_enabled", False):

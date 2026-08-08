@@ -17,6 +17,9 @@ class Propagator:
         trade_date: str,
         asset_type: str = "stock",
         past_context: str = "",
+        strategy_context: dict[str, Any] | None = None,
+        analysis_mode: str = "live",
+        learning_eligible: bool = True,
     ) -> dict[str, Any]:
         state = {
             "messages": [("human", company_name)],
@@ -24,6 +27,12 @@ class Propagator:
             "asset_type": asset_type,
             "trade_date": str(trade_date),
             "past_context": past_context,
+            "strategy_context": dict(strategy_context or {}),
+            "analysis_plan_json": {},
+            "synthesis_json": {},
+            "market_regime_json": {},
+            "strategy_candidate_json": {},
+            "pm_proposal_json": {},
             "investment_debate_state": InvestDebateState(
                 {
                     "bull_history": "",
@@ -49,6 +58,10 @@ class Propagator:
                 }
             ),
             "portfolio_decision_json": "{}",
+            "decision_transition_json": {},
+            "calibrated_confidence": None,
+            "analysis_mode": analysis_mode,
+            "learning_eligible": bool(learning_eligible),
         }
         # Keep the state schema and its initial values in lockstep.  The
         # previous hand-written subset predated several optional analysts, so

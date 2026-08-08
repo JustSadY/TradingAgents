@@ -1025,6 +1025,110 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     )}
                   </div>
                 </div>
+
+                {/* 7. Strategy Continuity & Decision Stability */}
+                <div className="glass-panel rounded-2xl p-4 md:p-5 space-y-4 border border-white/[0.06] shadow-xl backdrop-blur-md">
+                  <div className="flex items-center gap-2.5 border-b border-white/[0.06] pb-3">
+                    <div className="p-1.5 rounded-lg bg-fuchsia-500/10 border border-fuchsia-500/20 text-fuchsia-300">
+                      <Brain className="w-4 h-4" />
+                    </div>
+                    <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
+                      {t('settings.section_strategy_continuity') || 'Strategy Continuity & Decision Stability'}
+                    </h3>
+                  </div>
+
+                  <p className="text-[11px] text-slate-400 leading-relaxed -mt-1">
+                    {t('settings.strategy_continuity_hint') || 'Shadow mode records the controller’s counterfactual without changing the Portfolio Manager’s executable decision.'}
+                  </p>
+
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                    <ToggleItem
+                      label={t('settings.row_strategy_learning') || 'Learn Active Asset Strategies'}
+                      hint={t('settings.strategy_learning_hint') || 'Persist live strategy revisions and use them as context for later analyses.'}
+                      checked={s.strategy_learning_enabled ?? true}
+                      onChange={v => update('strategy_learning_enabled', v)}
+                    />
+
+                    <RiskRowItem
+                      label={t('settings.row_decision_stability_mode') || 'Decision Stability Mode'}
+                      hint={s.decision_stability_mode === 'enforce'
+                        ? t('settings.decision_stability_enforce_warning') || 'Enforce can replace a proposal with Hold when change evidence is insufficient.'
+                        : undefined}
+                    >
+                      <select
+                        aria-label={t('settings.row_decision_stability_mode') || 'Decision Stability Mode'}
+                        className={CompactInputStyle}
+                        value={s.decision_stability_mode ?? 'shadow'}
+                        onChange={e => update('decision_stability_mode', e.target.value)}
+                      >
+                        <option value="off">{t('settings.decision_stability_off') || 'Off'}</option>
+                        <option value="shadow">{t('settings.decision_stability_shadow') || 'Shadow'}</option>
+                        <option value="enforce">{t('settings.decision_stability_enforce') || 'Enforce'}</option>
+                      </select>
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_stability_min_quality') || 'Min. Change Quality'} unit="%">
+                      <input
+                        aria-label={t('settings.row_stability_min_quality') || 'Min. Change Quality'}
+                        type="number"
+                        min="0"
+                        max="100"
+                        step="1"
+                        className={CompactInputStyle}
+                        value={s.decision_stability_min_quality ?? 70}
+                        onChange={e => update('decision_stability_min_quality', Number.parseInt(e.target.value) || 0)}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_stability_min_confidence') || 'Min. Calibrated Confidence'} unit="0–1">
+                      <input
+                        aria-label={t('settings.row_stability_min_confidence') || 'Min. Calibrated Confidence'}
+                        type="number"
+                        min="0"
+                        max="1"
+                        step="0.01"
+                        className={CompactInputStyle}
+                        value={s.decision_stability_min_confidence ?? 0.65}
+                        onChange={e => update('decision_stability_min_confidence', Number.parseFloat(e.target.value) || 0)}
+                      />
+                    </RiskRowItem>
+
+                    <RiskRowItem label={t('settings.row_stability_min_evidence_groups') || 'Min. Independent Evidence Groups'} unit="#" className="md:col-span-2">
+                      <input
+                        aria-label={t('settings.row_stability_min_evidence_groups') || 'Min. Independent Evidence Groups'}
+                        type="number"
+                        min="1"
+                        max="10"
+                        step="1"
+                        className={CompactInputStyle}
+                        value={s.decision_stability_min_evidence_groups ?? 2}
+                        onChange={e => update('decision_stability_min_evidence_groups', Number.parseInt(e.target.value) || 1)}
+                      />
+                    </RiskRowItem>
+
+                    <ToggleItem
+                      label={t('settings.row_reversal_verifier') || 'Verify Major Reversals'}
+                      hint={t('settings.reversal_verifier_hint') || 'Require an extra independent-evidence check before a major BUY↔SELL reversal is accepted.'}
+                      checked={s.reversal_verifier_enabled ?? true}
+                      onChange={v => update('reversal_verifier_enabled', v)}
+                    />
+
+                    <ToggleItem
+                      label={t('settings.row_confidence_calibration') || 'Calibrate PM Confidence'}
+                      hint={t('settings.confidence_calibration_hint') || 'Use realised outcomes to adjust raw Portfolio Manager confidence before stability checks.'}
+                      checked={s.confidence_calibration_enabled ?? false}
+                      onChange={v => update('confidence_calibration_enabled', v)}
+                    />
+
+                    <ToggleItem
+                      label={t('settings.row_regime_aware_weighting') || 'Regime-Aware Analyst Weighting'}
+                      hint={t('settings.regime_aware_weighting_hint') || 'Weight analyst history by the current market regime when enough realised evidence exists.'}
+                      checked={s.regime_aware_weighting_enabled ?? false}
+                      onChange={v => update('regime_aware_weighting_enabled', v)}
+                      className="md:col-span-2"
+                    />
+                  </div>
+                </div>
               </div>
             </ErrorBoundary>
           )}

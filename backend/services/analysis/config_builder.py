@@ -68,6 +68,10 @@ def inject_tool_credentials(config: dict) -> None:
 
 def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -> dict:
     _vendor_default = getattr(sys_settings, "active_data_vendor", None) or "yfinance"
+    _raw_stability_mode = str(getattr(settings, "decision_stability_mode", "shadow") or "shadow").lower()
+    _stability_mode = _raw_stability_mode if _raw_stability_mode in {"off", "shadow", "enforce"} else "shadow"
+    if _raw_stability_mode != _stability_mode:
+        _logger.warning("Invalid decision_stability_mode=%r; using safe shadow mode", _raw_stability_mode)
 
     def _vendor(field: str) -> str:
         return getattr(sys_settings, field, None) or _vendor_default
@@ -125,6 +129,18 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         "memory_recall_count": getattr(settings, "memory_recall_count", DEFAULT_CONFIG.get("memory_recall_count", 5))
         or DEFAULT_CONFIG.get("memory_recall_count", 5),
         "summary_only_mode": getattr(settings, "summary_only_mode", False),
+        "strategy_learning_enabled": bool(getattr(settings, "strategy_learning_enabled", True)),
+        "decision_stability_mode": _stability_mode,
+        "decision_stability_min_quality": int(getattr(settings, "decision_stability_min_quality", 70) or 70),
+        "decision_stability_min_confidence": float(
+            getattr(settings, "decision_stability_min_confidence", 0.65) or 0.65
+        ),
+        "decision_stability_min_evidence_groups": int(
+            getattr(settings, "decision_stability_min_evidence_groups", 2) or 2
+        ),
+        "reversal_verifier_enabled": bool(getattr(settings, "reversal_verifier_enabled", True)),
+        "confidence_calibration_enabled": bool(getattr(settings, "confidence_calibration_enabled", False)),
+        "regime_aware_weighting_enabled": bool(getattr(settings, "regime_aware_weighting_enabled", False)),
         "data_vendors": {
             "core_stock_apis": _vendor("data_vendor_core_stock"),
             "technical_indicators": _vendor("data_vendor_technicals"),

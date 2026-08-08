@@ -8,7 +8,9 @@ TradingAgents uses LangGraph to separate market evidence gathering, adversarial 
 
 ```mermaid
 stateDiagram-v2
-    [*] --> Analysts
+    [*] --> StrategyContext
+    StrategyContext --> AnalysisPlanner
+    AnalysisPlanner --> Analysts
 
     state Analysts {
         [*] --> RunEnabledAnalysts
@@ -36,8 +38,10 @@ stateDiagram-v2
         NeutralRisk --> RiskEvidence
     }
 
-    RiskEvidence --> PortfolioManager
-    PortfolioManager --> Validation
+    RiskEvidence --> StrategyReconciler
+    StrategyReconciler --> PortfolioManager
+    PortfolioManager --> StabilityController
+    StabilityController --> Validation
     Validation --> [*]
 ```
 
@@ -80,7 +84,7 @@ The research layer can include:
 - auditing/fact checking of claims against upstream evidence
 - Research Manager consolidation
 
-The purpose of this layer is to improve evidence quality and expose unsupported claims. Research agents do not bypass the final Portfolio Manager.
+The purpose of this layer is to improve evidence quality and expose unsupported claims. Research agents do not bypass the Portfolio Manager proposal or the downstream stability controller.
 
 ---
 
@@ -103,9 +107,16 @@ This boundary is intentional: risk personas influence the final decision but do 
 
 ---
 
-## 5. Portfolio Manager
+## 5. Strategy Reconciliation and Portfolio Manager
 
-The Portfolio Manager is the sole AI stage that produces the final structured investment decision.
+Before the Portfolio Manager, the Strategy Reconciler compares fresh structured
+evidence with the exact active Asset Strategy. It proposes one of `KEEP`,
+`STRENGTHEN`, `WEAKEN`, `INVALIDATE`, or `REBUILD`; it does not write to the
+database or place an order. Persistence happens transactionally after the
+graph run.
+
+The Portfolio Manager is the sole AI stage that produces a raw structured
+investment proposal.
 
 It consumes the available upstream context, which may include:
 
@@ -118,13 +129,35 @@ It consumes the available upstream context, which may include:
 - configured persona/settings
 - available historical lessons/memory context
 
-Its output can include the final rating, confidence, intended allocation/capital, entry, stop, target, and leverage fields supported by the current schema.
+Its output can include the proposed rating, confidence, intended allocation/capital, entry, stop, target, and leverage fields supported by the current schema.
 
-This is still **portfolio intent**, not guaranteed execution.
+This is still **portfolio intent**, not an accepted decision or guaranteed
+execution. The planner and analyst stage receive a neutral agenda derived from
+prior assumptions and invalidations, not the previous Buy/Sell rating.
 
 ---
 
-## 6. Deterministic Execution Controls
+## 6. Decision Stability and execution
+
+The deterministic Decision Stability Controller follows the Portfolio Manager.
+It compares the raw proposal with the prior **accepted** decision, run quality,
+calibrated confidence, structured independent evidence, and triggered
+invalidation conditions. Risk-increasing changes require more support than
+risk-reducing changes; major cross-zero reversals additionally require explicit
+invalidation and independent confirmation. A rejected reversal becomes Hold /
+no new order rather than replaying the prior directional order.
+
+`shadow` is the default rollout mode: it preserves the PM proposal for current
+execution semantics and stores what enforcement would have done. `enforce`
+makes the controller's accepted decision canonical. A hard risk exit bypasses
+hysteresis and remains reduce-only in every mode.
+
+See [`strategy_continuity.md`](strategy_continuity.md) for strategy versioning,
+optimistic locking, replay safety, and the rollout scorecard.
+
+---
+
+## 7. Deterministic Execution Controls
 
 Any optional trade created from an analysis must pass application-side controls outside the LLM decision itself.
 
@@ -138,21 +171,21 @@ Depending on the configured execution path, controls can include:
 - broker/trading mode
 - user/server execution settings
 
-These controls can reduce, reject, or prevent the Portfolio Manager proposal. Code that places orders should consume the final structured Portfolio Manager decision, not intermediate analyst or risk-agent text.
+These controls can reduce, reject, or prevent the accepted canonical decision. Code that places orders should consume `portfolio_decision_json`, not intermediate analyst/risk text or the raw PM proposal.
 
 ---
 
-## 7. Reflection and Historical Learning
+## 8. Reflection and Historical Learning
 
 TradingAgents contains mechanisms for feeding historical outcomes and prior analysis context back into later runs. The exact behavior depends on enabled settings and configured memory components.
 
 Do not assume that every run has external/vector memory enabled. Memory/provider configuration is user/runtime dependent, and the graph must continue to work when those optional integrations are unavailable.
 
-Historical performance and review information should be treated as evidence for future decisions rather than as a hardcoded substitute for current market data.
+Historical performance and review information should be treated as evidence for future decisions rather than as a hardcoded substitute for current market data. Historical/time-travel replays load strategy state as-of both its effective and recorded time and do not mutate strategy or learning stores.
 
 ---
 
-## 8. Analyst Report Caching
+## 9. Analyst Report Caching
 
 The runtime may cache analyst outputs when the relevant input-data identity matches a previous run. Caching is an optimization to reduce redundant model calls and latency; it is not a guarantee that external market data can never become stale.
 
@@ -165,7 +198,7 @@ When extending caching logic:
 
 ---
 
-## 9. LLM Resolution
+## 10. LLM Resolution
 
 Agent LLM selection is resolved through the existing runtime hierarchy/settings rather than hardcoded per node.
 
@@ -185,7 +218,7 @@ Provider-specific reasoning controls belong in the LLM client/runtime layer.
 
 ---
 
-## 10. Tool Resolution
+## 11. Tool Resolution
 
 Analyst tools use the modular registry under:
 
@@ -199,7 +232,7 @@ See [`modular_tool_system.md`](modular_tool_system.md) for tool registration and
 
 ---
 
-## 11. Real-Time Events
+## 12. Real-Time Events
 
 Analysis execution emits progress/report/debate events to the application event bus. In single-process mode they can be forwarded directly to connected WebSocket clients. With Redis enabled, the event bus can move those events across processes so the web process can stream work performed by an `arq` worker.
 
@@ -213,7 +246,7 @@ JWT authentication must remain outside the URL and follow the existing WebSocket
 
 ---
 
-## 12. Source-of-Truth Rule
+## 13. Source-of-Truth Rule
 
 When this document conflicts with code, use the following implementation sources to resolve the mismatch:
 

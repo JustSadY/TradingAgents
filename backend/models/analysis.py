@@ -1,9 +1,10 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import JSON, DateTime, Float, ForeignKey, Index, Integer, String, Text
+from sqlalchemy import JSON, Boolean, DateTime, Float, ForeignKey, Index, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from backend.core.database import Base
+
 
 class AnalysisResult(Base):
     __tablename__ = "analysis_results"
@@ -38,6 +39,34 @@ class AnalysisResult(Base):
     audit_report: Mapped[str] = mapped_column(Text, default="")
     agent_qa_report: Mapped[str] = mapped_column(Text, default="")
     investment_plan: Mapped[str] = mapped_column(Text, default="")
+    # The pre-analysis investigation brief and structured evidence are kept
+    # independently from the human-readable reports.  They are machine-facing
+    # inputs to the strategy/controller and must never be reconstructed by
+    # parsing Markdown on a later run.
+    analysis_plan_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    synthesis_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    market_regime_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    strategy_before_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    strategy_after_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    strategy_candidate_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    # PM proposal and controller-accepted decision intentionally have separate
+    # durable columns.  The executor is allowed to consume only the latter.
+    pm_proposal_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    portfolio_decision_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    decision_transition_json: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    calibrated_confidence: Mapped[float | None] = mapped_column(Float, nullable=True)
+    strategy_update_status: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    strategy_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("asset_strategies.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    strategy_before_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    strategy_after_version: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    # Historical/time-travel/shadow runs are auditable analysis artifacts, not
+    # live learning observations.  This prevents simulated outcomes from
+    # quietly entering calibration, analyst-weight, episodic-memory or active
+    # strategy learning.
+    analysis_mode: Mapped[str] = mapped_column(String(20), default="live", index=True)
+    learning_eligible: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
     trader_plan: Mapped[str] = mapped_column(Text, default="")
     final_decision: Mapped[str] = mapped_column(Text, default="")
     reflection: Mapped[str] = mapped_column(Text, default="")

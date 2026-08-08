@@ -14,15 +14,21 @@ The top-level graph (see ``graph/setup.py``) wires these linearly:
 """
 
 from .agent_qa import create_agent_qa_node
+from .analysis_planner import create_analysis_planner_node
+from .decision_stability import create_decision_stability_controller_node
 from .market_intelligence import create_market_intelligence_node
 from .portfolio import create_portfolio_manager_node
 from .research import create_research_manager_node
 from .risk import create_risk_debate_node
+from .strategy_reconciler import create_strategy_reconciler_node
 
 __all__ = [
+    "create_analysis_planner_node",
+    "create_decision_stability_controller_node",
     "create_market_intelligence_node",
     "create_agent_qa_node",
     "create_research_manager_node",
     "create_risk_debate_node",
     "create_portfolio_manager_node",
+    "create_strategy_reconciler_node",
 ]

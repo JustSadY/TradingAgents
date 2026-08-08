@@ -25,7 +25,6 @@ from .config_builder import (
 from .emitter import AnalysisEmitter
 from .persistence import (
     create_skeleton_result,
-    finalize_result,
     mark_as_cancelled,
     mark_as_failed,
     update_result_fields,
@@ -43,6 +42,23 @@ from .reports import (
 _logger = logging.getLogger(__name__)
 
 _OWNER_UNSET = object()
+
+
+def _json_mapping(value: object) -> dict:
+    """Normalize state/JSON-column values without parsing display Markdown."""
+
+    if isinstance(value, BaseModel):
+        dumped = value.model_dump(mode="json")
+        return dumped if isinstance(dumped, dict) else {}
+    if isinstance(value, dict):
+        return value
+    if isinstance(value, str) and value.strip() not in {"", "{}"}:
+        try:
+            parsed = json.loads(value)
+        except json.JSONDecodeError:
+            return {}
+        return parsed if isinstance(parsed, dict) else {}
+    return {}
 
 
 async def _emit_system_status(emitter: AnalysisEmitter, message: str, status: str = "starting") -> None:
@@ -136,6 +152,14 @@ async def run_individual_analysis(
 
     user_id = user.id if user else None
     persisted_user_id = user_id if result_owner_user_id is _OWNER_UNSET else result_owner_user_id
+    from backend.core.temporal import is_historical_trade_date
+
+    historical_mode = is_historical_trade_date(trade_date)
+    analysis_mode = "time_travel" if triggered_by == "time-travel" else "historical" if historical_mode else "live"
+    temporal_replay_mode = analysis_mode != "live"
+    # Replays and time-travel are inspection tools, never training examples.
+    # A user may also explicitly disable all live strategy learning.
+    learning_eligible = bool(getattr(settings, "strategy_learning_enabled", True)) and analysis_mode == "live"
 
     if existing_result_id is not None:
         # Time-travel resumes the selected analysis in place.  Creating a new
@@ -172,6 +196,20 @@ async def run_individual_analysis(
             "audit_report": "",
             "agent_qa_report": "",
             "investment_plan": "",
+            "analysis_plan_json": None,
+            "synthesis_json": None,
+            "market_regime_json": None,
+            "strategy_before_json": None,
+            "strategy_after_json": None,
+            "strategy_candidate_json": None,
+            "pm_proposal_json": None,
+            "portfolio_decision_json": None,
+            "decision_transition_json": None,
+            "calibrated_confidence": None,
+            "strategy_update_status": None,
+            "strategy_id": None,
+            "strategy_before_version": None,
+            "strategy_after_version": None,
             "trader_plan": "",
             "final_decision": "",
             "reflection": "",
@@ -199,6 +237,8 @@ async def run_individual_analysis(
             status="running",
             triggered_by=triggered_by,
             signal=None,
+            analysis_mode=analysis_mode,
+            learning_eligible=learning_eligible,
             **reset_outputs,
         )
         if row is None:
@@ -212,6 +252,8 @@ async def run_individual_analysis(
             asset_type,
             triggered_by,
             persisted_user_id,
+            analysis_mode=analysis_mode,
+            learning_eligible=learning_eligible,
         )
     row_id = row.id
 
@@ -223,11 +265,10 @@ async def run_individual_analysis(
         await _emit_system_status(emitter, "Preparing engine...")
 
         config = build_analysis_config(settings, user=user, sys_settings=sys_settings)
-        from backend.core.temporal import is_historical_trade_date
-
-        historical_mode = is_historical_trade_date(trade_date)
         config["trade_date"] = trade_date
-        config["historical_mode"] = historical_mode
+        config["historical_mode"] = temporal_replay_mode
+        config["analysis_mode"] = analysis_mode
+        config["learning_eligible"] = learning_eligible
         # Point-in-time runs fail closed.  Operators may explicitly opt in for
         # research-only comparisons, but historical/backtest paths never do.
         config["allow_live_data_in_historical"] = False
@@ -257,8 +298,23 @@ async def run_individual_analysis(
         from backend.services.analysis.scenario_service import get_active_scenarios
         from backend.services.performance_service import get_analyst_performance_context
         from backend.services.signal_backtest_service import get_signal_replay_context
+        from backend.services.strategy_context_service import load_strategy_context
 
-        if historical_mode:
+        # Load the exact point-in-time strategy before building live analyst
+        # performance context.  Its structured regime assumption is safe to
+        # use as a pre-analysis weighting hint; analysts still receive only
+        # the sanitised neutral plan, never this directional snapshot.
+        config["strategy_context"] = await load_strategy_context(
+            db,
+            user_id=persisted_user_id,
+            ticker=ticker,
+            asset_type=asset_type,
+            trade_date=trade_date,
+            historical_mode=analysis_mode != "live",
+            learning_eligible=learning_eligible,
+        )
+
+        if analysis_mode != "live":
             # Learned weights, outcome replay, today's market pulse, and active
             # scenarios are all knowledge created after the requested date.
             # Excluding them is safer than pretending they are point-in-time.
@@ -272,15 +328,37 @@ async def run_individual_analysis(
                 "future outcome attribution, replay statistics, and current scenarios were excluded.\n\n"
             )
         else:
-            attribution_md = await get_analyst_performance_context(db, user_id=user_id)
+            regime_hint = _json_mapping(
+                _json_mapping(config["strategy_context"].get("strategy_before")).get("regime_assumption")
+            )
+            if config.get("regime_aware_weighting_enabled", False):
+                attribution_md = await get_analyst_performance_context(
+                    db,
+                    user_id=persisted_user_id,
+                    ticker=ticker,
+                    current_regime=regime_hint,
+                    regime_aware=True,
+                )
+            else:
+                attribution_md = await get_analyst_performance_context(db, user_id=persisted_user_id)
             market_pulse_md = await get_market_pulse()
             scenarios_md = get_active_scenarios()
-            signal_replay_md = await get_signal_replay_context(db, ticker, user_id)
+            signal_replay_md = await get_signal_replay_context(db, ticker, persisted_user_id)
             config["historical_context"] = attribution_md + market_pulse_md + scenarios_md + signal_replay_md
 
         permitted_analysts = await prepare_graph_config(db, user_id, config)
+        if config.get("confidence_calibration_enabled") and learning_eligible:
+            from backend.services.confidence_calibration_service import load_calibration_context
 
-        if getattr(settings, "analyst_prefilter_enabled", False) and not historical_mode:
+            config["confidence_calibration_context"] = await load_calibration_context(
+                db,
+                user_id=row.user_id,
+                asset_type=asset_type,
+            )
+        else:
+            config["confidence_calibration_context"] = {}
+
+        if getattr(settings, "analyst_prefilter_enabled", False) and analysis_mode == "live":
             from backend.services.analyst_prefilter_service import filter_analysts_by_history
 
             permitted_analysts, dropped = await filter_analysts_by_history(
@@ -328,9 +406,10 @@ async def run_individual_analysis(
                 "resistance_levels": [],
                 "activity_tracker": activity_tracker,
                 "trade_date": trade_date,
-                "historical_mode": historical_mode,
+                "historical_mode": temporal_replay_mode,
                 "allow_live_data_in_historical": False,
                 "user_id": user_id,
+                "learning_eligible": learning_eligible,
             }
         )
 
@@ -547,19 +626,11 @@ async def run_individual_analysis(
         if not isinstance(structured_data, dict):
             structured_data = {}
 
-        portfolio_decision_raw = final_state.get("portfolio_decision_json")
-        if isinstance(portfolio_decision_raw, BaseModel):
-            structured_data["portfolio_decision"] = portfolio_decision_raw.model_dump()
-        elif isinstance(portfolio_decision_raw, dict):
-            structured_data["portfolio_decision"] = portfolio_decision_raw
-        elif isinstance(portfolio_decision_raw, str) and portfolio_decision_raw.strip() not in {"", "{}"}:
-            try:
-                portfolio_decision = json.loads(portfolio_decision_raw)
-            except json.JSONDecodeError:
-                _logger.warning("Ignoring malformed portfolio_decision_json for %s", ticker)
-            else:
-                if isinstance(portfolio_decision, dict):
-                    structured_data["portfolio_decision"] = portfolio_decision
+        # Keep the legacy annotation copy for older report consumers, but the
+        # physical AnalysisResult JSON columns below are the canonical contract.
+        portfolio_decision = _json_mapping(final_state.get("portfolio_decision_json"))
+        if portfolio_decision:
+            structured_data["portfolio_decision"] = portfolio_decision
 
         _VALID_SIGNALS = {"Buy", "Overweight", "Hold", "Underweight", "Sell"}
         raw_signal = result.signal
@@ -581,6 +652,15 @@ async def run_individual_analysis(
         final_payload = {
             "signal": raw_signal,
             **final_report_values,
+            "analysis_plan_json": _json_mapping(final_state.get("analysis_plan_json")) or None,
+            "synthesis_json": _json_mapping(final_state.get("synthesis_json")) or None,
+            "market_regime_json": _json_mapping(final_state.get("market_regime_json")) or None,
+            "pm_proposal_json": _json_mapping(final_state.get("pm_proposal_json")) or None,
+            "portfolio_decision_json": portfolio_decision or None,
+            "decision_transition_json": _json_mapping(final_state.get("decision_transition_json")) or None,
+            "calibrated_confidence": final_state.get("calibrated_confidence"),
+            "analysis_mode": analysis_mode,
+            "learning_eligible": learning_eligible,
             "bull_history": history_json_from(inv_debate.get("bull_history", "")),
             "bear_history": history_json_from(inv_debate.get("bear_history", "")),
             "investment_debate_history": debate_messages(inv_debate.get("history", "")) or None,
@@ -611,7 +691,31 @@ async def run_individual_analysis(
             ),
         }
 
-        await finalize_result(db, row_id, **final_payload)
+        from backend.services.strategy_persistence_service import persist_completed_analysis_with_strategy
+
+        persistence_result = await persist_completed_analysis_with_strategy(
+            db,
+            row_id=row_id,
+            final_payload=final_payload,
+            strategy_context=config.get("strategy_context"),
+            candidate_raw=final_state.get("strategy_candidate_json"),
+            # Do not dereference an ORM instance after the many incremental
+            # commits above: async sessions may have expired it.  The result
+            # owner was captured before graph execution and is authoritative.
+            user_id=persisted_user_id,
+            ticker=ticker,
+            asset_type=asset_type,
+            trade_date=trade_date,
+            learning_eligible=learning_eligible,
+        )
+        # A CAS conflict is deliberately fail-closed: never let a proposal
+        # calculated from strategy v5 auto-trade after another worker wrote v6.
+        signal = str(getattr(row, "signal", raw_signal) or raw_signal)
+        final_decision = str(getattr(row, "final_decision", result.final_decision) or result.final_decision)
+        if persistence_result.decision_override is not None:
+            final_state["portfolio_decision_json"] = persistence_result.decision_override
+            final_state["final_signal"] = signal
+            final_state["final_trade_decision"] = final_decision
 
         await emitter.emit({"type": "risk_metrics", "metrics": risk_metrics})
 
@@ -635,7 +739,7 @@ async def run_individual_analysis(
             extract_and_save_annotations(
                 row_id,
                 result.market_report,
-                result.final_decision,
+                final_decision,
                 ta.thinking_llm,
                 getattr(ta, "custom_indicators", []),
                 getattr(ta, "visual_annotations", []),
@@ -647,14 +751,14 @@ async def run_individual_analysis(
         )
 
         track_background_task(
-            send_analysis_webhook(ticker, trade_date, signal, result.final_decision, settings), task_id=emitter.task_id
+            send_analysis_webhook(ticker, trade_date, signal, final_decision, settings), task_id=emitter.task_id
         )
 
         track_background_task(send_signal_flip_webhook(ticker, prev_signal, signal, settings), task_id=emitter.task_id)
 
         await await_analysis_background_tasks(emitter.task_id)
 
-        await emitter.emit_decision(signal, result.final_decision)
+        await emitter.emit_decision(signal, final_decision)
 
         cost = estimate_cost(
             ta.llm_provider,

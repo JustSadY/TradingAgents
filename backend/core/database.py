@@ -139,6 +139,12 @@ async def create_all_tables():
     fallback because the production migrations intentionally use PostgreSQL
     foreign-key and index operations.
     """
+    # Import the package rather than relying on whichever API router happened
+    # to be loaded before startup.  New exact-state tables (for example
+    # AssetStrategy) may otherwise be absent from SQLite ``create_all`` even
+    # though their model exists and PostgreSQL/Alembic knows about it.
+    import backend.models  # noqa: F401
+
     if engine.dialect.name == "sqlite":
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)

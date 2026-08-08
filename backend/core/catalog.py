@@ -67,11 +67,14 @@ SECTION_LABELS: dict[str, str] = {
     "catalyst_report": "Upcoming Catalysts",
     "review_report": "Performance Review",
     "agent_qa_report": "Analyst Cross-Examination",
+    "analysis_plan_report": "Analysis Plan",
     "investment_plan": "Research Evidence Summary",
+    "strategy_reconciliation_report": "Strategy Reconciliation",
+    "pm_proposal_report": "Portfolio Manager Proposal",
     "trader_investment_plan": "Legacy Trader Proposal (historical only)",
     "trader_plan": "Legacy Trader Proposal (historical only)",
-    "final_trade_decision": "Final Decision (Portfolio Manager)",
-    "final_decision": "Final Decision (Portfolio Manager)",
+    "final_trade_decision": "Accepted Final Decision",
+    "final_decision": "Accepted Final Decision",
     "bull_history": "Bull Arguments",
     "bear_history": "Bear Arguments",
     "investment_debate_history": "Debate",
@@ -298,6 +301,8 @@ async def build_meta(db=None, user=None) -> dict:
     }
 
 _STATIC_NODE_LABELS: dict[str, tuple[str, str]] = {
+    "Strategy Context Loader": ("Strategy Context", "research"),
+    "Analysis Planner": ("Analysis Planner", "research"),
     "Market Intelligence": ("Market Intelligence", "analyst"),
     "Agent Q&A": ("Agent Q&A Cross-Examination", "analyst"),
     "Bull Researcher": ("Bull Researcher", "research"),
@@ -308,7 +313,9 @@ _STATIC_NODE_LABELS: dict[str, tuple[str, str]] = {
     "Aggressive Analyst": ("Aggressive Risk Analyst", "risk"),
     "Conservative Analyst": ("Conservative Risk Analyst", "risk"),
     "Neutral Analyst": ("Neutral Risk Analyst", "risk"),
-    "Portfolio Manager": ("Portfolio Manager — final decision", "decision"),
+    "Strategy Reconciler": ("Strategy Reconciler", "research"),
+    "Portfolio Manager": ("Portfolio Manager — raw proposal", "decision"),
+    "Decision Stability Controller": ("Decision Stability Controller", "decision"),
 }
 _ANALYST_NODE_LABELS: dict[str, tuple[str, str]] | None = None
 

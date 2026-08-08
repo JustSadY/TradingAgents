@@ -35,7 +35,6 @@ from backend.services.execution.base import OrderResult
 from backend.services.trading_orchestrator import auto_execute_signals_enabled, place_signal_order
 
 from .analysis.emitter import AnalysisEmitter
-
 from .analysis.orchestrator import run_individual_analysis
 from .analysis.portfolio_orchestrator import run_portfolio_analysis
 
@@ -46,6 +45,28 @@ _TASK_REGISTRY: dict[str, dict] = {}
 _TASK_OWNERS: dict[str, int | None] = {}
 _HEARTBEAT_TASKS: dict[str, asyncio.Task] = {}
 _WORKER_ID = f"{socket.gethostname()}:{os.getpid()}"
+
+
+def _time_travel_checkpoint_overrides(
+    *,
+    strategy_context: dict,
+    historical_context: str,
+) -> dict:
+    """Return server-owned state that makes a checkpoint replay non-learning.
+
+    A checkpoint is data from a previous graph execution, so its values must
+    never override the current replay's point-in-time strategy/learning
+    boundary. Keeping this small mapping separate makes the safety contract
+    testable without opening a graph or database session.
+    """
+
+    return {
+        "strategy_context": strategy_context,
+        "analysis_mode": "time_travel",
+        "learning_eligible": False,
+        "past_context": historical_context,
+    }
+
 
 async def register_task_owner(task_id: str, user_id: int | None) -> None:
     _TASK_OWNERS[task_id] = user_id
@@ -138,6 +159,7 @@ async def _heartbeat_loop(task_id: str, user_id: int | None) -> None:
             await task_store.touch_task(task_id, user_id)
             try:
                 from sqlalchemy import update
+
                 from backend.models.analysis import AnalysisResult
 
                 async with AsyncSessionLocal() as db:
@@ -279,6 +301,10 @@ def _snapshot_auto_order_context(row) -> SimpleNamespace:
         quality=getattr(row, "quality", None),
         chart_annotations=getattr(row, "chart_annotations", None),
         portfolio_decision_json=getattr(row, "portfolio_decision_json", None),
+        decision_transition_json=getattr(row, "decision_transition_json", None),
+        strategy_update_status=getattr(row, "strategy_update_status", None),
+        analysis_mode=getattr(row, "analysis_mode", "live"),
+        learning_eligible=getattr(row, "learning_eligible", True),
         final_decision=getattr(row, "final_decision", ""),
     )
 
@@ -560,13 +586,12 @@ async def rollback_and_resume_analysis(
     db: AsyncSession,
 ) -> None:
     """Rollback analysis to a specific checkpoint, update the state, and resume execution in the background."""
-    import time
-
     from backend.core.database import AsyncSessionLocal
     from backend.repositories.analysis import get_analysis_by_id
     from backend.repositories.system_settings import get_system_settings
     from backend.services.analysis.config_builder import build_analysis_config, prepare_graph_config
     from backend.services.settings_service import get_or_create_settings
+    from backend.services.strategy_context_service import load_strategy_context
     from backend.trading_agents.graph.checkpointer import checkpoint_scope, get_async_checkpointer, thread_id
     from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
 
@@ -577,11 +602,29 @@ async def rollback_and_resume_analysis(
     settings = await get_or_create_settings(db, current_user)
     sys_settings = await get_system_settings(db)
     config = build_analysis_config(settings, user=current_user, sys_settings=sys_settings)
-    from backend.core.temporal import is_historical_trade_date
-
     config["trade_date"] = str(analysis.trade_date)
-    config["historical_mode"] = is_historical_trade_date(str(analysis.trade_date))
+    # A checkpoint replay is a point-in-time inspection even when its original
+    # trade date is today. Its persisted checkpoint can otherwise carry live
+    # performance context, a prior strategy snapshot, and learning eligibility
+    # into the resumed graph.
+    config["historical_mode"] = True
+    config["analysis_mode"] = "time_travel"
+    config["learning_eligible"] = False
     config["allow_live_data_in_historical"] = False
+    config["historical_context"] = (
+        "=== POINT-IN-TIME MODE ===\n"
+        f"Knowledge cutoff: {analysis.trade_date}. Live portfolio state, current market pulse, "
+        "future outcome attribution, replay statistics, and current scenarios were excluded.\n\n"
+    )
+    config["strategy_context"] = await load_strategy_context(
+        db,
+        user_id=analysis.user_id,
+        ticker=str(analysis.ticker),
+        asset_type=str(analysis.asset_type),
+        trade_date=str(analysis.trade_date),
+        historical_mode=True,
+        learning_eligible=False,
+    )
     permitted_analysts = await prepare_graph_config(db, current_user.id if current_user else None, config)
 
     checkpoint_namespace = checkpoint_scope(analysis.user_id, analysis.id)
@@ -603,7 +646,18 @@ async def rollback_and_resume_analysis(
     async with get_async_checkpointer(config["data_cache_dir"], analysis.ticker, checkpoint_namespace) as saver:
         graph = ta.workflow.compile(checkpointer=saver)
         update_config = {"configurable": {"thread_id": tid, "checkpoint_id": checkpoint_id}}
-        await graph.aupdate_state(update_config, update_state, as_node=node_name)
+        # These fields are deliberately server-owned. They overwrite any
+        # checkpoint values before execution resumes, so an old live state
+        # cannot write memory/learning or expose a future strategy/attribution
+        # context during a time-travel run.
+        safe_update_state = {
+            **update_state,
+            **_time_travel_checkpoint_overrides(
+                strategy_context=config["strategy_context"],
+                historical_context=config["historical_context"],
+            ),
+        }
+        await graph.aupdate_state(update_config, safe_update_state, as_node=node_name)
 
     analysis.status = "running"
     analysis.task_id = task_id

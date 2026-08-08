@@ -103,6 +103,13 @@ def _config_meta(analyst_key: str) -> dict:
                     agent_settings = agent_ctx.get("settings", {})
                     if isinstance(agent_settings, dict):
                         config_meta["agent_settings"] = agent_settings
+        # The planner runs immediately before analysts and stores only a hash
+        # here.  It changes both exact data-cache hashes and stale-fallback
+        # fingerprints, so a cached report generated for yesterday's agenda
+        # cannot silently bypass a new assumption/invalidation test.
+        plan_key = ctx.get("analysis_plan_cache_key")
+        if isinstance(plan_key, str) and plan_key:
+            config_meta["analysis_plan_cache_key"] = plan_key
     return config_meta
 
 def _compute_config_fingerprint(analyst_key: str) -> str:

@@ -1,14 +1,227 @@
+import json
 import logging
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
 from backend.core.constants import (
     DEFAULT_HOLDING_DAYS as HOLDING_DAYS,
 )
 from backend.core.utils import resolve_benchmark
+from backend.services.market_data_service import calculate_returns
 
 _logger = logging.getLogger(__name__)
 
-from backend.services.market_data_service import calculate_returns
+_WEIGHT_PRIOR_STRENGTH = 8.0
+_WEIGHT_COMPONENTS = (
+    ("global", 0.40),
+    ("ticker", 0.25),
+    ("regime", 0.20),
+    ("recent", 0.15),
+)
+_REGIME_KEYS = ("trend", "volatility", "risk", "macro")
+
+
+def _analysis_regime(row: object) -> dict[str, str]:
+    raw = getattr(row, "market_regime_json", None)
+    if isinstance(raw, str):
+        try:
+            raw = json.loads(raw)
+        except (TypeError, ValueError):
+            raw = None
+    if not isinstance(raw, dict):
+        return {}
+    return {
+        key: str(raw[key]).strip().lower()
+        for key in _REGIME_KEYS
+        if raw.get(key) is not None and str(raw[key]).strip()
+    }
+
+
+def _normalise_regime(regime: dict[str, Any] | None) -> dict[str, str]:
+    if not isinstance(regime, dict):
+        return {}
+    return {
+        key: str(regime[key]).strip().lower()
+        for key in _REGIME_KEYS
+        if regime.get(key) is not None and str(regime[key]).strip()
+    }
+
+
+def _is_matching_regime(row: object, current_regime: dict[str, str]) -> bool:
+    """Require a meaningful overlap, not a coincidental one-field match."""
+
+    if not current_regime:
+        return False
+    observed = _analysis_regime(row)
+    shared = [key for key in _REGIME_KEYS if key in current_regime and key in observed]
+    if not shared:
+        return False
+    matches = sum(current_regime[key] == observed[key] for key in shared)
+    required = 2 if len(shared) >= 2 else 1
+    return matches >= required
+
+
+def _is_recent(row: object, *, now: datetime | None = None) -> bool:
+    now = now or datetime.now(UTC)
+    try:
+        observed = datetime.fromisoformat(str(getattr(row, "trade_date", "")).replace("Z", "+00:00"))
+    except ValueError:
+        return False
+    if observed.tzinfo is None:
+        observed = observed.replace(tzinfo=UTC)
+    return observed >= now - timedelta(days=90)
+
+
+def _prediction_success(report: object, raw_return: object) -> bool | None:
+    """Score one analyst report with the existing five-tier rating semantics."""
+
+    from backend.trading_agents.agents.runtime.rating import parse_rating
+
+    prediction = parse_rating(str(report or ""), default=None)
+    if not prediction:
+        return None
+    if prediction in ("Overweight", "Buy"):
+        prediction = "Buy"
+    elif prediction in ("Underweight", "Sell"):
+        prediction = "Sell"
+    try:
+        realized = float(raw_return)
+    except (TypeError, ValueError):
+        return None
+    if prediction == "Buy":
+        return realized > 0
+    if prediction == "Sell":
+        return realized < 0
+    if prediction == "Hold":
+        return abs(realized) <= 0.02
+    return None
+
+
+def _posterior_accuracy(successes: int, count: int, *, prior_mean: float = 0.5) -> float:
+    return (successes + prior_mean * _WEIGHT_PRIOR_STRENGTH) / (count + _WEIGHT_PRIOR_STRENGTH)
+
+
+def _regime_aware_weight_rows(
+    rows: list[object],
+    *,
+    ticker: str,
+    current_regime: dict[str, Any] | None,
+    report_fields: dict[str, str],
+    now: datetime | None = None,
+) -> list[dict[str, Any]]:
+    """Compute shrinkage-based per-analyst weights from resolved outcomes.
+
+    A sparse ticker/regime slice is never allowed to overwhelm the global
+    baseline.  Each local score is a beta-binomial posterior anchored on the
+    analyst's global posterior, and its contribution grows gradually with the
+    sample count.  This is deliberately compact enough to send to an LLM
+    without exposing per-run user data.
+    """
+
+    normalized_regime = _normalise_regime(current_regime)
+    counters: dict[str, dict[str, list[int]]] = {
+        key: {component: [0, 0] for component, _ in _WEIGHT_COMPONENTS}
+        for key in (field.removesuffix("_report") for field in report_fields)
+    }
+    ticker = ticker.upper()
+    for row in rows:
+        ticker_match = str(getattr(row, "ticker", "")).upper() == ticker
+        regime_match = _is_matching_regime(row, normalized_regime)
+        recent_match = _is_recent(row, now=now)
+        for report_field in report_fields:
+            analyst = report_field.removesuffix("_report")
+            success = _prediction_success(getattr(row, report_field, ""), getattr(row, "raw_return", None))
+            if success is None:
+                continue
+            counters[analyst]["global"][0] += 1
+            counters[analyst]["global"][1] += int(success)
+            if ticker_match:
+                counters[analyst]["ticker"][0] += 1
+                counters[analyst]["ticker"][1] += int(success)
+            if regime_match:
+                counters[analyst]["regime"][0] += 1
+                counters[analyst]["regime"][1] += int(success)
+            if recent_match:
+                counters[analyst]["recent"][0] += 1
+                counters[analyst]["recent"][1] += int(success)
+
+    output: list[dict[str, Any]] = []
+    for report_field, label in report_fields.items():
+        analyst = report_field.removesuffix("_report")
+        counts = counters[analyst]
+        global_count, global_successes = counts["global"]
+        global_accuracy = _posterior_accuracy(global_successes, global_count)
+        weighted_accuracy = 0.0
+        applied_weight = 0.0
+        metrics: dict[str, Any] = {}
+        for component, base_weight in _WEIGHT_COMPONENTS:
+            count, successes = counts[component]
+            accuracy = _posterior_accuracy(successes, count, prior_mean=global_accuracy)
+            # Local relevance is smoothly shrunk toward the global result;
+            # 2/2 cannot become a spurious 100%-reliable specialist.
+            reliability = 1.0 if component == "global" else count / (count + _WEIGHT_PRIOR_STRENGTH)
+            component_weight = base_weight * reliability
+            weighted_accuracy += component_weight * accuracy
+            applied_weight += component_weight
+            metrics[f"{component}_samples"] = count
+            metrics[f"{component}_accuracy"] = round(accuracy * 100, 1)
+        effective_accuracy = weighted_accuracy / applied_weight if applied_weight else global_accuracy
+        output.append(
+            {
+                "key": analyst,
+                "label": label,
+                **metrics,
+                "effective_accuracy": round(effective_accuracy * 100, 1),
+                # We normalise this below; the small floor avoids an analyst
+                # disappearing solely because it has no resolved observations.
+                "_raw_weight": max(0.05, effective_accuracy),
+            }
+        )
+
+    total = sum(item["_raw_weight"] for item in output) or 1.0
+    for item in output:
+        item["effective_weight"] = round(100.0 * item.pop("_raw_weight") / total, 1)
+    return output
+
+
+async def get_regime_aware_analyst_attribution_stats(
+    db,
+    *,
+    user_id: int | None,
+    ticker: str,
+    current_regime: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Return privacy-scoped Bayesian analyst weights for one live run."""
+
+    from sqlalchemy import select
+
+    from backend.models.analysis import AnalysisResult
+    from backend.trading_agents.agents.analyst_registry import get_report_fields
+
+    query = (
+        select(AnalysisResult)
+        .where(AnalysisResult.raw_return.isnot(None))
+        .where(AnalysisResult.learning_eligible.is_(True))
+        .where(AnalysisResult.status == "completed")
+    )
+    if user_id is None:
+        query = query.where(AnalysisResult.user_id.is_(None))
+    else:
+        query = query.where(AnalysisResult.user_id == user_id)
+    rows = list((await db.execute(query)).scalars().all())
+    report_fields = get_report_fields()
+    return {
+        "method": "beta_binomial_global_ticker_regime_recency_v1",
+        "ticker": ticker.upper(),
+        "regime": _normalise_regime(current_regime),
+        "attribution": _regime_aware_weight_rows(
+            rows,
+            ticker=ticker,
+            current_regime=current_regime,
+            report_fields=report_fields,
+        ),
+        "total_resolved_runs": len(rows),
+    }
 
 async def backfill_returns(db) -> int:
     from sqlalchemy import select
@@ -22,6 +235,8 @@ async def backfill_returns(db) -> int:
         select(AnalysisResult)
         .where(AnalysisResult.raw_return.is_(None))
         .where(AnalysisResult.signal.isnot(None))
+        .where(AnalysisResult.learning_eligible.is_(True))
+        .where(AnalysisResult.status == "completed")
         .where(AnalysisResult.trade_date <= cutoff)
         .limit(50)
     )
@@ -106,7 +321,11 @@ async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
     from backend.models.analysis import AnalysisResult
     from backend.trading_agents.agents.analyst_registry import get_report_fields
 
-    q = select(AnalysisResult).where(AnalysisResult.raw_return.isnot(None))
+    q = (
+        select(AnalysisResult)
+        .where(AnalysisResult.raw_return.isnot(None))
+        .where(AnalysisResult.learning_eligible.is_(True))
+    )
     if user_id is None:
         q = q.where(AnalysisResult.user_id.is_(None))
     else:
@@ -180,7 +399,14 @@ async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
     total_runs_evaluated = sum(s["total_predictions"] for s in attribution_list)
     return {"attribution": attribution_list, "total_evaluated_runs": total_runs_evaluated}
 
-async def get_analyst_performance_context(db, user_id: int | None = None) -> str:
+async def get_analyst_performance_context(
+    db,
+    user_id: int | None = None,
+    *,
+    ticker: str | None = None,
+    current_regime: dict[str, Any] | None = None,
+    regime_aware: bool = False,
+) -> str:
     """Return a tenant-scoped Markdown summary for AI prompt injection.
 
     ``AnalysisResult`` data belongs to individual users.  The analysis graph
@@ -189,6 +415,34 @@ async def get_analyst_performance_context(db, user_id: int | None = None) -> str
     administrative aggregate.
     """
     try:
+        if regime_aware and ticker:
+            attribution_data = await get_regime_aware_analyst_attribution_stats(
+                db,
+                user_id=user_id,
+                ticker=ticker,
+                current_regime=current_regime,
+            )
+            attribution = attribution_data.get("attribution") or []
+            if not attribution:
+                return ""
+            md = "=== REGIME-AWARE ANALYST PERFORMANCE & WEIGHTS ===\n"
+            md += (
+                "Effective weights use beta-binomial shrinkage across global, ticker-specific, "
+                "matching-regime, and recent accuracy. Sparse local samples are deliberately "
+                "pulled back toward the global baseline.\n"
+            )
+            for att in attribution:
+                md += (
+                    f"- {att['label']}: Effective Accuracy = {att['effective_accuracy']}%, "
+                    f"Weight = {att['effective_weight']}% "
+                    f"(global {att['global_accuracy']}%/{att['global_samples']}, "
+                    f"ticker {att['ticker_accuracy']}%/{att['ticker_samples']}, "
+                    f"regime {att['regime_accuracy']}%/{att['regime_samples']}, "
+                    f"recent {att['recent_accuracy']}%/{att['recent_samples']})\n"
+                )
+            md += "\n[IMPORTANT] Treat these as evidence-quality priors, not as a substitute for current source-grounded evidence.\n\n"
+            return md
+
         attribution_data = await get_analyst_attribution_stats(db, user_id=user_id)
         if not attribution_data.get("attribution"):
             return ""

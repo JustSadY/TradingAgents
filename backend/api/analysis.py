@@ -15,6 +15,8 @@ from backend.schemas.analysis import (
     AnalysisResultRead,
     AnalysisRunRequest,
     AnalysisRunResponse,
+    AssetStrategyRead,
+    AssetStrategyVersionRead,
     CancelTaskResponse,
     ChatMessageCreate,
     ChatMessageRead,
@@ -170,6 +172,57 @@ async def list_analysis(
     from backend.repositories.analysis import list_analyses as _repo_list
 
     return await _repo_list(db, user=current_user, ticker=ticker, limit=limit, offset=offset)
+
+
+@router.get(
+    "/strategies/{ticker}",
+    response_model=AssetStrategyRead,
+    responses={404: {"description": "Active asset strategy not found"}},
+)
+async def get_active_asset_strategy(
+    ticker: str,
+    asset_type: str = Query(default="stock", pattern="^(stock|crypto)$"),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_page("analysis")),
+):
+    """Return the exact active strategy (not episodic/vector memory)."""
+    from backend.repositories.asset_strategy import get_active_asset_strategy as _get_strategy
+
+    strategy = await _get_strategy(
+        db,
+        user_id=current_user.id,
+        ticker=ticker,
+        asset_type=asset_type,
+    )
+    if strategy is None:
+        raise HTTPException(status_code=404, detail="Active asset strategy not found")
+    return strategy
+
+
+@router.get(
+    "/strategies/{ticker}/history",
+    response_model=list[AssetStrategyVersionRead],
+    responses={404: {"description": "Active asset strategy not found"}},
+)
+async def get_active_asset_strategy_history(
+    ticker: str,
+    asset_type: str = Query(default="stock", pattern="^(stock|crypto)$"),
+    limit: int = Query(default=100, ge=1, le=500),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_page("analysis")),
+):
+    from backend.repositories.asset_strategy import list_asset_strategy_versions_for_asset
+
+    versions = await list_asset_strategy_versions_for_asset(
+        db,
+        user_id=current_user.id,
+        ticker=ticker,
+        asset_type=asset_type,
+        limit=limit,
+    )
+    if not versions:
+        raise HTTPException(status_code=404, detail="Asset strategy history not found")
+    return versions
 
 @router.post("/{task_id}/cancel", response_model=CancelTaskResponse, responses={404: {"description": "Task not found"}})
 async def cancel_analysis(

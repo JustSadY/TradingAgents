@@ -102,6 +102,15 @@ def get_standard_agent_settings() -> list[AgentSettingField]:
 
 AGENTS: list[AgentInfo] = [
     AgentInfo(
+        "analysis_planner",
+        "Analysis Planner",
+        "Builds a direction-neutral investigation agenda from prior assumptions and open questions",
+        "manager",
+        True,
+        get_standard_agent_settings(),
+        "portfolio_manager",
+    ),
+    AgentInfo(
         "market_intelligence",
         "Market Intelligence",
         "Coordinates the data & indicator analyst sub-agents",
@@ -300,9 +309,27 @@ AGENTS: list[AgentInfo] = [
         "portfolio_manager",
     ),
     AgentInfo(
+        "strategy_reconciler",
+        "Strategy Reconciler",
+        "Compares structured fresh evidence with the active exact asset strategy",
+        "manager",
+        True,
+        get_standard_agent_settings(),
+        "portfolio_manager",
+    ),
+    AgentInfo(
+        "decision_stability_controller",
+        "Decision Stability Controller",
+        "Deterministically validates material Portfolio Manager decision changes before execution",
+        "manager",
+        True,
+        [],
+        "portfolio_manager",
+    ),
+    AgentInfo(
         "portfolio_manager",
         "Portfolio Manager",
-        "Sole authority for final allocation, order direction, sizing, and risk levels",
+        "Produces the raw allocation proposal; the stability controller is the final execution authority",
         "manager",
         True,
         get_standard_agent_settings(),

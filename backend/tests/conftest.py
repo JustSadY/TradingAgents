@@ -26,6 +26,7 @@ os.environ["DATABASE_URL"] = f"sqlite+aiosqlite:///{_TEST_DB_PATH}"
 import backend.bootstrap  # noqa: F401, E402
 import backend.models.agent_settings  # noqa: F401, E402
 import backend.models.alert  # noqa: F401, E402
+import backend.models.asset_strategy  # noqa: F401, E402
 import backend.models.analysis  # noqa: F401, E402
 import backend.models.assistant  # noqa: F401, E402
 import backend.models.log  # noqa: F401, E402

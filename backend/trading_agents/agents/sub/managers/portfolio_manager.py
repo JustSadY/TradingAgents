@@ -1,9 +1,10 @@
-"""The sole AI authority for final trade direction and execution guidance.
+"""Portfolio Manager raw proposal generation.
 
 Upstream analysts, the research manager, and the risk panel deliberately
 produce evidence and guardrails rather than competing buy/sell instructions.
 This node is the one place where that evidence is converted into a structured
-PortfolioDecision that the order engine may consume.
+raw PortfolioDecision proposal. A deterministic controller decides whether it
+becomes executable.
 """
 
 from __future__ import annotations
@@ -26,10 +27,26 @@ _logger = logging.getLogger(__name__)
 
 _DEFAULT_INSTRUCTION = (
     "As the Portfolio Manager, evaluate all available evidence and risk guardrails, "
-    "then issue the one final trade decision and execution recommendation."
+    "then issue one coherent raw trade proposal and execution recommendation."
 )
 _MAX_FALLBACK_REPORT_CHARS = 2_400
 _MAX_DECISION_CONTEXT_CHARS = 3_500
+
+
+def _point_in_time_portfolio_exclusion(trade_date: object) -> str:
+    """Explain why a replay cannot see the mutable live portfolio.
+
+    ``trade_date`` alone is not enough to infer this: a time-travel replay may
+    deliberately resume an analysis created *today*.  In that case the current
+    cash/holdings are still future knowledge relative to the checkpoint, so
+    the graph's explicit ``historical_mode`` flag is the authority.
+    """
+
+    return (
+        "=== PORTFOLIO CONTEXT EXCLUDED ===\n"
+        f"This is a point-in-time replay as of {trade_date or 'the selected checkpoint'}; "
+        "the mutable current portfolio must not influence its tactical sizing."
+    )
 
 def _prompt_report_limit() -> int:
     """Return a bounded fallback budget for reports without an executive summary."""
@@ -80,6 +97,7 @@ def build_portfolio_manager_evidence(state: dict) -> str:
         ("Synthesis Manager Conflict Map", "synthesis_report"),
         ("Auditor Fact Check", "audit_report"),
         ("Analyst Cross-Examination", "agent_qa_report"),
+        ("Strategy Reconciliation (non-executable)", "strategy_reconciliation_report"),
     ):
         section = _optional_context_section(label, state.get(key))
         if section:
@@ -116,10 +134,22 @@ def create_portfolio_manager(llm):
 
         from backend.trading_agents.agents.runtime.portfolio_context import get_portfolio_context
 
-        portfolio_context = await get_portfolio_context(
-            get_config().get("user_id"),
-            as_of=state.get("trade_date"),
-        )
+        # Direct node callers from extensions/tests do not always carry a
+        # trade date.  Supplying ``as_of=None`` buys us no point-in-time
+        # protection and needlessly breaks the older one-argument context
+        # adapters, while graph runs always take the as-of path below.
+        portfolio_user_id = get_config().get("user_id")
+        trade_date = state.get("trade_date")
+        # ``historical_mode`` includes a same-day time-travel resume.  Do not
+        # delegate that safety decision solely to the calendar date inside
+        # get_portfolio_context: today's live holdings can still be newer than
+        # the checkpoint being replayed.
+        if bool(get_config().get("historical_mode", False)):
+            portfolio_context = _point_in_time_portfolio_exclusion(trade_date)
+        elif trade_date:
+            portfolio_context = await get_portfolio_context(portfolio_user_id, as_of=trade_date)
+        else:
+            portfolio_context = await get_portfolio_context(portfolio_user_id)
         past_context = "\n\n".join(
             part for part in (memory_lessons, state.get("past_context", "")) if part
         )
@@ -135,10 +165,13 @@ def create_portfolio_manager(llm):
 {instrument_context}
 ---
 You are the **only** agent allowed to produce a final Buy, Overweight, Hold,
-Underweight, or Sell decision and its execution fields. Treat the Research
-Manager's posture and the Risk Debate as non-authoritative evidence and
-guardrails, not as orders. Do not mechanically copy or average them; resolve
-their conflicts against the complete analyst evidence and the live portfolio.
+Underweight, or Sell *proposal* and its execution fields. This proposal is
+non-executable: the deterministic Decision Stability Controller has final
+execution authority and may accept it, downgrade it to Hold, or issue a
+risk-only reduction. Treat the Research Manager's posture and the Risk Debate
+as non-authoritative evidence and guardrails, not as orders. Do not
+mechanically copy or average them; resolve their conflicts against the complete
+analyst evidence and the live portfolio.
 
 **Final Rating Scale** (use exactly one):
 - **Buy**: Enter or materially add to a position.
@@ -160,8 +193,8 @@ their conflicts against the complete analyst evidence and the live portfolio.
 ## Prior lessons and ambient market context
 {past_context or 'No prior lessons were available.'}
 ---
-Return one coherent PortfolioDecision. For Buy/Overweight, provide a calibrated
-confidence score, entry, stop loss, take profit, target allocation percentage,
+Return one coherent raw PortfolioDecision. For Buy/Overweight, provide an
+honest raw confidence score, entry, stop loss, take profit, target allocation percentage,
 suggested capital, and leverage. For Sell, use a 0% target allocation for a
 full exit; for Underweight, give the lower desired final allocation. For Hold,
 use no entry/stop/take-profit, no new capital, and a null target allocation.
@@ -182,13 +215,23 @@ stop clearly justify more; volatile/speculative instruments should remain at
         )
 
         final_signal: str | None = None
-        decision_json = "{}"
+        # Preserve the legacy serialized state contract here.  The controller
+        # normalises either a mapping or a JSON string and replaces this field
+        # with the accepted mapping at the end of a full graph run.
+        decision_json: dict | str = "{}"
+        proposal_json: dict = {}
         if isinstance(result, str):
             final_trade_decision = result
         else:
             final_trade_decision = render_pm_decision(result)
             final_signal = result.rating.value
             decision_json = result.model_dump_json()
+            proposal_json = {
+                "proposed_decision": result.model_dump(mode="json"),
+                "rationale": result.investment_thesis or result.executive_summary,
+                "supporting_evidence_ids": [],
+                "triggered_invalidation_ids": [],
+            }
 
         new_risk_debate_state = {
             "judge_decision": final_trade_decision,
@@ -204,6 +247,11 @@ stop clearly justify more; volatile/speculative instruments should remain at
         }
         out = {
             "risk_debate_state": new_risk_debate_state,
+            "pm_proposal_json": proposal_json,
+            "pm_proposal_report": final_trade_decision,
+            # The graph controller overwrites these legacy aliases with the
+            # accepted canonical decision. Keeping them here preserves direct
+            # node callers and older checkpoint decoding during migration.
             "final_trade_decision": final_trade_decision,
             "portfolio_decision_json": decision_json,
         }
