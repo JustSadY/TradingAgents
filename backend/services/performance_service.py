@@ -49,9 +49,6 @@ def _normalise_regime(
     if require_fresh:
         raw_as_of = regime.get("as_of")
         if not raw_as_of:
-            # A prior AssetStrategy regime without a timestamp cannot be
-            # asserted to describe the market *now*. Ignore its regime slice
-            # rather than bias a fresh run toward stale market conditions.
             return {}
         try:
             observed = datetime.fromisoformat(str(raw_as_of).replace("Z", "+00:00"))
@@ -220,11 +217,26 @@ async def get_regime_aware_analyst_attribution_stats(
     ticker: str,
     current_regime: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return privacy-scoped Bayesian analyst weights for one live run."""
+    """Return privacy-scoped Bayesian analyst weights for one live run.
+
+    A fresh broad-market snapshot is preferred. A recent caller-supplied regime
+    remains an allowed fast path, but an old/undated AssetStrategy assumption
+    is never treated as the current market regime.
+    """
     from sqlalchemy import select
 
     from backend.models.analysis import AnalysisResult
     from backend.trading_agents.agents.analyst_registry import get_report_fields
+
+    effective_regime: dict[str, Any] | None = current_regime
+    if not _normalise_regime(effective_regime, require_fresh=True):
+        try:
+            from backend.services.analysis.market_pulse_service import get_current_regime_snapshot
+
+            effective_regime = await get_current_regime_snapshot()
+        except Exception as exc:  # noqa: BLE001 - regime slice is optional
+            _logger.warning("Could not load current market regime; using non-regime attribution: %s", exc)
+            effective_regime = {}
 
     query = (
         select(AnalysisResult)
@@ -238,7 +250,7 @@ async def get_regime_aware_analyst_attribution_stats(
         query = query.where(AnalysisResult.user_id == user_id)
     rows = list((await db.execute(query)).scalars().all())
     report_fields = get_report_fields()
-    fresh_regime = _normalise_regime(current_regime, require_fresh=True)
+    fresh_regime = _normalise_regime(effective_regime, require_fresh=True)
     return {
         "method": "beta_binomial_global_ticker_regime_recency_v2",
         "ticker": ticker.upper(),
@@ -246,7 +258,7 @@ async def get_regime_aware_analyst_attribution_stats(
         "attribution": _regime_aware_weight_rows(
             rows,
             ticker=ticker,
-            current_regime=current_regime,
+            current_regime=effective_regime,
             report_fields=report_fields,
         ),
         "total_resolved_runs": len(rows),
@@ -441,8 +453,8 @@ async def get_analyst_performance_context(
             md += (
                 "Effective weights use beta-binomial shrinkage across global, ticker-specific, "
                 "fresh matching-regime, and recent accuracy. A stale/undated strategy regime is "
-                "not treated as the current market regime. Sparse local samples are pulled toward "
-                "the global baseline.\n"
+                "replaced by a direction-neutral broad-market snapshot when available. Sparse local "
+                "samples are pulled toward the global baseline.\n"
             )
             for att in attribution:
                 md += (
