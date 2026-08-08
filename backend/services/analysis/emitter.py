@@ -1,9 +1,11 @@
 from __future__ import annotations
 
 import asyncio
+from collections import Counter
 from typing import Any
 
 from backend.core.event_bus import publish_close, publish_event
+
 
 class AnalysisEmitter:
     """Handles real-time event emission for analysis tasks."""
@@ -12,6 +14,12 @@ class AnalysisEmitter:
         self.task_id = task_id
         self.loop = loop or asyncio.get_running_loop()
         self.terminal_event_emitted = False
+        # Imperative debate loops can publish a turn before their enclosing
+        # LangGraph node returns. The normal graph observer later sees that
+        # same turn once. Keep a one-use suppression token for that replay so
+        # the UI gets exactly one bubble without globally deduping legitimate
+        # later turns that happen to contain identical text.
+        self._debate_replay_suppressions: Counter[tuple[str, str, str]] = Counter()
 
     async def emit(self, event: dict[str, Any]) -> None:
         """Send an event to the task's WebSocket subscribers (direct or via Redis)."""
@@ -25,7 +33,7 @@ class AnalysisEmitter:
         """Emit a structured status update.
 
         ``agent`` is the producer identifier, while ``status`` is a compact
-        lifecycle state.  Human-readable progress belongs in ``message`` so
+        lifecycle state. Human-readable progress belongs in ``message`` so
         consumers do not have to overload the agent field to display it.
         """
         event: dict[str, Any] = {"type": "status", "status": status, "agent": agent}
@@ -46,13 +54,29 @@ class AnalysisEmitter:
         *,
         sender: str | None = None,
         content: str | None = None,
+        expect_graph_replay: bool = False,
     ) -> None:
         """Emit one complete debate turn.
 
-        ``message`` remains for older clients.  New clients consume the
+        ``message`` remains for older clients. New clients consume the
         structured sender/content fields, which avoids reparsing multiline
         Markdown responses on the browser side.
+
+        ``expect_graph_replay`` is used only by imperative inner debate loops:
+        the turn is emitted immediately and one later graph-observer emission
+        of the exact same structured turn is suppressed. This is intentionally
+        a counter, not a permanent content set, so identical arguments in a
+        genuinely later round remain visible.
         """
+        replay_key = (debate_type, sender or "", content if content is not None else message)
+        if expect_graph_replay:
+            self._debate_replay_suppressions[replay_key] += 1
+        elif self._debate_replay_suppressions.get(replay_key, 0) > 0:
+            self._debate_replay_suppressions[replay_key] -= 1
+            if self._debate_replay_suppressions[replay_key] <= 0:
+                self._debate_replay_suppressions.pop(replay_key, None)
+            return
+
         event: dict[str, Any] = {"type": "debate_bubble", "debate_type": debate_type, "message": message}
         if sender:
             event["sender"] = sender
@@ -86,7 +110,7 @@ class AnalysisEmitter:
         """Publish the durable outcome of an optional post-analysis order.
 
         ``complete`` means that the AI report was persisted; it must not be
-        interpreted as an assertion that an order was filled.  This separate
+        interpreted as an assertion that an order was filled. This separate
         event gives the client an explicit filled/skipped/rejected/error
         result, while retaining broker-specific detail for an order history.
         Values may be ``Decimal`` instances, so convert them at this wire
