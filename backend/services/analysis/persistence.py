@@ -18,6 +18,8 @@ async def create_skeleton_result(
     asset_type: str,
     triggered_by: str,
     user_id: int | None = None,
+    analysis_mode: str = "live",
+    learning_eligible: bool = True,
 ) -> AnalysisResult:
     """Create the initial skeleton record for tracking progress."""
     from backend.repositories.analysis import create_analysis_result
@@ -31,6 +33,8 @@ async def create_skeleton_result(
         asset_type=asset_type,
         status="running",
         triggered_by=triggered_by,
+        analysis_mode=analysis_mode,
+        learning_eligible=learning_eligible,
     )
 
 async def update_result_fields(db: AsyncSession, row_id: int, **fields) -> None:

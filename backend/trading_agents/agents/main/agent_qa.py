@@ -103,18 +103,19 @@ def create_agent_qa_node(ctx: AgentRunContext) -> NodeFn:
 
         transcript = "### Analyst Cross-Examination\n\n" + "\n\n".join(transcript_parts)
 
-        try:
-            from backend.services.memory_service import record_agent_qa
+        if state.get("learning_eligible", get_config().get("learning_eligible", True)):
+            try:
+                from backend.services.memory_service import record_agent_qa
 
-            await record_agent_qa(
-                user_id=get_config().get("user_id"),
-                ticker=state.get("company_of_interest", ""),
-                trade_date=state.get("trade_date", ""),
-                situation_text=state.get("market_report", ""),
-                transcript=transcript,
-            )
-        except Exception as exc:
-            logger.debug("[agent_qa] memory store failed (non-fatal): %s", exc)
+                await record_agent_qa(
+                    user_id=get_config().get("user_id"),
+                    ticker=state.get("company_of_interest", ""),
+                    trade_date=state.get("trade_date", ""),
+                    situation_text=state.get("market_report", ""),
+                    transcript=transcript,
+                )
+            except Exception as exc:
+                logger.debug("[agent_qa] memory store failed (non-fatal): %s", exc)
 
         return {"agent_qa_report": transcript}
 

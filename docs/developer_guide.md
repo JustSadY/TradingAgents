@@ -94,7 +94,7 @@ The frontend tracks the graph's execution using a persistent WebSocket connectio
       "content": "### Market Technical Analysis\n* RSI: 62\n* Momentum: Neutral..."
     }
     ```
-4.  **Completion Signal:** Once the Portfolio Manager outputs its decision, the connection returns the final decision parameters and closes:
+4.  **Completion Signal:** The Portfolio Manager first emits a raw proposal. The Decision Stability Controller then records its shadow counterfactual or emits the accepted canonical decision; only that accepted decision is returned as executable output before the connection closes:
     ```json
     {
       "type": "complete",
@@ -350,4 +350,3 @@ The `AnalystReportCache` table is defined in
 - `created_at` — timestamp (auto-set)
 
 The table is cleaned via an idempotent migration in `core/migrations.py` (no Alembic needed).
-

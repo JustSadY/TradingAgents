@@ -32,6 +32,53 @@ _COLLAB_SYSTEM = (
 
 _logger = logging.getLogger(__name__)
 
+_TEAM_FOR_ANALYST = {
+    "market": "technical",
+    "quant": "technical",
+    "fundamentals": "fundamental",
+    "earnings": "fundamental",
+    "insider": "fundamental",
+    "ownership": "fundamental",
+    "ratings": "fundamental",
+    "short_interest": "fundamental",
+    "valuation": "fundamental",
+    "macro": "macro_sentiment",
+    "social": "macro_sentiment",
+    "news": "macro_sentiment",
+    "options": "catalyst_options",
+    "catalyst": "catalyst_options",
+}
+
+
+def _neutral_analysis_agenda(state: dict, analyst: str) -> str:
+    """Return the planner's analyst-safe research agenda, if one exists.
+
+    Only ``analysis_plan_json`` flows into analyst prompts.  The full active
+    strategy and previous accepted decision never do, which prevents a prior
+    BUY/SELL from becoming an implicit instruction to the research team.
+    """
+
+    plan = state.get("analysis_plan_json")
+    if not isinstance(plan, dict):
+        return ""
+    questions_by_team = plan.get("analyst_questions")
+    if not isinstance(questions_by_team, dict):
+        return ""
+    questions: list[str] = []
+    for key in (analyst, _TEAM_FOR_ANALYST.get(analyst)):
+        values = questions_by_team.get(key) if key else None
+        if isinstance(values, list):
+            questions.extend(str(item).strip() for item in values if str(item).strip())
+    if not questions:
+        return ""
+    unique = list(dict.fromkeys(questions))[:5]
+    return (
+        "\n\n## Neutral Investigation Agenda\n"
+        "Independently test these questions. Seek evidence that could support *and* contradict each one; "
+        "do not infer any prior portfolio rating or try to preserve a previous thesis.\n"
+        + "\n".join(f"- {question}" for question in unique)
+    )
+
 
 def _report_text(content: Any) -> str:
     """Normalize provider-specific content blocks through the shared parser."""
@@ -188,13 +235,14 @@ async def run_tool_analyst(
     runtime_retry_config = None
     if ctx and "graph" in ctx:
         runtime_retry_config = getattr(ctx["graph"], "config", {}) or {}
+    neutral_agenda = _neutral_analysis_agenda(state, analyst)
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", effective_collab_system),
             MessagesPlaceholder(variable_name="messages"),
         ]
     )
-    prompt = prompt.partial(system_message=effective_system_message + get_general_settings_block())
+    prompt = prompt.partial(system_message=effective_system_message + neutral_agenda + get_general_settings_block())
     prompt = prompt.partial(tool_names=", ".join(tool.name for tool in tools))
     prompt = prompt.partial(current_date=state["trade_date"])
     prompt = prompt.partial(instrument_context=instrument_context)

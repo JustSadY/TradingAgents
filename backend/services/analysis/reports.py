@@ -28,7 +28,6 @@ PIPELINE_REPORT_FIELDS: tuple[str, ...] = (
     "audit_report",
     "investment_plan",
     "final_trade_decision",
-    "portfolio_decision_json",
 )
 
 

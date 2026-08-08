@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
 
+
 class AppSettings(Base):
     __tablename__ = "app_settings"
     __table_args__ = (Index("uq_app_settings_owner", text("COALESCE(user_id, 0)"), unique=True),)
@@ -73,6 +74,17 @@ class AppSettings(Base):
     analyst_prefilter_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     analyst_prefilter_min_samples: Mapped[int] = mapped_column(Integer, default=5)
     analyst_prefilter_max_win_rate: Mapped[float] = mapped_column(Float, default=40.0)
+    # Strategy continuity / decision-stability controls.  Shadow is the safe
+    # default: the controller records what it would have changed without
+    # changing the Portfolio Manager's executable decision.
+    strategy_learning_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    decision_stability_mode: Mapped[str] = mapped_column(String(20), default="shadow")
+    decision_stability_min_quality: Mapped[int] = mapped_column(Integer, default=70)
+    decision_stability_min_confidence: Mapped[float] = mapped_column(Float, default=0.65)
+    decision_stability_min_evidence_groups: Mapped[int] = mapped_column(Integer, default=2)
+    reversal_verifier_enabled: Mapped[bool] = mapped_column(Boolean, default=True)
+    confidence_calibration_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
+    regime_aware_weighting_enabled: Mapped[bool] = mapped_column(Boolean, default=False)
     memory_recall_count: Mapped[int] = mapped_column(Integer, default=5)
     summary_only_mode: Mapped[bool] = mapped_column(Boolean, default=False)
     news_article_limit: Mapped[int] = mapped_column(Integer, default=20)

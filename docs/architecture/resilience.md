@@ -48,9 +48,10 @@ with the data it already has, instead of crashing. (Falls back to the default
   | Synthesis / Auditor | empty `synthesis_report` / `audit_report` |
   | Research Manager | placeholder `investment_plan` |
   | Risk Debate | neutral risk-guardrail state |
-  | **Portfolio Manager** | `final_trade_decision = "Hold — automated fallback"` |
+  | **Portfolio Manager** | `final_trade_decision = "Hold — automated fallback"` raw proposal, followed by controller fail-closed acceptance |
 
-The Portfolio Manager fallback guarantees the run always produces a final
+The Portfolio Manager fallback guarantees the run always produces a safe raw
+proposal. The Decision Stability Controller then guarantees a canonical final
 decision, so the analysis completes (as `Hold`) even if the terminal agent fails.
 
 > Everything is **behaviour-preserving on the happy path** — retries/fallbacks

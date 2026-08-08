@@ -2027,6 +2027,36 @@ export interface components {
             agent_qa_report: string;
             /** Investment Plan */
             investment_plan: string;
+            /** Direction-neutral investigation plan created before analysts run. */
+            analysis_plan_json?: unknown;
+            /** Structured synthesis and evidence lineage. */
+            synthesis_json?: unknown;
+            /** Structured market-regime snapshot for this analysis. */
+            market_regime_json?: unknown;
+            /** Exact persistent asset strategy loaded before the analysis. */
+            strategy_before_json?: unknown;
+            /** Candidate/accepted asset strategy after reconciliation. */
+            strategy_after_json?: unknown;
+            /** Non-persisted reconciler candidate, recorded for audit. */
+            strategy_candidate_json?: unknown;
+            /** Raw, non-executable Portfolio Manager proposal. */
+            pm_proposal_json?: unknown;
+            /** Controller-accepted canonical portfolio decision. */
+            portfolio_decision_json?: unknown;
+            /** Auditable controller transition from proposal to acceptance. */
+            decision_transition_json?: unknown;
+            /** Confidence used by the stability controller and execution path. */
+            calibrated_confidence?: number | null;
+            /** Persistence outcome, including optimistic-lock conflicts. */
+            strategy_update_status?: string | null;
+            /** Asset strategy version loaded at analysis start. */
+            strategy_before_version?: number | null;
+            /** Asset strategy version after a material accepted revision. */
+            strategy_after_version?: number | null;
+            /** Live, historical, or time-travel analysis mode. */
+            analysis_mode?: string | null;
+            /** Whether this row is eligible to teach live-learning services. */
+            learning_eligible?: boolean | null;
             /** Trader Plan */
             trader_plan: string;
             /** Final Decision */
@@ -3432,6 +3462,46 @@ export interface components {
              */
             analyst_prefilter_max_win_rate: number;
             /**
+             * Strategy Learning Enabled
+             * @default true
+             */
+            strategy_learning_enabled: boolean;
+            /**
+             * Decision Stability Mode
+             * @default shadow
+             */
+            decision_stability_mode: string;
+            /**
+             * Decision Stability Min Quality
+             * @default 70
+             */
+            decision_stability_min_quality: number;
+            /**
+             * Decision Stability Min Confidence
+             * @default 0.65
+             */
+            decision_stability_min_confidence: number;
+            /**
+             * Decision Stability Min Evidence Groups
+             * @default 2
+             */
+            decision_stability_min_evidence_groups: number;
+            /**
+             * Reversal Verifier Enabled
+             * @default true
+             */
+            reversal_verifier_enabled: boolean;
+            /**
+             * Confidence Calibration Enabled
+             * @default false
+             */
+            confidence_calibration_enabled: boolean;
+            /**
+             * Regime Aware Weighting Enabled
+             * @default false
+             */
+            regime_aware_weighting_enabled: boolean;
+            /**
              * Memory Recall Count
              * @default 5
              */
@@ -3575,6 +3645,22 @@ export interface components {
             analyst_prefilter_min_samples?: number | null;
             /** Analyst Prefilter Max Win Rate */
             analyst_prefilter_max_win_rate?: number | null;
+            /** Strategy Learning Enabled */
+            strategy_learning_enabled?: boolean | null;
+            /** Decision Stability Mode */
+            decision_stability_mode?: string | null;
+            /** Decision Stability Min Quality */
+            decision_stability_min_quality?: number | null;
+            /** Decision Stability Min Confidence */
+            decision_stability_min_confidence?: number | null;
+            /** Decision Stability Min Evidence Groups */
+            decision_stability_min_evidence_groups?: number | null;
+            /** Reversal Verifier Enabled */
+            reversal_verifier_enabled?: boolean | null;
+            /** Confidence Calibration Enabled */
+            confidence_calibration_enabled?: boolean | null;
+            /** Regime Aware Weighting Enabled */
+            regime_aware_weighting_enabled?: boolean | null;
             /** Memory Recall Count */
             memory_recall_count?: number | null;
             /** Summary Only Mode */

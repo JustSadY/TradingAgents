@@ -25,6 +25,7 @@ import { DebateBubble, DebateHistoryWidget, parseDebateMessage } from '../compon
 import { AnalysisChatWidget } from '../components/analysis/AnalysisChatWidget'
 import { RiskMetricsCard } from '../components/analysis/RiskMetricsCard'
 import { MentalModelTicker } from '../components/analysis/MentalModelTicker'
+import { StrategyTransitionCard } from '../components/analysis/StrategyTransitionCard'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 
 interface WsEvent {
@@ -552,19 +553,28 @@ function decisionNumber(value: unknown): number | undefined {
   return isFiniteNumeric(value) ? value : undefined
 }
 
+function unwrapCanonicalPortfolioDecision(value: unknown): Record<string, unknown> | null {
+  const record = objectFromJson(value)
+  if (!record) return null
+  if (typeof record.rating === 'string' || typeof record.action === 'string') return record
+  const nested = objectFromJson(record.decision) ?? objectFromJson(record.accepted_decision)
+  return nested ? unwrapCanonicalPortfolioDecision(nested) : null
+}
+
 /**
- * New runs store the sole Portfolio Manager recommendation inside
- * `chart_annotations.portfolio_decision`.  The Trader JSON is read only for
- * old saved analyses so current UI never presents competing AI trade sizes.
+ * New runs persist the controller-accepted canonical decision directly.  The
+ * chart annotation remains a backwards-compatible fallback for older rows,
+ * while the Trader JSON is read only for historical legacy analyses.
  */
 function readPortfolioDecision(
-  chartAnnotations: unknown,
+  acceptedPortfolioDecision?: unknown,
+  chartAnnotations?: unknown,
   legacyTraderJson?: string | null,
   streamedPortfolioDecision?: unknown,
 ): PortfolioDecisionPreview | null {
   const annotations = objectFromJson(chartAnnotations)
-  const decision = objectFromJson(
-    annotations?.portfolio_decision ?? annotations?.portfolio_decision_json ?? streamedPortfolioDecision,
+  const decision = unwrapCanonicalPortfolioDecision(
+    acceptedPortfolioDecision ?? annotations?.portfolio_decision ?? annotations?.portfolio_decision_json ?? streamedPortfolioDecision,
   )
   if (decision) {
     const rating = typeof decision.rating === 'string' && decision.rating.trim() ? decision.rating.trim() : undefined
@@ -600,16 +610,18 @@ function readPortfolioDecision(
 }
 
 function PortfolioDecisionCard({
+  acceptedPortfolioDecision,
   chartAnnotations,
   legacyTraderJson,
   streamedPortfolioDecision,
 }: {
+  acceptedPortfolioDecision?: unknown
   chartAnnotations?: unknown
   legacyTraderJson?: string | null
   streamedPortfolioDecision?: unknown
 }) {
   const { t } = useTranslation()
-  const decision = readPortfolioDecision(chartAnnotations, legacyTraderJson, streamedPortfolioDecision)
+  const decision = readPortfolioDecision(acceptedPortfolioDecision, chartAnnotations, legacyTraderJson, streamedPortfolioDecision)
   if (!decision) return null
 
   const confidence = decision.confidenceScore === undefined
@@ -1449,8 +1461,10 @@ function RunTab() {
         const activeRiskMetrics = detail ? detail.risk_metrics : riskMetrics;
         const activeLegacyTraderProposal = detail ? detail.trader_proposal_json : reports.trader_proposal_json;
         const activeChartAnnotations = detail?.chart_annotations ?? reports.chart_annotations;
-        const streamedPortfolioDecision = reports.portfolio_decision_json || reports.portfolio_decision;
+        const activeAcceptedPortfolioDecision = detail?.portfolio_decision_json ?? reports.portfolio_decision_json;
+        const streamedPortfolioDecision = reports.pm_proposal_json || reports.portfolio_decision;
         const activePortfolioDecision = readPortfolioDecision(
+          activeAcceptedPortfolioDecision,
           activeChartAnnotations,
           activeLegacyTraderProposal,
           streamedPortfolioDecision,
@@ -1654,6 +1668,7 @@ function RunTab() {
                       {activePortfolioDecision && (
                         <div className="flex-1 max-w-md min-w-[200px]">
                           <PortfolioDecisionCard
+                            acceptedPortfolioDecision={activeAcceptedPortfolioDecision}
                             chartAnnotations={activeChartAnnotations}
                             legacyTraderJson={activeLegacyTraderProposal}
                             streamedPortfolioDecision={streamedPortfolioDecision}
@@ -1664,6 +1679,20 @@ function RunTab() {
 
                     {/* Risk metrics if present */}
                     {activeRiskMetrics && <RiskMetricsCard metrics={activeRiskMetrics} />}
+
+                    <StrategyTransitionCard
+                      analysisPlan={detail?.analysis_plan_json ?? reports.analysis_plan_json}
+                      strategyBefore={detail?.strategy_before_json ?? reports.strategy_before_json}
+                      strategyAfter={detail?.strategy_after_json ?? reports.strategy_after_json}
+                      strategyCandidate={detail?.strategy_candidate_json ?? reports.strategy_candidate_json}
+                      pmProposal={detail?.pm_proposal_json ?? reports.pm_proposal_json}
+                      acceptedDecision={activeAcceptedPortfolioDecision}
+                      transition={detail?.decision_transition_json ?? reports.decision_transition_json}
+                      calibratedConfidence={detail?.calibrated_confidence ?? null}
+                      strategyUpdateStatus={detail?.strategy_update_status ?? null}
+                      strategyBeforeVersion={detail?.strategy_before_version ?? null}
+                      strategyAfterVersion={detail?.strategy_after_version ?? null}
+                    />
 
                     {/* PM Final Decision */}
                     {activePlans.final_decision ? (
@@ -2316,7 +2345,7 @@ function HistoryTab({
   }, [initialDetailId, openDetail])
 
   const historyPortfolioDecision = detail
-    ? readPortfolioDecision(detail.chart_annotations, detail.trader_proposal_json)
+    ? readPortfolioDecision(detail.portfolio_decision_json, detail.chart_annotations, detail.trader_proposal_json)
     : null
   const historyHasPortfolioManagerDecision = historyPortfolioDecision?.source === 'portfolio_manager'
   const historyReportEntries = detail
@@ -2552,8 +2581,22 @@ function HistoryTab({
                     <div className="space-y-2 pr-1">
                       {detail.risk_metrics ? <RiskMetricsCard metrics={detail.risk_metrics as any} /> : null}
                       <PortfolioDecisionCard
+                        acceptedPortfolioDecision={detail.portfolio_decision_json}
                         chartAnnotations={detail.chart_annotations}
                         legacyTraderJson={detail.trader_proposal_json}
+                      />
+                      <StrategyTransitionCard
+                        analysisPlan={detail.analysis_plan_json}
+                        strategyBefore={detail.strategy_before_json}
+                        strategyAfter={detail.strategy_after_json}
+                        strategyCandidate={detail.strategy_candidate_json}
+                        pmProposal={detail.pm_proposal_json}
+                        acceptedDecision={detail.portfolio_decision_json}
+                        transition={detail.decision_transition_json}
+                        calibratedConfidence={detail.calibrated_confidence ?? null}
+                        strategyUpdateStatus={detail.strategy_update_status ?? null}
+                        strategyBeforeVersion={detail.strategy_before_version ?? null}
+                        strategyAfterVersion={detail.strategy_after_version ?? null}
                       />
                       {([
                         ...historyReportEntries,

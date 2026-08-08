@@ -20,10 +20,14 @@ graph TD
     Redis --> Worker[arq analysis worker]
     Worker --> Graph
 
-    Graph --> Analysts[12 analyst plugins]
+    Graph --> StrategyContext[Exact strategy context]
+    StrategyContext --> Planner[Neutral analysis planner]
+    Planner --> Analysts[12 analyst plugins]
     Analysts --> Research[Cross-examination / Bull-Bear research]
     Research --> Risk[Risk evidence and guardrails]
-    Risk --> PM[Portfolio Manager final decision]
+    Risk --> Reconciler[Strategy Reconciler]
+    Reconciler --> PM[Portfolio Manager raw proposal]
+    PM --> Stability[Decision Stability Controller]
 
     Graph --> LLM[Unified LLM clients]
     Graph --> Tools[Modular agent tools]
@@ -35,12 +39,12 @@ graph TD
     Events -->|Redis pub/sub| Redis
     Redis --> WS
 
-    PM --> Controls[Deterministic execution controls]
+    Stability --> Controls[Deterministic execution controls]
     Controls --> Paper[Paper/simulation execution]
     Controls --> Broker[Optional configured broker execution]
 ```
 
-The important ownership boundary is that agent output is not itself an order. The Portfolio Manager produces the final structured investment intent; application-side risk, cash, exposure, broker, and execution controls still decide whether an order can be placed.
+The important ownership boundary is that agent output is not itself an order. The Portfolio Manager produces a raw structured proposal; the Decision Stability Controller records or accepts the canonical decision, and application-side risk, cash, exposure, broker, and execution controls still decide whether an order can be placed.
 
 ---
 
@@ -97,15 +101,18 @@ The AI subsystem lives under `backend/trading_agents/` and is imported by the Fa
 
 The implementation separates specialized evidence production from final execution authority:
 
-1. **Market Intelligence / analyst execution** — runs the enabled analyst plugins.
-2. **Cross-examination and research synthesis** — resolves conflicts and runs Bull/Bear thesis work and auditing/management steps.
-3. **Risk evaluation** — aggressive, conservative, and neutral risk agents produce risk evidence and guardrails.
-4. **Portfolio Manager** — produces the sole final structured investment decision.
-5. **Validation/reflection and application execution controls** — graph/application checks may reject, refine, reduce, or prevent downstream execution.
+1. **Strategy Context + Analysis Planner** — loads the exact active/as-of strategy and creates a neutral investigation agenda without exposing its old direction to fresh analysts.
+2. **Market Intelligence / analyst execution** — runs the enabled analyst plugins.
+3. **Cross-examination and research synthesis** — resolves conflicts and runs Bull/Bear thesis work and auditing/management steps, including structured synthesis evidence.
+4. **Risk evaluation** — aggressive, conservative, and neutral risk agents produce risk evidence and guardrails.
+5. **Strategy Reconciler** — compares new evidence with the active thesis and proposes `KEEP`, `STRENGTHEN`, `WEAKEN`, `INVALIDATE`, or `REBUILD`.
+6. **Portfolio Manager** — emits the sole AI raw structured proposal.
+7. **Decision Stability Controller** — records (shadow) or accepts (enforce) the canonical decision using hysteresis, invalidations, independent evidence, quality, and calibrated confidence.
+8. **Transactional persistence and application execution controls** — atomically records the accepted result/strategy version; application controls may still reject, reduce, or prevent an order.
 
 The current analyst catalog contains 12 specialized analyst plugins: Market/Technical, Social Sentiment, News, Fundamentals, Macroeconomics, Options Chain, Quantitative Factor, Earnings Call, Performance Review, Catalyst, Insider Activity, and Institutional Ownership.
 
-Risk agents do **not** independently own final Buy/Sell/Hold direction or executable quantity/allocation. Final agent authority belongs to the Portfolio Manager.
+Risk agents do **not** independently own final Buy/Sell/Hold direction or executable quantity/allocation. The Portfolio Manager is the sole AI proposal authority; the deterministic controller owns the canonical accepted-decision boundary.
 
 ### Package layout
 
@@ -129,7 +136,7 @@ backend/trading_agents/
 └── llm_clients/
 ```
 
-For the detailed graph and agent responsibilities, see [`multi_agent_system.md`](multi_agent_system.md) and [`../../backend/trading_agents/README.md`](../../backend/trading_agents/README.md).
+For the detailed graph and agent responsibilities, see [`multi_agent_system.md`](multi_agent_system.md), [`strategy_continuity.md`](strategy_continuity.md), and [`../../backend/trading_agents/README.md`](../../backend/trading_agents/README.md).
 
 ---
 

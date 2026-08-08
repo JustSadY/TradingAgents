@@ -1,14 +1,16 @@
 """
 Top-level graph assembly for the 3-tier agent model.
 
-The graph has five decision stages wired linearly:
+The graph has strategy-aware stages wired linearly:
 
-    START → Market Intelligence → Agent Q&A → Research Manager
-          → Risk Debate → Portfolio Manager → END
+    START → Strategy Context Loader → Analysis Planner → Market Intelligence
+          → Agent Q&A → Research Manager → Risk Debate → Strategy Reconciler
+          → Portfolio Manager (raw proposal) → Decision Stability Controller → END
 
-The former Trader node was intentionally removed. It used a separate LLM to
-emit a competing action, quantity, and price plan; the Portfolio Manager now
-owns the only executable AI decision.
+The former Trader node was intentionally removed. The Portfolio Manager emits
+the only AI proposal, while a deterministic controller is the final execution
+authority. Asset strategy persistence stays outside LangGraph in the analysis
+orchestrator, so graph nodes never carry a database session.
 
 Each Main Agent node internally checks its kill-switch and orchestrates its own
 Tier-2 sub-agents (which in turn call Tier-3 tools). All of the per-analyst
@@ -33,10 +35,13 @@ from backend.trading_agents.agents.base import (
 )
 from backend.trading_agents.agents.main import (
     create_agent_qa_node,
+    create_analysis_planner_node,
+    create_decision_stability_controller_node,
     create_market_intelligence_node,
     create_portfolio_manager_node,
     create_research_manager_node,
     create_risk_debate_node,
+    create_strategy_reconciler_node,
 )
 from backend.trading_agents.agents.main.market_intelligence import market_intelligence_failure_update
 from backend.trading_agents.agents.runtime.resilience import guard_node
@@ -46,10 +51,14 @@ from .conditional_logic import ConditionalLogic
 logger = logging.getLogger(__name__)
 
 _MARKET_INTELLIGENCE = "Market Intelligence"
+_STRATEGY_CONTEXT_LOADER = "Strategy Context Loader"
+_ANALYSIS_PLANNER = "Analysis Planner"
 _AGENT_QA = "Agent Q&A"
 _RESEARCH_MANAGER = "Research Manager"
 _RISK_DEBATE = "Risk Debate"
+_STRATEGY_RECONCILER = "Strategy Reconciler"
 _PORTFOLIO_MANAGER = "Portfolio Manager"
+_DECISION_STABILITY = "Decision Stability Controller"
 
 
 def _market_timeout_multiplier(selected_analysts: list[str] | set[str]) -> float:
@@ -121,6 +130,25 @@ class GraphSetup:
             timeout_multiplier=_market_timeout_multiplier(selected_analysts),
             retry_timeouts=False,
         )
+        strategy_context_loader = guard_node(
+            lambda state: {"strategy_context": state.get("strategy_context") or {}},
+            name=_STRATEGY_CONTEXT_LOADER,
+            kind="main",
+            fallback=lambda _state, _exc: {"strategy_context": {}},
+            timeout_multiplier=1,
+            retry_timeouts=False,
+        )
+        analysis_planner = guard_node(
+            create_analysis_planner_node(ctx),
+            name=_ANALYSIS_PLANNER,
+            kind="main",
+            fallback=lambda _state, _exc: {
+                "analysis_plan_json": {},
+                "analysis_plan_report": "Analysis planner unavailable; analysts will perform an independent general review.",
+            },
+            timeout_multiplier=2,
+            retry_timeouts=False,
+        )
         agent_qa = guard_node(
             create_agent_qa_node(ctx),
             name=_AGENT_QA,
@@ -149,6 +177,17 @@ class GraphSetup:
             },
             retry_timeouts=False,
         )
+        strategy_reconciler = guard_node(
+            create_strategy_reconciler_node(ctx),
+            name=_STRATEGY_RECONCILER,
+            kind="main",
+            fallback=lambda _state, _exc: {
+                "strategy_candidate_json": {},
+                "strategy_reconciliation_report": "Strategy reconciliation unavailable; no strategy revision will be persisted.",
+            },
+            timeout_multiplier=2,
+            retry_timeouts=False,
+        )
         portfolio_manager = guard_node(
             create_portfolio_manager_node(ctx),
             name=_PORTFOLIO_MANAGER,
@@ -159,19 +198,55 @@ class GraphSetup:
             timeout_multiplier=2,
             retry_timeouts=False,
         )
+        decision_stability = guard_node(
+            create_decision_stability_controller_node(ctx),
+            name=_DECISION_STABILITY,
+            kind="decision",
+            fallback=lambda _state, _exc: {
+                "portfolio_decision_json": {
+                    "rating": "Hold",
+                    "executive_summary": "Decision Stability Controller unavailable; no new order.",
+                    "investment_thesis": "A controller failure must fail closed.",
+                    "confidence_score": 0.0,
+                    "entry_price": None,
+                    "stop_loss": None,
+                    "take_profit_price": None,
+                    "position_size_pct": None,
+                    "suggested_capital": 0.0,
+                    "price_target": None,
+                    "recommended_leverage": 1.0,
+                    "liquidation_price": None,
+                    "time_horizon": None,
+                },
+                "final_signal": "Hold",
+                "final_trade_decision": "Hold — Decision Stability Controller unavailable; no new order.",
+                "decision_transition_json": {"outcome": "BLOCKED_CHANGE", "reason": "controller_unavailable"},
+                "calibrated_confidence": 0.0,
+            },
+            timeout_multiplier=2,
+            retry_timeouts=False,
+        )
 
         workflow = StateGraph(AgentState)
+        workflow.add_node(_STRATEGY_CONTEXT_LOADER, strategy_context_loader)
+        workflow.add_node(_ANALYSIS_PLANNER, analysis_planner)
         workflow.add_node(_MARKET_INTELLIGENCE, market_intelligence)
         workflow.add_node(_AGENT_QA, agent_qa)
         workflow.add_node(_RESEARCH_MANAGER, research_manager)
         workflow.add_node(_RISK_DEBATE, risk_debate)
+        workflow.add_node(_STRATEGY_RECONCILER, strategy_reconciler)
         workflow.add_node(_PORTFOLIO_MANAGER, portfolio_manager)
+        workflow.add_node(_DECISION_STABILITY, decision_stability)
 
-        workflow.add_edge(START, _MARKET_INTELLIGENCE)
+        workflow.add_edge(START, _STRATEGY_CONTEXT_LOADER)
+        workflow.add_edge(_STRATEGY_CONTEXT_LOADER, _ANALYSIS_PLANNER)
+        workflow.add_edge(_ANALYSIS_PLANNER, _MARKET_INTELLIGENCE)
         workflow.add_edge(_MARKET_INTELLIGENCE, _AGENT_QA)
         workflow.add_edge(_AGENT_QA, _RESEARCH_MANAGER)
         workflow.add_edge(_RESEARCH_MANAGER, _RISK_DEBATE)
-        workflow.add_edge(_RISK_DEBATE, _PORTFOLIO_MANAGER)
-        workflow.add_edge(_PORTFOLIO_MANAGER, END)
+        workflow.add_edge(_RISK_DEBATE, _STRATEGY_RECONCILER)
+        workflow.add_edge(_STRATEGY_RECONCILER, _PORTFOLIO_MANAGER)
+        workflow.add_edge(_PORTFOLIO_MANAGER, _DECISION_STABILITY)
+        workflow.add_edge(_DECISION_STABILITY, END)
 
         return workflow

@@ -190,3 +190,61 @@ async def test_portfolio_manager_ignores_legacy_trader_plan_and_emits_canonical_
     assert "SELL ALL NVDA AT ANY PRICE" not in captured["prompt"]
     assert "New Plugin Analyst" in captured["prompt"]
     assert "only** agent allowed to produce a final Buy" in captured["prompt"]
+
+
+@pytest.mark.asyncio
+async def test_portfolio_manager_excludes_live_portfolio_for_same_day_time_travel(monkeypatch):
+    """A checkpoint replay is historical even if its business date is today."""
+
+    from backend.services import memory_service
+    from backend.trading_agents.agents.runtime import portfolio_context
+    from backend.trading_agents.agents.sub.managers import portfolio_manager as pm
+    from backend.trading_agents.dataflows import config
+
+    captured: dict[str, str] = {}
+    final = PortfolioDecision(
+        rating=PortfolioRating.HOLD,
+        executive_summary="No new position is required for this replay.",
+        investment_thesis="The replay must not rely on present-day account balances.",
+        confidence_score=0.55,
+        suggested_capital=0.0,
+    )
+
+    async def fake_structured(_structured, _plain, prompt, _name, *, schema):
+        assert schema is PortfolioDecision
+        captured["prompt"] = prompt
+        return final
+
+    async def no_memory(**_kwargs):
+        return ""
+
+    async def live_portfolio_must_not_be_read(*_args, **_kwargs):
+        raise AssertionError("time-travel must not read mutable live portfolio state")
+
+    monkeypatch.setattr(pm, "bind_structured", lambda *_args: None)
+    monkeypatch.setattr(pm, "ainvoke_structured_or_freetext", fake_structured)
+    monkeypatch.setattr(pm, "get_general_settings_block", lambda: "")
+    monkeypatch.setattr(pm, "get_system_instruction_override", lambda _key: None)
+    monkeypatch.setattr(
+        config,
+        "get_config",
+        lambda: {"user_id": 1, "investor_persona": "Balanced", "historical_mode": True},
+    )
+    monkeypatch.setattr(memory_service, "recall_episode_lessons", no_memory)
+    monkeypatch.setattr(portfolio_context, "get_portfolio_context", live_portfolio_must_not_be_read)
+
+    node = pm.create_portfolio_manager(object())
+    await node(
+        {
+            "company_of_interest": "NVDA",
+            "asset_type": "stock",
+            # A same-day date is the regression: date-only filtering would
+            # previously treat it as safe to pull the current account.
+            "trade_date": "2026-08-08",
+            "investment_plan": "Re-evaluate the prior evidence without current account state.",
+            "risk_debate_state": {},
+        }
+    )
+
+    assert "PORTFOLIO CONTEXT EXCLUDED" in captured["prompt"]
+    assert "mutable current portfolio must not influence" in captured["prompt"]

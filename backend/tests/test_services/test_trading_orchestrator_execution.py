@@ -8,6 +8,7 @@ import pytest
 from backend.services.execution.base import OrderResult
 from backend.services.trading_orchestrator import _apply_portfolio_risk_caps, place_signal_order
 
+
 class _FakeTrader:
     def __init__(self):
         self.request = None
@@ -23,6 +24,26 @@ class _FakeTrader:
             filled_price=Decimal("100"),
             filled_quantity=request.quantity,
         )
+
+
+async def test_historical_or_time_travel_result_can_never_place_an_order():
+    result = await place_signal_order(
+        object(),
+        ticker="NVDA",
+        row=SimpleNamespace(
+            signal="Buy",
+            analysis_mode="historical",
+            portfolio_decision_json={"rating": "Buy", "position_size_pct": 10.0},
+            final_decision="",
+        ),
+        settings=_opening_settings(),
+        include_skip_result=True,
+    )
+
+    assert result is not None
+    assert result.status == "SKIPPED"
+    assert result.reason_code == "non_live_analysis"
+
 
 @pytest.mark.parametrize(
     ("signal", "holding_side", "expected_action"),
@@ -86,6 +107,120 @@ async def test_signal_exit_closes_the_entire_held_position_not_a_new_risk_sized_
     assert trader.request.stop_loss is None
     assert trader.request.take_profit is None
 
+
+async def test_sell_with_positive_target_opens_short_when_short_selling_is_enabled(monkeypatch):
+    from backend.repositories import portfolio as portfolio_repo
+    from backend.repositories import system_settings as system_settings_repo
+    from backend.services import trading_orchestrator
+
+    portfolio = SimpleNamespace(
+        id=42,
+        initial_capital=Decimal("10000"),
+        current_balance=Decimal("10000"),
+        cash_available=Decimal("10000"),
+    )
+    trader = _FakeTrader()
+
+    async def _get_system_settings(_db):
+        return None
+
+    async def _get_holding(_db, _portfolio_id, _ticker):
+        return None
+
+    async def _get_portfolio(_db, user=None):
+        return portfolio
+
+    async def _allocation_snapshot(_db, *, portfolio):
+        return {"total_value": 10_000.0, "holdings": []}
+
+    async def _risk_caps(_db, **kwargs):
+        return kwargs["quantity"]
+
+    monkeypatch.setattr(system_settings_repo, "get_system_settings", _get_system_settings)
+    monkeypatch.setattr(portfolio_repo, "get_holding", _get_holding)
+    monkeypatch.setattr(trading_orchestrator, "get_or_create_sim_portfolio", _get_portfolio)
+    monkeypatch.setattr(trading_orchestrator, "get_trader", lambda **_kwargs: trader)
+    monkeypatch.setattr(trading_orchestrator, "_allocation_snapshot", _allocation_snapshot)
+    monkeypatch.setattr(trading_orchestrator, "_apply_portfolio_risk_caps", _risk_caps)
+
+    result = await place_signal_order(
+        object(),
+        ticker="AAPL",
+        row=SimpleNamespace(
+            signal="Sell",
+            analysis_mode="live",
+            portfolio_decision_json={
+                "rating": "Sell",
+                "position_size_pct": 5.0,
+                "suggested_capital": 500.0,
+                "stop_loss": 110.0,
+                "take_profit_price": 90.0,
+                "recommended_leverage": 1.0,
+            },
+            final_decision="Open a measured short.",
+        ),
+        settings=_opening_settings(allow_short_selling=True),
+    )
+
+    assert result is not None
+    assert trader.request is not None
+    assert trader.request.action == "SELL"
+    assert trader.request.allow_short is True
+    assert trader.request.quantity > 0
+    assert trader.request.stop_loss == Decimal("110.0")
+    assert trader.request.take_profit == Decimal("90.0")
+
+
+async def test_sell_zero_target_does_not_open_short_from_flat(monkeypatch):
+    from backend.repositories import portfolio as portfolio_repo
+    from backend.repositories import system_settings as system_settings_repo
+    from backend.services import trading_orchestrator
+
+    portfolio = SimpleNamespace(
+        id=42,
+        initial_capital=Decimal("10000"),
+        current_balance=Decimal("10000"),
+        cash_available=Decimal("10000"),
+    )
+    trader = _FakeTrader()
+
+    async def _get_system_settings(_db):
+        return None
+
+    async def _get_holding(_db, _portfolio_id, _ticker):
+        return None
+
+    async def _get_portfolio(_db, user=None):
+        return portfolio
+
+    async def _allocation_snapshot(_db, *, portfolio):
+        return {"total_value": 10_000.0, "holdings": []}
+
+    monkeypatch.setattr(system_settings_repo, "get_system_settings", _get_system_settings)
+    monkeypatch.setattr(portfolio_repo, "get_holding", _get_holding)
+    monkeypatch.setattr(trading_orchestrator, "get_or_create_sim_portfolio", _get_portfolio)
+    monkeypatch.setattr(trading_orchestrator, "get_trader", lambda **_kwargs: trader)
+    monkeypatch.setattr(trading_orchestrator, "_allocation_snapshot", _allocation_snapshot)
+
+    result = await place_signal_order(
+        object(),
+        ticker="AAPL",
+        row=SimpleNamespace(
+            signal="Sell",
+            analysis_mode="live",
+            portfolio_decision_json={"rating": "Sell", "position_size_pct": 0.0},
+            final_decision="Stay flat.",
+        ),
+        settings=_opening_settings(allow_short_selling=True),
+        include_skip_result=True,
+    )
+
+    assert result is not None
+    assert result.status == "SKIPPED"
+    assert result.reason_code == "target_allocation_met"
+    assert trader.request is None
+
+
 async def test_portfolio_risk_snapshot_is_read_only(monkeypatch):
     from backend.services import mock_trading_service
 
@@ -113,6 +248,7 @@ async def test_portfolio_risk_snapshot_is_read_only(monkeypatch):
     assert quantity == 10.0
     assert received_kwargs == {"portfolio_id": 42, "read_only": True}
 
+
 async def test_portfolio_risk_snapshot_failure_fails_closed_for_new_exposure(monkeypatch):
     from backend.services import mock_trading_service
 
@@ -136,6 +272,7 @@ async def test_portfolio_risk_snapshot_failure_fails_closed_for_new_exposure(mon
 
     assert quantity == 0.0
 
+
 def _opening_settings(**overrides):
     values = {
         "quality_gate_enabled": False,
@@ -149,6 +286,7 @@ def _opening_settings(**overrides):
     }
     values.update(overrides)
     return SimpleNamespace(**values)
+
 
 async def test_drawdown_snapshot_error_blocks_a_new_position(monkeypatch):
     from backend.repositories import portfolio as portfolio_repo
@@ -187,6 +325,7 @@ async def test_drawdown_snapshot_error_blocks_a_new_position(monkeypatch):
     )
 
     assert result is None
+
 
 async def test_drawdown_snapshot_error_does_not_block_a_safe_exit(monkeypatch):
     from backend.repositories import portfolio as portfolio_repo
@@ -232,6 +371,7 @@ async def test_drawdown_snapshot_error_does_not_block_a_safe_exit(monkeypatch):
     assert result is not None
     assert trader.request.quantity == Decimal("7.25")
     assert snapshot_calls == 0
+
 
 async def test_zero_cash_never_falls_back_to_initial_capital_for_position_sizing(monkeypatch):
     from backend.repositories import portfolio as portfolio_repo

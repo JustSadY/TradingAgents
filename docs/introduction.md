@@ -1,6 +1,6 @@
 # TradingAgents Documentation Index
 
-TradingAgents is a multi-agent investment analysis and execution platform built around FastAPI, React, PostgreSQL, and LangGraph. Specialized analysts collect evidence, research agents challenge competing theses, risk agents surface guardrails, and a single Portfolio Manager produces the final structured investment decision. The surrounding application provides portfolio simulation, optional broker execution, scheduling, alerts, reporting, administration, and real-time progress streaming.
+TradingAgents is a multi-agent investment analysis and execution platform built around FastAPI, React, PostgreSQL, and LangGraph. Specialized analysts collect evidence, research agents challenge competing theses, risk agents surface guardrails, the Portfolio Manager produces a raw structured proposal, and the deterministic Decision Stability Controller records or accepts the canonical decision. The surrounding application provides portfolio simulation, optional broker execution, scheduling, alerts, reporting, administration, and real-time progress streaming.
 
 This documentation describes the current repository behavior. Historical audit, patch-note, and validation files under `docs/` are point-in-time records and should not be treated as the current architecture specification.
 
@@ -10,12 +10,13 @@ This documentation describes the current repository behavior. Historical audit, 
 2. **[Installation & Setup](installation.md)** — Linux/systemd, Docker Compose, monitoring stack, and local development setup.
 3. **[Configuration & API Setup](configuration.md)** — Infrastructure environment variables, provider configuration, Redis worker mode, and runtime settings.
 4. **[Multi-Agent Decision Core](architecture/multi_agent_system.md)** — LangGraph decision stages, analyst/research/risk responsibilities, and Portfolio Manager authority.
-5. **[Modular Tool System](architecture/modular_tool_system.md)** — Dynamic agent-tool registry, settings schemas, access control, and runtime activation.
-6. **[Backend Layering & Conventions](architecture/backend.md)** — FastAPI/service/repository/model boundaries and backend implementation rules.
-7. **[Developer Guide](developer_guide.md)** — Extension points, custom analysts/tools, WebSocket events, and development workflows.
-8. **[Backend README](../backend/README.md)** — Practical backend package and API overview.
-9. **[Agent Engine README](../backend/trading_agents/README.md)** — Agent hierarchy, tool registration, LLM clients, and LangGraph package layout.
-10. **[Deployment README](../deploy/README.md)** — Linux installer, systemd service, self-updater, and operational commands.
+5. **[Strategy Continuity & Stability](architecture/strategy_continuity.md)** — Persistent Asset Strategy state, neutral planning, versioning, hysteresis, time-travel safety, and rollout scorecard.
+6. **[Modular Tool System](architecture/modular_tool_system.md)** — Dynamic agent-tool registry, settings schemas, access control, and runtime activation.
+7. **[Backend Layering & Conventions](architecture/backend.md)** — FastAPI/service/repository/model boundaries and backend implementation rules.
+8. **[Developer Guide](developer_guide.md)** — Extension points, custom analysts/tools, WebSocket events, and development workflows.
+9. **[Backend README](../backend/README.md)** — Practical backend package and API overview.
+10. **[Agent Engine README](../backend/trading_agents/README.md)** — Agent hierarchy, tool registration, LLM clients, and LangGraph package layout.
+11. **[Deployment README](../deploy/README.md)** — Linux installer, systemd service, self-updater, and operational commands.
 
 ---
 
@@ -39,11 +40,13 @@ Aggressive, Conservative, and Neutral risk agents evaluate the research result f
 
 Risk agents are **not order authorities**. They do not independently issue the final Buy/Sell/Hold direction, quantity, allocation, leverage, stop, or target. Their output is evidence consumed by the final decision stage.
 
-### 4. Portfolio Manager authority
+### 4. Portfolio Manager proposal and accepted decision
 
-The Portfolio Manager is the sole agent responsible for the final structured investment decision. It evaluates active analyst reports, the research debate, and risk-agent evidence and emits the final rating and portfolio intent.
+The Portfolio Manager is the sole AI agent that proposes a structured rating and portfolio intent. It evaluates active analyst reports, the research debate, and risk-agent evidence, but its output is a raw proposal rather than an executable order.
 
-Any resulting order still passes deterministic application-side controls. Cash availability, concentration limits, exposure constraints, stop/risk rules, broker mode, and execution settings can reduce or reject the agent proposal.
+The Decision Stability Controller compares that proposal with the previous *accepted* decision, structured evidence, invalidations, run quality, and calibrated confidence. In `shadow` mode it records its counterfactual only; in `enforce` mode it becomes the canonical accepted decision. Any resulting order still passes deterministic application-side controls. Cash availability, concentration limits, exposure constraints, stop/risk rules, broker mode, and execution settings can reduce or reject the accepted decision.
+
+See [Strategy Continuity & Stability](architecture/strategy_continuity.md) for the distinction between exact Asset Strategy state and episodic memory, historical replay safeguards, and rollout metrics.
 
 ---
 

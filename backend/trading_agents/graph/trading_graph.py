@@ -364,6 +364,8 @@ class TradingAgentsGraph:
                 "historical_mode": bool(self.config.get("historical_mode", False)),
                 "allow_live_data_in_historical": bool(self.config.get("allow_live_data_in_historical", False)),
                 "user_id": self.config.get("user_id"),
+                "learning_eligible": bool(self.config.get("learning_eligible", True)),
+                "analysis_plan_cache_key": self.config.get("analysis_plan_cache_key", ""),
             }
         )
         checkpoint_scope = self._checkpoint_scope()
@@ -387,7 +389,13 @@ class TradingAgentsGraph:
     def _run_graph(self, company_name, trade_date, asset_type: str = "stock"):
         past_context = self.config.get("historical_context", "")
         init_agent_state = self.propagator.create_initial_state(
-            company_name, trade_date, asset_type=asset_type, past_context=past_context
+            company_name,
+            trade_date,
+            asset_type=asset_type,
+            past_context=past_context,
+            strategy_context=self.config.get("strategy_context"),
+            analysis_mode=self.config.get("analysis_mode", "live"),
+            learning_eligible=bool(self.config.get("learning_eligible", True)),
         )
         args = self.propagator.get_graph_args()
         checkpoint_scope = self._checkpoint_scope()
@@ -491,6 +499,8 @@ class TradingAgentsGraph:
                 "historical_mode": bool(self.config.get("historical_mode", False)),
                 "allow_live_data_in_historical": bool(self.config.get("allow_live_data_in_historical", False)),
                 "user_id": self.config.get("user_id"),
+                "learning_eligible": bool(self.config.get("learning_eligible", True)),
+                "analysis_plan_cache_key": self.config.get("analysis_plan_cache_key", ""),
             }
         )
 
@@ -524,7 +534,13 @@ class TradingAgentsGraph:
 
         past_context = self.config.get("historical_context", "")
         init_state = self.propagator.create_initial_state(
-            company_name, trade_date, asset_type=asset_type, past_context=past_context
+            company_name,
+            trade_date,
+            asset_type=asset_type,
+            past_context=past_context,
+            strategy_context=self.config.get("strategy_context"),
+            analysis_mode=self.config.get("analysis_mode", "live"),
+            learning_eligible=bool(self.config.get("learning_eligible", True)),
         )
         args = self.propagator.get_graph_args()
         checkpoint_scope = self._checkpoint_scope()

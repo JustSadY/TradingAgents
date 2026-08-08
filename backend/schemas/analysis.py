@@ -66,6 +66,22 @@ class AnalysisResultRead(BaseModel):
     audit_report: str = ""
     agent_qa_report: str = ""
     investment_plan: str
+    analysis_plan_json: Any = None
+    synthesis_json: Any = None
+    market_regime_json: Any = None
+    strategy_before_json: Any = None
+    strategy_after_json: Any = None
+    strategy_candidate_json: Any = None
+    pm_proposal_json: Any = None
+    portfolio_decision_json: Any = None
+    decision_transition_json: Any = None
+    calibrated_confidence: float | None = None
+    strategy_update_status: str | None = None
+    strategy_id: int | None = None
+    strategy_before_version: int | None = None
+    strategy_after_version: int | None = None
+    analysis_mode: str = "live"
+    learning_eligible: bool = True
     trader_plan: str
     final_decision: str
     bull_history: Any = None
@@ -131,6 +147,54 @@ class AnalysisListItem(BaseModel):
     @classmethod
     def validate_signal(cls, v: object) -> str | None:
         return _validated_signal(v)
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AssetStrategyRead(BaseModel):
+    id: int
+    ticker: str
+    asset_type: str
+    status: str
+    version: int
+    strategic_bias: str
+    conviction: float
+    accepted_rating: str | None = None
+    thesis: str
+    key_drivers: Any = None
+    watch_conditions: Any = None
+    invalidation_conditions: Any = None
+    open_questions: Any = None
+    regime_assumption: Any = None
+    time_horizon: str | None = None
+    last_analysis_id: int | None = None
+    effective_at: datetime | None = None
+    recorded_at: datetime | None = None
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+    last_reviewed_at: datetime | None = None
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class AssetStrategyVersionRead(BaseModel):
+    id: int
+    strategy_id: int
+    version: int
+    analysis_id: int | None = None
+    revision_action: str
+    before_state: Any = None
+    after_state: Any = None
+    triggered_invalidations: Any = None
+    supporting_evidence: Any = None
+    regime_before: Any = None
+    regime_after: Any = None
+    pm_proposed_rating: str | None = None
+    accepted_rating: str | None = None
+    change_strength: float | None = None
+    effective_at: datetime | None = None
+    recorded_at: datetime | None = None
+    created_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -233,9 +297,16 @@ _TIME_TRAVEL_ALLOWED_FIELDS = frozenset({
     "audit_report",
     "agent_qa_report",
     "investment_plan",
+    "analysis_plan_json",
+    "synthesis_json",
+    "market_regime_json",
+    "strategy_candidate_json",
+    "pm_proposal_json",
     "investment_debate_state",
     "risk_debate_state",
     "portfolio_decision_json",
+    "decision_transition_json",
+    "calibrated_confidence",
     "final_trade_decision",
     "final_signal",
     "trader_investment_plan",

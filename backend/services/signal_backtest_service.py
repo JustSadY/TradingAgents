@@ -76,6 +76,7 @@ async def get_signal_replay_context(db: AsyncSession, ticker: str, user_id: int 
             select(AnalysisResult)
             .where(AnalysisResult.ticker == ticker.upper())
             .where(AnalysisResult.raw_return.is_not(None))
+            .where(AnalysisResult.learning_eligible.is_(True))
             .order_by(AnalysisResult.trade_date.desc())
             .limit(_MAX_ROWS)
         )

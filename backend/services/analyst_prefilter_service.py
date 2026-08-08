@@ -109,6 +109,7 @@ async def filter_analysts_by_history(
             select(AnalysisResult)
             .where(AnalysisResult.ticker == ticker.upper())
             .where(AnalysisResult.raw_return.is_not(None))
+            .where(AnalysisResult.learning_eligible.is_(True))
         )
         if user_id is None:
             q = q.where(AnalysisResult.user_id.is_(None))

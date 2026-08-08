@@ -126,6 +126,14 @@ class SettingsBase(BaseModel):
     analyst_prefilter_enabled: bool = False
     analyst_prefilter_min_samples: int = 5
     analyst_prefilter_max_win_rate: float = 40.0
+    strategy_learning_enabled: bool = True
+    decision_stability_mode: str = "shadow"
+    decision_stability_min_quality: int = 70
+    decision_stability_min_confidence: float = 0.65
+    decision_stability_min_evidence_groups: int = 2
+    reversal_verifier_enabled: bool = True
+    confidence_calibration_enabled: bool = False
+    regime_aware_weighting_enabled: bool = False
     memory_recall_count: int = 5
     summary_only_mode: bool = False
     news_article_limit: int = 20
@@ -233,6 +241,14 @@ class SettingsUpdate(BaseModel):
     analyst_prefilter_enabled: bool | None = None
     analyst_prefilter_min_samples: int | None = Field(default=None, ge=1, le=100)
     analyst_prefilter_max_win_rate: float | None = Field(default=None, ge=0, le=100)
+    strategy_learning_enabled: bool | None = None
+    decision_stability_mode: str | None = Field(default=None, pattern="^(off|shadow|enforce)$")
+    decision_stability_min_quality: int | None = Field(default=None, ge=0, le=100)
+    decision_stability_min_confidence: float | None = Field(default=None, ge=0, le=1)
+    decision_stability_min_evidence_groups: int | None = Field(default=None, ge=1, le=10)
+    reversal_verifier_enabled: bool | None = None
+    confidence_calibration_enabled: bool | None = None
+    regime_aware_weighting_enabled: bool | None = None
     memory_recall_count: int | None = Field(default=None, ge=1, le=50)
     summary_only_mode: bool | None = None
     news_article_limit: int | None = Field(default=None, ge=1, le=100)

@@ -1,6 +1,6 @@
 # 🤖 TradingAgents AI: Multi-Agent Decision Engine
 
-This directory contains the core multi-agent AI system designed to analyze securities, conduct investment thesis debates, surface risk guardrails, and have one Portfolio Manager produce the final trade recommendation.
+This directory contains the core multi-agent AI system designed to analyze securities, conduct investment thesis debates, surface risk guardrails, and have one Portfolio Manager produce a raw trade proposal. The deterministic Decision Stability Controller records or accepts the canonical decision before application-side execution controls run.
 
 Built using **LangGraph** and **LangChain Core**, the system models complex financial decision-making as a state machine with asynchronous execution, self-correction reflection loops, and streaming updates.
 
@@ -13,7 +13,8 @@ Instead of relying on a single, general-purpose LLM prompt to make investment de
 ```mermaid
 graph TD
     Start([Start Run]) --> InitState[Initialize State]
-    InitState --> AnalystExecution[Analyst Execution Node]
+    InitState --> StrategyContext[Strategy Context + Neutral Analysis Planner]
+    StrategyContext --> AnalystExecution[Analyst Execution Node]
     
     subgraph Analysts [12 Specialized Analyst Plugins]
         AnalystExecution --> A1[Technical / Market]
@@ -47,8 +48,10 @@ graph TD
         RiskDebate --> RN[Neutral Risk Agent]
     end
     
-    RA & RC & RN --> FinalExecution[Portfolio Manager: Sole Execution Decision]
-    FinalExecution --> Reflection{Reflection & Correction Loop}
+    RA & RC & RN --> Reconciler[Strategy Reconciler]
+    Reconciler --> PM[Portfolio Manager: Raw Proposal]
+    PM --> Stability[Decision Stability Controller]
+    Stability --> Reflection{Reflection & Correction Loop}
     Reflection -->|Validation Failed| AnalystExecution
     Reflection -->|Validation Approved| EndNode([Final Output & Execution])
 ```
@@ -123,11 +126,12 @@ The Research Manager's summary is evaluated by three risk personas:
 *   **Neutral Risk Agent:** Reconciles the guardrails and unresolved risk questions.
 
 They are evidence producers, not order authorities: they do not issue a
-Buy/Sell/Hold instruction, quantity, or allocation. The **Portfolio Manager**
-then evaluates their transcript together with every active analyst report and
-emits the one structured final rating, target allocation, entry, stop, target,
-and leverage. The order engine may only consume that final structured decision
-and can still reduce or reject it using deterministic cash and risk limits.
+Buy/Sell/Hold instruction, quantity, or allocation. The **Strategy Reconciler**
+first compares fresh evidence with the durable asset thesis, then the
+**Portfolio Manager** proposes a structured rating, target allocation, entry,
+stop, target, and leverage. The deterministic **Decision Stability Controller**
+records or accepts the canonical decision, and the order engine can still
+reduce or reject it using deterministic cash and risk limits.
 
 ### 4. Self-Correcting Reflection Loop
 Before publishing the final report, the **Reflection Node** checks the generated output:
