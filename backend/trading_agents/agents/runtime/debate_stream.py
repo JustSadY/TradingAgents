@@ -5,10 +5,10 @@ node's state update after the node returns, which is too late for a live UI.
 This helper emits complete debate turns directly through the current run's
 AnalysisEmitter while keeping persistence in the outer orchestrator.
 
-The current run context also records the highest emitted turn count per debate
-type. The normal graph stream observer calls this same helper after a node
-returns; the shared count makes that path a no-op instead of emitting duplicate
-bubbles.
+The current run context records the highest emitted turn count per debate type,
+and the emitter marks each live event for one later graph-observer replay
+suppression. This keeps the UI live without duplicating the same turn when the
+enclosing node finally returns.
 """
 
 from __future__ import annotations
@@ -59,7 +59,7 @@ async def emit_live_debate_state(debate_type: str, state: Mapping[str, object] |
     messages = debate_messages(state.get("history", ""))
     if not messages:
         # Advance the watermark so a malformed/empty fallback state cannot be
-        # emitted repeatedly by the outer stream observer.
+        # emitted repeatedly by the enclosing node itself.
         counts[debate_type] = current_count
         return 0
 
@@ -71,6 +71,7 @@ async def emit_live_debate_state(debate_type: str, state: Mapping[str, object] |
             f"{message['sender']}: {message['content']}",
             sender=message["sender"],
             content=message["content"],
+            expect_graph_replay=True,
         )
         emitted += 1
 
