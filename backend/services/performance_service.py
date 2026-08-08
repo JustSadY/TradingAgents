@@ -19,6 +19,7 @@ _WEIGHT_COMPONENTS = (
     ("recent", 0.15),
 )
 _REGIME_KEYS = ("trend", "volatility", "risk", "macro")
+_REGIME_FRESHNESS = timedelta(hours=36)
 
 
 def _analysis_regime(row: object) -> dict[str, str]:
@@ -37,9 +38,28 @@ def _analysis_regime(row: object) -> dict[str, str]:
     }
 
 
-def _normalise_regime(regime: dict[str, Any] | None) -> dict[str, str]:
+def _normalise_regime(
+    regime: dict[str, Any] | None,
+    *,
+    require_fresh: bool = False,
+    now: datetime | None = None,
+) -> dict[str, str]:
     if not isinstance(regime, dict):
         return {}
+    if require_fresh:
+        raw_as_of = regime.get("as_of")
+        if not raw_as_of:
+            return {}
+        try:
+            observed = datetime.fromisoformat(str(raw_as_of).replace("Z", "+00:00"))
+        except ValueError:
+            return {}
+        if observed.tzinfo is None:
+            observed = observed.replace(tzinfo=UTC)
+        observed = observed.astimezone(UTC)
+        current = (now or datetime.now(UTC)).astimezone(UTC)
+        if observed > current + timedelta(minutes=5) or current - observed > _REGIME_FRESHNESS:
+            return {}
     return {
         key: str(regime[key]).strip().lower()
         for key in _REGIME_KEYS
@@ -49,7 +69,6 @@ def _normalise_regime(regime: dict[str, Any] | None) -> dict[str, str]:
 
 def _is_matching_regime(row: object, current_regime: dict[str, str]) -> bool:
     """Require a meaningful overlap, not a coincidental one-field match."""
-
     if not current_regime:
         return False
     observed = _analysis_regime(row)
@@ -72,28 +91,43 @@ def _is_recent(row: object, *, now: datetime | None = None) -> bool:
     return observed >= now - timedelta(days=90)
 
 
-def _prediction_success(report: object, raw_return: object) -> bool | None:
-    """Score one analyst report with the existing five-tier rating semantics."""
+def _return_value(value: object) -> float | None:
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError):
+        return None
+    if parsed != parsed or parsed in (float("inf"), float("-inf")):
+        return None
+    return parsed
 
+
+def _prediction_success(report: object, raw_return: object, alpha_return: object = None) -> bool | None:
+    """Score analyst ratings with their actual five-tier semantics.
+
+    Buy/Sell are absolute directional calls and use raw return. Overweight and
+    Underweight are relative allocation calls and therefore require benchmark
+    alpha. Hold uses alpha when available (otherwise raw return) to represent a
+    roughly neutral outcome. Missing alpha never silently turns a relative call
+    into an absolute one.
+    """
     from backend.trading_agents.agents.runtime.rating import parse_rating
 
     prediction = parse_rating(str(report or ""), default=None)
     if not prediction:
         return None
-    if prediction in ("Overweight", "Buy"):
-        prediction = "Buy"
-    elif prediction in ("Underweight", "Sell"):
-        prediction = "Sell"
-    try:
-        realized = float(raw_return)
-    except (TypeError, ValueError):
-        return None
+    raw = _return_value(raw_return)
+    alpha = _return_value(alpha_return)
     if prediction == "Buy":
-        return realized > 0
+        return raw > 0 if raw is not None else None
     if prediction == "Sell":
-        return realized < 0
+        return raw < 0 if raw is not None else None
+    if prediction == "Overweight":
+        return alpha > 0 if alpha is not None else None
+    if prediction == "Underweight":
+        return alpha < 0 if alpha is not None else None
     if prediction == "Hold":
-        return abs(realized) <= 0.02
+        neutral_return = alpha if alpha is not None else raw
+        return abs(neutral_return) <= 0.02 if neutral_return is not None else None
     return None
 
 
@@ -109,16 +143,8 @@ def _regime_aware_weight_rows(
     report_fields: dict[str, str],
     now: datetime | None = None,
 ) -> list[dict[str, Any]]:
-    """Compute shrinkage-based per-analyst weights from resolved outcomes.
-
-    A sparse ticker/regime slice is never allowed to overwhelm the global
-    baseline.  Each local score is a beta-binomial posterior anchored on the
-    analyst's global posterior, and its contribution grows gradually with the
-    sample count.  This is deliberately compact enough to send to an LLM
-    without exposing per-run user data.
-    """
-
-    normalized_regime = _normalise_regime(current_regime)
+    """Compute shrinkage-based per-analyst weights from resolved outcomes."""
+    normalized_regime = _normalise_regime(current_regime, require_fresh=True, now=now)
     counters: dict[str, dict[str, list[int]]] = {
         key: {component: [0, 0] for component, _ in _WEIGHT_COMPONENTS}
         for key in (field.removesuffix("_report") for field in report_fields)
@@ -130,7 +156,11 @@ def _regime_aware_weight_rows(
         recent_match = _is_recent(row, now=now)
         for report_field in report_fields:
             analyst = report_field.removesuffix("_report")
-            success = _prediction_success(getattr(row, report_field, ""), getattr(row, "raw_return", None))
+            success = _prediction_success(
+                getattr(row, report_field, ""),
+                getattr(row, "raw_return", None),
+                getattr(row, "alpha_return", None),
+            )
             if success is None:
                 continue
             counters[analyst]["global"][0] += 1
@@ -157,8 +187,6 @@ def _regime_aware_weight_rows(
         for component, base_weight in _WEIGHT_COMPONENTS:
             count, successes = counts[component]
             accuracy = _posterior_accuracy(successes, count, prior_mean=global_accuracy)
-            # Local relevance is smoothly shrunk toward the global result;
-            # 2/2 cannot become a spurious 100%-reliable specialist.
             reliability = 1.0 if component == "global" else count / (count + _WEIGHT_PRIOR_STRENGTH)
             component_weight = base_weight * reliability
             weighted_accuracy += component_weight * accuracy
@@ -172,8 +200,6 @@ def _regime_aware_weight_rows(
                 "label": label,
                 **metrics,
                 "effective_accuracy": round(effective_accuracy * 100, 1),
-                # We normalise this below; the small floor avoids an analyst
-                # disappearing solely because it has no resolved observations.
                 "_raw_weight": max(0.05, effective_accuracy),
             }
         )
@@ -191,12 +217,26 @@ async def get_regime_aware_analyst_attribution_stats(
     ticker: str,
     current_regime: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
-    """Return privacy-scoped Bayesian analyst weights for one live run."""
+    """Return privacy-scoped Bayesian analyst weights for one live run.
 
+    A fresh broad-market snapshot is preferred. A recent caller-supplied regime
+    remains an allowed fast path, but an old/undated AssetStrategy assumption
+    is never treated as the current market regime.
+    """
     from sqlalchemy import select
 
     from backend.models.analysis import AnalysisResult
     from backend.trading_agents.agents.analyst_registry import get_report_fields
+
+    effective_regime: dict[str, Any] | None = current_regime
+    if not _normalise_regime(effective_regime, require_fresh=True):
+        try:
+            from backend.services.analysis.market_pulse_service import get_current_regime_snapshot
+
+            effective_regime = await get_current_regime_snapshot()
+        except Exception as exc:  # noqa: BLE001 - regime slice is optional
+            _logger.warning("Could not load current market regime; using non-regime attribution: %s", exc)
+            effective_regime = {}
 
     query = (
         select(AnalysisResult)
@@ -210,18 +250,20 @@ async def get_regime_aware_analyst_attribution_stats(
         query = query.where(AnalysisResult.user_id == user_id)
     rows = list((await db.execute(query)).scalars().all())
     report_fields = get_report_fields()
+    fresh_regime = _normalise_regime(effective_regime, require_fresh=True)
     return {
-        "method": "beta_binomial_global_ticker_regime_recency_v1",
+        "method": "beta_binomial_global_ticker_regime_recency_v2",
         "ticker": ticker.upper(),
-        "regime": _normalise_regime(current_regime),
+        "regime": fresh_regime,
         "attribution": _regime_aware_weight_rows(
             rows,
             ticker=ticker,
-            current_regime=current_regime,
+            current_regime=effective_regime,
             report_fields=report_fields,
         ),
         "total_resolved_runs": len(rows),
     }
+
 
 async def backfill_returns(db) -> int:
     from sqlalchemy import select
@@ -308,14 +350,9 @@ async def backfill_returns(db) -> int:
     _logger.info("Performance backfill: updated %d rows with custom benchmarks", updated)
     return updated
 
-async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
-    """Return attribution statistics for one tenant or the system scope.
 
-    ``None`` means system-owned analysis rows (``user_id IS NULL``), never
-    every tenant.  A future administrative all-user aggregate must use an
-    explicitly named function so it cannot be injected into a system run by
-    accident.
-    """
+async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
+    """Return attribution statistics for one tenant or the system scope."""
     from sqlalchemy import select
 
     from backend.models.analysis import AnalysisResult
@@ -325,6 +362,7 @@ async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
         select(AnalysisResult)
         .where(AnalysisResult.raw_return.isnot(None))
         .where(AnalysisResult.learning_eligible.is_(True))
+        .where(AnalysisResult.status == "completed")
     )
     if user_id is None:
         q = q.where(AnalysisResult.user_id.is_(None))
@@ -334,49 +372,39 @@ async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
     rows = result.scalars().all()
 
     report_fields = get_report_fields()
-    analysts = {rf.replace("_report", ""): {"label": label, "report_field": rf} for rf, label in report_fields.items()}
-
+    analysts = {
+        rf.replace("_report", ""): {"label": label, "report_field": rf}
+        for rf, label in report_fields.items()
+    }
     stats = {
-        k: {"key": k, "label": val["label"], "total_predictions": 0, "correct_predictions": 0, "win_rate": 50.0}
+        k: {
+            "key": k,
+            "label": val["label"],
+            "total_predictions": 0,
+            "correct_predictions": 0,
+            "win_rate": 50.0,
+        }
         for k, val in analysts.items()
     }
-    from backend.trading_agents.agents.runtime.rating import parse_rating
 
     for row in rows:
         for key, config in analysts.items():
-            report_text = getattr(row, config["report_field"], "")
-            pred = parse_rating(report_text, default=None)
-            if not pred:
+            success = _prediction_success(
+                getattr(row, config["report_field"], ""),
+                getattr(row, "raw_return", None),
+                getattr(row, "alpha_return", None),
+            )
+            if success is None:
                 continue
-            if pred in ("Overweight", "Buy"):
-                pred = "Buy"
-            elif pred in ("Underweight", "Sell"):
-                pred = "Sell"
+            stats[key]["total_predictions"] += 1
+            if success:
+                stats[key]["correct_predictions"] += 1
 
-            raw_ret = row.raw_return
-            is_correct = False
-            has_graded = False
-            if pred == "Buy":
-                has_graded = True
-                is_correct = raw_ret > 0
-            elif pred == "Sell":
-                has_graded = True
-                is_correct = raw_ret < 0
-            elif pred == "Hold":
-                has_graded = True
-                is_correct = abs(raw_ret) <= 0.02
-            if has_graded:
-                stats[key]["total_predictions"] += 1
-                if is_correct:
-                    stats[key]["correct_predictions"] += 1
     win_rates = {}
     for key, s in stats.items():
         total = s["total_predictions"]
         correct = s["correct_predictions"]
-        if total > 0:
-            s["win_rate"] = round((correct / total) * 100, 1)
-        else:
-            s["win_rate"] = 50.0
+        s["win_rate"] = round((correct / total) * 100, 1) if total > 0 else 50.0
         win_rates[key] = s["win_rate"]
     sum_win_rates = sum(win_rates.values())
     for key, s in stats.items():
@@ -384,6 +412,7 @@ async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
             s["weight"] = round((win_rates[key] / sum_win_rates) * 100, 1)
         else:
             s["weight"] = round(100.0 / len(stats), 1)
+
     from backend.services.analyst_prefilter_service import _PROTECTED_ANALYSTS
 
     chronic_min_samples = 10
@@ -399,6 +428,7 @@ async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
     total_runs_evaluated = sum(s["total_predictions"] for s in attribution_list)
     return {"attribution": attribution_list, "total_evaluated_runs": total_runs_evaluated}
 
+
 async def get_analyst_performance_context(
     db,
     user_id: int | None = None,
@@ -407,13 +437,7 @@ async def get_analyst_performance_context(
     current_regime: dict[str, Any] | None = None,
     regime_aware: bool = False,
 ) -> str:
-    """Return a tenant-scoped Markdown summary for AI prompt injection.
-
-    ``AnalysisResult`` data belongs to individual users.  The analysis graph
-    must never tune one user's analyst weights using another user's history.
-    ``None`` selects only system-owned analysis rows; it is not an all-user
-    administrative aggregate.
-    """
+    """Return a tenant-scoped Markdown summary for AI prompt injection."""
     try:
         if regime_aware and ticker:
             attribution_data = await get_regime_aware_analyst_attribution_stats(
@@ -428,8 +452,9 @@ async def get_analyst_performance_context(
             md = "=== REGIME-AWARE ANALYST PERFORMANCE & WEIGHTS ===\n"
             md += (
                 "Effective weights use beta-binomial shrinkage across global, ticker-specific, "
-                "matching-regime, and recent accuracy. Sparse local samples are deliberately "
-                "pulled back toward the global baseline.\n"
+                "fresh matching-regime, and recent accuracy. A stale/undated strategy regime is "
+                "replaced by a direction-neutral broad-market snapshot when available. Sparse local "
+                "samples are pulled toward the global baseline.\n"
             )
             for att in attribution:
                 md += (

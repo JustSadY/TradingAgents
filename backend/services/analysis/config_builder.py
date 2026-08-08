@@ -89,6 +89,7 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         "analyst_concurrency_limit": settings.analyst_concurrency_limit or DEFAULT_CONFIG["analyst_concurrency_limit"],
         "skip_disk_log": True,
         "checkpoint_enabled": True,
+        "allow_short_selling": bool(getattr(settings, "allow_short_selling", False)),
         "agent_qa_enabled": getattr(settings, "agent_qa_enabled", True),
         "anthropic_prompt_caching": getattr(settings, "anthropic_prompt_caching", True),
         "max_report_chars_in_prompts": getattr(

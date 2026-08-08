@@ -49,9 +49,6 @@ def _snapshot_from_raw(raw: object) -> AssetStrategySnapshot | None:
     values = _mapping(raw)
     if not values:
         return None
-    # Repository snapshots carry tenancy and bitemporal audit extras that are
-    # intentionally not emitted to graph prompts.  Snapshot's public schema
-    # is the stable exact-state contract used by nodes.
     values.pop("user_id", None)
     values.pop("recorded_at", None)
     try:
@@ -119,6 +116,21 @@ def _bias(value: object, default: ResearchBias = ResearchBias.NEUTRAL) -> Resear
         return default
 
 
+def _material_invalidations(raw: object) -> list[dict[str, Any]]:
+    """Return only validated invalidations strong enough to close a thesis."""
+    if not isinstance(raw, list):
+        return []
+    return [
+        item
+        for item in raw
+        if isinstance(item, dict)
+        and str(item.get("severity") or "").strip().lower() in {
+            InvalidationSeverity.MATERIAL.value,
+            InvalidationSeverity.CRITICAL.value,
+        }
+    ]
+
+
 def _next_snapshot(
     before: AssetStrategySnapshot,
     *,
@@ -144,12 +156,13 @@ def _fallback_candidate(state: Mapping[str, Any]) -> StrategyRevisionCandidate:
     evidence = _evidence_items(synthesis)
     triggered_raw = synthesis.get("triggered_invalidations")
     triggered = triggered_raw if isinstance(triggered_raw, list) else []
+    material_triggered = _material_invalidations(triggered)
     ticker = str(state.get("company_of_interest") or "UNKNOWN").upper()
     asset_type = str(state.get("asset_type") or "stock").lower()
 
     if before is None:
         plan_invalidations = _invalidations_from_plan(state)
-        drivers = [item.claim for item in evidence[:3]] or ["Fresh multi-source evidence must be reviewed." ]
+        drivers = [item.claim for item in evidence[:3]] or ["Fresh multi-source evidence must be reviewed."]
         after = AssetStrategySnapshot(
             strategy_id=None,
             ticker=ticker,
@@ -182,10 +195,6 @@ def _fallback_candidate(state: Mapping[str, Any]) -> StrategyRevisionCandidate:
         )
 
     if before.status in {AssetStrategyStatus.INVALIDATED, AssetStrategyStatus.CLOSED}:
-        # Invalidated lineages are intentionally no longer ACTIVE, but the
-        # context loader supplies the latest one as a predecessor.  Replacing
-        # it must remain an explicit REBUILD rather than silently becoming an
-        # unrelated CREATE with no thesis lineage.
         plan_invalidations = _invalidations_from_plan(state)
         drivers = [item.claim for item in evidence[:3]] or ["Fresh replacement evidence must be revalidated."]
         replacement_bias = _bias(synthesis.get("dominant_bias"), ResearchBias.NEUTRAL)
@@ -216,17 +225,13 @@ def _fallback_candidate(state: Mapping[str, Any]) -> StrategyRevisionCandidate:
             change_strength=StrategyChangeStrength.MAJOR,
             revision_reason="The prior lineage is no longer active; establish a separately auditable replacement thesis.",
             supporting_evidence=evidence[:8],
-            triggered_invalidations=triggered,
+            triggered_invalidations=material_triggered,
             regime_before=before.regime_assumption,
             regime_after=after.regime_assumption,
         )
 
     dominant = _bias(synthesis.get("dominant_bias"), before.strategic_bias)
-    has_triggered = bool(triggered)
-    # Triggered invalidations are materially different from normal noisy
-    # disagreement: they can close an active thesis, but do not create a new
-    # directional thesis until a later REBUILD candidate has evidence.
-    if has_triggered:
+    if material_triggered:
         after = _next_snapshot(
             before,
             action=StrategyRevisionAction.INVALIDATE,
@@ -238,9 +243,9 @@ def _fallback_candidate(state: Mapping[str, Any]) -> StrategyRevisionCandidate:
             strategy_before=before,
             strategy_after=after,
             change_strength=StrategyChangeStrength.MAJOR,
-            revision_reason="Structured synthesis reported an explicit strategy invalidation.",
+            revision_reason="Validated material/critical synthesis evidence triggered an explicit strategy invalidation.",
             supporting_evidence=evidence[:8],
-            triggered_invalidations=triggered,
+            triggered_invalidations=material_triggered,
             regime_before=before.regime_assumption,
             regime_after=_mapping(synthesis.get("market_regime")) or before.regime_assumption,
         )
@@ -257,7 +262,7 @@ def _fallback_candidate(state: Mapping[str, Any]) -> StrategyRevisionCandidate:
             strategy_before=before,
             strategy_after=after,
             change_strength=StrategyChangeStrength.MATERIAL,
-            revision_reason="Fresh structured synthesis differs from the active strategic bias; retain the thesis only with lower conviction.",
+            revision_reason="Fresh structured synthesis differs from the active strategic bias; retain the same thesis direction with lower conviction until explicit invalidation is established.",
             supporting_evidence=evidence[:8],
             triggered_invalidations=[],
             regime_before=before.regime_assumption,
@@ -298,6 +303,36 @@ def _fallback_candidate(state: Mapping[str, Any]) -> StrategyRevisionCandidate:
     )
 
 
+def _candidate_respects_lifecycle(candidate: StrategyRevisionCandidate, state: Mapping[str, Any]) -> bool:
+    """Reject LLM candidates that bypass deterministic lifecycle invariants."""
+    before = candidate.strategy_before
+    after = candidate.strategy_after
+    synthesis = _mapping(state.get("synthesis_json"))
+    allowed_invalidations = _material_invalidations(synthesis.get("triggered_invalidations"))
+    allowed_ids = {str(item.get("condition_id")) for item in allowed_invalidations}
+
+    if candidate.revision_action is StrategyRevisionAction.INVALIDATE:
+        candidate_ids = {item.condition_id for item in candidate.triggered_invalidations}
+        if not candidate_ids or not candidate_ids.issubset(allowed_ids):
+            return False
+
+    if candidate.revision_action in {StrategyRevisionAction.STRENGTHEN, StrategyRevisionAction.WEAKEN}:
+        if before is None or after is None:
+            return False
+        if before.status is not AssetStrategyStatus.ACTIVE or after.status is not AssetStrategyStatus.ACTIVE:
+            return False
+        if after.strategic_bias is not before.strategic_bias:
+            return False
+        if after.accepted_rating is not before.accepted_rating:
+            return False
+
+    if candidate.revision_action in {StrategyRevisionAction.CREATE, StrategyRevisionAction.REBUILD}:
+        if after is None or after.status is not AssetStrategyStatus.ACTIVE:
+            return False
+
+    return True
+
+
 def _render_candidate(candidate: StrategyRevisionCandidate) -> str:
     before = candidate.strategy_before
     after = candidate.strategy_after
@@ -322,9 +357,6 @@ def create_strategy_reconciler_node(ctx: AgentRunContext) -> NodeFn:
                 "strategy_reconciliation_report": _render_candidate(fallback),
             }
 
-        # This is the first node allowed to see the full current strategy.
-        # It produces a strategy lifecycle candidate, never an executable
-        # decision, and all actual writes remain outside the graph.
         prompt = f"""You are a strategy reconciler. Compare an exact active asset strategy with
 fresh structured evidence, research, and risk guardrails. Return only a
 StrategyRevisionCandidate matching the schema.
@@ -343,11 +375,12 @@ StrategyRevisionCandidate matching the schema.
 
 Rules:
 - Choose only CREATE, KEEP, STRENGTHEN, WEAKEN, INVALIDATE, or REBUILD.
-- KEEP must not create a new version. Use STRENGTHEN or WEAKEN only for a
-  material evidence delta. INVALIDATE requires explicit triggered invalidation evidence.
+- KEEP must not create a new version.
+- STRENGTHEN/WEAKEN may change conviction and thesis detail only; they MUST preserve ACTIVE status, strategic_bias, accepted_rating, ticker, asset type and lineage. A direction change requires INVALIDATE followed by a later REBUILD.
+- INVALIDATE requires a validated MATERIAL or CRITICAL triggered invalidation from Structured Synthesis. WATCH conditions can justify caution/WEAKEN but never close a thesis.
+- CREATE and REBUILD must produce ACTIVE strategy state; do not emit PROVISIONAL.
 - Do not emit Buy, Sell, order sizing, entries, stops, or execution advice.
-- Preserve the old lineage/version for normal revisions. REBUILD starts a new
-  lineage only after the old thesis is invalidated.
+- Preserve the old lineage/version for normal revisions. REBUILD starts a new lineage only after the old thesis is invalidated.
 - Review-origin evidence never counts as independent reversal confirmation.
 {get_general_settings_block()}"""
         try:
@@ -359,6 +392,9 @@ Rules:
                 schema=StrategyRevisionCandidate,
             )
             candidate = result if isinstance(result, StrategyRevisionCandidate) else fallback
+            if not _candidate_respects_lifecycle(candidate, state):
+                logger.warning("Strategy reconciler candidate violated deterministic lifecycle invariants; using fallback")
+                candidate = fallback
         except Exception as exc:  # noqa: BLE001 - fallback retains safe strategy invariants
             logger.warning("Strategy reconciler failed: %s", exc)
             candidate = fallback

@@ -2,20 +2,16 @@ from datetime import UTC, datetime
 from unittest.mock import AsyncMock
 
 from backend.models.analysis import AnalysisResult
-from backend.repositories.asset_strategy import create_asset_strategy, touch_asset_strategy_review
+from backend.repositories.asset_strategy import (
+    compare_and_swap_asset_strategy,
+    create_asset_strategy,
+    touch_asset_strategy_review,
+)
 from backend.services import strategy_context_service
 from backend.services.strategy_context_service import load_strategy_context
 
 
 async def test_historical_context_uses_latest_keep_review_decision_without_future_leakage(db_session, test_user):
-    """KEEP does not append a strategy version, so replay must query analyses.
-
-    The v1 ledger intentionally retains the original ``last_analysis_id``.
-    A later non-material review updates only the current row; historical
-    context must still recover its accepted decision while excluding a future
-    backfill with the same business date.
-    """
-
     first_at = datetime(2026, 8, 1, 12, tzinfo=UTC)
     review_at = datetime(2026, 8, 2, 12, tzinfo=UTC)
     future_recorded_at = datetime(2026, 8, 4, 12, tzinfo=UTC)
@@ -87,6 +83,68 @@ async def test_historical_context_uses_latest_keep_review_decision_without_futur
     assert context["source"] == "historical_version"
     assert context["strategy_before"]["last_analysis_id"] == initial.id
     assert context["previous_accepted_decision"]["rating"] == "Hold"
+
+
+async def test_same_day_replay_does_not_see_later_strategy_revision(db_session, test_user):
+    replay_started = datetime(2026, 8, 8, 10, tzinfo=UTC)
+    original = AnalysisResult(
+        user_id=test_user.id,
+        ticker="NVDA",
+        trade_date="2026-08-08",
+        asset_type="stock",
+        status="completed",
+        learning_eligible=True,
+        created_at=replay_started,
+        portfolio_decision_json={"rating": "Buy", "confidence_score": 0.7},
+    )
+    db_session.add(original)
+    await db_session.flush()
+
+    strategy = await create_asset_strategy(
+        db_session,
+        user_id=test_user.id,
+        ticker="NVDA",
+        state={
+            "strategic_bias": "BULLISH",
+            "conviction": 0.60,
+            "accepted_rating": "Buy",
+            "thesis": "Morning thesis.",
+        },
+        analysis_id=None,
+        effective_at=datetime(2026, 8, 8, 9, tzinfo=UTC),
+        recorded_at=datetime(2026, 8, 8, 9, tzinfo=UTC),
+    )
+    later = await compare_and_swap_asset_strategy(
+        db_session,
+        strategy_id=strategy.id,
+        expected_version=1,
+        updates={
+            "status": "ACTIVE",
+            "strategic_bias": "BULLISH",
+            "conviction": 0.80,
+            "accepted_rating": "Buy",
+            "thesis": "Afternoon revision that the 10:00 replay must not know.",
+        },
+        revision_action="STRENGTHEN",
+        effective_at=datetime(2026, 8, 8, 15, tzinfo=UTC),
+        recorded_at=datetime(2026, 8, 8, 15, tzinfo=UTC),
+    )
+    assert later.applied
+
+    context = await load_strategy_context(
+        db_session,
+        user_id=test_user.id,
+        ticker="NVDA",
+        asset_type="stock",
+        trade_date="2026-08-08",
+        historical_mode=True,
+        learning_eligible=False,
+    )
+
+    assert context["source"] == "historical_version"
+    assert context["strategy_before"]["version"] == 1
+    assert context["strategy_before"]["thesis"] == "Morning thesis."
+    assert datetime.fromisoformat(context["knowledge_cutoff"]) == replay_started
 
 
 async def test_live_context_uses_invalidated_predecessor_for_a_traceable_rebuild(monkeypatch):
