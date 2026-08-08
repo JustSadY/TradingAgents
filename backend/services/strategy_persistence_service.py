@@ -1,10 +1,11 @@
 """Transactional persistence for analysis results and exact asset strategies.
 
-The graph only proposes a strategy revision.  This service is the single
-write boundary that turns that candidate into a durable ``AssetStrategy``
-version *and* writes the accepted canonical decision to ``AnalysisResult``.
-It uses repository CAS operations, so two concurrent analyses cannot both
-silently write ``v5 → v6`` for the same asset.
+The graph only proposes a strategy revision. This service is the single write
+boundary that turns that candidate into a durable ``AssetStrategy`` version
+and writes the accepted canonical decision to ``AnalysisResult``. It uses
+repository CAS operations so concurrent analyses cannot silently overwrite one
+another, and repeats lifecycle validation here so stale checkpoints/extensions
+cannot bypass graph-level guards.
 """
 
 from __future__ import annotations
@@ -33,8 +34,6 @@ _logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True, slots=True)
 class StrategyPersistenceResult:
-    """Outcome used by the orchestrator to surface CAS and safety decisions."""
-
     status: str
     strategy_id: int | None
     before_snapshot: dict[str, Any] | None
@@ -69,8 +68,6 @@ def _as_dict(value: object) -> dict:
 
 
 def _db_strategy_state(snapshot: Mapping[str, Any]) -> dict[str, Any]:
-    """Map a validated graph snapshot to repository-owned mutable columns."""
-
     status = str(snapshot.get("status") or "ACTIVE").upper()
     bias = str(snapshot.get("strategic_bias") or "Neutral").upper()
     rating = snapshot.get("accepted_rating")
@@ -119,8 +116,6 @@ def _strength_value(value: object) -> float | None:
 
 
 def _safe_hold(decision: Mapping[str, Any], *, reason: str) -> dict[str, Any]:
-    """Turn a stale action into HOLD/NO_NEW_ORDER without replaying old risk."""
-
     held = copy.deepcopy(dict(decision))
     held.update(
         {
@@ -153,6 +148,64 @@ def _candidate_parts(candidate_raw: object) -> tuple[dict[str, Any], dict[str, A
     return candidate, before, after
 
 
+def _allowed_invalidation_ids(payload: Mapping[str, Any]) -> set[str]:
+    """Rebuild the trusted invalidation allow-list from persisted machine state."""
+    plan = _mapping(payload.get("analysis_plan_json"))
+    synthesis = _mapping(payload.get("synthesis_json"))
+    raw_plan = plan.get("invalidations_to_check")
+    plan_by_id: dict[str, str] = {}
+    if isinstance(raw_plan, list):
+        for item in raw_plan:
+            if not isinstance(item, Mapping):
+                continue
+            condition_id = str(item.get("condition_id") or "").strip()
+            severity = str(item.get("severity") or "material").strip().lower()
+            if condition_id:
+                plan_by_id[condition_id] = severity
+
+    allowed: set[str] = set()
+    raw_triggered = synthesis.get("triggered_invalidations")
+    if not isinstance(raw_triggered, list):
+        return allowed
+    for item in raw_triggered:
+        if not isinstance(item, Mapping):
+            continue
+        condition_id = str(item.get("condition_id") or "").strip()
+        severity = str(item.get("severity") or "").strip().lower()
+        if (
+            condition_id
+            and condition_id in plan_by_id
+            and severity == plan_by_id[condition_id]
+            and severity in {"material", "critical"}
+            and isinstance(item.get("evidence_ids"), list)
+            and bool(item.get("evidence_ids"))
+        ):
+            allowed.add(condition_id)
+    return allowed
+
+
+def _normal_revision_is_safe(
+    *,
+    action: str,
+    before: Mapping[str, Any] | None,
+    after: Mapping[str, Any] | None,
+) -> tuple[bool, str | None]:
+    if action not in {"STRENGTHEN", "WEAKEN"}:
+        return True, None
+    if before is None or after is None:
+        return False, f"{action} requires before and after strategy state"
+    if str(before.get("status") or "").upper() != "ACTIVE" or str(after.get("status") or "").upper() != "ACTIVE":
+        return False, f"{action} must preserve ACTIVE status"
+    if str(before.get("strategic_bias") or "").upper() != str(after.get("strategic_bias") or "").upper():
+        return False, f"{action} cannot change strategic_bias; invalidate then rebuild"
+    # accepted_rating belongs to PM/controller authority, not the reconciler.
+    before_rating = str(before.get("accepted_rating") or "").upper()
+    after_rating = str(after.get("accepted_rating") or "").upper()
+    if before_rating != after_rating:
+        return False, f"{action} cannot change accepted_rating"
+    return True, None
+
+
 async def _create_with_conflict_handling(
     db: AsyncSession,
     *,
@@ -165,8 +218,6 @@ async def _create_with_conflict_handling(
     candidate: Mapping[str, Any],
     pm_rating: str | None,
 ) -> tuple[object | None, bool]:
-    """Create v1 within a savepoint so a concurrent initial run is safe."""
-
     try:
         async with db.begin_nested():
             strategy = await create_asset_strategy(
@@ -187,9 +238,6 @@ async def _create_with_conflict_handling(
             )
         return strategy, False
     except IntegrityError:
-        # The enclosing session remains usable because the failed create was
-        # isolated in a savepoint.  Never convert this into an implicit retry;
-        # callers must fail closed rather than apply a stale initial thesis.
         _logger.info("Concurrent AssetStrategy create detected for %s/%s", ticker, asset_type)
         return None, True
 
@@ -207,14 +255,6 @@ async def persist_completed_analysis_with_strategy(
     trade_date: str | datetime,
     learning_eligible: bool,
 ) -> StrategyPersistenceResult:
-    """Persist an accepted analysis and optionally apply its strategy revision.
-
-    The final commit happens exactly once, after the CAS/version append and
-    ``AnalysisResult`` field assignment.  A stale CAS never causes an order to
-    be emitted: the physical canonical decision is replaced with a HOLD and
-    the caller can render the conflict in its transition card.
-    """
-
     from backend.models.analysis import AnalysisResult
 
     row = await db.get(AnalysisResult, row_id, with_for_update=True)
@@ -232,15 +272,14 @@ async def persist_completed_analysis_with_strategy(
         proposed_decision = _mapping(proposed_decision.get("proposed_decision"))
     pm_rating = str(proposed_decision.get("rating") or "").strip() or None
     accepted_rating = str(_mapping(payload.get("portfolio_decision_json")).get("rating") or "").strip() or None
-    # The reconciler intentionally runs before the PM so it cannot leak an old
-    # rating to analysts. For a new lineage, bind the eventually accepted
-    # tactical rating only at this post-controller persistence boundary.
-    if (
-        str(candidate.get("revision_action") or "").upper() in {"CREATE", "REBUILD"}
-        and candidate_after is not None
-        and accepted_rating
-    ):
-        candidate_after["accepted_rating"] = accepted_rating
+    action = str(candidate.get("revision_action") or "").upper()
+
+    # Reconciler is never the authority for an accepted tactical rating. New
+    # lineages and material revisions bind the controller/physical canonical
+    # rating here, after the graph has completed.
+    if candidate_after is not None and action in {"CREATE", "REBUILD", "STRENGTHEN", "WEAKEN", "INVALIDATE"}:
+        if accepted_rating:
+            candidate_after["accepted_rating"] = accepted_rating
         candidate["strategy_after"] = candidate_after
 
     status = "not_requested"
@@ -257,14 +296,31 @@ async def persist_completed_analysis_with_strategy(
         status = "candidate_missing"
         reason = "strategy_reconciler_did_not_return_a_candidate"
     else:
-        action = str(candidate.get("revision_action") or "").upper()
         expected_version = candidate.get("expected_version") or context.get("expected_version")
         strategy_id = context.get("strategy_id") or (candidate_before or {}).get("strategy_id")
 
-        if action == "CREATE":
+        # Validate using the candidate's original before-state, but ignore its
+        # accepted_rating difference because that field was rebound above by
+        # the controller. Other lifecycle fields must still be invariant.
+        compare_after = copy.deepcopy(candidate_after) if candidate_after is not None else None
+        if compare_after is not None and before_snapshot is not None and action in {"STRENGTHEN", "WEAKEN"}:
+            compare_after["accepted_rating"] = before_snapshot.get("accepted_rating")
+        normal_safe, normal_reason = _normal_revision_is_safe(
+            action=action,
+            before=before_snapshot,
+            after=compare_after,
+        )
+        if not normal_safe:
+            status = "candidate_invalid"
+            reason = normal_reason
+
+        elif action == "CREATE":
             if before_snapshot is not None or candidate_after is None:
                 status = "candidate_invalid"
                 reason = "CREATE requires a new after-state and no active prior strategy"
+            elif str(candidate_after.get("status") or "").upper() != "ACTIVE":
+                status = "candidate_invalid"
+                reason = "CREATE must persist an ACTIVE strategy"
             else:
                 strategy, conflict = await _create_with_conflict_handling(
                     db,
@@ -305,10 +361,51 @@ async def persist_completed_analysis_with_strategy(
             if not isinstance(strategy_id, int) or not isinstance(expected_version, int):
                 status = "candidate_invalid"
                 reason = f"{action} requires strategy_id and expected_version"
+            elif action == "INVALIDATE":
+                allowed_ids = _allowed_invalidation_ids(payload)
+                candidate_ids = {
+                    str(item.get("condition_id") or "").strip()
+                    for item in _as_list(candidate.get("triggered_invalidations"))
+                    if isinstance(item, Mapping)
+                }
+                if not candidate_ids or not candidate_ids.issubset(allowed_ids):
+                    status = "candidate_invalid"
+                    reason = "INVALIDATE requires validated material/critical AnalysisPlan invalidation evidence"
+                elif candidate_after is not None and str(candidate_after.get("status") or "").upper() not in {"INVALIDATED", "CLOSED"}:
+                    status = "candidate_invalid"
+                    reason = "INVALIDATE after-state must be INVALIDATED or CLOSED"
+                else:
+                    updates = _db_strategy_state(candidate_after or before_snapshot or {})
+                    updates["status"] = "INVALIDATED"
+                    if before_snapshot:
+                        updates["strategic_bias"] = str(before_snapshot.get("strategic_bias") or "NEUTRAL").upper()
+                    if accepted_rating:
+                        updates["accepted_rating"] = accepted_rating
+                    cas = await compare_and_swap_asset_strategy(
+                        db,
+                        strategy_id=strategy_id,
+                        expected_version=expected_version,
+                        updates=updates,
+                        revision_action=action,
+                        analysis_id=row_id,
+                        effective_at=effective_at,
+                        triggered_invalidations=_as_list(candidate.get("triggered_invalidations")),
+                        supporting_evidence=_as_list(candidate.get("supporting_evidence")),
+                        regime_before=_mapping(candidate.get("regime_before")) or None,
+                        regime_after=_mapping(candidate.get("regime_after")) or None,
+                        pm_proposed_rating=pm_rating,
+                        change_strength=_strength_value(candidate.get("change_strength")),
+                    )
+                    status, reason, strategy_id, after_snapshot, after_version = _apply_cas_result(cas, "updated")
             else:
                 updates = _db_strategy_state(candidate_after or before_snapshot or {})
-                if action == "INVALIDATE" and candidate_after is None:
-                    updates["status"] = "INVALIDATED"
+                # Defense in depth: normal revisions may alter thesis detail and
+                # conviction but cannot switch strategic direction/lifecycle.
+                if before_snapshot:
+                    updates["status"] = "ACTIVE"
+                    updates["strategic_bias"] = str(before_snapshot.get("strategic_bias") or "NEUTRAL").upper()
+                if accepted_rating:
+                    updates["accepted_rating"] = accepted_rating
                 cas = await compare_and_swap_asset_strategy(
                     db,
                     strategy_id=strategy_id,
@@ -317,7 +414,7 @@ async def persist_completed_analysis_with_strategy(
                     revision_action=action,
                     analysis_id=row_id,
                     effective_at=effective_at,
-                    triggered_invalidations=_as_list(candidate.get("triggered_invalidations")),
+                    triggered_invalidations=[],
                     supporting_evidence=_as_list(candidate.get("supporting_evidence")),
                     regime_before=_mapping(candidate.get("regime_before")) or None,
                     regime_after=_mapping(candidate.get("regime_after")) or None,
@@ -327,25 +424,17 @@ async def persist_completed_analysis_with_strategy(
                 status, reason, strategy_id, after_snapshot, after_version = _apply_cas_result(cas, "updated")
 
         elif action == "REBUILD":
-            # Close the previous lineage through CAS before inserting v1 of the
-            # replacement.  The two actions share the surrounding transaction,
-            # so no reader sees a half-completed rebuild after a failure.
             predecessor_status = str((before_snapshot or {}).get("status") or "").upper()
             if predecessor_status not in {"INVALIDATED", "CLOSED"}:
-                # The graph schema enforces this too, but persistence is the
-                # authoritative write boundary.  A stale/corrupted checkpoint
-                # or extension must not be able to close an ACTIVE lineage by
-                # bypassing Pydantic validation.
                 status = "candidate_invalid"
                 reason = "REBUILD requires an INVALIDATED or CLOSED predecessor"
             elif not isinstance(strategy_id, int) or not isinstance(expected_version, int) or candidate_after is None:
                 status = "candidate_invalid"
                 reason = "REBUILD requires previous lineage, expected_version, and replacement after-state"
+            elif str(candidate_after.get("status") or "").upper() != "ACTIVE":
+                status = "candidate_invalid"
+                reason = "REBUILD replacement must be ACTIVE"
             else:
-                # One savepoint covers *both* closing the old lineage and
-                # creating the replacement.  If the insert races/fails, the
-                # old ACTIVE row is restored rather than leaving the ticker
-                # with no current strategy.
                 try:
                     async with db.begin_nested():
                         cas = await compare_and_swap_asset_strategy(
@@ -397,9 +486,6 @@ async def persist_completed_analysis_with_strategy(
         existing = _mapping(payload.get("portfolio_decision_json"))
         decision_override = _safe_hold(existing, reason=reason or "strategy_conflict")
         payload["portfolio_decision_json"] = decision_override
-        # Older readers can still consult the annotation copy. Keep it aligned
-        # with the physical canonical decision so a stale PM proposal is never
-        # rendered as an executable recommendation after a CAS conflict.
         annotations = _mapping(payload.get("chart_annotations"))
         annotations["portfolio_decision"] = copy.deepcopy(decision_override)
         payload["chart_annotations"] = annotations
@@ -452,9 +538,7 @@ def _apply_cas_result(
         return success_status, None, cas.strategy.id, snapshot, cas.strategy.version
     if cas.conflict:
         snapshot = strategy_state_snapshot(cas.strategy) if cas.strategy is not None else None
-        return "conflict", "expected_version_mismatch", cas.strategy.id if cas.strategy else None, snapshot, (
-            cas.actual_version
-        )
+        return "conflict", "expected_version_mismatch", cas.strategy.id if cas.strategy else None, snapshot, cas.actual_version
     return "not_found", "strategy_not_found", None, None, None
 
 
