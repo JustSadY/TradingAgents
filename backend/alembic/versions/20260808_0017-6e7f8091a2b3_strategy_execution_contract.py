@@ -60,9 +60,8 @@ def upgrade() -> None:
 
     # Existing rows pre-date the explicit replay/learning contract. Do not
     # silently turn known historical or checkpoint-replay rows into training
-    # examples. We can deterministically identify time-travel by trigger and
-    # historical research by a business date earlier than its recorded date.
-    # Ambiguous same-day legacy rows remain live rather than guessing.
+    # examples. Nested CASE keeps the date cast unreachable for malformed
+    # legacy trade_date strings.
     op.execute(
         sa.text(
             """
@@ -71,19 +70,23 @@ def upgrade() -> None:
                 analysis_mode = CASE
                     WHEN LOWER(COALESCE(triggered_by, '')) IN ('time-travel', 'time_travel')
                         THEN 'time_travel'
-                    WHEN trade_date ~ '^\\d{4}-\\d{2}-\\d{2}$'
-                         AND created_at IS NOT NULL
-                         AND trade_date::date < (created_at AT TIME ZONE 'UTC')::date
-                        THEN 'historical'
+                    WHEN trade_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                        THEN CASE
+                            WHEN trade_date::date < (created_at AT TIME ZONE 'UTC')::date
+                                THEN 'historical'
+                            ELSE 'live'
+                        END
                     ELSE 'live'
                 END,
                 learning_eligible = CASE
                     WHEN LOWER(COALESCE(triggered_by, '')) IN ('time-travel', 'time_travel')
                         THEN FALSE
-                    WHEN trade_date ~ '^\\d{4}-\\d{2}-\\d{2}$'
-                         AND created_at IS NOT NULL
-                         AND trade_date::date < (created_at AT TIME ZONE 'UTC')::date
-                        THEN FALSE
+                    WHEN trade_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                        THEN CASE
+                            WHEN trade_date::date < (created_at AT TIME ZONE 'UTC')::date
+                                THEN FALSE
+                            ELSE TRUE
+                        END
                     ELSE TRUE
                 END
             """
