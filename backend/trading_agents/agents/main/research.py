@@ -32,6 +32,7 @@ from backend.trading_agents.agents.base import (
     neutral_invest_debate_state,
 )
 from backend.trading_agents.agents.runtime.debate_stream import emit_live_debate_state
+from backend.trading_agents.agents.runtime.resilience import classify_error, record_agent_result
 from backend.trading_agents.agents.sub.managers.auditor_node import create_auditor_node
 from backend.trading_agents.agents.sub.managers.research_manager import create_research_manager
 from backend.trading_agents.agents.sub.managers.synthesis_manager import create_synthesis_manager
@@ -43,6 +44,30 @@ logger = logging.getLogger(__name__)
 MAIN_KEY = "research_manager"
 
 
+async def _report_sub_failure(label: str, exc: Exception) -> None:
+    """Make an imperative sub-agent failure visible to run health + live UI.
+
+    The Research Manager intentionally keeps useful synthesis/debate/audit
+    output when one inner step fails. That graceful degradation must not hide
+    the exception from the report card merely because the outer LangGraph node
+    itself returned successfully.
+    """
+    error = str(exc) or exc.__class__.__name__
+    record_agent_result(label, fallback=True, error=error)
+    try:
+        from backend.trading_agents.agents.data.chart_tools import active_run_context
+
+        run_ctx = active_run_context.get(None) or {}
+        emitter = run_ctx.get("emitter")
+        if emitter is None:
+            return
+        error_type = classify_error(exc)
+        await emitter.emit_node_error(label, "subagent", error[:500], error_type)
+        await emitter.emit_fallback(label, "subagent", error[:500])
+    except Exception:
+        logger.debug("[research_manager] could not emit failure telemetry for %s", label, exc_info=True)
+
+
 async def _safe(label: str, fn, state: dict, fallback: dict) -> dict:
     try:
         if inspect.iscoroutinefunction(fn):
@@ -50,6 +75,7 @@ async def _safe(label: str, fn, state: dict, fallback: dict) -> dict:
         return fn(state)
     except Exception as exc:
         logger.warning("[research_manager] sub '%s' failed: %s — using fallback.", label, exc, exc_info=True)
+        await _report_sub_failure(label, exc)
         return fallback
 
 
@@ -81,6 +107,23 @@ def _fallback_debate_update(label: str, debate_state: dict) -> dict:
             "judge_decision": str(debate_state.get("judge_decision", "") or ""),
             "count": _debate_count(debate_state) + 1,
         }
+    }
+
+
+def _research_judgement_fallback(state: dict) -> dict:
+    """Preserve completed research artifacts while failing the final judge closed."""
+    plan = (
+        "Research judgement unavailable; the run is degraded. Research posture: Neutral. "
+        "Portfolio Manager must rely on the available analyst reports, synthesis, audit, and debate evidence "
+        "without treating this fallback as a directional research conclusion."
+    )
+    debate = dict(state.get("investment_debate_state") or neutral_invest_debate_state())
+    debate["judge_decision"] = plan
+    debate["current_response"] = plan
+    debate["count"] = _debate_count(debate)
+    return {
+        "investment_debate_state": debate,
+        "investment_plan": plan,
     }
 
 
@@ -145,18 +188,16 @@ def create_research_manager_node(ctx: AgentRunContext) -> NodeFn:
         else:
             apply({"audit_report": ""})
 
-        judge = create_research_manager(ctx.llm_for("research_manager"))
-        apply(
-            await _safe(
-                "research_manager",
-                judge,
-                local,
-                {
-                    "investment_plan": "Research manager unavailable; proceeding with available reports.",
-                },
-            )
-        )
+        fallback = _research_judgement_fallback(local)
+        try:
+            judge = create_research_manager(ctx.llm_for("research_manager"))
+        except Exception as exc:
+            logger.warning("[research_manager] final judge factory failed: %s — using fallback.", exc, exc_info=True)
+            await _report_sub_failure("research_manager", exc)
+            apply(fallback)
+            return out
 
+        apply(await _safe("research_manager", judge, local, fallback))
         return out
 
     return research_manager_node

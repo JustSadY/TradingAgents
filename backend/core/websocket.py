@@ -1,8 +1,9 @@
 import asyncio
 import json
 import logging
+import threading
 from collections import deque
-from typing import Any
+from typing import Any, Callable, Coroutine
 
 from fastapi import WebSocket
 
@@ -10,170 +11,221 @@ from backend.core.metrics import WS_CONNECTIONS
 
 _logger = logging.getLogger(__name__)
 
-_BACKGROUND_TASKS: set[asyncio.Task] = set()
 _BUFFER_SIZE = 10000
 _BUFFER_TTL = 30
+_ACTIVE_BUFFER_TTL = 600
+_REPLAYABLE_EVENT_TYPES = {
+    "report",
+    "debate_bubble",
+    "risk_metrics",
+    "decision",
+    "order_result",
+    "complete",
+    "error",
+    "stats",
+}
 
-class _TaskLock:
-    """An asyncio.Lock plus a count of coroutines currently holding a
-    reference to it, so it's only safe to drop from the registry once no one
-    is using it anymore (see WebSocketManager._acquire/_release)."""
 
-    __slots__ = ("lock", "waiters")
+class _SocketBinding:
+    """A WebSocket plus the event loop that owns its ASGI send channel.
 
-    def __init__(self) -> None:
-        self.lock = asyncio.Lock()
-        self.waiters = 0
+    Cross-loop callers never await this binding's ``send_lock`` directly.
+    They marshal the whole send/close coroutine onto ``loop`` first, so the
+    asyncio primitive and the WebSocket transport are always touched from the
+    loop that accepted the socket.
+    """
+
+    __slots__ = ("ws", "loop", "send_lock")
+
+    def __init__(self, ws: WebSocket, loop: asyncio.AbstractEventLoop) -> None:
+        self.ws = ws
+        self.loop = loop
+        self.send_lock = asyncio.Lock()
+
 
 class WebSocketManager:
-    """Manages WebSocket connections with per-task locking for race safety.
+    """Manage analysis WebSockets safely across multiple asyncio event loops.
 
-    Thread-/task-safe guards
-    ---------------------------
-    - ``_task_locks``: each task_id has a ``_TaskLock`` (an ``asyncio.Lock``
-      plus a reference count) so concurrent ``connect``/``disconnect``/
-      ``send``/``close_task`` calls for the same task_id are serialised.
-    - Buffer, connection-list, and cleanup-handle mutations always happen
-      under the per-task lock.
-    - The registry entry is only dropped once its reference count reaches
-      zero (via ``_acquire``/``_release``), so a coroutine already waiting on
-      or holding the lock can never have it swapped out from under it by a
-      concurrent caller creating a *different* lock for the same task_id.
+    The manager is process-global, while WebSocket requests, background
+    analysis work, test clients, and Redis forwarders may execute on different
+    event loops. A process-global ``asyncio.Lock`` therefore cannot guard task
+    state: once awaited by one loop it raises ``bound to a different event
+    loop`` from another.
+
+    Shared Python containers are protected only by a short-lived
+    ``threading.RLock`` (never held across ``await``). Each actual socket send
+    or close is marshalled back to the loop that accepted that socket.
     """
 
     def __init__(self):
-        self._connections: dict[str, list[WebSocket]] = {}
+        self._connections: dict[str, list[_SocketBinding]] = {}
         self._buffers: dict[str, deque] = {}
-        self._cleanup_handles: dict[str, asyncio.TimerHandle] = {}
-        self._task_locks: dict[str, _TaskLock] = {}
+        self._cleanup_handles: dict[str, tuple[asyncio.AbstractEventLoop, asyncio.TimerHandle, int]] = {}
+        self._cleanup_generation: dict[str, int] = {}
+        self._guard = threading.RLock()
 
-    def _acquire(self, task_id: str) -> _TaskLock:
-        """Get (creating if needed) the lock entry for *task_id* and mark it
-        in-use. Must be paired with a later ``_release`` call. Synchronous —
-        no ``await`` here, so this can't race with a concurrent caller."""
-        entry = self._task_locks.get(task_id)
-        if entry is None:
-            entry = _TaskLock()
-            self._task_locks[task_id] = entry
-        entry.waiters += 1
-        return entry
-
-    def _release(self, task_id: str, entry: _TaskLock) -> None:
-        """Mark *entry* no longer in-use; drop it from the registry once
-        nothing else references it. Synchronous for the same reason as
-        ``_acquire``."""
-        entry.waiters -= 1
-        if entry.waiters <= 0 and self._task_locks.get(task_id) is entry:
-            del self._task_locks[task_id]
-
-    def _refresh_connection_gauge(self):
+    def _refresh_connection_gauge_locked(self) -> None:
         WS_CONNECTIONS.set(sum(len(conns) for conns in self._connections.values()))
 
-    async def connect(self, task_id: str, ws: WebSocket, *, subprotocol: str | None = None):
-        """Accept and register a task stream, optionally negotiating a safe protocol."""
-        await ws.accept(subprotocol=subprotocol)
-        entry = self._acquire(task_id)
+    @staticmethod
+    async def _run_on_loop(
+        loop: asyncio.AbstractEventLoop,
+        factory: Callable[[], Coroutine[Any, Any, Any]],
+    ) -> Any:
+        current = asyncio.get_running_loop()
+        if current is loop:
+            return await factory()
+        if loop.is_closed() or not loop.is_running():
+            raise RuntimeError("WebSocket owner event loop is no longer running")
+        future = asyncio.run_coroutine_threadsafe(factory(), loop)
+        return await asyncio.wrap_future(future)
+
+    async def _send_binding(self, binding: _SocketBinding, text: str) -> None:
+        async def _send() -> None:
+            async with binding.send_lock:
+                await binding.ws.send_text(text)
+
+        await self._run_on_loop(binding.loop, _send)
+
+    async def _close_binding(self, binding: _SocketBinding) -> None:
+        async def _close() -> None:
+            async with binding.send_lock:
+                try:
+                    await binding.ws.close()
+                except Exception:
+                    _logger.debug("WS close failed during cleanup", exc_info=True)
+
+        await self._run_on_loop(binding.loop, _close)
+
+    def _remove_binding(self, task_id: str, binding: _SocketBinding) -> None:
+        with self._guard:
+            conns = self._connections.get(task_id, [])
+            if binding in conns:
+                conns.remove(binding)
+            if not conns:
+                self._connections.pop(task_id, None)
+            self._refresh_connection_gauge_locked()
+
+    def _cancel_cleanup_locked(self, task_id: str) -> None:
+        record = self._cleanup_handles.pop(task_id, None)
+        if not record:
+            return
+        loop, handle, _generation = record
+        if loop.is_closed():
+            return
         try:
-            async with entry.lock:
-                self._connections.setdefault(task_id, []).append(ws)
-                self._refresh_connection_gauge()
-                buffered = list(self._buffers.get(task_id, []))
-                _logger.debug("WS connected: task=%s", task_id)
-                if buffered:
-                    _logger.debug("Replaying %d buffered events for task=%s", len(buffered), task_id)
-                    for event in buffered:
-                        try:
-                            await ws.send_text(json.dumps(event, ensure_ascii=False))
-                        except Exception:
-                            break
-        finally:
-            self._release(task_id, entry)
+            current = asyncio.get_running_loop()
+        except RuntimeError:
+            current = None
+        if current is loop:
+            handle.cancel()
+        elif loop.is_running():
+            try:
+                loop.call_soon_threadsafe(handle.cancel)
+            except RuntimeError:
+                pass
+
+    def _schedule_buffer_cleanup(self, task_id: str, ttl: int = _BUFFER_TTL) -> None:
+        loop = asyncio.get_running_loop()
+        with self._guard:
+            self._cancel_cleanup_locked(task_id)
+            generation = self._cleanup_generation.get(task_id, 0) + 1
+            self._cleanup_generation[task_id] = generation
+            handle = loop.call_later(ttl, self._cleanup_buffer, task_id, generation)
+            self._cleanup_handles[task_id] = (loop, handle, generation)
+
+    def _cleanup_buffer(self, task_id: str, generation: int) -> None:
+        """Drop only detached buffers; never close a live socket from a timer."""
+        with self._guard:
+            record = self._cleanup_handles.get(task_id)
+            if not record or record[2] != generation:
+                return
+            if self._connections.get(task_id):
+                # A connected client still owns the stream. Heartbeat/live
+                # events normally refresh the timer, but fail safe and retry
+                # instead of deleting state underneath an active socket.
+                loop = asyncio.get_running_loop()
+                next_generation = generation + 1
+                self._cleanup_generation[task_id] = next_generation
+                handle = loop.call_later(_BUFFER_TTL, self._cleanup_buffer, task_id, next_generation)
+                self._cleanup_handles[task_id] = (loop, handle, next_generation)
+                return
+            self._buffers.pop(task_id, None)
+            self._cleanup_handles.pop(task_id, None)
+            self._cleanup_generation.pop(task_id, None)
+            _logger.debug("Buffer cleaned up for task=%s", task_id)
+
+    async def connect(self, task_id: str, ws: WebSocket, *, subprotocol: str | None = None):
+        """Accept/register a task stream and restore durable UI state only."""
+        await ws.accept(subprotocol=subprotocol)
+        loop = asyncio.get_running_loop()
+        binding = _SocketBinding(ws, loop)
+        with self._guard:
+            self._connections.setdefault(task_id, []).append(binding)
+            self._refresh_connection_gauge_locked()
+            buffered = [dict(event) for event in self._buffers.get(task_id, []) if event.get("type") in _REPLAYABLE_EVENT_TYPES]
+        _logger.debug("WS connected: task=%s", task_id)
+
+        # Reconnect is state restoration, not a replay of the analysis UI.
+        # Transient status/progress/token/mental-model events are deliberately
+        # omitted so a page refresh does not look like the scan started again.
+        if buffered:
+            _logger.debug("Restoring %d buffered state events for task=%s", len(buffered), task_id)
+        try:
+            for event in buffered:
+                replay_event = {**event, "replay": True}
+                await self._send_binding(binding, json.dumps(replay_event, ensure_ascii=False))
+        except Exception:
+            self._remove_binding(task_id, binding)
+            raise
 
     async def disconnect(self, task_id: str, ws: WebSocket):
-        entry = self._acquire(task_id)
-        try:
-            async with entry.lock:
-                conns = self._connections.get(task_id, [])
-                if ws in conns:
-                    conns.remove(ws)
-                if not conns:
-                    self._connections.pop(task_id, None)
-                self._refresh_connection_gauge()
-        finally:
-            self._release(task_id, entry)
+        """Remove a socket without touching any loop-bound asyncio primitive."""
+        with self._guard:
+            conns = self._connections.get(task_id, [])
+            conns[:] = [binding for binding in conns if binding.ws is not ws]
+            if not conns:
+                self._connections.pop(task_id, None)
+            self._refresh_connection_gauge_locked()
 
     async def send(self, task_id: str, event: dict[str, Any]):
-        entry = self._acquire(task_id)
-        try:
-            async with entry.lock:
-                buf = self._buffers.setdefault(task_id, deque(maxlen=_BUFFER_SIZE))
-                buf.append(event)
-                self._schedule_buffer_cleanup(task_id, ttl=600)
-                text = json.dumps(event, ensure_ascii=False)
-                active_conns = list(self._connections.get(task_id, []))
-                if not active_conns:
-                    return
-                dead: list[WebSocket] = []
-                results = await asyncio.gather(*[ws.send_text(text) for ws in active_conns], return_exceptions=True)
-                for i, res in enumerate(results):
-                    if isinstance(res, Exception):
-                        dead.append(active_conns[i])
-                        _logger.debug("WS send failed for task=%s, marking as dead: %s", task_id, res)
-                for ws in dead:
-                    conns = self._connections.get(task_id, [])
-                    if ws in conns:
-                        conns.remove(ws)
-                if not self._connections.get(task_id):
+        stored_event = dict(event)
+        with self._guard:
+            buf = self._buffers.setdefault(task_id, deque(maxlen=_BUFFER_SIZE))
+            buf.append(stored_event)
+            active_conns = list(self._connections.get(task_id, []))
+        self._schedule_buffer_cleanup(task_id, ttl=_ACTIVE_BUFFER_TTL)
+
+        if not active_conns:
+            return
+
+        text = json.dumps(event, ensure_ascii=False)
+        results = await asyncio.gather(
+            *[self._send_binding(binding, text) for binding in active_conns],
+            return_exceptions=True,
+        )
+        dead: list[_SocketBinding] = []
+        for binding, result in zip(active_conns, results, strict=False):
+            if isinstance(result, Exception):
+                dead.append(binding)
+                _logger.debug("WS send failed for task=%s, marking as dead: %s", task_id, result)
+
+        if dead:
+            with self._guard:
+                conns = self._connections.get(task_id, [])
+                conns[:] = [binding for binding in conns if binding not in dead]
+                if not conns:
                     self._connections.pop(task_id, None)
-                self._refresh_connection_gauge()
-        finally:
-            self._release(task_id, entry)
+                self._refresh_connection_gauge_locked()
 
     async def close_task(self, task_id: str):
-        entry = self._acquire(task_id)
-        try:
-            async with entry.lock:
-                for ws in list(self._connections.get(task_id, [])):
-                    try:
-                        await ws.close()
-                    except Exception:
-                        _logger.debug("WS close failed for task=%s (cleanup)", task_id)
-                self._connections.pop(task_id, None)
-                self._refresh_connection_gauge()
-                self._schedule_buffer_cleanup(task_id, ttl=_BUFFER_TTL)
-        finally:
-            self._release(task_id, entry)
+        with self._guard:
+            bindings = list(self._connections.pop(task_id, []))
+            self._refresh_connection_gauge_locked()
 
-    def _schedule_buffer_cleanup(self, task_id: str, ttl: int = _BUFFER_TTL):
-        existing = self._cleanup_handles.pop(task_id, None)
-        if existing:
-            try:
-                existing.cancel()
-            except Exception:
-                _logger.debug("Cleanup handle cancel failed for task=%s", task_id)
-        loop = asyncio.get_running_loop()
-        handle = loop.call_later(ttl, self._cleanup_buffer, task_id)
-        self._cleanup_handles[task_id] = handle
+        if bindings:
+            await asyncio.gather(*[self._close_binding(binding) for binding in bindings], return_exceptions=True)
+        self._schedule_buffer_cleanup(task_id, ttl=_BUFFER_TTL)
 
-    def _cleanup_buffer(self, task_id: str):
-        if task_id in self._task_locks:
-            _logger.debug("Skipping buffer cleanup for task=%s — lock in use, will retry", task_id)
-            handle = asyncio.get_running_loop().call_later(1.0, self._cleanup_buffer, task_id)
-            self._cleanup_handles[task_id] = handle
-            return
-        self._buffers.pop(task_id, None)
-        self._cleanup_handles.pop(task_id, None)
-        conns = self._connections.pop(task_id, None)
-        self._refresh_connection_gauge()
-        if conns:
-            _logger.debug("Closing %d lingering WS connections for task=%s during buffer cleanup", len(conns), task_id)
-            for ws in conns:
-                try:
-                    task = asyncio.create_task(ws.close())
-                    _BACKGROUND_TASKS.add(task)
-                    task.add_done_callback(_BACKGROUND_TASKS.discard)
-                except Exception:
-                    _logger.debug("Lingering WS close task creation failed for task=%s", task_id)
-        _logger.debug("Buffer cleaned up for task=%s", task_id)
 
 ws_manager = WebSocketManager()
