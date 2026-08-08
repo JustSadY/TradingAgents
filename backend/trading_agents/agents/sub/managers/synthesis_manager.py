@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 from collections import defaultdict
 
@@ -18,6 +19,7 @@ from backend.trading_agents.agents.schemas import (
     EvidenceItem,
     EvidenceSourceFamily,
     EvidenceStrength,
+    InvalidationSeverity,
     MacroRegime,
     MarketRegimeSnapshot,
     MarketTrend,
@@ -104,6 +106,94 @@ def _fallback_regime(macro_report: str) -> MarketRegimeSnapshot:
         macro=macro,
         confidence=0.35 if macro_report.strip() else 0.15,
     )
+
+
+def _plan_invalidation_catalog(state: dict) -> dict[str, dict]:
+    """Return the only invalidation conditions synthesis is allowed to trigger."""
+    plan = state.get("analysis_plan_json")
+    if not isinstance(plan, dict):
+        return {}
+    raw = plan.get("invalidations_to_check")
+    if not isinstance(raw, list):
+        return {}
+    catalog: dict[str, dict] = {}
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        condition_id = str(item.get("condition_id") or "").strip()
+        if condition_id:
+            catalog[condition_id] = item
+    return catalog
+
+
+def _sanitize_triggered_invalidations(state: dict, assessment: SynthesisAssessment) -> SynthesisAssessment:
+    """Drop hallucinated/weak invalidations before they can affect strategy state.
+
+    A synthesis model may only trigger a condition that the neutral AnalysisPlan
+    explicitly asked the analysts to test. The severity comes from that plan,
+    never from the synthesis model. At least one cited evidence item must be
+    explicitly linked to the condition; critical invalidations additionally need
+    two independent non-review evidence groups. This is a deterministic trust
+    boundary: unknown IDs or unlinked evidence are observations, not events.
+    """
+    catalog = _plan_invalidation_catalog(state)
+    if not catalog or not assessment.triggered_invalidations:
+        if assessment.triggered_invalidations and not catalog:
+            _logger.warning("Dropping synthesis invalidations because no AnalysisPlan invalidation catalog exists")
+        return assessment.model_copy(update={"triggered_invalidations": []}) if assessment.triggered_invalidations else assessment
+
+    evidence_by_id: dict[str, EvidenceItem] = {}
+    for items in assessment.evidence_groups.values():
+        for evidence in items:
+            evidence_by_id[evidence.evidence_id] = evidence
+
+    validated = []
+    for invalidation in assessment.triggered_invalidations:
+        condition = catalog.get(invalidation.condition_id)
+        if condition is None:
+            _logger.warning("Dropping unknown triggered invalidation id=%s", invalidation.condition_id)
+            continue
+        try:
+            severity = InvalidationSeverity(str(condition.get("severity") or "material").lower())
+        except ValueError:
+            _logger.warning("Dropping invalidation %s with invalid plan severity", invalidation.condition_id)
+            continue
+
+        cited = [evidence_by_id[eid] for eid in invalidation.evidence_ids if eid in evidence_by_id]
+        linked = [
+            item
+            for item in cited
+            if invalidation.condition_id in item.related_invalidation_ids
+        ]
+        if not linked:
+            _logger.warning("Dropping invalidation %s without explicitly linked evidence", invalidation.condition_id)
+            continue
+
+        independent_groups = {
+            item.evidence_group
+            for item in linked
+            if item.independent_for_reversal and item.evidence_group is not EvidenceGroup.REVIEW
+        }
+        required_groups = 2 if severity is InvalidationSeverity.CRITICAL else 1
+        if len(independent_groups) < required_groups:
+            _logger.warning(
+                "Dropping invalidation %s: independent evidence groups %d < %d",
+                invalidation.condition_id,
+                len(independent_groups),
+                required_groups,
+            )
+            continue
+
+        validated.append(
+            invalidation.model_copy(
+                update={
+                    "severity": severity,
+                    "evidence_ids": [item.evidence_id for item in linked],
+                }
+            )
+        )
+
+    return assessment.model_copy(update={"triggered_invalidations": validated})
 
 
 def _deterministic_assessment(state: dict) -> SynthesisAssessment:
@@ -255,6 +345,7 @@ def create_synthesis_manager(llm):
 
         summary_only = get_config().get("summary_only_mode", False)
         resources_text = build_resources(state, get_report_fields(), prefix="### ", summary_only=summary_only)
+        invalidation_catalog = list(_plan_invalidation_catalog(state).values())
 
         default_instruction = (
             f"You are a Senior Investment Strategist. Synthesize analyst reports and historical backtests for {ticker}. "
@@ -267,8 +358,11 @@ def create_synthesis_manager(llm):
 ### Objective:
 1. Identify grounded alignments and contradictions without inventing unavailable data.
 2. Extract source-aware evidence items and explicitly mark review-origin evidence as non-independent.
-3. Record only actually triggered invalidations; open concerns belong in unresolved_questions.
+3. Record only actually triggered invalidations from the exact catalog below. Never invent a condition_id or severity. Link supporting EvidenceItem.related_invalidation_ids to the condition. Open concerns belong in unresolved_questions.
 4. Return a structured SynthesisAssessment, including a MarketRegimeSnapshot when macro evidence permits it.
+
+### Allowed Invalidation Catalog:
+{json.dumps(invalidation_catalog, ensure_ascii=False, default=str)}
 
 ### Historical Baseline (Backtests):
 {macd_results}
@@ -289,7 +383,7 @@ def create_synthesis_manager(llm):
                 schema=SynthesisAssessment,
             )
             if isinstance(result, SynthesisAssessment):
-                assessment = result
+                assessment = _sanitize_triggered_invalidations(state, result)
                 report = _render_assessment(assessment)
             else:
                 assessment = fallback
