@@ -150,15 +150,32 @@ def _invalidation_items(state: Mapping[str, Any]) -> list[dict[str, Any]]:
 
 
 def _hard_risk_from_state(state: Mapping[str, Any]) -> object:
-    """Return only an application-owned deterministic hard-risk event.
-
-    Thesis invalidations are research evidence. Even a validated CRITICAL
-    invalidation must pass normal stability/reversal policy and can never turn
-    shadow/off mode into live execution by itself. Emergency bypass is reserved
-    for deterministic application inputs such as stop breaches, drawdown or
-    portfolio/broker risk violations placed in ``hard_risk_exit``.
-    """
+    """Return only an application-owned deterministic hard-risk event."""
     return state.get("hard_risk_exit") or None
+
+
+def _signed_decision_for_controller(value: object) -> dict[str, Any]:
+    """Add a signed exposure alias without changing the persisted PM contract.
+
+    ``PortfolioDecision.position_size_pct`` stays a non-negative magnitude for
+    API/backward compatibility. Sell with 0 means flat/exit; Sell with a
+    positive target means a short magnitude when short selling is enabled.
+    The pure stability service already prefers ``target_allocation_pct``, so a
+    negative alias makes true long<->short crossings explicit while keeping an
+    Underweight target positive (a smaller long, not a synthetic short).
+    """
+    decision = _mapping(value)
+    if not decision:
+        return {}
+    rating = str(decision.get("rating") or "").strip().lower()
+    raw = decision.get("position_size_pct")
+    try:
+        allocation = float(raw) if raw is not None else None
+    except (TypeError, ValueError):
+        allocation = None
+    if allocation is not None:
+        decision["target_allocation_pct"] = -allocation if rating == "sell" and allocation > 0 else allocation
+    return decision
 
 
 def _thresholds(ctx: AgentRunContext) -> StabilityThresholds:
@@ -314,6 +331,8 @@ def _transition_model(
     verification: ReversalVerification | None,
 ) -> DecisionTransition:
     accepted_raw = _mapping(evaluation.get("accepted_decision"))
+    # target_allocation_pct is an internal signed alias, not a PortfolioDecision field.
+    accepted_raw.pop("target_allocation_pct", None)
     confidence = float(evaluation.get("calibrated_confidence", proposal.proposed_decision.confidence_score) or 0.0)
     accepted_raw["confidence_score"] = confidence
     accepted = PortfolioDecision.model_validate(accepted_raw)
@@ -363,6 +382,7 @@ def create_decision_stability_controller_node(ctx: AgentRunContext) -> NodeFn:
     async def decision_stability_controller_node(state: dict) -> dict:
         proposal = _proposal_from_state(state) or _fallback_hold_proposal()
         context = _mapping(state.get("strategy_context"))
+        previous_raw = _mapping(context.get("previous_accepted_decision")) or None
         quality = _quality_from_state(state, ctx.selected_analysts)
         controller_enabled = ctx.is_enabled(MAIN_KEY)
         mode = str(ctx.config.get("decision_stability_mode", "shadow") or "shadow").lower()
@@ -379,9 +399,11 @@ def create_decision_stability_controller_node(ctx: AgentRunContext) -> NodeFn:
         invalidations = _invalidation_items(state)
         hard_risk = _hard_risk_from_state(state)
         candidate = _mapping(state.get("strategy_candidate_json"))
+        proposal_controller = _signed_decision_for_controller(proposal.proposed_decision.model_dump(mode="json"))
+        previous_controller = _signed_decision_for_controller(previous_raw) if previous_raw else None
         evaluation = evaluate_decision_stability(
-            proposal.proposed_decision.model_dump(mode="json"),
-            context.get("previous_accepted_decision"),
+            proposal_controller,
+            previous_controller,
             candidate.get("revision_action"),
             quality.model_dump(mode="json"),
             calibration["calibrated_confidence"],
@@ -403,7 +425,7 @@ def create_decision_stability_controller_node(ctx: AgentRunContext) -> NodeFn:
 
         transition = _transition_model(
             proposal=proposal,
-            previous=_mapping(context.get("previous_accepted_decision")) or None,
+            previous=previous_raw,
             evaluation=evaluation,
             quality=quality,
             strategic_state=_strategic_state(state),
@@ -413,8 +435,6 @@ def create_decision_stability_controller_node(ctx: AgentRunContext) -> NodeFn:
         controller_json = transition.accepted_decision.decision.model_dump(mode="json")
         controller_json["execution_action"] = transition.accepted_decision.execution_action.value.lower()
         controller_json["tactical_action"] = transition.accepted_decision.tactical_action.value.lower()
-        # Shadow/off are strictly counterfactual. Only application-owned hard
-        # risk events bypass those rollout modes.
         enforce = (controller_enabled and mode == "enforce") or str(evaluation.get("status")) == "hard_risk_exit"
         canonical = controller_json if enforce else proposed_json
         canonical_text = transition.accepted_decision.decision if enforce else proposal.proposed_decision
@@ -426,6 +446,7 @@ def create_decision_stability_controller_node(ctx: AgentRunContext) -> NodeFn:
         transition_json["controller_reason_codes"] = evaluation.get("reason_codes") or []
         transition_json["would_execution_action"] = evaluation.get("would_execution_action")
         transition_json["canonical_enforced"] = enforce
+        transition_json["signed_exposure_transition"] = _mapping(evaluation.get("transition"))
         return {
             "pm_proposal_json": proposal.model_dump(mode="json"),
             "portfolio_decision_json": canonical,
