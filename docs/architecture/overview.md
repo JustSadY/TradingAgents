@@ -1,144 +1,270 @@
 # System Architecture
 
-TradingAgents uses a multi-layered design. This separation guarantees that user actions, background scheduled executions, and real-time state machines run concurrently without blocking the UI thread or API event loops.
+TradingAgents is split into a React frontend, a FastAPI application shell, a LangGraph-based multi-agent decision engine, PostgreSQL persistence, and optional Redis/arq worker infrastructure. This document describes the current implementation rather than proposed or roadmap-only features.
 
 ---
 
-## 1. High-Level Data Flow
-
-The diagram below details the boundary limits and data flow directions among the React SPA client, the FastAPI API and WebSocket server, the LangGraph AI orchestrator, and external API providers, highlighting the integration paths for advanced features.
+## 1. High-Level Runtime Flow
 
 ```mermaid
 graph TD
-    subgraph Client ["Client Interface (React SPA)"]
-        UI[User Interface / React]
-        WS_Client[WebSocket State & Live Chat QnA]
-        Chart_Viz[Interactive Charts & Live Debate Baloon UI]
-        Dashboard_Full[Simulated Trading Dashboard]
-    end
+    Browser[React SPA] -->|REST /auth + /api| API[FastAPI routers]
+    Browser <-->|Authenticated WebSocket| WS[WebSocket manager]
 
-    subgraph Server ["Server Layer (FastAPI API)"]
-        API_Route[FastAPI Router & Chat QnA Handler]
-        Cron_Service[APScheduler Cron Service & Rebalancer]
-        WS_Manager[WebSocket Event Manager]
-        Attribution_Engine[Analyst Success Scorecard Service]
-        AB_Testing_Service[LLM A/B Testing Service]
-        DB_Log[Database Async Log Handler]
-    end
+    API --> Services[Business services]
+    Services --> DB[(PostgreSQL)]
+    Services --> Queue{ANALYSIS_QUEUE_MODE}
 
-    subgraph AI_Engine ["Multi-Agent Execution Layer"]
-        LangGraph_Engine[LangGraph State Machine Engine]
-        Registry[Dynamic Analyst Registry & Plugins]
-        Debate_Flow[Live Bull/Bear & Risk Debate Stream]
-        Persona_Manager[Investor Persona Context Filter]
-        LLM_Gate[LLM Unified Gateways]
-    end
+    Queue -->|inline| Graph[LangGraph TradingAgentsGraph]
+    Queue -->|worker| Redis[(Redis)]
+    Redis --> Worker[arq analysis worker]
+    Worker --> Graph
 
-    subgraph Persistence ["Data & Storage Layer"]
-        DB[(PostgreSQL Database)]
-        Cache_Dir[Veneered Disk Caches]
-        FS_State[Local States JSON Files]
-    end
+    Graph --> Analysts[12 analyst plugins]
+    Analysts --> Research[Cross-examination / Bull-Bear research]
+    Research --> Risk[Risk evidence and guardrails]
+    Risk --> PM[Portfolio Manager final decision]
 
-    subgraph Vendors ["API Vendors"]
-        Data_Providers[yFinance / AlphaVantage / SEC Form 4]
-        Options_Sweeps[Options / Whale Sweeps Providers]
-        Search_Providers[SearXNG Meta Search / Patents API / Supply Chain Map]
-        Reddit_API[Reddit & Social Sentiment]
-    end
+    Graph --> LLM[Unified LLM clients]
+    Graph --> Tools[Modular agent tools]
+    Tools --> Vendors[Market / news / social / external data sources]
 
-    %% Flow lines
-    UI <-->|REST HTTP Requests| API_Route
-    WS_Client <-->|Live WebSocket Events & Debate / Chat QnA| WS_Manager
-    
-    API_Route -->|Read / Write Settings, Users, Scorecards & Presets| DB
-    API_Route -->|Spawn Task in Threadpool / Chat Requests| LangGraph_Engine
-    Cron_Service -->|Periodic Scan & Rebalancing Executions| LangGraph_Engine
-    Attribution_Engine -->|Calculate Weights & Store Stats| DB
-    AB_Testing_Service -->|Query Performance Metrics & Logs| DB
-    
-    LangGraph_Engine -->|Fetch Registry Plugins| Registry
-    LangGraph_Engine -->|Queries| LLM_Gate
-    LangGraph_Engine -->|Read Cache / Fallback to Live| Cache_Dir
-    
-    Cache_Dir -->|Fetch Missing / Stale Data / SEC Filings| Data_Providers
-    Cache_Dir -->|Fetch News & Patents| Search_Providers
-    Cache_Dir -->|Social Sentiment| Reddit_API
-    Cache_Dir -->|Option Sweeps & Whale Trades| Options_Sweeps
-    
-    LangGraph_Engine -->|Save Final Result State & Debate Logs| DB
-    LangGraph_Engine -.->|Log State Progress & Reports| WS_Manager
-    LangGraph_Engine -.->|Skip Disk Cache Log in Web Context| FS_State
-    
-    API_Route -.->|Unified Debug Logger| DB_Log
-    DB_Log -->|Commit Logger Lines| DB
+    Graph --> DB
+    Graph --> Events[Analysis event bus]
+    Events -->|single process| WS
+    Events -->|Redis pub/sub| Redis
+    Redis --> WS
+
+    PM --> Controls[Deterministic execution controls]
+    Controls --> Paper[Paper/simulation execution]
+    Controls --> Broker[Optional configured broker execution]
 ```
 
----
-
-## 2. Component Directory Boundaries
-
-The source code is organized into three major system boundaries:
-
-### A. The Backend Web Shell (`backend/`)
-*   `api/`: Defines endpoints for user authentication, managing portfolios, watchlists, editing platform settings, querying logs, and manual analysis triggers. *Integrates A/B testing queries, QnA chat message routing, and scorecard lookups.*
-*   `core/`: Core setup logic for SQLAlchemy connections, Fernet-based API key encryption/decryption, logging scrubbing/redaction to prevent keys from leaking into stdout/database, and the WebSocket registry (`ws_manager`).
-*   `services/`: Business services (managing simulated trades, user-specific cron job assignments, sending alert/slack notifications, updating chart annotations, and spawning the graph wrapper). *Integrates the per-user watchlist scheduler and the Analyst Success Scorecard background tracking service.*
-
-### B. The AI Multi-Agent Core (`backend/trading_agents/`)
-This is a cohesive AI subsystem that lives inside the backend and is imported as the `backend.trading_agents` sub-package:
-*   `agents/`: Outlines the prompt templates, system instructions, and schema formats for analysts (technical indicators, news, fundamentals, sentiment, options, macro, quantitative, review, earnings) and managers (research manager, portfolio manager, and debate risk managers). The Portfolio Manager is the sole executable decision authority. Organized into sub-agents under `sub/` (analysts, managers, researchers, risk_mgmt), execution runtime helpers under `runtime/`, tool data handlers under `data/`, and general utilities under `utils/`. *Features specialized modules for Investor Personas, Patent & Research evaluation, Short Squeeze analysis, and Supply Chain risk mappings.*
-*   `graph/`: Houses the state machine architecture (`trading_graph.py`), graph conditional logic (`conditional_logic.py`), propagation configurations, and SQLite checkpoint database connectors. *Streams intermediate debate dialogs directly to the WebSocket and incorporates dynamic performance weightings for each analyst.*
-*   `llm_clients/`: Handles the connections, token usage callback handlers, and specific provider thinking levels (OpenAI reasoning effort, Gemini thinking budget, and Claude effort configurations). Per-provider model lists live in `llm_clients/model_catalog.py` and are served via `/api/settings/llm-catalog`.
-
-### C. The Frontend Dashboard UI (`frontend/`)
-*   A responsive dashboard built with React, TypeScript, and Vite.
-*   `components/`: Visualizations for portfolio metrics, charting with trading annotations, live WebSocket state progressions, and log visualizers. *Features the chat QnA widget, live bubble debate visualizer, A/B Testing charts, and interactive Recharts graphs.*
-*   `pages/`: Interactive pages such as the Watchlist manager, Live multi-agent analysis visualizer, Mock Trading execution pane, and configuration dashboard settings.
+The important ownership boundary is that agent output is not itself an order. The Portfolio Manager produces the final structured investment intent; application-side risk, cash, exposure, broker, and execution controls still decide whether an order can be placed.
 
 ---
 
-## 3. Asynchronous Task Offloading Strategy
+## 2. Repository Boundaries
 
-FastAPI's main thread runs on a single event loop. Executing heavy graph operations directly on this loop without yielding would block other requests.
+### `backend/api/` — HTTP presentation layer
 
-To solve this, TradingAgents utilizes a fully asynchronous architecture:
-1.  **Asynchronous Graph Execution:** The function `async_propagate` runs the LangGraph runner using `await ta.graph.ainvoke` or `ta.graph.astream`. This allows the event loop to yield during LLM calls or tool executions, keeping the server responsive.
-2.  **Async/Sync Bridging (where needed):** While most components are now native async, any remaining heavy synchronous calculations (like pandas-based backtests or yfinance fetches) are offloaded to threads using `asyncio.to_thread` from within their respective async tools or nodes.
-3.  **Real-time WebSocket Streaming:** The graph uses `astream` to push live state updates (like which agent node is executing) and partial reports directly to the main event loop, which multicasts them over WebSockets to the frontend.
-4.  **Background Database Workers:** Long-running database updates, such as parsing chart annotations and sending notifications via webhooks, are offloaded to background asyncio tasks (`asyncio.create_task`) to minimize initial response times.
-5.  **Optional Out-of-Process Analysis Worker:** With `REDIS_URL` set and `ANALYSIS_QUEUE_MODE=worker`, analysis runs are enqueued onto **arq** and executed by a separate `backend.worker` process; WebSocket events flow back to web clients over Redis pub/sub, and the task registry/cancel requests are shared across processes (`core/event_bus.py`, `core/task_store.py`).
+FastAPI routers validate input, enforce authentication/authorization, call services, and return DTOs. Business logic belongs outside the routers.
+
+Major route groups cover authentication, analyses, market data, watchlists, portfolio/trading, settings, users/RBAC, logs, alerts, cron jobs, metadata, updates, reports, screeners, and other dashboard features.
+
+The authentication router is mounted under `/auth`; most application APIs are mounted under `/api`.
+
+### `backend/services/` — application/business logic
+
+Services coordinate database access, market-data work, analysis runs, report chat, paper trading, order execution, alerts, scheduling, performance calculations, notifications, update operations, and related workflows.
+
+Long-running synchronous vendor or numerical work should not block the FastAPI event loop. Existing synchronous operations are bridged from async code using appropriate worker/thread boundaries.
+
+### `backend/repositories/` — data access helpers
+
+Repositories and shared query helpers encapsulate repeated database access and per-user scoping. User-owned records must preserve ownership checks to avoid cross-user data exposure.
+
+### `backend/models/` and `backend/schemas/`
+
+- `models/` contains SQLAlchemy ORM persistence models.
+- `schemas/` contains Pydantic request/response contracts.
+
+PostgreSQL through SQLAlchemy async/`asyncpg` is the supported primary database path.
+
+### `backend/core/` — platform infrastructure
+
+Core modules include:
+
+- application configuration
+- async database engine/session setup
+- security, JWT, password hashing, and Fernet encryption
+- request limits and proxy handling
+- logging/redaction
+- WebSocket connection management
+- Redis event transport
+- cross-process task registry/cancellation
+- startup schema migration helpers
+
+The default single-process path works without Redis. Redis becomes important when work is split across processes.
 
 ---
 
-## 4. Architectural Integration Blueprint for Advanced Features
+## 3. Multi-Agent Decision Engine
 
-This section outlines how the 16 new AI, visual, and automated execution features map onto the existing system architecture.
+The AI subsystem lives under `backend/trading_agents/` and is imported by the FastAPI application as an internal package.
 
-### A. AI & Multi-Agent Layer
-*   **Interactive Q&A on Reports (1):** Integrates as an asynchronous chat endpoint `/api/analysis/{analysis_id}/chat` which starts a separate lightweight agent context initialized with the completed analysis report content as system context.
-*   **Live Analyst Debate (2):** The `BullResearcher` and `BearResearcher` nodes are upgraded to emit message structures containing raw debate transcripts over the active WebSocket channel during their execution.
-*   **Analyst Success Scorecard (3):** A daily/weekly cron service measures the predictive success of each analyst (e.g. Signal vs Price action delta at T+7 and T+30 days). The calculated weights are stored in PostgreSQL and read dynamically by the `Portfolio Manager` node to weight analyst inputs.
-*   **Investor Personas (4):** The user's active risk profile/persona (`conservative`, `aggressive`, `esg`) is loaded from the settings database and passed as metadata context into the system prompts of all debate and management agents.
-*   **LLM A/B Testing Panel (5):** An analytics router compiles execution metrics (duration, token costs, win rates) across different setting templates (presets) for performance comparisons.
+### Current decision stages
 
-### B. Visualizations & Dashboards Layer
-*   **Interactive Charts (6):** The frontend integrates Recharts components and TradingView Lightweight Charts, displaying candle series, volume, and overlaying support/resistance levels, target price lines, and stop losses. Now features a **Dynamic Custom Formula Box** evaluated securely on the backend, **Agent-to-UI Visual Annotations** (Buy/Sell arrows, custom text markers, and trendlines), and dynamically loaded custom indicator subcharts.
-*   **Trading Dashboard (7):** Integrates live data feeds with transaction logs, open orders, and P&L tracking (using real-time price updates).
+The implementation separates specialized evidence production from final execution authority:
 
-### C. Advanced Data Scanning & Signals Layer
-*   **Vision-Based Pattern Recognition:** Serves candlestick chart plots (last 90 days) through `mplfinance`, converts them into base64 images, and prompts the vision LLM to extract visual shapes (Head & Shoulders, Flags, etc.), appending these findings to technical reports.
-*   **Multi-Timeframe Trend Alignment:** Downloads Weekly/Monthly macro data, computes a 20 EMA, and performs a backward merge mapping it onto daily candlesticks as a trend overlay.
-*   **SEC Insider Tracking (8):** A background service queries external SEC Form 4 feeds and appends executive and political trades to the `NewsAnalyst` or `FundamentalsAnalyst` context.
-*   **Patent & R&D Scanning (9):** A dedicated tool queries research and patent databases to score corporate innovation pipelines for the `FundamentalsAnalyst` or a new `R&D Analyst`.
-*   **Whale & Option Sweeps (10):** An options data worker tracks large-block option flows and pushes sweep alerts directly to the `OptionsAnalyst` node.
-*   **Algorithmic Triggers (11):** A technical scanner runs in the background. If a configured break-out condition is met (e.g. MACD crossovers), it invokes a background LangGraph run automatically.
-*   **Short Squeeze Potential (12):** Integrates short interest, share borrow rates, and social mentions metrics into a dedicated `SqueezeAnalyst` subclass evaluation.
+1. **Market Intelligence / analyst execution** — runs the enabled analyst plugins.
+2. **Cross-examination and research synthesis** — resolves conflicts and runs Bull/Bear thesis work and auditing/management steps.
+3. **Risk evaluation** — aggressive, conservative, and neutral risk agents produce risk evidence and guardrails.
+4. **Portfolio Manager** — produces the sole final structured investment decision.
+5. **Validation/reflection and application execution controls** — graph/application checks may reject, refine, reduce, or prevent downstream execution.
 
-### D. Supply Chain & Risk Management Layer
-*   **Supply Chain Mapping (13):** A database mapping dependencies (TSMC -> Apple) enables the `MacroAnalyst` to construct stress-test simulations for geopolitics or disasters.
-*   **Activist Investor Alerts (14):** Scans Form 13D filings and activist headlines to inject proxy battle risk matrices into the `ReviewAnalyst`.
+The current analyst catalog contains 12 specialized analyst plugins: Market/Technical, Social Sentiment, News, Fundamentals, Macroeconomics, Options Chain, Quantitative Factor, Earnings Call, Performance Review, Catalyst, Insider Activity, and Institutional Ownership.
 
-### E. Automation & Portfolio Management Layer
-*   **Auto-Rebalancing (15):** A cron schedule triggers portfolio rebalancing by calculating differences between target and actual allocations, sending buy/sell orders via the simulated or integrated broker.
-*   **Fractional Shares Optimization (16):** The order management and simulation broker engines are updated to accept floating-point order sizes (e.g. `0.025` shares) to support small capital diversification targets.
+Risk agents do **not** independently own final Buy/Sell/Hold direction or executable quantity/allocation. Final agent authority belongs to the Portfolio Manager.
+
+### Package layout
+
+```text
+backend/trading_agents/
+├── agent_catalog.py
+├── personas.py
+├── agents/
+│   ├── analyst_registry.py
+│   ├── hierarchy.py
+│   ├── main/
+│   ├── sub/
+│   │   ├── analysts/
+│   │   ├── researchers/
+│   │   ├── managers/
+│   │   └── risk_mgmt/
+│   ├── runtime/
+│   └── tools/
+├── graph/
+├── dataflows/
+└── llm_clients/
+```
+
+For the detailed graph and agent responsibilities, see [`multi_agent_system.md`](multi_agent_system.md) and [`../../backend/trading_agents/README.md`](../../backend/trading_agents/README.md).
+
+---
+
+## 4. Modular Tool System
+
+Agent tools are registered through the tool registry under `backend/trading_agents/agents/tools/`.
+
+Each tool can expose:
+
+- a stable tool key and category
+- target/allowed analysts
+- default enabled state
+- configurable settings schema
+- LangChain-compatible executable functions
+
+Tool metadata is exposed to the frontend so settings controls can be generated from backend metadata rather than duplicated manually in React.
+
+Access control supports system defaults and user-specific permissions/overrides. Runtime settings are resolved and injected into the analysis context before graph execution.
+
+See [`modular_tool_system.md`](modular_tool_system.md) for the extension model.
+
+---
+
+## 5. LLM Provider Layer
+
+The unified provider implementation lives under:
+
+```text
+backend/trading_agents/llm_clients/
+```
+
+The authoritative provider/model registry is:
+
+```text
+backend/trading_agents/llm_clients/registry.py
+```
+
+The UI receives the current catalog through:
+
+```text
+GET /api/settings/llm-catalog
+```
+
+Registered provider support includes OpenAI, Anthropic Claude, Google Gemini, and NVIDIA NIM/OpenAI-compatible models. Provider-specific reasoning controls are mapped from runtime settings by the LLM client layer.
+
+Provider API keys are stored encrypted in PostgreSQL through application settings. They are not normal backend `.env` configuration.
+
+---
+
+## 6. Analysis Execution Modes
+
+### Inline mode
+
+```ini
+ANALYSIS_QUEUE_MODE=inline
+REDIS_URL=
+```
+
+Analyses execute inside the FastAPI process. WebSocket events can be delivered directly to in-process clients. This is the default lightweight deployment model.
+
+### Worker mode
+
+```ini
+REDIS_URL=redis://localhost:6379/0
+ANALYSIS_QUEUE_MODE=worker
+```
+
+Analysis requests are queued to `arq` and executed by `backend.worker.WorkerSettings` in a separate worker process.
+
+In this mode Redis is used for more than queueing: it also carries cross-process analysis events and supports shared task ownership/cancellation so a FastAPI process can serve WebSocket clients while a different process performs the analysis.
+
+Docker Compose enables this worker architecture by default.
+
+---
+
+## 7. WebSocket Event Flow
+
+Long-running analyses stream progress over:
+
+```text
+/ws/analysis/{task_id}
+```
+
+The current authentication design does not put the JWT in the URL. Clients offer a private JWT-bearing WebSocket subprotocol together with `tradingagents.v1`; the server selects the application protocol while validating the token separately.
+
+In single-process mode the event bus can forward events directly to the WebSocket manager. With Redis enabled, events can cross process boundaries using Redis pub/sub.
+
+---
+
+## 8. Persistence and Schema Management
+
+PostgreSQL stores application users, settings, encrypted provider credentials, analyses, portfolio/trading state, logs, alerts, and other feature data.
+
+On startup the backend creates missing tables and supports additive idempotent column migration for databases that have not been placed under Alembic management. Once an Alembic baseline/version is present, startup migration logic defers to Alembic for that database.
+
+Destructive schema changes such as drops, renames, and incompatible type changes require an explicit migration strategy.
+
+---
+
+## 9. Frontend Architecture
+
+The frontend is a React 19 + TypeScript application built with Vite and Tailwind CSS.
+
+Development mode uses the Vite server and proxies `/api`, `/auth`, and `/ws` to FastAPI. Production Linux builds are emitted to `frontend/dist` and can be served by FastAPI. The Docker deployment instead uses the frontend container as the public nginx-served application/reverse-proxy entry point.
+
+The frontend includes dashboard, analysis, charts, watchlists, portfolio/trading, orders, alerts, performance, A/B testing, administration, logs, settings, screener, sector rotation, reports, and related feature pages.
+
+---
+
+## 10. Deployment Topologies
+
+### Linux/systemd
+
+`deploy/install.sh` provisions PostgreSQL, the virtual environment, frontend build, root `.env`, and a managed systemd web service. The optional Redis/arq worker can be enabled separately.
+
+### Docker Compose
+
+The current compose stack contains:
+
+- PostgreSQL
+- Redis
+- FastAPI backend
+- arq worker
+- frontend/nginx
+- Prometheus
+- Grafana
+- postgres-exporter
+- redis-exporter
+
+The backend and monitoring ports are bound to loopback by default where appropriate. Public application traffic is expected to enter through the frontend proxy.
+
+---
+
+## 11. What Is Not Part of This Architecture Contract
+
+Older versions of this document mixed implemented functionality with proposed ideas such as dedicated `SqueezeAnalyst` classes, patent/R&D scanners, supply-chain maps, and whale-sweep subsystems. Those items must not be treated as implemented architecture unless corresponding production code exists in the repository.
+
+Roadmap ideas should be documented separately from this file. This document is intended to remain a description of code that exists in the current branch.
