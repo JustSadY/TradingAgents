@@ -15,6 +15,23 @@ from backend.trading_agents.llm_clients.base_client import is_provider_function_
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
+# These machine contracts are consumed by nodes that already own a deterministic,
+# schema-valid fallback. If provider-native structured output is malformed, asking
+# the same model two or three more times to repair the payload only burns quota,
+# tokens and wall-clock time while producing no safer state. Returning an empty
+# value lets those callers select their deterministic fallback immediately.
+_DETERMINISTIC_CALLER_FALLBACK_SCHEMAS = frozenset(
+    {
+        "AnalysisPlan",
+        "SynthesisAssessment",
+        "StrategyRevisionCandidate",
+    }
+)
+
+
+def _uses_deterministic_caller_fallback(schema: type[BaseModel] | None) -> bool:
+    return schema is not None and schema.__name__ in _DETERMINISTIC_CALLER_FALLBACK_SCHEMAS
+
 
 def bind_structured(llm: Any, schema: type[T], agent_name: str) -> Any | None:
     try:
@@ -236,6 +253,12 @@ async def ainvoke_structured_or_freetext(
     instance of that schema, or plain text after every structured/parsing
     recovery path has been exhausted. Arbitrary provider response objects are
     never returned to callers.
+
+    AnalysisPlan, SynthesisAssessment and StrategyRevisionCandidate are special:
+    their callers already build deterministic schema-valid fallbacks. For those
+    contracts we never spend additional LLM calls trying to repair malformed
+    provider-native structured output; an empty string tells the caller to use
+    its deterministic state immediately.
     """
     if structured_llm is not None:
         try:
@@ -250,6 +273,13 @@ async def ainvoke_structured_or_freetext(
                     agent_name,
                 )
                 raise
+            if _uses_deterministic_caller_fallback(schema):
+                logger.warning(
+                    "%s: structured output was unusable (%s); using the caller's deterministic fallback without extra LLM repair calls",
+                    agent_name,
+                    exc,
+                )
+                return ""
             logger.warning(
                 "%s: structured-output invocation/coercion failed (%s); falling back to parsing free-text",
                 agent_name,
@@ -272,6 +302,14 @@ async def ainvoke_structured_or_freetext(
             validation_error = f"JSON/Schema Error: {exc}"
     else:
         validation_error = "Could not locate a valid JSON curly brace block in the text response."
+
+    if _uses_deterministic_caller_fallback(schema):
+        logger.warning(
+            "%s: free-text structured recovery failed (%s); using the caller's deterministic fallback without self-correction",
+            agent_name,
+            validation_error,
+        )
+        return ""
 
     for attempt in range(1, 3):
         try:

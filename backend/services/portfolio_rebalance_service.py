@@ -11,6 +11,8 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
+from typing import Any
 
 from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -26,6 +28,7 @@ _FALLBACK = {
     "issues": ["LLM response could not be parsed."],
     "suggestions": [],
 }
+
 
 async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
     from backend.services.mock_trading_service import get_portfolio_with_live_prices
@@ -48,6 +51,7 @@ async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
     prompt = _build_prompt(portfolio, sectors, recent_signals)
     return await _call_llm(db, user, prompt)
 
+
 async def _fetch_sectors(tickers: list[str]) -> dict[str, str]:
     async def _one(ticker: str) -> tuple[str, str]:
         sector = await fetch_sector(ticker)
@@ -55,6 +59,7 @@ async def _fetch_sectors(tickers: list[str]) -> dict[str, str]:
 
     pairs = await asyncio.gather(*[_one(t) for t in tickers], return_exceptions=False)
     return dict(pairs)
+
 
 async def _get_recent_signals(db: AsyncSession, user: User, tickers: list[str]) -> list:
     from sqlalchemy import select
@@ -72,6 +77,7 @@ async def _get_recent_signals(db: AsyncSession, user: User, tickers: list[str]) 
     q = scope_to_user(q, AnalysisResult, user)
     rows = (await db.execute(q)).fetchall()
     return list(rows)
+
 
 def _build_prompt(portfolio: dict, sectors: dict[str, str], signals: list) -> str:
     total: float = portfolio.get("total_value") or 1.0
@@ -129,6 +135,88 @@ Rules:
 - Keep suggestions to a maximum of 5.
 - Quantities must be realistic given portfolio size."""
 
+
+def _decode_json_object(content: str) -> dict[str, Any] | None:
+    """Decode the first complete JSON object, tolerating fences and surrounding prose.
+
+    OpenAI-compatible providers occasionally prepend a sentence, wrap JSON in a
+    markdown fence, or append a short explanation even when instructed not to.
+    ``JSONDecoder.raw_decode`` lets us accept the complete object without using a
+    permissive/repair parser that could invent missing data from a truncated JSON
+    response.
+    """
+    text = (content or "").strip()
+    if text.startswith("```"):
+        first_newline = text.find("\n")
+        if first_newline >= 0:
+            text = text[first_newline + 1 :]
+        if text.rstrip().endswith("```"):
+            text = text.rstrip()[:-3]
+        text = text.strip()
+
+    decoder = json.JSONDecoder()
+    for index, char in enumerate(text):
+        if char != "{":
+            continue
+        try:
+            value, _end = decoder.raw_decode(text[index:])
+        except json.JSONDecodeError:
+            continue
+        if isinstance(value, dict):
+            return value
+    return None
+
+
+def _normalise_rebalance_result(raw: dict[str, Any]) -> dict[str, Any]:
+    """Keep only the documented rebalance contract and coerce harmless scalars."""
+    summary = str(raw.get("summary") or "").strip()
+
+    try:
+        score = int(round(float(raw.get("score", 70))))
+    except (TypeError, ValueError, OverflowError):
+        score = 70
+    score = min(100, max(0, score))
+
+    issues_raw = raw.get("issues")
+    issues = [str(item).strip() for item in issues_raw if str(item).strip()] if isinstance(issues_raw, list) else []
+
+    suggestions: list[dict[str, Any]] = []
+    raw_suggestions = raw.get("suggestions")
+    if isinstance(raw_suggestions, list):
+        for item in raw_suggestions[:5]:
+            if not isinstance(item, dict):
+                continue
+            action = str(item.get("action") or "").strip().upper()
+            ticker = str(item.get("ticker") or "").strip().upper()
+            if action not in {"BUY", "SELL"} or not ticker:
+                continue
+            try:
+                quantity = float(item.get("quantity"))
+            except (TypeError, ValueError):
+                continue
+            if not math.isfinite(quantity) or quantity <= 0:
+                continue
+            urgency = str(item.get("urgency") or "medium").strip().lower()
+            if urgency not in {"low", "medium", "high"}:
+                urgency = "medium"
+            suggestions.append(
+                {
+                    "action": action,
+                    "ticker": ticker,
+                    "quantity": quantity,
+                    "rationale": str(item.get("rationale") or "").strip(),
+                    "urgency": urgency,
+                }
+            )
+
+    return {
+        "summary": summary,
+        "score": score,
+        "issues": issues,
+        "suggestions": suggestions,
+    }
+
+
 async def _call_llm(db: AsyncSession, user: User, prompt: str) -> dict:
     from langchain_core.messages import HumanMessage
 
@@ -166,22 +254,14 @@ async def _call_llm(db: AsyncSession, user: User, prompt: str) -> dict:
         llm = client.get_llm()
         response = await llm.ainvoke([HumanMessage(content=prompt)])
         from backend.services.llm_content import llm_text
+
         content = llm_text(response)
     except Exception as e:
         _logger.warning("Rebalance LLM error: %s", e)
         raise HTTPException(status_code=500, detail="The model request failed") from e
 
-    if content.startswith("```"):
-        content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
-
-    try:
-        result = json.loads(content)
-
-        result.setdefault("summary", "")
-        result.setdefault("score", 70)
-        result.setdefault("issues", [])
-        result.setdefault("suggestions", [])
-        return result
-    except json.JSONDecodeError:
-        _logger.warning("Could not parse rebalance JSON: %.200s", content)
+    result = _decode_json_object(content)
+    if result is None:
+        _logger.warning("Could not parse complete rebalance JSON: %.200s", content)
         return {**_FALLBACK, "summary": content[:400]}
+    return _normalise_rebalance_result(result)
