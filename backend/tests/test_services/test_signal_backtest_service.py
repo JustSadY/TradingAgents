@@ -4,6 +4,7 @@ from backend.models.analysis import AnalysisResult
 from backend.models.user import User
 from backend.services.signal_backtest_service import get_signal_replay_context
 
+
 async def test_system_signal_replay_excludes_tenant_history(db: AsyncSession, test_user: User) -> None:
     db.add_all(
         [

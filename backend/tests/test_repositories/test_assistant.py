@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.user import User
 from backend.repositories.assistant import add_message, clear_messages, get_messages
 
+
 class TestAssistantRepository:
     async def test_add_message(self, db: AsyncSession, test_user: User):
         msg = await add_message(db, user_id=test_user.id, role="user", content="Hello assistant")

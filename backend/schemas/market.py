@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
+
 class FormulaAssistResponse(BaseModel):
     formula: str
 

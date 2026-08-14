@@ -7,6 +7,7 @@ from slowapi.util import get_remote_address
 
 from backend.core.config import get_settings
 
+
 @lru_cache(maxsize=32)
 def _trusted_proxy_networks(raw_cidrs: str) -> tuple:
     """Parse the configured reverse-proxy CIDRs, failing closed on typos.

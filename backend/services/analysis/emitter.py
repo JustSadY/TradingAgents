@@ -5,6 +5,7 @@ from typing import Any
 
 from backend.core.event_bus import publish_close, publish_event
 
+
 class AnalysisEmitter:
     """Handles real-time event emission for analysis tasks."""
 

@@ -5,6 +5,7 @@ from backend.trading_agents.llm_clients.base_client import (
     normalize_content,
 )
 
+
 class _FakeResponse:
     def __init__(self, content):
         self.content = content

@@ -48,17 +48,26 @@ dependencies = [
     "setuptools>=80.9.0",
     "typing-extensions>=4.14.0",
     "aiosqlite",
+]
+
+# Test and lint tooling is deliberately kept out of [project.dependencies] so
+# the production image and deploy venvs do not ship it. CI installs it with
+# `uv sync` (which includes dev groups by default).
+[dependency-groups]
+dev = [
+    "ruff>=0.9.0",
+    "pyright>=1.1.390",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.25.0",
     "pytest-cov>=6.0.0",
     "pytest-mock>=3.14.0",
 ]
 
-[project.optional-dependencies]
-dev = [
-    "ruff>=0.9.0",
-    "pyright>=1.1.390",
-]
+[tool.uv]
+# The importable package is the repository root's `backend` package, not this
+# directory as a distribution, so uv manages dependencies only and never tries
+# to build/install the project itself.
+package = false
 
 [tool.ruff]
 line-length = 120
@@ -79,6 +88,11 @@ ignore = [
     "C901", # legacy orchestrators are tracked for staged decomposition
     "E501", # line too long
     "E402", # module level import not at top of file
+    # UP042 wants `class X(str, Enum)` rewritten to `StrEnum`, which changes what
+    # str()/f-string interpolation produces ("X.BUY" -> "Buy"). These enums are
+    # serialized into prompts, stored decisions and API payloads, so the rewrite
+    # is a behaviour change that needs a per-enum audit rather than a lint pass.
+    "UP042",
 ]
 
 [tool.ruff.lint.isort]

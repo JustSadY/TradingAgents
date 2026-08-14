@@ -9,6 +9,7 @@ from backend.models.user import User
 from backend.schemas.agent_settings import AgentSettingsRead, AgentSettingsUpdate, AgentSettingValue
 from backend.trading_agents.agent_catalog import AgentInfo, get_agent, list_agents
 
+
 def validate_agent_settings(agent: AgentInfo, incoming: dict[str, Any]) -> dict[str, Any]:
     schema_by_key = {field.key: field for field in agent.settings_schema}
     normalized = {}

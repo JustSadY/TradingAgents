@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+
 class UserCreate(BaseModel):
     username: str
     password: str = Field(min_length=8, max_length=128)

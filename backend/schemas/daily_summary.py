@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
+
 class DailySummaryResponse(BaseModel):
     id: int | None = None
     date: str | None = None

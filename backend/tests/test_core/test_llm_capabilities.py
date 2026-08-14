@@ -4,6 +4,7 @@ from backend.trading_agents.llm_clients.capabilities import (
     supports_output_language,
 )
 
+
 def test_nemotron_3_language_support_is_explicit_and_case_insensitive():
     model = "nvidia/nemotron-3-super-120b-a12b"
 

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.settings import AppSettings
 from backend.models.user import User
 
+
 class TestSettingsAPI:
     async def test_get_settings(self, auth_client: AsyncClient, db: AsyncSession, test_user: User):
         settings = AppSettings(user_id=test_user.id, llm_provider="openai", llm_model="gpt-4o-mini")

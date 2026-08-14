@@ -60,7 +60,7 @@ class SimulationTrader(BaseTraderInterface):
                 commission=safe_decimal(res["commission"]),
                 message="Simulation order filled",
             )
-        except Exception as e:
+        except Exception:
             _logger.exception("Simulation order failed for %s", request.ticker)
             return OrderResult(
                 order_id="",

@@ -9,6 +9,7 @@ from backend.repositories.persona import (
     update_user_persona,
 )
 
+
 async def get_user_personas(db: AsyncSession, user_id: int) -> list[UserPersona]:
     return await list_user_personas(db, user_id)
 

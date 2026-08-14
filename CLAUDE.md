@@ -232,6 +232,24 @@ cp .env.example .env
 uvicorn backend.main:app --reload --port 8000
 ```
 
+### Dependencies
+
+`backend/pyproject.toml` is the single hand-edited dependency manifest, locked by
+`backend/uv.lock`. `backend/requirements.txt` is a generated, hash-pinned export
+of that lock — never edit it directly. Docker and the deploy scripts install from
+it because they use pip without uv.
+
+To change a dependency:
+
+```bash
+cd backend
+# edit pyproject.toml, then:
+uv lock
+./scripts/export-requirements.sh
+```
+
+CI fails if the committed export does not match the lock.
+
 Configure infrastructure values such as `DATABASE_URL`, `SECRET_KEY`, and `ENCRYPTION_KEY` in `.env` as needed. Configure LLM/provider keys after login through the Web UI, not in `.env`.
 
 ### Frontend

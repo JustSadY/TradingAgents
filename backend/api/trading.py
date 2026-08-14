@@ -6,8 +6,8 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db, require_page
-from backend.core.utils import safe_ticker_component
 from backend.core.limiter import limiter
+from backend.core.utils import safe_ticker_component
 from backend.models.user import User
 from backend.schemas.trading import (
     BacktestResponse,

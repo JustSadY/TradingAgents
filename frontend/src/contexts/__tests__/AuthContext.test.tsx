@@ -5,6 +5,11 @@ import axios from 'axios'
 import { AuthProvider, useAuth, getAccessToken } from '../AuthContext'
 import type { ReactNode } from 'react'
 
+// AuthContext registers its axios interceptors once, at module import time.
+// Capture the response-error handler here, before beforeEach's clearAllMocks()
+// wipes the recorded call and leaves mock.calls empty.
+const responseErrorHandler = vi.mocked(axios.interceptors.response.use).mock.calls.at(-1)?.[1]
+
 function jwt(sub: string, role = 'user', seconds = 3600) {
   const payload = { sub, role, exp: Math.floor(Date.now() / 1000) + seconds }
   return `header.${btoa(JSON.stringify(payload))}.signature`
@@ -116,10 +121,9 @@ describe('AuthContext', () => {
     await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('alice'))
 
     vi.mocked(axios.post).mockRejectedValue(new Error('refresh rejected'))
-    const responseUseCalls = vi.mocked(axios.interceptors.response.use).mock.calls
-    const errorHandler = responseUseCalls[responseUseCalls.length - 1][1]
+    expect(responseErrorHandler).toBeDefined()
     const fakeError = { config: { url: '/api/portfolio', headers: {} }, response: { status: 401, data: {} } }
-    await expect(errorHandler(fakeError)).rejects.toBeTruthy()
+    await expect(responseErrorHandler!(fakeError)).rejects.toBeTruthy()
     await waitFor(() => expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('false'))
   })
 })

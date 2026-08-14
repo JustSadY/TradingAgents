@@ -7,6 +7,7 @@ from backend.api.deps import (
     get_websocket_application_subprotocol,
 )
 
+
 def test_websocket_auth_reads_private_subprotocol_token():
     token = get_websocket_access_token(f"chat.v1, {WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX}header-token")
 

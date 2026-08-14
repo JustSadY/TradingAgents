@@ -20,6 +20,7 @@ from backend.services.preset_service import PresetError, create_user_preset
 from backend.services.settings_service import apply_preset_to_settings, apply_settings_update, get_or_create_settings
 from backend.trading_agents.graph.checkpointer import _db_path, checkpoint_scope, thread_id
 
+
 class TestCheckpointTenantIsolation:
     def test_checkpoint_paths_and_threads_include_analysis_scope(self, tmp_path):
         first = checkpoint_scope(user_id=101, analysis_id=501)

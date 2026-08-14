@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
 
+
 class ConfigPreset(Base):
     __tablename__ = "config_presets"
     __table_args__ = (

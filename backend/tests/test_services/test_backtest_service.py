@@ -17,6 +17,7 @@ from backend.services.backtest_service import (
     _trade_pnl,
 )
 
+
 class TestApplySlippage:
     def test_buy_worsens_price_upward(self):
         assert _apply_slippage(100.0, "BUY", 5.0) == 100.05

@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from backend.api import share as share_api
 
+
 async def test_shared_report_exposes_only_canonical_report_fields(monkeypatch) -> None:
     report_text_fields = (
         "market_report",

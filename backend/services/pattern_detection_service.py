@@ -4,6 +4,7 @@ from typing import Any
 import numpy as np
 import yfinance as yf
 
+
 def _local_extrema(prices: np.ndarray, order: int = 5) -> tuple[list[int], list[int]]:
     maxima: list[int] = []
     minima: list[int] = []

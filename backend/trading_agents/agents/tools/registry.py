@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from .base import BaseAgentTool
 
+
 class ToolRegistry:
     def __init__(self):
         self._tools: dict[str, BaseAgentTool] = {}

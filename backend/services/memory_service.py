@@ -12,9 +12,9 @@ Memory is off (these become no-ops returning "") when no store is configured.
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 from backend.core.memory import MemoryRecord, MemoryStore, build_pgvector_store, build_pinecone_store
-from datetime import UTC, datetime
 
 _logger = logging.getLogger(__name__)
 

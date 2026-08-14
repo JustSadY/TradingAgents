@@ -6,6 +6,7 @@ from fastapi import HTTPException
 from backend.schemas.tool_settings import ToolSettingsUpdate, ToolSettingUpdateValue
 from backend.services.tool_settings_service import _apply_tool_setting_row_update, validate_tool_settings
 
+
 def _tool():
     return SimpleNamespace(
         key="test_tool",

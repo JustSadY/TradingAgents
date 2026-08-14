@@ -2,6 +2,7 @@ import pytest
 
 from backend.core import database
 
+
 @pytest.mark.parametrize(
     "url",
     [

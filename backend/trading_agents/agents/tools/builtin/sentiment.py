@@ -3,6 +3,7 @@ from backend.trading_agents.agents.tools.base import ToolSettingField
 from backend.trading_agents.agents.tools.registry import registry
 from backend.trading_agents.dataflows.interface import route_to_vendor
 
+
 def route_reddit_posts(*args, **kwargs):
     return route_to_vendor("fetch_reddit_posts", *args, **kwargs)
 

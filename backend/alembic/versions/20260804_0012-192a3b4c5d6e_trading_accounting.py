@@ -3,8 +3,11 @@ Revision ID: 192a3b4c5d6e
 Revises: 08192a3b4c5d
 """
 from collections.abc import Sequence
+
 import sqlalchemy as sa
+
 from alembic import op
+
 revision: str = "192a3b4c5d6e"
 down_revision: str | None = "08192a3b4c5d"
 branch_labels: str | Sequence[str] | None = None

@@ -5,6 +5,7 @@ from decimal import Decimal
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
+
 class TestTradingAPI:
     """Tests for the trading API endpoints."""
 

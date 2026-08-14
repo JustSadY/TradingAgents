@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from backend.services.settings_service import get_or_create_settings
 
+
 async def test_alert_api_returns_conflict_when_active_cap_is_reached(
     authenticated_client,
     db_session,

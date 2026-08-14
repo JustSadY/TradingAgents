@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from backend.services.trading_orchestrator import _classify_order_intent, _directional_exit_levels, _position_quantity
 
+
 class TestPositionQuantity:
     def test_basic_risk_based_sizing_no_stop_loss(self):
         qty = _position_quantity(risk_per_trade_pct=2.0, capital=100_000.0, price=50.0)

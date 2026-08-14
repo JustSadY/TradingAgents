@@ -6,6 +6,7 @@ from backend.models.order import Order
 from backend.models.portfolio import Holding, Portfolio
 from backend.repositories.common import scope_to_user
 
+
 async def get_portfolio_by_id(db: AsyncSession, portfolio_id: int, user=None) -> Portfolio | None:
     q = select(Portfolio).where(Portfolio.id == portfolio_id).options(selectinload(Portfolio.holdings))
     q = scope_to_user(q, Portfolio, user)

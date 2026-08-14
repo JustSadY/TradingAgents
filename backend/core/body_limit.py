@@ -10,6 +10,7 @@ import json
 
 from starlette.exceptions import HTTPException
 
+
 class BodySizeLimitMiddleware:
     def __init__(self, app, max_body_size: int):
         self.app = app

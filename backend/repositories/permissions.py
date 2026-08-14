@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.page_permission import UserPagePermission, UserSettingPermission
 
+
 async def get_user_page_permission(db: AsyncSession, user_id: int, page_key: str):
     res = await db.execute(
         select(UserPagePermission)

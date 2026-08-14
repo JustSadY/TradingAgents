@@ -10,6 +10,7 @@ from backend.core.migrations import (
     _normalize_webhook_events_value,
 )
 
+
 def test_webhook_event_normalizer_migrates_real_legacy_event_and_drops_phantom_event() -> None:
     events, discarded = _normalize_webhook_events_value(
         "analysis_complete, order_filled, risk_breach, analysis_complete"

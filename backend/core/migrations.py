@@ -360,7 +360,7 @@ _NEW_COLUMNS += [
 ]
 
 _NEW_COLUMNS += [
-    ("app_settings", "llm_model", _TYPE_VARCHAR_100 + " DEFAULT 'gpt-4o-mini'"),
+    ("app_settings", "llm_model", _TYPE_VARCHAR_100 + " DEFAULT 'gpt-5.6-luna'"),
     ("app_settings", "openai_reasoning_effort", _TYPE_VARCHAR_20),
     ("app_settings", "anthropic_effort", _TYPE_VARCHAR_20),
     ("app_settings", "google_thinking_level", _TYPE_VARCHAR_20),

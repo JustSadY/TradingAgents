@@ -8,6 +8,7 @@ import pytest
 from backend.services.execution.base import OrderResult
 from backend.services.trading_orchestrator import _apply_portfolio_risk_caps, place_signal_order
 
+
 class _FakeTrader:
     def __init__(self):
         self.request = None

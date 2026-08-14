@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.webhook_delivery import WebhookDelivery
 
+
 async def list_webhook_deliveries(db: AsyncSession, user_id: int, limit: int = 20) -> list[WebhookDelivery]:
     q = (
         select(WebhookDelivery)

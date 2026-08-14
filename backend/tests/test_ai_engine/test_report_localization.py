@@ -14,6 +14,7 @@ from backend.trading_agents.agents.schemas import (
 )
 from backend.trading_agents.graph.reflection import Reflector
 
+
 def test_structured_renderers_localize_turkish_scaffolding_and_actions():
     plan = render_research_plan(
         ResearchPlan(

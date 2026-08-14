@@ -6,6 +6,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import MONEY, Base
 
+
 class PriceAlert(Base):
     __tablename__ = "price_alerts"
     __table_args__ = (

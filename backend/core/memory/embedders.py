@@ -8,6 +8,7 @@ a vector store without hosted inference.
 
 from __future__ import annotations
 
+
 class OpenAIEmbedder:
     """Embeds text with the OpenAI embeddings API."""
 

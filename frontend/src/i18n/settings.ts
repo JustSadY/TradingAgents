@@ -1,7 +1,7 @@
 const translations = {
   en: {
 
-    'settings.llm_model_placeholder': 'e.g. gpt-4o-mini',
+    'settings.llm_model_placeholder': 'e.g. gpt-5.6-luna',
     'settings.loading': 'Loading...',
     'settings.tab_agents': 'AI Configuration',
     'settings.tab_memory': 'Memory',
@@ -110,7 +110,7 @@ const translations = {
     'settings.model_quick_suffix': 'Quick',
     'settings.model_deep_suffix': 'Deep',
     'settings.custom_model_option': 'Custom model...',
-    'settings.custom_model_placeholder': 'Model ID (e.g. gpt-4o)',
+    'settings.custom_model_placeholder': 'Model ID (e.g. gpt-5.6-sol)',
     'settings.model_language_warning': 'This model does not have verified support for the selected output language. Responses may mix languages; verified languages:',
     'settings.row_output_language': 'Output Language',
     'settings.row_debate_rounds': 'Debate Rounds',
@@ -262,7 +262,7 @@ const translations = {
   },
   tr: {
 
-    'settings.llm_model_placeholder': 'ör. gpt-4o-mini',
+    'settings.llm_model_placeholder': 'ör. gpt-5.6-luna',
     'settings.loading': 'Yükleniyor...',
     'settings.tab_agents': 'Yapay Zeka Yapılandırması',
     'settings.tab_memory': 'Bellek',
@@ -371,7 +371,7 @@ const translations = {
     'settings.model_quick_suffix': 'Hızlı',
     'settings.model_deep_suffix': 'Derin',
     'settings.custom_model_option': 'Özel model...',
-    'settings.custom_model_placeholder': 'Model ID (örn: gpt-4o)',
+    'settings.custom_model_placeholder': 'Model ID (örn: gpt-5.6-sol)',
     'settings.model_language_warning': 'Bu model seçili çıktı dili için doğrulanmış desteğe sahip değil. Yanıtlar karışık dilde gelebilir; doğrulanmış diller:',
     'settings.row_output_language': 'Çıktı Dili',
     'settings.row_debate_rounds': 'Tartışma Turları',

@@ -23,6 +23,7 @@ from backend.trading_agents.dataflows.stocktwits import (
     reset_stocktwits_cooldown,
 )
 
+
 @pytest.fixture(autouse=True)
 def _reset_provider_state(tmp_path):
     old_get_path = APICache.get_cache_path

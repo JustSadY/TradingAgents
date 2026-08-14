@@ -9,6 +9,7 @@ from sqlalchemy.schema import Index
 
 from backend.core.database import Base
 
+
 class SharedReport(Base):
     __tablename__ = "shared_reports"
     __table_args__ = (

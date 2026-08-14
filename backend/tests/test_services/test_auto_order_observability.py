@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from backend.services.execution.base import OrderRequest, OrderResult
 
+
 async def test_simulation_trader_forwards_analysis_provenance_to_persisted_order(monkeypatch):
     from backend.services.execution import simulation
 

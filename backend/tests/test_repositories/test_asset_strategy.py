@@ -164,7 +164,10 @@ async def test_keep_review_uses_expected_version_without_artificial_revision(db_
     assert result.applied
     assert result.strategy is not None
     assert result.strategy.version == 1
-    assert result.strategy.last_reviewed_at == reviewed_at
+    # SQLite drops the tzinfo that PostgreSQL's timestamptz preserves, so
+    # compare the instant rather than the tz-awareness of the round trip.
+    stored = result.strategy.last_reviewed_at
+    assert (stored if stored.tzinfo else stored.replace(tzinfo=UTC)) == reviewed_at
     assert await list_asset_strategy_versions(db_session, strategy_id=strategy.id)
     assert len(await list_asset_strategy_versions(db_session, strategy_id=strategy.id)) == 1
 

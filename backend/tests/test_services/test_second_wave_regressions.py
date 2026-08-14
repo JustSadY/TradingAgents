@@ -1,9 +1,10 @@
 from __future__ import annotations
 
 import asyncio
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 from types import SimpleNamespace
+from unittest.mock import AsyncMock
 
 import pandas as pd
 import pytest
@@ -11,6 +12,7 @@ import pytest
 from backend.services.analysis.emitter import AnalysisEmitter
 from backend.services.analysis.orchestrator import _emit_system_status, _heartbeat_monitor
 from backend.services.trade_journal_service import _realized_cost_basis, _realized_pnl_pct
+
 
 class _AsyncSessionContext:
     async def __aenter__(self):
@@ -22,21 +24,75 @@ class _AsyncSessionContext:
     async def commit(self):
         return None
 
+class _ConfirmSessionContext(_AsyncSessionContext):
+    """Serves the pending-action SELECT, then the single-row claim UPDATE."""
+
+    def __init__(self, row) -> None:
+        self._row = row
+        self._calls = 0
+
+    async def execute(self, _statement):
+        self._calls += 1
+        if self._calls == 1:
+            return SimpleNamespace(scalar_one_or_none=lambda: self._row)
+        return SimpleNamespace(rowcount=1)
+
+    async def rollback(self):
+        return None
+
 async def test_portfolio_assistant_uses_execute_order_result_keys(monkeypatch):
+    """The confirm step reports the *filled* quantity/price, not what was asked.
+
+    A partial fill must never be reported back as a complete one, so the reply
+    is built from execute_order's result keys rather than the request payload.
+    """
     from backend.core import database
     from backend.services import mock_trading_service, portfolio_assistant_service
 
     async def fake_execute_order(*_args, **_kwargs):
         return {"quantity": 2.0, "price": 12.5}
 
-    monkeypatch.setattr(database, "AsyncSessionLocal", lambda: _AsyncSessionContext())
+    row = SimpleNamespace(
+        id="c" * 32,
+        user_id=7,
+        action="place_paper_order",
+        payload={"ticker": "AAPL", "action": "BUY", "quantity": 5.0},
+        consumed_at=None,
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+    monkeypatch.setattr(database, "AsyncSessionLocal", lambda: _ConfirmSessionContext(row))
     monkeypatch.setattr(mock_trading_service, "execute_order", fake_execute_order)
 
-    message = await portfolio_assistant_service._tool_place_paper_order(
-        SimpleNamespace(), {"trading"}, "aapl", "buy", 2.0
+    message = await portfolio_assistant_service._tool_confirm_pending_action(
+        SimpleNamespace(id=7, is_admin=False), {"trading"}, "c" * 32
     )
 
-    assert message == "Order placed: BUY 2.0000 shares of AAPL @ $12.50. Total: $25.00."
+    assert message == "Paper order placed: BUY 2.0000 shares of AAPL @ $12.50. Total: $25.00."
+
+async def test_portfolio_assistant_paper_order_preview_does_not_execute(monkeypatch):
+    """Preparing an order must stage a confirmation, never place it."""
+    from backend.services import mock_trading_service, portfolio_assistant_service
+
+    called = False
+
+    async def _unexpected(*_args, **_kwargs):
+        nonlocal called
+        called = True
+        return {}
+
+    monkeypatch.setattr(mock_trading_service, "execute_order", _unexpected)
+    monkeypatch.setattr(
+        portfolio_assistant_service,
+        "_create_pending_action",
+        AsyncMock(return_value="d" * 32),
+    )
+
+    message = await portfolio_assistant_service._tool_place_paper_order(
+        SimpleNamespace(id=7, is_admin=False), {"trading"}, "aapl", "buy", 2.0
+    )
+
+    assert not called
+    assert "d" * 32 in message
 
 class _RecordingAnalysisEmitter(AnalysisEmitter):
     def __init__(self):
@@ -132,7 +188,9 @@ async def test_performance_compares_spy_over_the_portfolio_lifetime(monkeypatch)
     user = SimpleNamespace(id=1)
     result = await mock_trading_service.get_performance(object(), user=user)
 
-    assert snapshot_calls == [{"user": user, "portfolio_id": 42}]
+    # read_only keeps the performance read path from writing prices/positions
+    # back while it is only computing a return figure.
+    assert snapshot_calls == [{"user": user, "portfolio_id": 42, "read_only": True}]
     assert benchmark_calls == [{"benchmark": "SPY", "period": "1y", "start_date": "2024-05-10", "end_date": None}]
     assert result["alpha_pct"] == 1.75
 
@@ -213,32 +271,25 @@ def test_trade_journal_uses_all_in_entry_fee_for_current_closing_orders(
     assert _realized_cost_basis(order) == Decimal(expected_cost)
     assert _realized_pnl_pct(order) == pytest.approx(expected_pct)
 
-async def test_cron_uses_the_orchestrator_signal_mapping(monkeypatch):
-    from backend.services import cron_service
+def test_signal_actionability_is_single_sourced():
+    """``is_actionable`` and the order path must read one mapping.
 
-    placed: list[dict] = []
-    commits = 0
+    ``place_signal_order`` resolves its side with ``SIGNAL_TO_ACTION``; a second,
+    looser notion of "actionable" anywhere else could admit a signal the order
+    path cannot map, so the predicate is derived from the same constant.
+    """
+    from backend.core.constants import SIGNAL_TO_ACTION
+    from backend.services.trading_orchestrator import is_actionable
 
-    class _Db:
-        async def commit(self):
-            nonlocal commits
-            commits += 1
+    assert SIGNAL_TO_ACTION, "signal mapping must not be empty"
+    for signal in SIGNAL_TO_ACTION:
+        assert is_actionable(signal) is True
+    for signal in (None, "", "Hold", "Neutral", "buy"):
+        assert is_actionable(signal) is False
 
-    async def fake_place_order(db, **kwargs):
-        placed.append({"db": db, **kwargs})
+def test_auto_execution_path_uses_the_orchestrator_helpers():
+    """The automatic order path must not re-implement execution gating."""
+    from backend.services import analysis_service, trading_orchestrator
 
-    monkeypatch.setattr(cron_service, "is_actionable", lambda signal: signal == "NewActionableSignal")
-    monkeypatch.setattr(cron_service, "place_signal_order", fake_place_order)
-    row = SimpleNamespace(signal="NewActionableSignal")
-
-    was_placed = await cron_service._place_actionable_signal_order(
-        _Db(),
-        ticker="AAPL",
-        row=row,
-        settings=SimpleNamespace(auto_execute_signals=True),
-        user=SimpleNamespace(id=1),
-    )
-
-    assert was_placed is True
-    assert len(placed) == 1
-    assert commits == 1
+    assert analysis_service.place_signal_order is trading_orchestrator.place_signal_order
+    assert analysis_service.auto_execute_signals_enabled is trading_orchestrator.auto_execute_signals_enabled

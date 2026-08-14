@@ -4,6 +4,7 @@ from langchain_core.tools import tool
 
 from backend.trading_agents.dataflows.interface import route_to_vendor
 
+
 @tool
 async def get_institutional_holdings(
     ticker: Annotated[str, "ticker symbol"],

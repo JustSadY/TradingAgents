@@ -8,6 +8,7 @@ from backend.models.analysis import AnalysisResult
 from backend.models.shared_report import SharedReport
 from backend.repositories import shared_report as repo
 
+
 def _as_utc(value: datetime) -> datetime:
     if value.tzinfo is None:
         return value.replace(tzinfo=UTC)

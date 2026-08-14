@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+
 def scope_to_user(query, model, user):
     """Restrict ``query`` to rows owned by ``user`` unless the user is an admin.
 

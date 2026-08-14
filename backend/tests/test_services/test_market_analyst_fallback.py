@@ -6,6 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_market_analyst_preserves_prefetched_data_when_model_report_is_unavailable(monkeypatch):
     """A provider-side blank must not become an empty or permanently cached panel."""

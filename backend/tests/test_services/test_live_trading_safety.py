@@ -7,6 +7,7 @@ import pytest
 
 from backend.services.execution.base import OrderRequest
 
+
 async def test_live_alpaca_executor_rejects_before_constructing_an_http_client(monkeypatch):
     """The executor boundary must be safe even without the orchestrator."""
     from backend.services.execution import alpaca

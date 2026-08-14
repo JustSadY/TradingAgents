@@ -1,5 +1,6 @@
 from pydantic import BaseModel
 
+
 class ScreenResultItem(BaseModel):
     ticker: str
     score: float

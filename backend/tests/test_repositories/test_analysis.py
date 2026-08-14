@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime, timedelta
 from types import SimpleNamespace
 
 import pytest
@@ -19,6 +20,7 @@ from backend.repositories.analysis import (
     list_historical_analyses,
     update_analysis_result,
 )
+
 
 class TestAnalysisRepository:
     async def _create_analysis(
@@ -211,12 +213,40 @@ class TestAnalysisRepository:
             await update_analysis_result(_Session(), 17, signal="sell")
 
     async def test_cleanup_stale_analyses(self, db: AsyncSession, test_user: User):
-        await self._create_analysis(db, test_user.id, status="running")
+        """Only an expired lease is failed — a live run must survive.
+
+        Cleanup runs on web boot, so sweeping every ``running`` row would kill
+        analyses that are still executing in a worker.
+        """
+        stale = await self._create_analysis(
+            db,
+            test_user.id,
+            ticker="STALE",
+            status="running",
+            created_at=datetime.now(UTC) - timedelta(hours=2),
+        )
+        live = await self._create_analysis(
+            db,
+            test_user.id,
+            ticker="LIVE",
+            status="running",
+            heartbeat_at=datetime.now(UTC),
+        )
         await self._create_analysis(db, test_user.id, status="completed")
+        stale_id, live_id = stale.id, live.id
+
+        # Cleanup runs on boot against a fresh session. Detaching mirrors that,
+        # and avoids SQLAlchemy evaluating the WHERE clause in Python against
+        # SQLite's naive datetimes (PostgreSQL returns tz-aware values).
+        db.expunge_all()
 
         count = await cleanup_stale_analyses(db)
         assert count == 1
 
+        assert (await get_analysis_by_id(db, stale_id, user=test_user)).status == "failed"
+        assert (await get_analysis_by_id(db, live_id, user=test_user)).status == "running"
+
+        # list_analyses only returns completed rows.
         remaining = await list_analyses(db, user=test_user)
         assert len(remaining) == 1
 

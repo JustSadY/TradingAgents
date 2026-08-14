@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.preset import ConfigPreset
 from backend.repositories.common import scope_to_user
 
+
 async def list_presets(db: AsyncSession, user=None) -> list[ConfigPreset]:
     q = select(ConfigPreset).order_by(ConfigPreset.created_at.desc())
     q = scope_to_user(q, ConfigPreset, user)

@@ -11,6 +11,7 @@ from backend.core.security import (
     verify_password,
 )
 
+
 class TestSecurityService:
     def test_hash_password(self):
         hashed = hash_password("testpassword")
@@ -48,11 +49,22 @@ class TestSecurityService:
         assert payload["ver"] == 5
 
     def test_create_refresh_token(self):
-        token = create_refresh_token("testuser")
+        token = create_refresh_token("testuser", session_id="sess-1", token_id="jti-1")
         assert token is not None
         payload = decode_token_payload(token, "refresh")
         assert payload["sub"] == "testuser"
         assert payload["type"] == "refresh"
+
+    def test_refresh_token_carries_session_and_token_identity(self):
+        """``sid``/``jti`` are what make a refresh token individually revocable.
+
+        Losing either claim would silently turn rotation back into a plain
+        long-lived token, so assert they survive the encode/decode round trip.
+        """
+        token = create_refresh_token("testuser", session_id="sess-abc", token_id="jti-xyz")
+        payload = decode_token_payload(token, "refresh")
+        assert payload["sid"] == "sess-abc"
+        assert payload["jti"] == "jti-xyz"
 
     def test_decode_token(self):
         token = create_access_token("testuser")
@@ -74,7 +86,7 @@ class TestSecurityService:
 
     def test_access_refresh_token_roundtrip(self):
         access = create_access_token("testuser", role="user", token_version=1)
-        refresh = create_refresh_token("testuser", token_version=1)
+        refresh = create_refresh_token("testuser", token_version=1, session_id="sess-1", token_id="jti-1")
 
         access_payload = decode_token_payload(access, "access")
         refresh_payload = decode_token_payload(refresh, "refresh")

@@ -17,6 +17,7 @@ from backend.trading_agents.llm_clients.base_client import is_quota_exhausted, i
 from backend.trading_agents.llm_clients.factory import create_llm_client
 from backend.trading_agents.llm_clients.registry import llm_registry, provider_requires_api_key
 
+
 class TestTokenUsage:
     def test_default_zeros(self):
         u = TokenUsage()
@@ -252,7 +253,7 @@ class TestRegistry:
     def test_get_model_options(self):
         models = llm_registry.get_model_options("openai")
         assert len(models) > 0
-        assert any("gpt-4o" in m[1] for m in models)
+        assert any("gpt-5.6-sol" in m[1] for m in models)
 
     def test_is_openai_compatible(self):
         assert llm_registry.is_openai_compatible("openai") is True
@@ -275,23 +276,23 @@ class TestRegistry:
 
 class TestFactory:
     def test_create_openai_client(self):
-        client = create_llm_client("openai", "gpt-4o", api_key="sk-test")
+        client = create_llm_client("openai", "gpt-5.6-sol", api_key="sk-test")
         assert client.get_provider_name() == "openai"
 
     def test_create_anthropic_client(self):
-        client = create_llm_client("anthropic", "claude-3-5-sonnet-latest", api_key="sk-test")
+        client = create_llm_client("anthropic", "claude-sonnet-5", api_key="sk-test")
         assert client.get_provider_name() == "anthropic"
 
     def test_create_google_client(self):
-        client = create_llm_client("google", "gemini-1.5-pro", api_key="test-key")
+        client = create_llm_client("google", "gemini-3.7-flash", api_key="test-key")
         assert client.get_provider_name() == "google"
 
     def test_create_mistral_client(self):
-        client = create_llm_client("mistral", "mistral-large-latest", api_key="test-key")
+        client = create_llm_client("mistral", "mistral-large-3-25-12", api_key="test-key")
         assert client.get_provider_name() == "mistral"
 
     def test_create_groq_client(self):
-        client = create_llm_client("groq", "llama-3.3-70b-versatile", api_key="gsk-test")
+        client = create_llm_client("groq", "openai/gpt-oss-120b", api_key="gsk-test")
         assert client.get_provider_name() == "groq"
 
     def test_create_nvidia_openai_compatible(self):
@@ -299,7 +300,7 @@ class TestFactory:
         assert client.get_provider_name() == "nvidia"
 
     def test_create_deepseek_openai_compatible(self):
-        client = create_llm_client("deepseek", "deepseek-chat", api_key="sk-test")
+        client = create_llm_client("deepseek", "deepseek-v4-flash", api_key="sk-test")
         assert client.get_provider_name() == "deepseek"
 
     def test_unsupported_provider_raises(self):
@@ -307,23 +308,23 @@ class TestFactory:
             create_llm_client("nonexistent", "some-model", api_key="test")
 
     def test_openai_client_missing_key_raises(self):
-        client = create_llm_client("openai", "gpt-4o")
+        client = create_llm_client("openai", "gpt-5.6-sol")
         with pytest.raises(ValueError, match="API key"):
             client.get_llm()
 
     def test_openai_client_get_llm_ollama_no_key(self):
-        client = create_llm_client("ollama", "llama3.2")
+        client = create_llm_client("ollama", "qwen3.6:27b")
         llm = client.get_llm()
         assert llm is not None
 
     def test_anthropic_missing_key_raises(self):
-        client = create_llm_client("anthropic", "claude-3-5-sonnet-latest")
+        client = create_llm_client("anthropic", "claude-sonnet-5")
         with pytest.raises(ValueError, match="API key"):
             client.get_llm()
 
 class TestModelValidation:
     def test_validate_known_model(self):
-        client = create_llm_client("openai", "gpt-4o", api_key="sk-test")
+        client = create_llm_client("openai", "gpt-5.6-sol", api_key="sk-test")
         assert client.validate_model() is True
 
     def test_validate_unknown_model(self):
@@ -331,5 +332,5 @@ class TestModelValidation:
         assert client.validate_model() is False
 
     def test_anthropic_known_model(self):
-        client = create_llm_client("anthropic", "claude-3-5-sonnet-latest", api_key="sk-test")
+        client = create_llm_client("anthropic", "claude-sonnet-5", api_key="sk-test")
         assert client.validate_model() is True

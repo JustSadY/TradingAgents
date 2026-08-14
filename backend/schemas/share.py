@@ -2,6 +2,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+
 class ShareCreateResponse(BaseModel):
     token: str
     expires_at: str

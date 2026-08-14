@@ -6,6 +6,7 @@ import pytest
 
 from backend.core import event_bus
 
+
 class _FakeRedis:
     def __init__(self):
         self.payloads: list[str] = []

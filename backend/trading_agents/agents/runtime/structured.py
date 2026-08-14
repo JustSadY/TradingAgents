@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from backend.services.llm_content import llm_text
-
 import asyncio
 import json
 import logging
@@ -10,6 +8,7 @@ from typing import Any, TypeVar
 
 from pydantic import BaseModel
 
+from backend.services.llm_content import llm_text
 from backend.trading_agents.llm_clients.base_client import is_provider_function_degraded
 
 logger = logging.getLogger(__name__)

@@ -296,6 +296,7 @@ async def run_tool_analyst(
         import traceback as _tb
 
         from langchain_core.messages import AIMessage
+
         from backend.trading_agents.llm_clients.base_client import is_quota_exhausted
 
         log_event(

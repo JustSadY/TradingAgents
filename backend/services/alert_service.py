@@ -240,10 +240,6 @@ async def check_price_alerts() -> None:
         if not alerts:
             return
 
-        from backend.repositories.system_settings import get_system_settings
-
-        settings = await get_system_settings(db)
-
         price_alerts = [a for a in alerts if getattr(a, "alert_type", "price") not in _INDICATOR_ALERT_TYPES]
         indicator_alerts = [a for a in alerts if getattr(a, "alert_type", "price") in _INDICATOR_ALERT_TYPES]
 
@@ -297,10 +293,9 @@ async def _auto_analyze(ticker: str, trade_date: str, user_id: int | None) -> No
                 return
             settings = await get_or_create_settings(new_db, user)
             task_id = str(uuid.uuid4())
+            from backend.repositories.analysis import create_analysis_result
             from backend.services.analysis_queue import dispatch_analysis
             from backend.services.analysis_service import register_queued_task
-
-            from backend.repositories.analysis import create_analysis_result
 
             await create_analysis_result(
                 new_db, task_id=task_id, user_id=user.id, ticker=ticker, trade_date=trade_date,

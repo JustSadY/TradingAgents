@@ -211,9 +211,15 @@ def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
             series = pd.to_numeric(pd.Series(res, index=df.index), errors="coerce")
         import numpy as np
 
-        finite = np.isfinite(series.to_numpy(dtype="float64", na_value=np.nan))
-        if not bool(finite.all()):
+        values = series.to_numpy(dtype="float64", na_value=np.nan)
+        # NaN is the expected warm-up of every rolling/shifted term (SMA(20)
+        # leads with 19 of them), and market_service renders those as JSON null.
+        # Only +/-inf is unrenderable, so reject that rather than all non-finite
+        # values -- the latter would reject every rolling formula there is.
+        if bool(np.isinf(values).any()):
             raise ValueError("Formula result contains non-finite values")
+        if not bool(np.isfinite(values).any()):
+            raise ValueError("Formula result has no finite values over this range")
         # Prevent huge finite values from later overflowing JSON/plotting code.
         if bool((series.abs() > 1e100).any()):
             raise ValueError("Formula result is outside the supported numeric range")

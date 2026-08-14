@@ -4,6 +4,7 @@ from typing import Any
 
 from .base import BaseAgentTool, TemporalSemantics, ToolContext, ToolSettingField
 
+
 class FunctionToolAdapter(BaseAgentTool):
     def __init__(
         self,

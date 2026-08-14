@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any, Protocol, runtime_checkable
 
+
 @dataclass
 class MemoryRecord:
     """A single item to store. ``text`` is what gets embedded; ``metadata`` is

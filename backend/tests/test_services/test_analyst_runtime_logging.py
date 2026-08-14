@@ -2,6 +2,7 @@ from types import SimpleNamespace
 
 import pytest
 
+
 class _Prompt:
     @classmethod
     def from_messages(cls, _messages):

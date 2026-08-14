@@ -3,6 +3,7 @@ from typing import Any
 import numpy as np
 import pandas as pd
 
+
 def calculate_sharpe_ratio(returns: pd.Series, risk_free_rate: float = 0.02) -> float:
     """Calculate the annualized Sharpe Ratio."""
     if len(returns) < 2:

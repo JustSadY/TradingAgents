@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.trade_note import TradeNote
 
+
 async def get_note(db: AsyncSession, order_id: int, user_id: int) -> TradeNote | None:
     result = await db.execute(
         select(TradeNote).where(TradeNote.order_id == order_id).where(TradeNote.user_id == user_id)

@@ -22,6 +22,7 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass
 from typing import Any
 
+
 @dataclass(frozen=True)
 class ToolCallContext:
     """The safe identifiers associated with one in-flight tool call."""

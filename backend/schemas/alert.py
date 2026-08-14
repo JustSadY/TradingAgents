@@ -4,6 +4,7 @@ from pydantic import BaseModel, ConfigDict, Field, field_validator, model_valida
 
 from backend.core.utils import safe_ticker_component
 
+
 class AlertCreate(BaseModel):
     ticker: str = Field(..., min_length=1, max_length=20)
     condition: str = Field(..., pattern="^(above|below)$")

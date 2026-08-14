@@ -8,6 +8,7 @@ import pytest
 
 from backend.trading_agents.agents.runtime.debate_history import debate_messages, format_debate_argument
 
+
 def test_debate_messages_keep_multiline_markdown_in_one_speaker_turn():
     history = (
         "Bull Analyst: **Catalyst:** Earnings improved.\n"

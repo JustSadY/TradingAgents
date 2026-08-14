@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel
 
+
 class ToolSettingValue(BaseModel):
     enabled: bool
     settings: dict[str, Any] = {}

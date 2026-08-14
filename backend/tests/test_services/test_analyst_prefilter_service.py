@@ -4,6 +4,7 @@ from backend.models.analysis import AnalysisResult
 from backend.models.user import User
 from backend.services import analyst_prefilter_service
 
+
 async def test_system_prefilter_excludes_tenant_history(db: AsyncSession, test_user: User, monkeypatch) -> None:
     system_row = AnalysisResult(
         user_id=None,

@@ -1,0 +1,71 @@
+name: Backend
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: backend-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # backend/requirements.txt is a generated, fully-pinned export of uv.lock.
+  # Docker and the deploy scripts install from it, so it must never drift from
+  # the lock that CI tests against.
+  deps:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: Lockfile matches pyproject.toml
+        working-directory: backend
+        run: uv lock --check
+
+      - name: requirements.txt matches uv.lock
+        run: |
+          backend/scripts/export-requirements.sh
+          git diff --exit-code -- backend/requirements.txt \
+            || { echo "::error::backend/requirements.txt is stale — run backend/scripts/export-requirements.sh and commit the result"; exit 1; }
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      - name: ruff check
+        working-directory: backend
+        run: uv run --frozen ruff check --output-format=github .
+
+      # The repository predates a single enforced formatter, so `ruff format`
+      # currently rewrites most files. Kept visible but non-blocking until a
+      # dedicated formatting commit lands; flip to blocking in the same change.
+      - name: ruff format --check
+        working-directory: backend
+        continue-on-error: true
+        run: uv run --frozen ruff format --check .
+
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.11 is the ruff target-version; 3.12 is what Dockerfile.backend ships.
+        python-version: ["3.11", "3.12"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v5
+        with:
+          enable-cache: true
+
+      # Tests run against a temp-file SQLite database configured in
+      # backend/tests/conftest.py, so no PostgreSQL service is required here.
+      - name: pytest
+        working-directory: backend
+        run: uv run --frozen --python ${{ matrix.python-version }} pytest -q

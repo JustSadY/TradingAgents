@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.repositories.preset import create_preset, get_preset_by_id, get_preset_by_name, list_presets
 
+
 class TestPresetRepository:
     async def test_create_preset(self, db: AsyncSession, test_user):
         preset = await create_preset(

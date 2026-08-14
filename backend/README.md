@@ -132,6 +132,10 @@ Ensure you have a PostgreSQL database server running and a database named `tradi
     ```bash
     pip install -r backend/requirements.txt
     ```
+    `requirements.txt` is generated from `uv.lock` and is fully pinned; do not
+    edit it by hand. Declare dependencies in `pyproject.toml`, then run
+    `uv lock && ./scripts/export-requirements.sh`. Contributors with uv can use
+    `uv sync` instead, which also installs the `dev` group (ruff, pyright, pytest).
 4.  **Database Setup / Migrations:**
     Tables and additive column migrations are applied automatically on startup
     (see [core/migrations.py](core/migrations.py)). No manual migration step is
