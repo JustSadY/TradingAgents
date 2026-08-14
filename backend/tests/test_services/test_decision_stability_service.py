@@ -14,6 +14,10 @@ def _proposal(rating: str, allocation: float | None = None) -> dict:
         "confidence_score": 0.91,
         "executive_summary": "Raw Portfolio Manager proposal.",
     }
+    if allocation is not None:
+        # Mirror the graph adapter: Sell with a positive magnitude is a short
+        # target, while Sell 0 is flat/exit. Other ratings remain long/flat.
+        proposal["target_allocation_pct"] = -allocation if rating == "Sell" and allocation > 0 else allocation
     return proposal
 
 
@@ -104,9 +108,37 @@ def test_allocation_expansion_is_classified_as_risk_increase_even_when_rating_is
     assert result["required_confidence"] == 0.75
 
 
-def test_cross_zero_reversal_needs_explicit_invalidation_and_independent_groups() -> None:
+def test_buy_to_underweight_lower_long_target_is_risk_reduction_not_reversal() -> None:
+    result = evaluate_decision_stability(
+        _proposal("Underweight", 8),
+        _proposal("Buy", 12),
+        "WEAKEN",
+        _quality(90),
+        0.70,
+    )
+
+    assert result["status"] == "accepted"
+    assert result["transition"]["movement"] == "risk_reduction"
+    assert result["transition"]["is_cross_zero_reversal"] is False
+
+
+def test_sell_zero_is_exit_not_short_reversal() -> None:
     result = evaluate_decision_stability(
         _proposal("Sell", 0),
+        _proposal("Buy", 12),
+        "INVALIDATE",
+        _quality(90),
+        0.95,
+    )
+
+    assert result["status"] == "accepted"
+    assert result["transition"]["movement"] == "risk_reduction"
+    assert result["transition"]["is_cross_zero_reversal"] is False
+
+
+def test_cross_zero_reversal_needs_explicit_invalidation_and_independent_groups() -> None:
+    result = evaluate_decision_stability(
+        _proposal("Sell", 10),
         _proposal("Buy", 12),
         "INVALIDATE",
         _quality(),
@@ -120,19 +152,18 @@ def test_cross_zero_reversal_needs_explicit_invalidation_and_independent_groups(
     assert result["required_confidence"] == 0.82
     assert "reversal_invalidation_missing" in result["reason_codes"]
     assert "independent_evidence_missing" in result["reason_codes"]
-    # A reconciler label is meaningful context, but cannot manufacture an event.
     assert result["candidate_strategy_action"] == "INVALIDATE"
 
 
 def test_cross_zero_reversal_accepts_only_with_high_quality_independent_confirmation() -> None:
     result = evaluate_decision_stability(
-        _proposal("Sell", 0),
+        _proposal("Sell", 10),
         _proposal("Buy", 12),
         {"action": "INVALIDATE"},
         _quality(90),
         0.90,
         evidence_groups=_reversal_evidence(),
-        triggered_invalidations=[{"name": "guidance_cut", "triggered": True}],
+        triggered_invalidations=[{"condition_id": "guidance_cut", "evidence_ids": ["e1"], "triggered": True}],
     )
 
     assert result["status"] == "accepted"
@@ -148,7 +179,7 @@ def test_review_and_duplicate_source_families_do_not_satisfy_reversal_confirmati
         "review": {"bias": "bearish", "evidence_strength": 1.0},
     }
     result = evaluate_decision_stability(
-        _proposal("Sell", 0),
+        _proposal("Sell", 10),
         _proposal("Buy", 12),
         "INVALIDATE",
         _quality(90),
@@ -166,7 +197,7 @@ def test_review_and_duplicate_source_families_do_not_satisfy_reversal_confirmati
 
 def test_cross_zero_reversal_rejects_low_quality_even_when_other_evidence_is_present() -> None:
     result = evaluate_decision_stability(
-        _proposal("Sell", 0),
+        _proposal("Sell", 10),
         _proposal("Buy", 12),
         "INVALIDATE",
         _quality(70),
@@ -180,10 +211,10 @@ def test_cross_zero_reversal_rejects_low_quality_even_when_other_evidence_is_pre
     assert "major_reversal_requires_high_quality" in result["reason_codes"]
 
 
-def test_rejected_change_becomes_tactical_hold_and_never_replays_previous_buy() -> None:
+def test_rejected_reversal_becomes_tactical_hold_and_never_replays_previous_buy() -> None:
     previous = _proposal("Buy", 15)
     result = evaluate_decision_stability(
-        _proposal("Sell", 0),
+        _proposal("Sell", 10),
         previous,
         "INVALIDATE",
         _quality(90),
@@ -218,7 +249,6 @@ def test_hard_risk_exit_bypasses_hysteresis_and_forces_clamped_reduce_only_exit(
     assert result["execution_action"] == "reduce_only"
     assert result["reduce_only"] is True
     assert result["accepted_decision"]["rating"] == "Sell"
-    # A hard exit can flatten the long, but cannot use a negative target to open a short.
     assert result["accepted_decision"]["target_allocation_pct"] == 0
     assert "stop_breached" in result["reason_codes"]
 

@@ -16,7 +16,7 @@ from backend.trading_agents.agents.runtime.structured import (
     ainvoke_structured_or_freetext,
     bind_structured,
 )
-from backend.trading_agents.agents.schemas import PortfolioDecision, render_pm_decision
+from backend.trading_agents.agents.schemas import PortfolioDecision, PortfolioRating, render_pm_decision
 from backend.trading_agents.agents.utils.agent_utils import (
     build_instrument_context,
     get_general_settings_block,
@@ -34,19 +34,13 @@ _MAX_DECISION_CONTEXT_CHARS = 3_500
 
 
 def _point_in_time_portfolio_exclusion(trade_date: object) -> str:
-    """Explain why a replay cannot see the mutable live portfolio.
-
-    ``trade_date`` alone is not enough to infer this: a time-travel replay may
-    deliberately resume an analysis created *today*.  In that case the current
-    cash/holdings are still future knowledge relative to the checkpoint, so
-    the graph's explicit ``historical_mode`` flag is the authority.
-    """
-
+    """Explain why a replay cannot see the mutable live portfolio."""
     return (
         "=== PORTFOLIO CONTEXT EXCLUDED ===\n"
         f"This is a point-in-time replay as of {trade_date or 'the selected checkpoint'}; "
         "the mutable current portfolio must not influence its tactical sizing."
     )
+
 
 def _prompt_report_limit() -> int:
     """Return a bounded fallback budget for reports without an executive summary."""
@@ -57,6 +51,7 @@ def _prompt_report_limit() -> int:
     except Exception:  # noqa: BLE001 - prompt compaction must never stop a run
         configured = _MAX_FALLBACK_REPORT_CHARS
     return max(800, min(configured, _MAX_FALLBACK_REPORT_CHARS))
+
 
 def _optional_context_section(label: str, content: object, *, limit: int = _MAX_DECISION_CONTEXT_CHARS) -> str:
     """Render one bounded supplemental evidence section when it exists."""
@@ -70,15 +65,9 @@ def _optional_context_section(label: str, content: object, *, limit: int = _MAX_
 
     return f"### {label}\n{middle_truncate(text, limit)}"
 
-def build_portfolio_manager_evidence(state: dict) -> str:
-    """Build the PM's dynamic evidence packet from every active analyst report.
 
-    ``get_report_fields`` is registry-driven, so a new enabled analyst appears
-    here automatically. ``build_resources(summary_only=True)`` keeps every
-    report's conclusion when present and safely falls back to a bounded raw
-    report when it has no recognisable executive summary. Synthesis, audit, and
-    cross-examination are separate evidence artifacts and are added explicitly.
-    """
+def build_portfolio_manager_evidence(state: dict) -> str:
+    """Build the PM's dynamic evidence packet from every active analyst report."""
     from backend.trading_agents.agents.analyst_registry import get_report_fields
     from backend.trading_agents.agents.runtime.report_aggregator import build_resources
 
@@ -105,6 +94,7 @@ def build_portfolio_manager_evidence(state: dict) -> str:
 
     return "\n\n".join(sections) or "No analyst evidence was available for this run."
 
+
 def create_portfolio_manager(llm):
     structured_llm = bind_structured(llm, PortfolioDecision, "Portfolio Manager")
 
@@ -119,32 +109,32 @@ def create_portfolio_manager(llm):
 
         from backend.trading_agents.dataflows.config import get_config
 
-        memory_lessons = ""
-        try:
-            from backend.services.memory_service import recall_episode_lessons
+        runtime_config = get_config()
+        short_allowed = bool(runtime_config.get("allow_short_selling", False))
+        analysis_mode = str(runtime_config.get("analysis_mode", "live") or "live").lower()
 
-            memory_lessons = await recall_episode_lessons(
-                user_id=get_config().get("user_id"),
-                situation_text=state.get("market_report") or research_plan,
-                top_k=get_config().get("memory_recall_count", 5),
-                as_of=state.get("trade_date"),
-            )
-        except Exception as exc:  # noqa: BLE001 - memory is advisory
-            _logger.debug("Memory recall skipped: %s", exc)
+        memory_lessons = ""
+        # Checkpoint time-travel needs an exact recorded-at cutoff. Vector stores
+        # expose date-oriented metadata here, so fail closed rather than allow a
+        # later same-day episode to leak into an earlier checkpoint replay.
+        if analysis_mode != "time_travel":
+            try:
+                from backend.services.memory_service import recall_episode_lessons
+
+                memory_lessons = await recall_episode_lessons(
+                    user_id=runtime_config.get("user_id"),
+                    situation_text=state.get("market_report") or research_plan,
+                    top_k=runtime_config.get("memory_recall_count", 5),
+                    as_of=state.get("trade_date"),
+                )
+            except Exception as exc:  # noqa: BLE001 - memory is advisory
+                _logger.debug("Memory recall skipped: %s", exc)
 
         from backend.trading_agents.agents.runtime.portfolio_context import get_portfolio_context
 
-        # Direct node callers from extensions/tests do not always carry a
-        # trade date.  Supplying ``as_of=None`` buys us no point-in-time
-        # protection and needlessly breaks the older one-argument context
-        # adapters, while graph runs always take the as-of path below.
-        portfolio_user_id = get_config().get("user_id")
+        portfolio_user_id = runtime_config.get("user_id")
         trade_date = state.get("trade_date")
-        # ``historical_mode`` includes a same-day time-travel resume.  Do not
-        # delegate that safety decision solely to the calendar date inside
-        # get_portfolio_context: today's live holdings can still be newer than
-        # the checkpoint being replayed.
-        if bool(get_config().get("historical_mode", False)):
+        if bool(runtime_config.get("historical_mode", False)):
             portfolio_context = _point_in_time_portfolio_exclusion(trade_date)
         elif trade_date:
             portfolio_context = await get_portfolio_context(portfolio_user_id, as_of=trade_date)
@@ -156,9 +146,16 @@ def create_portfolio_manager(llm):
 
         from backend.trading_agents.personas import DEFAULT_PERSONA, get_persona_instructions
 
-        persona = get_config().get("investor_persona", DEFAULT_PERSONA)
-        persona_instructions = get_config().get("investor_persona_instructions") or get_persona_instructions(persona)
+        persona = runtime_config.get("investor_persona", DEFAULT_PERSONA)
+        persona_instructions = runtime_config.get("investor_persona_instructions") or get_persona_instructions(persona)
         instruction = get_system_instruction_override("portfolio_manager") or _DEFAULT_INSTRUCTION
+        short_rule = (
+            "Short selling is ENABLED. If there is no long position to exit and the evidence justifies a new short, "
+            "Sell may use a POSITIVE position_size_pct as the desired short exposure magnitude. Sell with 0% means flat/avoid."
+            if short_allowed
+            else
+            "Short selling is DISABLED. Sell may only exit an existing long or stay flat/avoid; therefore Sell must use 0% target allocation."
+        )
 
         prompt = f"""{instruction}
 {persona_instructions}
@@ -174,11 +171,13 @@ mechanically copy or average them; resolve their conflicts against the complete
 analyst evidence and the live portfolio.
 
 **Final Rating Scale** (use exactly one):
-- **Buy**: Enter or materially add to a position.
-- **Overweight**: Increase toward a measured target allocation.
+- **Buy**: Enter or materially add to a long position.
+- **Overweight**: Increase a long position toward a measured target allocation.
 - **Hold**: Do not place a new order.
-- **Underweight**: Reduce toward a lower target allocation.
-- **Sell**: Exit or avoid the position.
+- **Underweight**: Reduce an existing long toward a lower positive target allocation.
+- **Sell**: Exit an existing long or stay flat; when short selling is enabled and no long needs closing, it may propose a short.
+
+**Short policy:** {short_rule}
 
 {portfolio_context}
 ---
@@ -195,16 +194,16 @@ analyst evidence and the live portfolio.
 ---
 Return one coherent raw PortfolioDecision. For Buy/Overweight, provide an
 honest raw confidence score, entry, stop loss, take profit, target allocation percentage,
-suggested capital, and leverage. For Sell, use a 0% target allocation for a
-full exit; for Underweight, give the lower desired final allocation. For Hold,
-use no entry/stop/take-profit, no new capital, and a null target allocation.
-All prices must use the instrument quote currency from the context. Base the
-target allocation on actual cash, existing holdings, and portfolio equity;
-never propose spending more cash than is available. The execution engine will
-enforce its own hard limits, so do not evade risk controls by inflating the
-confidence or leverage. Keep leverage at 1.0 unless the evidence and defined
-stop clearly justify more; volatile/speculative instruments should remain at
-1.0-2.0.{get_general_settings_block()}"""
+suggested capital, and leverage. For Underweight, give the lower desired final
+long allocation. For Sell that exits/avoids, use 0%. If short selling is enabled
+and Sell intentionally opens/adds a short, use a POSITIVE position_size_pct as
+the desired short exposure magnitude; the deterministic execution adapter will
+apply the negative direction. For Hold use no entry/stop/take-profit, no new
+capital, and a null target allocation. All prices must use the instrument quote
+currency from the context. Never propose spending more available cash than the
+portfolio permits. The execution engine will enforce hard limits. Keep leverage
+at 1.0 unless evidence and a defined stop justify more; volatile/speculative
+instruments should remain at 1.0-2.0.{get_general_settings_block()}"""
 
         result = await ainvoke_structured_or_freetext(
             structured_llm,
@@ -215,14 +214,15 @@ stop clearly justify more; volatile/speculative instruments should remain at
         )
 
         final_signal: str | None = None
-        # Preserve the legacy serialized state contract here.  The controller
-        # normalises either a mapping or a JSON string and replaces this field
-        # with the accepted mapping at the end of a full graph run.
         decision_json: dict | str = "{}"
         proposal_json: dict = {}
         if isinstance(result, str):
             final_trade_decision = result
         else:
+            # Deterministically prevent a disabled short policy from being
+            # bypassed by an LLM returning Sell with a non-zero short target.
+            if result.rating is PortfolioRating.SELL and not short_allowed and (result.position_size_pct or 0) != 0:
+                result = result.model_copy(update={"position_size_pct": 0.0, "suggested_capital": 0.0})
             final_trade_decision = render_pm_decision(result)
             final_signal = result.rating.value
             decision_json = result.model_dump_json()
@@ -249,9 +249,6 @@ stop clearly justify more; volatile/speculative instruments should remain at
             "risk_debate_state": new_risk_debate_state,
             "pm_proposal_json": proposal_json,
             "pm_proposal_report": final_trade_decision,
-            # The graph controller overwrites these legacy aliases with the
-            # accepted canonical decision. Keeping them here preserves direct
-            # node callers and older checkpoint decoding during migration.
             "final_trade_decision": final_trade_decision,
             "portfolio_decision_json": decision_json,
         }

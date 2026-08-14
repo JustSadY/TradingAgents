@@ -40,6 +40,7 @@ import {
 import type { AnalysisListItem, AnalysisResultRead, MultiTickerListItem, MultiTickerResultRead } from '../api/generated/model'
 import { SignalBadge } from '../components/analysis/SignalBadge'
 import { ReportCard } from '../components/analysis/ReportCard'
+import { MarkdownReport } from '../components/report/MarkdownReport'
 import { AnalysisControls, type AnalysisStartError, type TickerSuggestion } from '../components/analysis/AnalysisControls'
 
 import { DebateBubble, DebateHistoryWidget, parseDebateMessage } from '../components/analysis/DebateHistoryWidget'
@@ -1714,9 +1715,10 @@ function RunTab() {
                         <h4 className="text-[10px] font-bold text-violet-300 uppercase tracking-widest flex items-center gap-1.5">
                           <Scale size={13} /> {sectionLabels.final_decision || 'Nihai Karar (Portfolio Manager)'}
                         </h4>
-                        <div className="text-xs text-slate-200 whitespace-pre-wrap leading-relaxed select-text font-sans">
-                          {activePlans.final_decision}
-                        </div>
+                        <MarkdownReport
+                          content={activePlans.final_decision}
+                          className="!text-xs !leading-relaxed !text-slate-200"
+                        />
                       </div>
                     ) : (
                       <div className="text-center py-12 text-slate-500 text-xs">
@@ -1725,17 +1727,23 @@ function RunTab() {
                     )}
 
                     {/* Stacked Plan Cards */}
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 gap-4">
                       {activePlans.investment_plan && (
                         <div className="glass-panel p-4 rounded-xl space-y-2 bg-slate-900/30">
                           <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{sectionLabels.investment_plan || 'Research Evidence Summary'}</h5>
-                          <div className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed select-text font-sans">{activePlans.investment_plan}</div>
+                          <MarkdownReport
+                            content={activePlans.investment_plan}
+                            className="!text-xs !leading-relaxed !text-slate-300"
+                          />
                         </div>
                       )}
                       {activePlans.trader_plan && (
                         <div className="glass-panel p-4 rounded-xl space-y-2 bg-slate-900/30">
                           <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{sectionLabels.trader_plan || 'Legacy Trader Proposal'}</h5>
-                          <div className="text-xs text-slate-300 whitespace-pre-wrap leading-relaxed select-text font-sans">{activePlans.trader_plan}</div>
+                          <MarkdownReport
+                            content={activePlans.trader_plan}
+                            className="!text-xs !leading-relaxed !text-slate-300"
+                          />
                         </div>
                       )}
                     </div>
@@ -2255,9 +2263,12 @@ function PortfolioHistorySection() {
               <button onClick={() => setDetail(null)} className="text-slate-500 hover:text-white transition-colors p-1.5 rounded-lg hover:bg-white/5 cursor-pointer"><X size={16} /></button>
             </div>
             <p className="text-slate-500 text-[10px] font-mono">{detail.trade_date} • {new Date(detail.created_at).toLocaleString()}</p>
-            <pre className="text-xs text-slate-300 whitespace-pre-wrap bg-slate-950 rounded-xl p-4 max-h-[50vh] overflow-y-auto border border-white/[0.04] font-mono leading-relaxed select-text">
-              {detail.super_portfolio_report || t('analysis.portfolio_history.report_not_ready')}
-            </pre>
+            <div className="bg-slate-950 rounded-xl p-4 max-h-[50vh] overflow-y-auto border border-white/[0.04] custom-scrollbar">
+              <MarkdownReport
+                content={detail.super_portfolio_report || t('analysis.portfolio_history.report_not_ready')}
+                className="!text-xs !leading-relaxed"
+              />
+            </div>
           </div>
         </div>
       )}

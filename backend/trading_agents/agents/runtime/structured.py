@@ -13,11 +13,26 @@ from backend.trading_agents.llm_clients.base_client import is_provider_function_
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
+# These machine contracts are consumed by nodes that already own a deterministic,
+# schema-valid fallback. If provider-native structured output is malformed, asking
+# the same model to repair it only burns quota and wall-clock time.
+_DETERMINISTIC_CALLER_FALLBACK_SCHEMAS = frozenset(
+    {
+        "AnalysisPlan",
+        "SynthesisAssessment",
+        "StrategyRevisionCandidate",
+    }
+)
+
+
+def _uses_deterministic_caller_fallback(schema: type[BaseModel] | None) -> bool:
+    return schema is not None and schema.__name__ in _DETERMINISTIC_CALLER_FALLBACK_SCHEMAS
+
 
 def bind_structured(llm: Any, schema: type[T], agent_name: str) -> Any | None:
     try:
         return llm.with_structured_output(schema)
-    except (NotImplementedError, AttributeError) as exc:
+    except (NotImplementedError, AttributeError, TypeError, ValueError) as exc:
         logger.warning(
             "%s: provider does not support with_structured_output (%s); falling back to free-text generation",
             agent_name,
@@ -66,24 +81,25 @@ def parse_and_validate(text: str, schema: type[T]) -> T:
     return validate_schema(schema, json.loads(json_str))
 
 
-def _coerce_structured_result(result: Any, schema: type[T]) -> Any:
-    """Normalize a ``with_structured_output`` result into a validated model.
+def _coerce_structured_result(result: Any, schema: type[T]) -> T:
+    """Normalize a structured provider result into a validated model.
 
-    Handles the three shapes a provider may return: an already-built model, a
-    plain dict, or an AIMessage/string carrying JSON. Returns the raw ``result``
-    unchanged when it cannot be coerced.
+    A schema-bound call has a strict boundary: callers may only receive the
+    requested Pydantic model (or, after the outer fallback path, plain text).
+    Provider-specific response objects must not escape as validated results.
     """
     if isinstance(result, schema):
         return result
     if isinstance(result, dict):
         return validate_schema(schema, result)
-    content = getattr(result, "content", result)
-    if isinstance(content, str):
-        try:
-            return parse_and_validate(content, schema)
-        except Exception as exc:
-            logger.debug("parse_and_validate failed, returning raw result: %s", exc)
-    return result
+
+    text = llm_text(result).strip()
+    if not text:
+        raise ValueError(f"Structured provider returned no parseable text for {schema.__name__}")
+    try:
+        return parse_and_validate(text, schema)
+    except Exception as exc:
+        raise ValueError(f"Structured provider result did not match {schema.__name__}: {exc}") from exc
 
 
 async def _retry_llm_call(
@@ -203,8 +219,15 @@ async def ainvoke_structured_or_freetext(
                     agent_name,
                 )
                 raise
+            if _uses_deterministic_caller_fallback(schema):
+                logger.warning(
+                    "%s: structured output was unusable (%s); using the caller's deterministic fallback without extra LLM repair calls",
+                    agent_name,
+                    exc,
+                )
+                return ""
             logger.warning(
-                "%s: structured-output ainvocation failed (%s); falling back to parsing free-text",
+                "%s: structured-output invocation/coercion failed (%s); falling back to parsing free-text",
                 agent_name,
                 exc,
             )
@@ -225,6 +248,14 @@ async def ainvoke_structured_or_freetext(
             validation_error = f"JSON/Schema Error: {exc}"
     else:
         validation_error = "Could not locate a valid JSON curly brace block in the text response."
+
+    if _uses_deterministic_caller_fallback(schema):
+        logger.warning(
+            "%s: free-text structured recovery failed (%s); using the caller's deterministic fallback without self-correction",
+            agent_name,
+            validation_error,
+        )
+        return ""
 
     for attempt in range(1, 3):
         try:

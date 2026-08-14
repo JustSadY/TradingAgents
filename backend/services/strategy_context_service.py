@@ -1,14 +1,15 @@
 """Point-in-time strategy context for an analysis run.
 
-The active asset strategy is intentionally **not** vector memory.  This module
+The active asset strategy is intentionally **not** vector memory. This module
 loads one exact belief before the graph starts, turns it into a graph-safe
 snapshot, and produces a deliberately blind planning context for fresh
-analysts.  Nodes never receive a database session: all persistence occurs only
+analysts. Nodes never receive a database session: all persistence occurs only
 after the graph finishes through :mod:`strategy_persistence_service`.
 
 Historical and time-travel runs use the immutable version ledger as-of both
-the requested business time and the time at which that belief was recorded.
-That prevents a later live strategy from leaking into an earlier replay.
+the requested business time and the exact time at which knowledge was allowed
+to exist. Keeping those clocks separate prevents later same-day revisions from
+leaking into an earlier checkpoint replay.
 """
 
 from __future__ import annotations
@@ -29,14 +30,7 @@ from backend.repositories.asset_strategy import (
 
 
 def _as_utc_day_end(trade_date: str | datetime) -> datetime:
-    """Resolve an ISO trade date to the end of that UTC business day.
-
-    A date-only analysis sees facts recorded no later than that date.  We use
-    the end rather than midnight so an intraday strategy review on the same
-    date remains visible, while the ``recorded_at`` predicate still rejects
-    all future knowledge.
-    """
-
+    """Resolve an ISO business date to the end of that UTC business day."""
     if isinstance(trade_date, datetime):
         value = trade_date
     else:
@@ -47,6 +41,14 @@ def _as_utc_day_end(trade_date: str | datetime) -> datetime:
     if value.hour == value.minute == value.second == value.microsecond == 0:
         return datetime.combine(value.date(), time.max, tzinfo=UTC)
     return value
+
+
+def _as_utc_instant(value: datetime | None, fallback: datetime) -> datetime:
+    if value is None:
+        return fallback
+    if value.tzinfo is None:
+        return value.replace(tzinfo=UTC)
+    return value.astimezone(UTC)
 
 
 def _json_mapping(value: object) -> dict[str, Any]:
@@ -75,15 +77,7 @@ def _decision_from_analysis(row: object | None) -> dict[str, Any] | None:
 
 
 def _blind_planning_context(snapshot: dict[str, Any] | None) -> dict[str, Any]:
-    """Return only hypotheses/questions, never the old rating or conviction.
-
-    The planner needs to know which assumptions require re-testing.  It must
-    not know whether the prior strategy was Buy, Sell, or how strongly the
-    system believed it; that information would turn a research agenda into a
-    confirmation prompt.  The resulting plan is separately validated by the
-    ``AnalysisPlan`` schema before analysts see it.
-    """
-
+    """Return only hypotheses/questions, never the old rating or conviction."""
     if not snapshot:
         return {
             "source_strategy_version": None,
@@ -116,6 +110,49 @@ def _blind_planning_context(snapshot: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
+async def _derive_recorded_cutoff(
+    db: AsyncSession,
+    *,
+    user_id: int | None,
+    ticker: str,
+    asset_type: str,
+    trade_date: str | datetime,
+    business_as_of: datetime,
+) -> datetime:
+    """Use the earliest same-run-day analysis timestamp as a safe replay bound.
+
+    Checkpoint callers may not yet pass an exact checkpoint timestamp through
+    every legacy call path. The selected/original AnalysisResult necessarily
+    already exists before a time-travel resume and keeps its original
+    ``created_at`` even while its status is reset to running. Using the earliest
+    matching timestamp is conservative: it may hide later same-day knowledge,
+    but can never expose knowledge created after the replay began.
+    """
+    from backend.models.analysis import AnalysisResult
+
+    business_date = _as_utc_day_end(trade_date).date().isoformat()
+    stmt = (
+        select(AnalysisResult.created_at)
+        .where(
+            AnalysisResult.ticker == ticker.upper(),
+            AnalysisResult.asset_type == asset_type.lower(),
+            AnalysisResult.trade_date == business_date,
+            AnalysisResult.created_at.isnot(None),
+        )
+        .order_by(AnalysisResult.created_at.asc())
+        .limit(1)
+    )
+    if user_id is None:
+        stmt = stmt.where(AnalysisResult.user_id.is_(None))
+    else:
+        stmt = stmt.where(AnalysisResult.user_id == user_id)
+    candidate = (await db.execute(stmt)).scalar_one_or_none()
+    if candidate is None:
+        return business_as_of
+    candidate_utc = _as_utc_instant(candidate, business_as_of)
+    return min(candidate_utc, business_as_of)
+
+
 async def _last_accepted_decision(
     db: AsyncSession,
     *,
@@ -123,21 +160,15 @@ async def _last_accepted_decision(
     ticker: str,
     asset_type: str,
     strategy_snapshot: dict[str, Any] | None,
-    as_of: datetime | None,
+    business_as_of: datetime | None,
+    recorded_as_of: datetime | None,
 ) -> dict[str, Any] | None:
     """Load the last accepted canonical decision in the same tenant scope."""
-
     from backend.models.analysis import AnalysisResult
 
     row = None
-    # The mutable row's ``last_analysis_id`` is the fastest and most precise
-    # answer for a live run.  A historical ledger deliberately does not append
-    # a new strategy version for a KEEP review, however, so its immutable
-    # ``after_state`` can legitimately point to an older analysis.  Replays
-    # must therefore resolve the accepted decision from the point-in-time
-    # analysis history instead of trusting that stale ledger pointer.
     last_analysis_id = (strategy_snapshot or {}).get("last_analysis_id")
-    if as_of is None and isinstance(last_analysis_id, int):
+    if business_as_of is None and recorded_as_of is None and isinstance(last_analysis_id, int):
         candidate = await db.get(AnalysisResult, last_analysis_id)
         if candidate is not None and candidate.status == "completed":
             row = candidate
@@ -158,14 +189,10 @@ async def _last_accepted_decision(
             stmt = stmt.where(AnalysisResult.user_id.is_(None))
         else:
             stmt = stmt.where(AnalysisResult.user_id == user_id)
-        if as_of is not None:
-            # Both business date and recorded time must be in the past.  A
-            # later-created backfill for an old trade date is still future
-            # knowledge from the perspective of this replay.
-            stmt = stmt.where(
-                AnalysisResult.trade_date <= as_of.date().isoformat(),
-                AnalysisResult.created_at <= as_of,
-            )
+        if business_as_of is not None:
+            stmt = stmt.where(AnalysisResult.trade_date <= business_as_of.date().isoformat())
+        if recorded_as_of is not None:
+            stmt = stmt.where(AnalysisResult.created_at <= recorded_as_of)
         row = (await db.execute(stmt)).scalar_one_or_none()
     return _decision_from_analysis(row)
 
@@ -179,17 +206,32 @@ async def load_strategy_context(
     trade_date: str | datetime,
     historical_mode: bool,
     learning_eligible: bool,
+    knowledge_cutoff: datetime | None = None,
 ) -> dict[str, Any]:
     """Load an exact strategy snapshot and an analyst-safe neutral context.
 
-    ``learning_eligible`` is returned as part of the context so every caller
-    can audit why a strategy was or was not allowed to mutate at finalization.
-    It is not inferred inside graph nodes.
+    ``trade_date`` is business time. ``knowledge_cutoff`` is recorded/system
+    time and is intentionally separate. For ordinary date-based historical
+    research the recorded cutoff is at most that business day's end. For
+    checkpoint time-travel an explicit timestamp is preferred; when legacy
+    callers omit it, the earliest matching AnalysisResult ``created_at`` is
+    used as a conservative same-day boundary.
     """
-
     ticker = ticker.upper()
     asset_type = asset_type.lower()
-    as_of = _as_utc_day_end(trade_date)
+    business_as_of = _as_utc_day_end(trade_date)
+    if historical_mode and knowledge_cutoff is None:
+        recorded_as_of = await _derive_recorded_cutoff(
+            db,
+            user_id=user_id,
+            ticker=ticker,
+            asset_type=asset_type,
+            trade_date=trade_date,
+            business_as_of=business_as_of,
+        )
+    else:
+        recorded_as_of = min(_as_utc_instant(knowledge_cutoff, business_as_of), business_as_of)
+
     snapshot: dict[str, Any] | None = None
     source = "none"
 
@@ -199,13 +241,11 @@ async def load_strategy_context(
             user_id=user_id,
             ticker=ticker,
             asset_type=asset_type,
-            effective_at=as_of,
-            recorded_at=as_of,
+            effective_at=business_as_of,
+            recorded_at=recorded_as_of,
         )
         if version is not None and isinstance(version.after_state, dict):
             snapshot = dict(version.after_state)
-            # The ledger snapshot has all row fields, but record a stable
-            # version even for records created before this explicit field.
             snapshot.setdefault("strategy_id", version.strategy_id)
             snapshot.setdefault("version", version.version)
             source = "historical_version"
@@ -220,10 +260,6 @@ async def load_strategy_context(
             snapshot = strategy_state_snapshot(strategy)
             source = "active_strategy"
         else:
-            # An explicitly invalidated/closed lineage is not active and must
-            # never be presented as an active thesis. It remains the exact
-            # predecessor for a later REBUILD, however; without this fallback
-            # the next run would lose the lineage and create an unrelated v1.
             predecessor = await get_latest_asset_strategy(
                 db,
                 user_id=user_id,
@@ -240,7 +276,8 @@ async def load_strategy_context(
         ticker=ticker,
         asset_type=asset_type,
         strategy_snapshot=snapshot,
-        as_of=as_of if historical_mode else None,
+        business_as_of=business_as_of if historical_mode else None,
+        recorded_as_of=recorded_as_of if historical_mode else None,
     )
     return {
         "source": source,
@@ -251,7 +288,8 @@ async def load_strategy_context(
         "blind_planning_context": _blind_planning_context(snapshot),
         "historical_mode": historical_mode,
         "learning_eligible": bool(learning_eligible),
-        "as_of": as_of.isoformat(),
+        "as_of": business_as_of.isoformat(),
+        "knowledge_cutoff": recorded_as_of.isoformat(),
     }
 
 
