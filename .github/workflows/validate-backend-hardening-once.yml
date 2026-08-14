@@ -1,6 +1,10 @@
 name: Validate backend hardening once
 
 on:
+  pull_request:
+    branches:
+      - integration/memory-maintenance-base
+    types: [opened, synchronize, reopened]
   push:
     branches:
       - integration/memory-maintenance-base
@@ -12,6 +16,7 @@ permissions:
 
 jobs:
   validate-and-publish:
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -98,17 +103,18 @@ jobs:
           set -euo pipefail
           cd backend
           uv run pytest -q -m postgres_rls postgres_tests
-      - name: Apply tested backend patch to integration and remove validator
+      - name: Create tested backend output branch
+        env:
+          EVENT_BASE_SHA: ${{ github.event.pull_request.base.sha }}
         run: |
           set -euo pipefail
-          base='54ab148cc4b0b6609ddaf0e9884391ece49e59df'
-          git diff --binary "$base" -- backend > /tmp/backend-hardening.patch
+          b0='54ab148cc4b0b6609ddaf0e9884391ece49e59df'
+          git diff --binary "$b0" -- backend > /tmp/backend-hardening.patch
           test -s /tmp/backend-hardening.patch
           git fetch origin integration/memory-maintenance-base
           current="$(git rev-parse origin/integration/memory-maintenance-base)"
-          trigger="${GITHUB_SHA}"
-          test "$current" = "$trigger" || { echo "Integration branch moved: $current != $trigger"; exit 1; }
-          git reset --hard "$current"
+          test "$current" = "$EVENT_BASE_SHA" || { echo "Integration branch moved: $current != $EVENT_BASE_SHA"; exit 1; }
+          git reset --hard "$EVENT_BASE_SHA"
           git apply --index /tmp/backend-hardening.patch
           git rm .github/workflows/validate-backend-hardening-once.yml
           if git diff --cached --name-only | grep '^frontend/'; then
@@ -117,4 +123,4 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "Harden RLS and backend API schema contracts"
-          git push origin HEAD:integration/memory-maintenance-base
+          git push origin HEAD:refs/heads/tmp/backend-hardening-tested
