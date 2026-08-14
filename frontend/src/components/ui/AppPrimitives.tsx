@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import {
   Alert,
   type AlertProps,
@@ -205,7 +205,7 @@ export function AppSnackbar({ open, message, title, severity = 'info', autoHideD
 }
 
 export function SecretField(props: Omit<TextFieldProps, 'type'>) {
-  const [visible, setVisible] = React.useState(false)
+  const [visible, setVisible] = useState(false)
   return (
     <AppTextField
       {...props}
@@ -213,7 +213,7 @@ export function SecretField(props: Omit<TextFieldProps, 'type'>) {
       slotProps={{
         ...props.slotProps,
         input: {
-          ...props.slotProps?.input,
+          ...(typeof props.slotProps?.input === 'object' ? props.slotProps.input : {}),
           endAdornment: (
             <InputAdornment position="end">
               <IconButton
@@ -231,5 +231,3 @@ export function SecretField(props: Omit<TextFieldProps, 'type'>) {
     />
   )
 }
-
-import React from 'react'
