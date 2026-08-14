@@ -53,7 +53,17 @@ _CONTEXT_KEYS = (
 
 
 def _is_postgres(db: AsyncSession) -> bool:
-    bind = db.get_bind()
+    """Return whether *db* is backed by PostgreSQL.
+
+    A few API unit tests deliberately pass lightweight stand-ins instead of a
+    SQLAlchemy session. Treat those as non-PostgreSQL rather than making the
+    transport contract depend on test-only ``get_bind`` methods.
+    """
+
+    get_bind = getattr(db, "get_bind", None)
+    if not callable(get_bind):
+        return False
+    bind = get_bind()
     return bool(bind is not None and bind.dialect.name == "postgresql")
 
 
