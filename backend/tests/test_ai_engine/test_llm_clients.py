@@ -116,14 +116,14 @@ class TestErrorClassification:
     @pytest.mark.parametrize(
         ("msg", "expected"),
         [
-            ("resourceexhausted", "quota_exhausted"),
-            ("too many requests", "quota_exhausted"),
+            ("resourceexhausted", "quota"),
+            ("too many requests", "quota"),
             ("401 unauthorized", "auth"),
             ("403 forbidden", "auth"),
             ("invalid_api_key", "auth"),
             ("timeout after 30s", "timeout"),
-            ("some random error", "unknown"),
-            ("try again later", "rate_limited"),
+            ("some random error", "bug"),
+            ("try again later", "quota"),
         ],
     )
     def test_classify_error(self, msg, expected):
@@ -334,3 +334,33 @@ class TestModelValidation:
     def test_anthropic_known_model(self):
         client = create_llm_client("anthropic", "claude-sonnet-5", api_key="sk-test")
         assert client.validate_model() is True
+
+
+class TestSingleRetryAuthority:
+    """`retry_call` owns retries; the SDK layer must not add its own.
+
+    LangChain clients default to roughly two internal retries. Left unset those
+    multiplied with `node_retry_attempts` and the fallback chain, so one failure
+    could cost far more provider calls than the configured attempts suggest.
+    """
+
+    @pytest.mark.parametrize(
+        ("provider", "model"),
+        [
+            ("openai", "gpt-5.6-luna"),
+            ("anthropic", "claude-sonnet-5"),
+            ("groq", "openai/gpt-oss-120b"),
+            ("mistral", "mistral-large-3-25-12"),
+            ("google", "gemini-3.7-flash"),
+        ],
+    )
+    def test_sdk_retries_are_disabled_by_default(self, provider, model):
+        llm = create_llm_client(provider=provider, model=model, api_key="test-key").get_llm()
+        assert llm.max_retries == 0
+
+    def test_an_explicit_setting_still_wins(self):
+        """Operators can opt back in; the default is only a default."""
+        llm = create_llm_client(
+            provider="openai", model="gpt-5.6-luna", api_key="test-key", max_retries=3
+        ).get_llm()
+        assert llm.max_retries == 3

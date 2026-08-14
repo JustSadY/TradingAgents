@@ -4,7 +4,7 @@ from typing import Any
 
 from langchain_anthropic import ChatAnthropic
 
-from .base_client import BaseLLMClient, is_quota_exhausted, normalize_content
+from .base_client import SDK_RETRIES, BaseLLMClient, is_quota_exhausted, normalize_content
 from .validators import validate_model
 
 _logger = logging.getLogger(__name__)
@@ -108,6 +108,7 @@ class AnthropicClient(BaseLLMClient):
             if key == "effort" and not _supports_effort(self.model):
                 continue
             llm_kwargs[key] = self.kwargs[key]
+        llm_kwargs.setdefault("max_retries", SDK_RETRIES)
         llm = NormalizedChatAnthropic(**llm_kwargs)
         llm.prompt_caching = prompt_caching
         return llm

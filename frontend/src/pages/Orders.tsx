@@ -12,7 +12,7 @@ import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
 import { exportOrdersCSV } from '../utils/csvExport'
 import { ErrorBoundary } from '../components/ErrorBoundary'
-import type { OrderRead } from '../api/types'
+import type { OrderRead } from '../api/generated/model'
 
 const STATUS_BADGES: Record<string, string> = {
   FILLED: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',

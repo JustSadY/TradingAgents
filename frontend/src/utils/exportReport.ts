@@ -1,4 +1,4 @@
-import type { AnalysisResultRead } from '../api/types'
+import type { AnalysisResultRead } from '../api/generated/model'
 
 type Lang = 'en' | 'tr'
 

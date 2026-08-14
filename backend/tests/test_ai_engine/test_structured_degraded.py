@@ -11,7 +11,7 @@ from backend.trading_agents.agents.runtime.structured import (
     get_json_schema,
     validate_schema,
 )
-from backend.trading_agents.llm_clients.base_client import is_provider_function_degraded, retry_with_exponential_backoff
+from backend.trading_agents.llm_clients.base_client import is_provider_function_degraded
 from backend.trading_agents.llm_clients.fallback import FallbackLLM
 
 _DEGRADED = "Function id 'ac74040f-9fc9-4c5e-ac74-279ba5161d69': DEGRADED function cannot be invoked"
@@ -140,18 +140,5 @@ async def test_node_retry_does_not_repeat_a_degraded_provider_call():
 
     with pytest.raises(RuntimeError, match="DEGRADED function"):
         await retry_call(invoke, label="decision:Portfolio Manager", attempts=3)
-
-    assert calls == 1
-
-async def test_llm_retry_does_not_repeat_a_degraded_provider_call():
-    calls = 0
-
-    async def invoke():
-        nonlocal calls
-        calls += 1
-        raise RuntimeError(_DEGRADED)
-
-    with pytest.raises(RuntimeError, match="DEGRADED function"):
-        await retry_with_exponential_backoff(invoke, max_retries=3, base_delay=0)
 
     assert calls == 1

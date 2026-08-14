@@ -1,9 +1,14 @@
 """AI portfolio rebalancing suggestions.
 
-Fetches the user's current holdings (with live prices), sector data from
-yfinance, recent analysis signals, then asks the user's configured LLM to
-analyse concentration risk, diversification, and cash allocation — returning
-a structured list of suggested BUY/SELL actions with a health score.
+Every actionable number — action, ticker, quantity, health score, issue list —
+is computed deterministically in ``portfolio_rebalance_planner`` from the live
+portfolio snapshot. The model is given the finished plan and writes only prose:
+a summary and a per-trade rationale.
+
+This is deliberate. The suggestions feed an order form, so a model that could
+choose quantities could size a real trade; it also previously returned a health
+score unrelated to the issues it listed. The prose is replaceable, the numbers
+are not.
 """
 
 from __future__ import annotations
@@ -12,20 +17,16 @@ import asyncio
 import json
 import logging
 
-from fastapi import HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.user import User
 from backend.services.indicator_service import fetch_sector
+from backend.services.portfolio_rebalance_planner import build_plan
 
 _logger = logging.getLogger(__name__)
 
-_FALLBACK = {
-    "summary": "Unable to generate suggestions right now.",
-    "score": 50,
-    "issues": ["LLM response could not be parsed."],
-    "suggestions": [],
-}
+# The plan carries the score, issues and trades; only prose can be missing.
+_NO_NARRATIVE: dict = {"summary": "", "rationales": []}
 
 async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
     from backend.services.mock_trading_service import get_portfolio_with_live_prices
@@ -45,8 +46,19 @@ async def get_rebalance_suggestions(db: AsyncSession, user: User) -> dict:
     sectors = await _fetch_sectors(tickers)
     recent_signals = await _get_recent_signals(db, user, tickers)
 
-    prompt = _build_prompt(portfolio, sectors, recent_signals)
-    return await _call_llm(db, user, prompt)
+    plan = build_plan(portfolio)
+
+    if not plan["suggestions"] and not plan["issues"]:
+        return {
+            "summary": "No concentration or cash-allocation issues found.",
+            "score": plan["score"],
+            "issues": [],
+            "suggestions": [],
+        }
+
+    prompt = _build_prompt(portfolio, sectors, recent_signals, plan)
+    narrative = await _call_llm(db, user, prompt)
+    return _merge(plan, narrative)
 
 async def _fetch_sectors(tickers: list[str]) -> dict[str, str]:
     async def _one(ticker: str) -> tuple[str, str]:
@@ -73,10 +85,9 @@ async def _get_recent_signals(db: AsyncSession, user: User, tickers: list[str]) 
     rows = (await db.execute(q)).fetchall()
     return list(rows)
 
-def _build_prompt(portfolio: dict, sectors: dict[str, str], signals: list) -> str:
+def _build_prompt(portfolio: dict, sectors: dict[str, str], signals: list, plan: dict) -> str:
+    """Ask for prose only. Every number below is already decided."""
     total: float = portfolio.get("total_value") or 1.0
-    cash: float = portfolio.get("cash_available") or 0.0
-    cash_pct = cash / total * 100
 
     holding_lines = []
     for h in portfolio.get("holdings", []):
@@ -87,47 +98,89 @@ def _build_prompt(portfolio: dict, sectors: dict[str, str], signals: list) -> st
         holding_lines.append(
             f"  {t} ({sector}): {weight:.1f}% | "
             f"market value ${h.get('market_value', 0):,.0f} | "
-            f"P&L {pnl_pct:+.1f}% | qty {h.get('quantity', 0):.4f}"
+            f"P&L {pnl_pct:+.1f}%"
         )
 
     signal_lines = [f"  {r.ticker} ({r.trade_date}): {r.signal or 'N/A'}" for r in signals] or [
         "  No recent analyses available."
     ]
 
-    return f"""Analyze this paper trading portfolio and provide rebalancing suggestions.
+    issue_lines = [f"  - {issue}" for issue in plan["issues"]] or ["  - None."]
+    trade_lines = [
+        f"  {i}. {s['action']} {s['quantity']} {s['ticker']} "
+        f"(~${s['notional']:,.0f}; currently {s['weight_pct']:.1f}% of the portfolio)"
+        for i, s in enumerate(plan["suggestions"], start=1)
+    ] or ["  None required."]
+
+    return f"""You are explaining a portfolio rebalancing plan that has already been calculated.
 
 Portfolio:
 - Total Value: ${total:,.2f}
-- Cash: ${cash:,.2f} ({cash_pct:.1f}%)
+- Cash: {plan['cash_pct']:.1f}%
+- Health score: {plan['score']}/100
 - Positions:
 {chr(10).join(holding_lines)}
 
 Recent AI Signals:
 {chr(10).join(signal_lines)}
 
-Return ONLY a valid JSON object — no markdown, no prose — with this exact schema:
+Detected issues:
+{chr(10).join(issue_lines)}
+
+Planned trades:
+{chr(10).join(trade_lines)}
+
+Write ONLY a valid JSON object — no markdown, no prose outside it — with this schema:
 {{
-  "summary": "<2-3 sentence overview of health and key risks>",
-  "score": <integer 0-100>,
-  "issues": ["<issue>", ...],
-  "suggestions": [
-    {{
-      "action": "BUY" | "SELL",
-      "ticker": "<symbol>",
-      "quantity": <positive number>,
-      "rationale": "<why>",
-      "urgency": "low" | "medium" | "high"
-    }}
-  ]
+  "summary": "<2-3 sentences on portfolio health and the main risk>",
+  "rationales": ["<one short sentence per planned trade, in the order listed>"]
 }}
 
 Rules:
-- Flag any single position >25% of portfolio as high concentration.
-- Healthy cash range: 5-15%. Flag <5% (under-reserved) or >30% (idle).
-- Suggest SELL for over-concentrated positions, BUY for diversification.
-- Only suggest BUY for tickers the user already owns or well-known stocks.
-- Keep suggestions to a maximum of 5.
-- Quantities must be realistic given portfolio size."""
+- Do NOT propose trades, quantities, tickers or a score. They are fixed.
+- Return exactly {len(plan['suggestions'])} rationale(s), matching the order above.
+- Explain why each listed trade helps, referring to the detected issues."""
+
+def _merge(plan: dict, narrative: dict) -> dict:
+    """Attach model prose to the computed plan.
+
+    The plan is the source of truth: a missing, short or over-long rationale
+    list degrades to an empty string rather than shifting explanations onto the
+    wrong trade.
+    """
+    rationales = narrative.get("rationales")
+    if not isinstance(rationales, list):
+        rationales = []
+
+    suggestions = []
+    for index, trade in enumerate(plan["suggestions"]):
+        rationale = rationales[index] if index < len(rationales) else ""
+        suggestions.append(
+            {
+                "action": trade["action"],
+                "ticker": trade["ticker"],
+                "quantity": trade["quantity"],
+                "rationale": str(rationale)[:400],
+                "urgency": trade["urgency"],
+            }
+        )
+
+    summary = str(narrative.get("summary") or "").strip()
+    if not summary:
+        # Stated from the measurements rather than left blank when the model
+        # produced nothing usable.
+        issue_count = len(plan["issues"])
+        summary = (
+            f"Health score {plan['score']}/100 with {issue_count} policy issue(s) "
+            f"and {len(plan['suggestions'])} suggested trade(s)."
+        )
+
+    return {
+        "summary": summary[:1000],
+        "score": plan["score"],
+        "issues": plan["issues"],
+        "suggestions": suggestions,
+    }
 
 async def _call_llm(db: AsyncSession, user: User, prompt: str) -> dict:
     from langchain_core.messages import HumanMessage
@@ -152,10 +205,9 @@ async def _call_llm(db: AsyncSession, user: User, prompt: str) -> dict:
         user_key = None
 
     if provider_requires_api_key(provider) and not user_key:
-        raise HTTPException(
-            status_code=400,
-            detail=f"No API key set for provider '{provider}'. Please add it in Settings.",
-        )
+        # The plan needs no model, so a missing key costs the explanation only.
+        _logger.info("Rebalance narrative skipped: no API key for provider %r", provider)
+        return _NO_NARRATIVE
 
     lang = (settings.output_language or "English").strip()
     if lang.lower() != "english":
@@ -168,20 +220,20 @@ async def _call_llm(db: AsyncSession, user: User, prompt: str) -> dict:
         from backend.services.llm_content import llm_text
         content = llm_text(response)
     except Exception as e:
-        _logger.warning("Rebalance LLM error: %s", e)
-        raise HTTPException(status_code=500, detail="The model request failed") from e
+        # The plan is already computed and is the part the user acts on, so a
+        # model outage costs the explanation, not the suggestions.
+        _logger.warning("Rebalance narrative unavailable: %s", e)
+        return _NO_NARRATIVE
 
     if content.startswith("```"):
         content = content.split("\n", 1)[-1].rsplit("```", 1)[0].strip()
 
     try:
-        result = json.loads(content)
-
-        result.setdefault("summary", "")
-        result.setdefault("score", 70)
-        result.setdefault("issues", [])
-        result.setdefault("suggestions", [])
-        return result
+        parsed = json.loads(content)
     except json.JSONDecodeError:
-        _logger.warning("Could not parse rebalance JSON: %.200s", content)
-        return {**_FALLBACK, "summary": content[:400]}
+        _logger.warning("Could not parse rebalance narrative JSON: %.200s", content)
+        return _NO_NARRATIVE
+
+    if not isinstance(parsed, dict):
+        return _NO_NARRATIVE
+    return {"summary": parsed.get("summary") or "", "rationales": parsed.get("rationales") or []}

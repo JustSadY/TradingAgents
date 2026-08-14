@@ -83,7 +83,7 @@ trading_agents/
 │   └── utils/               # Shared utilities
 ├── graph/                   # State machine structure (LangGraph engine)
 │   ├── setup.py             # Instantiates, compiles, and chains StateGraph nodes
-│   ├── checkpointer.py      # Persists conversation states and node states
+│   ├── checkpointer.py      # Persists graph state (PostgreSQL; SQLite fallback)
 │   ├── conditional_logic.py # Defines dynamic routing criteria between nodes
 │   ├── propagation.py       # Initial state construction
 │   ├── signal_processing.py # Signal extraction from final decisions

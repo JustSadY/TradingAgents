@@ -5,10 +5,10 @@ import {
   RefreshCw, RotateCcw, AlertCircle, CheckCircle, Loader2
 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
-import type { OrderResponse } from '../api/types'
-import type { components } from '../api/schema'
+import type { OrderResponse } from '../api/generated/model'
+import type { BackendSchemasTradingPerformanceResponse } from '../api/generated/model'
 
-type PortfolioData = components['schemas']['backend__schemas__trading__PerformanceResponse']
+type PortfolioData = BackendSchemasTradingPerformanceResponse
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)

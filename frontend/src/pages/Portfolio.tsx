@@ -8,7 +8,7 @@ import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
 import { exportPortfolioCSV } from '../utils/csvExport'
 import { ErrorBoundary } from '../components/ErrorBoundary'
-import type { HoldingRead, PortfolioRead, RiskDashboardResponse, RebalanceResponse } from '../api/types'
+import type { HoldingRead, PortfolioRead, RiskDashboardResponse, RebalanceResponse } from '../api/generated/model'
 
 const LONG_HOLD_DAYS = 30
 

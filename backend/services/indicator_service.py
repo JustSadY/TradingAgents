@@ -46,7 +46,12 @@ def calculate_macd(
     return macd_line, signal_line
 
 def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Compute Average Directional Index (ADX)."""
+    """Compute Average Directional Index (ADX) to Wilder's definition.
+
+    Directional movement, true range and DX are all smoothed the same way, as
+    Wilder specified; mixing a simple mean into any of the three shifts the
+    result away from standard charting platforms.
+    """
     high = df["High"]
     low = df["Low"]
 
@@ -58,11 +63,10 @@ def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
 
     atr = calculate_atr(df, period)
 
-    plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
-    minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
+    plus_di = 100 * (_wilder(plus_dm, period) / atr)
+    minus_di = 100 * (_wilder(minus_dm, period) / atr)
     dx = 100 * ((plus_di - minus_di).abs() / (plus_di + minus_di))
-    adx = dx.rolling(window=period).mean()
-    return adx
+    return _wilder(dx, period)
 
 def calculate_ichimoku(df: pd.DataFrame) -> dict[str, pd.Series]:
     """Compute Ichimoku Cloud components."""
@@ -107,13 +111,23 @@ def calculate_fibonacci_levels(df: pd.DataFrame, period: int = 100) -> dict[str,
         "level_100": low,
     }
 
+def _wilder(series: pd.Series, period: int) -> pd.Series:
+    """Wilder's smoothed average (an EMA with ``alpha = 1/period``).
+
+    Wilder defined ATR, ADX and RSI on this average, not a simple mean. Using
+    a rolling mean instead produced values several percent away from every
+    mainstream implementation — including the Alpha Vantage endpoint this repo
+    also routes ``atr`` to.
+    """
+    return series.ewm(alpha=1 / period, adjust=False, min_periods=period).mean()
+
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Compute Average True Range."""
+    """Compute Average True Range using Wilder's smoothing."""
     high = df["High"]
     low = df["Low"]
     close = df["Close"]
     tr = pd.concat([high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()], axis=1).max(axis=1)
-    return tr.rolling(window=period).mean()
+    return _wilder(tr, period)
 
 def calculate_vwap(df: pd.DataFrame, period: int = 20) -> pd.Series:
     """Compute rolling Volume-Weighted Average Price over *period* bars."""

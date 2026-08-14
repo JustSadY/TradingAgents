@@ -37,7 +37,7 @@ import {
   Download, FileDown, AlertTriangle, Scale, Share2, Copy,
   MessageSquare, Bot, Terminal, BookOpen, Trash2
 } from 'lucide-react'
-import type { AnalysisListItem, AnalysisResultRead, MultiTickerListItem, MultiTickerResultRead } from '../api/types'
+import type { AnalysisListItem, AnalysisResultRead, MultiTickerListItem, MultiTickerResultRead } from '../api/generated/model'
 import { SignalBadge } from '../components/analysis/SignalBadge'
 import { ReportCard } from '../components/analysis/ReportCard'
 import { AnalysisControls, type AnalysisStartError, type TickerSuggestion } from '../components/analysis/AnalysisControls'

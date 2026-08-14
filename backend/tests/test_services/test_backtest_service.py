@@ -7,140 +7,141 @@ import pandas as pd
 import pytest
 
 from backend.services.backtest_service import (
-    _apply_slippage,
-    _close_position,
+    _apply_slippage_decimal,
     _close_position_decimal,
     _compute_metrics,
     _exit_reason_and_price,
     _generate_signal,
     _normalise_exit_levels,
-    _trade_pnl,
+    _trade_pnl_decimal,
 )
 
 
 class TestApplySlippage:
+    """Exercises the Decimal implementation the simulator actually uses."""
+
     def test_buy_worsens_price_upward(self):
-        assert _apply_slippage(100.0, "BUY", 5.0) == 100.05
+        assert _apply_slippage_decimal(Decimal("100"), "BUY", Decimal("5")) == Decimal("100.05")
 
     def test_sell_worsens_price_downward(self):
-        assert _apply_slippage(100.0, "SELL", 5.0) == 99.95
+        assert _apply_slippage_decimal(Decimal("100"), "SELL", Decimal("5")) == Decimal("99.95")
 
     def test_zero_slippage_is_a_no_op(self):
-        assert _apply_slippage(123.45, "BUY", 0.0) == 123.45
-        assert _apply_slippage(123.45, "SELL", 0.0) == 123.45
+        assert _apply_slippage_decimal(Decimal("123.45"), "BUY", Decimal("0")) == Decimal("123.45")
+        assert _apply_slippage_decimal(Decimal("123.45"), "SELL", Decimal("0")) == Decimal("123.45")
 
-    def test_returns_plain_float(self):
-        result = _apply_slippage(50.0, "BUY", 10.0)
-        assert isinstance(result, float)
+    def test_stays_in_decimal(self):
+        """Money never round-trips through float in the simulation path."""
+        assert isinstance(_apply_slippage_decimal(Decimal("50"), "BUY", Decimal("10")), Decimal)
 
 class TestTradePnl:
+    @staticmethod
+    def _pnl(side, entry, exit_, size, rate):
+        return _trade_pnl_decimal(side, Decimal(entry), Decimal(exit_), Decimal(size), Decimal(rate))
+
     def test_long_profit(self):
-        pnl = _trade_pnl("long", entry_price=100.0, exit_price=110.0, size=10.0, rate=0.0)
-        assert pnl == 100.0
+        assert self._pnl("long", "100", "110", "10", "0") == Decimal("100")
 
     def test_long_loss(self):
-        pnl = _trade_pnl("long", entry_price=100.0, exit_price=90.0, size=10.0, rate=0.0)
-        assert pnl == -100.0
+        assert self._pnl("long", "100", "90", "10", "0") == Decimal("-100")
 
     def test_short_profit_when_price_drops(self):
-        pnl = _trade_pnl("short", entry_price=100.0, exit_price=90.0, size=10.0, rate=0.0)
-        assert pnl == 100.0
+        assert self._pnl("short", "100", "90", "10", "0") == Decimal("100")
 
     def test_commission_charged_on_both_legs(self):
-        pnl = _trade_pnl("long", entry_price=100.0, exit_price=110.0, size=10.0, rate=0.001)
-        expected_gross = 100.0
-        expected_commission = 1000.0 * 0.001 + 1100.0 * 0.001
-        assert round(pnl, 6) == round(expected_gross - expected_commission, 6)
+        pnl = self._pnl("long", "100", "110", "10", "0.001")
+        expected_commission = Decimal("1000") * Decimal("0.001") + Decimal("1100") * Decimal("0.001")
+        assert pnl == Decimal("100") - expected_commission
 
-    def test_returns_plain_float(self):
-        assert isinstance(_trade_pnl("long", 100.0, 110.0, 10.0, 0.001), float)
+    def test_stays_in_decimal(self):
+        assert isinstance(self._pnl("long", "100", "110", "10", "0.001"), Decimal)
 
 class TestClosePosition:
     def test_long_cash_delta_returns_sale_proceeds_without_double_counting_pnl(self):
-        cash_delta, trade = _close_position(
+        cash_delta, trade = _close_position_decimal(
             "long",
-            entry_price=100.0,
-            exit_price=110.0,
-            size=10.0,
+            entry_price=Decimal("100.0"),
+            exit_price=Decimal("110.0"),
+            size=Decimal("10.0"),
             entry_date="2024-01-01",
             exit_date="2024-01-05",
             reason="SIGNAL",
-            rate=0.0,
+            rate=Decimal("0.0"),
         )
-        assert cash_delta == 1100.0
-        assert trade["pnl"] == 100.0
-        assert trade["return_pct"] == 10.0
+        assert cash_delta == Decimal("1100")
+        assert trade["pnl"] == Decimal("100.0")
+        assert trade["return_pct"] == Decimal("10.0")
         assert trade["side"] == "long"
         assert trade["reason"] == "SIGNAL"
 
     def test_short_cash_delta_is_pnl_only(self):
-        cash_delta, trade = _close_position(
+        cash_delta, trade = _close_position_decimal(
             "short",
-            entry_price=100.0,
-            exit_price=90.0,
-            size=10.0,
+            entry_price=Decimal("100.0"),
+            exit_price=Decimal("90.0"),
+            size=Decimal("10.0"),
             entry_date="2024-01-01",
             exit_date="2024-01-05",
             reason="TAKE_PROFIT",
-            rate=0.0,
+            rate=Decimal("0.0"),
         )
-        assert cash_delta == 100.0
-        assert trade["pnl"] == 100.0
+        assert cash_delta == Decimal("100.0")
+        assert trade["pnl"] == Decimal("100.0")
 
     def test_exit_cash_flows_charge_each_commission_leg_once(self):
-        cash_delta, trade = _close_position(
+        cash_delta, trade = _close_position_decimal(
             "long",
-            entry_price=100.0,
-            exit_price=110.0,
-            size=1.0,
+            entry_price=Decimal("100.0"),
+            exit_price=Decimal("110.0"),
+            size=Decimal("1.0"),
             entry_date="2024-01-01",
             exit_date="2024-01-05",
             reason="SIGNAL",
-            rate=0.001,
+            rate=Decimal("0.001"),
         )
-        assert cash_delta == 109.89
-        assert round(1000.0 - 100.0 - 0.1 + cash_delta, 2) == 1009.79
+        assert cash_delta == Decimal("109.89")
+        assert round(Decimal("1000") - Decimal("100") - Decimal("0.1") + cash_delta, 2) == Decimal("1009.79")
         assert trade["pnl"] == 9.79
 
     def test_short_exit_does_not_charge_entry_commission_twice(self):
-        cash_delta, trade = _close_position(
+        cash_delta, trade = _close_position_decimal(
             "short",
-            entry_price=100.0,
-            exit_price=90.0,
-            size=1.0,
+            entry_price=Decimal("100.0"),
+            exit_price=Decimal("90.0"),
+            size=Decimal("1.0"),
             entry_date="2024-01-01",
             exit_date="2024-01-05",
             reason="SIGNAL",
-            rate=0.001,
+            rate=Decimal("0.001"),
         )
-        assert cash_delta == 9.91
-        assert round(1000.0 - 0.1 + cash_delta, 2) == 1009.81
+        assert cash_delta == Decimal("9.91")
+        assert round(Decimal("1000") - Decimal("0.1") + cash_delta, 2) == Decimal("1009.81")
         assert trade["pnl"] == 9.81
 
     def test_return_pct_matches_pnl_over_cost_basis(self):
-        _, trade = _close_position(
+        _, trade = _close_position_decimal(
             "long",
-            entry_price=50.0,
-            exit_price=55.0,
-            size=4.0,
+            entry_price=Decimal("50.0"),
+            exit_price=Decimal("55.0"),
+            size=Decimal("4.0"),
             entry_date="2024-01-01",
             exit_date="2024-01-02",
             reason="SIGNAL",
-            rate=0.0,
+            rate=Decimal("0.0"),
         )
         assert trade["pnl"] == 20.0
-        assert trade["return_pct"] == 10.0
+        assert trade["return_pct"] == Decimal("10.0")
 
     def test_prices_rounded_to_cents_in_trade_record(self):
-        _, trade = _close_position(
+        _, trade = _close_position_decimal(
             "long",
-            entry_price=100.123456,
-            exit_price=110.987654,
-            size=1.0,
+            entry_price=Decimal("100.123456"),
+            exit_price=Decimal("110.987654"),
+            size=Decimal("1.0"),
             entry_date="2024-01-01",
             exit_date="2024-01-02",
             reason="SIGNAL",
-            rate=0.0,
+            rate=Decimal("0.0"),
         )
         assert trade["entry_price"] == 100.12
         assert trade["exit_price"] == 110.99

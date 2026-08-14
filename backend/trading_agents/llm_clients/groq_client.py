@@ -5,7 +5,7 @@ from typing import Any
 
 from langchain_groq import ChatGroq
 
-from .base_client import BaseLLMClient, is_quota_exhausted, normalize_content
+from .base_client import SDK_RETRIES, BaseLLMClient, is_quota_exhausted, normalize_content
 from .validators import validate_model
 
 logger = logging.getLogger(__name__)
@@ -74,6 +74,7 @@ class GroqClient(BaseLLMClient):
             else:
                 llm_kwargs[key] = value
 
+        llm_kwargs.setdefault("max_retries", SDK_RETRIES)
         return NormalizedChatGroq(**llm_kwargs)
 
     def validate_model(self) -> bool:

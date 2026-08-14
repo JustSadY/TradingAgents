@@ -5,7 +5,7 @@ from langchain_core.messages import AIMessageChunk
 from langchain_core.outputs import ChatGenerationChunk
 from langchain_openai import ChatOpenAI
 
-from .base_client import BaseLLMClient, global_llm_concurrency_guard, is_quota_exhausted, normalize_content
+from .base_client import SDK_RETRIES, BaseLLMClient, global_llm_concurrency_guard, is_quota_exhausted, normalize_content
 from .capabilities import get_capabilities
 from .validators import validate_model
 
@@ -197,6 +197,7 @@ class OpenAIClient(BaseLLMClient):
             else:
                 llm_kwargs[key] = value
 
+        llm_kwargs.setdefault("max_retries", SDK_RETRIES)
         return NormalizedChatOpenAI(**llm_kwargs)
 
     def validate_model(self) -> bool:

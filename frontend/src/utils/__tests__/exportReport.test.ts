@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { AnalysisResultRead } from '../../api/types'
+import type { AnalysisResultRead } from '../../api/generated/model'
 import { buildExportSections, markdownToHtml } from '../exportReport'
 
 function analysisWith(overrides: Record<string, unknown>): AnalysisResultRead {

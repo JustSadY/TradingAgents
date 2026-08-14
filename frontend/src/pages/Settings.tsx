@@ -45,7 +45,7 @@ import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
 import type { ToolSettingsPanelHandle } from '../components/settings/ToolSettingsPanel'
 import AgentSettingsPanel from '../components/settings/AgentSettingsPanel'
 import type { AgentSettingsPanelHandle } from '../components/settings/AgentSettingsPanel'
-import type { WebhookDeliveryRead, SettingsRead, PresetRead } from '../api/types'
+import type { WebhookDeliveryRead, SettingsRead, PresetRead } from '../api/generated/model'
 
 type Settings = SettingsRead
 type LlmModelOption = { value: string; label: string; supported_output_languages?: string[] }

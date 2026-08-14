@@ -38,14 +38,12 @@ jobs:
         run: uv run --frozen python scripts/export-openapi.py ../frontend/openapi.json
 
       - name: Regenerate typed client
-        run: |
-          npm run generate:types
-          npm run generate:client
+        run: npm run generate:client
 
       - name: Generated client is up to date
         working-directory: .
         run: |
-          git diff --exit-code -- frontend/openapi.json frontend/src/api/schema.d.ts frontend/src/api/generated \
+          git diff --exit-code -- frontend/openapi.json frontend/src/api/generated \
             || { echo "::error::API client is stale — run 'npm run generate:api' in frontend/ and commit the result"; exit 1; }
 
   check:

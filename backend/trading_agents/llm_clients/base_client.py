@@ -95,6 +95,25 @@ class TokenUsageTracker:
             "llm_calls": self._call_count,
         }
 
+_TRANSIENT_HINTS = (
+    "rate limit",
+    "ratelimit",
+    "429",
+    "timeout",
+    "timed out",
+    "temporar",
+    "overload",
+    "503",
+    "502",
+    "500",
+    "connection",
+    "unavailable",
+    "again",
+)
+
+def _is_timeout_error(exc: BaseException) -> bool:
+    return isinstance(exc, (TimeoutError, asyncio.TimeoutError))
+
 def is_quota_exhausted(exc: Exception) -> bool:
     """Detect permanent quota/resource exhaustion across providers.
 
@@ -140,77 +159,58 @@ def is_provider_function_degraded(exc: BaseException) -> bool:
         "function id" in err_msg and "degraded" in err_msg and "cannot be invoked" in err_msg
     )
 
-def classify_error(exc: Exception) -> str:
-    """Classify an LLM error into a category for structured handling.
+# The node runtime (`retry_call`/`guard_node`) is the single retry authority.
+# LangChain clients otherwise retry ~2 times of their own accord, which the app
+# never configured and which multiplied with the node attempts and the provider
+# fallback chain. Providers still get retried — once, where it is observable and
+# where `node_retry_attempts` controls it.
+SDK_RETRIES = 0
 
-    Returns one of ``quota_exhausted``, ``rate_limited``, ``auth``,
-    ``timeout``, ``provider_degraded``, or ``unknown``.
+def is_transient(exc: BaseException) -> bool:
+    """Whether an error is worth retrying with the same provider."""
+    if _is_timeout_error(exc) or isinstance(exc, ConnectionError):
+        return True
+    return any(hint in str(exc).lower() for hint in _TRANSIENT_HINTS)
+
+def classify_error(exc: BaseException) -> str:
+    """Classify an exception into a high-level error category.
+
+    Returns one of ``"auth"``, ``"quota"``, ``"timeout"``,
+    ``"provider_degraded"``, ``"transient"`` or ``"bug"``.
+
+    This is the single classifier for the whole engine. There used to be a
+    second one in ``agents/runtime/resilience`` with a different vocabulary
+    (``quota_exhausted``/``rate_limited``/``unknown``), so the same provider
+    error was reported under two different names depending on which layer
+    caught it. These category strings are the ones that reach Prometheus
+    (``NODE_ERRORS_BY_TYPE``) and the analysis WebSocket, so they are the
+    canonical set; changing one is an observable change.
     """
-    err_msg = str(exc).lower()
+    msg = str(exc).lower()
     if is_provider_function_degraded(exc):
         return "provider_degraded"
-    if is_quota_exhausted(exc):
-        return "quota_exhausted"
-    if is_rate_limited(exc):
-        return "rate_limited"
-    auth_signals = ["401", "403", "unauthorized", "forbidden", "invalid_api_key", "authentication"]
-    if any(s in err_msg for s in auth_signals):
+    # Union of both former implementations. fallback.py treats "auth" as a
+    # permanent failure and stops trying other providers, so dropping a signal
+    # here would make an invalid key burn a call against every fallback.
+    auth_signals = (
+        "401",
+        "403",
+        "unauthorized",
+        "forbidden",
+        "invalid_api_key",
+        "invalid api key",
+        "authentication",
+        "auth",
+    )
+    if any(k in msg for k in auth_signals):
         return "auth"
-    timeout_signals = ["timeout", "timed out", "deadline exceeded"]
-    if any(s in err_msg for s in timeout_signals):
+    if is_quota_exhausted(exc) or is_rate_limited(exc):
+        return "quota"
+    if _is_timeout_error(exc) or any(k in msg for k in ("timeout", "timed out", "deadline")):
         return "timeout"
-    return "unknown"
-
-async def retry_with_exponential_backoff(
-    coro_factory,
-    max_retries: int = 3,
-    base_delay: float = 1.0,
-    max_delay: float = 30.0,
-) -> Any:
-    """Await *coro_factory()*, retrying on rate-limit errors with backoff.
-
-    Parameters
-    ----------
-    coro_factory:
-        Zero-argument callable that returns an awaitable.  Called on each
-        attempt so a fresh underlying connection / iterator is used.
-    max_retries:
-        How many times to retry before giving up (default 3).
-    base_delay:
-        Initial delay in seconds (doubles each retry, default 1.0).
-    max_delay:
-        Cap for the backoff delay (default 30.0).
-
-    Returns
-    -------
-    The first successful result.
-
-    Raises
-    ------
-    The last exception encountered (quota, auth, unknown, and degraded-provider
-    errors are not retried).
-    """
-    last_exc = None
-    for attempt in range(max_retries + 1):
-        try:
-            async with global_llm_concurrency_guard():
-                return await coro_factory()
-        except Exception as exc:
-            last_exc = exc
-            category = classify_error(exc)
-            if category in ("quota_exhausted", "auth", "provider_degraded", "unknown"):
-                raise
-            delay = min(base_delay * (2**attempt), max_delay)
-            logger.info(
-                "LLM call %s (attempt %d/%d), retrying in %.1fs: %s",
-                category,
-                attempt + 1,
-                max_retries + 1,
-                delay,
-                exc,
-            )
-            await asyncio.sleep(delay)
-    raise last_exc
+    if is_transient(exc):
+        return "transient"
+    return "bug"
 
 def normalize_content(response):
     content = response.content

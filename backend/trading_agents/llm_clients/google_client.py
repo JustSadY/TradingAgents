@@ -3,7 +3,7 @@ from typing import Any
 
 from langchain_google_genai import ChatGoogleGenerativeAI
 
-from .base_client import BaseLLMClient, is_quota_exhausted, normalize_content
+from .base_client import SDK_RETRIES, BaseLLMClient, is_quota_exhausted, normalize_content
 from .validators import validate_model
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,7 @@ class GoogleClient(BaseLLMClient):
                 llm_kwargs["thinking_level"] = thinking_level
             else:
                 llm_kwargs["thinking_budget"] = -1 if thinking_level == "high" else 0
+        llm_kwargs.setdefault("max_retries", SDK_RETRIES)
         return NormalizedChatGoogleGenerativeAI(**llm_kwargs)
 
     def validate_model(self) -> bool:

@@ -26,29 +26,23 @@ import traceback
 from collections.abc import Callable
 from typing import Any
 
-from backend.trading_agents.llm_clients.base_client import is_provider_function_degraded
+# Error classification lives with the LLM clients so there is exactly one
+# taxonomy; re-exported here because callers and tests import it from the
+# resilience layer.
+from backend.trading_agents.agents.runtime import circuit_breaker
+from backend.trading_agents.llm_clients.base_client import (
+    _is_timeout_error,
+    classify_error,
+    is_provider_function_degraded,
+    is_transient,
+)
 
 run_logger = logging.getLogger("tradingagents.run")
 
 _WS_BG_TASKS: set[asyncio.Task] = set()
 
-_TRANSIENT_HINTS = (
-    "rate limit",
-    "ratelimit",
-    "429",
-    "timeout",
-    "timed out",
-    "temporar",
-    "overload",
-    "503",
-    "502",
-    "500",
-    "connection",
-    "unavailable",
-    "again",
-)
-
-_circuit_state: dict[str, dict] = {}
+# Circuit state lives in `circuit_breaker`, which shares it through Redis in
+# worker mode and falls back to process memory without it.
 
 def _circuit_key(name: str, kind: str) -> str:
     try:
@@ -191,33 +185,6 @@ def _analyst_turn_fields(state: Any, kind: str) -> dict[str, Any]:
         "tool_results": tool_results,
     }
 
-def _is_timeout_error(exc: BaseException) -> bool:
-    return isinstance(exc, (TimeoutError, asyncio.TimeoutError))
-
-def is_transient(exc: BaseException) -> bool:
-    if _is_timeout_error(exc) or isinstance(exc, ConnectionError):
-        return True
-    return any(hint in str(exc).lower() for hint in _TRANSIENT_HINTS)
-
-def classify_error(exc: BaseException) -> str:
-    """Classify an exception into a high-level error category.
-
-    Returns one of ``"auth"``, ``"quota"``, ``"timeout"``,
-    ``"provider_degraded"``, ``"transient"``, or ``"bug"``. Used for
-    Prometheus label cardinality and post-run diagnostics.
-    """
-    msg = str(exc).lower()
-    if is_provider_function_degraded(exc):
-        return "provider_degraded"
-    if any(k in msg for k in ("401", "unauthorized", "invalid api key", "auth")):
-        return "auth"
-    if any(k in msg for k in ("429", "quota", "rate limit", "ratelimit", "rate_limit")):
-        return "quota"
-    if _is_timeout_error(exc) or any(k in msg for k in ("timeout", "timed out", "deadline")):
-        return "timeout"
-    if is_transient(exc):
-        return "transient"
-    return "bug"
 
 async def _execute_fn(fn: Callable[[], Any], run_in_thread: bool) -> Any:
     import asyncio
@@ -373,11 +340,11 @@ def guard_node(
 
         runtime_config = _active_runtime_config()
         ck = _circuit_key(name, kind)
-        cb = _circuit_state.get(ck)
         cb_threshold = _cfg("circuit_breaker_threshold", 3, runtime_config)
         cb_cooldown = _cfg("circuit_breaker_cooldown", 60, runtime_config)
+        cb = await circuit_breaker.get_state(ck)
 
-        if cb and cb.get("open_since") is not None:
+        if cb.get("open_since") is not None:
             elapsed = time.time() - cb["open_since"]
             if elapsed < cb_cooldown:
                 log_event(
@@ -395,8 +362,8 @@ def guard_node(
                 return await _handle_node_fallback(
                     name, kind, fallback, state, RuntimeError(f"Circuit breaker open for {name}")
                 )
-            cb["open_since"] = None
-            cb["failures"] = 0
+            # Cooldown elapsed: let the next call through and start counting again.
+            await circuit_breaker.reset(ck)
 
         try:
             is_async = inspect.iscoroutinefunction(fn)
@@ -420,15 +387,13 @@ def guard_node(
                     retry_timeouts=retry_timeouts,
                     runtime_config=runtime_config,
                 )
-            _circuit_state.pop(ck, None)
+            await circuit_breaker.reset(ck)
             _log_node_success(name, kind, start, **turn_fields)
             return result
         except Exception as exc:
             await _log_node_error(name, kind, exc, **turn_fields)
-            entry = _circuit_state.setdefault(ck, {"failures": 0, "open_since": None})
-            entry["failures"] += 1
-            if entry["failures"] >= cb_threshold:
-                entry["open_since"] = time.time()
+            entry = await circuit_breaker.record_failure(ck, cb_threshold, cb_cooldown)
+            if entry["open_since"] is not None:
                 log_event("circuit_tripped", level=logging.WARNING, node=name, kind=kind, failures=entry["failures"])
             record_agent_result(name, retries=entry["failures"], fallback=fallback is not None, error=str(exc)[:200])
             if fallback is None:

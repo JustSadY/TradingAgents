@@ -129,7 +129,7 @@ async def test_tool_analyst_exposes_a_visible_degraded_report_when_recovery_is_e
 
 @pytest.mark.asyncio
 async def test_guard_node_remains_the_single_analyst_lifecycle_source(monkeypatch):
-    from backend.trading_agents.agents.runtime import resilience
+    from backend.trading_agents.agents.runtime import circuit_breaker, resilience
 
     events = []
 
@@ -144,7 +144,7 @@ async def test_guard_node_remains_the_single_analyst_lifecycle_source(monkeypatc
 
     monkeypatch.setattr(resilience, "log_event", capture)
     monkeypatch.setattr(resilience, "retry_call", call_once)
-    resilience._circuit_state.clear()
+    circuit_breaker.reset_all_local()
 
     result = await resilience.guard_node(
         analyst_node,
@@ -164,7 +164,7 @@ async def test_guard_node_remains_the_single_analyst_lifecycle_source(monkeypatc
 @pytest.mark.asyncio
 async def test_guard_node_marks_post_tool_analyst_invocations_as_continuations(monkeypatch):
     """ToolNode loops are real LLM turns, but must not look like duplicate starts."""
-    from backend.trading_agents.agents.runtime import resilience
+    from backend.trading_agents.agents.runtime import circuit_breaker, resilience
 
     events = []
 
@@ -191,7 +191,7 @@ async def test_guard_node_marks_post_tool_analyst_invocations_as_continuations(m
 
     monkeypatch.setattr(resilience, "log_event", capture)
     monkeypatch.setattr(resilience, "retry_call", call_once)
-    resilience._circuit_state.clear()
+    circuit_breaker.reset_all_local()
 
     result = await resilience.guard_node(
         analyst_node,

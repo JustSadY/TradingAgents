@@ -6,7 +6,7 @@ import {
   FileText, BookOpen, Scale, Zap,
 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
-import type { SharedReportResponse } from '../api/types'
+import type { SharedReportResponse } from '../api/generated/model'
 import { DebateHistoryWidget } from '../components/analysis/DebateHistoryWidget'
 import { MarkdownReport } from '../components/report/MarkdownReport'
 import { formatSharedReportValue } from '../utils/sharedReport'
