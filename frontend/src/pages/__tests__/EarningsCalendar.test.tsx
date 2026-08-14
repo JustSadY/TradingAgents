@@ -132,8 +132,9 @@ describe('EarningsCalendar', () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.clear(screen.getByRole('textbox', { name: 'Tickers' }))
-    await user.type(screen.getByRole('textbox', { name: 'Tickers' }), 'msft')
+    const input = screen.getByPlaceholderText('AAPL, MSFT')
+    await user.clear(input)
+    await user.type(input, 'msft')
     await user.click(screen.getByRole('button', { name: 'Search' }))
     expect(mocks.earningsHook).toHaveBeenLastCalledWith({ tickers: 'MSFT' })
 
