@@ -143,12 +143,9 @@ async def test_public_share_context_is_token_then_exact_analysis_id(seeded):
         await set_public_share_context(db, token="active-share")
         tokens = set((await db.execute(select(SharedReport.token))).scalars())
         assert tokens == {"active-share"}
-        # A validated token alone cannot read any tenant analysis row.
         assert (await db.execute(select(AnalysisResult.id))).scalars().all() == []
         await db.rollback()
 
-        # The endpoint establishes this selector only after validating the share
-        # row; exactly that analysis becomes visible, no sibling tenant row.
         await set_public_share_context(db, token="active-share", analysis_id=seeded.analysis_a)
         analysis_ids = set((await db.execute(select(AnalysisResult.id))).scalars())
         assert analysis_ids == {seeded.analysis_a}
@@ -236,8 +233,6 @@ async def test_context_reapplies_after_repository_commit_on_real_postgres(seeded
             task_id="rls-context-reapply",
             triggered_by="manual",
         )
-        # create_analysis_result commits and then refreshes. That refresh starts
-        # a new PostgreSQL transaction and therefore exercises after_begin.
         assert created.user_id == seeded.a
         kind, user_id = (
             await db.execute(
@@ -257,8 +252,6 @@ async def test_context_reapplies_after_repository_commit_on_real_postgres(seeded
 
 
 async def test_transaction_local_context_does_not_leak_on_same_pooled_connection(seeded):
-    # Start with a fresh runtime pool so the next two sessions necessarily
-    # exercise checkout/return/re-checkout of the same sole physical connection.
     await runtime_engine.dispose()
 
     async with AsyncSessionLocal() as db:
@@ -270,8 +263,6 @@ async def test_transaction_local_context_does_not_leak_on_same_pooled_connection
     async with AsyncSessionLocal() as db:
         pid_after = (await db.execute(text("SELECT pg_backend_pid()"))).scalar_one()
         assert pid_after == pid_before
-        # No context was set on this new ORM session. SET LOCAL from the prior
-        # transaction must have disappeared despite physical connection reuse.
         assert (await db.execute(select(AppSettings.id))).scalars().all() == []
         await set_request_tenant_context(db, seeded.b)
         kind, user_id = (
@@ -287,8 +278,6 @@ async def test_transaction_local_context_does_not_leak_on_same_pooled_connection
 '''
 path.write_text(prefix + tests, encoding="utf-8")
 
-# Resolve absolute `backend.*` imports when acceptance invokes pyright from the
-# backend project root.
 pyproject = Path("backend/pyproject.toml")
 config = pyproject.read_text(encoding="utf-8")
 needle = 'include = ["core/temporal.py", "schemas"]\nexclude = ["tests", "postgres_tests"]\n'
@@ -297,8 +286,6 @@ if needle not in config:
     raise SystemExit("pyright include/exclude block not found")
 pyproject.write_text(config.replace(needle, replacement, 1), encoding="utf-8")
 
-# Snapshot the immutable username before repository commits. Logging must not
-# trigger async ORM lazy-loads after a commit/rollback boundary.
 cron = Path("backend/services/cron_service.py")
 cron_text = cron.read_text(encoding="utf-8")
 old = '''            trade_date = _trade_date_for_asset("stock")\n            _logger.info(\n                "User cron watchlist scan started for user=%s (id=%d), date=%s",\n                user.username, user_id, trade_date,\n            )\n'''
@@ -311,10 +298,8 @@ end = cron_text.index("\n    def get_status", start)
 segment = cron_text[start:end].replace("user.username", "username")
 cron.write_text(cron_text[:start] + segment + cron_text[end:], encoding="utf-8")
 
-# Normalize all Ruff auto-fixes before creating the exact candidate commit.
-# The next workflow step reruns lock/sync/Ruff/Pyright/pytest/OpenAPI on this
-# commit; if Ruff changes anything there, the post-commit cleanliness guard
-# below will make the acceptance fail rather than silently testing a dirty tree.
+# Normalize Ruff fixes before the exact acceptance commit. The workflow reruns
+# every gate after this commit is created.
 subprocess.run([sys.executable, "-m", "pip", "install", "--upgrade", "uv"], check=True)
 subprocess.run(["uv", "lock", "--check"], cwd="backend", check=True)
 subprocess.run(["uv", "sync", "--frozen"], cwd="backend", check=True)
@@ -325,21 +310,6 @@ if subprocess.run(["git", "diff", "--quiet", "--", "frontend"]).returncode != 0:
     raise SystemExit("frontend changed while materializing backend hardening candidate")
 subprocess.run(["git", "diff", "--check"], check=True)
 
-# Remove files that existed only to trigger previous CI attempts. No empty
-# commit or trigger source remains in the exact candidate tree.
-for obsolete in (
-    ".github/backend_hardening_trigger.txt",
-    ".github/gitdata_backend_hardening_trigger.txt",
-    ".github/fix_final_rls_acceptance.py",
-    ".github/workflows/backend-contract-hardening-final-once.yml",
-):
-    candidate = Path(obsolete)
-    if candidate.exists():
-        candidate.unlink()
-
-# Freeze the exact acceptance commit on tmp/backend-contract-hardening. The
-# branch must not have moved since checkout, and current integration must still
-# have the verified B0 backend tree.
 subprocess.run(["git", "fetch", "origin", "integration/memory-maintenance-base", "tmp/backend-contract-hardening"], check=True)
 local_before = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
 remote_before = subprocess.check_output(
@@ -358,13 +328,6 @@ if subprocess.run(
     raise SystemExit("integration backend tree no longer matches verified B0")
 
 subprocess.run(["git", "add", "backend"], check=True)
-for obsolete in (
-    ".github/backend_hardening_trigger.txt",
-    ".github/gitdata_backend_hardening_trigger.txt",
-    ".github/fix_final_rls_acceptance.py",
-    ".github/workflows/backend-contract-hardening-final-once.yml",
-):
-    subprocess.run(["git", "add", "-A", "--", obsolete], check=True)
 staged = subprocess.check_output(["git", "diff", "--cached", "--name-only"], text=True).splitlines()
 if any(name.startswith("frontend/") for name in staged):
     raise SystemExit("frontend staged unexpectedly")
@@ -381,7 +344,5 @@ candidate_sha = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True)
 print(f"EXACT_ACCEPTANCE_SHA={candidate_sha}")
 subprocess.run(["git", "push", "origin", "HEAD:tmp/backend-contract-hardening"], check=True)
 
-# Acceptance commands in the next workflow step must operate on the exact clean
-# commit. Any generated source change after this point invalidates acceptance.
 if subprocess.run(["git", "status", "--porcelain", "--untracked-files=no"], capture_output=True, text=True).stdout.strip():
     raise SystemExit("candidate commit is not clean before acceptance")
