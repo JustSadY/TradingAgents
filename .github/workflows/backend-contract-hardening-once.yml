@@ -37,6 +37,7 @@ jobs:
           python .github/apply_b2_b3_meta_schema.py
           python .github/apply_b4_openapi.py
           python .github/apply_postgres_rls_tests.py
+          python .github/fix_postgres_marker.py
           if ! git diff --quiet -- frontend; then
             echo "Frontend files changed by backend hardening; refusing."
             git diff --name-only -- frontend
@@ -104,7 +105,7 @@ jobs:
           expected='54ab148cc4b0b6609ddaf0e9884391ece49e59df'
           actual="$(git rev-parse origin/integration/memory-maintenance-base)"
           test "$actual" = "$expected" || { echo "Integration branch moved: $actual"; exit 1; }
-          git rm .github/apply_b1_rls.py .github/apply_b2_b3_meta_schema.py .github/apply_b4_openapi.py .github/apply_postgres_rls_tests.py .github/workflows/backend-contract-hardening-once.yml
+          git rm .github/apply_b1_rls.py .github/apply_b2_b3_meta_schema.py .github/apply_b4_openapi.py .github/apply_postgres_rls_tests.py .github/fix_postgres_marker.py .github/workflows/backend-contract-hardening-once.yml
           git add backend
           if ! git diff --cached --quiet -- frontend; then
             echo "Frontend staged unexpectedly"; exit 1
