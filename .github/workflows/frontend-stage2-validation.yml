@@ -29,11 +29,14 @@ jobs:
         working-directory: frontend
         run: npm run lint
       - name: Test
+        if: always()
         working-directory: frontend
         run: npm test
       - name: Build
+        if: always()
         working-directory: frontend
         run: npm run build
       - name: API check
+        if: always()
         working-directory: frontend
         run: npm run api:check
