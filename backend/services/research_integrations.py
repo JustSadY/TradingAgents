@@ -1,8 +1,8 @@
-"""Optional industry-package reference adapters.
+"""Research/reference integrations that are not production fallbacks.
 
-These integrations are side-car/reference paths. Production data, execution,
-and accounting continue to work without the optional packages, while research
-jobs can compare the native implementation against widely used libraries.
+Production LLM routing, technical indicators, broker execution and checkpoint
+persistence are package-backed directly in their owning services. The helpers
+here are deliberately isolated research/validation tools.
 """
 
 from __future__ import annotations
@@ -21,7 +21,6 @@ _OPTIONAL_PACKAGES = {
     "empyrical": "empyrical",
     "quantstats": "quantstats",
     "pypfopt": "pypfopt",
-    "alpaca_py": "alpaca",
     "opentelemetry": "opentelemetry",
 }
 
@@ -37,7 +36,7 @@ async def openbb_historical(
     end_date: str | None = None,
     provider: str | None = None,
 ) -> pd.DataFrame:
-    """Fetch an OpenBB comparison data set without mutating application caches."""
+    """Fetch an OpenBB research data set without mutating application caches."""
     try:
         from openbb import obb
     except ImportError as exc:
@@ -53,7 +52,9 @@ async def openbb_historical(
             kwargs["provider"] = provider
         frame = obb.equity.price.historical(**kwargs).to_df().copy()
         frame.index = pd.to_datetime(frame.index)
-        frame = frame.rename(columns={name: name.capitalize() for name in ("open", "high", "low", "close", "volume")})
+        frame = frame.rename(
+            columns={name: name.capitalize() for name in ("open", "high", "low", "close", "volume")}
+        )
         required = ["Open", "High", "Low", "Close", "Volume"]
         missing = [column for column in required if column not in frame.columns]
         if missing:
@@ -64,7 +65,7 @@ async def openbb_historical(
 
 
 def talib_standard_indicators(df: pd.DataFrame, *, period: int = 14) -> dict[str, pd.Series]:
-    """Calculate standard indicators with TA-Lib for parity/reference checks."""
+    """Calculate a TA-Lib oracle for research/parity checks only."""
     try:
         import talib
     except ImportError as exc:
@@ -122,7 +123,7 @@ def vectorbt_reference_backtest(
 
 
 def cross_validate_return_metrics(returns: pd.Series) -> dict[str, dict[str, float]]:
-    """Cross-check return metrics with empyrical and QuantStats when available."""
+    """Cross-check return metrics with empyrical and QuantStats when installed."""
     clean = pd.Series(returns, dtype=float).replace([np.inf, -np.inf], np.nan).dropna()
     result: dict[str, dict[str, float]] = {}
     try:
@@ -155,7 +156,7 @@ def pypfopt_target_weights(
     *,
     risk_free_rate: float = 0.0,
 ) -> dict[str, float]:
-    """Produce deterministic max-Sharpe weights when PyPortfolioOpt is installed."""
+    """Produce deterministic max-Sharpe research weights with PyPortfolioOpt."""
     try:
         from pypfopt.efficient_frontier import EfficientFrontier
     except ImportError as exc:

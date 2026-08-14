@@ -25,17 +25,14 @@ dependencies = [
     "redis>=5.0,<7.0",
     "arq>=0.26,<0.27",
     "langchain-core>=0.3.81,<2.0",
-    "langchain-anthropic>=0.3.15,<2.0",
     "langchain-experimental>=0.3.4,<1.0",
-    "langchain-google-genai>=4.0.0,<5.0",
-    "langchain-openai>=0.3.23,<2.0",
-    "langchain-mistralai>=1.1.0,<2.0",
-    "langchain-groq>=1.1.0,<2.0",
+    "langchain-litellm>=0.7.0,<1.0",
     "langgraph>=1.0.0,<2.0",
-    "langgraph-checkpoint-sqlite>=2.0.0,<4.0",
     "langgraph-checkpoint-postgres>=2.0.0,<4.0",
     "psycopg[binary,pool]>=3.2.0",
     "pinecone>=5.0.0",
+    "alpaca-py>=0.43.5,<1.0",
+    "pandas-ta-classic>=0.6.52,<1.0",
     "pandas>=2.3.0",
     "numpy>=2.0.0",
     "yfinance>=0.2.63",
@@ -51,9 +48,6 @@ dependencies = [
     "aiosqlite",
 ]
 
-# Test and lint tooling is deliberately kept out of [project.dependencies] so
-# the production image and deploy venvs do not ship it. CI installs it with
-# `uv sync` (which includes dev groups by default).
 [dependency-groups]
 dev = [
     "ruff>=0.9.0",
@@ -65,9 +59,6 @@ dev = [
 ]
 
 [tool.uv]
-# The importable package is the repository root's `backend` package, not this
-# directory as a distribution, so uv manages dependencies only and never tries
-# to build/install the project itself.
 package = false
 
 [tool.ruff]
@@ -75,26 +66,8 @@ line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
-select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "C",   # flake8-comprehensions
-    "B",   # flake8-bugbear
-    "UP",  # pyupgrade
-]
-ignore = [
-    "B008", # FastAPI Depends calls in defaults
-    "C901", # legacy orchestrators are tracked for staged decomposition
-    "E501", # line too long
-    "E402", # module level import not at top of file
-    # UP042 wants `class X(str, Enum)` rewritten to `StrEnum`, which changes what
-    # str()/f-string interpolation produces ("X.BUY" -> "Buy"). These enums are
-    # serialized into prompts, stored decisions and API payloads, so the rewrite
-    # is a behaviour change that needs a per-enum audit rather than a lint pass.
-    "UP042",
-]
+select = ["E", "W", "F", "I", "C", "B", "UP"]
+ignore = ["B008", "C901", "E501", "E402", "UP042"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["backend"]
@@ -113,7 +86,6 @@ addopts = "-q --tb=short --strict-markers"
 [tool.coverage.run]
 source = ["backend"]
 omit = ["backend/tests/*"]
-
 
 [tool.pyright]
 pythonVersion = "3.11"

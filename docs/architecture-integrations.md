@@ -1,64 +1,67 @@
-# Optional architecture integrations
+# Architecture integrations
 
-This branch keeps the locked production environment stable while exposing
-package-backed comparison and adapter paths for the architecture migration.
-None of the optional research libraries are imported during normal startup.
+This branch uses package-backed implementations as the production path. Legacy
+provider, broker, standard-indicator and SQLite-checkpoint fallbacks are removed.
 
-## LiteLLM proxy
+## LLMs: LiteLLM only
 
-The existing LangChain clients remain the compatibility path. To route hosted
-providers through an OpenAI-compatible LiteLLM Proxy, set:
+All configured LLM providers are routed in-process through
+`langchain-litellm` / `ChatLiteLLM`.
 
-```bash
-LITELLM_PROXY_URL=http://litellm:4000
-LITELLM_PROXY_KEY=...
-LITELLM_ROUTE_ALL=true
-# Set only when the proxy expects provider/model names rather than aliases.
-LITELLM_PREFIX_PROVIDER=false
-```
+The existing per-user provider keys remain the credential source. There is no
+second provider-specific LangChain SDK layer and no external LiteLLM Proxy is
+required. Provider routing is normalized as follows:
 
-Ollama remains local. SDK retries stay disabled; the agent runtime remains the
-single retry authority.
+- OpenAI -> `openai/...`
+- Anthropic -> `anthropic/...`
+- Google AI Studio -> `gemini/...`
+- Mistral -> `mistral/...`
+- Groq -> `groq/...`
+- NVIDIA NIM -> `nvidia_nim/...`
+- DeepSeek -> `deepseek/...`
+- Ollama -> `ollama/...`
 
-## OpenTelemetry
+Ollama remains server-managed through `OLLAMA_BASE_URL`; tenants cannot replace
+its endpoint with a stored credential. SDK retries default to zero so the agent
+runtime remains the single retry authority.
 
-Technical traces are opt-in and do not replace product WebSocket events:
+## Alpaca: official SDK only
 
-```bash
-OTEL_ENABLED=true
-OTEL_SERVICE_NAME=tradingagents-backend
-OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4317
-```
+Alpaca paper/live execution uses `alpaca-py`. The hand-written HTTP broker
+implementation and package-detection fallback are removed.
 
-Install the OpenTelemetry SDK, OTLP exporter, and FastAPI/httpx/SQLAlchemy
-instrumentation packages in the deployment that enables this flag.
+## Standard technical indicators: pandas-ta-classic only
+
+EMA, RSI, MACD, ADX, ATR and rolling volume-weighted price calculations are
+provided by `pandas-ta-classic`. The application still owns product-specific
+contracts such as formula sandboxing, Ichimoku output shaping, Fibonacci
+display levels and custom chart-pattern algorithms.
+
+## Checkpoints: PostgreSQL only
+
+LangGraph checkpoints use `PostgresSaver` / `AsyncPostgresSaver`. The per-run
+SQLite checkpoint fallback is removed. A PostgreSQL `DATABASE_URL` is therefore
+required for analysis checkpointing.
+
+## Vector memory: Pinecone and pgvector
+
+Both memory backends remain supported:
+
+- Pinecone is retained as a managed vector-memory option.
+- pgvector remains the self-hosted PostgreSQL option.
+
+Alembic owns pgvector extension/table creation; request-time memory operations
+do not perform schema DDL.
 
 ## Research/reference packages
 
-`backend.services.research_integrations` contains isolated reference adapters
-for OpenBB, TA-Lib, vectorbt, empyrical/QuantStats, and PyPortfolioOpt. They are
-intentionally not the production source of truth and do not mutate application
-caches or execution state. Install only the packages needed by a research job.
+`backend.services.research_integrations` remains isolated from production
+execution for OpenBB, vectorbt, empyrical/QuantStats comparisons and
+PyPortfolioOpt research. Those adapters are research or validation tools, not
+fallback production engines.
 
-TA-Lib parity tests skip automatically when TA-Lib is absent. This allows the
-native implementation to be compared before any production calculation is
-replaced.
+## Observability
 
-## Alpaca
-
-`backend.services.execution.factory` prefers the official `alpaca-py` adapter
-when the `alpaca` Python package is installed. Existing deployments retain the
-legacy HTTP adapter as a compatibility fallback until their locked environment
-is upgraded.
-
-## PostgreSQL schema and tenant isolation
-
-Alembic now owns the `vector` extension and `memory_vectors` table. Runtime
-memory code performs read-only schema verification and asks operators to run
-`alembic upgrade head` when the migration is missing.
-
-The same migration creates row-level-security policies for application tables
-that carry a direct `user_id` column. Authenticated HTTP and WebSocket requests
-set transaction-local `app.user_id` / `app.is_admin` values before accessing
-tenant data. Tables without a direct `user_id` continue to rely on their
-existing repository ownership joins and application authorization boundaries.
+OpenTelemetry remains opt-in and does not replace product WebSocket events.
+When enabled, install the configured OpenTelemetry SDK/exporter/instrumentation
+packages in the deployment.

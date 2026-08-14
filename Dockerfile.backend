@@ -2,12 +2,10 @@ FROM python:3.12-slim AS builder
 
 WORKDIR /app
 
-# Install web dependencies. requirements.txt is generated from backend/uv.lock
-# (see backend/scripts/export-requirements.sh) and is fully pinned with hashes,
-# so this resolves to identical versions on every build. --require-hashes is
-# implied by the hashes, but stating it makes a stripped export fail loudly.
+# requirements.txt is a generated compatibility view of backend/pyproject.toml.
+# It contains only direct production requirements; pip resolves transitives.
 COPY backend/requirements.txt ./backend/requirements.txt
-RUN pip install --no-cache-dir --require-hashes -r backend/requirements.txt
+RUN pip install --no-cache-dir -r backend/requirements.txt
 
 # Copy full source
 COPY . .
