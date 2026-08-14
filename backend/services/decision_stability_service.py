@@ -1,12 +1,12 @@
 """Pure, deterministic guardrail for Portfolio Manager decision changes.
 
-The controller deliberately has no database, graph, or LLM dependency.  It
+The controller deliberately has no database, graph, or LLM dependency. It
 accepts plain mappings and returns a plain mapping so an orchestrator can run
 it in shadow mode before it becomes the canonical decision authority.
 
-``pm_proposal`` is always preserved verbatim in the result.  The separately
+``pm_proposal`` is always preserved verbatim in the result. The separately
 returned ``accepted_decision`` is the only payload a caller should persist or
-send to execution.  A rejected proposal becomes a tactical ``Hold`` with
+send to execution. A rejected proposal becomes a tactical ``Hold`` with
 ``no_order``; it does *not* replay the previous Buy/Sell as a fresh order.
 """
 
@@ -24,7 +24,7 @@ RATING_SCORES: dict[str, int] = {
     "Underweight": -1,
     "Sell": -2,
 }
-"""Canonical five-tier ratings and their ordered position scores."""
+"""Canonical five-tier ordinal ratings; never treat these as signed exposure."""
 
 _RATING_ALIASES = {
     "buy": "Buy",
@@ -48,6 +48,17 @@ _ALLOCATION_KEYS = (
 )
 _NON_INDEPENDENT_GROUPS = frozenset({"review", "review_analyst", "audit", "auditor", "hindsight"})
 _RISK_INCREASING_ACTIONS_BLOCKED = frozenset({"WEAKEN", "INVALIDATE"})
+_RATING_RISK_MAGNITUDE = {
+    "Buy": 2,
+    "Overweight": 1,
+    "Hold": 0,
+    # Underweight means a smaller long target in the execution contract unless
+    # a negative signed target explicitly says otherwise.
+    "Underweight": 0,
+    # Sell with target 0 is an exit/avoid recommendation, not a short. A short
+    # requires a negative signed target exposure.
+    "Sell": 0,
+}
 
 
 @dataclass(frozen=True)
@@ -55,8 +66,8 @@ class StabilityThresholds:
     """Default thresholds for confidence and analysis quality (all 0..1).
 
     The defaults intentionally make risk increases harder than risk reductions.
-    A cross-zero change (for example Buy -> Sell) is a reversal, not merely a
-    reduction: it needs explicit invalidation evidence and independent support.
+    A true cross-zero exposure reversal needs explicit invalidation evidence and
+    independent support.
     """
 
     initial_confidence: float = 0.50
@@ -107,45 +118,11 @@ def evaluate_decision_stability(
 ) -> dict[str, Any]:
     """Evaluate a Portfolio Manager proposal without performing any I/O.
 
-    Parameters are deliberately mapping-oriented so callers can feed graph
-    state or JSON columns directly:
-
-    ``proposal``
-        Raw PM decision, including ``rating`` and preferably a target allocation
-        (``position_size_pct`` or one of the accepted target aliases).
-    ``previous_accepted_decision``
-        The last *controller accepted* decision, never the last raw PM proposal.
-    ``candidate_strategy_action``
-        ``KEEP``, ``STRENGTHEN``, ``WEAKEN``, ``INVALIDATE`` or ``REBUILD``.
-    ``run_quality`` / ``calibrated_confidence``
-        A 0..1 score, 0..100 score, quality label, or a mapping such as the
-        existing run-quality payload.  Missing calibrated confidence falls back
-        to the proposal's confidence score for backward-compatible shadow mode.
-    ``evidence_groups``
-        Named structured evidence.  A group counts for a reversal only when it
-        independently supports the proposal; duplicate ``source_family`` values
-        count once.  A list of strings is treated as explicit supporting groups.
-    ``triggered_invalidations``
-        Explicit invalidation events.  A reconciler's ``INVALIDATE`` label alone
-        does not substitute for a triggered event.
-    ``hard_risk``
-        A bool or a mapping (for example ``{"triggered": True,
-        "target_allocation_pct": 0}``).  A hard-risk path bypasses hysteresis,
-        forces a reduce-only decision, and can never increase/reverse exposure.
-
-    ``pm_proposal``, ``strategy_action``, ``quality``, ``invalidations``, and
-    ``hard_risk_exit`` are keyword aliases supplied for graph-state callers.
-
-    The result includes both ``pm_proposal`` and ``accepted_decision``.  Use
-    only ``accepted_decision`` for persistence/execution.  ``proposal_accepted``
-    is false for a rejected proposal and for a forced hard-risk override.  The
-    ``would_*`` fields mirror the same outcome for shadow-mode persistence;
-    they let the caller retain the current canonical PM decision while recording
-    what enforcement would have done.
+    Target allocation/exposure is signed: positive is long, zero is flat, and
+    negative is short. Rating labels remain descriptive tiers and never by
+    themselves imply a short position. This avoids treating an Underweight
+    reduction of a long as a long-to-short reversal.
     """
-
-    # The aliases make direct graph-state wiring obvious while retaining a
-    # compact positional API for focused callers and tests.
     if proposal is None:
         proposal = pm_proposal
     if candidate_strategy_action is None:
@@ -191,13 +168,15 @@ def evaluate_decision_stability(
     }
 
     if proposal_point.rating is None:
-        return _with_shadow_fields(_rejected_result(
-            base,
-            proposal_point,
-            reasons=["invalid_proposal_rating"],
-            required_confidence=None,
-            required_quality=None,
-        ))
+        return _with_shadow_fields(
+            _rejected_result(
+                base,
+                proposal_point,
+                reasons=["invalid_proposal_rating"],
+                required_confidence=None,
+                required_quality=None,
+            )
+        )
 
     if hard_risk_active:
         accepted = _forced_reduce_only_decision(
@@ -205,19 +184,21 @@ def evaluate_decision_stability(
             previous_point,
             hard_risk_payload,
         )
-        return _with_shadow_fields({
-            **base,
-            "status": "hard_risk_exit",
-            "proposal_accepted": False,
-            "accepted": False,
-            "accepted_decision": accepted,
-            "execution_action": "reduce_only",
-            "reduce_only": True,
-            "reason_codes": _hard_risk_reason_codes(hard_risk_payload),
-            "required_confidence": None,
-            "required_quality": None,
-            "transition": {**transition, "accepted_rating": accepted["rating"]},
-        })
+        return _with_shadow_fields(
+            {
+                **base,
+                "status": "hard_risk_exit",
+                "proposal_accepted": False,
+                "accepted": False,
+                "accepted_decision": accepted,
+                "execution_action": "reduce_only",
+                "reduce_only": True,
+                "reason_codes": _hard_risk_reason_codes(hard_risk_payload),
+                "required_confidence": None,
+                "required_quality": None,
+                "transition": {**transition, "accepted_rating": accepted["rating"]},
+            }
+        )
 
     required_confidence, required_quality = _required_thresholds(transition, config)
     reasons: list[str] = []
@@ -244,29 +225,33 @@ def evaluate_decision_stability(
         reasons.append("strategy_action_blocks_risk_increase")
 
     if reasons:
-        return _with_shadow_fields(_rejected_result(
-            base,
-            proposal_point,
-            reasons=_unique(reasons),
-            required_confidence=required_confidence,
-            required_quality=required_quality,
-        ))
+        return _with_shadow_fields(
+            _rejected_result(
+                base,
+                proposal_point,
+                reasons=_unique(reasons),
+                required_confidence=required_confidence,
+                required_quality=required_quality,
+            )
+        )
 
     accepted = _accepted_proposal(proposal_point, confidence_score)
     execution_action = "no_order" if accepted["rating"] == "Hold" else "order"
-    return _with_shadow_fields({
-        **base,
-        "status": "accepted",
-        "proposal_accepted": True,
-        "accepted": True,
-        "accepted_decision": accepted,
-        "execution_action": execution_action,
-        "reduce_only": False,
-        "reason_codes": ["proposal_meets_stability_requirements"],
-        "required_confidence": required_confidence,
-        "required_quality": required_quality,
-        "transition": {**transition, "accepted_rating": accepted["rating"]},
-    })
+    return _with_shadow_fields(
+        {
+            **base,
+            "status": "accepted",
+            "proposal_accepted": True,
+            "accepted": True,
+            "accepted_decision": accepted,
+            "execution_action": execution_action,
+            "reduce_only": False,
+            "reason_codes": ["proposal_meets_stability_requirements"],
+            "required_confidence": required_confidence,
+            "required_quality": required_quality,
+            "transition": {**transition, "accepted_rating": accepted["rating"]},
+        }
+    )
 
 
 class DecisionStabilityController:
@@ -292,7 +277,6 @@ class DecisionStabilityController:
         invalidations: Any = None,
         hard_risk_exit: Any = None,
     ) -> dict[str, Any]:
-        """Evaluate one proposal using this controller's immutable thresholds."""
         return evaluate_decision_stability(
             proposal,
             previous_accepted_decision,
@@ -328,6 +312,9 @@ def _unwrap_previous(value: Mapping[str, Any] | None) -> dict[str, Any]:
         return {}
     nested = value.get("accepted_decision")
     if isinstance(nested, Mapping):
+        nested_decision = nested.get("decision")
+        if isinstance(nested_decision, Mapping):
+            return deepcopy(dict(nested_decision))
         return deepcopy(dict(nested))
     return deepcopy(dict(value))
 
@@ -467,25 +454,26 @@ def _transition(previous: _DecisionPoint, proposal: _DecisionPoint, config: Stab
     assert previous.score is not None
     assert proposal.score is not None
     rating_distance = abs(proposal.score - previous.score)
-    rating_crosses_zero = previous.score * proposal.score < 0
     allocation_crosses_zero = (
         previous.allocation is not None
         and proposal.allocation is not None
         and previous.allocation * proposal.allocation < 0
     )
-    is_cross_zero = rating_crosses_zero or allocation_crosses_zero
 
     allocation_direction = _allocation_direction(previous.allocation, proposal.allocation, config)
-    if is_cross_zero:
+    if allocation_crosses_zero:
         movement = "cross_zero_reversal"
     elif allocation_direction:
         movement = allocation_direction
-    elif abs(proposal.score) > abs(previous.score):
-        movement = "risk_increase"
-    elif abs(proposal.score) < abs(previous.score):
-        movement = "risk_reduction"
     else:
-        movement = "same_state"
+        previous_risk = _rating_risk_magnitude(previous.rating)
+        proposal_risk = _rating_risk_magnitude(proposal.rating)
+        if proposal_risk > previous_risk:
+            movement = "risk_increase"
+        elif proposal_risk < previous_risk:
+            movement = "risk_reduction"
+        else:
+            movement = "same_state"
 
     return {
         "previous_rating": previous.rating,
@@ -497,13 +485,19 @@ def _transition(previous: _DecisionPoint, proposal: _DecisionPoint, config: Stab
         "movement": movement,
         "is_material": rating_distance >= 2
         or _allocation_is_material(previous.allocation, proposal.allocation, config),
-        "is_major_reversal": is_cross_zero,
-        "is_cross_zero_reversal": is_cross_zero,
+        "is_major_reversal": allocation_crosses_zero,
+        "is_cross_zero_reversal": allocation_crosses_zero,
     }
+
+
+def _rating_risk_magnitude(rating: str | None) -> int:
+    return _RATING_RISK_MAGNITUDE.get(rating or "", 0)
 
 
 def _allocation_direction(previous: float | None, proposal: float | None, config: StabilityThresholds) -> str | None:
     if previous is None or proposal is None or abs(previous - proposal) < 1e-12:
+        return None
+    if previous * proposal < 0:
         return None
     previous_magnitude = abs(previous)
     proposal_magnitude = abs(proposal)
@@ -554,6 +548,10 @@ def _has_triggered_invalidation(value: Any) -> bool:
                 return bool(value[key])
         if "items" in value:
             return _has_triggered_invalidation(value["items"])
+        # A structured TriggeredInvalidation is itself an event; it does not
+        # carry a redundant boolean flag.
+        if value.get("condition_id") and value.get("evidence_ids"):
+            return True
         return any(_has_triggered_invalidation(item) for item in value.values())
     if isinstance(value, Sequence):
         return any(_has_triggered_invalidation(item) for item in value)
@@ -704,7 +702,6 @@ def _rejected_result(
 
 
 def _hold_no_order(proposal: _DecisionPoint) -> dict[str, Any]:
-    """Return a safe tactical Hold without reissuing the old strategic order."""
     held = deepcopy(proposal.payload)
     held["rating"] = "Hold"
     for key in _ALLOCATION_KEYS:
@@ -728,8 +725,6 @@ def _forced_reduce_only_decision(
     target = _reduce_only_target(previous_target, requested_target)
     allocation_key = requested_key or proposal.allocation_key or previous.allocation_key or "position_size_pct"
     accepted[allocation_key] = target
-    # Keep the legacy order-engine key in sync when it was already present or is
-    # our selected canonical key.  A future adapter can use target_allocation_*.
     if allocation_key == "position_size_pct" or "position_size_pct" in accepted:
         accepted["position_size_pct"] = target
     accepted["suggested_capital"] = 0.0
@@ -737,9 +732,12 @@ def _forced_reduce_only_decision(
     accepted["reduce_only"] = True
     accepted["forced_by_hard_risk"] = True
 
+    previous_is_short = (
+        previous_target is not None and previous_target < 0
+    ) or (previous_target is None and previous.rating == "Sell")
     if target == 0:
-        accepted["rating"] = "Buy" if (previous.score or 0) < 0 else "Sell"
-    elif (previous.score or 0) < 0:
+        accepted["rating"] = "Buy" if previous_is_short else "Sell"
+    elif previous_is_short:
         accepted["rating"] = "Overweight"
     else:
         accepted["rating"] = "Underweight"
@@ -747,7 +745,6 @@ def _forced_reduce_only_decision(
 
 
 def _reduce_only_target(previous: float | None, requested: float | None) -> float:
-    """Bound a risk exit to closing/reducing the prior target, never reversing."""
     if previous is None or abs(previous) < 1e-12:
         return 0.0
     desired = 0.0 if requested is None else requested
@@ -761,13 +758,6 @@ def _unique(values: Sequence[str]) -> list[str]:
 
 
 def _with_shadow_fields(result: dict[str, Any]) -> dict[str, Any]:
-    """Add immutable-style ``would_*`` aliases for a non-enforcing shadow run.
-
-    The controller itself never writes state.  During shadow mode, an
-    orchestrator should keep its current PM decision as canonical and persist
-    these fields as the controller's counterfactual.  Once enforcement is
-    enabled, ``accepted_decision`` is already the same payload.
-    """
     result["would_status"] = result["status"]
     result["would_accept_proposal"] = result["proposal_accepted"]
     result["would_block_proposal"] = not result["proposal_accepted"]

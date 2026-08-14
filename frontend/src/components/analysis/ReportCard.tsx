@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react'
 import { FileText, Loader2 } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
+import { MarkdownReport } from '../report/MarkdownReport'
 
 interface ReportCardProps {
   label: string
@@ -57,9 +58,9 @@ export function ReportCard({ label, content, defaultOpen, isStreaming }: ReportC
             <img src={imageSrc} alt="Chart Analysis" className="w-full h-auto" />
           </div>
         )}
-        <pre className="text-xs text-slate-300 whitespace-pre-wrap max-h-80 overflow-y-auto font-mono leading-relaxed select-text">
-          {textContent}
-        </pre>
+        <div className="max-h-80 overflow-y-auto select-text custom-scrollbar pr-1">
+          <MarkdownReport content={textContent} className="!text-xs !leading-relaxed" />
+        </div>
       </div>
     </details>
   )

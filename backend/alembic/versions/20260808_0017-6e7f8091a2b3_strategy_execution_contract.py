@@ -57,6 +57,42 @@ def upgrade() -> None:
         sa.Column("learning_eligible", sa.Boolean(), nullable=False, server_default=sa.true()),
     )
     op.create_index("ix_analysis_results_learning_eligible", "analysis_results", ["learning_eligible"], unique=False)
+
+    # Existing rows pre-date the explicit replay/learning contract. Do not
+    # silently turn known historical or checkpoint-replay rows into training
+    # examples. Nested CASE keeps the date cast unreachable for malformed
+    # legacy trade_date strings.
+    op.execute(
+        sa.text(
+            """
+            UPDATE analysis_results
+            SET
+                analysis_mode = CASE
+                    WHEN LOWER(COALESCE(triggered_by, '')) IN ('time-travel', 'time_travel')
+                        THEN 'time_travel'
+                    WHEN trade_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                        THEN CASE
+                            WHEN trade_date::date < (created_at AT TIME ZONE 'UTC')::date
+                                THEN 'historical'
+                            ELSE 'live'
+                        END
+                    ELSE 'live'
+                END,
+                learning_eligible = CASE
+                    WHEN LOWER(COALESCE(triggered_by, '')) IN ('time-travel', 'time_travel')
+                        THEN FALSE
+                    WHEN trade_date ~ '^[0-9]{4}-[0-9]{2}-[0-9]{2}$'
+                        THEN CASE
+                            WHEN trade_date::date < (created_at AT TIME ZONE 'UTC')::date
+                                THEN FALSE
+                            ELSE TRUE
+                        END
+                    ELSE TRUE
+                END
+            """
+        )
+    )
+
     op.alter_column("analysis_results", "analysis_mode", server_default=None)
     op.alter_column("analysis_results", "learning_eligible", server_default=None)
 

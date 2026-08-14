@@ -44,6 +44,15 @@ class _UnsupportedStructuredLLM:
         self.calls += 1
         raise RuntimeError("This model does not support function calling.")
 
+class _MalformedStructuredLLM:
+    def __init__(self):
+        self.calls = 0
+
+    async def ainvoke(self, _prompt):
+        self.calls += 1
+        return _Response("not-json")
+
+
 class _FreeTextThenDegradedLLM:
     def __init__(self):
         self.calls = 0
@@ -105,6 +114,23 @@ async def test_non_degraded_structured_error_still_uses_freetext_fallback():
     assert result == _Decision(rating="Hold")
     assert structured_llm.calls == 1
     assert plain_llm.calls == 1
+
+async def test_malformed_structured_response_never_escapes_as_raw_provider_object():
+    structured_llm = _MalformedStructuredLLM()
+    plain_llm = _SuccessfulFallbackLLM()
+
+    result = await ainvoke_structured_or_freetext(
+        structured_llm,
+        plain_llm,
+        "Make a decision",
+        "Portfolio Manager",
+        schema=_Decision,
+    )
+
+    assert result == _Decision(rating="Hold")
+    assert structured_llm.calls == 1
+    assert plain_llm.calls == 1
+
 
 async def test_configured_fallback_is_used_for_a_degraded_primary():
     primary = _DegradedLLM()
