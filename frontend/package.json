@@ -13,9 +13,17 @@
     "preview": "vite preview",
     "generate:openapi": "cd ../backend && uv run --frozen python scripts/export-openapi.py ../frontend/openapi.json",
     "generate:client": "orval --config ./orval.config.ts",
-    "generate:api": "npm run generate:openapi && npm run generate:client"
+    "generate:api": "npm run generate:openapi && npm run generate:client",
+    "api:check": "npm run generate:api && git diff --exit-code -- openapi.json src/api/generated"
   },
   "dependencies": {
+    "@emotion/react": "^11.14.0",
+    "@emotion/styled": "^11.14.0",
+    "@mui/material": "^7.3.11",
+    "@mui/x-data-grid": "^9.10.1",
+    "@rjsf/core": "^6.7.1",
+    "@rjsf/utils": "^6.7.1",
+    "@rjsf/validator-ajv8": "^6.7.0",
     "@tailwindcss/vite": "^4.3.0",
     "@tanstack/react-query": "^5.101.4",
     "axios": "^1.16.1",
