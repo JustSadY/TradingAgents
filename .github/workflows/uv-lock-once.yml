@@ -1,3 +1,4 @@
+# Final one-shot validation; this workflow deletes itself on success.
 name: Finish architecture once
 
 on:
