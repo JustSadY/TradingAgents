@@ -1,0 +1,1 @@
+Trigger final backend hardening validation with the latest transaction-lifecycle RLS fixes.
