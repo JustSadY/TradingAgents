@@ -26,6 +26,7 @@ else
 fi
 
 psql_admin() { runuser -u postgres -- psql -d template1 -v ON_ERROR_STOP=1 "$@"; }
+runuser -u postgres -- psql -d "$DB_NAME" -v ON_ERROR_STOP=1 -c "CREATE EXTENSION IF NOT EXISTS vector"
 psql_admin -v runtime="$DB_USER" -v runtime_pw="$DB_PASS" -v migrator="$MIGRATOR_USER" -v migrator_pw="$MIGRATOR_PASS" <<'SQL'
 SELECT format('CREATE ROLE %I LOGIN', :'migrator')
 WHERE NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = :'migrator');

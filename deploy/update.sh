@@ -111,7 +111,7 @@ rollback() {
         fi
     fi
     if [ "$DB_MIGRATED" -eq 1 ] && [ -n "$OLD_DB_REVISION" ]; then
-        asuser bash -c "cd '$WORKTREE' && '$NEW_VENV/bin/alembic' -c backend/alembic.ini downgrade '$OLD_DB_REVISION'" >>"$LOG" 2>&1 || true
+        asuser env "MIGRATION_DATABASE_URL=$MIGRATION_DATABASE_URL" bash -c "cd '$WORKTREE' && '$NEW_VENV/bin/alembic' -c backend/alembic.ini downgrade '$OLD_DB_REVISION'" >>"$LOG" 2>&1 || true
     fi
     if [ "$WORKER_STOPPED" -eq 1 ]; then
         systemctl start "$WORKER_SERVICE_NAME" >>"$LOG" 2>&1 || true
@@ -159,7 +159,7 @@ OLD_DB_REVISION="$(asuser bash -c "cd '$PROJECT_ROOT' && '$VENV/bin/alembic' -c 
 
 # PostgreSQL DDL migrations are transactional. Migrations in this repository
 # must remain backward-compatible with the previous release (expand/contract).
-if ! asuser bash -c "cd '$WORKTREE' && '$NEW_VENV/bin/alembic' -c backend/alembic.ini upgrade head" >>"$LOG" 2>&1; then
+if ! asuser env "MIGRATION_DATABASE_URL=$MIGRATION_DATABASE_URL" bash -c "cd '$WORKTREE' && '$NEW_VENV/bin/alembic' -c backend/alembic.ini upgrade head" >>"$LOG" 2>&1; then
     rollback "Database migration failed"
 fi
 DB_MIGRATED=1

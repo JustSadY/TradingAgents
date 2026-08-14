@@ -16,7 +16,16 @@ depends_on: str | Sequence[str] | None = None
 
 
 def upgrade() -> None:
-    op.execute("CREATE EXTENSION IF NOT EXISTS vector")
+    op.execute(
+        """
+        DO $$
+        BEGIN
+            IF NOT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector') THEN
+                RAISE EXCEPTION 'pgvector extension is not installed; provision it before running Alembic';
+            END IF;
+        END $$;
+        """
+    )
     op.execute(
         """
         CREATE TABLE IF NOT EXISTS memory_vectors (

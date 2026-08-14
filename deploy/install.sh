@@ -223,6 +223,41 @@ else
 
     for _ in $(seq 1 10); do runuser -u postgres -- psql -d template1 -tAc 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
 
+    # pgvector is a database-server extension. Prefer a distro package; when it is
+    # unavailable, build the pinned upstream release against the running server.
+    if ! runuser -u postgres -- psql -d template1 -tAc "SELECT 1 FROM pg_available_extensions WHERE name='vector'" | grep -q 1; then
+        info "Installing pgvector 0.8.6 for local PostgreSQL..."
+        PG_MAJOR="$(runuser -u postgres -- psql -d template1 -tAc 'SHOW server_version' | sed 's/\..*//')"
+        if [ "$PM" = apt ]; then
+            pm_install "postgresql-${PG_MAJOR}-pgvector" >/dev/null 2>&1 || true
+            if ! runuser -u postgres -- psql -d template1 -tAc "SELECT 1 FROM pg_available_extensions WHERE name='vector'" | grep -q 1; then
+                pm_install "postgresql-server-dev-${PG_MAJOR}"
+            fi
+        else
+            pm_install "pgvector_${PG_MAJOR}" >/dev/null 2>&1 || pm_install pgvector >/dev/null 2>&1 || true
+            if ! runuser -u postgres -- psql -d template1 -tAc "SELECT 1 FROM pg_available_extensions WHERE name='vector'" | grep -q 1; then
+                pm_install "postgresql${PG_MAJOR}-devel" >/dev/null 2>&1 || pm_install postgresql-devel
+            fi
+        fi
+
+        if ! runuser -u postgres -- psql -d template1 -tAc "SELECT 1 FROM pg_available_extensions WHERE name='vector'" | grep -q 1; then
+            PG_CONFIG_BIN="/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config"
+            [ -x "$PG_CONFIG_BIN" ] || PG_CONFIG_BIN="$(command -v pg_config || true)"
+            [ -n "$PG_CONFIG_BIN" ] && [ -x "$PG_CONFIG_BIN" ] || die "pg_config not found after installing PostgreSQL development headers."
+            CONFIG_MAJOR="$($PG_CONFIG_BIN --version | grep -oE '[0-9]+' | head -1)"
+            [ "$CONFIG_MAJOR" = "$PG_MAJOR" ] || die "pg_config major $CONFIG_MAJOR does not match running PostgreSQL $PG_MAJOR."
+            rm -rf /tmp/tradingagents-pgvector
+            git clone --quiet --depth 1 --branch v0.8.6 https://github.com/pgvector/pgvector.git /tmp/tradingagents-pgvector
+            make -C /tmp/tradingagents-pgvector PG_CONFIG="$PG_CONFIG_BIN" >/dev/null
+            make -C /tmp/tradingagents-pgvector PG_CONFIG="$PG_CONFIG_BIN" install >/dev/null
+            rm -rf /tmp/tradingagents-pgvector
+        fi
+
+        runuser -u postgres -- psql -d template1 -tAc "SELECT 1 FROM pg_available_extensions WHERE name='vector'" | grep -q 1 \
+            || die "pgvector server extension installation failed."
+        ok "pgvector server extension installed."
+    fi
+
     psql_admin() { runuser -u postgres -- psql -d template1 -v ON_ERROR_STOP=1 "$@"; }
     if psql_admin -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1; then
         psql_admin -c "ALTER ROLE \"$DB_USER\" LOGIN PASSWORD '$DB_PASS';"
@@ -242,8 +277,7 @@ if [ "$SKIP_DB" = 1 ]; then
     MIGRATION_DATABASE_URL="$MIGRATION_DATABASE_URL" "$PYTHON" - "$MIGRATION_ENV_FILE" <<'PY'
 import os, shlex, sys
 from pathlib import Path
-Path(sys.argv[1]).write_text("MIGRATION_DATABASE_URL=" + shlex.quote(os.environ["MIGRATION_DATABASE_URL"]) + "
-", encoding="utf-8")
+Path(sys.argv[1]).write_text("MIGRATION_DATABASE_URL=" + shlex.quote(os.environ["MIGRATION_DATABASE_URL"]) + "\n", encoding="utf-8")
 PY
     chmod 600 "$MIGRATION_ENV_FILE"
 else
