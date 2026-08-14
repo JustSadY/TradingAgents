@@ -35,6 +35,10 @@ function schemaDescription(props: WidgetProps): ReactNode {
 }
 
 function TextWidget(props: WidgetProps) {
+  if (props.schema.type === 'number' || props.schema.type === 'integer') {
+    return <NumberWidget {...props} />
+  }
+
   return (
     <AppTextField
       id={props.id}
@@ -161,7 +165,7 @@ function AppArrayFieldTemplate(props: ArrayFieldTemplateProps) {
         <Typography variant="caption" color="text.secondary">{props.schema.description}</Typography>
       ) : null}
       {props.items.map((item, index) => (
-        <Box key={index} sx={{ minWidth: 0 }}>{item.children}</Box>
+        <Box key={index} sx={{ minWidth: 0 }}>{item}</Box>
       ))}
       {props.rawErrors?.length ? <FormHelperText error>{props.rawErrors.join(', ')}</FormHelperText> : null}
       {props.canAdd && !props.disabled && !props.readonly ? (
@@ -340,7 +344,7 @@ export interface LegacySchemaField {
   label?: string
   description_key?: string
   description?: string
-  default?: unknown
+  default?: RJSFSchema['default']
   required?: boolean
   min?: number
   max?: number
