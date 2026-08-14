@@ -22,11 +22,10 @@ import {
   Switch,
   Tab,
   Tabs,
-  TextField,
-  type TextFieldProps,
   Tooltip,
   type TooltipProps,
 } from '@mui/material'
+import TextField, { type OutlinedTextFieldProps, type TextFieldProps } from '@mui/material/TextField'
 import { Eye, EyeOff } from 'lucide-react'
 
 export function AppButton(props: ButtonProps) {
@@ -204,11 +203,12 @@ export function AppSnackbar({ open, message, title, severity = 'info', autoHideD
   )
 }
 
-export function SecretField(props: Omit<TextFieldProps, 'type'>) {
+export function SecretField(props: Omit<OutlinedTextFieldProps, 'type' | 'variant'>) {
   const [visible, setVisible] = useState(false)
   return (
     <AppTextField
       {...props}
+      variant="outlined"
       type={visible ? 'text' : 'password'}
       slotProps={{
         ...props.slotProps,
