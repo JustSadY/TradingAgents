@@ -1,5 +1,6 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
 import React, { lazy, Suspense } from 'react'
+import { ThemeProvider } from '@mui/material/styles'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PermissionsProvider } from './contexts/PermissionsContext'
 import RequirePage from './components/RequirePage'
@@ -32,6 +33,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { LanguageProvider } from './contexts/LanguageContext'
 import { CurrencyProvider } from './contexts/CurrencyContext'
 import { queryClient } from './api/queryClient'
+import { appTheme } from './theme/appTheme'
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -67,21 +69,10 @@ function AppRoutes() {
 
   return (
     <Routes>
-      {/* 1. Login Route */}
-      <Route 
-        path="/login" 
-        element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} 
-      />
+      <Route path="/login" element={isAuthenticated ? <Navigate to="/dashboard" replace /> : <Login />} />
 
-      {/* 2. Protected Routes Container */}
-      <Route 
-        path="/" 
-        element={isAuthenticated ? <Layout /> : <Navigate to="/login" replace />}
-      >
-        {/* Redirect base path to dashboard */}
+      <Route path="/" element={isAuthenticated ? <Layout /> : <Navigate to="/login" replace />}>
         <Route index element={<Navigate to="/dashboard" replace />} />
-        
-        {/* All Main Pages — guarded by per-page permission */}
         <Route path="dashboard" element={<RequirePage page="dashboard"><Dashboard /></RequirePage>} />
         <Route path="analysis" element={<RequirePage page="analysis"><Analysis /></RequirePage>} />
         <Route path="chart" element={<RequirePage page="chart"><Chart /></RequirePage>} />
@@ -97,25 +88,14 @@ function AppRoutes() {
         <Route path="ab-testing" element={<RequirePage page="ab-testing"><ABTesting /></RequirePage>} />
         <Route path="logs" element={<RequirePage page="logs"><Logs /></RequirePage>} />
         <Route path="profile" element={<RequirePage page="profile"><Profile /></RequirePage>} />
-        
-        {/* Admin Route with explicit check */}
-        <Route 
-          path="admin" 
-          element={isAdmin ? <Admin /> : <Navigate to="/dashboard" replace />} 
-        />
-
+        <Route path="admin" element={isAdmin ? <Admin /> : <Navigate to="/dashboard" replace />} />
         <Route path="screener" element={<RequirePage page="screener"><Screener /></RequirePage>} />
         <Route path="sector-rotation" element={<RequirePage page="sector-rotation"><SectorRotation /></RequirePage>} />
         <Route path="earnings" element={<RequirePage page="earnings"><EarningsCalendar /></RequirePage>} />
-
-        {/* Catch-all within the layout */}
         <Route path="*" element={<Navigate to="/dashboard" replace />} />
       </Route>
 
-      {/* Public shared report — no auth */}
       <Route path="/share/:token" element={<Suspense fallback={null}><SharedReport /></Suspense>} />
-
-      {/* 3. Global Fallback */}
       <Route path="*" element={<Navigate to="/dashboard" replace />} />
     </Routes>
   )
@@ -124,19 +104,21 @@ function AppRoutes() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <PermissionsProvider>
-            <LanguageProvider>
-              <CurrencyProvider>
-                <BrowserRouter>
-                  <AppRoutes />
-                </BrowserRouter>
-              </CurrencyProvider>
-            </LanguageProvider>
-          </PermissionsProvider>
-        </AuthProvider>
-      </QueryClientProvider>
+      <ThemeProvider theme={appTheme}>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <PermissionsProvider>
+              <LanguageProvider>
+                <CurrencyProvider>
+                  <BrowserRouter>
+                    <AppRoutes />
+                  </BrowserRouter>
+                </CurrencyProvider>
+              </LanguageProvider>
+            </PermissionsProvider>
+          </AuthProvider>
+        </QueryClientProvider>
+      </ThemeProvider>
     </ErrorBoundary>
   )
 }
