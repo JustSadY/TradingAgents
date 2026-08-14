@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -9,7 +10,7 @@ import AppDataGrid from '../AppDataGrid'
 import AppSchemaForm, { legacyFieldsToSchema } from '../AppSchemaForm'
 import { AppConfirmDialog } from '../AppPrimitives'
 
-function withTheme(node: React.ReactNode) {
+function withTheme(node: ReactNode) {
   return render(<ThemeProvider theme={appTheme}>{node}</ThemeProvider>)
 }
 
