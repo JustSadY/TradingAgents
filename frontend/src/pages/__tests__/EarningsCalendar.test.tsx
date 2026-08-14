@@ -132,7 +132,7 @@ describe('EarningsCalendar', () => {
     const user = userEvent.setup()
     renderPage()
 
-    const input = screen.getByPlaceholderText('AAPL, MSFT')
+    const input = screen.getByRole('textbox', { name: 'Tickers' })
     await user.clear(input)
     await user.type(input, 'msft')
     await user.click(screen.getByRole('button', { name: 'Search' }))
