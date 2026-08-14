@@ -1,3 +1,5 @@
+from importlib.util import find_spec
+
 from .alpaca import AlpacaTrader
 from .base import BaseTraderInterface
 from .simulation import SimulationTrader
@@ -7,6 +9,15 @@ _REGISTRY: dict[str, type[BaseTraderInterface]] = {
     "alpaca": AlpacaTrader,
 }
 
+
+def _alpaca_class() -> type[BaseTraderInterface]:
+    if find_spec("alpaca") is not None:
+        from .alpaca_py import AlpacaPyTrader
+
+        return AlpacaPyTrader
+    return AlpacaTrader
+
+
 def get_trader(
     mode: str,
     broker: str,
@@ -15,11 +26,13 @@ def get_trader(
     db=None,
 ) -> BaseTraderInterface:
     key = "alpaca" if broker == "alpaca" else ("simulation" if mode == "simulation" else broker)
+    if key == "alpaca":
+        cls = _alpaca_class()
+        return cls(portfolio_id=portfolio_id, initial_capital=initial_capital, db=db, mode=mode)
+
     cls = _REGISTRY.get(key)
     if cls is None:
         raise ValueError(
             f"No trader implementation for mode={mode!r} broker={broker!r}. Available: {list(_REGISTRY.keys())}"
         )
-    if cls == AlpacaTrader:
-        return cls(portfolio_id=portfolio_id, initial_capital=initial_capital, db=db, mode=mode)
     return cls(portfolio_id=portfolio_id, initial_capital=initial_capital, db=db)
