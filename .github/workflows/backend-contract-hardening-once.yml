@@ -9,7 +9,7 @@ permissions:
   contents: write
 
 jobs:
-  validate-and-publish:
+  validate-exact-candidate:
     runs-on: ubuntu-latest
     services:
       postgres:
@@ -28,7 +28,8 @@ jobs:
         with:
           ref: tmp/backend-contract-hardening
           fetch-depth: 0
-      - name: Apply backend-only B1-B4 patches
+
+      - name: Materialize exact B1-B4 backend candidate
         run: |
           set -euo pipefail
           python .github/apply_b1_rls.py
@@ -38,29 +39,35 @@ jobs:
           python .github/fix_postgres_marker.py
           python .github/fix_hardening_compat.py
           python .github/fix_postgres_loop_scope.py
-          if ! git diff --quiet -- frontend; then
-            echo "Frontend files changed by backend hardening; refusing."
-            git diff --name-only -- frontend
-            exit 1
-          fi
-          git diff --check
-      - name: Run backend acceptance suite
+          exact="$(git rev-parse HEAD)"
+          echo "EXACT_ACCEPTANCE_SHA=$exact" | tee -a "$GITHUB_ENV"
+          test -z "$(git status --porcelain --untracked-files=no)"
+          git diff --check HEAD^..HEAD
+          git diff --quiet 54ab148cc4b0b6609ddaf0e9884391ece49e59df HEAD -- frontend
+
+      - name: Run exact-commit backend acceptance suite
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXACT_ACCEPTANCE_SHA"
+          test -z "$(git status --porcelain --untracked-files=no)"
           cd backend
           python -m pip install --upgrade uv
           uv lock --check
           uv sync --frozen
-          uv run ruff check . --fix
           uv run ruff check .
           uv run pyright
           uv run pytest -q
           uv run python scripts/export-openapi.py /tmp/openapi-a.json
           uv run python scripts/export-openapi.py /tmp/openapi-b.json
           cmp /tmp/openapi-a.json /tmp/openapi-b.json
-      - name: Provision PostgreSQL migrator and non-owner runtime roles
+          cd ..
+          test "$(git rev-parse HEAD)" = "$EXACT_ACCEPTANCE_SHA"
+          test -z "$(git status --porcelain --untracked-files=no)"
+
+      - name: Provision clean PostgreSQL migrator and runtime roles
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXACT_ACCEPTANCE_SHA"
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client
           export PGPASSWORD=postgres
@@ -83,7 +90,9 @@ jobs:
           export MIGRATION_DATABASE_URL='postgresql+asyncpg://migrator:migrator-test@127.0.0.1:5432/tradingagents'
           uv run alembic -c alembic.ini upgrade head
           test "$(uv run alembic -c alembic.ini heads | grep -c '(head)')" -eq 1
-      - name: Run PostgreSQL RLS integration tests
+          test "$(uv run alembic -c alembic.ini heads | awk '{print $1}')" = '8a90b2c3d4e5'
+
+      - name: Run PostgreSQL RLS 8-of-8 acceptance
         env:
           TEST_POSTGRES_RLS_URL: postgresql+asyncpg://app_runtime:runtime-test@127.0.0.1:5432/tradingagents
           TEST_POSTGRES_MIGRATION_URL: postgresql+asyncpg://migrator:migrator-test@127.0.0.1:5432/tradingagents
@@ -94,23 +103,15 @@ jobs:
           ANALYSIS_QUEUE_MODE: inline
         run: |
           set -euo pipefail
+          test "$(git rev-parse HEAD)" = "$EXACT_ACCEPTANCE_SHA"
           cd backend
           uv run pytest -q -m postgres_rls postgres_tests
-      - name: Publish one clean integration commit
+
+      - name: Verify candidate remained exact and backend-only
         run: |
           set -euo pipefail
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git fetch origin integration/memory-maintenance-base
-          expected='95059fef4bf05f6d2ba5bdb989048d1f5b244070'
-          actual="$(git rev-parse origin/integration/memory-maintenance-base)"
-          test "$actual" = "$expected" || { echo "Integration branch moved: $actual"; exit 1; }
-          git rm .github/apply_b1_rls.py .github/apply_b2_b3_meta_schema.py .github/apply_b4_openapi.py .github/apply_postgres_rls_tests.py .github/fix_postgres_marker.py .github/fix_hardening_compat.py .github/fix_postgres_loop_scope.py .github/workflows/backend-contract-hardening-once.yml
-          git add backend
-          git reset --soft "$expected"
-          git add -A
-          if git diff --cached --name-only | grep '^frontend/'; then
-            echo "Frontend would be included; refusing"; exit 1
-          fi
-          git commit -m "Harden RLS and backend API schema contracts"
-          git push origin HEAD:integration/memory-maintenance-base
+          test "$(git rev-parse HEAD)" = "$EXACT_ACCEPTANCE_SHA"
+          test -z "$(git status --porcelain --untracked-files=no)"
+          git diff --quiet 54ab148cc4b0b6609ddaf0e9884391ece49e59df HEAD -- frontend
+          grep -q 'down_revision: str | None = "7f8091a2b3c4"' backend/alembic/versions/20260814_0019-8a90b2c3d4e5_contextual_rls.py
+          echo "VALIDATED_EXACT_ACCEPTANCE_SHA=$EXACT_ACCEPTANCE_SHA"
