@@ -23,3 +23,11 @@ Path("backend/tests/test_core/test_llm_catalog.py").write_text(
     '''from backend.core.catalog import LANGUAGES, LLM_CATALOG\n\n\ndef test_catalog_exposes_one_language_contract_for_all_litellm_models():\n    expected = {item["value"] for item in LANGUAGES}\n    assert expected\n\n    for provider in LLM_CATALOG.values():\n        for model in provider["models"]:\n            assert set(model["supported_output_languages"]) == expected\n''',
     encoding="utf-8",
 )
+
+install = Path("deploy/install.sh")
+install_text = install.read_text(encoding="utf-8")
+install_text = install_text.replace(
+    "#   2. Python virtual environment + backend/requirements.txt",
+    "#   2. Python virtual environment + backend/pyproject.toml + backend/uv.lock",
+)
+install.write_text(install_text, encoding="utf-8")
