@@ -1,8 +1,17 @@
 import type { ReactNode } from 'react'
-import { Box, FormHelperText, Typography } from '@mui/material'
+import { Box, FormHelperText, IconButton, Typography } from '@mui/material'
+import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from 'lucide-react'
 import Form from '@rjsf/core'
 import validator from '@rjsf/validator-ajv8'
-import type { ObjectFieldTemplateProps, RJSFSchema, UiSchema, WidgetProps } from '@rjsf/utils'
+import type {
+  ArrayFieldTemplateProps,
+  FieldTemplateProps,
+  IconButtonProps as RjsfIconButtonProps,
+  ObjectFieldTemplateProps,
+  RJSFSchema,
+  UiSchema,
+  WidgetProps,
+} from '@rjsf/utils'
 import { AppButton, AppSelect, AppSwitch, AppTextField, SecretField } from './AppPrimitives'
 
 export interface AppSchemaFormProps {
@@ -21,6 +30,10 @@ function helperText(rawErrors?: string[], help?: ReactNode) {
   return help
 }
 
+function schemaDescription(props: WidgetProps): ReactNode {
+  return typeof props.schema.description === 'string' ? props.schema.description : undefined
+}
+
 function TextWidget(props: WidgetProps) {
   return (
     <AppTextField
@@ -32,7 +45,7 @@ function TextWidget(props: WidgetProps) {
       slotProps={{ input: { readOnly: props.readonly } }}
       placeholder={props.placeholder}
       error={Boolean(props.rawErrors?.length)}
-      helperText={helperText(props.rawErrors)}
+      helperText={helperText(props.rawErrors, schemaDescription(props))}
       onChange={event => props.onChange(event.target.value)}
       onBlur={() => props.onBlur(props.id, props.value)}
       onFocus={() => props.onFocus(props.id, props.value)}
@@ -51,7 +64,7 @@ function PasswordWidget(props: WidgetProps) {
       slotProps={{ input: { readOnly: props.readonly } }}
       placeholder={props.placeholder}
       error={Boolean(props.rawErrors?.length)}
-      helperText={helperText(props.rawErrors)}
+      helperText={helperText(props.rawErrors, schemaDescription(props))}
       onChange={event => props.onChange(event.target.value)}
     />
   )
@@ -70,7 +83,7 @@ function TextareaWidget(props: WidgetProps) {
       minRows={3}
       placeholder={props.placeholder}
       error={Boolean(props.rawErrors?.length)}
-      helperText={helperText(props.rawErrors)}
+      helperText={helperText(props.rawErrors, schemaDescription(props))}
       onChange={event => props.onChange(event.target.value)}
     />
   )
@@ -93,7 +106,7 @@ function NumberWidget(props: WidgetProps) {
         htmlInput: { min: minimum, max: maximum, step: multipleOf ?? (props.schema.type === 'integer' ? 1 : 'any') },
       }}
       error={Boolean(props.rawErrors?.length)}
-      helperText={helperText(props.rawErrors)}
+      helperText={helperText(props.rawErrors, schemaDescription(props))}
       onChange={event => {
         const next = event.target.value
         props.onChange(next === '' ? undefined : props.schema.type === 'integer' ? Number.parseInt(next, 10) : Number.parseFloat(next))
@@ -103,6 +116,7 @@ function NumberWidget(props: WidgetProps) {
 }
 
 function CheckboxWidget(props: WidgetProps) {
+  const help = helperText(props.rawErrors, schemaDescription(props))
   return (
     <Box>
       <AppSwitch
@@ -111,13 +125,14 @@ function CheckboxWidget(props: WidgetProps) {
         label={props.label}
         onChange={props.onChange}
       />
-      {props.rawErrors?.length ? <FormHelperText error>{props.rawErrors.join(', ')}</FormHelperText> : null}
+      {help ? <FormHelperText error={Boolean(props.rawErrors?.length)}>{help}</FormHelperText> : null}
     </Box>
   )
 }
 
 function SelectWidget(props: WidgetProps) {
   const enumOptions = props.options.enumOptions ?? []
+  const help = helperText(props.rawErrors, schemaDescription(props))
   return (
     <Box>
       <AppSelect
@@ -128,9 +143,84 @@ function SelectWidget(props: WidgetProps) {
         options={enumOptions.map(option => ({ value: option.value as string | number, label: option.label }))}
         onChange={props.onChange}
       />
-      {props.rawErrors?.length ? <FormHelperText error>{props.rawErrors.join(', ')}</FormHelperText> : null}
+      {help ? <FormHelperText error={Boolean(props.rawErrors?.length)}>{help}</FormHelperText> : null}
     </Box>
   )
+}
+
+function AppFieldTemplate(props: FieldTemplateProps) {
+  if (props.hidden) return <div style={{ display: 'none' }}>{props.children}</div>
+  return <Box sx={{ minWidth: 0 }}>{props.children}</Box>
+}
+
+function AppArrayFieldTemplate(props: ArrayFieldTemplateProps) {
+  return (
+    <Box sx={{ display: 'grid', gap: 1 }}>
+      {props.title ? <Typography variant="caption" fontWeight={700}>{props.title}{props.required ? ' *' : ''}</Typography> : null}
+      {typeof props.schema.description === 'string' ? (
+        <Typography variant="caption" color="text.secondary">{props.schema.description}</Typography>
+      ) : null}
+      {props.items.map((item, index) => (
+        <Box key={index} sx={{ minWidth: 0 }}>{item.children}</Box>
+      ))}
+      {props.rawErrors?.length ? <FormHelperText error>{props.rawErrors.join(', ')}</FormHelperText> : null}
+      {props.canAdd && !props.disabled && !props.readonly ? (
+        <AppButton type="button" variant="outlined" startIcon={<Plus size={14} />} onClick={props.onAddClick} sx={{ justifySelf: 'start' }}>
+          Add item
+        </AppButton>
+      ) : null}
+    </Box>
+  )
+}
+
+function RjsfActionButton({ props, label, icon }: { props: RjsfIconButtonProps; label: string; icon: ReactNode }) {
+  return (
+    <IconButton
+      id={props.id}
+      className={props.className}
+      type="button"
+      size="small"
+      disabled={props.disabled}
+      onClick={props.onClick}
+      title={typeof props.title === 'string' ? props.title : label}
+      aria-label={typeof props.title === 'string' ? props.title : label}
+    >
+      {icon}
+    </IconButton>
+  )
+}
+
+function AddButton(props: RjsfIconButtonProps) {
+  return (
+    <AppButton
+      id={props.id}
+      className={props.className}
+      type="button"
+      size="small"
+      variant="outlined"
+      disabled={props.disabled}
+      onClick={props.onClick}
+      startIcon={<Plus size={13} />}
+    >
+      {typeof props.title === 'string' ? props.title : 'Add'}
+    </AppButton>
+  )
+}
+
+function RemoveButton(props: RjsfIconButtonProps) {
+  return <RjsfActionButton props={props} label="Remove" icon={<Trash2 size={14} />} />
+}
+
+function MoveUpButton(props: RjsfIconButtonProps) {
+  return <RjsfActionButton props={props} label="Move up" icon={<ArrowUp size={14} />} />
+}
+
+function MoveDownButton(props: RjsfIconButtonProps) {
+  return <RjsfActionButton props={props} label="Move down" icon={<ArrowDown size={14} />} />
+}
+
+function CopyButton(props: RjsfIconButtonProps) {
+  return <RjsfActionButton props={props} label="Copy" icon={<Copy size={14} />} />
 }
 
 function AppObjectFieldTemplate(props: ObjectFieldTemplateProps) {
@@ -149,7 +239,9 @@ function AppObjectFieldTemplate(props: ObjectFieldTemplateProps) {
   return (
     <Box sx={{ display: 'grid', gap: 2 }}>
       {props.title ? <Typography variant="subtitle2" fontWeight={800}>{props.title}</Typography> : null}
-      {props.description}
+      {typeof props.description === 'string' && props.description ? (
+        <Typography variant="caption" color="text.secondary">{props.description}</Typography>
+      ) : null}
       {[...sections.entries()].map(([section, properties]) => (
         <Box key={section} sx={{ display: 'grid', gap: 1.5 }}>
           {sections.size > 1 ? <Typography variant="overline" color="primary.light">{section}</Typography> : null}
@@ -190,7 +282,18 @@ const widgets = {
   SelectWidget,
 }
 
-const templates = { ObjectFieldTemplate: AppObjectFieldTemplate }
+const templates = {
+  FieldTemplate: AppFieldTemplate,
+  ObjectFieldTemplate: AppObjectFieldTemplate,
+  ArrayFieldTemplate: AppArrayFieldTemplate,
+  ButtonTemplates: {
+    AddButton,
+    RemoveButton,
+    MoveUpButton,
+    MoveDownButton,
+    CopyButton,
+  },
+}
 
 export function AppSchemaForm({
   schema,
@@ -203,7 +306,7 @@ export function AppSchemaForm({
   onSubmit,
 }: AppSchemaFormProps) {
   return (
-    <Box className="app-schema-form" sx={{ '& .field-description': { color: 'text.secondary' }, '& fieldset': { border: 0, p: 0, m: 0 } }}>
+    <Box className="app-schema-form" sx={{ display: 'grid', gap: 1.5 }}>
       <Form
         schema={schema}
         uiSchema={uiSchema}
