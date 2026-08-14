@@ -180,6 +180,9 @@ async def create_all_tables():
 
     try:
         await _run_alembic("upgrade", "head")
+        from backend.core.rls import verify_runtime_rls_role
+
+        await verify_runtime_rls_role(engine)
     except Exception:
-        _logger.exception("Alembic upgrade failed; refusing to start with an unknown schema state")
+        _logger.exception("Alembic upgrade or RLS runtime-role validation failed; refusing unknown database security state")
         raise

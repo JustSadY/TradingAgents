@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import asyncio
 import json
 import logging
 import re
@@ -14,6 +13,7 @@ from backend.trading_agents.llm_clients.base_client import is_provider_function_
 logger = logging.getLogger(__name__)
 T = TypeVar("T", bound=BaseModel)
 
+
 def bind_structured(llm: Any, schema: type[T], agent_name: str) -> Any | None:
     try:
         return llm.with_structured_output(schema)
@@ -24,6 +24,7 @@ def bind_structured(llm: Any, schema: type[T], agent_name: str) -> Any | None:
             exc,
         )
         return None
+
 
 def extract_json_block(text: str) -> str | None:
     """Extract a JSON substring from text, supporting markdown blocks or raw bounds."""
@@ -43,13 +44,16 @@ def extract_json_block(text: str) -> str | None:
 
     return None
 
+
 def validate_schema(schema: type[T], parsed_dict: dict) -> T:
     """Validate structured output with the project's Pydantic v2 contract."""
     return schema.model_validate(parsed_dict)
 
+
 def get_json_schema(schema: type[T]) -> str:
     """Export the Pydantic v2 JSON schema used for self-correction prompts."""
     return json.dumps(schema.model_json_schema(), indent=2)
+
 
 def parse_and_validate(text: str, schema: type[T]) -> T:
     """Extract a JSON block from ``text`` and validate it against ``schema``.
@@ -60,6 +64,7 @@ def parse_and_validate(text: str, schema: type[T]) -> T:
     """
     json_str = extract_json_block(text) or text.strip()
     return validate_schema(schema, json.loads(json_str))
+
 
 def _coerce_structured_result(result: Any, schema: type[T]) -> Any:
     """Normalize a ``with_structured_output`` result into a validated model.
@@ -76,9 +81,36 @@ def _coerce_structured_result(result: Any, schema: type[T]) -> Any:
     if isinstance(content, str):
         try:
             return parse_and_validate(content, schema)
-        except Exception as _e:
-            logger.debug("parse_and_validate failed, returning raw result: %s", _e)
+        except Exception as exc:
+            logger.debug("parse_and_validate failed, returning raw result: %s", exc)
     return result
+
+
+async def _retry_llm_call(
+    llm: Any,
+    prompt: Any,
+    agent_name: str,
+    max_retries: int = 2,
+    base_delay: float = 2.0,
+    timeout: float = 90.0,
+) -> Any:
+    """Invoke an LLM through the runtime's single retry/timeout authority.
+
+    ``max_retries`` keeps the historical call-site contract even though the
+    value represents total attempts. The actual retry classification,
+    exponential backoff and timeout implementation lives only in
+    ``agents.runtime.resilience.retry_call``.
+    """
+    from backend.trading_agents.agents.runtime.resilience import retry_call
+
+    return await retry_call(
+        lambda: llm.ainvoke(prompt),
+        label=f"llm:{agent_name}",
+        attempts=max(1, int(max_retries)),
+        base_delay=float(base_delay),
+        timeout=float(timeout),
+    )
+
 
 async def self_correct_structured(
     plain_llm: Any,
@@ -119,7 +151,15 @@ async def self_correct_structured(
     correction_messages = [{"role": "system", "content": system_content}, {"role": "user", "content": user_content}]
 
     try:
-        response = await plain_llm.ainvoke(correction_messages)
+        # Semantic self-correction has its own outer loop below. This call gets
+        # one runtime-controlled attempt so timeout/error classification still
+        # comes from the same authority without multiplying retries.
+        response = await _retry_llm_call(
+            plain_llm,
+            correction_messages,
+            f"{agent_name}:self_correction",
+            max_retries=1,
+        )
         text = llm_text(response)
         return parse_and_validate(text, schema)
     except Exception as exc:
@@ -137,75 +177,6 @@ async def self_correct_structured(
         )
         return None
 
-def _is_quota_exhausted(exc: Exception) -> bool:
-    """Check if the error indicates a hard quota exhaustion (not a transient rate limit).
-
-    ``ResourceExhausted`` with "total request limit" or "quota" means the provider
-    has permanently denied requests for the current period — retrying is useless.
-    Also catches ``QuotaExhaustedError`` from the LLM client layer.
-    """
-    err_msg = str(exc).lower()
-    if "quota exhausted" in err_msg:
-        return True
-    return "resourceexhausted" in err_msg and ("total" in err_msg or "quota" in err_msg)
-
-def _is_rate_limit(exc: Exception) -> bool:
-    """Check if the error is a transient rate limit (429) worth retrying."""
-    err_msg = str(exc).lower()
-    return "429" in err_msg or "rate limit" in err_msg or "rate_limit" in err_msg
-
-def _is_server_error(exc: Exception) -> bool:
-    """Check if the error is a transient server error worth retrying."""
-    err_msg = str(exc).lower()
-    return "503" in err_msg or "service unavailable" in err_msg or "502" in err_msg
-
-async def _retry_llm_call(
-    llm: Any,
-    prompt: Any,
-    agent_name: str,
-    max_retries: int = 2,
-    base_delay: float = 2.0,
-    timeout: float = 90.0,
-) -> Any:
-    """Invoke *llm* with retry and exponential backoff for transient errors.
-
-    Permanent quota exhaustion (``ResourceExhausted`` + "total"/"quota") is detected
-    immediately — no retries wasted, the exception propagates so callers can use fallback.
-
-    Note: ``max_retries = 2`` (1 retry) is the default — the provider quota (32
-    requests) is tight; burning 3+ requests per failed call can exhaust it before
-    essential nodes get to run.
-    """
-    last_exc: Exception | None = None
-    for attempt in range(max_retries):
-        try:
-            return await asyncio.wait_for(llm.ainvoke(prompt), timeout=timeout)
-        except Exception as exc:
-            last_exc = exc
-            if is_provider_function_degraded(exc):
-                raise
-            if _is_quota_exhausted(exc):
-                logger.warning(
-                    "%s: quota exhausted (%s) — skipping retries, using fallback.",
-                    agent_name,
-                    exc,
-                )
-                raise
-            retriable = _is_rate_limit(exc) or _is_server_error(exc) or "timeout" in str(exc).lower()
-            if not retriable:
-                raise
-            delay = min(base_delay * (2**attempt), 30.0)
-            if attempt + 1 < max_retries:
-                logger.warning(
-                    "%s: LLM call failed (attempt %d/%d, retry in %.0fs): %s",
-                    agent_name,
-                    attempt + 1,
-                    max_retries,
-                    delay,
-                    exc,
-                )
-                await asyncio.sleep(delay)
-    raise last_exc
 
 async def ainvoke_structured_or_freetext(
     structured_llm: Any | None,

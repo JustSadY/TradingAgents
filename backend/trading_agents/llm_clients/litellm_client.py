@@ -106,13 +106,28 @@ class LiteLLMClient(BaseLLMClient):
             "top_p",
             "top_k",
             "stop",
-            "callbacks",
             "extra_headers",
             "organization",
         ):
             value = self.kwargs.get(key)
             if value is not None:
                 llm_kwargs[key] = value
+
+        callbacks_value = self.kwargs.get("callbacks")
+        if callbacks_value is None:
+            callbacks: list[Any] = []
+        elif isinstance(callbacks_value, (list, tuple)):
+            callbacks = list(callbacks_value)
+        else:
+            callbacks = [callbacks_value]
+
+        from backend.core.observability import get_langfuse_callback
+
+        langfuse_callback = get_langfuse_callback()
+        if langfuse_callback is not None and langfuse_callback not in callbacks:
+            callbacks.append(langfuse_callback)
+        if callbacks:
+            llm_kwargs["callbacks"] = callbacks
 
         timeout = self.kwargs.get("timeout")
         if timeout is not None:

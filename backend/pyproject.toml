@@ -57,9 +57,26 @@ dev = [
     "pytest-cov>=6.0.0",
     "pytest-mock>=3.14.0",
 ]
+research = [
+    "openbb>=4.7.2,<5.0",
+    "TA-Lib>=0.7.1,<1.0",
+    "vectorbt>=1.1.0,<2.0",
+    "empyrical-reloaded>=0.5.12,<1.0",
+    "quantstats>=0.0.81,<1.0",
+    "pyportfolioopt>=1.6.0,<2.0",
+]
+observability = [
+    "opentelemetry-sdk>=1.44.0,<2.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.44.0,<2.0",
+    "opentelemetry-instrumentation-fastapi>=0.64b0,<1.0",
+    "opentelemetry-instrumentation-httpx>=0.64b0,<1.0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.64b0,<1.0",
+    "langfuse>=4.0.0,<5.0",
+]
 
 [tool.uv]
 package = false
+default-groups = ["dev"]
 
 [tool.ruff]
 line-length = 120
