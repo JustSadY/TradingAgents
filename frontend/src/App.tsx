@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PermissionsProvider } from './contexts/PermissionsContext'
 import RequirePage from './components/RequirePage'
 import Layout from './components/Layout'
+import NotificationAdapter from './components/ui/NotificationAdapter'
 
 // Login eagerly (it's the entry point); every protected page is code-split so
 // the initial bundle stays small and each page loads on demand.
@@ -107,6 +108,7 @@ export default function App() {
       <ThemeProvider theme={appTheme}>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
+            <NotificationAdapter />
             <PermissionsProvider>
               <LanguageProvider>
                 <CurrencyProvider>
