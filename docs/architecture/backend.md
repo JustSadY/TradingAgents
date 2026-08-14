@@ -166,7 +166,7 @@ import engine modules lazily inside functions (they pull heavy deps).
   tests — these break graph compilation silently. Prefer additive, isolated
   changes (e.g. shared helpers like `agents/runtime/report_aggregator.py`).
 - **Env note:** the LLM stack is capped below its next major in
-  `requirements.txt` (`langchain-core`/`langgraph` `<2.0`); the test suite and
+  `pyproject.toml + uv.lock` (`langchain-core`/`langgraph` `<2.0`); the test suite and
   app import cleanly on the current 1.x line. When bumping the caps, re-run the
   full test suite — graph compilation issues surface as import errors.
 
@@ -175,7 +175,7 @@ import engine modules lazily inside functions (they pull heavy deps).
 ## 7. Verifying a change locally
 
 ```bash
-pip install -r backend/requirements.txt          # langchain-core may resolve to 1.x; see §6
+cd backend && uv sync --frozen          # langchain-core may resolve to 1.x; see §6
 python -c "import backend.main; print('import OK')"   # app must always import
 uvicorn backend.main:app --reload --port 8000     # /docs for the live contract
 ```

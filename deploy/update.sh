@@ -17,6 +17,13 @@ SERVICE_NAME="${SERVICE_NAME:-tradingagents}"
 WORKER_SERVICE_NAME="${WORKER_SERVICE_NAME:-tradingagents-worker}"
 RUN_USER="${RUN_USER:-${SUDO_USER:-root}}"
 VENV="${VENV:-$PROJECT_ROOT/.venv}"
+MIGRATION_ENV_FILE="${MIGRATION_ENV_FILE:-/etc/tradingagents/migration.env}"
+[ -r "$MIGRATION_ENV_FILE" ] || { echo "Missing migration credential file: $MIGRATION_ENV_FILE" >&2; exit 1; }
+set -a
+# shellcheck disable=SC1090
+. "$MIGRATION_ENV_FILE"
+set +a
+: "${MIGRATION_DATABASE_URL:?missing MIGRATION_DATABASE_URL}"
 
 : "${PROJECT_ROOT:?missing PROJECT_ROOT}"
 : "${SERVICE_NAME:?missing SERVICE_NAME}"
@@ -122,8 +129,9 @@ chown -R "$RUN_USER":"$RUN_USER" "$VENV_ROOT"
 if [ ! -x "$NEW_VENV/bin/python" ]; then
     run_user python3 -m venv "$NEW_VENV"
 fi
-run_user "$NEW_VENV/bin/python" -m pip install --upgrade pip wheel
-run_user "$NEW_VENV/bin/pip" install -r "$WORKTREE/backend/requirements.txt"
+run_user "$NEW_VENV/bin/python" -m pip install --upgrade pip wheel uv
+run_user "$NEW_VENV/bin/uv" lock --check --project "$WORKTREE/backend"
+run_user env UV_PROJECT_ENVIRONMENT="$NEW_VENV" "$NEW_VENV/bin/uv" sync --frozen --no-dev --project "$WORKTREE/backend"
 run_user "$NEW_VENV/bin/python" -m compileall -q "$WORKTREE/backend"
 if [ -d "$WORKTREE/frontend" ]; then
     run_user bash -c "cd '$WORKTREE/frontend' && npm ci && npm run lint && npm test && npm run build"

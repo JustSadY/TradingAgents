@@ -130,7 +130,7 @@ Ensure a local PostgreSQL instance is running, create a database named `tradinga
     ```
 2.  Install dependencies:
     ```bash
-    pip install -r backend/requirements.txt
+    cd backend && uv sync --frozen
     ```
 3.  Configure your local `.env`.
 4.  Run the API server:

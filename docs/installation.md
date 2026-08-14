@@ -158,7 +158,7 @@ source .venv/bin/activate
 Install dependencies:
 
 ```bash
-pip install -r backend/requirements.txt
+cd backend && uv sync --frozen
 ```
 
 Create the root environment file:

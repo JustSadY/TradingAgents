@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import pathlib
 import sys
 from logging.config import fileConfig
@@ -43,10 +44,16 @@ config = context.config
 if config.config_file_name is not None and not logging.getLogger().handlers:
     fileConfig(config.config_file_name)
 
-# Single source of truth for the URL: the app settings, not a duplicate in alembic.ini.
-# ``%`` is doubled because configparser would otherwise treat a percent-encoded
-# password as interpolation syntax and raise on set_main_option().
-config.set_main_option("sqlalchemy.url", get_settings().DATABASE_URL.replace("%", "%%"))
+# Standalone migrations may use a privileged URL supplied only to the migration
+# process. The web/worker processes never need that credential. Without the
+# override (development/tests), Alembic uses the normal application URL.
+migration_url = os.getenv("MIGRATION_DATABASE_URL", "").strip() or get_settings().DATABASE_URL
+if migration_url.startswith("postgresql://"):
+    migration_url = "postgresql+asyncpg://" + migration_url.removeprefix("postgresql://")
+elif migration_url.startswith("postgres://"):
+    migration_url = "postgresql+asyncpg://" + migration_url.removeprefix("postgres://")
+# ``%`` is doubled because configparser treats percent-encoded passwords as interpolation.
+config.set_main_option("sqlalchemy.url", migration_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 

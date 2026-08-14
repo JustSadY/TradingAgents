@@ -146,6 +146,32 @@ async def _has_complete_unversioned_app_schema(conn) -> bool:
     return _is_complete_unversioned_app_schema(set(rows.scalars()))
 
 
+
+def _expected_alembic_heads() -> set[str]:
+    from alembic.script import ScriptDirectory
+
+    return set(ScriptDirectory.from_config(_alembic_config()).get_heads())
+
+
+async def _verify_schema_at_alembic_head() -> None:
+    async with engine.connect() as conn:
+        if not await _has_alembic_version(conn):
+            raise RuntimeError(
+                "Production database is not Alembic-managed. Run `alembic -c backend/alembic.ini upgrade head` "
+                "with the migration role before starting the application."
+            )
+        rows = await conn.execute(text("SELECT version_num FROM alembic_version"))
+        current = set(rows.scalars())
+
+    expected = _expected_alembic_heads()
+    if current != expected:
+        raise RuntimeError(
+            "Production database schema is not at Alembic head: "
+            f"current={sorted(current)}, expected={sorted(expected)}. "
+            "Run the migration step before starting web/worker processes."
+        )
+
+
 async def create_all_tables():
     """Bring the schema to the current Alembic head before serving requests."""
     import backend.models  # noqa: F401
@@ -168,6 +194,13 @@ async def create_all_tables():
             await normalize_sqlite_analysis_signals(conn)
             await normalize_sqlite_settings_collections(conn)
             await normalize_sqlite_simulation_entry_commissions(conn)
+        return
+
+    if settings.ENVIRONMENT.strip().lower() == "production":
+        await _verify_schema_at_alembic_head()
+        from backend.core.rls import verify_runtime_rls_role
+
+        await verify_runtime_rls_role(engine)
         return
 
     async with engine.begin() as conn:

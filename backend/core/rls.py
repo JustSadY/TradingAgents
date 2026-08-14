@@ -16,7 +16,9 @@ _logger = logging.getLogger(__name__)
 
 
 def _strict_enabled() -> bool:
-    return os.getenv("RLS_STRICT_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+    explicit = os.getenv("RLS_STRICT_MODE", "").strip().lower() in {"1", "true", "yes", "on"}
+    production = os.getenv("ENVIRONMENT", "").strip().lower() == "production"
+    return explicit or production
 
 
 def rls_role_is_safe(*, is_superuser: bool, bypass_rls: bool, owned_rls_tables: int) -> bool:

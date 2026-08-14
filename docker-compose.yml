@@ -21,6 +21,39 @@ services:
         max-size: "10m"
         max-file: "3"
 
+  db-prepare:
+    image: postgres:16-alpine
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      PGHOST: postgres
+      PGDATABASE: tradingagents
+      PGUSER: tradingagents
+      PGPASSWORD: ${DB_PASSWORD:?Set DB_PASSWORD in .env}
+      DB_RUNTIME_USER: tradingagents_app
+      DB_RUNTIME_PASSWORD: ${DB_RUNTIME_PASSWORD:?Set DB_RUNTIME_PASSWORD in .env}
+    volumes:
+      - ./deploy/docker-db-prepare.sh:/usr/local/bin/docker-db-prepare.sh:ro
+    command: ["/bin/sh", "/usr/local/bin/docker-db-prepare.sh"]
+    networks:
+      - tradingagents-net
+
+  migrate:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    depends_on:
+      db-prepare:
+        condition: service_completed_successfully
+    environment:
+      ENVIRONMENT: development
+      DATABASE_URL: postgresql+asyncpg://tradingagents_app:${DB_RUNTIME_PASSWORD:?Set DB_RUNTIME_PASSWORD in .env}@postgres:5432/tradingagents
+      MIGRATION_DATABASE_URL: postgresql+asyncpg://tradingagents:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/tradingagents
+    command: ["alembic", "-c", "backend/alembic.ini", "upgrade", "head"]
+    networks:
+      - tradingagents-net
+
   redis:
     image: redis:7-alpine
     restart: unless-stopped
@@ -51,11 +84,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
-    env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://tradingagents:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/tradingagents
+      ENVIRONMENT: production
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?Set ADMIN_PASSWORD_HASH in .env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+      RLS_STRICT_MODE: "true"
+      DATABASE_URL: postgresql+asyncpg://tradingagents_app:${DB_RUNTIME_PASSWORD:?Set DB_RUNTIME_PASSWORD in .env}@postgres:5432/tradingagents
       CORS_ORIGINS: ${CORS_ORIGINS}
       REDIS_URL: redis://redis:6379/0
       ANALYSIS_QUEUE_MODE: worker
@@ -93,11 +133,18 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
-    env_file: .env
     environment:
-      DATABASE_URL: postgresql+asyncpg://tradingagents:${DB_PASSWORD:?Set DB_PASSWORD in .env}@postgres:5432/tradingagents
+      ENVIRONMENT: production
+      SECRET_KEY: ${SECRET_KEY:?Set SECRET_KEY in .env}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD_HASH: ${ADMIN_PASSWORD_HASH:?Set ADMIN_PASSWORD_HASH in .env}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:?Set ENCRYPTION_KEY in .env}
+      RLS_STRICT_MODE: "true"
+      DATABASE_URL: postgresql+asyncpg://tradingagents_app:${DB_RUNTIME_PASSWORD:?Set DB_RUNTIME_PASSWORD in .env}@postgres:5432/tradingagents
       REDIS_URL: redis://redis:6379/0
       ANALYSIS_QUEUE_MODE: worker
       OLLAMA_BASE_URL: http://host.docker.internal:11434
