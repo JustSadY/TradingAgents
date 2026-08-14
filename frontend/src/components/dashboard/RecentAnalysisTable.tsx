@@ -40,7 +40,7 @@ export function RecentAnalysisTable({ recentAnalysis, t }: RecentAnalysisTablePr
       minWidth: 120,
       align: 'center',
       headerAlign: 'center',
-      renderCell: params => <SignalBadge signal={params.row.signal} />,
+      renderCell: params => <SignalBadge signal={params.row.signal ?? null} />,
     },
     {
       field: 'duration_seconds',
