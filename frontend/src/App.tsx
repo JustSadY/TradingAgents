@@ -28,8 +28,10 @@ const SectorRotation = lazy(() => import('./pages/SectorRotation'))
 const SharedReport = lazy(() => import('./pages/SharedReport'))
 const EarningsCalendar = lazy(() => import('./pages/EarningsCalendar'))
 
+import { QueryClientProvider } from '@tanstack/react-query'
 import { LanguageProvider } from './contexts/LanguageContext'
 import { CurrencyProvider } from './contexts/CurrencyContext'
+import { queryClient } from './api/queryClient'
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -122,17 +124,19 @@ function AppRoutes() {
 export default function App() {
   return (
     <ErrorBoundary>
-      <AuthProvider>
-        <PermissionsProvider>
-          <LanguageProvider>
-            <CurrencyProvider>
-              <BrowserRouter>
-                <AppRoutes />
-              </BrowserRouter>
-            </CurrencyProvider>
-          </LanguageProvider>
-        </PermissionsProvider>
-      </AuthProvider>
+      <QueryClientProvider client={queryClient}>
+        <AuthProvider>
+          <PermissionsProvider>
+            <LanguageProvider>
+              <CurrencyProvider>
+                <BrowserRouter>
+                  <AppRoutes />
+                </BrowserRouter>
+              </CurrencyProvider>
+            </LanguageProvider>
+          </PermissionsProvider>
+        </AuthProvider>
+      </QueryClientProvider>
     </ErrorBoundary>
   )
 }

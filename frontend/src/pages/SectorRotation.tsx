@@ -1,7 +1,7 @@
-import { useState, useCallback, useEffect } from 'react'
-import axios from 'axios'
+import { useState } from 'react'
+import { useSectorSectorRotation } from '../api/generated/sector/sector'
 import { TrendingUp, TrendingDown, Minus, RefreshCw, Loader2, BarChart2 } from 'lucide-react'
-import { notify } from '../utils/notify'
+import { useQueryErrorToast } from '../api/useQueryErrorToast'
 import { useTranslation } from '../contexts/LanguageContext'
 
 interface SectorData {
@@ -65,8 +65,6 @@ function RsiGauge({ rsi }: { rsi: number }) {
 
 export default function SectorRotation() {
   const { t } = useTranslation()
-  const [sectors, setSectors] = useState<SectorData[]>([])
-  const [loading, setLoading] = useState(false)
   const [sortKey, setSortKey] = useState<SortKey>('momentum_score')
 
   const SORT_OPTIONS: { key: SortKey; label: string }[] = [
@@ -75,22 +73,12 @@ export default function SectorRotation() {
     { key: 'ret_1m', label: t('sector.sort_1m') },
     { key: 'ret_3m', label: t('sector.sort_3m') },
   ]
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
-
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const r = await axios.get('/api/market/sector-rotation')
-      setSectors(r.data.sectors || [])
-      setLastUpdated(new Date())
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Failed to load sector data', 'Sector Rotation')
-    } finally {
-      setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => { load() }, [load])
+  const query = useSectorSectorRotation()
+  const sectors = ((query.data as { sectors?: SectorData[] } | undefined)?.sectors ?? []) as SectorData[]
+  const loading = query.isFetching
+  const lastUpdated = query.dataUpdatedAt ? new Date(query.dataUpdatedAt) : null
+  const load = () => query.refetch()
+  useQueryErrorToast(query.error, 'Failed to load sector data', 'Sector Rotation')
 
   const sorted = [...sectors].sort((a, b) => b[sortKey] - a[sortKey])
   const leaders = sorted.slice(0, 3)

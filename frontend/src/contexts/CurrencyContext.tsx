@@ -1,5 +1,5 @@
-import { createContext, useContext, useEffect, useState, useCallback, type ReactNode } from 'react'
-import axios from 'axios'
+import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { useMarketGetFxRates } from '../api/generated/market/market'
 
 const STORAGE_KEY = 'ta_currency'
 
@@ -36,18 +36,12 @@ export function CurrencyProvider({ children }: { children: ReactNode }) {
   const [currency, _setCurrency] = useState<Currency>(
     () => (localStorage.getItem(STORAGE_KEY) as Currency) || 'USD'
   )
-  const [rates, setRates] = useState<Record<string, number | null>>({ USD: 1 })
-  const [loadingRates, setLoadingRates] = useState(false)
-
-  const fetchRates = useCallback(() => {
-    setLoadingRates(true)
-    axios.get<Record<string, number | null>>('/api/market/fx-rates')
-      .then(r => setRates(r.data))
-      .catch(() => {})
-      .finally(() => setLoadingRates(false))
-  }, [])
-
-  useEffect(() => { fetchRates() }, [fetchRates])
+  const ratesQuery = useMarketGetFxRates()
+  // Fall back to USD-only so a failed FX fetch renders unconverted USD rather
+  // than multiplying by an undefined rate.
+  const rates = (ratesQuery.data ?? { USD: 1 }) as Record<string, number | null>
+  const loadingRates = ratesQuery.isFetching
+  const fetchRates = useCallback(() => { ratesQuery.refetch() }, [ratesQuery])
 
   const setCurrency = useCallback((c: Currency) => {
     localStorage.setItem(STORAGE_KEY, c)

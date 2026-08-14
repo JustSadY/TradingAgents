@@ -1,7 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { StrictMode } from 'react'
+import { StrictMode, createElement, type ReactNode } from 'react'
 import { renderHook, waitFor } from '@testing-library/react'
 import { useActiveTasks } from '../useActiveTasks'
+import { QueryWrapper } from '../../test/renderWithQuery'
+
+// StrictMode replays effects; the query provider still has to be above the hook.
+const StrictQueryWrapper = ({ children }: { children: ReactNode }) =>
+  createElement(QueryWrapper, null, createElement(StrictMode, null, children))
 import axios from 'axios'
 
 const mockTasks = vi.hoisted(() => [
@@ -11,16 +16,22 @@ const mockTasks = vi.hoisted(() => [
 
 vi.mock('axios', async () => {
   const actual = await vi.importActual('axios')
-  return {
-    ...actual,
-    default: {
+  const get = vi.fn().mockResolvedValue({ data: mockTasks })
+  const post = vi.fn().mockResolvedValue({ data: {} })
+  // The generated query calls axios(config); route it to the same mocks.
+  const instance = Object.assign(
+    vi.fn((config: { url?: string; method?: string } = {}) =>
+      String(config.method ?? 'get').toLowerCase() === 'get' ? get(config.url, config) : post(config.url, config),
+    ),
+    {
       ...(actual as any).default,
-      get: vi.fn().mockResolvedValue({ data: mockTasks }),
-      post: vi.fn().mockResolvedValue({ data: {} }),
+      get,
+      post,
       interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
       defaults: {},
     },
-  }
+  )
+  return { ...actual, default: instance }
 })
 
 describe('useActiveTasks', () => {
@@ -30,7 +41,7 @@ describe('useActiveTasks', () => {
   })
 
   it('fetches active tasks on mount', async () => {
-    const { result } = renderHook(() => useActiveTasks())
+    const { result } = renderHook(() => useActiveTasks(), { wrapper: QueryWrapper })
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
     })
@@ -39,7 +50,7 @@ describe('useActiveTasks', () => {
   })
 
   it('provides refreshActiveTasks function', async () => {
-    const { result } = renderHook(() => useActiveTasks())
+    const { result } = renderHook(() => useActiveTasks(), { wrapper: QueryWrapper })
     await waitFor(() => {
       expect(typeof result.current.refreshActiveTasks).toBe('function')
     })
@@ -47,7 +58,7 @@ describe('useActiveTasks', () => {
 
   it('handles API error gracefully', async () => {
     vi.mocked(axios.get).mockRejectedValue(new Error('Network error'))
-    const { result } = renderHook(() => useActiveTasks())
+    const { result } = renderHook(() => useActiveTasks(), { wrapper: QueryWrapper })
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
     })
@@ -56,7 +67,7 @@ describe('useActiveTasks', () => {
   })
 
   it('shares the initial request across StrictMode effect replay', async () => {
-    const { result } = renderHook(() => useActiveTasks(), { wrapper: StrictMode })
+    const { result } = renderHook(() => useActiveTasks(), { wrapper: StrictQueryWrapper })
 
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(axios.get).toHaveBeenCalledTimes(1)
@@ -64,7 +75,7 @@ describe('useActiveTasks', () => {
 
   it('treats a non-array response as unavailable instead of propagating it to consumers', async () => {
     vi.mocked(axios.get).mockResolvedValue({ data: { unexpected: true } } as any)
-    const { result } = renderHook(() => useActiveTasks())
+    const { result } = renderHook(() => useActiveTasks(), { wrapper: QueryWrapper })
 
     await waitFor(() => expect(result.current.loading).toBe(false))
     expect(result.current.activeTasks).toEqual([])

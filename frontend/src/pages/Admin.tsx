@@ -1,5 +1,32 @@
 import { useEffect, useState, useCallback, useRef } from 'react'
-import axios from 'axios'
+import { useQueryClient } from '@tanstack/react-query'
+import {
+  useUsersListUsersRun,
+  useUsersCreateUser,
+  useUsersUpdateUser,
+  useUsersDeleteUser,
+  useUsersSetUserPermissions,
+  useUsersSetUserSettingPermissions,
+  useUsersSetAgentAccess,
+  useUsersSetToolAccess,
+  useUsersSetToolFieldAccess,
+  useUsersSetUserApiKeyEndpoint,
+  useUsersDeleteUserApiKeyEndpoint,
+  usersGetUserPermissions,
+  getUsersGetUserPermissionsQueryKey,
+  usersGetUserSettingPermissions,
+  getUsersGetUserSettingPermissionsQueryKey,
+  usersGetAgentAccess,
+  getUsersGetAgentAccessQueryKey,
+  usersGetToolAccess,
+  getUsersGetToolAccessQueryKey,
+  usersGetToolFieldAccess,
+  getUsersGetToolFieldAccessQueryKey,
+  usersListUserApiKeys,
+  getUsersListUserApiKeysQueryKey,
+} from '../api/generated/users/users'
+import { useSystemSettingsGetSystemSettings, useSystemSettingsUpdateSystemSettings } from '../api/generated/system-settings/system-settings'
+import { useAnalyticsGetSystemMetrics, useAnalyticsGetSystemHealth } from '../api/generated/analytics/analytics'
 import { Save, Trash2, Plus, UserCog, ShieldCheck, Globe, CheckCircle2, Key, Sliders, BarChart3, RefreshCw, Zap, AlertTriangle, Clock, Wifi } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -76,7 +103,6 @@ export default function Admin() {
   const ALL_PAGE_KEYS = meta?.page_keys ?? FALLBACK_PAGE_KEYS
   const PAGE_LABELS = meta?.section_labels ?? FALLBACK_PAGE_LABELS
   const [tab, setTab] = useState<Tab>('users')
-  const [users, setUsers] = useState<UserRecord[]>([])
   const [selectedUserId, setSelectedUserId] = useState<number | null>(null)
   const [permissions, setPermissions] = useState<Record<string, boolean>>({})
   const [settingPermissions, setSettingPermissions] = useState<Record<string, boolean>>({})
@@ -93,92 +119,124 @@ export default function Admin() {
   const [keyError, setKeyError] = useState<string | null>(null)
   const [systemSettings, setSystemSettings] = useState<any>(null)
   const [sysSaved, setSysSaved] = useState(false)
-  const [sysMetrics, setSysMetrics] = useState<SystemMetrics | null>(null)
-  const [sysHealth, setSysHealth] = useState<SystemHealth | null>(null)
-  const [metricsLoading, setMetricsLoading] = useState(false)
   const adminTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => { return () => { if (adminTimeoutRef.current) clearTimeout(adminTimeoutRef.current) } }, [])
 
-  const loadUsers = useCallback(async () => {
-    const r = await axios.get('/api/users')
-    setUsers(r.data)
-  }, [])
+  const queryClient = useQueryClient()
+  const createUserMutation = useUsersCreateUser()
+  const updateUserMutation = useUsersUpdateUser()
+  const deleteUserMutation = useUsersDeleteUser()
+  const setPerms = useUsersSetUserPermissions()
+  const setSettingPerms = useUsersSetUserSettingPermissions()
+  const setAgents = useUsersSetAgentAccess()
+  const setTools = useUsersSetToolAccess()
+  const setToolFields = useUsersSetToolFieldAccess()
+  const setUserKey = useUsersSetUserApiKeyEndpoint()
+  const deleteUserKey = useUsersDeleteUserApiKeyEndpoint()
+  const updateSystemSettings = useSystemSettingsUpdateSystemSettings()
 
-  const loadSystemSettings = useCallback(async () => {
-    try {
-      const r = await axios.get('/api/system-settings')
-      setSystemSettings(r.data)
-    } catch (err) {
-      console.error('Failed to load system settings:', err)
-    }
-  }, [])
+  const usersQuery = useUsersListUsersRun()
+  const users = (usersQuery.data ?? []) as UserRecord[]
+  const loadUsers = useCallback(() => usersQuery.refetch(), [usersQuery])
 
-  const loadMetrics = useCallback(async () => {
-    setMetricsLoading(true)
-    try {
-      const [metricsRes, healthRes] = await Promise.allSettled([
-        axios.get('/api/admin/system-metrics'),
-        axios.get('/api/admin/system-health'),
-      ])
-      if (metricsRes.status === 'fulfilled') setSysMetrics(metricsRes.value.data)
-      if (healthRes.status === 'fulfilled') setSysHealth(healthRes.value.data)
-    } finally { setMetricsLoading(false) }
-  }, [])
-
+  // System settings are edited in place before saving, so the server copy seeds
+  // local form state rather than being rendered directly.
+  const systemSettingsQuery = useSystemSettingsGetSystemSettings()
   useEffect(() => {
-    loadUsers()
-    loadSystemSettings()
-  }, [loadUsers, loadSystemSettings])
+    if (systemSettingsQuery.data) setSystemSettings(systemSettingsQuery.data)
+  }, [systemSettingsQuery.data])
+
+  // Metrics stay disabled until the tab is opened; they are polled server-side
+  // work that the user-management tabs never need.
+  const [metricsEnabled, setMetricsEnabled] = useState(false)
+  const metricsQuery = useAnalyticsGetSystemMetrics({ query: { enabled: metricsEnabled } })
+  const healthQuery = useAnalyticsGetSystemHealth({ query: { enabled: metricsEnabled } })
+  const sysMetrics = (metricsQuery.data ?? null) as unknown as SystemMetrics | null
+  const sysHealth = (healthQuery.data ?? null) as unknown as SystemHealth | null
+  const metricsLoading = metricsEnabled && (metricsQuery.isFetching || healthQuery.isFetching)
+  // Each panel degrades independently, matching the previous allSettled().
+  const loadMetrics = useCallback(() => {
+    setMetricsEnabled(true)
+    void metricsQuery.refetch()
+    void healthQuery.refetch()
+  }, [metricsQuery, healthQuery])
 
   useEffect(() => {
     setSelectedUserId(null)
   }, [tab])
 
+  // Permission payloads seed editable form state, so they are fetched
+  // imperatively on selection rather than rendered straight from the cache.
   const loadUserPermissions = async (userId: number) => {
     try {
       const [pRes, sRes, agentRes, toolRes, toolFieldRes] = await Promise.all([
-        axios.get(`/api/users/${userId}/permissions`),
-        axios.get(`/api/users/${userId}/setting-permissions`),
-        axios.get(`/api/users/${userId}/agent-access`),
-        axios.get(`/api/users/${userId}/tool-access`),
-        axios.get(`/api/users/${userId}/tool-field-access`),
+        queryClient.fetchQuery({
+          queryKey: getUsersGetUserPermissionsQueryKey(userId),
+          queryFn: () => usersGetUserPermissions(userId),
+        }),
+        queryClient.fetchQuery({
+          queryKey: getUsersGetUserSettingPermissionsQueryKey(userId),
+          queryFn: () => usersGetUserSettingPermissions(userId),
+        }),
+        queryClient.fetchQuery({
+          queryKey: getUsersGetAgentAccessQueryKey(userId),
+          queryFn: () => usersGetAgentAccess(userId),
+        }),
+        queryClient.fetchQuery({
+          queryKey: getUsersGetToolAccessQueryKey(userId),
+          queryFn: () => usersGetToolAccess(userId),
+        }),
+        queryClient.fetchQuery({
+          queryKey: getUsersGetToolFieldAccessQueryKey(userId),
+          queryFn: () => usersGetToolFieldAccess(userId),
+        }),
       ])
-      setPermissions(pRes.data.permissions)
-      setSettingPermissions(sRes.data.permissions)
-      setAgentAccess(agentRes.data)
-      setToolAccess(toolRes.data)
-      setToolFieldAccess(toolFieldRes.data)
+      setPermissions((pRes as unknown as { permissions: Record<string, boolean> }).permissions)
+      setSettingPermissions((sRes as unknown as { permissions: Record<string, boolean> }).permissions)
+      setAgentAccess(agentRes as never)
+      setToolAccess(toolRes as never)
+      setToolFieldAccess(toolFieldRes as never)
       setSelectedUserId(userId)
     } catch {
       setErrorMsg('Failed to load user permissions')
     }
   }
 
+  const refetchUserKeys = async (userId: number) => {
+    const res = await queryClient.fetchQuery({
+      queryKey: getUsersListUserApiKeysQueryKey(userId),
+      queryFn: () => usersListUserApiKeys(userId),
+    })
+    return ((res as { providers?: string[] })?.providers ?? []) as string[]
+  }
+
   const loadUserApiKeys = async (userId: number) => {
     setSelectedUserId(userId)
-    const r = await axios.get(`/api/users/${userId}/api-keys`)
-    setUserKeyProviders(r.data.providers)
+    const r = await refetchUserKeys(userId)
+    setUserKeyProviders(r)
   }
 
   const saveUserApiKey = async (userId: number, provider: string, apiKey: string) => {
     setKeyError(null)
     try {
-      await axios.put(`/api/users/${userId}/api-keys`, { provider, api_key: apiKey })
+      await setUserKey.mutateAsync({ userId, data: { provider, api_key: apiKey } })
       setKeySaved(true)
       adminTimeoutRef.current = setTimeout(() => setKeySaved(false), 2000)
       await loadUserApiKeys(userId)
-    } catch (err: any) {
-      setKeyError(err.response?.data?.detail || 'Key could not be saved')
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setKeyError(detail || 'Key could not be saved')
     }
   }
 
   const deleteUserApiKey = async (userId: number, provider: string) => {
     setKeyError(null)
     try {
-      await axios.delete(`/api/users/${userId}/api-keys/${provider}`)
+      await deleteUserKey.mutateAsync({ userId, provider })
       await loadUserApiKeys(userId)
-    } catch (err: any) {
-      setKeyError(err.response?.data?.detail || 'Key could not be deleted')
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setKeyError(detail || 'Key could not be deleted')
     }
   }
 
@@ -187,11 +245,11 @@ export default function Admin() {
     setErrorMsg(null)
     try {
       await Promise.all([
-        axios.put(`/api/users/${selectedUserId}/permissions`, { permissions }),
-        axios.put(`/api/users/${selectedUserId}/setting-permissions`, { permissions: settingPermissions }),
-        axios.put(`/api/users/${selectedUserId}/agent-access`, { agents: agentAccess }),
-        axios.put(`/api/users/${selectedUserId}/tool-access`, { tools: toolAccess }),
-        axios.put(`/api/users/${selectedUserId}/tool-field-access`, { fields: toolFieldAccess }),
+        setPerms.mutateAsync({ userId: selectedUserId, data: { permissions } }),
+        setSettingPerms.mutateAsync({ userId: selectedUserId, data: { permissions: settingPermissions } }),
+        setAgents.mutateAsync({ userId: selectedUserId, data: { agents: agentAccess } }),
+        setTools.mutateAsync({ userId: selectedUserId, data: { tools: toolAccess } }),
+        setToolFields.mutateAsync({ userId: selectedUserId, data: { fields: toolFieldAccess } }),
       ])
       setPermSaved(true)
       adminTimeoutRef.current = setTimeout(() => setPermSaved(false), 2500)
@@ -208,12 +266,14 @@ export default function Admin() {
     }
     setCreating(true)
     try {
-      await axios.post('/api/users', {
-        username: newUser.username.trim(),
-        password: newUser.password.trim(),
-        email: newUser.email.trim() || null,
-        display_name: newUser.display_name.trim() || null,
-        role: newUser.role,
+      await createUserMutation.mutateAsync({
+        data: {
+          username: newUser.username.trim(),
+          password: newUser.password.trim(),
+          email: newUser.email.trim() || null,
+          display_name: newUser.display_name.trim() || null,
+          role: newUser.role,
+        },
       })
       setNewUser({ username: '', password: '', email: '', display_name: '', role: 'user' })
       await loadUsers()
@@ -224,28 +284,32 @@ export default function Admin() {
     }
   }
 
+  // The list is refetched instead of patched locally: the server is the only
+  // authority on a role or activation change.
   const toggleRole = async (u: UserRecord) => {
-    const newRole = u.role === 'admin' ? 'user' : 'admin'
-    await axios.put(`/api/users/${u.id}`, { role: newRole })
-    setUsers(prev => prev.map(x => x.id === u.id ? { ...x, role: newRole } : x))
+    await updateUserMutation.mutateAsync({
+      userId: u.id,
+      data: { role: u.role === 'admin' ? 'user' : 'admin' },
+    })
+    await usersQuery.refetch()
   }
 
   const toggleActive = async (u: UserRecord) => {
-    await axios.put(`/api/users/${u.id}`, { is_active: !u.is_active })
-    setUsers(prev => prev.map(x => x.id === u.id ? { ...x, is_active: !u.is_active } : x))
+    await updateUserMutation.mutateAsync({ userId: u.id, data: { is_active: !u.is_active } })
+    await usersQuery.refetch()
   }
 
   const deleteUser = async (id: number) => {
     if (!window.confirm(t('admin.delete_user_confirm'))) return
-    await axios.delete(`/api/users/${id}`)
-    setUsers(prev => prev.filter(u => u.id !== id))
+    await deleteUserMutation.mutateAsync({ userId: id })
+    await usersQuery.refetch()
     if (selectedUserId === id) setSelectedUserId(null)
   }
 
   const saveSystemSettings = async () => {
     if (!systemSettings) return
     try {
-      await axios.put('/api/system-settings', systemSettings)
+      await updateSystemSettings.mutateAsync({ data: systemSettings })
       setSysSaved(true)
       adminTimeoutRef.current = setTimeout(() => setSysSaved(false), 2000)
     } catch (err) {

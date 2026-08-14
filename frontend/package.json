@@ -11,10 +11,14 @@
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
     "preview": "vite preview",
-    "generate:types": "openapi-typescript /tmp/openapi.json --output src/api/schema.d.ts"
+    "generate:types": "openapi-typescript ./openapi.json --output src/api/schema.d.ts",
+    "generate:openapi": "python ../backend/scripts/export-openapi.py ./openapi.json",
+    "generate:client": "orval --config ./orval.config.ts",
+    "generate:api": "npm run generate:openapi && npm run generate:types && npm run generate:client"
   },
   "dependencies": {
     "@tailwindcss/vite": "^4.3.0",
+    "@tanstack/react-query": "^5.101.4",
     "axios": "^1.16.1",
     "lightweight-charts": "^5.2.0",
     "lucide-react": "^1.17.0",
@@ -41,6 +45,7 @@
     "happy-dom": "^20.10.6",
     "jsdom": "^29.1.1",
     "openapi-typescript": "^7.13.0",
+    "orval": "^8.24.0",
     "typescript": "~5.9.3",
     "typescript-eslint": "^8.59.2",
     "vite": "^8.0.12",

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithQuery } from '../../test/renderWithQuery'
 import Backtest from '../Backtest'
 
 vi.mock('axios', () => ({
@@ -65,14 +66,14 @@ describe('Backtest', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
   it('renders backtest form', async () => {
-    render(<Backtest />)
+    renderWithQuery(<Backtest />)
     await waitFor(() => {
       expect(screen.getByText('Backtest')).toBeInTheDocument()
     })
   })
 
   it('renders strategy options', async () => {
-    render(<Backtest />)
+    renderWithQuery(<Backtest />)
     await waitFor(() => {
       expect(screen.getByText('Consensus')).toBeInTheDocument()
       expect(screen.getByText('MACD Crossover')).toBeInTheDocument()

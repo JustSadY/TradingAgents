@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useMemo } from 'react'
-import api from '../utils/api'
+import { useCallback, useMemo } from 'react'
+import { usePortfolioListPortfolios } from '../api/generated/portfolio/portfolio'
 
 interface Portfolio {
   id: number
@@ -13,28 +13,10 @@ interface Portfolio {
 }
 
 export function usePortfolio() {
-  const [portfolios, setPortfolios] = useState<Portfolio[]>([])
-  const [loading, setLoading] = useState(true)
-
-  const fetchPortfolios = useCallback(async (quiet = false) => {
-    if (!quiet) setLoading(true)
-    try {
-      const { data } = await api.get('/api/portfolio')
-      setPortfolios(Array.isArray(data) ? data : [])
-    } catch (error) {
-      console.error('Failed to fetch portfolios:', error)
-    } finally {
-      if (!quiet) setLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    fetchPortfolios()
-    const interval = setInterval(() => {
-      fetchPortfolios(true)
-    }, 15000)
-    return () => clearInterval(interval)
-  }, [fetchPortfolios])
+  const query = usePortfolioListPortfolios({ query: { refetchInterval: 15_000 } })
+  const portfolios = (Array.isArray(query.data) ? query.data : []) as Portfolio[]
+  const loading = query.isPending
+  const fetchPortfolios = useCallback(() => query.refetch(), [query])
 
   const sim = useMemo(() => portfolios.find(p => p.mode === 'simulation') || portfolios[0], [portfolios])
   

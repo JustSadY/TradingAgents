@@ -1,5 +1,12 @@
 import { type ReactNode, useEffect, useMemo, useState, forwardRef, useImperativeHandle, useRef } from 'react'
-import axios from 'axios'
+import {
+  useSettingsGetUserAgents,
+  useSettingsUpdateUserAgents,
+  useSettingsGetServerAgents,
+  useSettingsUpdateServerAgents,
+  useSettingsGetOtherUserAgents,
+  useSettingsUpdateOtherUserAgents,
+} from '../../api/generated/settings/settings'
 import { AlertCircle, ChevronDown, ChevronRight, Settings2, Save, Loader2 } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
 import { useMeta, triggerMetaRefetch } from '../../hooks/useMeta'
@@ -476,49 +483,60 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
   const { t } = useTranslation()
   const meta = useMeta()
   const [settings, setSettings] = useState<AgentSettingsData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const agentTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => { return () => { if (agentTimeoutRef.current) clearTimeout(agentTimeoutRef.current) } }, [])
 
-  const apiPath = serverScope
-    ? '/api/settings/agents/server'
-    : userId
-    ? `/api/settings/users/${userId}/agents`
-    : '/api/settings/agents'
+  // One panel, three scopes. All hooks are declared unconditionally and only
+  // the matching one is enabled.
+  const otherUserId = !serverScope && userId ? userId : 0
+  const serverQuery = useSettingsGetServerAgents({ query: { enabled: serverScope } })
+  const otherUserQuery = useSettingsGetOtherUserAgents(otherUserId, {
+    query: { enabled: !serverScope && Boolean(userId) },
+  })
+  const ownQuery = useSettingsGetUserAgents({ query: { enabled: !serverScope && !userId } })
+  const activeQuery = serverScope ? serverQuery : userId ? otherUserQuery : ownQuery
 
+  const loading = activeQuery.isPending
   useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setSaveError(null)
-    axios
-      .get(apiPath)
-      .then(res => { if (!cancelled) setSettings(res.data) })
-      .catch(err => { if (!cancelled) setSaveError(err.response?.data?.detail || 'Failed to load agent settings.') })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [apiPath, meta])
+    if (activeQuery.data) setSettings(activeQuery.data as unknown as AgentSettingsData)
+  }, [activeQuery.data])
+  useEffect(() => {
+    if (!activeQuery.error) return
+    const detail = (activeQuery.error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+    setSaveError(detail || 'Failed to load agent settings.')
+  }, [activeQuery.error])
 
+  const saveServer = useSettingsUpdateServerAgents()
+  const saveOtherUser = useSettingsUpdateOtherUserAgents()
+  const saveOwn = useSettingsUpdateUserAgents()
+  const saving = saveServer.isPending || saveOtherUser.isPending || saveOwn.isPending
+
+  // The parent awaits save() and relies on it throwing to abort a multi-panel
+  // save, so keep mutateAsync and re-raise.
   const save = async () => {
     if (!settings) return
-    setSaving(true)
     setSaveSuccess(false)
     setSaveError(null)
     try {
-      const res = await axios.put(apiPath, settings)
-      setSettings(res.data)
+      const body = settings as unknown as Parameters<typeof saveOwn.mutateAsync>[0]['data']
+      const res = serverScope
+        ? await saveServer.mutateAsync({ data: body })
+        : userId
+          ? await saveOtherUser.mutateAsync({ userId, data: body })
+          : await saveOwn.mutateAsync({ data: body })
+      setSettings(res as unknown as AgentSettingsData)
       triggerMetaRefetch()
       setSaveSuccess(true)
       if (agentTimeoutRef.current) clearTimeout(agentTimeoutRef.current)
       agentTimeoutRef.current = setTimeout(() => setSaveSuccess(false), 2000)
-    } catch (err: any) {
-      const msg = err.response?.data?.detail || 'Failed to save agent settings.'
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        || 'Failed to save agent settings.'
       setSaveError(msg)
       throw new Error(msg, { cause: err })
-    } finally {
-      setSaving(false)
     }
   }
 

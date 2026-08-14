@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
-import axios from 'axios'
+import { useCallback } from 'react'
+import { useAnalysisGetActiveTasks } from '../api/generated/analysis/analysis'
 
 export interface ActiveTask {
   task_id: string
@@ -10,53 +10,34 @@ export interface ActiveTask {
   status: string
 }
 
-function sameTasks(left: ActiveTask[], right: ActiveTask[]): boolean {
-  return left.length === right.length && left.every((task, index) => {
-    const next = right[index]
-    return task.task_id === next.task_id &&
-      task.ticker === next.ticker &&
-      task.trade_date === next.trade_date &&
-      task.asset_type === next.asset_type &&
-      task.started_at === next.started_at &&
-      task.status === next.status
-  })
-}
+const EMPTY: ActiveTask[] = []
 
+/**
+ * Poll the analyses currently running for this user.
+ *
+ * The previous implementation kept an in-flight ref so StrictMode's replayed
+ * effects and the 30s fallback poll could not fan out duplicate requests, and
+ * compared task lists by hand to avoid re-rendering on identical payloads.
+ * TanStack Query already deduplicates concurrent identical queries and applies
+ * structural sharing, so both are handled by the client rather than here.
+ */
 export function useActiveTasks() {
-  const [activeTasks, setActiveTasks] = useState<ActiveTask[]>([])
-  const [loading, setLoading] = useState(true)
-  const [unavailable, setUnavailable] = useState(false)
-  // StrictMode replays effects in development and a slow endpoint can overlap
-  // the 30-second fallback poll.  Keep one request in flight so either case
-  // cannot fan out identical `/api/analysis/active` calls.
-  const inFlightRef = useRef<Promise<void> | null>(null)
+  const query = useAnalysisGetActiveTasks({
+    query: { refetchInterval: 30_000 },
+  })
 
-  const refreshActiveTasks = useCallback(() => {
-    if (inFlightRef.current) return inFlightRef.current
+  // A malformed payload is treated the same as a failed request: callers gate
+  // UI on `unavailable`, and rendering a non-array would throw downstream.
+  const payload = query.data
+  const valid = Array.isArray(payload)
+  const activeTasks = (valid ? payload : EMPTY) as ActiveTask[]
 
-    const request = axios.get('/api/analysis/active')
-      .then(({ data }) => {
-        if (!Array.isArray(data)) throw new TypeError('Invalid active-tasks response')
-        setActiveTasks(previous => sameTasks(previous, data) ? previous : data)
-        setUnavailable(false)
-      })
-      .catch(error => {
-        console.error('Failed to fetch active tasks:', error)
-        setUnavailable(true)
-      })
-      .finally(() => {
-        setLoading(false)
-        if (inFlightRef.current === request) inFlightRef.current = null
-      })
-    inFlightRef.current = request
-    return request
-  }, [])
+  const refreshActiveTasks = useCallback(() => query.refetch(), [query])
 
-  useEffect(() => {
-    refreshActiveTasks()
-    const interval = setInterval(refreshActiveTasks, 30000) // Poll every 30s as fallback
-    return () => clearInterval(interval)
-  }, [refreshActiveTasks])
-
-  return { activeTasks, loading, unavailable, refreshActiveTasks }
+  return {
+    activeTasks,
+    loading: query.isPending,
+    unavailable: Boolean(query.error) || (!query.isPending && !valid),
+    refreshActiveTasks,
+  }
 }

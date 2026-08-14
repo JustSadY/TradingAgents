@@ -1,5 +1,8 @@
-import { useEffect, useState, useCallback } from 'react'
-import axios from 'axios'
+import { useState, useCallback } from 'react'
+import { usePortfolioListPortfolios, usePortfolioListHoldings } from '../api/generated/portfolio/portfolio'
+import { useTradingRebalancePortfolio, useTradingGetRiskDashboard, useTradingCreateOrder, useTradingGetCorrelation } from '../api/generated/trading/trading'
+import { useQueryErrorToast } from '../api/useQueryErrorToast'
+import type { APIOrderRequestAction } from '../api/generated/model'
 import { TrendingUp, TrendingDown, DollarSign, Briefcase, Loader2, AlertCircle, RefreshCw, PieChart, Sparkles, X, CheckCircle2, ShieldAlert, Activity, ChevronDown, ChevronUp, Download, Grid3x3 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
@@ -53,78 +56,53 @@ function UrgencyBadge({ urgency }: { urgency: string }) {
 
 export default function Portfolio() {
   const { t, language } = useTranslation()
-  const [holdings, setHoldings] = useState<HoldingRead[]>([])
-  const [portfolios, setPortfolios] = useState<PortfolioRead[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState(false)
-  const [rebalancing, setRebalancing] = useState(false)
   const [rebalanceResult, setRebalanceResult] = useState<RebalanceResponse | null>(null)
   const [applyingIdx, setApplyingIdx] = useState<number | null>(null)
-  const [riskData, setRiskData] = useState<RiskDashboardResponse | null>(null)
-  const [loadingRisk, setLoadingRisk] = useState(false)
+  const orderMutation = useTradingCreateOrder()
   const [showRisk, setShowRisk] = useState(false)
 
-  const fetchPortfolioData = useCallback((quiet = false) => {
-    if (!quiet) setLoading(true)
-    setError(false)
-    Promise.all([
-      axios.get<PortfolioRead[]>('/api/portfolio').then(r => r.data),
-      axios.get<HoldingRead[]>('/api/portfolio/holdings').then(r => r.data),
-    ]).then(([p, h]) => {
-      setPortfolios(p)
-      setHoldings(h)
-    }).catch(() => {
-      if (!quiet) setError(true)
-    }).finally(() => {
-      if (!quiet) setLoading(false)
+  const portfoliosQuery = usePortfolioListPortfolios({ query: { refetchInterval: 15_000 } })
+  const holdingsQuery = usePortfolioListHoldings(undefined, { query: { refetchInterval: 15_000 } })
+  const portfolios = (portfoliosQuery.data ?? []) as PortfolioRead[]
+  const holdings = (holdingsQuery.data ?? []) as HoldingRead[]
+  const loading = portfoliosQuery.isPending || holdingsQuery.isPending
+  const error = Boolean(portfoliosQuery.error || holdingsQuery.error)
+  const fetchPortfolioData = useCallback(
+    () => Promise.all([portfoliosQuery.refetch(), holdingsQuery.refetch()]),
+    [portfoliosQuery, holdingsQuery],
+  )
+
+  const rebalanceMutation = useTradingRebalancePortfolio()
+  const rebalancing = rebalanceMutation.isPending
+  const runRebalance = useCallback(() => {
+    rebalanceMutation.mutate(undefined, {
+      onSuccess: (data) => setRebalanceResult(data as unknown as RebalanceResponse),
+      onError: (err) => {
+        const detail = (err as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        notify('error', detail || 'Rebalance failed', 'AI Rebalance')
+      },
     })
-  }, [])
+  }, [rebalanceMutation])
 
-  useEffect(() => {
-    fetchPortfolioData()
-    const interval = setInterval(() => {
-      fetchPortfolioData(true)
-    }, 15000)
-    return () => clearInterval(interval)
-  }, [fetchPortfolioData])
-
-  const runRebalance = useCallback(async () => {
-    setRebalancing(true)
-    try {
-      const { data } = await axios.post<RebalanceResponse>('/api/trading/rebalance')
-      setRebalanceResult(data)
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Rebalance failed', 'AI Rebalance')
-    } finally {
-      setRebalancing(false)
-    }
-  }, [])
-
-  const loadRiskDashboard = useCallback(async () => {
-    setLoadingRisk(true)
-    try {
-      const { data } = await axios.get<RiskDashboardResponse>('/api/trading/risk-dashboard')
-      setRiskData(data)
-      setShowRisk(true)
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Risk dashboard failed', 'Risk')
-    } finally {
-      setLoadingRisk(false)
-    }
-  }, [])
+  // Only fetched on demand: the risk dashboard is an expensive panel behind a
+  // toggle, not part of the page's initial load.
+  const riskQuery = useTradingGetRiskDashboard({ query: { enabled: showRisk } })
+  const riskData = (riskQuery.data ?? null) as RiskDashboardResponse | null
+  const loadingRisk = showRisk && riskQuery.isFetching
+  useQueryErrorToast(riskQuery.error, 'Risk dashboard failed', 'Risk')
+  const loadRiskDashboard = useCallback(() => setShowRisk(true), [])
 
   const applySuggestion = useCallback(async (s: RebalanceSuggestion, idx: number) => {
     setApplyingIdx(idx)
     try {
-      await axios.post('/api/trading/order', {
-        ticker: s.ticker,
-        action: s.action,
-        quantity: s.quantity,
+      await orderMutation.mutateAsync({
+        data: { ticker: s.ticker, action: s.action as APIOrderRequestAction, quantity: s.quantity },
       })
       notify('success', `${s.action} ${s.quantity} ${s.ticker} order placed`, 'Trade Executed')
-      fetchPortfolioData(false)
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Order failed', 'Trade Error')
+      void fetchPortfolioData()
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      notify('error', detail || 'Order failed', 'Trade Error')
     } finally {
       setApplyingIdx(null)
     }
@@ -150,7 +128,7 @@ export default function Portfolio() {
           <p className="text-xs text-slate-500 leading-relaxed">Ensure backend service is running and retry the connection request</p>
         </div>
         <button
-          onClick={() => fetchPortfolioData(false)}
+          onClick={() => fetchPortfolioData()}
           className="bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition duration-200 cursor-pointer shadow-lg shadow-violet-600/25"
         >
           {t('common.retry') || 'Retry Connection'}
@@ -201,7 +179,7 @@ export default function Portfolio() {
             {rebalancing ? 'Analysing…' : 'AI Rebalance'}
           </button>
           <button
-            onClick={() => fetchPortfolioData(false)}
+            onClick={() => fetchPortfolioData()}
             disabled={loading}
             className="flex items-center justify-center p-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white transition-all cursor-pointer"
             title="Refresh"
@@ -612,19 +590,11 @@ function corrColor(v: number, isDiag: boolean): string {
 }
 
 function CorrelationHeatmap() {
-  const [data, setData] = useState<CorrData | null>(null)
-  const [loading, setLoading] = useState(true)
   const [period, setPeriod] = useState('90d')
 
-  const load = useCallback(async (p: string) => {
-    setLoading(true)
-    try {
-      const r = await axios.get(`/api/trading/correlation?period=${p}`)
-      setData(r.data)
-    } catch { /* ignore */ } finally { setLoading(false) }
-  }, [])
-
-  useEffect(() => { load(period) }, [load, period])
+  const query = useTradingGetCorrelation({ period })
+  const data = (query.data ?? null) as unknown as CorrData | null
+  const loading = query.isPending
 
   const diversificationLabel = (avg: number | null) => {
     if (avg === null) return ''
@@ -644,7 +614,7 @@ function CorrelationHeatmap() {
         </div>
         <select
           value={period}
-          onChange={e => { setPeriod(e.target.value); load(e.target.value) }}
+          onChange={e => setPeriod(e.target.value)}
           className="bg-slate-900 border border-white/[0.08] text-slate-300 text-[10px] font-semibold rounded-lg px-2 py-1 outline-none cursor-pointer"
         >
           {['30d','90d','180d','1y'].map(p => <option key={p} value={p}>{p}</option>)}

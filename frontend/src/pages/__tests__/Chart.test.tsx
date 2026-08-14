@@ -1,21 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithQuery } from '../../test/renderWithQuery'
 import userEvent from '@testing-library/user-event'
 import Chart from '../Chart'
-import api from '../../utils/api'
+import axios from 'axios'
 
 vi.mock('react-router-dom', () => ({
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }))
 
-vi.mock('../../utils/api', () => ({
-  default: {
-    get: vi.fn().mockResolvedValue({ data: {} }),
-    post: vi.fn().mockResolvedValue({ data: {} }),
-    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
-    defaults: {},
-  },
-}))
+// Chart now uses the generated client, which goes through the global axios
+// mock in src/test/setup.ts. Its callable form forwards (url, config), so the
+// per-test implementations below still read config.params.
 
 vi.mock('../../contexts/LanguageContext', () => ({
   useTranslation: () => ({
@@ -77,7 +73,7 @@ describe('Chart', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
   it('renders chart components', async () => {
-    render(<Chart />)
+    renderWithQuery(<Chart />)
     await waitFor(() => {
       expect(screen.getByText('ChartSearch')).toBeInTheDocument()
       expect(screen.getByText('TechnicalControls')).toBeInTheDocument()
@@ -85,7 +81,7 @@ describe('Chart', () => {
   })
 
   it('uses the sentiment-history object response and clears old candles on a failed symbol load', async () => {
-    const get = vi.mocked(api.get)
+    const get = vi.mocked(axios.get)
     get.mockImplementation((url, config) => {
       const ticker = (config as any)?.params?.ticker
       if (ticker === 'AAPL' && url === '/api/market/ohlcv') {
@@ -102,7 +98,7 @@ describe('Chart', () => {
     })
 
     const user = userEvent.setup()
-    render(<Chart />)
+    renderWithQuery(<Chart />)
     const input = screen.getByLabelText('ticker')
 
     await user.type(input, 'AAPL')

@@ -1,5 +1,11 @@
 import { useEffect, useState, forwardRef, useImperativeHandle, useRef, useCallback } from 'react'
-import axios from 'axios'
+import { useSystemSettingsGetServerTools, useSystemSettingsUpdateServerTools } from '../../api/generated/system-settings/system-settings'
+import {
+  useSettingsGetUserTools,
+  useSettingsUpdateUserTools,
+  useSettingsGetOtherUserTools,
+  useSettingsUpdateOtherUserTools,
+} from '../../api/generated/settings/settings'
 import { Save, RefreshCw, AlertCircle } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
 import { useMeta } from '../../hooks/useMeta'
@@ -29,59 +35,61 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
   const { t } = useTranslation()
   const meta = useMeta()
   const [settings, setSettings] = useState<ToolSettings | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
   const [saveSuccess, setSaveSuccess] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
   const toolTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => { return () => { if (toolTimeoutRef.current) clearTimeout(toolTimeoutRef.current) } }, [])
 
-  const apiPath = serverScope
-    ? '/api/system-settings/tools'
-    : userId
-    ? `/api/settings/users/${userId}/tools`
-    : '/api/settings/tools'
+  // One panel serves three scopes (server-wide, another user, own settings).
+  // All hooks are declared unconditionally and only the matching one is
+  // enabled, since hooks cannot be called conditionally.
+  const otherUserId = !serverScope && userId ? userId : 0
+  const serverQuery = useSystemSettingsGetServerTools({ query: { enabled: serverScope } })
+  const otherUserQuery = useSettingsGetOtherUserTools(otherUserId, {
+    query: { enabled: !serverScope && Boolean(userId) },
+  })
+  const ownQuery = useSettingsGetUserTools({ query: { enabled: !serverScope && !userId } })
+  const activeQuery = serverScope ? serverQuery : userId ? otherUserQuery : ownQuery
 
-  const fetchSettings = useCallback(async () => {
-    setLoading(true)
-    setSaveError(null)
-    try {
-      const res = await axios.get(apiPath)
-      setSettings(res.data)
-    } catch (err: any) {
-      setSaveError(err.response?.data?.detail || 'Failed to load tool settings.')
-    } finally {
-      setLoading(false)
-    }
-  }, [apiPath])
-
+  const loading = activeQuery.isPending
   useEffect(() => {
-    fetchSettings()
-  }, [fetchSettings])
+    if (activeQuery.data) setSettings(activeQuery.data as unknown as ToolSettings)
+  }, [activeQuery.data])
 
   useImperativeHandle(ref, () => ({
     save
   }))
 
+  const saveServer = useSystemSettingsUpdateServerTools()
+  const saveOtherUser = useSettingsUpdateOtherUserTools()
+  const saveOwn = useSettingsUpdateUserTools()
+  const saving = saveServer.isPending || saveOtherUser.isPending || saveOwn.isPending
+
+  // The parent Settings page awaits save() and relies on it *throwing* to abort
+  // a multi-panel save, so keep mutateAsync and re-raise rather than swallowing.
   const save = useCallback(async () => {
     if (!settings) return
-    setSaving(true)
     setSaveSuccess(false)
     setSaveError(null)
     try {
-      const res = await axios.put(apiPath, settings)
-      setSettings(res.data)
+      const body = settings as unknown as Parameters<typeof saveOwn.mutateAsync>[0]['data']
+      const res = serverScope
+        ? await saveServer.mutateAsync({ data: body })
+        : userId
+          ? await saveOtherUser.mutateAsync({ userId, data: body })
+          : await saveOwn.mutateAsync({ data: body })
+      setSettings(res as unknown as ToolSettings)
       setSaveSuccess(true)
       if (toolTimeoutRef.current) clearTimeout(toolTimeoutRef.current)
       toolTimeoutRef.current = setTimeout(() => setSaveSuccess(false), 2000)
-    } catch (err: any) {
-      const msg = err.response?.data?.detail || 'Failed to save tool settings.'
+    } catch (err: unknown) {
+      const msg =
+        (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        || 'Failed to save tool settings.'
       setSaveError(msg)
       throw new Error(msg, { cause: err })
-    } finally {
-      setSaving(false)
     }
-  }, [settings, apiPath])
+  }, [settings, serverScope, userId, saveServer, saveOtherUser, saveOwn])
 
   const resetField = useCallback((toolKey: string, fieldKey: string) => {
     if (!settings) return

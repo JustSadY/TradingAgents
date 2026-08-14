@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithQuery } from '../../test/renderWithQuery'
 import { MemoryRouter } from 'react-router-dom'
 import Dashboard from '../Dashboard'
 
@@ -26,14 +27,8 @@ vi.mock('../../hooks/useNewsFeed', () => ({
   useNewsFeed: () => mockNewsData,
 }))
 
-vi.mock('../../utils/api', () => ({
-  default: {
-    get: vi.fn().mockResolvedValue({ data: [] }),
-    post: vi.fn().mockResolvedValue({ data: {} }),
-    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
-    defaults: {},
-  },
-}))
+// Dashboard now uses the generated client, which goes through the global
+// axios mock installed in src/test/setup.ts.
 
 vi.mock('../../contexts/LanguageContext', () => ({
   useTranslation: () => ({
@@ -74,7 +69,7 @@ describe('Dashboard', () => {
   })
 
   it('renders dashboard title', async () => {
-    render(
+    renderWithQuery(
       <MemoryRouter>
         <Dashboard />
       </MemoryRouter>
@@ -85,7 +80,7 @@ describe('Dashboard', () => {
   })
 
   it('renders AI Morning Brief section', async () => {
-    render(
+    renderWithQuery(
       <MemoryRouter>
         <Dashboard />
       </MemoryRouter>
@@ -96,7 +91,7 @@ describe('Dashboard', () => {
   })
 
   it('renders Asset Allocation section', async () => {
-    render(
+    renderWithQuery(
       <MemoryRouter>
         <Dashboard />
       </MemoryRouter>
@@ -108,7 +103,7 @@ describe('Dashboard', () => {
 
   it('shows loading state initially', () => {
     mockPortfolioData.loading = true
-    render(
+    renderWithQuery(
       <MemoryRouter>
         <Dashboard />
       </MemoryRouter>

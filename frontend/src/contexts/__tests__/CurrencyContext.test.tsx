@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithQuery } from '../../test/renderWithQuery'
 import userEvent from '@testing-library/user-event'
 import { CurrencyProvider, useCurrency, CURRENCIES } from '../CurrencyContext'
 import type { ReactNode } from 'react'
@@ -11,16 +12,22 @@ const mockFxRates = vi.hoisted((): Record<string, number | null> => ({
 
 vi.mock('axios', async () => {
   const actual = await vi.importActual('axios')
-  return {
-    ...actual,
-    default: {
+  const get = vi.fn().mockResolvedValue({ data: mockFxRates })
+  const post = vi.fn().mockResolvedValue({ data: {} })
+  // The generated FX query calls axios(config); route it to the same mocks.
+  const instance = Object.assign(
+    vi.fn((config: { url?: string; method?: string } = {}) =>
+      String(config.method ?? 'get').toLowerCase() === 'get' ? get(config.url, config) : post(config.url, config),
+    ),
+    {
       ...(actual as any).default,
-      get: vi.fn().mockResolvedValue({ data: mockFxRates }),
-      post: vi.fn().mockResolvedValue({ data: {} }),
+      get,
+      post,
       interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
       defaults: {},
     },
-  }
+  )
+  return { ...actual, default: instance }
 })
 
 function TestConsumer() {
@@ -41,7 +48,7 @@ function TestConsumer() {
 }
 
 function renderWithCurrency(children: ReactNode) {
-  return render(<CurrencyProvider>{children}</CurrencyProvider>)
+  return renderWithQuery(<CurrencyProvider>{children}</CurrencyProvider>)
 }
 
 beforeEach(() => {

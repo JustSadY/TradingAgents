@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
+import { renderWithQuery } from '../../test/renderWithQuery'
 import userEvent from '@testing-library/user-event'
 import { StrictMode } from 'react'
 import Analysis from '../Analysis'
@@ -8,16 +9,25 @@ vi.mock('react-router-dom', () => ({
   useSearchParams: () => [new URLSearchParams(), vi.fn()],
 }))
 
-vi.mock('axios', () => ({
-  default: {
+vi.mock('axios', () => {
+  const methods = {
     get: vi.fn().mockResolvedValue({ data: {} }),
     post: vi.fn().mockResolvedValue({ data: {} }),
-    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
-    defaults: {},
-  },
-  get: vi.fn().mockResolvedValue({ data: {} }),
-  post: vi.fn().mockResolvedValue({ data: {} }),
-}))
+    put: vi.fn().mockResolvedValue({ data: {} }),
+    delete: vi.fn().mockResolvedValue({ data: {} }),
+  }
+  // The generated client calls axios(config); read handlers off the instance so
+  // per-test mockResolvedValue on axios.get still applies.
+  const instance: any = Object.assign(
+    vi.fn((config: { url?: string; method?: string } = {}) => {
+      const m = String(config.method ?? 'get').toLowerCase()
+      return (instance[m] ?? instance.get)(config.url, config)
+    }),
+    methods,
+    { interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } }, defaults: {} },
+  )
+  return { default: instance, ...methods }
+})
 
 vi.mock('../../hooks/useMeta', () => ({
   useMeta: () => ({
@@ -172,7 +182,7 @@ describe('Analysis', () => {
   })
 
   it('renders analysis tabs', async () => {
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
     await waitFor(() => {
       expect(screen.getByText('Run')).toBeInTheDocument()
     })
@@ -194,7 +204,7 @@ describe('Analysis', () => {
     }))
     sessionStorage.setItem('ta_task_running', '{malformed')
 
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     await waitFor(() => expect(screen.getByText('Run')).toBeInTheDocument())
     expect(sessionStorage.getItem('ta_task_running')).toBeNull()
@@ -223,7 +233,7 @@ describe('Analysis', () => {
       return Promise.resolve({ data: {} })
     })
 
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
     const user = userEvent.setup()
     await user.type(screen.getByRole('textbox', { name: 'Ticker' }), 'AAPL')
     await user.click(screen.getByRole('button', { name: 'Start analysis' }))
@@ -265,7 +275,7 @@ describe('Analysis', () => {
       return Promise.resolve({ data: {} })
     })
 
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
     const user = userEvent.setup()
     await user.type(screen.getByRole('textbox', { name: 'Ticker' }), 'AAPL')
     await user.click(screen.getByRole('button', { name: 'Start analysis' }))
@@ -315,7 +325,7 @@ describe('Analysis', () => {
       return Promise.resolve({ data: {} })
     })
 
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
     const user = userEvent.setup()
     await user.type(screen.getByRole('textbox', { name: 'Ticker' }), 'NVDA')
     await user.click(screen.getByRole('button', { name: 'Start analysis' }))
@@ -357,7 +367,7 @@ describe('Analysis', () => {
       return Promise.resolve({ data: {} })
     })
 
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
     const user = userEvent.setup()
     await user.type(screen.getByRole('textbox', { name: 'Ticker' }), 'NVDA')
     await user.click(screen.getByRole('button', { name: 'Start analysis' }))
@@ -419,7 +429,7 @@ describe('Analysis', () => {
 
     const user = userEvent.setup()
     localStorage.setItem('ta_access', 'test-token')
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
     await user.click(screen.getByText('Multi').closest('button')!)
 
     const input = screen.getByPlaceholderText('AAPL, Enter')
@@ -473,7 +483,7 @@ describe('Analysis', () => {
     sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: 'AAPL', taskId: 'resume-task', startedAt: new Date().toISOString(),
     }))
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
 
@@ -518,7 +528,7 @@ describe('Analysis', () => {
     sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
     }))
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
     const user = userEvent.setup()
@@ -561,7 +571,7 @@ describe('Analysis', () => {
     sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: 'AAPL', taskId: 'strict-task', startedAt: new Date().toISOString(),
     }))
-    render(<StrictMode><Analysis /></StrictMode>)
+    renderWithQuery(<StrictMode><Analysis /></StrictMode>)
 
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
   })
@@ -599,7 +609,7 @@ describe('Analysis', () => {
     sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
     }))
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
 
@@ -639,7 +649,7 @@ describe('Analysis', () => {
       ticker: 'AAPL', date: '2026-07-26', assetType: 'stock', runStatus: 'idle',
       signal: null, reports: {}, log: [], activeSection: null, analysisId: null, liveDebate: [],
     }))
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Start analysis' }))
@@ -653,7 +663,7 @@ describe('Analysis', () => {
       await Promise.resolve()
     })
 
-    await waitFor(() => expect(axios.default.post).toHaveBeenCalledWith('/api/analysis/late-task/cancel'))
+    await waitFor(() => expect(axios.default.post).toHaveBeenCalledWith('/api/analysis/late-task/cancel', expect.anything()))
     expect(sessionStorage.getItem('ta_task_running')).toBeNull()
     expect(screen.getByTestId('run-state')).toHaveTextContent('idle')
     expect(MockWebSocket.instances).toHaveLength(0)
@@ -685,14 +695,14 @@ describe('Analysis', () => {
       ticker: 'AAPL', date: '2026-07-26', assetType: 'stock', runStatus: 'idle',
       signal: null, reports: {}, log: [], activeSection: null, analysisId: null, liveDebate: [],
     }))
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Start analysis' }))
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
     await user.click(screen.getByRole('button', { name: 'Stop analysis' }))
 
-    await waitFor(() => expect(axios.default.post).toHaveBeenCalledWith('/api/analysis/cannot-stop-task/cancel'))
+    await waitFor(() => expect(axios.default.post).toHaveBeenCalledWith('/api/analysis/cannot-stop-task/cancel', expect.anything()))
     expect(screen.getByTestId('run-state')).toHaveTextContent('running')
   })
 
@@ -719,7 +729,7 @@ describe('Analysis', () => {
       if (url === '/api/analysis/portfolio-stop-task/cancel') return Promise.resolve({ data: { cancelled: true } })
       return Promise.resolve({ data: {} })
     })
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     const user = userEvent.setup()
     await user.click(screen.getByText('Multi').closest('button')!)
@@ -731,7 +741,7 @@ describe('Analysis', () => {
 
     await user.click(screen.getByRole('button', { name: /analysis\.btn\.stop/ }))
 
-    await waitFor(() => expect(axios.default.post).toHaveBeenCalledWith('/api/analysis/portfolio-stop-task/cancel'))
+    await waitFor(() => expect(axios.default.post).toHaveBeenCalledWith('/api/analysis/portfolio-stop-task/cancel', expect.anything()))
     expect(screen.getByText('analysis.ws.stopped')).toBeInTheDocument()
     expect(MockWebSocket.instances).toHaveLength(1)
   })
@@ -768,7 +778,7 @@ describe('Analysis', () => {
       ticker: 'AAPL', date: '2026-07-26', assetType: 'stock', runStatus: 'idle',
       signal: null, reports: {}, log: [], activeSection: null, analysisId: null, liveDebate: [],
     }))
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Start analysis' }))
@@ -798,7 +808,7 @@ describe('Analysis', () => {
     sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: 'AAPL', taskId: 'probe-task', startedAt: new Date().toISOString(),
     }))
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     expect(MockWebSocket.instances).toHaveLength(0)
     expect(screen.getByTestId('run-state')).toHaveTextContent('idle')
@@ -835,7 +845,7 @@ describe('Analysis', () => {
       ticker: 'AAPL', date: '2026-07-26', assetType: 'stock', runStatus: 'idle',
       signal: null, reports: {}, log: [], activeSection: null, analysisId: null, liveDebate: [],
     }))
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Start analysis' }))
@@ -881,7 +891,7 @@ describe('Analysis', () => {
       ticker: 'AAPL', date: '2026-07-26', assetType: 'stock', runStatus: 'idle',
       signal: null, reports: {}, log: [], activeSection: null, analysisId: null, liveDebate: [],
     }))
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     const user = userEvent.setup()
     await user.click(screen.getByRole('button', { name: 'Start analysis' }))
@@ -921,7 +931,7 @@ describe('Analysis', () => {
     sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: 'AAPL', taskId: 'retry-task', startedAt: new Date().toISOString(),
     }))
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
 
     vi.useFakeTimers()
@@ -969,7 +979,7 @@ describe('Analysis', () => {
     sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
     }))
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
     act(() => MockWebSocket.instances[0].close())
@@ -1007,7 +1017,7 @@ describe('Analysis', () => {
     sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
     }))
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
     act(() => MockWebSocket.instances[0].close(4001))
@@ -1050,7 +1060,7 @@ describe('Analysis', () => {
     sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
     }))
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
     act(() => MockWebSocket.instances[0].close())
@@ -1094,7 +1104,7 @@ describe('Analysis', () => {
     sessionStorage.setItem('ta_task_running', JSON.stringify({
       ticker: task.ticker, taskId: task.task_id, startedAt: new Date().toISOString(),
     }))
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
     vi.useFakeTimers()
@@ -1136,7 +1146,7 @@ describe('Analysis', () => {
       }
       return Promise.resolve({ data: {} })
     })
-    render(<Analysis />)
+    renderWithQuery(<Analysis />)
 
     const user = userEvent.setup()
     const tickerInput = screen.getByRole('textbox', { name: 'Ticker' })

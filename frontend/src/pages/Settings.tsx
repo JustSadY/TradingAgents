@@ -1,5 +1,35 @@
-import { useEffect, useState, useRef, useCallback } from 'react'
-import axios from 'axios'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useSettingsGetSettings,
+  useSettingsUpdateSettings,
+  useSettingsGetUserSettingsById,
+  useSettingsUpdateUserSettingsById,
+  useSettingsGetLlmCatalog,
+  useSettingsGetMemoryStatus,
+  useSettingsGetWebhookDeliveries,
+  useSettingsTestWebhook,
+} from '../api/generated/settings/settings'
+import {
+  usePresetsListPresetsRun,
+  usePresetsCreatePresetRun,
+  usePresetsApplyPreset,
+  usePresetsDeletePreset,
+} from '../api/generated/presets/presets'
+import {
+  useUsersGetMySettingPermissions,
+  useUsersGetUserSettingPermissions,
+  useUsersSetMyApiKey,
+  useUsersDeleteMyApiKey,
+  useUsersSetUserApiKeyEndpoint,
+  useUsersDeleteUserApiKeyEndpoint,
+} from '../api/generated/users/users'
+import { useCronCronStatus } from '../api/generated/cron/cron'
+import {
+  usePersonasListAllPersonas,
+  usePersonasCreatePersona,
+  usePersonasUpdatePersona,
+  usePersonasDeletePersona,
+} from '../api/generated/personas/personas'
 import {
   Save, BookmarkPlus, Trash2, Play, Bell,
   Settings as SettingsIcon, Brain, ShieldAlert, Clock, Wrench, Database,
@@ -155,57 +185,72 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const [saved, setSaved] = useState(false)
   const [saving, setSaving] = useState(false)
   const [saveError, setSaveError] = useState<string | null>(null)
-  const [presets, setPresets] = useState<PresetRead[]>([])
   const [presetName, setPresetName] = useState('')
   const [presetSaving, setPresetSaving] = useState(false)
   const [browserNotify, setBrowserNotify] = useState(isBrowserNotifyEnabled())
   const [webhookTesting, setWebhookTesting] = useState(false)
   const [webhookTestResult, setWebhookTestResult] = useState<string | null>(null)
-  const [deliveries, setDeliveries] = useState<WebhookDeliveryRead[]>([])
-  const [loadingDeliveries, setLoadingDeliveries] = useState(false)
   const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   useEffect(() => { return () => { if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current) } }, [])
-  const loadDeliveries = useCallback(() => {
-    setLoadingDeliveries(true)
-    const url = userId ? `/api/settings/webhook-deliveries?user_id=${userId}` : '/api/settings/webhook-deliveries'
-    axios.get<WebhookDeliveryRead[]>(url)
-      .then(r => setDeliveries(r.data))
-      .catch(e => console.error('Failed to load webhook deliveries', e))
-      .finally(() => setLoadingDeliveries(false))
-  }, [userId])
+  const deliveriesQuery = useSettingsGetWebhookDeliveries(
+    userId ? { user_id: userId } : undefined,
+    { query: { enabled: false } },
+  )
+  const deliveries = (deliveriesQuery.data ?? []) as unknown as WebhookDeliveryRead[]
+  const loadingDeliveries = deliveriesQuery.isFetching
+  // Deliveries are only fetched when the webhooks tab asks for them.
+  const loadDeliveries = useCallback(() => { void deliveriesQuery.refetch() }, [deliveriesQuery])
   const [activeTab, setActiveTab] = useState<'general' | 'llm' | 'agents' | 'risk' | 'alerts' | 'webhooks' | 'presets' | 'advanced' | 'cron' | 'tools' | 'memory' | 'personas'>('general')
-  const [memoryStatus, setMemoryStatus] = useState<any>(null)
   const [pineconeKey, setPineconeKey] = useState('')
   const [pineconeSaving, setPineconeSaving] = useState(false)
-  const loadMemoryStatus = () => {
-    const url = userId ? `/api/settings/memory?user_id=${userId}` : '/api/settings/memory'
-    axios.get(url).then(r => setMemoryStatus(r.data)).catch(e => console.error('Failed to load memory status', e))
-  }
+  const memoryQuery = useSettingsGetMemoryStatus(userId ? { user_id: userId } : undefined)
+  const memoryStatus = memoryQuery.data ?? null
+  const loadMemoryStatus = useCallback(() => { void memoryQuery.refetch() }, [memoryQuery])
   const [allowedSettings, setAllowedSettings] = useState<string[]>([])
-  const [cronStatus, setCronStatus] = useState<{ running: boolean; job_configured: boolean; next_run_time: string | null } | null>(null)
-  const [llmCatalog, setLlmCatalog] = useState<LlmCatalog>({})
   const meta = useMeta()
   
+  const updateOwnSettings = useSettingsUpdateSettings()
+  const updateOtherSettings = useSettingsUpdateUserSettingsById()
+  const createPreset = usePresetsCreatePresetRun()
+  const applyPresetMutation = usePresetsApplyPreset()
+  const deletePresetMutation = usePresetsDeletePreset()
+  const testWebhookMutation = useSettingsTestWebhook()
+  const setOwnKey = useUsersSetMyApiKey()
+  const deleteOwnKey = useUsersDeleteMyApiKey()
+  const setOtherUserKey = useUsersSetUserApiKeyEndpoint()
+  const deleteOtherUserKey = useUsersDeleteUserApiKeyEndpoint()
+
   const toolPanelRef = useRef<ToolSettingsPanelHandle>(null)
   const agentPanelRef = useRef<AgentSettingsPanelHandle>(null)
 
+  // Admin editing another user and a user editing themselves hit different
+  // endpoints. Both hooks are declared and only the matching one is enabled.
+  const ownSettingsQuery = useSettingsGetSettings({ query: { enabled: !userId } })
+  const otherSettingsQuery = useSettingsGetUserSettingsById(userId ?? 0, { query: { enabled: Boolean(userId) } })
+  const settingsQuery = userId ? otherSettingsQuery : ownSettingsQuery
+
+  const presetsQuery = usePresetsListPresetsRun(userId ? { user_id: userId } : undefined)
+  const ownPermsQuery = useUsersGetMySettingPermissions({ query: { enabled: !userId } })
+  const otherPermsQuery = useUsersGetUserSettingPermissions(userId ?? 0, { query: { enabled: Boolean(userId) } })
+  const permsQuery = userId ? otherPermsQuery : ownPermsQuery
+  const presets = (presetsQuery.data ?? []) as unknown as PresetRead[]
+  const cronQuery = useCronCronStatus()
+  const catalogQuery = useSettingsGetLlmCatalog()
+
+  const cronStatus = (cronQuery.data ?? null) as { running: boolean; job_configured: boolean; next_run_time: string | null } | null
+  const llmCatalog = useMemo(
+    () => (catalogQuery.data ? normalizeLlmCatalog(catalogQuery.data) : {}),
+    [catalogQuery.data],
+  )
+
   useEffect(() => {
-    const settingsUrl = userId ? `/api/settings/users/${userId}` : '/api/settings'
-    const permUrl = userId ? `/api/users/${userId}/setting-permissions` : '/api/users/me/setting-permissions'
-    const presetsUrl = userId ? `/api/presets?user_id=${userId}` : '/api/presets'
-    Promise.all([
-      axios.get(settingsUrl).then(r => r.data),
-      axios.get(presetsUrl).then(r => r.data).catch(e => { console.error('Failed to load presets', e); return [] }),
-      axios.get(permUrl).then(r => r.data.allowed_settings || r.data.permissions || []).catch(e => { console.error('Failed to load permissions', e); return [] }),
-      axios.get('/api/cron/status').then(r => r.data).catch(e => { console.error('Failed to load cron status', e); return null }),
-      axios.get<unknown>('/api/settings/llm-catalog').then(r => normalizeLlmCatalog(r.data)).catch(e => { console.error('Failed to load LLM catalog', e); return {} }),
-    ]).then(([settings, presetList, allowedSet, cStatus, catalog]) => {
-      setS(settings)
-      setPresets(presetList)
+    if (!settingsQuery.data || !permsQuery.isFetched) return
+    const settings = settingsQuery.data
+    const permPayload = permsQuery.data as { allowed_settings?: string[]; permissions?: string[] } | undefined
+    const allowedSet = permPayload?.allowed_settings || permPayload?.permissions || []
+    {
+      setS(settings as never)
       setAllowedSettings(userId ? ['general', 'agents', 'tools', 'risk', 'alerts', 'webhooks', 'cron', 'memory', 'presets', 'personas'] : allowedSet)
-      setCronStatus(cStatus)
-      setLlmCatalog(catalog)
-      loadMemoryStatus()
 
       const defaultTabs = ['general', 'agents', 'tools', 'risk', 'alerts', 'webhooks', 'cron']
       const activeDefault = defaultTabs.find(tab => userId || allowedSet.includes(tab))
@@ -214,47 +259,44 @@ export default function Settings({ userId }: { userId?: number } = {}) {
       } else if (isAdmin) {
         setActiveTab('advanced')
       }
-    })
-  }, [isAdmin, userId])
+    }
+  }, [isAdmin, userId, settingsQuery.data, permsQuery.data, permsQuery.isFetched])
 
-  const loadPresets = () => {
-    const url = userId ? `/api/presets?user_id=${userId}` : '/api/presets'
-    axios.get(url).then(r => setPresets(r.data)).catch(e => console.error('Failed to load presets list', e))
-  }
+  const loadPresets = useCallback(() => { void presetsQuery.refetch() }, [presetsQuery])
 
   const savePreset = async () => {
     if (!presetName.trim() || !s) return
     setPresetSaving(true)
     try {
-      const url = userId ? `/api/presets?user_id=${userId}` : '/api/presets'
       const presetSettings = { ...s }
       delete presetSettings.updated_at
       delete presetSettings.active_preset_name
-      await axios.post(url, { name: presetName.trim(), settings_json: JSON.stringify(presetSettings) })
+      await createPreset.mutateAsync({
+        params: userId ? { user_id: userId } : undefined,
+        data: { name: presetName.trim(), settings_json: JSON.stringify(presetSettings) },
+      })
       setPresetName('')
       await loadPresets()
     } finally { setPresetSaving(false) }
   }
 
   const applyPreset = async (id: number) => {
-    const url = userId ? `/api/presets/${id}/apply?user_id=${userId}` : `/api/presets/${id}/apply`
-    await axios.post(url)
-    const settingsUrl = userId ? `/api/settings/users/${userId}` : '/api/settings'
-    const settingsRes = await axios.get(settingsUrl)
-    setS(settingsRes.data)
+    await applyPresetMutation.mutateAsync({ presetId: id, params: userId ? { user_id: userId } : undefined })
+    // Re-read the settings the preset just wrote rather than guessing them.
+    const refreshed = await settingsQuery.refetch()
+    if (refreshed.data) setS(refreshed.data as never)
   }
 
   const deletePreset = async (id: number) => {
-    const url = userId ? `/api/presets/${id}?user_id=${userId}` : `/api/presets/${id}`
-    await axios.delete(url)
-    setPresets(prev => prev.filter(p => p.id !== id))
+    await deletePresetMutation.mutateAsync({ presetId: id, params: userId ? { user_id: userId } : undefined })
+    void presetsQuery.refetch()
   }
 
   const testWebhook = async () => {
     if (!s?.webhook_url) return
     setWebhookTesting(true); setWebhookTestResult(null)
     try {
-      await axios.post('/api/settings/test-webhook', { url: s.webhook_url })
+      await testWebhookMutation.mutateAsync({ data: { url: s.webhook_url } })
       setWebhookTestResult(t('settings.webhook_success'))
     } catch { setWebhookTestResult(t('settings.webhook_failed')) }
     finally { setWebhookTesting(false) }
@@ -274,14 +316,17 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     setSaveError(null)
     setSaving(true)
     try {
-      const url = userId ? `/api/settings/users/${userId}` : '/api/settings'
       const settingsUpdate = { ...s }
       delete settingsUpdate.updated_at
       // Preset selection belongs to the preset apply endpoint. Sending the
       // read-only marker back with every full-form save would keep a stale
       // preset selected after the user changes an individual setting.
       delete settingsUpdate.active_preset_name
-      await axios.put(url, settingsUpdate)
+      if (userId) {
+        await updateOtherSettings.mutateAsync({ userId, data: settingsUpdate })
+      } else {
+        await updateOwnSettings.mutateAsync({ data: settingsUpdate })
+      }
       triggerMetaRefetch()
       if (agentPanelRef.current) {
         await agentPanelRef.current.save()
@@ -327,16 +372,21 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     if (!pineconeKey.trim()) return
     setPineconeSaving(true)
     try {
-      const url = userId ? `/api/users/${userId}/api-keys` : '/api/users/me/api-keys'
-      await axios.put(url, { provider: 'pinecone', api_key: pineconeKey.trim() })
+      const data = { provider: 'pinecone', api_key: pineconeKey.trim() }
+      if (userId) await setOtherUserKey.mutateAsync({ userId, data })
+      else await setOwnKey.mutateAsync({ data })
       setPineconeKey('')
-      await loadMemoryStatus()
+      loadMemoryStatus()
     } finally { setPineconeSaving(false) }
   }
   const deletePineconeKey = async () => {
-    const url = userId ? `/api/users/${userId}/api-keys/pinecone` : '/api/users/me/api-keys/pinecone'
-    await axios.delete(url).catch(e => console.error('Failed to delete Pinecone key', e))
-    await loadMemoryStatus()
+    try {
+      if (userId) await deleteOtherUserKey.mutateAsync({ userId, provider: 'pinecone' })
+      else await deleteOwnKey.mutateAsync({ provider: 'pinecone' })
+    } catch (e) {
+      console.error('Failed to delete Pinecone key', e)
+    }
+    loadMemoryStatus()
   }
 
   const languages = meta?.languages ?? [{ value: 'English', label: 'English' }, { value: 'Turkish', label: 'Türkçe' }]
@@ -1509,24 +1559,20 @@ interface PersonaItem {
 
 function PersonaEditor({ userId }: { userId?: number } = {}) {
   const { t } = useTranslation()
-  const [personas, setPersonas] = useState<PersonaItem[]>([])
-  const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
   const [editKey, setEditKey] = useState<string | null>(null)
   const [form, setForm] = useState({ key: '', label: '', description: '', instructions: '' })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const load = useCallback(async () => {
-    setLoading(true)
-    try {
-      const url = userId ? `/api/personas?user_id=${userId}` : '/api/personas'
-      const r = await axios.get(url)
-      setPersonas(r.data)
-    } finally { setLoading(false) }
-  }, [userId])
+  const personasQuery = usePersonasListAllPersonas(userId ? { user_id: userId } : undefined)
+  const personas = (personasQuery.data ?? []) as unknown as PersonaItem[]
+  const loading = personasQuery.isPending
+  const load = useCallback(() => personasQuery.refetch(), [personasQuery])
 
-  useEffect(() => { load() }, [load])
+  const createPersona = usePersonasCreatePersona()
+  const updatePersona = usePersonasUpdatePersona()
+  const deletePersona = usePersonasDeletePersona()
 
   const openCreate = () => { setForm({ key: '', label: '', description: '', instructions: '' }); setEditKey(null); setShowForm(true); setError(null) }
   const openEdit = (p: PersonaItem) => { setForm({ key: p.key, label: p.label, description: p.description, instructions: p.instructions }); setEditKey(p.key); setShowForm(true); setError(null) }
@@ -1535,13 +1581,16 @@ function PersonaEditor({ userId }: { userId?: number } = {}) {
     if (!form.label.trim()) { setError(t('settings.persona_label_required')); return }
     setSaving(true); setError(null)
     try {
+      const params = userId ? { user_id: userId } : undefined
       if (editKey) {
-        const url = userId ? `/api/personas/${editKey}?user_id=${userId}` : `/api/personas/${editKey}`
-        await axios.put(url, { label: form.label, description: form.description, instructions: form.instructions })
+        await updatePersona.mutateAsync({
+          key: editKey,
+          params,
+          data: { label: form.label, description: form.description, instructions: form.instructions },
+        })
       } else {
         if (!form.key.trim()) { setError(t('settings.persona_key_required')); setSaving(false); return }
-        const url = userId ? `/api/personas?user_id=${userId}` : '/api/personas'
-        await axios.post(url, form)
+        await createPersona.mutateAsync({ params, data: form })
       }
       setShowForm(false); await load()
     } catch (e: unknown) {
@@ -1552,8 +1601,7 @@ function PersonaEditor({ userId }: { userId?: number } = {}) {
 
   const del = async (key: string) => {
     try {
-      const url = userId ? `/api/personas/${key}?user_id=${userId}` : `/api/personas/${key}`
-      await axios.delete(url)
+      await deletePersona.mutateAsync({ key, params: userId ? { user_id: userId } : undefined })
       await load()
     } catch { /* ignore */ }
   }

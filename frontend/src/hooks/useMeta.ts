@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react'
-import axios from 'axios'
+import { useMetaGetMeta, getMetaGetMetaQueryKey } from '../api/generated/meta/meta'
+import { queryClient } from '../api/queryClient'
 
 
 
@@ -88,64 +88,30 @@ export interface Meta {
 }
 
 
-let _cache: Meta | null = null
-let _inflight: Promise<Meta> | null = null
-const _listeners = new Set<(m: Meta | null) => void>()
-// Meta is user-scoped (custom personas and tool/agent visibility are filtered
-// by the API).  A generation token keeps a response started for a previous
-// account from repopulating the cache after logout/login.
-let _generation = 0
-
-function notifyListeners(meta: Meta | null) {
-  _listeners.forEach(listener => listener(meta))
-}
-
-function fetchMeta(): Promise<Meta> {
-  const generation = _generation
-  const request = axios.get('/api/meta').then(r => {
-    const meta = r.data as Meta
-    if (_generation === generation) {
-      _cache = meta
-      notifyListeners(meta)
-    }
-    return meta
-  }).catch(err => {
-    if (_generation === generation) _inflight = null
-    throw err
-  })
-  _inflight = request
-  return request
-}
+// Metadata is user-scoped (custom personas and tool/agent visibility are
+// filtered by the API), shared by many components, and must not survive a
+// logout. That used to be a hand-rolled module cache with a listener set, an
+// in-flight promise and a generation counter guarding against a response from
+// the previous account landing after login. TanStack Query provides the shared
+// cache, the request de-duplication and the cancellation, so only the
+// user-scoping policy lives here.
 
 /** Clear all in-memory metadata associated with the authenticated account. */
 export function clearMetaCache() {
-  _generation += 1
-  _cache = null
-  _inflight = null
-  notifyListeners(null)
+  const queryKey = getMetaGetMetaQueryKey()
+  // cancel before remove: an in-flight request started by the previous account
+  // must not repopulate the cache after the switch.
+  void queryClient.cancelQueries({ queryKey })
+  queryClient.removeQueries({ queryKey })
 }
 
 export function triggerMetaRefetch() {
-  clearMetaCache()
-  return fetchMeta()
+  return queryClient.invalidateQueries({ queryKey: getMetaGetMetaQueryKey() })
 }
 
 export function useMeta(): Meta | null {
-  const [meta, setMeta] = useState<Meta | null>(_cache)
-
-  useEffect(() => {
-    _listeners.add(setMeta)
-    if (_cache) {
-      setMeta(_cache)
-    } else if (!_inflight) {
-      // Consumers surface their own loading state; a failed metadata fetch
-      // should not create an unhandled rejection in a render effect.
-      void fetchMeta().catch(() => {})
-    }
-    return () => {
-      _listeners.delete(setMeta)
-    }
-  }, [])
-
-  return meta
+  const { data } = useMetaGetMeta()
+  // /api/meta is typed as a free-form object in OpenAPI, so the richer local
+  // Meta interface above stays the source of truth for consumers.
+  return (data as unknown as Meta | undefined) ?? null
 }

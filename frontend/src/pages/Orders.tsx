@@ -1,11 +1,18 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import axios from 'axios'
+import { useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import {
+  useTradingGetTradeNote,
+  useTradingSaveTradeNote,
+  useTradingGenerateTradeDebrief,
+  getTradingGetTradeNoteQueryKey,
+} from '../api/generated/trading/trading'
+import { usePortfolioListOrders } from '../api/generated/portfolio/portfolio'
 import { Briefcase, RefreshCw, NotebookPen, X, Save, Sparkles, Loader2, Bot, Download } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
 import { exportOrdersCSV } from '../utils/csvExport'
 import { ErrorBoundary } from '../components/ErrorBoundary'
-import type { OrderRead, JournalNoteReadResponse } from '../api/types'
+import type { OrderRead } from '../api/types'
 
 const STATUS_BADGES: Record<string, string> = {
   FILLED: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
@@ -21,55 +28,47 @@ const ACTION_BADGES: Record<string, string> = {
 
 // ── Trade Journal Modal ────────────────────────────────────────────────────────
 function JournalModal({ order, onClose }: { order: OrderRead; onClose: () => void }) {
-  const [entry, setEntry] = useState<JournalNoteReadResponse | null>(null)
   const [note, setNote] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [debriefing, setDebriefing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const queryClient = useQueryClient()
+
+  const noteQuery = useTradingGetTradeNote(order.id)
+  const entry = noteQuery.data ?? null
+  const loading = noteQuery.isPending
+
+  // Seed the editable draft once the saved note arrives, without clobbering
+  // whatever the user has typed since.
+  useEffect(() => {
+    if (noteQuery.data) setNote(noteQuery.data.note || '')
+  }, [noteQuery.data])
 
   useEffect(() => {
-    axios.get<JournalNoteReadResponse>(`/api/trading/journal/${order.id}`)
-      .then(r => {
-        setEntry(r.data)
-        setNote(r.data.note || '')
-      })
-      .catch(() => setNote(''))
-      .finally(() => {
-        setLoading(false)
-        setTimeout(() => textareaRef.current?.focus(), 50)
-      })
-  }, [order.id])
+    if (!loading) setTimeout(() => textareaRef.current?.focus(), 50)
+  }, [loading])
 
-  const saveNote = async () => {
-    setSaving(true)
-    try {
-      const { data } = await axios.post<{ order_id: number; note: string; has_debrief: boolean }>(
-        `/api/trading/journal/${order.id}/note`,
-        { note }
-      )
-      setEntry(prev => prev ? { ...prev, note: data.note, has_debrief: data.has_debrief } : null)
-      notify('success', 'Note saved', 'Journal')
-    } catch {
-      notify('error', 'Failed to save note', 'Journal')
-    } finally {
-      setSaving(false)
-    }
-  }
+  const refreshNote = () =>
+    queryClient.invalidateQueries({ queryKey: getTradingGetTradeNoteQueryKey(order.id) })
 
-  const generateDebrief = async () => {
-    setDebriefing(true)
-    try {
-      const { data } = await axios.post<{ order_id: number; ai_debrief: string }>(
-        `/api/trading/journal/${order.id}/debrief`
-      )
-      setEntry(prev => prev ? { ...prev, ai_debrief: data.ai_debrief, has_debrief: true } : null)
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Debrief generation failed', 'AI Debrief')
-    } finally {
-      setDebriefing(false)
-    }
-  }
+  const saveMutation = useTradingSaveTradeNote({
+    mutation: {
+      onSuccess: () => { refreshNote(); notify('success', 'Note saved', 'Journal') },
+      onError: () => notify('error', 'Failed to save note', 'Journal'),
+    },
+  })
+  const debriefMutation = useTradingGenerateTradeDebrief({
+    mutation: {
+      onSuccess: refreshNote,
+      onError: (err) => {
+        const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        notify('error', detail || 'Debrief generation failed', 'AI Debrief')
+      },
+    },
+  })
+  const saving = saveMutation.isPending
+  const debriefing = debriefMutation.isPending
+
+  const saveNote = () => saveMutation.mutate({ orderId: order.id, data: { note } })
+  const generateDebrief = () => debriefMutation.mutate({ orderId: order.id })
 
   const pnl = order.realized_pnl ?? 0
   const pnlPct = order.total_value && order.total_value !== pnl
@@ -173,19 +172,12 @@ function JournalModal({ order, onClose }: { order: OrderRead; onClose: () => voi
 // ── Main Orders Page ───────────────────────────────────────────────────────────
 export default function Orders() {
   const { t } = useTranslation()
-  const [orders, setOrders] = useState<OrderRead[]>([])
-  const [loading, setLoading] = useState(true)
   const [journalOrder, setJournalOrder] = useState<OrderRead | null>(null)
 
-  const loadOrders = useCallback(() => {
-    setLoading(true)
-    axios.get('/api/portfolio/orders')
-      .then(r => setOrders(r.data))
-      .catch(e => console.error('Failed to load orders', e))
-      .finally(() => setLoading(false))
-  }, [])
-
-  useEffect(() => { loadOrders() }, [loadOrders])
+  const ordersQuery = usePortfolioListOrders()
+  const orders = (ordersQuery.data ?? []) as OrderRead[]
+  const loading = ordersQuery.isPending
+  const loadOrders = () => ordersQuery.refetch()
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">

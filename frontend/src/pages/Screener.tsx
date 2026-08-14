@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react'
-import axios from 'axios'
+import { useState } from 'react'
+import { useScreenerScan, useScreenerScanWatchlist } from '../api/generated/screener/screener'
+import { useAnalysisRunAnalysis } from '../api/generated/analysis/analysis'
 import { Filter, Play, TrendingUp, Loader2, ExternalLink, BarChart2 } from 'lucide-react'
 import { notify } from '../utils/notify'
 import { useTranslation } from '../contexts/LanguageContext'
@@ -26,47 +27,54 @@ const MAX_SCORE = 90
 export default function Screener() {
   const { t } = useTranslation()
   const [results, setResults] = useState<ScreenResult[]>([])
-  const [loading, setLoading] = useState(false)
   const [tickerInput, setTickerInput] = useState('')
   const [topN, setTopN] = useState(10)
   const [mode, setMode] = useState<'custom' | 'default' | 'watchlist'>('default')
   const [analyzing, setAnalyzing] = useState<string | null>(null)
 
-  const runScreen = useCallback(async () => {
-    setLoading(true)
-    setResults([])
-    try {
-      let data: { results: ScreenResult[] }
-      if (mode === 'watchlist') {
-        const r = await axios.post('/api/screener/scan-watchlist')
-        data = r.data
-      } else {
-        const tickers = mode === 'custom'
-          ? tickerInput.split(/[\s,]+/).map(t => t.trim().toUpperCase()).filter(Boolean)
-          : undefined
-        const r = await axios.post('/api/screener/scan', { tickers, top_n: topN })
-        data = r.data
-      }
-      setResults(data.results || [])
-      if ((data.results || []).length === 0) notify('info', 'No results found', 'Screener')
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Screener failed', 'Screener')
-    } finally {
-      setLoading(false)
-    }
-  }, [mode, tickerInput, topN])
+  const onScanError = (err: unknown) => {
+    const detail = (err as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+    notify('error', detail || 'Screener failed', 'Screener')
+  }
+  const onScanSuccess = (data: unknown) => {
+    const rows = ((data as { results?: ScreenResult[] } | undefined)?.results ?? []) as ScreenResult[]
+    setResults(rows)
+    if (rows.length === 0) notify('info', 'No results found', 'Screener')
+  }
 
-  const runAnalysis = useCallback(async (ticker: string) => {
-    setAnalyzing(ticker)
-    try {
-      await axios.post('/api/analysis/run', { ticker, trade_date: new Date().toISOString().slice(0, 10) })
-      notify('success', `Analysis started for ${ticker}`, 'Analysis')
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Failed to start analysis', 'Analysis')
-    } finally {
-      setAnalyzing(null)
+  const scanMutation = useScreenerScan({ mutation: { onSuccess: onScanSuccess, onError: onScanError } })
+  const watchlistScanMutation = useScreenerScanWatchlist({
+    mutation: { onSuccess: onScanSuccess, onError: onScanError },
+  })
+  const analysisMutation = useAnalysisRunAnalysis()
+  const loading = scanMutation.isPending || watchlistScanMutation.isPending
+
+  const runScreen = () => {
+    setResults([])
+    if (mode === 'watchlist') {
+      watchlistScanMutation.mutate()
+      return
     }
-  }, [])
+    const tickers = mode === 'custom'
+      ? tickerInput.split(/[\s,]+/).map(t => t.trim().toUpperCase()).filter(Boolean)
+      : undefined
+    scanMutation.mutate({ data: { tickers, top_n: topN } })
+  }
+
+  const runAnalysis = (ticker: string) => {
+    setAnalyzing(ticker)
+    analysisMutation.mutate(
+      { data: { ticker, trade_date: new Date().toISOString().slice(0, 10) } },
+      {
+        onSuccess: () => notify('success', `Analysis started for ${ticker}`, 'Analysis'),
+        onError: (err) => {
+          const detail = (err as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+          notify('error', detail || 'Failed to start analysis', 'Analysis')
+        },
+        onSettled: () => setAnalyzing(null),
+      },
+    )
+  }
 
   const scoreColor = (score: number | null | undefined) => {
     const s = score ?? 0

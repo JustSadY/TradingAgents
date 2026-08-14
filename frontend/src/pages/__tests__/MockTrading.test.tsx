@@ -1,19 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithQuery } from '../../test/renderWithQuery'
 import userEvent from '@testing-library/user-event'
 import axios from 'axios'
 import MockTrading from '../MockTrading'
 
-vi.mock('axios', () => ({
-  default: {
-    get: vi.fn().mockResolvedValue({ data: {} }),
-    post: vi.fn().mockResolvedValue({ data: {} }),
-    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
-    defaults: {},
-  },
-  get: vi.fn().mockResolvedValue({ data: {} }),
-  post: vi.fn().mockResolvedValue({ data: {} }),
-}))
+vi.mock('axios', () => {
+  const get = vi.fn().mockResolvedValue({ data: {} })
+  const post = vi.fn().mockResolvedValue({ data: {} })
+  // The generated client calls axios(config); read handlers off the instance so
+  // vi.spyOn / mockResolvedValue on axios.get still applies.
+  const instance: any = Object.assign(
+    vi.fn((config: { url?: string; method?: string } = {}) => {
+      const method = String(config.method ?? 'get').toLowerCase()
+      const handler = instance[method] ?? instance.get
+      return handler(config.url, config)
+    }),
+    { get, post, interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } }, defaults: {} },
+  )
+  return { default: instance, get, post }
+})
 
 vi.mock('../../contexts/LanguageContext', () => ({
   useTranslation: () => ({
@@ -75,19 +81,19 @@ describe('MockTrading', () => {
   })
 
   it('renders loading state initially', () => {
-    render(<MockTrading />)
+    renderWithQuery(<MockTrading />)
     expect(screen.getByText('Loading portfolio...')).toBeInTheDocument()
   })
 
   it('renders paper trading title after loading', async () => {
-    render(<MockTrading />)
+    renderWithQuery(<MockTrading />)
     await waitFor(() => {
       expect(screen.getByText('Paper Trading')).toBeInTheDocument()
     })
   })
 
   it('makes clear that manual orders do not reuse an AI analysis decision', async () => {
-    render(<MockTrading />)
+    renderWithQuery(<MockTrading />)
 
     await screen.findByText('Paper Trading')
     expect(screen.getByTestId('manual-order-independence')).toHaveTextContent('Manual orders are independent of AI analysis.')
@@ -96,7 +102,7 @@ describe('MockTrading', () => {
   it('shows a recoverable error instead of rendering a malformed portfolio payload', async () => {
     vi.mocked(axios.get).mockResolvedValue({ data: {} })
 
-    render(<MockTrading />)
+    renderWithQuery(<MockTrading />)
 
     await waitFor(() => {
       expect(screen.getByText('Error Loading Portfolio')).toBeInTheDocument()
@@ -107,7 +113,7 @@ describe('MockTrading', () => {
   it('handles a malformed order response without crashing the page', async () => {
     vi.mocked(axios.post).mockResolvedValue({ data: {} })
     const user = userEvent.setup()
-    render(<MockTrading />)
+    renderWithQuery(<MockTrading />)
 
     await screen.findByText('Paper Trading')
     await user.type(screen.getByPlaceholderText('mocktrading.order_symbol_placeholder'), 'AAPL')

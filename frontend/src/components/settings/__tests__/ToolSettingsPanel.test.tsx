@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
+import { screen, act } from '@testing-library/react'
+import { renderWithQuery } from '../../../test/renderWithQuery'
 import axios from 'axios'
 import ToolSettingsPanel from '../ToolSettingsPanel'
 
@@ -62,49 +63,41 @@ describe('ToolSettingsPanel', () => {
 
   it('shows loading state initially', () => {
     vi.spyOn(axios, 'get').mockImplementation(() => new Promise(() => {}))
-    render(<ToolSettingsPanel />)
+    renderWithQuery(<ToolSettingsPanel />)
     expect(screen.getByText('common.loading')).toBeInTheDocument()
   })
 
   it('renders tool settings after loading', async () => {
     vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
-    await act(async () => {
-      render(<ToolSettingsPanel />)
-    })
-    expect(screen.getByText('Yahoo Finance')).toBeInTheDocument()
+    renderWithQuery(<ToolSettingsPanel />)
+    expect(await screen.findByText('Yahoo Finance')).toBeInTheDocument()
     expect(screen.getByText('Technical Indicators')).toBeInTheDocument()
   })
 
   it('renders category headers', async () => {
     vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
-    await act(async () => {
-      render(<ToolSettingsPanel />)
-    })
-    expect(screen.getByText('MARKET')).toBeInTheDocument()
+    renderWithQuery(<ToolSettingsPanel />)
+    expect(await screen.findByText('MARKET')).toBeInTheDocument()
     expect(screen.getByText('ANALYSIS')).toBeInTheDocument()
   })
 
   it('shows empty state when no tools in meta', async () => {
     mockUseMeta.mockReturnValue({ tools: [] })
     vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
-    await act(async () => {
-      render(<ToolSettingsPanel />)
-    })
-    expect(screen.getByText(/No tool configurations found/)).toBeInTheDocument()
+    renderWithQuery(<ToolSettingsPanel />)
+    expect(await screen.findByText(/No tool configurations found/)).toBeInTheDocument()
   })
 
   it('renders Save Tools button by default', async () => {
     vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
-    await act(async () => {
-      render(<ToolSettingsPanel />)
-    })
-    expect(screen.getByText('Save Tools')).toBeInTheDocument()
+    renderWithQuery(<ToolSettingsPanel />)
+    expect(await screen.findByText('Save Tools')).toBeInTheDocument()
   })
 
   it('hides save button when hideSaveButton is true', async () => {
     vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
     await act(async () => {
-      render(<ToolSettingsPanel hideSaveButton={true} />)
+      renderWithQuery(<ToolSettingsPanel hideSaveButton={true} />)
     })
     expect(screen.queryByText('Save Tools')).not.toBeInTheDocument()
   })

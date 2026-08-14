@@ -1,61 +1,61 @@
-import { useEffect, useState } from 'react'
-import axios from 'axios'
+import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Bell, BellOff, Plus, Trash2, RefreshCw } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
-
-interface Alert {
-  id: number; ticker: string; condition: 'above' | 'below'
-  target_price: number; auto_analyze: boolean; enabled: boolean
-  triggered_at: string | null; created_at: string; alert_type?: string; creation_source?: string
-}
+import {
+  useAlertsListAlertsRun,
+  useAlertsCreateAlertRun,
+  useAlertsUpdateAlert,
+  useAlertsDeleteAlert,
+  getAlertsListAlertsRunQueryKey,
+} from '../api/generated/alerts/alerts'
+import type { AlertRead } from '../api/generated/model'
 
 const Input = "w-full glass-input rounded-xl px-3 py-2 text-xs outline-none"
 
 export default function Alerts() {
   const { t } = useTranslation()
-  const [alerts, setAlerts] = useState<Alert[]>([])
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
   const [ticker, setTicker] = useState('')
   const [condition, setCondition] = useState<'above' | 'below'>('above')
   const [targetPrice, setTargetPrice] = useState('')
   const [alertType, setAlertType] = useState<'price' | 'rsi' | 'macd_cross'>('price')
   const [autoAnalyze, setAutoAnalyze] = useState(false)
-  const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const load = async () => {
-    try {
-      const { data } = await axios.get('/api/alerts')
-      setAlerts(data)
-    } finally { setLoading(false) }
-  }
+  const alertsQuery = useAlertsListAlertsRun()
+  const alerts = alertsQuery.data ?? []
+  const loading = alertsQuery.isPending
 
-  useEffect(() => { load() }, [])
+  const invalidate = () => queryClient.invalidateQueries({ queryKey: getAlertsListAlertsRunQueryKey() })
 
-  const handleCreate = async () => {
+  const createMutation = useAlertsCreateAlertRun({ mutation: { onSuccess: invalidate } })
+  const updateMutation = useAlertsUpdateAlert({ mutation: { onSuccess: invalidate } })
+  const deleteMutation = useAlertsDeleteAlert({ mutation: { onSuccess: invalidate } })
+  const saving = createMutation.isPending
+
+  const handleCreate = () => {
     const sym = ticker.trim().toUpperCase()
     const needsPrice = alertType !== 'macd_cross'
     const price = needsPrice ? Number.parseFloat(targetPrice) : 0
     if (!sym || (needsPrice && (Number.isNaN(price) || price <= 0))) { setError(t('alerts.error_invalid')); return }
-    setSaving(true); setError(null)
-    try {
-      await axios.post('/api/alerts', { ticker: sym, condition, target_price: price, auto_analyze: autoAnalyze, alert_type: alertType })
-      setTicker(''); setTargetPrice(''); setAutoAnalyze(false)
-      await load()
-    } catch (e: any) {
-      setError(e.response?.data?.detail || t('alerts.error_create'))
-    } finally { setSaving(false) }
+    setError(null)
+    createMutation.mutate(
+      { data: { ticker: sym, condition, target_price: price, auto_analyze: autoAnalyze, alert_type: alertType } },
+      {
+        onSuccess: () => { setTicker(''); setTargetPrice(''); setAutoAnalyze(false) },
+        onError: (e) => {
+          const detail = (e as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+          setError(detail || t('alerts.error_create'))
+        },
+      },
+    )
   }
 
-  const toggleEnabled = async (a: Alert) => {
-    await axios.patch(`/api/alerts/${a.id}`, { enabled: !a.enabled })
-    setAlerts(prev => prev.map(x => x.id === a.id ? { ...x, enabled: !x.enabled } : x))
-  }
+  const toggleEnabled = (a: AlertRead) =>
+    updateMutation.mutate({ alertId: a.id, data: { enabled: !a.enabled } })
 
-  const deleteAlert = async (id: number) => {
-    await axios.delete(`/api/alerts/${id}`)
-    setAlerts(prev => prev.filter(x => x.id !== id))
-  }
+  const deleteAlert = (id: number) => deleteMutation.mutate({ alertId: id })
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-3xl mx-auto">

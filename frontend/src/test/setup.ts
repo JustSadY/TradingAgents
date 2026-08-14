@@ -94,17 +94,36 @@ Object.defineProperty(globalThis, 'crypto', {
 })
 
 vi.mock('axios', () => {
-  const mockAxios = {
+  // The Orval-generated client calls the *callable* form, `axios(config)`,
+  // through src/api/mutator.ts, while hand-written call sites still use
+  // axios.get/post/... Support both: the callable dispatches to the same method
+  // mocks, so a test that stubs `axios.get` also controls generated queries.
+  const methods = {
     get: vi.fn().mockResolvedValue({ data: {} }),
     post: vi.fn().mockResolvedValue({ data: {} }),
     put: vi.fn().mockResolvedValue({ data: {} }),
+    patch: vi.fn().mockResolvedValue({ data: {} }),
     delete: vi.fn().mockResolvedValue({ data: {} }),
-    interceptors: {
-      request: { use: vi.fn() },
-      response: { use: vi.fn() },
-    },
-    defaults: {},
   }
-  return { default: mockAxios, ...mockAxios }
+
+  const mockAxios = Object.assign(
+    vi.fn((config: { url?: string; method?: string; data?: unknown } = {}) => {
+      const method = String(config.method ?? 'get').toLowerCase() as keyof typeof methods
+      // Read the handler off the object, not the closure, so a test that does
+      // `vi.spyOn(axios, 'get')` also intercepts generated-client requests.
+      const handler = (mockAxios[method] ?? mockAxios.get) as (...args: never[]) => unknown
+      return handler(config.url as never, config as never)
+    }),
+    methods,
+    {
+      interceptors: {
+        request: { use: vi.fn() },
+        response: { use: vi.fn() },
+      },
+      defaults: {},
+    },
+  )
+
+  return { default: mockAxios, ...methods, interceptors: mockAxios.interceptors, defaults: mockAxios.defaults }
 })
 

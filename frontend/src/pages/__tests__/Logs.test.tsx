@@ -1,16 +1,21 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithQuery } from '../../test/renderWithQuery'
 import Logs from '../Logs'
 
-vi.mock('axios', () => ({
-  default: {
-    get: vi.fn().mockResolvedValue({ data: [] }),
-    post: vi.fn().mockResolvedValue({ data: {} }),
-    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
-    defaults: {},
-  },
-  get: vi.fn().mockResolvedValue({ data: [] }),
-}))
+vi.mock('axios', () => {
+  const get = vi.fn().mockResolvedValue({ data: [] })
+  const post = vi.fn().mockResolvedValue({ data: {} })
+  // The generated client calls axios(config); dispatch it to the same mocks so
+  // `vi.mocked(axios.default.get)` still controls what a query returns.
+  const instance = Object.assign(
+    vi.fn((config: { url?: string; method?: string } = {}) =>
+      String(config.method ?? 'get').toLowerCase() === 'get' ? get(config.url, config) : post(config.url, config),
+    ),
+    { get, post, interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } }, defaults: {} },
+  )
+  return { default: instance, get, post }
+})
 
 vi.mock('../../contexts/LanguageContext', () => ({
   useTranslation: () => ({
@@ -45,14 +50,14 @@ describe('Logs', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
   it('renders system logs title', async () => {
-    render(<Logs />)
+    renderWithQuery(<Logs />)
     await waitFor(() => {
       expect(screen.getByText('System Logs')).toBeInTheDocument()
     })
   })
 
   it('renders level filter', async () => {
-    render(<Logs />)
+    renderWithQuery(<Logs />)
     await waitFor(() => {
       expect(screen.getByText('All Levels')).toBeInTheDocument()
     })
@@ -72,7 +77,7 @@ describe('Logs', () => {
       }],
     })
 
-    render(<Logs />)
+    renderWithQuery(<Logs />)
 
     expect(await screen.findByText('Tool Failed')).toBeInTheDocument()
     expect(screen.getByText('get_fundamentals')).toBeInTheDocument()
@@ -98,7 +103,7 @@ describe('Logs', () => {
       }],
     })
 
-    render(<Logs />)
+    renderWithQuery(<Logs />)
 
     expect(await screen.findByText('Tool Timed Out')).toBeInTheDocument()
     expect(screen.getByText('get_fundamentals, get_cashflow')).toBeInTheDocument()
@@ -119,7 +124,7 @@ describe('Logs', () => {
       }],
     })
 
-    render(<Logs />)
+    renderWithQuery(<Logs />)
 
     expect(await screen.findByText('Continue after tools')).toBeInTheDocument()
     expect(screen.getByText('Market Analyst')).toBeInTheDocument()

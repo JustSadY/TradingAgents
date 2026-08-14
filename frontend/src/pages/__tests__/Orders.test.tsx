@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithQuery } from '../../test/renderWithQuery'
 import Orders from '../Orders'
 
 const mockOrder = {
@@ -28,16 +29,18 @@ const mockGet = vi.fn((url: string) => {
   return Promise.resolve({ data: [] })
 })
 
-vi.mock('axios', () => ({
-  default: {
-    get: (...args: [string]) => mockGet(...args),
-    post: vi.fn().mockResolvedValue({ data: {} }),
-    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
-    defaults: {},
-  },
-  get: (...args: [string]) => mockGet(...args),
-  post: vi.fn().mockResolvedValue({ data: {} }),
-}))
+vi.mock('axios', () => {
+  const get = (...args: [string]) => mockGet(...args)
+  const post = vi.fn().mockResolvedValue({ data: {} })
+  // The generated client calls axios(config); hand-written code calls axios.get.
+  const instance = Object.assign(
+    vi.fn((config: { url?: string; method?: string } = {}) =>
+      String(config.method ?? 'get').toLowerCase() === 'get' ? get(config.url as string) : post(),
+    ),
+    { get, post, interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } }, defaults: {} },
+  )
+  return { default: instance, get, post }
+})
 
 vi.mock('../../contexts/LanguageContext', () => ({
   useTranslation: () => ({
@@ -82,14 +85,14 @@ describe('Orders', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
   it('renders orders title', async () => {
-    render(<Orders />)
+    renderWithQuery(<Orders />)
     await waitFor(() => {
       expect(screen.getByText('Orders')).toBeInTheDocument()
     })
   })
 
   it('renders order table columns', async () => {
-    render(<Orders />)
+    renderWithQuery(<Orders />)
     await waitFor(() => {
       expect(screen.getByText('Symbol')).toBeInTheDocument()
       expect(screen.getByText('Direction')).toBeInTheDocument()

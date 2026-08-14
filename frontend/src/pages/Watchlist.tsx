@@ -1,77 +1,54 @@
-import { useEffect, useState, useCallback } from 'react'
-import axios from 'axios'
+import { useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Plus, Trash2, RefreshCw, Star, TrendingUp } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
+import {
+  useWatchlistGetWatchlist,
+  useWatchlistGetWatchlistPrices,
+  useWatchlistAddToWatchlist,
+  useWatchlistRemoveFromWatchlist,
+  getWatchlistGetWatchlistQueryKey,
+  getWatchlistGetWatchlistPricesQueryKey,
+} from '../api/generated/watchlist/watchlist'
 
 export default function Watchlist() {
-  const [tickers, setTickers] = useState<string[]>([])
-  const [prices, setPrices] = useState<Record<string, { price: number; change_percent: number }>>({})
   const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(true)
   const { t } = useTranslation()
+  const queryClient = useQueryClient()
 
-  const fetchPrices = useCallback(async (tickersList: string[]) => {
-    if (tickersList.length === 0) {
-      setPrices({})
-      return
-    }
-    try {
-      const { data } = await axios.get<Record<string, { price: number; change_percent: number }>>('/api/watchlist/prices')
-      setPrices(data || {})
-    } catch (e) {
-      console.error('Failed to fetch watchlist prices:', e)
-    }
-  }, [])
+  const watchlist = useWatchlistGetWatchlist()
+  const tickers = watchlist.data ?? []
 
-  const fetchWatchlist = useCallback(async (quiet = false) => {
-    if (!quiet) setLoading(true)
-    try {
-      const { data } = await axios.get<string[]>('/api/watchlist')
-      setTickers(data || [])
-      await fetchPrices(data || [])
-    } catch (e) {
-      console.error('Failed to fetch watchlist:', e)
-    } finally {
-      if (!quiet) setLoading(false)
-    }
-  }, [fetchPrices])
+  // Prices poll on their own cadence; the list itself rarely changes, so it is
+  // refetched only when a mutation invalidates it.
+  const pricesQuery = useWatchlistGetWatchlistPrices({
+    query: {
+      refetchInterval: 15_000,
+      enabled: tickers.length > 0,
+    },
+  })
+  const prices = pricesQuery.data ?? {}
 
-  useEffect(() => {
-    const doFetch = async () => {
-      await fetchWatchlist()
-    }
-    doFetch()
-    const interval = setInterval(() => {
-      fetchWatchlist(true)
-    }, 15000)
-    return () => clearInterval(interval)
-  }, [fetchWatchlist])
+  const loading = watchlist.isPending
 
-  const add = async () => {
-    if (!input.trim()) return
-    try {
-      const res = await axios.post<string[]>(`/api/watchlist/${input.trim().toUpperCase()}`)
-      setTickers(res.data)
-      setInput('')
-      await fetchPrices(res.data)
-    } catch (e) {
-      console.error(e)
-    }
+  const invalidate = () =>
+    Promise.all([
+      queryClient.invalidateQueries({ queryKey: getWatchlistGetWatchlistQueryKey() }),
+      queryClient.invalidateQueries({ queryKey: getWatchlistGetWatchlistPricesQueryKey() }),
+    ])
+
+  const addMutation = useWatchlistAddToWatchlist({ mutation: { onSuccess: invalidate } })
+  const removeMutation = useWatchlistRemoveFromWatchlist({ mutation: { onSuccess: invalidate } })
+
+  const add = () => {
+    const ticker = input.trim().toUpperCase()
+    if (!ticker) return
+    addMutation.mutate({ ticker }, { onSuccess: () => setInput('') })
   }
 
-  const remove = async (tickerVal: string) => {
-    try {
-      const res = await axios.delete<string[]>(`/api/watchlist/${tickerVal}`)
-      setTickers(res.data)
-      setPrices(prev => {
-        const next = { ...prev }
-        delete next[tickerVal]
-        return next
-      })
-    } catch (e) {
-      console.error(e)
-    }
-  }
+  const remove = (tickerVal: string) => removeMutation.mutate({ ticker: tickerVal })
+
+  const fetchWatchlist = () => invalidate()
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-4xl mx-auto">
@@ -85,7 +62,7 @@ export default function Watchlist() {
           <p className="text-xs text-slate-500 mt-1">Track and monitor your favorite assets and prompt live analyses</p>
         </div>
         <button
-          onClick={() => fetchWatchlist(false)}
+          onClick={() => fetchWatchlist()}
           disabled={loading}
           className="flex items-center justify-center p-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white transition-all cursor-pointer"
           title="Refresh"

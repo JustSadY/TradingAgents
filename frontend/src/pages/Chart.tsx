@@ -1,6 +1,8 @@
-import { useEffect, useRef, useState, useCallback, useMemo } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useSearchParams } from 'react-router-dom'
-import api from '../utils/api'
+import { useMarketOhlcv, useMarketSentimentHistory, useMarketCustomIndicator, useMarketFormulaAssist } from '../api/generated/market/market'
+import { useAnalysisListAnalysis } from '../api/generated/analysis/analysis'
+import { usePatternsGetPatterns } from '../api/generated/patterns/patterns'
 import { RefreshCw, BarChart2, AlertCircle, Sparkles, ScanSearch, TrendingUp, TrendingDown, Loader2 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { usePriceChart } from '../hooks/usePriceChart'
@@ -44,149 +46,89 @@ export default function ChartPage() {
   const [tickerInput, setTickerInput] = useState(searchParams.get('ticker') ?? '')
   const [activeTicker, setActiveTicker] = useState(searchParams.get('ticker') ?? '')
   const [period, setPeriod] = useState(searchParams.get('period') ?? '1y')
-  const [candles, setCandles] = useState<Candle[]>([])
-  const [analyses, setAnalyses] = useState<AnalysisItem[]>([])
   const [selected, setSelected] = useState<AnalysisItem | null>(null)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
 
   const [showSMA, setShowSMA] = useState(false)
   const [showEMA, setShowEMA] = useState(false)
   const [showRSI, setShowRSI] = useState(false)
   const [showMACD, setShowMACD] = useState(false)
   const [showSentiment, setShowSentiment] = useState(false)
-  const [sentimentHistory, setSentimentHistory] = useState<{ time: string; value: number }[]>([])
-  const [customIndicators, setCustomIndicators] = useState<any[]>([])
   const [userFormula, setUserFormula] = useState('')
-  const [userIndicatorData, setUserIndicatorData] = useState<{ time: string; value: number | null }[]>([])
-  const [userIndicatorLabel, setUserIndicatorLabel] = useState('')
   const [aiPrompt, setAiPrompt] = useState('')
-  const [aiLoading, setAiLoading] = useState(false)
   const [showPatterns, setShowPatterns] = useState(false)
-  const [patterns, setPatterns] = useState<Pattern[]>([])
-  const [patternsLoading, setPatternsLoading] = useState(false)
 
   const chartContainerRef = useRef<HTMLDivElement>(null)
+
+  // Data is keyed on (ticker, period), so a response for a previous symbol can
+  // never be applied to the current one. That removes the monotonic request-id
+  // guard, the activeTicker/period/load refs, and the manual reset of every
+  // series on each load that used to be needed for the same reason.
+  const chartKeyEnabled = Boolean(activeTicker)
+  const ohlcvQuery = useMarketOhlcv({ ticker: activeTicker, period }, { query: { enabled: chartKeyEnabled } })
+  const historyQuery = useAnalysisListAnalysis({ ticker: activeTicker, limit: 200 }, { query: { enabled: chartKeyEnabled } })
+  const sentimentQuery = useMarketSentimentHistory({ ticker: activeTicker }, { query: { enabled: chartKeyEnabled } })
+
+  // Backend can return partial/empty payloads on thin data; guard each field.
+  const candles = ((ohlcvQuery.data as { candles?: Candle[] } | undefined)?.candles ?? []) as Candle[]
+  const analyses = (Array.isArray(historyQuery.data) ? historyQuery.data : []) as AnalysisItem[]
+  const sentimentHistory = ((sentimentQuery.data as { history?: { time: string; value: number }[] } | undefined)?.history ?? [])
+
+  const patternsQuery = usePatternsGetPatterns(
+    activeTicker,
+    { period },
+    { query: { enabled: Boolean(showPatterns && activeTicker) } },
+  )
+  const patterns = (((patternsQuery.data as unknown as { patterns?: Pattern[] } | undefined)?.patterns) ?? []) as Pattern[]
+  const patternsLoading = patternsQuery.isFetching
+
+  // The custom indicator is a GET driven by a submitted formula rather than by
+  // typing, so it is keyed on the submitted value and disabled until there is one.
+  const [submittedFormula, setSubmittedFormula] = useState('')
+  const indicatorQuery = useMarketCustomIndicator(
+    { ticker: activeTicker, period, formula: submittedFormula },
+    { query: { enabled: Boolean(submittedFormula && activeTicker) } },
+  )
+  const userIndicatorData = ((indicatorQuery.data as { series?: { time: string; value: number | null }[] } | undefined)?.series ?? [])
+  const userIndicatorLabel = indicatorQuery.isSuccess ? submittedFormula : ''
+
   usePriceChart(chartContainerRef as React.RefObject<HTMLDivElement>, candles, analyses, showSMA, showEMA)
 
-  // Monotonic request id so that if loads overlap (e.g. rapid period switches),
-  // only the most recent one's result is applied — out-of-order responses for a
-  // stale ticker/period are ignored.
-  const loadReqId = useRef(0)
+  const assistMutation = useMarketFormulaAssist()
+  const aiLoading = assistMutation.isPending
 
-  const load = useCallback(async (ticker: string, p: string) => {
-    if (!ticker) return
-    const reqId = ++loadReqId.current
-    // Never leave a prior symbol's price/analysis data visible while a new
-    // request is in flight (or after it fails). In a trading UI that is much
-    // safer than displaying AAPL candles under an MSFT heading.
-    setLoading(true); setError(null); setSelected(null)
-    setCandles([]); setAnalyses([]); setSentimentHistory([]); setPatterns([])
-    setCustomIndicators([]); setUserIndicatorData([]); setUserIndicatorLabel('')
-    try {
-      const [ohlcvRes, histRes, sentRes] = await Promise.all([
-        api.get('/api/market/ohlcv', { params: { ticker, period: p } }),
-        api.get('/api/analysis/history', { params: { ticker, limit: 200 } }),
-        api.get('/api/market/sentiment-history', { params: { ticker } }),
-      ])
-      if (reqId !== loadReqId.current) return
-      // Backend can return partial/empty payloads on thin data; guard each field.
-      setCandles(ohlcvRes.data?.candles ?? [])
-      setAnalyses(Array.isArray(histRes.data) ? histRes.data : [])
-      setSentimentHistory(sentRes.data?.history ?? [])
-    } catch (e) {
-      if (reqId !== loadReqId.current) return
-      setError(((e as { response?: { data?: { detail?: string } } })?.response?.data?.detail) ?? t('chart.error_load'))
-    } finally {
-      if (reqId === loadReqId.current) setLoading(false)
-    }
-  }, [t])
+  const loading =
+    ohlcvQuery.isFetching || historyQuery.isFetching || sentimentQuery.isFetching || indicatorQuery.isFetching
 
-  const activeTickerRef = useRef(activeTicker)
-  const periodRef = useRef(period)
-  const loadRef = useRef(load)
+  const queryError = ohlcvQuery.error ?? historyQuery.error ?? sentimentQuery.error ?? indicatorQuery.error ?? assistMutation.error
+  const error = queryError
+    ? ((queryError as { response?: { data?: { detail?: string } } })?.response?.data?.detail ?? t('chart.error_load'))
+    : null
 
-  useEffect(() => {
-    activeTickerRef.current = activeTicker
-  }, [activeTicker])
-  useEffect(() => {
-    periodRef.current = period
-  }, [period])
-  useEffect(() => {
-    loadRef.current = load
-  }, [load])
+  const calculateIndicator = (formula: string) => setSubmittedFormula(formula.trim())
+  const handleCalculateUserIndicator = () => calculateIndicator(userFormula)
 
-  useEffect(() => { if (activeTicker) load(activeTicker, period) }, [])
-
-  // Sync state when URL params change due to in-app navigation
-  const urlTicker = searchParams.get('ticker');
-  const urlPeriod = searchParams.get('period');
-  useEffect(() => {
-    if (urlTicker && urlTicker !== activeTickerRef.current) {
-      setActiveTicker(urlTicker);
-      loadRef.current(urlTicker, urlPeriod || periodRef.current);
-    } else if (urlPeriod && urlPeriod !== periodRef.current) {
-      setPeriod(urlPeriod);
-      if (activeTickerRef.current) loadRef.current(activeTickerRef.current, urlPeriod);
-    }
-  }, [urlTicker, urlPeriod]);
+  const handleAiFormula = () => {
+    if (!aiPrompt.trim() || aiLoading) return
+    assistMutation.mutate(
+      { data: { prompt: aiPrompt.trim() } },
+      {
+        onSuccess: (res) => {
+          const formula = ((res as { formula?: string } | undefined)?.formula ?? '')
+          setUserFormula(formula)
+          calculateIndicator(formula)
+        },
+      },
+    )
+  }
 
   const handleSearch = () => {
     const tk = tickerInput.trim().toUpperCase()
     if (!tk) return
-    setActiveTicker(tk); setSearchParams({ ticker: tk, period }); load(tk, period)
+    setActiveTicker(tk); setSearchParams({ ticker: tk, period })
   }
 
   const handlePeriod = (p: string) => {
     setPeriod(p); setSearchParams({ ticker: activeTicker, period: p })
-    if (activeTicker) load(activeTicker, p)
-  }
-
-  const calculateIndicator = async (formula: string) => {
-    if (!formula.trim() || !activeTicker) return
-    setLoading(true); setError(null)
-    try {
-      const res = await api.get('/api/market/custom-indicator', { params: { ticker: activeTicker, period, formula: formula.trim() } })
-      setUserIndicatorData(res.data?.series ?? []); setUserIndicatorLabel(formula.trim())
-    } catch (err) {
-      // Surface the failure (e.g. invalid formula) instead of silently clearing.
-      setUserIndicatorData([]); setUserIndicatorLabel('')
-      setError(((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail) ?? t('chart.error_load'))
-    } finally { setLoading(false) }
-  }
-
-  const handleCalculateUserIndicator = () => calculateIndicator(userFormula)
-
-  // Describe the indicator in plain language; the backend LLM writes a
-  // validated formula, which we drop into the formula box and plot directly.
-  const fetchPatterns = useCallback(async (ticker: string, p: string) => {
-    setPatternsLoading(true)
-    try {
-      const r = await api.get(`/api/market/patterns/${ticker}`, { params: { period: p } })
-      setPatterns(r.data.patterns || [])
-    } catch {
-      setPatterns([])
-    } finally {
-      setPatternsLoading(false)
-    }
-  }, [])
-
-  useEffect(() => {
-    if (showPatterns && activeTicker) fetchPatterns(activeTicker, period)
-    else setPatterns([])
-  }, [showPatterns, activeTicker, period, fetchPatterns])
-
-  const handleAiFormula = async () => {
-    if (!aiPrompt.trim() || aiLoading) return
-    setAiLoading(true); setError(null)
-    try {
-      const res = await api.post('/api/market/formula-assist', { prompt: aiPrompt.trim() })
-      const formula: string = res.data?.formula ?? ''
-      setUserFormula(formula)
-      await calculateIndicator(formula)
-    } catch (err) {
-      setError(((err as { response?: { data?: { detail?: string } } })?.response?.data?.detail) ?? t('chart.error_load'))
-    } finally { setAiLoading(false) }
   }
 
   const sentimentChartData = useMemo(() => {
@@ -385,7 +327,7 @@ export default function ChartPage() {
         <CustomIndicatorPane 
             showRSI={showRSI} showMACD={showMACD} showSentiment={showSentiment}
             candles={candles} sentimentChartData={sentimentChartData}
-            customIndicators={customIndicators}
+            customIndicators={[]}
             userIndicatorData={userIndicatorData} userIndicatorLabel={userIndicatorLabel}
         />
       </ErrorBoundary>

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithQuery } from '../../test/renderWithQuery'
 import Watchlist from '../Watchlist'
 
 vi.mock('axios', () => ({
@@ -44,14 +45,14 @@ describe('Watchlist', () => {
   })
 
   it('renders watchlist title', async () => {
-    render(<Watchlist />)
+    renderWithQuery(<Watchlist />)
     await waitFor(() => {
       expect(screen.getByText('Watchlist')).toBeInTheDocument()
     })
   })
 
   it('renders add new asset section', async () => {
-    render(<Watchlist />)
+    renderWithQuery(<Watchlist />)
     await waitFor(() => {
       expect(screen.getByText('Add New Asset')).toBeInTheDocument()
     })

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState, useMemo } from 'react'
-import api from '../utils/api'
+import { useAnalysisListAnalysis, useAnalysisGetPerformanceAttribution } from '../api/generated/analysis/analysis'
+import { useWatchlistGetWatchlist } from '../api/generated/watchlist/watchlist'
+import { useDailySummaryFetchDailySummary, useDailySummaryTriggerDailySummary } from '../api/generated/daily-summary/daily-summary'
 import { Activity, Sparkles, Loader2, RefreshCw, Newspaper } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { ErrorBoundary } from '../components/ErrorBoundary'
@@ -24,43 +26,32 @@ export default function Dashboard() {
   const watchlistSlice = useMemo(() => watchlist.slice(0, 5), [watchlist])
   const { news } = useNewsFeed(watchlistSlice)
   
-  const [recentAnalysis, setRecentAnalysis] = useState<any[]>([])
-  const [attribution, setAttribution] = useState<any[]>([])
-  const [loading, setLoading] = useState(true)
-  const [summary, setSummary] = useState<DailySummary | null>(null)
-  const [summaryLoading, setSummaryLoading] = useState(false)
+  const historyQuery = useAnalysisListAnalysis({ limit: 8 })
+  const watchlistQuery = useWatchlistGetWatchlist()
+  const attributionQuery = useAnalysisGetPerformanceAttribution()
+  const summaryQuery = useDailySummaryFetchDailySummary()
 
-  const loadSummary = useCallback(async () => {
-    const r = await api.get('/api/market/daily-summary').catch(() => ({ data: null }))
-    if (r.data?.id) setSummary(r.data)
-  }, [])
+  const recentAnalysis = (Array.isArray(historyQuery.data) ? historyQuery.data : []) as any[]
+  const attribution = ((attributionQuery.data as { attribution?: any[] } | undefined)?.attribution ?? []) as any[]
+  // Each panel degrades on its own: a failed section renders empty rather than
+  // blocking the whole dashboard, which is what the previous per-request
+  // .catch() fallbacks did.
+  const loading = historyQuery.isPending || watchlistQuery.isPending || attributionQuery.isPending
 
-  const generateSummary = useCallback(async () => {
-    setSummaryLoading(true)
-    try {
-      const r = await api.post('/api/market/daily-summary/generate')
-      setSummary(r.data)
-    } catch {
-      // silently fail — user sees no change
-    } finally {
-      setSummaryLoading(false)
-    }
-  }, [])
+  const generateMutation = useDailySummaryTriggerDailySummary()
+  const summaryLoading = generateMutation.isPending
+  // Only a payload carrying an id is a real summary; the endpoint returns an
+  // empty body when none has been generated yet.
+  const rawSummary = generateMutation.data ?? summaryQuery.data ?? null
+  const summary = ((rawSummary as { id?: number } | null)?.id ? (rawSummary as DailySummary) : null)
+  const generateSummary = useCallback(() => generateMutation.mutate(undefined), [generateMutation])
+  const loadSummary = useCallback(() => { generateMutation.reset(); void summaryQuery.refetch() }, [generateMutation, summaryQuery])
 
   useEffect(() => {
-    Promise.all([
-      api.get('/api/analysis/history?limit=8').then(r => r.data).catch(() => []),
-      api.get('/api/watchlist').then(r => r.data || []).catch(() => []),
-      api.get('/api/analysis/performance-attribution').then(r => r.data).catch(() => ({ attribution: [] })),
-    ]).then(([a, w, attr]) => {
-      setRecentAnalysis(Array.isArray(a) ? a : [])
-      setWatchlist(w)
-      setAttribution(attr.attribution || [])
-    })
-      .catch(e => console.error('Dashboard data load failed', e))
-      .finally(() => setLoading(false))
-    loadSummary()
-  }, [loadSummary])
+    // Guard the shape: a malformed payload must not turn `watchlist` into a
+    // non-array and crash every consumer that reads .length.
+    if (Array.isArray(watchlistQuery.data)) setWatchlist(watchlistQuery.data as string[])
+  }, [watchlistQuery.data, setWatchlist])
 
   if (loading || portfolioLoading) return (
     <div className="h-[80vh] flex flex-col items-center justify-center space-y-4 opacity-50">

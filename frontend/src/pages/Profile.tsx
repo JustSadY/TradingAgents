@@ -1,5 +1,11 @@
-import { useEffect, useState, useMemo, useRef } from 'react'
-import axios from 'axios'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import {
+  useUsersGetMe,
+  useUsersUpdateMe,
+  useUsersListMyApiKeys,
+  useUsersSetMyApiKey,
+  useUsersDeleteMyApiKey,
+} from '../api/generated/users/users'
 import { Save, Key, Trash2, Eye, EyeOff, CheckCircle2, User2 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { useMeta } from '../hooks/useMeta'
@@ -130,8 +136,9 @@ function ApiKeyRow({ providerKey, label, hasKey, onSave, onDelete }: {
 export default function Profile() {
   const { t } = useTranslation()
   const meta = useMeta()
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-  const [keyProviders, setKeyProviders] = useState<string[]>([])
+  const updateProfile = useUsersUpdateMe()
+  const setApiKey = useUsersSetMyApiKey()
+  const removeApiKey = useUsersDeleteMyApiKey()
   const [profileForm, setProfileForm] = useState({ email: '', display_name: '', password: '', password2: '' })
   const [profileSaved, setProfileSaved] = useState(false)
   const [profileError, setProfileError] = useState<string | null>(null)
@@ -151,17 +158,20 @@ export default function Profile() {
       }))
   }, [providerLabels])
 
-  const load = async () => {
-    const [p, k] = await Promise.all([
-      axios.get('/api/users/me').then(r => r.data),
-      axios.get('/api/users/me/api-keys').then(r => r.data.providers),
-    ])
-    setProfile(p)
-    setKeyProviders(k)
-    setProfileForm({ email: p.email || '', display_name: p.display_name || '', password: '', password2: '' })
-  }
+  const profileQuery = useUsersGetMe()
+  const profile = (profileQuery.data ?? null) as UserProfile | null
+  const keysQuery = useUsersListMyApiKeys()
+  const keyProviders = ((keysQuery.data as { providers?: string[] } | undefined)?.providers ?? []) as string[]
 
-  useEffect(() => { load() }, [])
+  // Seed the editable form from the server copy; password fields always start
+  // empty so a saved profile never re-submits a stale password.
+  useEffect(() => {
+    if (!profileQuery.data) return
+    const p = profileQuery.data as UserProfile
+    setProfileForm({ email: p.email || '', display_name: p.display_name || '', password: '', password2: '' })
+  }, [profileQuery.data])
+
+  const load = useCallback(() => Promise.all([profileQuery.refetch(), keysQuery.refetch()]), [profileQuery, keysQuery])
 
   const saveProfile = async () => {
     setProfileError(null)
@@ -174,23 +184,24 @@ export default function Profile() {
       if (profileForm.email !== (profile?.email || '')) body.email = profileForm.email
       if (profileForm.display_name !== (profile?.display_name || '')) body.display_name = profileForm.display_name
       if (profileForm.password) body.password = profileForm.password
-      await axios.put('/api/users/me', body)
+      await updateProfile.mutateAsync({ data: body })
       setProfileSaved(true)
       profileTimeoutRef.current = setTimeout(() => setProfileSaved(false), 2500)
       await load()
-    } catch (err: any) {
-      setProfileError(err.response?.data?.detail || t('profile.save_error'))
+    } catch (err: unknown) {
+      const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+      setProfileError(detail || t('profile.save_error'))
     }
   }
 
   const saveApiKey = async (provider: string, apiKey: string) => {
-    await axios.put('/api/users/me/api-keys', { provider, api_key: apiKey })
-    setKeyProviders(prev => prev.includes(provider) ? prev : [...prev, provider])
+    await setApiKey.mutateAsync({ data: { provider, api_key: apiKey } })
+    await keysQuery.refetch()
   }
 
   const deleteApiKey = async (provider: string) => {
-    await axios.delete(`/api/users/me/api-keys/${provider}`)
-    setKeyProviders(prev => prev.filter(p => p !== provider))
+    await removeApiKey.mutateAsync({ provider })
+    await keysQuery.refetch()
   }
 
   if (!profile) return <div className="p-8 text-slate-500 text-xs font-semibold">{t('common.loading')}</div>

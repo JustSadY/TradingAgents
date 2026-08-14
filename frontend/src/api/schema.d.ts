@@ -4,61 +4,65 @@
  */
 
 export interface paths {
-    "/auth/login": {
+    "/api/admin/system-health": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        get?: never;
-        put?: never;
-        /** Login */
-        post: operations["login_auth_login_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/refresh": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Refresh */
-        post: operations["refresh_auth_refresh_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/auth/logout": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
         /**
-         * Logout
-         * @description Revoke every token issued to the caller by bumping their token version.
+         * Get System Health
+         * @description Combine guardrail telemetry (Prometheus) and quality history (DB) into one panel.
          */
-        post: operations["logout_auth_logout_post"];
+        get: operations["analytics_get_system_health"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/analysis/run": {
+    "/api/admin/system-metrics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get System Metrics
+         * @description Return key Prometheus metrics as JSON for the admin dashboard.
+         */
+        get: operations["analytics_get_system_metrics"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/alerts": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Alerts Run */
+        get: operations["alerts_list_alerts_run"];
+        put?: never;
+        /** Create Alert Run */
+        post: operations["alerts_create_alert_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/alerts/{alert_id}": {
         parameters: {
             query?: never;
             header?: never;
@@ -67,8 +71,26 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Run Analysis */
-        post: operations["run_analysis_api_analysis_run_post"];
+        post?: never;
+        /** Delete Alert */
+        delete: operations["alerts_delete_alert"];
+        options?: never;
+        head?: never;
+        /** Update Alert */
+        patch: operations["alerts_update_alert"];
+        trace?: never;
+    };
+    "/api/analysis/ab-comparison": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Ab Comparison */
+        get: operations["analysis_get_ab_comparison"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -83,7 +105,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Active Tasks */
-        get: operations["get_active_tasks_api_analysis_active_get"];
+        get: operations["analysis_get_active_tasks"];
         put?: never;
         post?: never;
         delete?: never;
@@ -92,15 +114,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/analysis/latest": {
+    "/api/analysis/cost-estimate": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Latest Analysis */
-        get: operations["get_latest_analysis_api_analysis_latest_get"];
+        /** Cost Estimate */
+        get: operations["analysis_cost_estimate"];
         put?: never;
         post?: never;
         delete?: never;
@@ -117,7 +139,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Analysis */
-        get: operations["list_analysis_api_analysis_history_get"];
+        get: operations["analysis_list_analysis"];
         put?: never;
         post?: never;
         delete?: never;
@@ -126,7 +148,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/analysis/{task_id}/cancel": {
+    "/api/analysis/history/clear": {
         parameters: {
             query?: never;
             header?: never;
@@ -135,40 +157,23 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Cancel Analysis */
-        post: operations["cancel_analysis_api_analysis__task_id__cancel_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/analysis/cost-estimate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Cost Estimate */
-        get: operations["cost_estimate_api_analysis_cost_estimate_get"];
-        put?: never;
         post?: never;
-        delete?: never;
+        /** Clear History */
+        delete: operations["analysis_clear_history"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/analysis/ab-comparison": {
+    "/api/analysis/latest": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Ab Comparison */
-        get: operations["get_ab_comparison_api_analysis_ab_comparison_get"];
+        /** Get Latest Analysis */
+        get: operations["analysis_get_latest_analysis"];
         put?: never;
         post?: never;
         delete?: never;
@@ -185,7 +190,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Performance */
-        get: operations["get_performance_api_analysis_performance_get"];
+        get: operations["analysis_get_performance"];
         put?: never;
         post?: never;
         delete?: never;
@@ -202,26 +207,9 @@ export interface paths {
             cookie?: never;
         };
         /** Get Performance Attribution */
-        get: operations["get_performance_attribution_api_analysis_performance_attribution_get"];
+        get: operations["analysis_get_performance_attribution"];
         put?: never;
         post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/analysis/run-portfolio": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Run Portfolio Run */
-        post: operations["run_portfolio_run_api_analysis_run_portfolio_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -236,7 +224,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Portfolio Analyses */
-        get: operations["list_portfolio_analyses_api_analysis_portfolio_history_get"];
+        get: operations["analysis_list_portfolio_analyses"];
         put?: never;
         post?: never;
         delete?: never;
@@ -253,7 +241,78 @@ export interface paths {
             cookie?: never;
         };
         /** Get Portfolio Analysis */
-        get: operations["get_portfolio_analysis_api_analysis_portfolio__portfolio_id__get"];
+        get: operations["analysis_get_portfolio_analysis"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analysis/run": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Analysis */
+        post: operations["analysis_run_analysis"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analysis/run-portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Run Portfolio Run */
+        post: operations["analysis_run_portfolio_run"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analysis/strategies/{ticker}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Active Asset Strategy
+         * @description Return the exact active strategy (not episodic/vector memory).
+         */
+        get: operations["analysis_get_active_asset_strategy"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analysis/strategies/{ticker}/history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Active Asset Strategy History */
+        get: operations["analysis_get_active_asset_strategy_history"];
         put?: never;
         post?: never;
         delete?: never;
@@ -270,10 +329,11 @@ export interface paths {
             cookie?: never;
         };
         /** Get Analysis */
-        get: operations["get_analysis_api_analysis__analysis_id__get"];
+        get: operations["analysis_get_analysis"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Delete Analysis */
+        delete: operations["analysis_delete_analysis"];
         options?: never;
         head?: never;
         patch?: never;
@@ -287,10 +347,10 @@ export interface paths {
             cookie?: never;
         };
         /** Get Analysis Chat */
-        get: operations["get_analysis_chat_api_analysis__analysis_id__chat_get"];
+        get: operations["analysis_get_analysis_chat"];
         put?: never;
         /** Ask Analysis Report */
-        post: operations["ask_analysis_report_api_analysis__analysis_id__chat_post"];
+        post: operations["analysis_ask_analysis_report"];
         delete?: never;
         options?: never;
         head?: never;
@@ -305,9 +365,44 @@ export interface paths {
             cookie?: never;
         };
         /** List Checkpoints */
-        get: operations["list_checkpoints_api_analysis__analysis_id__checkpoints_get"];
+        get: operations["analysis_list_checkpoints"];
         put?: never;
         post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analysis/{analysis_id}/share": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Share */
+        post: operations["share_create_share"];
+        /** Revoke Share */
+        delete: operations["share_revoke_share"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/analysis/{analysis_id}/share/rotate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rotate Share */
+        post: operations["share_rotate_share"];
         delete?: never;
         options?: never;
         head?: never;
@@ -324,48 +419,14 @@ export interface paths {
         get?: never;
         put?: never;
         /** Time Travel Resume */
-        post: operations["time_travel_resume_api_analysis__analysis_id__time_travel_post"];
+        post: operations["analysis_time_travel_resume"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/watchlist": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Watchlist */
-        get: operations["get_watchlist_api_watchlist_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/watchlist/prices": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Watchlist Prices */
-        get: operations["get_watchlist_prices_api_watchlist_prices_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/watchlist/{ticker}": {
+    "/api/analysis/{task_id}/cancel": {
         parameters: {
             query?: never;
             header?: never;
@@ -374,24 +435,23 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Add To Watchlist */
-        post: operations["add_to_watchlist_api_watchlist__ticker__post"];
-        /** Remove From Watchlist */
-        delete: operations["remove_from_watchlist_api_watchlist__ticker__delete"];
+        /** Cancel Analysis */
+        post: operations["analysis_cancel_analysis"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/portfolio": {
+    "/api/analytics/token-usage": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List Portfolios */
-        get: operations["list_portfolios_api_portfolio_get"];
+        /** Get Token Usage */
+        get: operations["analytics_get_token_usage"];
         put?: never;
         post?: never;
         delete?: never;
@@ -400,99 +460,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/portfolio/holdings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Holdings */
-        get: operations["list_holdings_api_portfolio_holdings_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/portfolio/orders": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Orders */
-        get: operations["list_orders_api_portfolio_orders_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/memory": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Memory Status
-         * @description The calling user's own vector-memory status (everything is per-user).
-         */
-        get: operations["get_memory_status_api_settings_memory_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/llm-catalog": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get Llm Catalog
-         * @description Per-provider model dropdown options, sourced from llm_clients/registry.py.
-         */
-        get: operations["get_llm_catalog_api_settings_llm_catalog_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Settings */
-        get: operations["get_settings_api_settings_get"];
-        /** Update Settings */
-        put: operations["update_settings_api_settings_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/test-webhook": {
+    "/api/assistant/chat": {
         parameters: {
             query?: never;
             header?: never;
@@ -501,148 +469,41 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Test Webhook */
-        post: operations["test_webhook_api_settings_test_webhook_post"];
+        /** Chat */
+        post: operations["assistant_chat"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/settings/webhook-deliveries": {
+    "/api/assistant/history": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Webhook Deliveries */
-        get: operations["get_webhook_deliveries_api_settings_webhook_deliveries_get"];
+        /** Get History */
+        get: operations["assistant_get_history"];
         put?: never;
         post?: never;
-        delete?: never;
+        /** Clear History */
+        delete: operations["assistant_clear_history"];
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/settings/users/{user_id}": {
+    "/api/cron/status": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get User Settings By Id */
-        get: operations["get_user_settings_by_id_api_settings_users__user_id__get"];
-        /** Update User Settings By Id */
-        put: operations["update_user_settings_by_id_api_settings_users__user_id__put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/users/{user_id}/tools": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Other User Tools */
-        get: operations["get_other_user_tools_api_settings_users__user_id__tools_get"];
-        /** Update Other User Tools */
-        put: operations["update_other_user_tools_api_settings_users__user_id__tools_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/tools": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get User Tools */
-        get: operations["get_user_tools_api_settings_tools_get"];
-        /** Update User Tools */
-        put: operations["update_user_tools_api_settings_tools_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/agents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get User Agents */
-        get: operations["get_user_agents_api_settings_agents_get"];
-        /** Update User Agents */
-        put: operations["update_user_agents_api_settings_agents_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/users/{user_id}/agents": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Other User Agents */
-        get: operations["get_other_user_agents_api_settings_users__user_id__agents_get"];
-        /** Update Other User Agents */
-        put: operations["update_other_user_agents_api_settings_users__user_id__agents_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/settings/agents/server": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Server Agents */
-        get: operations["get_server_agents_api_settings_agents_server_get"];
-        /** Update Server Agents */
-        put: operations["update_server_agents_api_settings_agents_server_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/logs/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List My Logs */
-        get: operations["list_my_logs_api_logs_me_get"];
+        /** Cron Status */
+        get: operations["cron_cron_status"];
         put?: never;
         post?: never;
         delete?: never;
@@ -659,7 +520,7 @@ export interface paths {
             cookie?: never;
         };
         /** List Logs */
-        get: operations["list_logs_api_logs_get"];
+        get: operations["logs_list_logs"];
         put?: never;
         post?: never;
         delete?: never;
@@ -668,270 +529,15 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/cron/status": {
+    "/api/logs/me": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Cron Status */
-        get: operations["cron_status_api_cron_status_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/trading/portfolio": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Portfolio */
-        get: operations["get_portfolio_api_trading_portfolio_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/trading/order": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Create Order */
-        post: operations["create_order_api_trading_order_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/trading/performance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Performance */
-        get: operations["get_performance_api_trading_performance_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/trading/reset": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Reset Portfolio */
-        post: operations["reset_portfolio_api_trading_reset_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/trading/backtest": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Run Backtest */
-        post: operations["run_backtest_api_trading_backtest_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/trading/portfolio-stats": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Portfolio Stats */
-        get: operations["get_portfolio_stats_api_trading_portfolio_stats_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/trading/risk-dashboard": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Risk Dashboard */
-        get: operations["get_risk_dashboard_api_trading_risk_dashboard_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/trading/rebalance": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Rebalance Portfolio */
-        post: operations["rebalance_portfolio_api_trading_rebalance_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/trading/journal/{order_id}/note": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Save Trade Note */
-        post: operations["save_trade_note_api_trading_journal__order_id__note_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/trading/journal/{order_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Trade Note */
-        get: operations["get_trade_note_api_trading_journal__order_id__get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/trading/journal/{order_id}/debrief": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Generate Trade Debrief */
-        post: operations["generate_trade_debrief_api_trading_journal__order_id__debrief_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/meta": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Meta */
-        get: operations["get_meta_api_meta_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/update/status": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Update Status */
-        get: operations["update_status_api_update_status_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/update/apply": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Update Apply */
-        post: operations["update_apply_api_update_apply_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/market/ohlcv": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Ohlcv */
-        get: operations["ohlcv_api_market_ohlcv_get"];
+        /** List My Logs */
+        get: operations["logs_list_my_logs"];
         put?: never;
         post?: never;
         delete?: never;
@@ -948,7 +554,61 @@ export interface paths {
             cookie?: never;
         };
         /** Custom Indicator */
-        get: operations["custom_indicator_api_market_custom_indicator_get"];
+        get: operations["market_custom_indicator"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/daily-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Fetch Daily Summary */
+        get: operations["daily-summary_fetch_daily_summary"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/daily-summary/generate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Trigger Daily Summary */
+        post: operations["daily-summary_trigger_daily_summary"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/earnings-calendar": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Earnings Calendar
+         * @description Return upcoming earnings data for the given tickers (or user watchlist).
+         */
+        get: operations["earnings_earnings_calendar"];
         put?: never;
         post?: never;
         delete?: never;
@@ -973,24 +633,7 @@ export interface paths {
          *     ValueError from the service (missing key, unsupported request, invalid
          *     LLM output) maps to 400 via the central exception handler.
          */
-        post: operations["formula_assist_api_market_formula_assist_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/market/sentiment-history": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Sentiment History */
-        get: operations["sentiment_history_api_market_sentiment_history_get"];
-        put?: never;
-        post?: never;
+        post: operations["market_formula_assist"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1010,7 +653,196 @@ export interface paths {
          *     Response: {"USD": 1.0, "EUR": 1.085, "GBP": 1.27, ...}
          *     Cached for 1 hour.
          */
-        get: operations["get_fx_rates_api_market_fx_rates_get"];
+        get: operations["market_get_fx_rates"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/ohlcv": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Ohlcv */
+        get: operations["market_ohlcv"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/patterns/{ticker}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Patterns */
+        get: operations["patterns_get_patterns"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/sector-rotation": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sector Rotation */
+        get: operations["sector_sector_rotation"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/market/sentiment-history": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Sentiment History */
+        get: operations["market_sentiment_history"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Meta */
+        get: operations["meta_get_meta"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/news/feed": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** News Feed */
+        get: operations["news_news_feed"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/personas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List All Personas */
+        get: operations["personas_list_all_personas"];
+        put?: never;
+        /** Create Persona */
+        post: operations["personas_create_persona"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/personas/{key}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update Persona */
+        put: operations["personas_update_persona"];
+        post?: never;
+        /** Delete Persona */
+        delete: operations["personas_delete_persona"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Portfolios */
+        get: operations["portfolio_list_portfolios"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portfolio/holdings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Holdings */
+        get: operations["portfolio_list_holdings"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/portfolio/orders": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Orders */
+        get: operations["portfolio_list_orders"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1027,10 +859,10 @@ export interface paths {
             cookie?: never;
         };
         /** List Presets Run */
-        get: operations["list_presets_run_api_presets_get"];
+        get: operations["presets_list_presets_run"];
         put?: never;
         /** Create Preset Run */
-        post: operations["create_preset_run_api_presets_post"];
+        post: operations["presets_create_preset_run"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1048,7 +880,7 @@ export interface paths {
         put?: never;
         post?: never;
         /** Delete Preset */
-        delete: operations["delete_preset_api_presets__preset_id__delete"];
+        delete: operations["presets_delete_preset"];
         options?: never;
         head?: never;
         patch?: never;
@@ -1064,344 +896,7 @@ export interface paths {
         get?: never;
         put?: never;
         /** Apply Preset */
-        post: operations["apply_preset_api_presets__preset_id__apply_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/alerts": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Alerts Run */
-        get: operations["list_alerts_run_api_alerts_get"];
-        put?: never;
-        /** Create Alert Run */
-        post: operations["create_alert_run_api_alerts_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/alerts/{alert_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete Alert */
-        delete: operations["delete_alert_api_alerts__alert_id__delete"];
-        options?: never;
-        head?: never;
-        /** Update Alert */
-        patch: operations["update_alert_api_alerts__alert_id__patch"];
-        trace?: never;
-    };
-    "/api/news/feed": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** News Feed */
-        get: operations["news_feed_api_news_feed_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/me": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Me */
-        get: operations["get_me_api_users_me_get"];
-        /** Update Me */
-        put: operations["update_me_api_users_me_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/me/api-keys": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List My Api Keys */
-        get: operations["list_my_api_keys_api_users_me_api_keys_get"];
-        /** Set My Api Key */
-        put: operations["set_my_api_key_api_users_me_api_keys_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/me/api-keys/{provider}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete My Api Key */
-        delete: operations["delete_my_api_key_api_users_me_api_keys__provider__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/me/permissions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get My Permissions */
-        get: operations["get_my_permissions_api_users_me_permissions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/me/setting-permissions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get My Setting Permissions */
-        get: operations["get_my_setting_permissions_api_users_me_setting_permissions_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List Users Run */
-        get: operations["list_users_run_api_users_get"];
-        put?: never;
-        /** Create User */
-        post: operations["create_user_api_users_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/{user_id}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        /** Update User */
-        put: operations["update_user_api_users__user_id__put"];
-        post?: never;
-        /** Delete User */
-        delete: operations["delete_user_api_users__user_id__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/{user_id}/permissions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get User Permissions */
-        get: operations["get_user_permissions_api_users__user_id__permissions_get"];
-        /** Set User Permissions */
-        put: operations["set_user_permissions_api_users__user_id__permissions_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/{user_id}/api-keys": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** List User Api Keys */
-        get: operations["list_user_api_keys_api_users__user_id__api_keys_get"];
-        /** Set User Api Key Endpoint */
-        put: operations["set_user_api_key_endpoint_api_users__user_id__api_keys_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/{user_id}/api-keys/{provider}": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        post?: never;
-        /** Delete User Api Key Endpoint */
-        delete: operations["delete_user_api_key_endpoint_api_users__user_id__api_keys__provider__delete"];
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/{user_id}/setting-permissions": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get User Setting Permissions */
-        get: operations["get_user_setting_permissions_api_users__user_id__setting_permissions_get"];
-        /** Set User Setting Permissions */
-        put: operations["set_user_setting_permissions_api_users__user_id__setting_permissions_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/{user_id}/agent-access": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Agent Access */
-        get: operations["get_agent_access_api_users__user_id__agent_access_get"];
-        /** Set Agent Access */
-        put: operations["set_agent_access_api_users__user_id__agent_access_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/{user_id}/tool-access": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Tool Access */
-        get: operations["get_tool_access_api_users__user_id__tool_access_get"];
-        /** Set Tool Access */
-        put: operations["set_tool_access_api_users__user_id__tool_access_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/users/{user_id}/tool-field-access": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Tool Field Access */
-        get: operations["get_tool_field_access_api_users__user_id__tool_field_access_get"];
-        /** Set Tool Field Access */
-        put: operations["set_tool_field_access_api_users__user_id__tool_field_access_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/system-settings": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get System Settings */
-        get: operations["get_system_settings_api_system_settings_get"];
-        /** Update System Settings */
-        put: operations["update_system_settings_api_system_settings_put"];
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/system-settings/tools": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Server Tools */
-        get: operations["get_server_tools_api_system_settings_tools_get"];
-        /** Update Server Tools */
-        put: operations["update_server_tools_api_system_settings_tools_put"];
-        post?: never;
+        post: operations["presets_apply_preset"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1421,7 +916,7 @@ export interface paths {
          * Scan
          * @description Score a ticker universe and return the strongest candidates.
          */
-        post: operations["scan_api_screener_scan_post"];
+        post: operations["screener_scan"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1441,22 +936,79 @@ export interface paths {
          * Scan Watchlist
          * @description Score the caller's saved watchlist tickers.
          */
-        post: operations["scan_watchlist_api_screener_scan_watchlist_post"];
+        post: operations["screener_scan_watchlist"];
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/market/sector-rotation": {
+    "/api/settings": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Sector Rotation */
-        get: operations["sector_rotation_api_market_sector_rotation_get"];
+        /** Get Settings */
+        get: operations["settings_get_settings"];
+        /** Update Settings */
+        put: operations["settings_update_settings"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get User Agents */
+        get: operations["settings_get_user_agents"];
+        /** Update User Agents */
+        put: operations["settings_update_user_agents"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/agents/server": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Server Agents */
+        get: operations["settings_get_server_agents"];
+        /** Update Server Agents */
+        put: operations["settings_update_server_agents"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/llm-catalog": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get Llm Catalog
+         * @description Per-provider model dropdown options, sourced from llm_clients/registry.py.
+         */
+        get: operations["settings_get_llm_catalog"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1465,15 +1017,18 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/market/patterns/{ticker}": {
+    "/api/settings/memory": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get Patterns */
-        get: operations["get_patterns_api_market_patterns__ticker__get"];
+        /**
+         * Get Memory Status
+         * @description The calling user's own vector-memory status (everything is per-user).
+         */
+        get: operations["settings_get_memory_status"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1482,7 +1037,7 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/analysis/{analysis_id}/share": {
+    "/api/settings/test-webhook": {
         parameters: {
             query?: never;
             header?: never;
@@ -1491,8 +1046,97 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Create Share */
-        post: operations["create_share_api_analysis__analysis_id__share_post"];
+        /** Test Webhook */
+        post: operations["settings_test_webhook"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get User Tools */
+        get: operations["settings_get_user_tools"];
+        /** Update User Tools */
+        put: operations["settings_update_user_tools"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get User Settings By Id */
+        get: operations["settings_get_user_settings_by_id"];
+        /** Update User Settings By Id */
+        put: operations["settings_update_user_settings_by_id"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/users/{user_id}/agents": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Other User Agents */
+        get: operations["settings_get_other_user_agents"];
+        /** Update Other User Agents */
+        put: operations["settings_update_other_user_agents"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/users/{user_id}/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Other User Tools */
+        get: operations["settings_get_other_user_tools"];
+        /** Update Other User Tools */
+        put: operations["settings_update_other_user_tools"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/settings/webhook-deliveries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Webhook Deliveries */
+        get: operations["settings_get_webhook_deliveries"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1507,7 +1151,7 @@ export interface paths {
             cookie?: never;
         };
         /** Get Shared Report */
-        get: operations["get_shared_report_api_share__token__get"];
+        get: operations["share_get_shared_report"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1516,25 +1160,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/assistant/history": {
+    "/api/system-settings": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** Get History */
-        get: operations["get_history_api_assistant_history_get"];
-        put?: never;
+        /** Get System Settings */
+        get: operations["system-settings_get_system_settings"];
+        /** Update System Settings */
+        put: operations["system-settings_update_system_settings"];
         post?: never;
-        /** Clear History */
-        delete: operations["clear_history_api_assistant_history_delete"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/assistant/chat": {
+    "/api/system-settings/tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Server Tools */
+        get: operations["system-settings_get_server_tools"];
+        /** Update Server Tools */
+        put: operations["system-settings_update_server_tools"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/backtest": {
         parameters: {
             query?: never;
             header?: never;
@@ -1543,119 +1205,8 @@ export interface paths {
         };
         get?: never;
         put?: never;
-        /** Chat */
-        post: operations["chat_api_assistant_chat_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/market/daily-summary": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Fetch Daily Summary */
-        get: operations["fetch_daily_summary_api_market_daily_summary_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/market/daily-summary/generate": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        get?: never;
-        put?: never;
-        /** Trigger Daily Summary */
-        post: operations["trigger_daily_summary_api_market_daily_summary_generate_post"];
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/analytics/token-usage": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /** Get Token Usage */
-        get: operations["get_token_usage_api_analytics_token_usage_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/system-metrics": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get System Metrics
-         * @description Return key Prometheus metrics as JSON for the admin dashboard.
-         */
-        get: operations["get_system_metrics_api_admin_system_metrics_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/admin/system-health": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Get System Health
-         * @description Combine guardrail telemetry (Prometheus) and quality history (DB) into one panel.
-         */
-        get: operations["get_system_health_api_admin_system_health_get"];
-        put?: never;
-        post?: never;
-        delete?: never;
-        options?: never;
-        head?: never;
-        patch?: never;
-        trace?: never;
-    };
-    "/api/market/earnings-calendar": {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        /**
-         * Earnings Calendar
-         * @description Return upcoming earnings data for the given tickers (or user watchlist).
-         */
-        get: operations["earnings_calendar_api_market_earnings_calendar_get"];
-        put?: never;
-        post?: never;
+        /** Run Backtest */
+        post: operations["trading_run_backtest"];
         delete?: never;
         options?: never;
         head?: never;
@@ -1673,7 +1224,7 @@ export interface paths {
          * Get Correlation
          * @description Compute pairwise correlation matrix for the user's current holdings.
          */
-        get: operations["get_correlation_api_trading_correlation_get"];
+        get: operations["trading_get_correlation"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1682,25 +1233,24 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
-    "/api/personas": {
+    "/api/trading/journal/{order_id}": {
         parameters: {
             query?: never;
             header?: never;
             path?: never;
             cookie?: never;
         };
-        /** List All Personas */
-        get: operations["list_all_personas_api_personas_get"];
+        /** Get Trade Note */
+        get: operations["trading_get_trade_note"];
         put?: never;
-        /** Create Persona */
-        post: operations["create_persona_api_personas_post"];
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
         patch?: never;
         trace?: never;
     };
-    "/api/personas/{key}": {
+    "/api/trading/journal/{order_id}/debrief": {
         parameters: {
             query?: never;
             header?: never;
@@ -1708,11 +1258,531 @@ export interface paths {
             cookie?: never;
         };
         get?: never;
-        /** Update Persona */
-        put: operations["update_persona_api_personas__key__put"];
+        put?: never;
+        /** Generate Trade Debrief */
+        post: operations["trading_generate_trade_debrief"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/journal/{order_id}/note": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Save Trade Note */
+        post: operations["trading_save_trade_note"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Create Order */
+        post: operations["trading_create_order"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/performance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Performance */
+        get: operations["trading_get_performance"];
+        put?: never;
         post?: never;
-        /** Delete Persona */
-        delete: operations["delete_persona_api_personas__key__delete"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/portfolio": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Portfolio */
+        get: operations["trading_get_portfolio"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/portfolio-stats": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Portfolio Stats */
+        get: operations["trading_get_portfolio_stats"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/rebalance": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Rebalance Portfolio */
+        post: operations["trading_rebalance_portfolio"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset Portfolio */
+        post: operations["trading_reset_portfolio"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/trading/risk-dashboard": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Risk Dashboard */
+        get: operations["trading_get_risk_dashboard"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/update/apply": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Update Apply */
+        post: operations["update_update_apply"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/update/status": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Update Status */
+        get: operations["update_update_status"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List Users Run */
+        get: operations["users_list_users_run"];
+        put?: never;
+        /** Create User */
+        post: operations["users_create_user"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Me */
+        get: operations["users_get_me"];
+        /** Update Me */
+        put: operations["users_update_me"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/me/api-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List My Api Keys */
+        get: operations["users_list_my_api_keys"];
+        /** Set My Api Key */
+        put: operations["users_set_my_api_key"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/me/api-keys/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete My Api Key */
+        delete: operations["users_delete_my_api_key"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/me/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Permissions */
+        get: operations["users_get_my_permissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/me/setting-permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get My Setting Permissions */
+        get: operations["users_get_my_setting_permissions"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{user_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /** Update User */
+        put: operations["users_update_user"];
+        post?: never;
+        /** Delete User */
+        delete: operations["users_delete_user"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{user_id}/agent-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Agent Access */
+        get: operations["users_get_agent_access"];
+        /** Set Agent Access */
+        put: operations["users_set_agent_access"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{user_id}/api-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List User Api Keys */
+        get: operations["users_list_user_api_keys"];
+        /** Set User Api Key Endpoint */
+        put: operations["users_set_user_api_key_endpoint"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{user_id}/api-keys/{provider}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete User Api Key Endpoint */
+        delete: operations["users_delete_user_api_key_endpoint"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{user_id}/permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get User Permissions */
+        get: operations["users_get_user_permissions"];
+        /** Set User Permissions */
+        put: operations["users_set_user_permissions"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{user_id}/setting-permissions": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get User Setting Permissions */
+        get: operations["users_get_user_setting_permissions"];
+        /** Set User Setting Permissions */
+        put: operations["users_set_user_setting_permissions"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{user_id}/tool-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Tool Access */
+        get: operations["users_get_tool_access"];
+        /** Set Tool Access */
+        put: operations["users_set_tool_access"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/users/{user_id}/tool-field-access": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Tool Field Access */
+        get: operations["users_get_tool_field_access"];
+        /** Set Tool Field Access */
+        put: operations["users_set_tool_field_access"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/watchlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Watchlist */
+        get: operations["watchlist_get_watchlist"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/watchlist/prices": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get Watchlist Prices */
+        get: operations["watchlist_get_watchlist_prices"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/watchlist/{ticker}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Add To Watchlist */
+        post: operations["watchlist_add_to_watchlist"];
+        /** Remove From Watchlist */
+        delete: operations["watchlist_remove_from_watchlist"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Login */
+        post: operations["auth_login"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Logout */
+        post: operations["auth_logout"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/auth/refresh": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Refresh */
+        post: operations["auth_refresh"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1726,7 +1796,7 @@ export interface paths {
             cookie?: never;
         };
         /** Health */
-        get: operations["health_health_get"];
+        get: operations["default_health"];
         put?: never;
         post?: never;
         delete?: never;
@@ -1741,45 +1811,36 @@ export interface components {
     schemas: {
         /** ABComparisonItem */
         ABComparisonItem: {
-            /** Preset Name */
-            preset_name: string;
-            /** Total Runs */
-            total_runs: number;
-            /** Avg Duration */
-            avg_duration: number;
-            /** Avg Tokens */
-            avg_tokens: number;
-            /** Avg Cost Usd */
-            avg_cost_usd: number;
-            /** Win Rate */
-            win_rate: number | null;
-            /** Total Graded */
-            total_graded: number;
-            /** Win Rate Last 50 */
-            win_rate_last_50: number | null;
             /** Avg Alpha Last 50 */
             avg_alpha_last_50: number;
+            /** Avg Cost Usd */
+            avg_cost_usd: number;
+            /** Avg Duration */
+            avg_duration: number;
             /** Avg Raw Return Last 50 */
             avg_raw_return_last_50: number;
+            /** Avg Tokens */
+            avg_tokens: number;
+            /** Preset Name */
+            preset_name: string;
+            /** Total Graded */
+            total_graded: number;
             /** Total Graded Last 50 */
             total_graded_last_50: number;
+            /** Total Runs */
+            total_runs: number;
+            /** Win Rate */
+            win_rate: number | null;
+            /** Win Rate Last 50 */
+            win_rate_last_50: number | null;
         };
         /** APIOrderRequest */
         APIOrderRequest: {
-            /** Ticker */
-            ticker: string;
             /**
              * Action
              * @enum {string}
              */
             action: "BUY" | "SELL";
-            /** Quantity */
-            quantity: number;
-            /**
-             * Leverage
-             * @default 1
-             */
-            leverage: number;
             /**
              * Allow Short
              * @default false
@@ -1787,23 +1848,32 @@ export interface components {
             allow_short: boolean;
             /** Analysis Id */
             analysis_id?: number | null;
+            /**
+             * Leverage
+             * @default 1
+             */
+            leverage: number;
+            /** Quantity */
+            quantity: number;
+            /** Ticker */
+            ticker: string;
         };
         /** ActiveTaskRead */
         ActiveTaskRead: {
+            /** Asset Type */
+            asset_type?: string | null;
+            /** Started At */
+            started_at?: number | null;
+            /** Status */
+            status?: string | null;
             /** Task Id */
             task_id: string;
             /** Ticker */
             ticker?: string | null;
             /** Trade Date */
             trade_date?: string | null;
-            /** Asset Type */
-            asset_type?: string | null;
             /** User Id */
             user_id?: number | null;
-            /** Started At */
-            started_at?: number | null;
-            /** Status */
-            status?: string | null;
         };
         /** AgentAccessUpdate */
         AgentAccessUpdate: {
@@ -1814,21 +1884,17 @@ export interface components {
         };
         /** AgentAccessUpdateResponse */
         AgentAccessUpdateResponse: {
-            /** Detail */
-            detail: string;
             /** Agents */
             agents: {
                 [key: string]: unknown;
             };
+            /** Detail */
+            detail: string;
         };
         /** AgentSettingUpdateValue */
         AgentSettingUpdateValue: {
             /** Enabled */
             enabled?: boolean | null;
-            /** Settings */
-            settings?: {
-                [key: string]: unknown;
-            } | null;
             /**
              * Reset Enabled
              * @default false
@@ -1839,6 +1905,10 @@ export interface components {
              * @default []
              */
             reset_settings: string[];
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** AgentSettingValue */
         AgentSettingValue: {
@@ -1868,307 +1938,318 @@ export interface components {
         };
         /** AlertCreate */
         AlertCreate: {
-            /** Ticker */
-            ticker: string;
-            /** Condition */
-            condition: string;
-            /** Target Price */
-            target_price: number;
-            /**
-             * Auto Analyze
-             * @default false
-             */
-            auto_analyze: boolean;
             /**
              * Alert Type
              * @default price
              */
             alert_type: string;
+            /**
+             * Auto Analyze
+             * @default false
+             */
+            auto_analyze: boolean;
+            /** Condition */
+            condition: string;
+            /**
+             * Target Price
+             * @default 0
+             */
+            target_price: number;
+            /** Ticker */
+            ticker: string;
         };
         /** AlertRead */
         AlertRead: {
-            /** Id */
-            id: number;
-            /** Ticker */
-            ticker: string;
             /** Alert Type */
             alert_type: string;
-            /** Condition */
-            condition: string;
-            /** Target Price */
-            target_price: number;
             /** Auto Analyze */
             auto_analyze: boolean;
+            /** Condition */
+            condition: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
             /** Creation Source */
             creation_source: string;
             /** Enabled */
             enabled: boolean;
+            /** Id */
+            id: number;
+            /** Target Price */
+            target_price: number;
+            /** Ticker */
+            ticker: string;
             /** Triggered At */
             triggered_at: string | null;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
         };
         /** AlertUpdate */
         AlertUpdate: {
+            /** Auto Analyze */
+            auto_analyze?: boolean | null;
             /** Enabled */
             enabled?: boolean | null;
             /** Target Price */
             target_price?: number | null;
-            /** Auto Analyze */
-            auto_analyze?: boolean | null;
         };
         /** AnalysisListItem */
         AnalysisListItem: {
-            /** Id */
-            id: number;
-            /** Ticker */
-            ticker: string;
-            /** Trade Date */
-            trade_date: string;
             /** Asset Type */
             asset_type: string;
-            /** Signal */
-            signal: string | null;
-            /** Duration Seconds */
-            duration_seconds: number;
-            /** Triggered By */
-            triggered_by: string;
+            /** Chart Annotations */
+            chart_annotations?: unknown;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-            /** Chart Annotations */
-            chart_annotations?: unknown;
-            /** Llm Provider */
-            llm_provider?: string | null;
-            /** Llm Model */
-            llm_model?: string | null;
-            /** Preset Name */
-            preset_name?: string | null;
-        };
-        /** AnalysisResultRead */
-        AnalysisResultRead: {
+            /** Duration Seconds */
+            duration_seconds: number;
             /** Id */
             id: number;
+            /** Llm Model */
+            llm_model?: string | null;
+            /** Llm Provider */
+            llm_provider?: string | null;
+            /** Preset Name */
+            preset_name?: string | null;
+            /** Signal */
+            signal: string | null;
             /** Ticker */
             ticker: string;
             /** Trade Date */
             trade_date: string;
-            /** Asset Type */
-            asset_type: string;
-            /** Signal */
-            signal: string | null;
-            /** Market Report */
-            market_report: string;
-            /** Sentiment Report */
-            sentiment_report: string;
-            /** News Report */
-            news_report: string;
-            /** Fundamentals Report */
-            fundamentals_report: string;
-            /** Macro Report */
-            macro_report: string;
-            /** Options Report */
-            options_report: string;
-            /** Quant Report */
-            quant_report: string;
-            /** Earnings Report */
-            earnings_report: string;
-            /**
-             * Insider Report
-             * @default
-             */
-            insider_report: string;
-            /**
-             * Ownership Report
-             * @default
-             */
-            ownership_report: string;
-            /**
-             * Ratings Report
-             * @default
-             */
-            ratings_report: string;
-            /**
-             * Short Interest Report
-             * @default
-             */
-            short_interest_report: string;
-            /**
-             * Valuation Report
-             * @default
-             */
-            valuation_report: string;
-            /**
-             * Catalyst Report
-             * @default
-             */
-            catalyst_report: string;
-            /** Review Report */
-            review_report: string;
-            /**
-             * Synthesis Report
-             * @default
-             */
-            synthesis_report: string;
-            /**
-             * Audit Report
-             * @default
-             */
-            audit_report: string;
+            /** Triggered By */
+            triggered_by: string;
+        };
+        /** AnalysisResultRead */
+        AnalysisResultRead: {
             /**
              * Agent Qa Report
              * @default
              */
             agent_qa_report: string;
-            /** Investment Plan */
-            investment_plan: string;
-            /** Direction-neutral investigation plan created before analysts run. */
+            /** Alpha Return */
+            alpha_return?: number | null;
+            /**
+             * Analysis Mode
+             * @default live
+             */
+            analysis_mode: string;
+            /** Analysis Plan Json */
             analysis_plan_json?: unknown;
-            /** Structured synthesis and evidence lineage. */
-            synthesis_json?: unknown;
-            /** Structured market-regime snapshot for this analysis. */
-            market_regime_json?: unknown;
-            /** Exact persistent asset strategy loaded before the analysis. */
-            strategy_before_json?: unknown;
-            /** Candidate/accepted asset strategy after reconciliation. */
-            strategy_after_json?: unknown;
-            /** Non-persisted reconciler candidate, recorded for audit. */
-            strategy_candidate_json?: unknown;
-            /** Raw, non-executable Portfolio Manager proposal. */
-            pm_proposal_json?: unknown;
-            /** Controller-accepted canonical portfolio decision. */
-            portfolio_decision_json?: unknown;
-            /** Auditable controller transition from proposal to acceptance. */
-            decision_transition_json?: unknown;
-            /** Confidence used by the stability controller and execution path. */
-            calibrated_confidence?: number | null;
-            /** Persistence outcome, including optimistic-lock conflicts. */
-            strategy_update_status?: string | null;
-            /** Asset strategy version loaded at analysis start. */
-            strategy_before_version?: number | null;
-            /** Asset strategy version after a material accepted revision. */
-            strategy_after_version?: number | null;
-            /** Live, historical, or time-travel analysis mode. */
-            analysis_mode?: string | null;
-            /** Whether this row is eligible to teach live-learning services. */
-            learning_eligible?: boolean | null;
-            /** Trader Plan */
-            trader_plan: string;
-            /** Final Decision */
-            final_decision: string;
-            /** Bull History */
-            bull_history?: unknown;
+            /** Asset Type */
+            asset_type: string;
+            /**
+             * Audit Report
+             * @default
+             */
+            audit_report: string;
             /** Bear History */
             bear_history?: unknown;
+            /** Bull History */
+            bull_history?: unknown;
+            /** Calibrated Confidence */
+            calibrated_confidence?: number | null;
+            /**
+             * Catalyst Report
+             * @default
+             */
+            catalyst_report: string;
+            /** Chart Annotations */
+            chart_annotations?: unknown;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Decision Transition Json */
+            decision_transition_json?: unknown;
+            /**
+             * Degraded
+             * @default false
+             */
+            degraded: boolean;
+            /** Duration Seconds */
+            duration_seconds: number;
+            /** Earnings Report */
+            earnings_report: string;
+            /**
+             * Estimated Cost Usd
+             * @default 0
+             */
+            estimated_cost_usd: number;
+            /** Failed Agents */
+            failed_agents?: string[] | null;
+            /** Final Decision */
+            final_decision: string;
+            /** Fundamentals Report */
+            fundamentals_report: string;
+            /** Holding Days */
+            holding_days?: number | null;
+            /** Id */
+            id: number;
+            /**
+             * Insider Report
+             * @default
+             */
+            insider_report: string;
             /** Investment Debate History */
             investment_debate_history?: unknown;
-            /** Risk Debate History */
-            risk_debate_history?: unknown;
+            /** Investment Plan */
+            investment_plan: string;
             /**
              * Judge Decision
              * @default
              */
             judge_decision: string;
             /**
-             * Trader Proposal Json
-             * @default {}
+             * Learning Eligible
+             * @default true
              */
-            trader_proposal_json: string;
-            /** Chart Annotations */
-            chart_annotations?: unknown;
-            /** Risk Metrics */
-            risk_metrics?: unknown;
-            /** Quality */
-            quality?: unknown;
-            /**
-             * Degraded
-             * @default false
-             */
-            degraded: boolean;
-            /** Failed Agents */
-            failed_agents?: string[] | null;
+            learning_eligible: boolean;
             /** Llm Calls */
             llm_calls: number;
-            /** Tool Calls */
-            tool_calls: number;
+            /** Llm Model */
+            llm_model?: string | null;
+            /** Llm Provider */
+            llm_provider?: string | null;
+            /** Macro Report */
+            macro_report: string;
+            /** Market Regime Json */
+            market_regime_json?: unknown;
+            /** Market Report */
+            market_report: string;
+            /** News Report */
+            news_report: string;
+            /** Options Report */
+            options_report: string;
+            /**
+             * Ownership Report
+             * @default
+             */
+            ownership_report: string;
+            /** Pm Proposal Json */
+            pm_proposal_json?: unknown;
+            /** Portfolio Decision Json */
+            portfolio_decision_json?: unknown;
+            /** Preset Name */
+            preset_name?: string | null;
+            /** Quality */
+            quality?: unknown;
+            /** Quant Report */
+            quant_report: string;
+            /**
+             * Ratings Report
+             * @default
+             */
+            ratings_report: string;
+            /** Raw Return */
+            raw_return?: number | null;
+            /** Review Report */
+            review_report: string;
+            /** Risk Debate History */
+            risk_debate_history?: unknown;
+            /** Risk Metrics */
+            risk_metrics?: unknown;
+            /** Sentiment Report */
+            sentiment_report: string;
+            /**
+             * Short Interest Report
+             * @default
+             */
+            short_interest_report: string;
+            /** Signal */
+            signal: string | null;
+            /** Strategy After Json */
+            strategy_after_json?: unknown;
+            /** Strategy After Version */
+            strategy_after_version?: number | null;
+            /** Strategy Before Json */
+            strategy_before_json?: unknown;
+            /** Strategy Before Version */
+            strategy_before_version?: number | null;
+            /** Strategy Candidate Json */
+            strategy_candidate_json?: unknown;
+            /** Strategy Id */
+            strategy_id?: number | null;
+            /** Strategy Update Status */
+            strategy_update_status?: string | null;
+            /** Synthesis Json */
+            synthesis_json?: unknown;
+            /**
+             * Synthesis Report
+             * @default
+             */
+            synthesis_report: string;
+            /** Ticker */
+            ticker: string;
             /** Tokens In */
             tokens_in: number;
             /** Tokens Out */
             tokens_out: number;
+            /** Tool Calls */
+            tool_calls: number;
+            /** Trade Date */
+            trade_date: string;
+            /** Trader Plan */
+            trader_plan: string;
             /**
-             * Estimated Cost Usd
-             * @default 0
+             * Trader Proposal Json
+             * @default {}
              */
-            estimated_cost_usd: number;
-            /** Llm Provider */
-            llm_provider?: string | null;
-            /** Llm Model */
-            llm_model?: string | null;
-            /** Preset Name */
-            preset_name?: string | null;
-            /** Duration Seconds */
-            duration_seconds: number;
+            trader_proposal_json: string;
             /** Triggered By */
             triggered_by: string;
             /**
-             * Created At
-             * Format: date-time
+             * Valuation Report
+             * @default
              */
-            created_at: string;
-            /** Raw Return */
-            raw_return?: number | null;
-            /** Alpha Return */
-            alpha_return?: number | null;
-            /** Holding Days */
-            holding_days?: number | null;
+            valuation_report: string;
         };
         /** AnalysisRunRequest */
         AnalysisRunRequest: {
-            /** Ticker */
-            ticker: string;
-            /** Trade Date */
-            trade_date: string;
             /**
              * Asset Type
              * @default stock
              */
             asset_type: string;
+            /** Ticker */
+            ticker: string;
+            /** Trade Date */
+            trade_date: string;
         };
         /** AnalysisRunResponse */
         AnalysisRunResponse: {
+            /**
+             * Message
+             * @default Analysis started
+             */
+            message: string;
             /** Task Id */
             task_id: string;
             /** Ticker */
             ticker: string;
             /** Trade Date */
             trade_date: string;
-            /**
-             * Message
-             * @default Analysis started
-             */
-            message: string;
         };
         /** AnalystAttributionItem */
         AnalystAttributionItem: {
+            /** Chronic Underperformer */
+            chronic_underperformer: boolean;
+            /** Correct Predictions */
+            correct_predictions: number;
             /** Key */
             key: string;
             /** Label */
             label: string;
             /** Total Predictions */
             total_predictions: number;
-            /** Correct Predictions */
-            correct_predictions: number;
-            /** Win Rate */
-            win_rate: number;
             /** Weight */
             weight: number;
-            /** Chronic Underperformer */
-            chronic_underperformer: boolean;
+            /** Win Rate */
+            win_rate: number;
         };
         /** ApiKeyProvidersResponse */
         ApiKeyProvidersResponse: {
@@ -2177,17 +2258,95 @@ export interface components {
         };
         /** ApiKeySet */
         ApiKeySet: {
-            /** Provider */
-            provider: string;
             /** Api Key */
             api_key: string;
+            /** Provider */
+            provider: string;
+        };
+        /** AssetStrategyRead */
+        AssetStrategyRead: {
+            /** Accepted Rating */
+            accepted_rating?: string | null;
+            /** Asset Type */
+            asset_type: string;
+            /** Conviction */
+            conviction: number;
+            /** Created At */
+            created_at?: string | null;
+            /** Effective At */
+            effective_at?: string | null;
+            /** Id */
+            id: number;
+            /** Invalidation Conditions */
+            invalidation_conditions?: unknown;
+            /** Key Drivers */
+            key_drivers?: unknown;
+            /** Last Analysis Id */
+            last_analysis_id?: number | null;
+            /** Last Reviewed At */
+            last_reviewed_at?: string | null;
+            /** Open Questions */
+            open_questions?: unknown;
+            /** Recorded At */
+            recorded_at?: string | null;
+            /** Regime Assumption */
+            regime_assumption?: unknown;
+            /** Status */
+            status: string;
+            /** Strategic Bias */
+            strategic_bias: string;
+            /** Thesis */
+            thesis: string;
+            /** Ticker */
+            ticker: string;
+            /** Time Horizon */
+            time_horizon?: string | null;
+            /** Updated At */
+            updated_at?: string | null;
+            /** Version */
+            version: number;
+            /** Watch Conditions */
+            watch_conditions?: unknown;
+        };
+        /** AssetStrategyVersionRead */
+        AssetStrategyVersionRead: {
+            /** Accepted Rating */
+            accepted_rating?: string | null;
+            /** After State */
+            after_state?: unknown;
+            /** Analysis Id */
+            analysis_id?: number | null;
+            /** Before State */
+            before_state?: unknown;
+            /** Change Strength */
+            change_strength?: number | null;
+            /** Created At */
+            created_at?: string | null;
+            /** Effective At */
+            effective_at?: string | null;
+            /** Id */
+            id: number;
+            /** Pm Proposed Rating */
+            pm_proposed_rating?: string | null;
+            /** Recorded At */
+            recorded_at?: string | null;
+            /** Regime After */
+            regime_after?: unknown;
+            /** Regime Before */
+            regime_before?: unknown;
+            /** Revision Action */
+            revision_action: string;
+            /** Strategy Id */
+            strategy_id: number;
+            /** Supporting Evidence */
+            supporting_evidence?: unknown;
+            /** Triggered Invalidations */
+            triggered_invalidations?: unknown;
+            /** Version */
+            version: number;
         };
         /** AssistantChatResponse */
         AssistantChatResponse: {
-            /** Id */
-            id: number;
-            /** Role */
-            role: string;
             /** Content */
             content: string;
             /**
@@ -2195,13 +2354,13 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Id */
+            id: number;
+            /** Role */
+            role: string;
         };
         /** AssistantHistoryItem */
         AssistantHistoryItem: {
-            /** Id */
-            id: number;
-            /** Role */
-            role: string;
             /** Content */
             content: string;
             /**
@@ -2209,46 +2368,46 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Id */
+            id: number;
+            /** Role */
+            role: string;
         };
         /** AutoCloseRecord */
         AutoCloseRecord: {
-            /** Ticker */
-            ticker: string;
-            /** Reason */
-            reason: string;
-            /** Side */
-            side: string;
             /** Price */
             price: number;
             /** Realized Pnl */
             realized_pnl: number;
+            /** Reason */
+            reason: string;
+            /** Side */
+            side: string;
+            /** Ticker */
+            ticker: string;
         };
         /** BacktestBenchmark */
         BacktestBenchmark: {
-            /** Ticker */
-            ticker: string;
             /** Return Pct */
             return_pct: number;
+            /** Ticker */
+            ticker: string;
         };
         /** BacktestEquityPoint */
         BacktestEquityPoint: {
-            /** Date */
-            date: string;
-            /** Value */
-            value: number;
             /** Cash */
             cash: number;
+            /** Date */
+            date: string;
             /** Holdings Value */
             holdings_value: number;
+            /** Value */
+            value: number;
         };
         /** BacktestRequest */
         BacktestRequest: {
-            /** Ticker */
-            ticker: string;
-            /** Strategy Type */
-            strategy_type: string;
-            /** Start Date */
-            start_date: string;
+            /** Benchmark Ticker */
+            benchmark_ticker?: string | null;
             /** End Date */
             end_date: string;
             /**
@@ -2261,94 +2420,76 @@ export interface components {
              * @default 5
              */
             slippage_bps: number;
-            /** Benchmark Ticker */
-            benchmark_ticker?: string | null;
+            /** Start Date */
+            start_date: string;
+            /** Strategy Type */
+            strategy_type: string;
+            /** Ticker */
+            ticker: string;
         };
         /** BacktestResponse */
         BacktestResponse: {
-            /** Initial Capital */
-            initial_capital: number;
+            /** Alpha Pct */
+            alpha_pct?: number | null;
+            /** Assumptions */
+            assumptions?: string[];
+            benchmark?: components["schemas"]["BacktestBenchmark"] | null;
+            consensus_report_stats?: components["schemas"]["ConsensusReportStats"] | null;
+            /** Equity Curve */
+            equity_curve?: components["schemas"]["BacktestEquityPoint"][];
             /** Final Value */
             final_value: number;
-            /** Total Return */
-            total_return: number;
-            /** Win Rate */
-            win_rate: number;
+            /** Initial Capital */
+            initial_capital: number;
             /** Max Drawdown */
             max_drawdown: number;
             /** Sharpe Ratio */
             sharpe_ratio: number;
-            /** Trades Count */
-            trades_count: number;
-            /**
-             * Trades
-             * @default []
-             */
-            trades: components["schemas"]["BacktestTradeRecord"][];
-            /**
-             * Equity Curve
-             * @default []
-             */
-            equity_curve: components["schemas"]["BacktestEquityPoint"][];
             /** Slippage Bps */
             slippage_bps: number;
-            benchmark?: components["schemas"]["BacktestBenchmark"] | null;
-            /** Alpha Pct */
-            alpha_pct?: number | null;
-            consensus_report_stats?: components["schemas"]["ConsensusReportStats"] | null;
-            /**
-             * Assumptions
-             * @default []
-             */
-            assumptions: string[];
+            /** Total Return */
+            total_return: number;
+            /** Trades */
+            trades?: components["schemas"]["BacktestTradeRecord"][];
+            /** Trades Count */
+            trades_count: number;
+            /** Win Rate */
+            win_rate: number;
         };
         /** BacktestTradeRecord */
         BacktestTradeRecord: {
             /** Entry Date */
             entry_date: string;
-            /** Exit Date */
-            exit_date: string;
-            /** Side */
-            side: string;
             /** Entry Price */
             entry_price: number;
+            /** Exit Date */
+            exit_date: string;
             /** Exit Price */
             exit_price: number;
-            /** Return Pct */
-            return_pct: number;
-            /** Pnl */
-            pnl: number;
             /**
              * Financing Cost
              * @default 0
              */
             financing_cost: number;
+            /** Pnl */
+            pnl: number;
             /** Reason */
             reason: string;
-        };
-        /** ConsensusReportStats */
-        ConsensusReportStats: {
-            /** Considered */
-            considered: number;
-            /** Used */
-            used: number;
-            /** Excluded Created After Trade Date */
-            excluded_created_after_trade_date: number;
-            /** Excluded Invalid Timestamp */
-            excluded_invalid_timestamp: number;
-            /** Replaced Duplicate Trade Date */
-            replaced_duplicate_trade_date: number;
+            /** Return Pct */
+            return_pct: number;
+            /** Side */
+            side: string;
         };
         /** BySignalItem */
         BySignalItem: {
-            /** Count */
-            count: number;
-            /** Wins */
-            wins: number;
             /** Avg Return */
             avg_return: number;
+            /** Count */
+            count: number;
             /** Win Rate */
             win_rate: number;
+            /** Wins */
+            wins: number;
         };
         /** CancelTaskResponse */
         CancelTaskResponse: {
@@ -2364,10 +2505,6 @@ export interface components {
         };
         /** ChatMessageRead */
         ChatMessageRead: {
-            /** Id */
-            id: number;
-            /** Role */
-            role: string;
             /** Content */
             content: string;
             /**
@@ -2375,6 +2512,10 @@ export interface components {
              * Format: date-time
              */
             created_at: string;
+            /** Id */
+            id: number;
+            /** Role */
+            role: string;
         };
         /** ChatRequest */
         ChatRequest: {
@@ -2385,32 +2526,60 @@ export interface components {
         CheckpointItem: {
             /** Checkpoint Id */
             checkpoint_id: string;
-            /** Step */
-            step: number;
-            /** Node */
-            node: string;
             /** Label */
             label: string;
+            /** Node */
+            node: string;
+            /** Step */
+            step: number;
             /** Ts */
             ts: string;
         };
+        /** ConsensusReportStats */
+        ConsensusReportStats: {
+            /**
+             * Considered
+             * @default 0
+             */
+            considered: number;
+            /**
+             * Excluded Created After Trade Date
+             * @default 0
+             */
+            excluded_created_after_trade_date: number;
+            /**
+             * Excluded Invalid Timestamp
+             * @default 0
+             */
+            excluded_invalid_timestamp: number;
+            /**
+             * Replaced Duplicate Trade Date
+             * @default 0
+             */
+            replaced_duplicate_trade_date: number;
+            /**
+             * Used
+             * @default 0
+             */
+            used: number;
+        };
         /** CorrelationPair */
         CorrelationPair: {
+            /** Correlation */
+            correlation: number;
             /** Ticker A */
             ticker_a: string;
             /** Ticker B */
             ticker_b: string;
-            /** Correlation */
-            correlation: number;
         };
         /** CorrelationResponse */
         CorrelationResponse: {
-            /** Tickers */
-            tickers: string[];
-            /** Matrix */
-            matrix: unknown[][];
             /** Avg Correlation */
             avg_correlation: number | null;
+            /** Matrix */
+            matrix: unknown[][];
+            /** Tickers */
+            tickers: string[];
             /** Warning */
             warning: string | null;
         };
@@ -2418,23 +2587,25 @@ export interface components {
         CostEstimateResponse: {
             /** Analyst Count */
             analyst_count: number;
-            /** Estimated Tokens */
-            estimated_tokens: number;
             /** Estimated Cost Usd */
             estimated_cost_usd: number;
             /** Estimated Duration Min */
             estimated_duration_min: number;
-            /** Pricing Source */
-            pricing_source: string;
+            /** Estimated Tokens */
+            estimated_tokens: number;
             /** Pricing Is Fallback */
             pricing_is_fallback: boolean;
+            /** Pricing Source */
+            pricing_source: string;
         };
         /** DailySummaryResponse */
         DailySummaryResponse: {
-            /** Id */
-            id?: number | null;
             /** Date */
             date?: string | null;
+            /** Generated At */
+            generated_at?: string | null;
+            /** Id */
+            id?: number | null;
             /** Summary */
             summary?: string | null;
             /**
@@ -2442,8 +2613,6 @@ export interface components {
              * @default []
              */
             tickers: string[];
-            /** Generated At */
-            generated_at?: string | null;
         };
         /** DeleteResponse */
         DeleteResponse: {
@@ -2460,10 +2629,10 @@ export interface components {
          * @description One ordered provider/model failover target for an analysis run.
          */
         FallbackLLMConfig: {
-            /** Provider */
-            provider: string;
             /** Model */
             model: string;
+            /** Provider */
+            provider: string;
         };
         /** FormulaAssistRequest */
         FormulaAssistRequest: {
@@ -2485,76 +2654,74 @@ export interface components {
         };
         /** HoldingItem */
         HoldingItem: {
-            /** Ticker */
-            ticker: string;
-            /** Quantity */
-            quantity: number;
             /** Avg Buy Price */
             avg_buy_price: number;
-            /** Current Price */
-            current_price: number;
-            /** Side */
-            side: string;
-            /** Leverage */
-            leverage: number;
-            /** Market Value */
-            market_value: number;
-            /** Equity */
-            equity: number;
             /** Borrowed Amount */
             borrowed_amount: number;
-            /** Margin Used */
-            margin_used: number;
+            /** Current Price */
+            current_price: number;
+            /** Equity */
+            equity: number;
+            /** Leverage */
+            leverage: number;
             /** Liquidation Price */
             liquidation_price: number;
+            /** Margin Used */
+            margin_used: number;
+            /** Market Value */
+            market_value: number;
+            /** Pnl Pct */
+            pnl_pct: number;
+            /** Quantity */
+            quantity: number;
+            /** Side */
+            side: string;
             /** Stop Loss */
             stop_loss: number;
             /** Take Profit */
             take_profit: number;
+            /** Ticker */
+            ticker: string;
             /** Unrealized Pnl */
             unrealized_pnl: number;
-            /** Pnl Pct */
-            pnl_pct: number;
         };
         /** HoldingRead */
         HoldingRead: {
-            /** Id */
-            id: number;
-            /** Ticker */
-            ticker: string;
-            /** Quantity */
-            quantity: number;
             /** Avg Buy Price */
             avg_buy_price: number;
+            /**
+             * Borrowed Amount
+             * @default 0
+             */
+            borrowed_amount: number;
             /** Current Price */
             current_price: number;
-            /** Unrealized Pnl */
-            unrealized_pnl: number;
-            /**
-             * Side
-             * @default long
-             */
-            side: string;
+            /** Id */
+            id: number;
             /**
              * Leverage
              * @default 1
              */
             leverage: number;
             /**
-             * Margin Used
-             * @default 0
-             */
-            margin_used: number;
-            /**
-             * Borrowed Amount
-             * @default 0
-             */
-            borrowed_amount: number;
-            /**
              * Liquidation Price
              * @default 0
              */
             liquidation_price: number;
+            /**
+             * Margin Used
+             * @default 0
+             */
+            margin_used: number;
+            /** Opened At */
+            opened_at?: string | null;
+            /** Quantity */
+            quantity: number;
+            /**
+             * Side
+             * @default long
+             */
+            side: string;
             /**
              * Stop Loss
              * @default 0
@@ -2565,44 +2732,46 @@ export interface components {
              * @default 0
              */
             take_profit: number;
+            /** Ticker */
+            ticker: string;
+            /** Unrealized Pnl */
+            unrealized_pnl: number;
             /**
              * Updated At
              * Format: date-time
              */
             updated_at: string;
-            /** Opened At */
-            opened_at?: string | null;
         };
         /** HoldingRisk */
         HoldingRisk: {
-            /** Ticker */
-            ticker: string;
-            /** Weight Pct */
-            weight_pct: number;
-            /** Volatility Annual */
-            volatility_annual?: number | null;
             /** Beta */
             beta?: number | null;
             /** Sector */
             sector: string;
+            /** Ticker */
+            ticker: string;
+            /** Volatility Annual */
+            volatility_annual?: number | null;
+            /** Weight Pct */
+            weight_pct: number;
         };
         /** JournalDebriefResponse */
         JournalDebriefResponse: {
-            /** Order Id */
-            order_id: number;
             /** Ai Debrief */
             ai_debrief: string;
+            /** Order Id */
+            order_id: number;
         };
         /** JournalNoteReadResponse */
         JournalNoteReadResponse: {
-            /** Order Id */
-            order_id: number;
-            /** Note */
-            note: string;
             /** Ai Debrief */
             ai_debrief?: string | null;
             /** Has Debrief */
             has_debrief: boolean;
+            /** Note */
+            note: string;
+            /** Order Id */
+            order_id: number;
         };
         /** JournalNoteRequest */
         JournalNoteRequest: {
@@ -2611,19 +2780,21 @@ export interface components {
         };
         /** JournalNoteResponse */
         JournalNoteResponse: {
-            /** Order Id */
-            order_id: number;
-            /** Note */
-            note: string;
             /** Has Debrief */
             has_debrief: boolean;
+            /** Note */
+            note: string;
+            /** Order Id */
+            order_id: number;
         };
         /** LLMModelOption */
         LLMModelOption: {
-            /** Value */
-            value: string;
             /** Label */
             label: string;
+            /** Supported Output Languages */
+            supported_output_languages?: string[] | null;
+            /** Value */
+            value: string;
         };
         /** LLMProviderCatalogEntry */
         LLMProviderCatalogEntry: {
@@ -2634,47 +2805,47 @@ export interface components {
         };
         /** LogRead */
         LogRead: {
-            /** Id */
-            id: number;
-            /** Level */
-            level: string;
-            /** Source */
-            source: string;
-            /** Message */
-            message: string;
-            /** Details */
-            details: string | null;
-            /** User Id */
-            user_id: number | null;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Details */
+            details: string | null;
+            /** Id */
+            id: number;
+            /** Level */
+            level: string;
+            /** Message */
+            message: string;
+            /** Source */
+            source: string;
+            /** User Id */
+            user_id: number | null;
         };
         /** LoginRequest */
         LoginRequest: {
-            /** Username */
-            username: string;
             /** Password */
             password: string;
+            /** Username */
+            username: string;
         };
         /** MemoryStatusResponse */
         MemoryStatusResponse: {
-            /** Enabled */
-            enabled: boolean;
-            /** Store */
-            store: string;
-            /** Embedder */
-            embedder: string | null;
-            /** Index */
-            index: string | null;
-            /** Embed Model */
-            embed_model: string | null;
-            /** Needs Openai Key */
-            needs_openai_key: boolean;
             /** Agent Qa Enabled */
             agent_qa_enabled: boolean;
+            /** Embed Model */
+            embed_model: string | null;
+            /** Embedder */
+            embedder: string | null;
+            /** Enabled */
+            enabled: boolean;
+            /** Index */
+            index: string | null;
+            /** Needs Openai Key */
+            needs_openai_key: boolean;
+            /** Store */
+            store: string;
         };
         /** MessageResponse */
         MessageResponse: {
@@ -2683,69 +2854,69 @@ export interface components {
         };
         /** MultiTickerListItem */
         MultiTickerListItem: {
+            /** Asset Type */
+            asset_type: string;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
             /** Id */
             id: number;
             /** Tickers */
             tickers: string[];
             /** Trade Date */
             trade_date: string;
-            /** Asset Type */
-            asset_type: string;
             /** Triggered By */
             triggered_by: string;
-            /**
-             * Created At
-             * Format: date-time
-             */
-            created_at: string;
         };
         /** MultiTickerResultRead */
         MultiTickerResultRead: {
-            /** Id */
-            id: number;
-            /** Tickers */
-            tickers: string[];
-            /** Trade Date */
-            trade_date: string;
-            /** Asset Type */
-            asset_type: string;
             /** Analysis Ids */
             analysis_ids: number[];
-            /** Super Portfolio Report */
-            super_portfolio_report: string;
-            /** Triggered By */
-            triggered_by: string;
+            /** Asset Type */
+            asset_type: string;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
-        };
-        /** MultiTickerRunRequest */
-        MultiTickerRunRequest: {
+            /** Id */
+            id: number;
+            /** Super Portfolio Report */
+            super_portfolio_report: string;
             /** Tickers */
             tickers: string[];
             /** Trade Date */
             trade_date: string;
+            /** Triggered By */
+            triggered_by: string;
+        };
+        /** MultiTickerRunRequest */
+        MultiTickerRunRequest: {
             /**
              * Asset Type
              * @default stock
              */
             asset_type: string;
+            /** Tickers */
+            tickers: string[];
+            /** Trade Date */
+            trade_date: string;
         };
         /** MultiTickerRunResponse */
         MultiTickerRunResponse: {
+            /**
+             * Message
+             * @default Portfolio analysis started
+             */
+            message: string;
             /** Task Id */
             task_id: string;
             /** Tickers */
             tickers: string[];
             /** Trade Date */
             trade_date: string;
-            /**
-             * Message
-             * @default Portfolio analysis started
-             */
-            message: string;
         };
         /** OkResponse */
         OkResponse: {
@@ -2754,47 +2925,16 @@ export interface components {
         };
         /** OrderRead */
         OrderRead: {
-            /** Id */
-            id: number;
-            /** Portfolio Id */
-            portfolio_id: number;
-            /** Broker */
-            broker: string;
-            /** Ticker */
-            ticker: string;
             /** Action */
             action: string;
-            /** Quantity Requested */
-            quantity_requested: number;
-            /** Quantity Filled */
-            quantity_filled: number;
-            /** Status */
-            status: string;
-            /** Price Per Share */
-            price_per_share: number | null;
-            /** Total Value */
-            total_value: number | null;
-            /** Commission */
-            commission: number;
-            /**
-             * Leverage
-             * @default 1
-             */
-            leverage: number;
-            /**
-             * Side
-             * @default long
-             */
-            side: string;
-            /**
-             * Realized Pnl
-             * @default 0
-             */
-            realized_pnl: number;
-            /** Analysis Id */
-            analysis_id: number | null;
             /** Ai Signal */
             ai_signal: string;
+            /** Analysis Id */
+            analysis_id: number | null;
+            /** Broker */
+            broker: string;
+            /** Commission */
+            commission: number;
             /**
              * Created At
              * Format: date-time
@@ -2802,31 +2942,62 @@ export interface components {
             created_at: string;
             /** Executed At */
             executed_at: string | null;
+            /** Id */
+            id: number;
+            /**
+             * Leverage
+             * @default 1
+             */
+            leverage: number;
+            /** Portfolio Id */
+            portfolio_id: number;
+            /** Price Per Share */
+            price_per_share: number | null;
+            /** Quantity Filled */
+            quantity_filled: number;
+            /** Quantity Requested */
+            quantity_requested: number;
+            /**
+             * Realized Pnl
+             * @default 0
+             */
+            realized_pnl: number;
+            /**
+             * Side
+             * @default long
+             */
+            side: string;
+            /** Status */
+            status: string;
+            /** Ticker */
+            ticker: string;
+            /** Total Value */
+            total_value: number | null;
         };
         /** OrderResponse */
         OrderResponse: {
-            /** Order Id */
-            order_id: number;
-            /** Ticker */
-            ticker: string;
             /** Action */
             action: string;
-            /** Side */
-            side: string;
-            /** Quantity */
-            quantity: number;
-            /** Price */
-            price: number;
-            /** Leverage */
-            leverage: number;
-            /** Total Value */
-            total_value: number;
             /** Commission */
             commission: number;
+            /** Leverage */
+            leverage: number;
+            /** Order Id */
+            order_id: number;
+            /** Price */
+            price: number;
+            /** Quantity */
+            quantity: number;
             /** Realized Pnl */
             realized_pnl: number;
+            /** Side */
+            side: string;
             /** Status */
             status: string;
+            /** Ticker */
+            ticker: string;
+            /** Total Value */
+            total_value: number;
         };
         /** PagePermissionsRead */
         PagePermissionsRead: {
@@ -2842,14 +3013,14 @@ export interface components {
         };
         /** PatternsResponse */
         PatternsResponse: {
-            /** Ticker */
-            ticker: string;
-            /** Period */
-            period: string;
             /** Patterns */
             patterns: {
                 [key: string]: unknown;
             }[];
+            /** Period */
+            period: string;
+            /** Ticker */
+            ticker: string;
         };
         /** PerformanceAttributionResponse */
         PerformanceAttributionResponse: {
@@ -2860,25 +3031,23 @@ export interface components {
         };
         /** PersonaCreate */
         PersonaCreate: {
+            /**
+             * Description
+             * @default
+             */
+            description: string;
+            /**
+             * Instructions
+             * @default
+             */
+            instructions: string;
             /** Key */
             key: string;
             /** Label */
             label: string;
-            /**
-             * Description
-             * @default
-             */
-            description: string;
-            /**
-             * Instructions
-             * @default
-             */
-            instructions: string;
         };
         /** PersonaUpdate */
         PersonaUpdate: {
-            /** Label */
-            label: string;
             /**
              * Description
              * @default
@@ -2889,30 +3058,32 @@ export interface components {
              * @default
              */
             instructions: string;
+            /** Label */
+            label: string;
         };
         /** PortfolioRead */
         PortfolioRead: {
-            /** Id */
-            id: number;
-            /** Mode */
-            mode: string;
             /** Broker */
             broker: string;
-            /** Initial Capital */
-            initial_capital: number;
-            /** Current Balance */
-            current_balance: number;
             /** Cash Available */
             cash_available: number;
-            /** Status */
-            status: string;
-            /** Holdings */
-            holdings: components["schemas"]["HoldingRead"][];
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Current Balance */
+            current_balance: number;
+            /** Holdings */
+            holdings: components["schemas"]["HoldingRead"][];
+            /** Id */
+            id: number;
+            /** Initial Capital */
+            initial_capital: number;
+            /** Mode */
+            mode: string;
+            /** Status */
+            status: string;
             /**
              * Updated At
              * Format: date-time
@@ -2921,63 +3092,63 @@ export interface components {
         };
         /** PortfolioResponse */
         PortfolioResponse: {
-            /** Id */
-            id: number;
-            /** Mode */
-            mode: string;
-            /** Initial Capital */
-            initial_capital: number;
-            /** Cash Available */
-            cash_available: number;
-            /** Margin Used */
-            margin_used: number;
-            /** Positions Value */
-            positions_value: number;
-            /** Total Value */
-            total_value: number;
-            /** Total Pnl */
-            total_pnl: number;
-            /** Total Pnl Pct */
-            total_pnl_pct: number;
-            /**
-             * Holdings
-             * @default []
-             */
-            holdings: components["schemas"]["HoldingItem"][];
             /**
              * Auto Closes
              * @default []
              */
             auto_closes: components["schemas"]["AutoCloseRecord"][];
+            /** Cash Available */
+            cash_available: number;
+            /**
+             * Holdings
+             * @default []
+             */
+            holdings: components["schemas"]["HoldingItem"][];
+            /** Id */
+            id: number;
+            /** Initial Capital */
+            initial_capital: number;
             /**
              * Liquidations
              * @default []
              */
             liquidations: components["schemas"]["AutoCloseRecord"][];
+            /** Margin Used */
+            margin_used: number;
+            /** Mode */
+            mode: string;
+            /** Positions Value */
+            positions_value: number;
+            /** Total Pnl */
+            total_pnl: number;
+            /** Total Pnl Pct */
+            total_pnl_pct: number;
+            /** Total Value */
+            total_value: number;
         };
         /** PortfolioStatsResponse */
         PortfolioStatsResponse: {
-            /** Total Trades */
-            total_trades: number;
-            /** Winning Trades */
-            winning_trades: number;
-            /** Win Rate */
-            win_rate: number;
             /** Avg Return Pct */
             avg_return_pct?: number | null;
             best_trade?: components["schemas"]["TradeSummaryRecord"] | null;
-            worst_trade?: components["schemas"]["TradeSummaryRecord"] | null;
-            /** Total Realized Pnl */
-            total_realized_pnl: number;
-            /** Sharpe Ratio */
-            sharpe_ratio?: number | null;
-            /** Max Drawdown Pct */
-            max_drawdown_pct?: number | null;
             /**
              * By Ticker
              * @default []
              */
             by_ticker: components["schemas"]["TickerBreakdownRecord"][];
+            /** Max Drawdown Pct */
+            max_drawdown_pct?: number | null;
+            /** Sharpe Ratio */
+            sharpe_ratio?: number | null;
+            /** Total Realized Pnl */
+            total_realized_pnl: number;
+            /** Total Trades */
+            total_trades: number;
+            /** Win Rate */
+            win_rate: number;
+            /** Winning Trades */
+            winning_trades: number;
+            worst_trade?: components["schemas"]["TradeSummaryRecord"] | null;
         };
         /** PresetApplyResponse */
         PresetApplyResponse: {
@@ -2988,13 +3159,13 @@ export interface components {
         };
         /** PresetCreate */
         PresetCreate: {
-            /** Name */
-            name: string;
             /**
              * Description
              * @default
              */
             description: string;
+            /** Name */
+            name: string;
             /** Settings Json */
             settings_json: string;
         };
@@ -3005,56 +3176,56 @@ export interface components {
         };
         /** PresetRead */
         PresetRead: {
-            /** Id */
-            id: number;
-            /** Name */
-            name: string;
-            /** Description */
-            description: string;
-            /** Settings Json */
-            settings_json: string;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Description */
+            description: string;
+            /** Id */
+            id: number;
+            /** Name */
+            name: string;
+            /** Settings Json */
+            settings_json: string;
         };
         /** ProfileUpdate */
         ProfileUpdate: {
-            /** Email */
-            email?: string | null;
             /** Display Name */
             display_name?: string | null;
+            /** Email */
+            email?: string | null;
             /** Password */
             password?: string | null;
         };
         /** RebalanceResponse */
         RebalanceResponse: {
-            /** Summary */
-            summary: string;
-            /** Score */
-            score: number;
             /**
              * Issues
              * @default []
              */
             issues: string[];
+            /** Score */
+            score: number;
             /**
              * Suggestions
              * @default []
              */
             suggestions: components["schemas"]["RebalanceSuggestion"][];
+            /** Summary */
+            summary: string;
         };
         /** RebalanceSuggestion */
         RebalanceSuggestion: {
             /** Action */
             action: string;
-            /** Ticker */
-            ticker: string;
             /** Quantity */
             quantity: number;
             /** Rationale */
             rationale: string;
+            /** Ticker */
+            ticker: string;
             /** Urgency */
             urgency: string;
         };
@@ -3073,33 +3244,31 @@ export interface components {
         };
         /** ResetResponse */
         ResetResponse: {
-            /** Status */
-            status: string;
             /** Message */
             message: string;
+            /** Status */
+            status: string;
         };
         /** RiskBreach */
         RiskBreach: {
+            /** Sector */
+            sector?: string | null;
+            /** Threshold */
+            threshold: number;
             /** Type */
             type: string;
             /** Value */
             value: number;
-            /** Threshold */
-            threshold: number;
-            /** Sector */
-            sector?: string | null;
         };
         /** RiskDashboardResponse */
         RiskDashboardResponse: {
             /** Beta */
             beta?: number | null;
-            /** Volatility */
-            volatility?: number | null;
             /**
-             * Sector Weights
+             * Breaches
              * @default []
              */
-            sector_weights: components["schemas"]["SectorWeight"][];
+            breaches: components["schemas"]["RiskBreach"][];
             /**
              * Correlation
              * @default []
@@ -3110,13 +3279,15 @@ export interface components {
              * @default []
              */
             holdings_risk: components["schemas"]["HoldingRisk"][];
-            /**
-             * Breaches
-             * @default []
-             */
-            breaches: components["schemas"]["RiskBreach"][];
             /** Message */
             message?: string | null;
+            /**
+             * Sector Weights
+             * @default []
+             */
+            sector_weights: components["schemas"]["SectorWeight"][];
+            /** Volatility */
+            volatility?: number | null;
         };
         /** ScreenRequest */
         ScreenRequest: {
@@ -3135,30 +3306,30 @@ export interface components {
         };
         /** ScreenResultItem */
         ScreenResultItem: {
-            /** Ticker */
-            ticker: string;
-            /** Score */
-            score: number;
             /** Momentum 1M Pct */
             momentum_1m_pct: number;
-            /** Trend */
-            trend: string;
-            /** Volume Surge */
-            volume_surge: number;
             /** Rsi 14 */
             rsi_14: number;
+            /** Score */
+            score: number;
             /**
              * Signals
              * @default []
              */
             signals: string[];
+            /** Ticker */
+            ticker: string;
+            /** Trend */
+            trend: string;
+            /** Volume Surge */
+            volume_surge: number;
         };
         /** SectorRotationResponse */
         SectorRotationResponse: {
-            /** Sectors */
-            sectors: unknown[];
             /** Count */
             count: number;
+            /** Sectors */
+            sectors: unknown[];
         };
         /** SectorWeight */
         SectorWeight: {
@@ -3176,10 +3347,10 @@ export interface components {
         };
         /** SentimentHistoryResponse */
         SentimentHistoryResponse: {
-            /** Ticker */
-            ticker: string;
             /** History */
             history: components["schemas"]["SentimentHistoryPoint"][];
+            /** Ticker */
+            ticker: string;
         };
         /** SettingPermissionsResponse */
         SettingPermissionsResponse: {
@@ -3195,6 +3366,77 @@ export interface components {
         };
         /** SettingsRead */
         SettingsRead: {
+            /** Active Preset Name */
+            active_preset_name?: string | null;
+            /**
+             * Agent Qa Enabled
+             * @default true
+             */
+            agent_qa_enabled: boolean;
+            /**
+             * Ai Alert Cooldown Hours
+             * @default 24
+             */
+            ai_alert_cooldown_hours: number;
+            /**
+             * Allow Short Selling
+             * @default false
+             */
+            allow_short_selling: boolean;
+            /**
+             * Analyst Concurrency Limit
+             * @default 1
+             */
+            analyst_concurrency_limit: number;
+            /**
+             * Analyst Prefilter Enabled
+             * @default false
+             */
+            analyst_prefilter_enabled: boolean;
+            /**
+             * Analyst Prefilter Max Win Rate
+             * @default 40
+             */
+            analyst_prefilter_max_win_rate: number;
+            /**
+             * Analyst Prefilter Min Samples
+             * @default 5
+             */
+            analyst_prefilter_min_samples: number;
+            /** Anthropic Effort */
+            anthropic_effort?: string | null;
+            /**
+             * Anthropic Prompt Caching
+             * @default true
+             */
+            anthropic_prompt_caching: boolean;
+            /**
+             * Auto Execute Signals
+             * @default false
+             */
+            auto_execute_signals: boolean;
+            /** Benchmark Ticker */
+            benchmark_ticker?: string | null;
+            /**
+             * Circuit Breaker Cooldown
+             * @default 60
+             */
+            circuit_breaker_cooldown: number;
+            /**
+             * Circuit Breaker Threshold
+             * @default 3
+             */
+            circuit_breaker_threshold: number;
+            /**
+             * Confidence Calibration Enabled
+             * @default false
+             */
+            confidence_calibration_enabled: boolean;
+            /**
+             * Correlation Risk Enabled
+             * @default false
+             */
+            correlation_risk_enabled: boolean;
             /**
              * Cron Enabled
              * @default false
@@ -3206,120 +3448,154 @@ export interface components {
              */
             cron_schedule: string;
             /**
-             * Price Tolerance Pct
-             * @default 0.5
+             * Decision Stability Min Confidence
+             * @default 0.65
              */
-            price_tolerance_pct: number;
+            decision_stability_min_confidence: number;
             /**
-             * Watchlist
-             * @default []
+             * Decision Stability Min Evidence Groups
+             * @default 2
              */
-            watchlist: string[];
+            decision_stability_min_evidence_groups: number;
             /**
-             * Output Language
-             * @default English
+             * Decision Stability Min Quality
+             * @default 70
              */
-            output_language: string;
+            decision_stability_min_quality: number;
             /**
-             * Llm Provider
-             * @default openai
+             * Decision Stability Mode
+             * @default shadow
              */
-            llm_provider: string;
+            decision_stability_mode: string;
             /**
-             * Llm Model
-             * @default gpt-4o-mini
+             * Drawdown Breaker Enabled
+             * @default false
              */
-            llm_model: string;
+            drawdown_breaker_enabled: boolean;
             /** Fallback Llm Chain */
             fallback_llm_chain?: components["schemas"]["FallbackLLMConfig"][];
+            /**
+             * Global News Article Limit
+             * @default 10
+             */
+            global_news_article_limit: number;
+            /**
+             * Global News Lookback Days
+             * @default 7
+             */
+            global_news_lookback_days: number;
+            /** Google Thinking Level */
+            google_thinking_level?: string | null;
             /**
              * Investor Persona
              * @default conservative
              */
             investor_persona: string;
             /**
-             * Analyst Concurrency Limit
-             * @default 1
+             * Llm Model
+             * @default gpt-5.6-luna
              */
-            analyst_concurrency_limit: number;
+            llm_model: string;
             /**
-             * Max Recur Limit
-             * @default 1000
+             * Llm Provider
+             * @default openai
              */
-            max_recur_limit: number;
-            /** Benchmark Ticker */
-            benchmark_ticker?: string | null;
+            llm_provider: string;
             /**
-             * Max Debate Rounds
-             * @default 1
+             * Max Active Alerts
+             * @default 30
              */
-            max_debate_rounds: number;
+            max_active_alerts: number;
             /**
-             * Max Risk Rounds
-             * @default 1
+             * Max Ai Alerts Per Run
+             * @default 3
              */
-            max_risk_rounds: number;
-            /**
-             * Max Position Size Pct
-             * @default 10
-             */
-            max_position_size_pct: number;
-            /**
-             * Max Risk Per Trade Pct
-             * @default 2
-             */
-            max_risk_per_trade_pct: number;
-            /**
-             * Auto Execute Signals
-             * @default false
-             */
-            auto_execute_signals: boolean;
-            /**
-             * Allow Short Selling
-             * @default false
-             */
-            allow_short_selling: boolean;
+            max_ai_alerts_per_run: number;
             /**
              * Max Concentration Pct
              * @default 25
              */
             max_concentration_pct: number;
             /**
+             * Max Debate History Chars
+             * @default 8000
+             */
+            max_debate_history_chars: number;
+            /**
+             * Max Debate Rounds
+             * @default 1
+             */
+            max_debate_rounds: number;
+            /**
              * Max Gross Exposure
              * @default 3
              */
             max_gross_exposure: number;
             /**
-             * Strict Stop Loss Mode
-             * @default false
-             */
-            strict_stop_loss_mode: boolean;
-            /**
-             * Correlation Risk Enabled
-             * @default false
-             */
-            correlation_risk_enabled: boolean;
-            /**
-             * Quality Gate Enabled
-             * @default false
-             */
-            quality_gate_enabled: boolean;
-            /**
-             * Drawdown Breaker Enabled
-             * @default false
-             */
-            drawdown_breaker_enabled: boolean;
-            /**
              * Max Portfolio Drawdown Pct
              * @default 20
              */
             max_portfolio_drawdown_pct: number;
-            /** Openai Reasoning Effort */
-            openai_reasoning_effort?: string | null;
-            /** Anthropic Effort */
-            anthropic_effort?: string | null;
-            /** Google Thinking Level */
-            google_thinking_level?: string | null;
+            /**
+             * Max Position Size Pct
+             * @default 10
+             */
+            max_position_size_pct: number;
+            /**
+             * Max Recur Limit
+             * @default 1000
+             */
+            max_recur_limit: number;
+            /**
+             * Max Report Chars In Prompts
+             * @default 6000
+             */
+            max_report_chars_in_prompts: number;
+            /**
+             * Max Risk Per Trade Pct
+             * @default 2
+             */
+            max_risk_per_trade_pct: number;
+            /**
+             * Max Risk Rounds
+             * @default 1
+             */
+            max_risk_rounds: number;
+            /**
+             * Max Tool Output Chars
+             * @default 12000
+             */
+            max_tool_output_chars: number;
+            /**
+             * Memory Embedder
+             * @default pinecone
+             */
+            memory_embedder: string;
+            /**
+             * Memory Ollama Embed Model
+             * @default nomic-embed-text
+             */
+            memory_ollama_embed_model: string;
+            /**
+             * Memory Openai Embed Model
+             * @default text-embedding-3-small
+             */
+            memory_openai_embed_model: string;
+            /**
+             * Memory Recall Count
+             * @default 5
+             */
+            memory_recall_count: number;
+            /**
+             * Memory Store
+             * @default pinecone
+             */
+            memory_store: string;
+            /**
+             * News Article Limit
+             * @default 20
+             */
+            news_article_limit: number;
             /**
              * Node Retry Attempts
              * @default 2
@@ -3335,43 +3611,82 @@ export interface components {
              * @default 120
              */
             node_timeout_seconds: number;
+            /** Openai Reasoning Effort */
+            openai_reasoning_effort?: string | null;
             /**
-             * Tool Timeout Seconds
-             * @default 60
+             * Output Language
+             * @default English
              */
-            tool_timeout_seconds: number;
+            output_language: string;
             /**
-             * Circuit Breaker Threshold
-             * @default 3
+             * Pinecone Cloud
+             * @default aws
              */
-            circuit_breaker_threshold: number;
+            pinecone_cloud: string;
             /**
-             * Circuit Breaker Cooldown
-             * @default 60
+             * Pinecone Embed Model
+             * @default llama-text-embed-v2
              */
-            circuit_breaker_cooldown: number;
+            pinecone_embed_model: string;
+            /**
+             * Pinecone Index
+             * @default tradingagents-memory
+             */
+            pinecone_index: string;
+            /**
+             * Pinecone Region
+             * @default us-east-1
+             */
+            pinecone_region: string;
+            /**
+             * Price Tolerance Pct
+             * @default 0.5
+             */
+            price_tolerance_pct: number;
+            /**
+             * Quality Gate Enabled
+             * @default false
+             */
+            quality_gate_enabled: boolean;
+            /**
+             * Regime Aware Weighting Enabled
+             * @default false
+             */
+            regime_aware_weighting_enabled: boolean;
+            /**
+             * Reversal Verifier Enabled
+             * @default true
+             */
+            reversal_verifier_enabled: boolean;
             /**
              * Stall Timeout Seconds
              * @default 120
              */
             stall_timeout_seconds: number;
             /**
-             * Max Active Alerts
-             * @default 30
+             * Strategy Learning Enabled
+             * @default true
              */
-            max_active_alerts: number;
+            strategy_learning_enabled: boolean;
             /**
-             * Max Ai Alerts Per Run
-             * @default 3
+             * Strict Stop Loss Mode
+             * @default false
              */
-            max_ai_alerts_per_run: number;
+            strict_stop_loss_mode: boolean;
             /**
-             * Ai Alert Cooldown Hours
-             * @default 24
+             * Summary Only Mode
+             * @default false
              */
-            ai_alert_cooldown_hours: number;
-            /** Webhook Url */
-            webhook_url?: string | null;
+            summary_only_mode: boolean;
+            /**
+             * Tool Timeout Seconds
+             * @default 60
+             */
+            tool_timeout_seconds: number;
+            /** Updated At */
+            updated_at?: string | null;
+            /** Watchlist */
+            watchlist?: string[];
             /**
              * Webhook Enabled
              * @default false
@@ -3379,411 +3694,254 @@ export interface components {
             webhook_enabled: boolean;
             /** Webhook Events */
             webhook_events?: string[];
-            /** Active Preset Name */
-            active_preset_name?: string | null;
-            /**
-             * Memory Store
-             * @default pinecone
-             */
-            memory_store: string;
-            /**
-             * Pinecone Index
-             * @default tradingagents-memory
-             */
-            pinecone_index: string;
-            /**
-             * Pinecone Cloud
-             * @default aws
-             */
-            pinecone_cloud: string;
-            /**
-             * Pinecone Region
-             * @default us-east-1
-             */
-            pinecone_region: string;
-            /**
-             * Memory Embedder
-             * @default pinecone
-             */
-            memory_embedder: string;
-            /**
-             * Pinecone Embed Model
-             * @default llama-text-embed-v2
-             */
-            pinecone_embed_model: string;
-            /**
-             * Memory Openai Embed Model
-             * @default text-embedding-3-small
-             */
-            memory_openai_embed_model: string;
-            /**
-             * Memory Ollama Embed Model
-             * @default nomic-embed-text
-             */
-            memory_ollama_embed_model: string;
-            /**
-             * Agent Qa Enabled
-             * @default true
-             */
-            agent_qa_enabled: boolean;
-            /**
-             * Anthropic Prompt Caching
-             * @default true
-             */
-            anthropic_prompt_caching: boolean;
-            /**
-             * Max Report Chars In Prompts
-             * @default 6000
-             */
-            max_report_chars_in_prompts: number;
-            /**
-             * Max Debate History Chars
-             * @default 8000
-             */
-            max_debate_history_chars: number;
-            /**
-             * Max Tool Output Chars
-             * @default 12000
-             */
-            max_tool_output_chars: number;
-            /**
-             * Analyst Prefilter Enabled
-             * @default false
-             */
-            analyst_prefilter_enabled: boolean;
-            /**
-             * Analyst Prefilter Min Samples
-             * @default 5
-             */
-            analyst_prefilter_min_samples: number;
-            /**
-             * Analyst Prefilter Max Win Rate
-             * @default 40
-             */
-            analyst_prefilter_max_win_rate: number;
-            /**
-             * Strategy Learning Enabled
-             * @default true
-             */
-            strategy_learning_enabled: boolean;
-            /**
-             * Decision Stability Mode
-             * @default shadow
-             */
-            decision_stability_mode: string;
-            /**
-             * Decision Stability Min Quality
-             * @default 70
-             */
-            decision_stability_min_quality: number;
-            /**
-             * Decision Stability Min Confidence
-             * @default 0.65
-             */
-            decision_stability_min_confidence: number;
-            /**
-             * Decision Stability Min Evidence Groups
-             * @default 2
-             */
-            decision_stability_min_evidence_groups: number;
-            /**
-             * Reversal Verifier Enabled
-             * @default true
-             */
-            reversal_verifier_enabled: boolean;
-            /**
-             * Confidence Calibration Enabled
-             * @default false
-             */
-            confidence_calibration_enabled: boolean;
-            /**
-             * Regime Aware Weighting Enabled
-             * @default false
-             */
-            regime_aware_weighting_enabled: boolean;
-            /**
-             * Memory Recall Count
-             * @default 5
-             */
-            memory_recall_count: number;
-            /**
-             * Summary Only Mode
-             * @default false
-             */
-            summary_only_mode: boolean;
-            /**
-             * News Article Limit
-             * @default 20
-             */
-            news_article_limit: number;
-            /**
-             * Global News Article Limit
-             * @default 10
-             */
-            global_news_article_limit: number;
-            /**
-             * Global News Lookback Days
-             * @default 7
-             */
-            global_news_lookback_days: number;
-            /** Updated At */
-            updated_at?: string | null;
+            /** Webhook Url */
+            webhook_url?: string | null;
         };
         /** SettingsUpdate */
         SettingsUpdate: {
+            /** Agent Qa Enabled */
+            agent_qa_enabled?: boolean | null;
+            /** Ai Alert Cooldown Hours */
+            ai_alert_cooldown_hours?: number | null;
+            /** Allow Short Selling */
+            allow_short_selling?: boolean | null;
+            /** Analyst Concurrency Limit */
+            analyst_concurrency_limit?: number | null;
+            /** Analyst Prefilter Enabled */
+            analyst_prefilter_enabled?: boolean | null;
+            /** Analyst Prefilter Max Win Rate */
+            analyst_prefilter_max_win_rate?: number | null;
+            /** Analyst Prefilter Min Samples */
+            analyst_prefilter_min_samples?: number | null;
+            /** Anthropic Effort */
+            anthropic_effort?: string | null;
+            /** Anthropic Prompt Caching */
+            anthropic_prompt_caching?: boolean | null;
+            /** Auto Execute Signals */
+            auto_execute_signals?: boolean | null;
+            /** Benchmark Ticker */
+            benchmark_ticker?: string | null;
+            /** Circuit Breaker Cooldown */
+            circuit_breaker_cooldown?: number | null;
+            /** Circuit Breaker Threshold */
+            circuit_breaker_threshold?: number | null;
+            /** Confidence Calibration Enabled */
+            confidence_calibration_enabled?: boolean | null;
+            /** Correlation Risk Enabled */
+            correlation_risk_enabled?: boolean | null;
             /** Cron Enabled */
             cron_enabled?: boolean | null;
             /** Cron Schedule */
             cron_schedule?: string | null;
-            /** Price Tolerance Pct */
-            price_tolerance_pct?: number | null;
-            /** Watchlist */
-            watchlist?: string[] | null;
-            /** Output Language */
-            output_language?: string | null;
-            /** Llm Provider */
-            llm_provider?: string | null;
-            /** Llm Model */
-            llm_model?: string | null;
-            /** Fallback Llm Chain */
-            fallback_llm_chain?: components["schemas"]["FallbackLLMConfig"][] | null;
-            /** Investor Persona */
-            investor_persona?: string | null;
-            /** Analyst Concurrency Limit */
-            analyst_concurrency_limit?: number | null;
-            /** Max Recur Limit */
-            max_recur_limit?: number | null;
-            /** Benchmark Ticker */
-            benchmark_ticker?: string | null;
-            /** Max Debate Rounds */
-            max_debate_rounds?: number | null;
-            /** Max Risk Rounds */
-            max_risk_rounds?: number | null;
-            /** Max Position Size Pct */
-            max_position_size_pct?: number | null;
-            /** Max Risk Per Trade Pct */
-            max_risk_per_trade_pct?: number | null;
-            /** Auto Execute Signals */
-            auto_execute_signals?: boolean | null;
-            /** Allow Short Selling */
-            allow_short_selling?: boolean | null;
-            /** Max Concentration Pct */
-            max_concentration_pct?: number | null;
-            /** Max Gross Exposure */
-            max_gross_exposure?: number | null;
-            /** Strict Stop Loss Mode */
-            strict_stop_loss_mode?: boolean | null;
-            /** Correlation Risk Enabled */
-            correlation_risk_enabled?: boolean | null;
-            /** Quality Gate Enabled */
-            quality_gate_enabled?: boolean | null;
+            /** Decision Stability Min Confidence */
+            decision_stability_min_confidence?: number | null;
+            /** Decision Stability Min Evidence Groups */
+            decision_stability_min_evidence_groups?: number | null;
+            /** Decision Stability Min Quality */
+            decision_stability_min_quality?: number | null;
+            /** Decision Stability Mode */
+            decision_stability_mode?: string | null;
             /** Drawdown Breaker Enabled */
             drawdown_breaker_enabled?: boolean | null;
-            /** Max Portfolio Drawdown Pct */
-            max_portfolio_drawdown_pct?: number | null;
-            /** Openai Reasoning Effort */
-            openai_reasoning_effort?: string | null;
-            /** Anthropic Effort */
-            anthropic_effort?: string | null;
+            /** Fallback Llm Chain */
+            fallback_llm_chain?: components["schemas"]["FallbackLLMConfig"][] | null;
+            /** Global News Article Limit */
+            global_news_article_limit?: number | null;
+            /** Global News Lookback Days */
+            global_news_lookback_days?: number | null;
             /** Google Thinking Level */
             google_thinking_level?: string | null;
+            /** Investor Persona */
+            investor_persona?: string | null;
+            /** Llm Model */
+            llm_model?: string | null;
+            /** Llm Provider */
+            llm_provider?: string | null;
+            /** Max Active Alerts */
+            max_active_alerts?: number | null;
+            /** Max Ai Alerts Per Run */
+            max_ai_alerts_per_run?: number | null;
+            /** Max Concentration Pct */
+            max_concentration_pct?: number | null;
+            /** Max Debate History Chars */
+            max_debate_history_chars?: number | null;
+            /** Max Debate Rounds */
+            max_debate_rounds?: number | null;
+            /** Max Gross Exposure */
+            max_gross_exposure?: number | null;
+            /** Max Portfolio Drawdown Pct */
+            max_portfolio_drawdown_pct?: number | null;
+            /** Max Position Size Pct */
+            max_position_size_pct?: number | null;
+            /** Max Recur Limit */
+            max_recur_limit?: number | null;
+            /** Max Report Chars In Prompts */
+            max_report_chars_in_prompts?: number | null;
+            /** Max Risk Per Trade Pct */
+            max_risk_per_trade_pct?: number | null;
+            /** Max Risk Rounds */
+            max_risk_rounds?: number | null;
+            /** Max Tool Output Chars */
+            max_tool_output_chars?: number | null;
+            /** Memory Embedder */
+            memory_embedder?: string | null;
+            /** Memory Ollama Embed Model */
+            memory_ollama_embed_model?: string | null;
+            /** Memory Openai Embed Model */
+            memory_openai_embed_model?: string | null;
+            /** Memory Recall Count */
+            memory_recall_count?: number | null;
+            /** Memory Store */
+            memory_store?: string | null;
+            /** News Article Limit */
+            news_article_limit?: number | null;
             /** Node Retry Attempts */
             node_retry_attempts?: number | null;
             /** Node Retry Base Delay */
             node_retry_base_delay?: number | null;
             /** Node Timeout Seconds */
             node_timeout_seconds?: number | null;
-            /** Tool Timeout Seconds */
-            tool_timeout_seconds?: number | null;
-            /** Circuit Breaker Threshold */
-            circuit_breaker_threshold?: number | null;
-            /** Circuit Breaker Cooldown */
-            circuit_breaker_cooldown?: number | null;
+            /** Openai Reasoning Effort */
+            openai_reasoning_effort?: string | null;
+            /** Output Language */
+            output_language?: string | null;
+            /** Pinecone Cloud */
+            pinecone_cloud?: string | null;
+            /** Pinecone Embed Model */
+            pinecone_embed_model?: string | null;
+            /** Pinecone Index */
+            pinecone_index?: string | null;
+            /** Pinecone Region */
+            pinecone_region?: string | null;
+            /** Price Tolerance Pct */
+            price_tolerance_pct?: number | null;
+            /** Quality Gate Enabled */
+            quality_gate_enabled?: boolean | null;
+            /** Regime Aware Weighting Enabled */
+            regime_aware_weighting_enabled?: boolean | null;
+            /** Reversal Verifier Enabled */
+            reversal_verifier_enabled?: boolean | null;
             /** Stall Timeout Seconds */
             stall_timeout_seconds?: number | null;
-            /** Max Active Alerts */
-            max_active_alerts?: number | null;
-            /** Max Ai Alerts Per Run */
-            max_ai_alerts_per_run?: number | null;
-            /** Ai Alert Cooldown Hours */
-            ai_alert_cooldown_hours?: number | null;
-            /** Webhook Url */
-            webhook_url?: string | null;
+            /** Strategy Learning Enabled */
+            strategy_learning_enabled?: boolean | null;
+            /** Strict Stop Loss Mode */
+            strict_stop_loss_mode?: boolean | null;
+            /** Summary Only Mode */
+            summary_only_mode?: boolean | null;
+            /** Tool Timeout Seconds */
+            tool_timeout_seconds?: number | null;
+            /** Watchlist */
+            watchlist?: string[] | null;
             /** Webhook Enabled */
             webhook_enabled?: boolean | null;
             /** Webhook Events */
             webhook_events?: string[] | null;
-            /** Memory Store */
-            memory_store?: string | null;
-            /** Pinecone Index */
-            pinecone_index?: string | null;
-            /** Pinecone Cloud */
-            pinecone_cloud?: string | null;
-            /** Pinecone Region */
-            pinecone_region?: string | null;
-            /** Memory Embedder */
-            memory_embedder?: string | null;
-            /** Pinecone Embed Model */
-            pinecone_embed_model?: string | null;
-            /** Memory Openai Embed Model */
-            memory_openai_embed_model?: string | null;
-            /** Memory Ollama Embed Model */
-            memory_ollama_embed_model?: string | null;
-            /** Agent Qa Enabled */
-            agent_qa_enabled?: boolean | null;
-            /** Anthropic Prompt Caching */
-            anthropic_prompt_caching?: boolean | null;
-            /** Max Report Chars In Prompts */
-            max_report_chars_in_prompts?: number | null;
-            /** Max Debate History Chars */
-            max_debate_history_chars?: number | null;
-            /** Max Tool Output Chars */
-            max_tool_output_chars?: number | null;
-            /** Analyst Prefilter Enabled */
-            analyst_prefilter_enabled?: boolean | null;
-            /** Analyst Prefilter Min Samples */
-            analyst_prefilter_min_samples?: number | null;
-            /** Analyst Prefilter Max Win Rate */
-            analyst_prefilter_max_win_rate?: number | null;
-            /** Strategy Learning Enabled */
-            strategy_learning_enabled?: boolean | null;
-            /** Decision Stability Mode */
-            decision_stability_mode?: string | null;
-            /** Decision Stability Min Quality */
-            decision_stability_min_quality?: number | null;
-            /** Decision Stability Min Confidence */
-            decision_stability_min_confidence?: number | null;
-            /** Decision Stability Min Evidence Groups */
-            decision_stability_min_evidence_groups?: number | null;
-            /** Reversal Verifier Enabled */
-            reversal_verifier_enabled?: boolean | null;
-            /** Confidence Calibration Enabled */
-            confidence_calibration_enabled?: boolean | null;
-            /** Regime Aware Weighting Enabled */
-            regime_aware_weighting_enabled?: boolean | null;
-            /** Memory Recall Count */
-            memory_recall_count?: number | null;
-            /** Summary Only Mode */
-            summary_only_mode?: boolean | null;
-            /** News Article Limit */
-            news_article_limit?: number | null;
-            /** Global News Article Limit */
-            global_news_article_limit?: number | null;
-            /** Global News Lookback Days */
-            global_news_lookback_days?: number | null;
+            /** Webhook Url */
+            webhook_url?: string | null;
         };
         /** ShareCreateResponse */
         ShareCreateResponse: {
-            /** Token */
-            token: string;
             /** Expires At */
             expires_at: string;
+            /** Token */
+            token: string;
         };
         /** SharedReportResponse */
         SharedReportResponse: {
-            /** Ticker */
-            ticker: string;
-            /** Trade Date */
-            trade_date?: string | null;
-            /** Signal */
-            signal?: string | null;
-            /** Market Report */
-            market_report?: string | null;
-            /** Sentiment Report */
-            sentiment_report?: string | null;
-            /** News Report */
-            news_report?: string | null;
-            /** Fundamentals Report */
-            fundamentals_report?: string | null;
-            /** Macro Report */
-            macro_report?: string | null;
-            /** Options Report */
-            options_report?: string | null;
-            /** Quant Report */
-            quant_report?: string | null;
-            /** Earnings Report */
-            earnings_report?: string | null;
-            /** Insider Report */
-            insider_report?: string | null;
-            /** Ownership Report */
-            ownership_report?: string | null;
-            /** Ratings Report */
-            ratings_report?: string | null;
-            /** Short Interest Report */
-            short_interest_report?: string | null;
-            /** Valuation Report */
-            valuation_report?: string | null;
-            /** Catalyst Report */
-            catalyst_report?: string | null;
-            /** Review Report */
-            review_report?: string | null;
-            /** Synthesis Report */
-            synthesis_report?: string | null;
-            /** Audit Report */
-            audit_report?: string | null;
             /** Agent Qa Report */
             agent_qa_report?: string | null;
-            /** Investment Plan */
-            investment_plan?: string | null;
-            /** Trader Plan */
-            trader_plan?: string | null;
-            /** Final Decision */
-            final_decision?: string | null;
-            /** Bull History */
-            bull_history?: unknown;
+            /** Audit Report */
+            audit_report?: string | null;
             /** Bear History */
             bear_history?: unknown;
-            /** Investment Debate History */
-            investment_debate_history?: unknown;
-            /** Risk Debate History */
-            risk_debate_history?: unknown;
-            /** Judge Decision */
-            judge_decision?: string | null;
-            /** Trader Proposal Json */
-            trader_proposal_json?: string | null;
-            /** Portfolio Decision */
-            portfolio_decision?: {
-                [key: string]: unknown;
-            } | null;
+            /** Bull History */
+            bull_history?: unknown;
+            /** Catalyst Report */
+            catalyst_report?: string | null;
             /** Chart Annotations */
             chart_annotations?: unknown;
-            /** Risk Metrics */
-            risk_metrics?: unknown;
-            /** Quality */
-            quality?: unknown;
+            /** Created At */
+            created_at: string;
             /**
              * Degraded
              * @default false
              */
             degraded: boolean;
+            /** Duration Seconds */
+            duration_seconds?: number | null;
+            /** Earnings Report */
+            earnings_report?: string | null;
+            /** Expires At */
+            expires_at: string;
             /**
              * Failed Agents
              * @default []
              */
             failed_agents: string[];
-            /** Duration Seconds */
-            duration_seconds?: number | null;
-            /** Llm Provider */
-            llm_provider?: string | null;
+            /** Final Decision */
+            final_decision?: string | null;
+            /** Fundamentals Report */
+            fundamentals_report?: string | null;
+            /** Insider Report */
+            insider_report?: string | null;
+            /** Investment Debate History */
+            investment_debate_history?: unknown;
+            /** Investment Plan */
+            investment_plan?: string | null;
+            /** Judge Decision */
+            judge_decision?: string | null;
             /** Llm Model */
             llm_model?: string | null;
-            /** Expires At */
-            expires_at: string;
-            /** Created At */
-            created_at: string;
+            /** Llm Provider */
+            llm_provider?: string | null;
+            /** Macro Report */
+            macro_report?: string | null;
+            /** Market Report */
+            market_report?: string | null;
+            /** News Report */
+            news_report?: string | null;
+            /** Options Report */
+            options_report?: string | null;
+            /** Ownership Report */
+            ownership_report?: string | null;
+            /** Portfolio Decision */
+            portfolio_decision?: {
+                [key: string]: unknown;
+            } | null;
+            /** Quality */
+            quality?: unknown;
+            /** Quant Report */
+            quant_report?: string | null;
+            /** Ratings Report */
+            ratings_report?: string | null;
+            /** Review Report */
+            review_report?: string | null;
+            /** Risk Debate History */
+            risk_debate_history?: unknown;
+            /** Risk Metrics */
+            risk_metrics?: unknown;
+            /** Sentiment Report */
+            sentiment_report?: string | null;
+            /** Short Interest Report */
+            short_interest_report?: string | null;
+            /** Signal */
+            signal?: string | null;
+            /** Synthesis Report */
+            synthesis_report?: string | null;
+            /** Ticker */
+            ticker: string;
+            /** Trade Date */
+            trade_date?: string | null;
+            /** Trader Plan */
+            trader_plan?: string | null;
+            /** Trader Proposal Json */
+            trader_proposal_json?: string | null;
+            /** Valuation Report */
+            valuation_report?: string | null;
         };
         /** SystemSettingsRead */
         SystemSettingsRead: {
-            /**
-             * Id
-             * @default 1
-             */
-            id: number;
-            /**
-             * Trading Mode
-             * @default simulation
-             */
-            trading_mode: string;
             /**
              * Active Broker
              * @default simulation
@@ -3800,11 +3958,6 @@ export interface components {
              */
             data_vendor_core_stock: string;
             /**
-             * Data Vendor Technicals
-             * @default yfinance
-             */
-            data_vendor_technicals: string;
-            /**
              * Data Vendor Fundamentals
              * @default yfinance
              */
@@ -3814,45 +3967,60 @@ export interface components {
              * @default yfinance
              */
             data_vendor_news: string;
+            /**
+             * Data Vendor Technicals
+             * @default yfinance
+             */
+            data_vendor_technicals: string;
+            /**
+             * Id
+             * @default 1
+             */
+            id: number;
+            /**
+             * Trading Mode
+             * @default simulation
+             */
+            trading_mode: string;
             /** Updated At */
             updated_at?: string | null;
         };
         /** SystemSettingsUpdate */
         SystemSettingsUpdate: {
-            /** Trading Mode */
-            trading_mode?: ("simulation" | "live") | null;
             /** Active Broker */
             active_broker?: ("simulation" | "alpaca") | null;
             /** Active Data Vendor */
             active_data_vendor?: string | null;
             /** Data Vendor Core Stock */
             data_vendor_core_stock?: string | null;
-            /** Data Vendor Technicals */
-            data_vendor_technicals?: string | null;
             /** Data Vendor Fundamentals */
             data_vendor_fundamentals?: string | null;
             /** Data Vendor News */
             data_vendor_news?: string | null;
+            /** Data Vendor Technicals */
+            data_vendor_technicals?: string | null;
+            /** Trading Mode */
+            trading_mode?: ("simulation" | "live") | null;
         };
         /** TickerBreakdownRecord */
         TickerBreakdownRecord: {
             /** Ticker */
             ticker: string;
-            /** Trades */
-            trades: number;
-            /** Wins */
-            wins: number;
-            /** Win Rate */
-            win_rate: number;
             /** Total Pnl */
             total_pnl: number;
+            /** Trades */
+            trades: number;
+            /** Win Rate */
+            win_rate: number;
+            /** Wins */
+            wins: number;
         };
         /** TimeTravelRequest */
         TimeTravelRequest: {
             /** Checkpoint Id */
             checkpoint_id: string;
             /** Update State */
-            update_state: {
+            update_state?: {
                 [key: string]: unknown;
             };
         };
@@ -3869,7 +4037,7 @@ export interface components {
         TokenResponse: {
             /** Access Token */
             access_token: string;
-            /** Refresh Token (legacy non-browser clients only) */
+            /** Refresh Token */
             refresh_token?: string | null;
             /**
              * Token Type
@@ -3919,10 +4087,6 @@ export interface components {
         ToolSettingUpdateValue: {
             /** Enabled */
             enabled?: boolean | null;
-            /** Settings */
-            settings?: {
-                [key: string]: unknown;
-            } | null;
             /**
              * Reset Enabled
              * @default false
@@ -3933,6 +4097,10 @@ export interface components {
              * @default []
              */
             reset_settings: string[];
+            /** Settings */
+            settings?: {
+                [key: string]: unknown;
+            } | null;
         };
         /** ToolSettingValue */
         ToolSettingValue: {
@@ -3962,98 +4130,98 @@ export interface components {
         };
         /** TradeSummaryRecord */
         TradeSummaryRecord: {
-            /** Ticker */
-            ticker: string;
-            /** Pnl Pct */
-            pnl_pct: number;
             /** Date */
             date?: string | null;
+            /** Pnl Pct */
+            pnl_pct: number;
+            /** Ticker */
+            ticker: string;
         };
         /** UserAdminUpdate */
         UserAdminUpdate: {
-            /** Role */
-            role?: string | null;
-            /** Is Active */
-            is_active?: boolean | null;
-            /** Email */
-            email?: string | null;
             /** Display Name */
             display_name?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Is Active */
+            is_active?: boolean | null;
+            /** Role */
+            role?: string | null;
         };
         /** UserCreate */
         UserCreate: {
-            /** Username */
-            username: string;
-            /** Password */
-            password: string;
-            /** Email */
-            email?: string | null;
             /** Display Name */
             display_name?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Password */
+            password: string;
             /**
              * Role
              * @default user
              */
             role: string;
+            /** Username */
+            username: string;
         };
         /** UserPermissionsResponse */
         UserPermissionsResponse: {
-            /** User Id */
-            user_id: number;
             /** Permissions */
             permissions: {
                 [key: string]: boolean;
             };
+            /** User Id */
+            user_id: number;
         };
         /** UserRead */
         UserRead: {
-            /** Id */
-            id: number;
-            /** Username */
-            username: string;
-            /** Email */
-            email?: string | null;
-            /** Display Name */
-            display_name?: string | null;
-            /** Role */
-            role: string;
-            /** Is Active */
-            is_active: boolean;
             /**
              * Created At
              * Format: date-time
              */
             created_at: string;
+            /** Display Name */
+            display_name?: string | null;
+            /** Email */
+            email?: string | null;
+            /** Id */
+            id: number;
+            /** Is Active */
+            is_active: boolean;
+            /** Role */
+            role: string;
+            /** Username */
+            username: string;
         };
         /** ValidationError */
         ValidationError: {
+            /** Context */
+            ctx?: Record<string, never>;
+            /** Input */
+            input?: unknown;
             /** Location */
             loc: (string | number)[];
             /** Message */
             msg: string;
             /** Error Type */
             type: string;
-            /** Input */
-            input?: unknown;
-            /** Context */
-            ctx?: Record<string, never>;
         };
         /** WebhookDeliveryRead */
         WebhookDeliveryRead: {
-            /** Id */
-            id: number;
-            /** Event */
-            event: string;
-            /** Url */
-            url: string;
-            /** Success */
-            success: boolean;
-            /** Status Code */
-            status_code?: number | null;
-            /** Error */
-            error?: string | null;
             /** Created At */
             created_at: string;
+            /** Error */
+            error?: string | null;
+            /** Event */
+            event: string;
+            /** Id */
+            id: number;
+            /** Status Code */
+            status_code?: number | null;
+            /** Success */
+            success: boolean;
+            /** Url */
+            url: string;
         };
         /** WebhookTestRequest */
         WebhookTestRequest: {
@@ -4062,60 +4230,60 @@ export interface components {
         };
         /** PerformanceResponse */
         backend__schemas__analysis__PerformanceResponse: {
-            /** Total */
-            total: number;
-            /** Win Rate */
-            win_rate: number | null;
-            /** Avg Raw Return */
-            avg_raw_return: number | null;
             /** Avg Alpha Return */
             avg_alpha_return: number | null;
+            /** Avg Raw Return */
+            avg_raw_return: number | null;
             /** By Signal */
             by_signal: {
                 [key: string]: components["schemas"]["BySignalItem"];
             };
+            /** Total */
+            total: number;
+            /** Win Rate */
+            win_rate: number | null;
         };
         /** PerformanceResponse */
         backend__schemas__trading__PerformanceResponse: {
-            /** Id */
-            id: number;
-            /** Mode */
-            mode: string;
-            /** Initial Capital */
-            initial_capital: number;
-            /** Cash Available */
-            cash_available: number;
-            /** Margin Used */
-            margin_used: number;
-            /** Positions Value */
-            positions_value: number;
-            /** Total Value */
-            total_value: number;
-            /** Total Pnl */
-            total_pnl: number;
-            /** Total Pnl Pct */
-            total_pnl_pct: number;
-            /**
-             * Holdings
-             * @default []
-             */
-            holdings: components["schemas"]["HoldingItem"][];
+            /** Alpha Pct */
+            alpha_pct?: number | null;
             /**
              * Auto Closes
              * @default []
              */
             auto_closes: components["schemas"]["AutoCloseRecord"][];
+            /** Benchmark Return Pct */
+            benchmark_return_pct?: number | null;
+            /** Benchmark Ticker */
+            benchmark_ticker?: string | null;
+            /** Cash Available */
+            cash_available: number;
+            /**
+             * Holdings
+             * @default []
+             */
+            holdings: components["schemas"]["HoldingItem"][];
+            /** Id */
+            id: number;
+            /** Initial Capital */
+            initial_capital: number;
             /**
              * Liquidations
              * @default []
              */
             liquidations: components["schemas"]["AutoCloseRecord"][];
-            /** Benchmark Ticker */
-            benchmark_ticker?: string | null;
-            /** Benchmark Return Pct */
-            benchmark_return_pct?: number | null;
-            /** Alpha Pct */
-            alpha_pct?: number | null;
+            /** Margin Used */
+            margin_used: number;
+            /** Mode */
+            mode: string;
+            /** Positions Value */
+            positions_value: number;
+            /** Total Pnl */
+            total_pnl: number;
+            /** Total Pnl Pct */
+            total_pnl_pct: number;
+            /** Total Value */
+            total_value: number;
         };
     };
     responses: never;
@@ -4126,1480 +4294,7 @@ export interface components {
 }
 export type $defs = Record<string, never>;
 export interface operations {
-    login_auth_login_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["LoginRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TokenResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    refresh_auth_refresh_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["RefreshRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TokenResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    logout_auth_logout_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    run_analysis_api_analysis_run_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AnalysisRunRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalysisRunResponse"];
-                };
-            };
-            /** @description Invalid or unknown ticker */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Ticker validation unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    get_active_tasks_api_analysis_active_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ActiveTaskRead"][];
-                };
-            };
-        };
-    };
-    get_latest_analysis_api_analysis_latest_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalysisResultRead"];
-                };
-            };
-            /** @description No completed analyses */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    list_analysis_api_analysis_history_get: {
-        parameters: {
-            query?: {
-                ticker?: string | null;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalysisListItem"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    cancel_analysis_api_analysis__task_id__cancel_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                task_id: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CancelTaskResponse"];
-                };
-            };
-            /** @description Task not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    cost_estimate_api_analysis_cost_estimate_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CostEstimateResponse"];
-                };
-            };
-        };
-    };
-    get_ab_comparison_api_analysis_ab_comparison_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ABComparisonItem"][];
-                };
-            };
-        };
-    };
-    get_performance_api_analysis_performance_get: {
-        parameters: {
-            query?: {
-                ticker?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["backend__schemas__analysis__PerformanceResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_performance_attribution_api_analysis_performance_attribution_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PerformanceAttributionResponse"];
-                };
-            };
-        };
-    };
-    run_portfolio_run_api_analysis_run_portfolio_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["MultiTickerRunRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MultiTickerRunResponse"];
-                };
-            };
-            /** @description Invalid or unknown ticker */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Ticker validation unavailable */
-            503: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    list_portfolio_analyses_api_analysis_portfolio_history_get: {
-        parameters: {
-            query?: {
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MultiTickerListItem"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_portfolio_analysis_api_analysis_portfolio__portfolio_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                portfolio_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MultiTickerResultRead"];
-                };
-            };
-            /** @description Portfolio analysis not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_analysis_api_analysis__analysis_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                analysis_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AnalysisResultRead"];
-                };
-            };
-            /** @description Analysis not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_analysis_chat_api_analysis__analysis_id__chat_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                analysis_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChatMessageRead"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    ask_analysis_report_api_analysis__analysis_id__chat_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                analysis_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ChatMessageCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ChatMessageRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_checkpoints_api_analysis__analysis_id__checkpoints_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                analysis_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["CheckpointItem"][];
-                };
-            };
-            /** @description Analysis not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    time_travel_resume_api_analysis__analysis_id__time_travel_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                analysis_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["TimeTravelRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["TimeTravelResponse"];
-                };
-            };
-            /** @description Invalid checkpoint or state */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Analysis not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_watchlist_api_watchlist_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": string[];
-                };
-            };
-        };
-    };
-    get_watchlist_prices_api_watchlist_prices_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: {
-                            [key: string]: number;
-                        };
-                    };
-                };
-            };
-        };
-    };
-    add_to_watchlist_api_watchlist__ticker__post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ticker: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": string[];
-                };
-            };
-            /** @description Invalid ticker format */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    remove_from_watchlist_api_watchlist__ticker__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                ticker: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": string[];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_portfolios_api_portfolio_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PortfolioRead"][];
-                };
-            };
-        };
-    };
-    list_holdings_api_portfolio_holdings_get: {
-        parameters: {
-            query?: {
-                mode?: string | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HoldingRead"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_orders_api_portfolio_orders_get: {
-        parameters: {
-            query?: {
-                mode?: string | null;
-                ticker?: string | null;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrderRead"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_memory_status_api_settings_memory_get: {
-        parameters: {
-            query?: {
-                user_id?: number | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MemoryStatusResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_llm_catalog_api_settings_llm_catalog_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: components["schemas"]["LLMProviderCatalogEntry"];
-                    };
-                };
-            };
-        };
-    };
-    get_settings_api_settings_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettingsRead"];
-                };
-            };
-        };
-    };
-    update_settings_api_settings_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SettingsUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettingsRead"];
-                };
-            };
-            /** @description Permission denied */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    test_webhook_api_settings_test_webhook_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["WebhookTestRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OkResponse"];
-                };
-            };
-            /** @description Invalid webhook URL or delivery failed */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_webhook_deliveries_api_settings_webhook_deliveries_get: {
-        parameters: {
-            query?: {
-                user_id?: number | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["WebhookDeliveryRead"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_user_settings_by_id_api_settings_users__user_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettingsRead"];
-                };
-            };
-            /** @description User not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_user_settings_by_id_api_settings_users__user_id__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SettingsUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettingsRead"];
-                };
-            };
-            /** @description User not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_other_user_tools_api_settings_users__user_id__tools_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolSettingsRead"];
-                };
-            };
-            /** @description User not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_other_user_tools_api_settings_users__user_id__tools_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ToolSettingsUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolSettingsRead"];
-                };
-            };
-            /** @description User not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_user_tools_api_settings_tools_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolSettingsRead"];
-                };
-            };
-        };
-    };
-    update_user_tools_api_settings_tools_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ToolSettingsUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolSettingsRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_user_agents_api_settings_agents_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSettingsRead"];
-                };
-            };
-        };
-    };
-    update_user_agents_api_settings_agents_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentSettingsUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSettingsRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_other_user_agents_api_settings_users__user_id__agents_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSettingsRead"];
-                };
-            };
-            /** @description User not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_other_user_agents_api_settings_users__user_id__agents_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentSettingsUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSettingsRead"];
-                };
-            };
-            /** @description User not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_server_agents_api_settings_agents_server_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSettingsRead"];
-                };
-            };
-        };
-    };
-    update_server_agents_api_settings_agents_server_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentSettingsUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentSettingsRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_my_logs_api_logs_me_get: {
-        parameters: {
-            query?: {
-                /** @description Filter by level: INFO, WARNING, ERROR, CRITICAL */
-                level?: string | null;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LogRead"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_logs_api_logs_get: {
-        parameters: {
-            query?: {
-                /** @description Filter by level: INFO, WARNING, ERROR, CRITICAL */
-                level?: string | null;
-                source?: string | null;
-                /** @description Filter by user ID */
-                user_id?: number | null;
-                limit?: number;
-                offset?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["LogRead"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    cron_status_api_cron_status_get: {
+    analytics_get_system_health: {
         parameters: {
             query?: never;
             header?: never;
@@ -5621,310 +4316,7 @@ export interface operations {
             };
         };
     };
-    get_portfolio_api_trading_portfolio_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PortfolioResponse"];
-                };
-            };
-        };
-    };
-    create_order_api_trading_order_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["APIOrderRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["OrderResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_performance_api_trading_performance_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["backend__schemas__trading__PerformanceResponse"];
-                };
-            };
-        };
-    };
-    reset_portfolio_api_trading_reset_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ResetRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ResetResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    run_backtest_api_trading_backtest_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["BacktestRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["BacktestResponse"];
-                };
-            };
-            /** @description Backtest simulation failed */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_portfolio_stats_api_trading_portfolio_stats_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PortfolioStatsResponse"];
-                };
-            };
-        };
-    };
-    get_risk_dashboard_api_trading_risk_dashboard_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RiskDashboardResponse"];
-                };
-            };
-        };
-    };
-    rebalance_portfolio_api_trading_rebalance_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["RebalanceResponse"];
-                };
-            };
-        };
-    };
-    save_trade_note_api_trading_journal__order_id__note_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                order_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["JournalNoteRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JournalNoteResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_trade_note_api_trading_journal__order_id__get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                order_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JournalNoteReadResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    generate_trade_debrief_api_trading_journal__order_id__debrief_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                order_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["JournalDebriefResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_meta_api_meta_get: {
+    analytics_get_system_metrics: {
         parameters: {
             query?: never;
             header?: never;
@@ -5946,397 +4338,7 @@ export interface operations {
             };
         };
     };
-    update_status_api_update_status_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-    };
-    update_apply_api_update_apply_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Update already in progress or not supported */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    ohlcv_api_market_ohlcv_get: {
-        parameters: {
-            query: {
-                /** @description Ticker symbol, e.g. AAPL */
-                ticker: string;
-                /** @description YYYY-MM-DD */
-                start_date?: string;
-                /** @description YYYY-MM-DD */
-                end_date?: string;
-                /** @description 1m|3m|6m|1y|2y|5y — ignored when start_date provided */
-                period?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    custom_indicator_api_market_custom_indicator_get: {
-        parameters: {
-            query: {
-                /** @description Ticker symbol, e.g. AAPL */
-                ticker: string;
-                /** @description Mathematical formula, e.g. (Close - SMA(20)) / STD(20) */
-                formula: string;
-                /** @description 1m|3m|6m|1y|2y|5y */
-                period?: string;
-                /** @description YYYY-MM-DD */
-                start_date?: string;
-                /** @description YYYY-MM-DD */
-                end_date?: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    formula_assist_api_market_formula_assist_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["FormulaAssistRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["FormulaAssistResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    sentiment_history_api_market_sentiment_history_get: {
-        parameters: {
-            query: {
-                /** @description Ticker symbol, e.g. AAPL */
-                ticker: string;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SentimentHistoryResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_fx_rates_api_market_fx_rates_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: number | null;
-                    };
-                };
-            };
-        };
-    };
-    list_presets_run_api_presets_get: {
-        parameters: {
-            query?: {
-                user_id?: number | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PresetRead"][];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    create_preset_run_api_presets_post: {
-        parameters: {
-            query?: {
-                user_id?: number | null;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PresetCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PresetRead"];
-                };
-            };
-            /** @description Permission denied */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Conflict */
-            409: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Invalid preset settings */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    delete_preset_api_presets__preset_id__delete: {
-        parameters: {
-            query?: {
-                user_id?: number | null;
-            };
-            header?: never;
-            path: {
-                preset_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PresetDeleteResponse"];
-                };
-            };
-            /** @description Permission denied */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Template not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    apply_preset_api_presets__preset_id__apply_post: {
-        parameters: {
-            query?: {
-                user_id?: number | null;
-            };
-            header?: never;
-            path: {
-                preset_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["PresetApplyResponse"];
-                };
-            };
-            /** @description Permission denied */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Template not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    list_alerts_run_api_alerts_get: {
+    alerts_list_alerts_run: {
         parameters: {
             query?: never;
             header?: never;
@@ -6356,7 +4358,7 @@ export interface operations {
             };
         };
     };
-    create_alert_run_api_alerts_post: {
+    alerts_create_alert_run: {
         parameters: {
             query?: never;
             header?: never;
@@ -6396,7 +4398,7 @@ export interface operations {
             };
         };
     };
-    delete_alert_api_alerts__alert_id__delete: {
+    alerts_delete_alert: {
         parameters: {
             query?: never;
             header?: never;
@@ -6434,7 +4436,7 @@ export interface operations {
             };
         };
     };
-    update_alert_api_alerts__alert_id__patch: {
+    alerts_update_alert: {
         parameters: {
             query?: never;
             header?: never;
@@ -6483,42 +4485,7 @@ export interface operations {
             };
         };
     };
-    news_feed_api_news_feed_get: {
-        parameters: {
-            query: {
-                /** @description Comma-separated ticker list, e.g. AAPL,TSLA */
-                tickers: string;
-                limit?: number;
-            };
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    }[];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_me_api_users_me_get: {
+    analysis_get_ab_comparison: {
         parameters: {
             query?: never;
             header?: never;
@@ -6533,52 +4500,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["UserRead"];
+                    "application/json": components["schemas"]["ABComparisonItem"][];
                 };
             };
         };
     };
-    update_me_api_users_me_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ProfileUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserRead"];
-                };
-            };
-            /** @description Email already in use */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_my_api_keys_api_users_me_api_keys_get: {
+    analysis_get_active_tasks: {
         parameters: {
             query?: never;
             header?: never;
@@ -6593,83 +4520,12 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["ApiKeyProvidersResponse"];
+                    "application/json": components["schemas"]["ActiveTaskRead"][];
                 };
             };
         };
     };
-    set_my_api_key_api_users_me_api_keys_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ApiKeySet"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MessageResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_my_api_key_api_users_me_api_keys__provider__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                provider: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MessageResponse"];
-                };
-            };
-            /** @description No key found for provider */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_my_permissions_api_users_me_permissions_get: {
+    analysis_cost_estimate: {
         parameters: {
             query?: never;
             header?: never;
@@ -6684,863 +4540,292 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PagePermissionsRead"];
+                    "application/json": components["schemas"]["CostEstimateResponse"];
                 };
             };
         };
     };
-    get_my_setting_permissions_api_users_me_setting_permissions_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SettingPermissionsResponse"];
-                };
-            };
-        };
-    };
-    list_users_run_api_users_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserRead"][];
-                };
-            };
-        };
-    };
-    create_user_api_users_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UserCreate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            201: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserRead"];
-                };
-            };
-            /** @description Username or email taken */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Permission denied */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    update_user_api_users__user_id__put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["UserAdminUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserRead"];
-                };
-            };
-            /** @description Permission denied */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description User not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_user_api_users__user_id__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Cannot delete yourself */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Permission denied */
-            403: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description User not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_user_permissions_api_users__user_id__permissions_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserPermissionsResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_user_permissions_api_users__user_id__permissions_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["PagePermissionsUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MessageResponse"];
-                };
-            };
-            /** @description User not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    list_user_api_keys_api_users__user_id__api_keys_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ApiKeyProvidersResponse"];
-                };
-            };
-            /** @description User not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_user_api_key_endpoint_api_users__user_id__api_keys_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ApiKeySet"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MessageResponse"];
-                };
-            };
-            /** @description User not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    delete_user_api_key_endpoint_api_users__user_id__api_keys__provider__delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-                provider: string;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MessageResponse"];
-                };
-            };
-            /** @description User or key not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_user_setting_permissions_api_users__user_id__setting_permissions_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["UserPermissionsResponse"];
-                };
-            };
-            /** @description User not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_user_setting_permissions_api_users__user_id__setting_permissions_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SettingPermissionsUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["MessageResponse"];
-                };
-            };
-            /** @description User not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_agent_access_api_users__user_id__agent_access_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_agent_access_api_users__user_id__agent_access_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["AgentAccessUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["AgentAccessUpdateResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_tool_access_api_users__user_id__tool_access_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_tool_access_api_users__user_id__tool_access_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ToolAccessUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolAccessUpdateResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_tool_field_access_api_users__user_id__tool_field_access_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    set_tool_field_access_api_users__user_id__tool_field_access_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path: {
-                user_id: number;
-            };
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ToolFieldAccessUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolFieldAccessUpdateResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_system_settings_api_system_settings_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SystemSettingsRead"];
-                };
-            };
-        };
-    };
-    update_system_settings_api_system_settings_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["SystemSettingsUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SystemSettingsRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    get_server_tools_api_system_settings_tools_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolSettingsRead"];
-                };
-            };
-        };
-    };
-    update_server_tools_api_system_settings_tools_put: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ToolSettingsUpdate"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ToolSettingsRead"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    scan_api_screener_scan_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody: {
-            content: {
-                "application/json": components["schemas"]["ScreenRequest"];
-            };
-        };
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScreenResponse"];
-                };
-            };
-            /** @description Validation Error */
-            422: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["HTTPValidationError"];
-                };
-            };
-        };
-    };
-    scan_watchlist_api_screener_scan_watchlist_post: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["ScreenResponse"];
-                };
-            };
-            /** @description Watchlist is empty */
-            400: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    sector_rotation_api_market_sector_rotation_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SectorRotationResponse"];
-                };
-            };
-        };
-    };
-    get_patterns_api_market_patterns__ticker__get: {
+    analysis_list_analysis: {
         parameters: {
             query?: {
-                period?: string;
+                ticker?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisListItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_clear_history: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+        };
+    };
+    analysis_get_latest_analysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisResultRead"];
+                };
+            };
+            /** @description No completed analyses */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    analysis_get_performance: {
+        parameters: {
+            query?: {
+                ticker?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["backend__schemas__analysis__PerformanceResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_get_performance_attribution: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PerformanceAttributionResponse"];
+                };
+            };
+        };
+    };
+    analysis_list_portfolio_analyses: {
+        parameters: {
+            query?: {
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MultiTickerListItem"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_get_portfolio_analysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                portfolio_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MultiTickerResultRead"];
+                };
+            };
+            /** @description Portfolio analysis not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_run_analysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AnalysisRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisRunResponse"];
+                };
+            };
+            /** @description Invalid or unknown ticker */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Ticker validation unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    analysis_run_portfolio_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["MultiTickerRunRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MultiTickerRunResponse"];
+                };
+            };
+            /** @description Invalid or unknown ticker */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Ticker validation unavailable */
+            503: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    analysis_get_active_asset_strategy: {
+        parameters: {
+            query?: {
+                asset_type?: string;
             };
             header?: never;
             path: {
@@ -7556,19 +4841,242 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["PatternsResponse"];
+                    "application/json": components["schemas"]["AssetStrategyRead"];
                 };
             };
-            /** @description Invalid ticker */
-            422: {
+            /** @description Active asset strategy not found */
+            404: {
                 headers: {
                     [name: string]: unknown;
                 };
                 content?: never;
             };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
-    create_share_api_analysis__analysis_id__share_post: {
+    analysis_get_active_asset_strategy_history: {
+        parameters: {
+            query?: {
+                asset_type?: string;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssetStrategyVersionRead"][];
+                };
+            };
+            /** @description Active asset strategy not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_get_analysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysis_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AnalysisResultRead"];
+                };
+            };
+            /** @description Analysis not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_delete_analysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysis_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_get_analysis_chat: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysis_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatMessageRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_ask_analysis_report: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysis_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ChatMessageCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ChatMessageRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_list_checkpoints: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysis_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CheckpointItem"][];
+                };
+            };
+            /** @description Analysis not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    share_create_share: {
         parameters: {
             query?: never;
             header?: never;
@@ -7606,35 +5114,19 @@ export interface operations {
             };
         };
     };
-    get_shared_report_api_share__token__get: {
+    share_revoke_share: {
         parameters: {
             query?: never;
             header?: never;
             path: {
-                token: string;
+                analysis_id: number;
             };
             cookie?: never;
         };
         requestBody?: never;
         responses: {
             /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": components["schemas"]["SharedReportResponse"];
-                };
-            };
-            /** @description Report or analysis data not found */
-            404: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-            /** @description Shared report has expired */
-            410: {
+            204: {
                 headers: {
                     [name: string]: unknown;
                 };
@@ -7651,7 +5143,132 @@ export interface operations {
             };
         };
     };
-    get_history_api_assistant_history_get: {
+    share_rotate_share: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysis_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ShareCreateResponse"];
+                };
+            };
+            /** @description Analysis not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_time_travel_resume: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                analysis_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["TimeTravelRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TimeTravelResponse"];
+                };
+            };
+            /** @description Invalid checkpoint or state */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Analysis not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analysis_cancel_analysis: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                task_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CancelTaskResponse"];
+                };
+            };
+            /** @description Task not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    analytics_get_token_usage: {
         parameters: {
             query?: never;
             header?: never;
@@ -7666,30 +5283,14 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["AssistantHistoryItem"][];
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
         };
     };
-    clear_history_api_assistant_history_delete: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            204: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content?: never;
-            };
-        };
-    };
-    chat_api_assistant_chat_post: {
+    assistant_chat: {
         parameters: {
             query?: never;
             header?: never;
@@ -7722,7 +5323,180 @@ export interface operations {
             };
         };
     };
-    fetch_daily_summary_api_market_daily_summary_get: {
+    assistant_get_history: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AssistantHistoryItem"][];
+                };
+            };
+        };
+    };
+    assistant_clear_history: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    cron_cron_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    logs_list_logs: {
+        parameters: {
+            query?: {
+                /** @description Filter by level: INFO, WARNING, ERROR, CRITICAL */
+                level?: string | null;
+                source?: string | null;
+                /** @description Filter by user ID */
+                user_id?: number | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    logs_list_my_logs: {
+        parameters: {
+            query?: {
+                /** @description Filter by level: INFO, WARNING, ERROR, CRITICAL */
+                level?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LogRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    market_custom_indicator: {
+        parameters: {
+            query: {
+                /** @description Ticker symbol, e.g. AAPL */
+                ticker: string;
+                /** @description Mathematical formula, e.g. (Close - SMA(20)) / STD(20) */
+                formula: string;
+                /** @description 1m|3m|6m|1y|2y|5y */
+                period?: string;
+                /** @description YYYY-MM-DD */
+                start_date?: string;
+                /** @description YYYY-MM-DD */
+                end_date?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    "daily-summary_fetch_daily_summary": {
         parameters: {
             query?: never;
             header?: never;
@@ -7742,7 +5516,7 @@ export interface operations {
             };
         };
     };
-    trigger_daily_summary_api_market_daily_summary_generate_post: {
+    "daily-summary_trigger_daily_summary": {
         parameters: {
             query?: never;
             header?: never;
@@ -7776,73 +5550,7 @@ export interface operations {
             };
         };
     };
-    get_token_usage_api_analytics_token_usage_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-    };
-    get_system_metrics_api_admin_system_metrics_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-    };
-    get_system_health_api_admin_system_health_get: {
-        parameters: {
-            query?: never;
-            header?: never;
-            path?: never;
-            cookie?: never;
-        };
-        requestBody?: never;
-        responses: {
-            /** @description Successful Response */
-            200: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/json": {
-                        [key: string]: unknown;
-                    };
-                };
-            };
-        };
-    };
-    earnings_calendar_api_market_earnings_calendar_get: {
+    earnings_earnings_calendar: {
         parameters: {
             query?: {
                 /** @description Comma-separated tickers. Defaults to user's watchlist. */
@@ -7874,10 +5582,71 @@ export interface operations {
             };
         };
     };
-    get_correlation_api_trading_correlation_get: {
+    market_formula_assist: {
         parameters: {
-            query?: {
-                /** @description Data period: 30d, 90d, 180d, 1y */
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["FormulaAssistRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["FormulaAssistResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    market_get_fx_rates: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: number | null;
+                    };
+                };
+            };
+        };
+    };
+    market_ohlcv: {
+        parameters: {
+            query: {
+                /** @description Ticker symbol, e.g. AAPL */
+                ticker: string;
+                /** @description YYYY-MM-DD */
+                start_date?: string;
+                /** @description YYYY-MM-DD */
+                end_date?: string;
+                /** @description 1m|3m|6m|1y|2y|5y — ignored when start_date provided */
                 period?: string;
             };
             header?: never;
@@ -7892,7 +5661,9 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content: {
-                    "application/json": components["schemas"]["CorrelationResponse"];
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
                 };
             };
             /** @description Validation Error */
@@ -7906,7 +5677,147 @@ export interface operations {
             };
         };
     };
-    list_all_personas_api_personas_get: {
+    patterns_get_patterns: {
+        parameters: {
+            query?: {
+                period?: string;
+            };
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PatternsResponse"];
+                };
+            };
+            /** @description Invalid ticker */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    sector_sector_rotation: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SectorRotationResponse"];
+                };
+            };
+        };
+    };
+    market_sentiment_history: {
+        parameters: {
+            query: {
+                /** @description Ticker symbol, e.g. AAPL */
+                ticker: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SentimentHistoryResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    meta_get_meta: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    news_news_feed: {
+        parameters: {
+            query: {
+                /** @description Comma-separated ticker list, e.g. AAPL,TSLA */
+                tickers: string;
+                limit?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    personas_list_all_personas: {
         parameters: {
             query?: {
                 user_id?: number | null;
@@ -7939,7 +5850,7 @@ export interface operations {
             };
         };
     };
-    create_persona_api_personas_post: {
+    personas_create_persona: {
         parameters: {
             query?: {
                 user_id?: number | null;
@@ -7983,7 +5894,7 @@ export interface operations {
             };
         };
     };
-    update_persona_api_personas__key__put: {
+    personas_update_persona: {
         parameters: {
             query?: {
                 user_id?: number | null;
@@ -8036,7 +5947,7 @@ export interface operations {
             };
         };
     };
-    delete_persona_api_personas__key__delete: {
+    personas_delete_persona: {
         parameters: {
             query?: {
                 user_id?: number | null;
@@ -8081,7 +5992,2463 @@ export interface operations {
             };
         };
     };
-    health_health_get: {
+    portfolio_list_portfolios: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioRead"][];
+                };
+            };
+        };
+    };
+    portfolio_list_holdings: {
+        parameters: {
+            query?: {
+                mode?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HoldingRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    portfolio_list_orders: {
+        parameters: {
+            query?: {
+                mode?: string | null;
+                ticker?: string | null;
+                limit?: number;
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    presets_list_presets_run: {
+        parameters: {
+            query?: {
+                user_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    presets_create_preset_run: {
+        parameters: {
+            query?: {
+                user_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PresetCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetRead"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Conflict */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Invalid preset settings */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    presets_delete_preset: {
+        parameters: {
+            query?: {
+                user_id?: number | null;
+            };
+            header?: never;
+            path: {
+                preset_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetDeleteResponse"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Template not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    presets_apply_preset: {
+        parameters: {
+            query?: {
+                user_id?: number | null;
+            };
+            header?: never;
+            path: {
+                preset_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PresetApplyResponse"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Template not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    screener_scan: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ScreenRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    screener_scan_watchlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ScreenResponse"];
+                };
+            };
+            /** @description Watchlist is empty */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    settings_get_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsRead"];
+                };
+            };
+        };
+    };
+    settings_update_settings: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsRead"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_get_user_agents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSettingsRead"];
+                };
+            };
+        };
+    };
+    settings_update_user_agents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSettingsRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_get_server_agents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSettingsRead"];
+                };
+            };
+        };
+    };
+    settings_update_server_agents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSettingsRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_get_llm_catalog: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: components["schemas"]["LLMProviderCatalogEntry"];
+                    };
+                };
+            };
+        };
+    };
+    settings_get_memory_status: {
+        parameters: {
+            query?: {
+                user_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MemoryStatusResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_test_webhook: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WebhookTestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OkResponse"];
+                };
+            };
+            /** @description Invalid webhook URL or delivery failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_get_user_tools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolSettingsRead"];
+                };
+            };
+        };
+    };
+    settings_update_user_tools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolSettingsRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_get_user_settings_by_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsRead"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_update_user_settings_by_id: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingsRead"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_get_other_user_agents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSettingsRead"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_update_other_user_agents: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentSettingsRead"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_get_other_user_tools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolSettingsRead"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_update_other_user_tools: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolSettingsRead"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    settings_get_webhook_deliveries: {
+        parameters: {
+            query?: {
+                user_id?: number | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WebhookDeliveryRead"][];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    share_get_shared_report: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                token: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SharedReportResponse"];
+                };
+            };
+            /** @description Report or analysis data not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Shared report has expired */
+            410: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    "system-settings_get_system_settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettingsRead"];
+                };
+            };
+        };
+    };
+    "system-settings_update_system_settings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SystemSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemSettingsRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    "system-settings_get_server_tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolSettingsRead"];
+                };
+            };
+        };
+    };
+    "system-settings_update_server_tools": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolSettingsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolSettingsRead"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trading_run_backtest: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["BacktestRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["BacktestResponse"];
+                };
+            };
+            /** @description Backtest simulation failed */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trading_get_correlation: {
+        parameters: {
+            query?: {
+                /** @description Data period: 30d, 90d, 180d, 1y */
+                period?: string;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CorrelationResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trading_get_trade_note: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalNoteReadResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trading_generate_trade_debrief: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalDebriefResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trading_save_trade_note: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                order_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["JournalNoteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["JournalNoteResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trading_create_order: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["APIOrderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OrderResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trading_get_performance: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["backend__schemas__trading__PerformanceResponse"];
+                };
+            };
+        };
+    };
+    trading_get_portfolio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioResponse"];
+                };
+            };
+        };
+    };
+    trading_get_portfolio_stats: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PortfolioStatsResponse"];
+                };
+            };
+        };
+    };
+    trading_rebalance_portfolio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RebalanceResponse"];
+                };
+            };
+        };
+    };
+    trading_reset_portfolio: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ResetRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ResetResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    trading_get_risk_dashboard: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RiskDashboardResponse"];
+                };
+            };
+        };
+    };
+    update_update_apply: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Update already in progress or not supported */
+            409: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    update_update_status: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+        };
+    };
+    users_list_users_run: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRead"][];
+                };
+            };
+        };
+    };
+    users_create_user: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRead"];
+                };
+            };
+            /** @description Username or email taken */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_get_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRead"];
+                };
+            };
+        };
+    };
+    users_update_me: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProfileUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRead"];
+                };
+            };
+            /** @description Email already in use */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_list_my_api_keys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyProvidersResponse"];
+                };
+            };
+        };
+    };
+    users_set_my_api_key: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApiKeySet"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_delete_my_api_key: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description No key found for provider */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_get_my_permissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PagePermissionsRead"];
+                };
+            };
+        };
+    };
+    users_get_my_setting_permissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SettingPermissionsResponse"];
+                };
+            };
+        };
+    };
+    users_update_user: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UserAdminUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserRead"];
+                };
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_delete_user: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Cannot delete yourself */
+            400: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Permission denied */
+            403: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_get_agent_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_set_agent_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AgentAccessUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentAccessUpdateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_list_user_api_keys: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ApiKeyProvidersResponse"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_set_user_api_key_endpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ApiKeySet"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_delete_user_api_key_endpoint: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+                provider: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description User or key not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_get_user_permissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPermissionsResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_set_user_permissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PagePermissionsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_get_user_setting_permissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UserPermissionsResponse"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_set_user_setting_permissions: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["SettingPermissionsUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["MessageResponse"];
+                };
+            };
+            /** @description User not found */
+            404: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_get_tool_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_set_tool_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolAccessUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolAccessUpdateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_get_tool_field_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    users_set_tool_field_access: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                user_id: number;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ToolFieldAccessUpdate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ToolFieldAccessUpdateResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    watchlist_get_watchlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+        };
+    };
+    watchlist_get_watchlist_prices: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: {
+                            [key: string]: number;
+                        };
+                    };
+                };
+            };
+        };
+    };
+    watchlist_add_to_watchlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Invalid ticker format */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    watchlist_remove_from_watchlist: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                ticker: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": string[];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    auth_login: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["LoginRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    auth_logout: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+        };
+    };
+    auth_refresh: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["RefreshRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TokenResponse"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    default_health: {
         parameters: {
             query?: never;
             header?: never;

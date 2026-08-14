@@ -1,6 +1,6 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useParams } from 'react-router-dom'
-import axios from 'axios'
+import { useShareGetSharedReport } from '../api/generated/share/share'
 import {
   TrendingUp, TrendingDown, Minus, Clock, AlertCircle, Loader2,
   FileText, BookOpen, Scale, Zap,
@@ -217,27 +217,18 @@ function PortfolioDecisionContent({ decision }: { decision: SharedReportResponse
 export default function SharedReport() {
   const { token } = useParams<{ token: string }>()
   const { t } = useTranslation()
-  const [report, setReport] = useState<SharedReportResponse | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
   const [activeKey, setActiveKey] = useState<string | null>(null)
   const sectionDefs = SHARED_REPORT_SECTION_DEFS
 
-  useEffect(() => {
-    if (!token) return
-    let mounted = true
-    axios.get<SharedReportResponse>(`/api/share/${token}`)
-      .then(r => {
-        if (mounted) setReport(r.data)
-      })
-      .catch(e => {
-        if (mounted) setError(e.response?.data?.detail || t('shared_report.error_not_found'))
-      })
-      .finally(() => {
-        if (mounted) setLoading(false)
-      })
-    return () => { mounted = false }
-  }, [token, t])
+  // Public page: the token comes from the URL, so the query stays disabled
+  // until one is present rather than requesting /api/share/undefined.
+  const query = useShareGetSharedReport(token ?? '', { query: { enabled: Boolean(token) } })
+  const report = (query.data ?? null) as SharedReportResponse | null
+  const loading = Boolean(token) && query.isPending
+  const error = query.error
+    ? ((query.error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        || t('shared_report.error_not_found'))
+    : null
 
   // Build available sections from all data the public API explicitly exposes.
   // This is intentionally not limited to final decisions: a shared analysis

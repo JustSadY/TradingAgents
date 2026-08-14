@@ -1,6 +1,8 @@
 import { useState, useCallback, useEffect } from 'react'
 import { CalendarDays, Loader2, Search, Play, AlertTriangle } from 'lucide-react'
-import axios from '../utils/api'
+import { useEarningsEarningsCalendar } from '../api/generated/earnings/earnings'
+import { useAnalysisRunAnalysis } from '../api/generated/analysis/analysis'
+import { useQueryErrorToast } from '../api/useQueryErrorToast'
 import { notify } from '../utils/notify'
 import { useTranslation } from '../contexts/LanguageContext'
 
@@ -79,57 +81,52 @@ function fmtDaysUntil(days: number | null): string {
 
 export default function EarningsCalendar() {
   const { t } = useTranslation()
-  const [results, setResults] = useState<EarningsEntry[]>([])
-  const [loading, setLoading] = useState(false)
   const [tickerInput, setTickerInput] = useState('')
   const [analyzing, setAnalyzing] = useState<string | null>(null)
-  const [hasLoaded, setHasLoaded] = useState(false)
 
-  const fetchEarnings = useCallback(async (overrideTickers?: string) => {
-    setLoading(true)
-    setResults([])
-    try {
-      const params: Record<string, string> = {}
-      const query = overrideTickers ?? tickerInput
-      if (query.trim()) {
-        params.tickers = query
-          .split(/[\s,]+/)
-          .map(t => t.trim().toUpperCase())
-          .filter(Boolean)
-          .join(',')
-      }
-      const r = await axios.get('/api/market/earnings-calendar', { params })
-      setResults(r.data.results || [])
-      setHasLoaded(true)
-      if ((r.data.results || []).length === 0) {
-        notify('info', 'No earnings data found for the selected tickers.', 'Earnings Calendar')
-      }
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Failed to load earnings data.', 'Earnings Calendar')
-    } finally {
-      setLoading(false)
+  // The submitted tickers, not the live input: typing must not refetch.
+  const [submitted, setSubmitted] = useState('')
+
+  const normalize = (query: string) =>
+    query
+      .split(/[\s,]+/)
+      .map(t => t.trim().toUpperCase())
+      .filter(Boolean)
+      .join(',')
+
+  const params = submitted.trim() ? { tickers: normalize(submitted) } : {}
+  const earningsQuery = useEarningsEarningsCalendar(params)
+  const loading = earningsQuery.isFetching
+  const results = ((earningsQuery.data as { results?: EarningsEntry[] } | undefined)?.results ?? []) as EarningsEntry[]
+  const hasLoaded = earningsQuery.isSuccess
+
+  useEffect(() => {
+    if (!earningsQuery.isSuccess) return
+    if (results.length === 0) {
+      notify('info', 'No earnings data found for the selected tickers.', 'Earnings Calendar')
     }
+  }, [earningsQuery.isSuccess, earningsQuery.dataUpdatedAt, results.length])
+
+  useQueryErrorToast(earningsQuery.error, 'Failed to load earnings data.', 'Earnings Calendar')
+
+  const fetchEarnings = useCallback((overrideTickers?: string) => {
+    setSubmitted(overrideTickers ?? tickerInput)
   }, [tickerInput])
 
-  // Auto-load watchlist on mount
-  useEffect(() => {
-    fetchEarnings('')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const runAnalysis = useCallback(async (ticker: string) => {
+  const analysisMutation = useAnalysisRunAnalysis()
+  const runAnalysis = useCallback((ticker: string) => {
     setAnalyzing(ticker)
-    try {
-      await axios.post('/api/analysis/run', {
-        ticker,
-        trade_date: new Date().toISOString().slice(0, 10),
-      })
-      notify('success', `Analysis started for ${ticker}`, 'Analysis')
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Failed to start analysis.', 'Analysis')
-    } finally {
-      setAnalyzing(null)
-    }
+    analysisMutation.mutate(
+      { data: { ticker, trade_date: new Date().toISOString().slice(0, 10) } },
+      {
+        onSuccess: () => notify('success', `Analysis started for ${ticker}`, 'Analysis'),
+        onError: (err) => {
+          const detail = (err as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+          notify('error', detail || 'Failed to start analysis.', 'Analysis')
+        },
+        onSettled: () => setAnalyzing(null),
+      },
+    )
   }, [])
 
   const handleSearch = useCallback(() => {

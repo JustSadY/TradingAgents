@@ -20,6 +20,12 @@ const POLL_IDLE_MS = 60 * 60 * 1000   // 1 saat — boşta
 const POLL_BUSY_MS = 4_000              // 4 saniye — güncelleme sırasında
 const UPDATE_TIMEOUT_MS = 12 * 60 * 1000 // 12 dakika — bu kadar sürer takılı sayılır
 
+// Deliberately still on raw axios rather than the generated TanStack hooks.
+// This poll treats a *failed* request as the expected signal that the server is
+// restarting mid-update (see sawDownRef below), reloads the page on the first
+// success afterwards, and switches interval based on `busy`. Expressing that
+// through a query would mean disabling retry, error surfacing and refetch
+// behaviour until little of the library remained.
 export default function UpdateBanner() {
   const { isOwner } = useAuth()
   const [st, setSt] = useState<UpdateStatus | null>(null)
