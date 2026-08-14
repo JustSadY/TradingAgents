@@ -69,9 +69,10 @@ describe('AppSchemaForm', () => {
 
     expect(screen.getByRole('combobox', { name: /provider/i })).toBeInTheDocument()
     expect(screen.getByRole('spinbutton', { name: /temperature/i })).toHaveAttribute('min', '0')
-    expect(screen.getByRole('checkbox', { name: /enabled/i })).toBeChecked()
+    expect(screen.getByRole('switch', { name: /enabled/i })).toBeChecked()
     expect(screen.getByText('Tags')).toBeInTheDocument()
 
+    await userEvent.click(screen.getByText('Advanced'))
     const secret = screen.getByLabelText('API key')
     expect(secret).toHaveAttribute('type', 'password')
     fireEvent.change(secret, { target: { value: 'changed' } })
