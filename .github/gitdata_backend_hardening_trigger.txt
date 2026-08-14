@@ -1,1 +1,0 @@
-Git Data API trigger for backend hardening validation.
