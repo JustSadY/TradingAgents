@@ -64,6 +64,7 @@ function renderBanner() {
 }
 
 beforeEach(() => {
+  vi.restoreAllMocks()
   vi.clearAllMocks()
   mocks.useAuth.mockReturnValue({ isOwner: true })
   mocks.statusQuery.data = defaultStatus
