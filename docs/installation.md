@@ -80,10 +80,9 @@ DB_PASSWORD=<strong-postgres-password>
 SECRET_KEY=<random-secret>
 ENCRYPTION_KEY=<fernet-key>
 ADMIN_PASSWORD_HASH=<bcrypt-hash>
-GRAFANA_ADMIN_PASSWORD=<strong-grafana-password>
 ```
 
-`DB_PASSWORD` and `GRAFANA_ADMIN_PASSWORD` are required by the current `docker-compose.yml`. `METRICS_TOKEN` is optional; when empty, the backend `/metrics` endpoint stays disabled.
+`DB_PASSWORD` is required by the current `docker-compose.yml`. `METRICS_TOKEN` is optional; when empty, the backend `/metrics` endpoint stays disabled.
 
 Do not put LLM, Pinecone, Reddit, Alpha Vantage, or SearXNG credentials into `.env` unless a specific server-managed integration explicitly documents an environment variable. User/provider settings are normally configured in the Web UI.
 
@@ -103,7 +102,6 @@ The current Compose stack includes:
 | `worker` | Dedicated `arq` analysis worker. |
 | `frontend` | nginx-served React production build and public reverse proxy. |
 | `prometheus` | Metrics collection. |
-| `grafana` | Monitoring dashboards. |
 | `postgres-exporter` | PostgreSQL Prometheus metrics. |
 | `redis-exporter` | Redis Prometheus metrics. |
 
@@ -112,7 +110,6 @@ The current Compose stack includes:
 - Frontend: `http://localhost:5173`
 - Backend/Swagger from the Docker host: `http://localhost:8000/docs`
 - Prometheus: `http://localhost:9090`
-- Grafana: `http://localhost:3001`
 - PostgreSQL exporter: `http://localhost:9187`
 - Redis exporter: `http://localhost:9121`
 

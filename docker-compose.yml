@@ -223,31 +223,6 @@ services:
         max-size: "10m"
         max-file: "3"
 
-  grafana:
-    image: grafana/grafana:11.3.1
-    restart: unless-stopped
-    environment:
-      - GF_SECURITY_ADMIN_USER=${GRAFANA_ADMIN_USER:-admin}
-      - "GF_SECURITY_ADMIN_PASSWORD=${GRAFANA_ADMIN_PASSWORD:?Set GRAFANA_ADMIN_PASSWORD in .env}"
-      - GF_INSTALL_PLUGINS=
-      - GF_AUTH_ANONYMOUS_ENABLED=false
-    ports:
-      - "127.0.0.1:3001:3000"
-    volumes:
-      - grafana_data:/var/lib/grafana
-      - ./monitoring/grafana/provisioning:/etc/grafana/provisioning
-      - ./monitoring/grafana/dashboards:/var/lib/grafana/dashboards
-    depends_on:
-      prometheus:
-        condition: service_started
-    networks:
-      - tradingagents-net
-    logging:
-      driver: json-file
-      options:
-        max-size: "10m"
-        max-file: "3"
-
   postgres-exporter:
     image: prometheuscommunity/postgres-exporter:v0.15.0
     restart: unless-stopped
@@ -294,7 +269,6 @@ volumes:
   pgdata:
   tradingagents_data:
   prometheus_data:
-  grafana_data:
 
 networks:
   tradingagents-net:

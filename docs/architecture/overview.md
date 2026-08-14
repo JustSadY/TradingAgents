@@ -262,7 +262,6 @@ The current compose stack contains:
 - arq worker
 - frontend/nginx
 - Prometheus
-- Grafana
 - postgres-exporter
 - redis-exporter
 

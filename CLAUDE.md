@@ -345,9 +345,9 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-The current Compose topology contains PostgreSQL, Redis, backend, arq worker, frontend/nginx, Prometheus, Grafana, postgres-exporter, and redis-exporter.
+The current Compose topology contains PostgreSQL, Redis, backend, arq worker, frontend/nginx, Prometheus, postgres-exporter, and redis-exporter.
 
-`DB_PASSWORD` and `GRAFANA_ADMIN_PASSWORD` must be set for the current Compose stack. Do not expose loopback-bound monitoring ports publicly without an authenticated reverse proxy or VPN.
+`DB_PASSWORD` must be set for the current Compose stack. Do not expose loopback-bound monitoring ports publicly without an authenticated reverse proxy or VPN.
 
 ---
 
