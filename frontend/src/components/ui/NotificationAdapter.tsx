@@ -27,6 +27,10 @@ export function NotificationAdapter() {
   useEffect(() => {
     const activeTimers = timers.current
     const handler = (event: Event) => {
+      // Layout historically listened to the same contract. Capture the event
+      // first so this adapter is the single renderer while keeping the public
+      // `ta-notify` event contract unchanged for axios and callers.
+      event.stopImmediatePropagation()
       const notification = (event as CustomEvent<Notification>).detail
       if (!notification || !isVisible(notification, isAdmin, isOwner)) return
 
@@ -35,9 +39,9 @@ export function NotificationAdapter() {
       activeTimers.set(notification.id, timeout)
     }
 
-    window.addEventListener('ta-notify', handler)
+    window.addEventListener('ta-notify', handler, true)
     return () => {
-      window.removeEventListener('ta-notify', handler)
+      window.removeEventListener('ta-notify', handler, true)
       activeTimers.forEach(timer => clearTimeout(timer))
       activeTimers.clear()
     }
