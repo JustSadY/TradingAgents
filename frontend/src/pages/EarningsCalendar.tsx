@@ -249,10 +249,11 @@ export default function EarningsCalendar() {
       <div className="glass-panel rounded-2xl p-5 space-y-4">
         <div className="flex gap-3 items-end">
           <div className="flex-1">
-            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+            <label htmlFor="earnings-tickers" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               {t('earnings.ticker_label')}
             </label>
             <input
+              id="earnings-tickers"
               type="text"
               value={tickerInput}
               onChange={e => setTickerInput(e.target.value)}
