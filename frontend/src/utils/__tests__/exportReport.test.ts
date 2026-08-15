@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { AnalysisResultRead } from '../../api/generated/model'
+import i18n from '../../i18n'
+import { REPORT_SECTIONS } from '../../report/reportSections'
 import { buildExportSections, markdownToHtml } from '../exportReport'
+import { EXPECTED_EXPORT_LABELS, EXPECTED_EXPORT_ORDER } from './exportLabels.fixture'
 
 function analysisWith(overrides: Record<string, unknown>): AnalysisResultRead {
   return {
@@ -68,21 +71,120 @@ describe('markdownToHtml', () => {
 
     expect(html).toContain('<table>')
     expect(html).toContain('<th>Metric</th>')
-    expect(html).toContain('<td><strong>30.1</strong></td>')
+    // The `---:` separator carries through as a column alignment attribute.
+    expect(html).toContain('<strong>30.1</strong>')
+    expect(html).toMatch(/<td[^>]*align="right"[^>]*><strong>30.1<\/strong><\/td>/)
     expect(html).not.toContain('<p>| Metric | Value |</p>')
   })
 
   it('escapes untrusted table cell HTML', () => {
     const html = markdownToHtml('| Metric | Value |\n| --- | --- |\n| Test | <script>alert(1)</script> |')
 
-    expect(html).toContain('&lt;script&gt;alert(1)&lt;/script&gt;')
+    // Escaped as a hex entity rather than a named one; both are inert, and
+    // the tag stays visible so the report shows what the model actually wrote.
     expect(html).not.toContain('<script>')
+    expect(html).toMatch(/&(lt|#x3C);script/i)
+    expect(html).toContain('alert(1)')
   })
 
   it('does not mistake ordinary pipe-containing prose for a table', () => {
     const html = markdownToHtml('Risk/reward is 1 | 3\nThis is still prose.')
 
     expect(html).not.toContain('<table>')
-    expect(html).toContain('<p>Risk/reward is 1 | 3</p>')
+    expect(html).toContain('Risk/reward is 1 | 3')
+  })
+
+  describe('block structures', () => {
+    it.each([
+      ['- a\n- b', '<ul'],
+      ['1. a\n2. b', '<ol'],
+      ['> quoted', '<blockquote'],
+      ['---', '<hr'],
+      ['```\ncode\n```', '<pre'],
+    ])('renders %s', (source, expected) => {
+      expect(markdownToHtml(source)).toContain(expected)
+    })
+
+    it('demotes report headings so they nest under the section heading', () => {
+      // The printable page emits each section as <h2>, so report content
+      // starts one level below it rather than competing with it.
+      const html = markdownToHtml('# Top\n\n## Second\n\n### Third')
+      expect(html).not.toContain('<h1')
+      expect(html).not.toContain('<h2')
+      expect(html.match(/<h[34]/g)?.length).toBe(3)
+    })
+
+    it('renders inline emphasis and code', () => {
+      const html = markdownToHtml('**bold** _italic_ `code`')
+      expect(html).toContain('<strong>bold</strong>')
+      expect(html).toContain('<em>italic</em>')
+      expect(html).toContain('<code>code</code>')
+    })
+  })
+
+  describe('untrusted content', () => {
+    it('escapes raw HTML in prose', () => {
+      const html = markdownToHtml('before <script>alert(1)</script> after')
+      expect(html).not.toContain('<script>')
+      expect(html).toContain('alert(1)')
+    })
+
+    it('escapes an img tag with an event handler', () => {
+      const html = markdownToHtml('<img src=x onerror="alert(1)">')
+      expect(html).not.toMatch(/<img[^>]*onerror/)
+    })
+
+    it('does not emit a javascript: link target', () => {
+      const html = markdownToHtml('[x](javascript:alert(1))')
+      expect(html).not.toContain('href="javascript:')
+    })
+
+    it('keeps a safe link', () => {
+      const html = markdownToHtml('[x](https://example.com)')
+      expect(html).toContain('https://example.com')
+    })
+
+    it('escapes angle brackets inside a fenced block', () => {
+      const html = markdownToHtml('```\n<script>alert(1)</script>\n```')
+      expect(html).not.toContain('<script>')
+      expect(html).toMatch(/&(lt|#x3C);script/i)
+    })
+  })
+})
+
+describe('export section headings', () => {
+  it('keeps every heading and its order byte-identical in both languages', () => {
+    // Guards a user-facing artefact: consolidating three metadata sources into
+    // one registry must not silently reword what a downloaded report says.
+    const exportable = REPORT_SECTIONS
+      .filter(section => section.exportLabelKey)
+      .sort((a, b) => (a.exportOrder ?? 0) - (b.exportOrder ?? 0))
+
+    expect(exportable.map(section => section.key)).toEqual([...EXPECTED_EXPORT_ORDER])
+
+    for (const lang of ['en', 'tr'] as const) {
+      for (const section of exportable) {
+        expect(i18n.t(section.exportLabelKey!, { lng: lang })).toBe(
+          EXPECTED_EXPORT_LABELS[lang][section.key],
+        )
+      }
+    }
+  })
+
+  it('resolves headings for the requested language, not the active one', async () => {
+    await i18n.changeLanguage('en')
+    const turkish = i18n.t('export.section.market_report', { lng: 'tr' })
+    expect(turkish).toBe(EXPECTED_EXPORT_LABELS.tr.market_report)
+    expect(turkish).not.toBe(EXPECTED_EXPORT_LABELS.en.market_report)
+  })
+
+  it('marks the share-only sections as not exportable', () => {
+    const shareOnly = REPORT_SECTIONS.filter(s => s.shareable && !s.exportLabelKey).map(s => s.key)
+    expect(shareOnly).toEqual([
+      'portfolio_decision',
+      'trader_proposal_json',
+      'debates',
+      'risk_metrics',
+    ])
   })
 })

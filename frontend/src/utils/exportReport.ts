@@ -1,74 +1,41 @@
+import type { Root as HastRoot } from 'hast'
+import type { Heading, Root } from 'mdast'
+import rehypeStringify from 'rehype-stringify'
+import remarkGfm from 'remark-gfm'
+import remarkParse from 'remark-parse'
+import remarkRehype from 'remark-rehype'
+import { unified } from 'unified'
+import { visit } from 'unist-util-visit'
+import i18n from '../i18n'
+import { REPORT_SECTIONS } from '../report/reportSections'
+import { safeImageSrc, safeLinkHref } from './safeUrl'
 import type { AnalysisResultRead } from '../api/generated/model'
 
 type Lang = 'en' | 'tr'
 
-const SECTION_LABELS: Record<Lang, Record<string, string>> = {
-  en: {
-    market_report:     'Market Analysis',
-    sentiment_report:  'Sentiment Analysis',
-    news_report:       'News Analysis',
-    fundamentals_report: 'Fundamentals',
-    macro_report:      'Macro Analysis',
-    options_report:    'Options Analysis',
-    quant_report:      'Quantitative Analysis',
-    earnings_report:   'Earnings Analysis',
-    insider_report:    'Insider Activity',
-    ownership_report:  'Institutional Ownership',
-    ratings_report:    'Analyst Ratings',
-    short_interest_report: 'Short Interest',
-    valuation_report: 'Valuation Comparison',
-    catalyst_report:   'Upcoming Catalysts',
-    review_report:     'Review',
-    synthesis_report:  'Synthesis',
-    audit_report:      'Audit',
-    agent_qa_report:   'Agent Cross-Examination',
-    investment_plan:   'Research Evidence Summary',
-    trader_plan:       'Legacy Trader Proposal (historical only)',
-    final_decision:    'Final Decision (Portfolio Manager)',
-    bull_history:      'Bull Arguments',
-    bear_history:      'Bear Arguments',
-    investment_debate_history: 'Investment Debate',
-    risk_debate_history:      'Risk Debate',
-    judge_decision:    'Judge Decision',
-  },
-  tr: {
-    market_report:     'Piyasa Analizi',
-    sentiment_report:  'Duygu Analizi',
-    news_report:       'Haber Analizi',
-    fundamentals_report: 'Temel Analiz',
-    macro_report:      'Makro Analiz',
-    options_report:    'Opsiyon Analizi',
-    quant_report:      'Kantitatif Analiz',
-    earnings_report:   'Kazanç Analizi',
-    insider_report:    'İçeriden İşlem',
-    ownership_report:  'Kurumsal Sahiplik',
-    ratings_report:    'Analist Tavsiyeleri',
-    short_interest_report: 'Açığa Satış',
-    valuation_report: 'Değerleme Karşılaştırması',
-    catalyst_report:   'Yaklaşan Katalizörler',
-    review_report:     'Performans İnceleme',
-    synthesis_report:  'Sentez',
-    audit_report:      'Denetim',
-    agent_qa_report:   'Ajan Çapraz Sorgu',
-    investment_plan:   'Araştırma Kanıt Özeti',
-    trader_plan:       'Eski Trader Önerisi (yalnız geçmiş kayıt)',
-    final_decision:    'Nihai Karar (Portfolio Manager)',
-    bull_history:      'Boğa Argümanları',
-    bear_history:      'Ayı Argümanları',
-    investment_debate_history: 'Yatırım Tartışması',
-    risk_debate_history:      'Risk Tartışması',
-    judge_decision:    'Hakem Kararı',
-  },
-}
+/**
+ * Export order and headings both come from the shared section registry.
+ *
+ * The registry array is in share-page order, so documents sort by the explicit
+ * `exportOrder` instead of reusing the array sequence.
+ */
+const EXPORT_SECTIONS = REPORT_SECTIONS
+  .filter(section => section.exportLabelKey)
+  .sort((a, b) => (a.exportOrder ?? 0) - (b.exportOrder ?? 0))
+const SECTION_ORDER = EXPORT_SECTIONS.map(section => section.key)
 
-const SECTION_ORDER = [
-  'final_decision', 'investment_plan', 'trader_plan',
-  'market_report', 'fundamentals_report', 'news_report', 'sentiment_report',
-  'macro_report', 'options_report', 'quant_report', 'earnings_report',
-  'insider_report', 'ownership_report', 'ratings_report', 'short_interest_report', 'valuation_report', 'catalyst_report',
-  'review_report', 'synthesis_report', 'audit_report', 'agent_qa_report',
-  'bull_history', 'bear_history', 'investment_debate_history', 'risk_debate_history', 'judge_decision',
-]
+/**
+ * Heading for a section in a downloaded document.
+ *
+ * Resolved for the language the user picked for this export, which is not
+ * necessarily the language the app is currently displaying, so the lookup is
+ * pinned with `lng` rather than reading the active locale.
+ */
+function sectionHeading(key: string, language: Lang): string {
+  const section = EXPORT_SECTIONS.find(entry => entry.key === key)
+  if (!section?.exportLabelKey) return key
+  return i18n.t(section.exportLabelKey, { lng: language, defaultValue: section.fallbackLabel })
+}
 
 export interface ExportSection {
   key: string
@@ -140,7 +107,6 @@ export function buildExportSections(analysis: AnalysisResultRead): ExportSection
 // ── Markdown export ──────────────────────────────────────────────────────────
 
 export function exportMarkdown(analysis: AnalysisResultRead, language: Lang = 'en'): void {
-  const labels = SECTION_LABELS[language]
   const meta = _metaLines(analysis, language)
   const lines: string[] = [
     `# ${analysis.ticker} — ${language === 'tr' ? 'Analiz Raporu' : 'Analysis Report'}`,
@@ -152,7 +118,7 @@ export function exportMarkdown(analysis: AnalysisResultRead, language: Lang = 'e
   ]
 
   for (const { key, content } of buildExportSections(analysis)) {
-    lines.push(`## ${labels[key] ?? key}`, '', content, '', '---', '')
+    lines.push(`## ${sectionHeading(key, language)}`, '', content, '', '---', '')
   }
 
   const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' })
@@ -167,7 +133,6 @@ export function exportMarkdown(analysis: AnalysisResultRead, language: Lang = 'e
 // ── PDF export ───────────────────────────────────────────────────────────────
 
 export function exportPDF(analysis: AnalysisResultRead, language: Lang = 'en'): void {
-  const labels = SECTION_LABELS[language]
   const meta = _metaLines(analysis, language)
 
   const metaHtml = meta.map(l => `<p class="meta-line">${escapeHtml(l)}</p>`).join('')
@@ -176,7 +141,7 @@ export function exportPDF(analysis: AnalysisResultRead, language: Lang = 'en'): 
   for (const { key, content } of buildExportSections(analysis)) {
     sectionsHtml += `
       <div class="section">
-        <h2>${escapeHtml(labels[key] ?? key)}</h2>
+        <h2>${escapeHtml(sectionHeading(key, language))}</h2>
         <div class="section-body">${markdownToHtml(content)}</div>
       </div>`
   }
@@ -273,123 +238,93 @@ function _signalColor(signal: string | null): { bg: string; fg: string } {
   return { bg: '#fef9c3', fg: '#854d0e' }
 }
 
+/** Escapes text interpolated into the printable page's own HTML template. */
 function escapeHtml(s: string): string {
-  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return s.replace(/[&<>"']/g, c => (
+    { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c] as string
+  ))
 }
 
-/** Converts the subset of Markdown that LLMs typically produce into safe HTML. */
-function splitTableRow(line: string): string[] {
-  const row = line.trim().replace(/^\|/, '').replace(/\|$/, '')
-  const cells: string[] = []
-  let cell = ''
-  let escaped = false
-
-  for (const char of row) {
-    if (escaped) {
-      cell += char
-      escaped = false
-    } else if (char === '\\') {
-      escaped = true
-    } else if (char === '|') {
-      cells.push(cell.trim())
-      cell = ''
-    } else {
-      cell += char
-    }
-  }
-  if (escaped) cell += '\\'
-  cells.push(cell.trim())
-  return cells
-}
-
-function isTableSeparator(line: string): boolean {
-  const cells = splitTableRow(line)
-  return cells.length > 0 && cells.every(cell => /^:?-{3,}:?$/.test(cell))
-}
-
-function isTableRow(line: string): boolean {
-  return line.includes('|') && splitTableRow(line).length > 1
-}
-
-function renderTable(headers: string[], rows: string[][]): string {
-  const head = headers.map(cell => `<th>${inlineFormat(cell)}</th>`).join('')
-  const body = rows.map(row => {
-    const cells = headers.map((_, index) => `<td>${inlineFormat(row[index] ?? '')}</td>`).join('')
-    return `<tr>${cells}</tr>`
-  }).join('')
-  return `<table><thead><tr>${head}</tr></thead><tbody>${body}</tbody></table>`
-}
-
-/** Converts the supported, safe Markdown subset used by AI reports into HTML. */
+/**
+ * Converts report Markdown into printable HTML.
+ *
+ * Shares the remark parser that {@link MarkdownReport} renders on screen, so an
+ * exported report matches what the user saw. The previous hand-written
+ * converter silently dropped blockquotes and mangled fenced code blocks, which
+ * the on-screen renderer has always supported.
+ *
+ * Report text is untrusted model output, so `allowDangerousHtml` stays off:
+ * remark-rehype drops raw HTML nodes rather than passing them through, and
+ * rehype-stringify escapes the remaining text.
+ */
 export function markdownToHtml(md: string): string {
-  const lines = md.split('\n')
-  const out: string[] = []
-  let inUl = false
-  let inOl = false
+  const file = printableMarkdown.processSync(md)
+  return String(file)
+}
 
-  const closeList = () => {
-    if (inUl) { out.push('</ul>'); inUl = false }
-    if (inOl) { out.push('</ol>'); inOl = false }
+/**
+ * The printable page emits each report section as an `<h2>`, so report headings
+ * start one level below it instead of competing with it. Depth is clamped at
+ * `h4` because the print stylesheet only styles `h3` and `h4`; anything deeper
+ * would render unstyled.
+ */
+function demoteHeadings() {
+  return (tree: Root) => {
+    visit(tree, 'heading', node => {
+      node.depth = Math.min(4, node.depth + 2) as Heading['depth']
+    })
   }
+}
 
-  for (let index = 0; index < lines.length; index += 1) {
-    const line = lines[index]
+/**
+ * Turns raw HTML nodes into literal text before they reach rehype.
+ *
+ * `remark-rehype` drops `html` nodes when `allowDangerousHtml` is off, which is
+ * safe but silently deletes the markup from the output. react-markdown instead
+ * shows it as text, so without this the exported report and the on-screen one
+ * disagree about content the model emitted — exactly the divergence this shared
+ * pipeline exists to remove. Keeping it visible is also the more honest
+ * rendering: a report that contains a `<script>` tag should show that it does.
+ */
+function htmlAsText() {
+  return (tree: Root) => {
+    visit(tree, 'html', (node, index, parent) => {
+      if (!parent || index === null || index === undefined) return
+      parent.children[index] = { type: 'text', value: node.value } as never
+    })
+  }
+}
 
-    // GFM tables need a header row followed by a separator row. Requiring the
-    // separator prevents ordinary prose containing a pipe from becoming HTML.
-    if (isTableRow(line) && index + 1 < lines.length && isTableSeparator(lines[index + 1])) {
-      closeList()
-      const headers = splitTableRow(line)
-      const rows: string[][] = []
-      index += 2
-      while (index < lines.length && isTableRow(lines[index]) && lines[index].trim() !== '') {
-        rows.push(splitTableRow(lines[index]))
-        index += 1
+/**
+ * Applies the same link and image policy the on-screen renderer uses.
+ *
+ * `remark-rehype` does no URL sanitisation of its own, so without this a model
+ * could emit a `javascript:` target straight into the printable page. Sharing
+ * the predicates with {@link MarkdownReport} keeps one policy rather than two
+ * that can drift.
+ */
+function sanitizeUrls() {
+  return (tree: HastRoot) => {
+    visit(tree, 'element', node => {
+      if (node.tagName === 'a' && typeof node.properties?.href === 'string') {
+        const safe = safeLinkHref(node.properties.href)
+        if (safe) node.properties.href = safe
+        else delete node.properties.href
       }
-      index -= 1
-      out.push(renderTable(headers, rows))
-      continue
-    }
-
-    if (/^#{4,}\s/.test(line)) {
-      closeList()
-      out.push(`<h4>${inlineFormat(line.replace(/^#+\s*/, ''))}</h4>`)
-    } else if (/^###\s/.test(line)) {
-      closeList()
-      out.push(`<h3>${inlineFormat(line.replace(/^###\s*/, ''))}</h3>`)
-    } else if (/^##\s/.test(line)) {
-      closeList()
-      out.push(`<h3>${inlineFormat(line.replace(/^##\s*/, ''))}</h3>`)
-    } else if (/^#\s/.test(line)) {
-      closeList()
-      out.push(`<h3>${inlineFormat(line.replace(/^#\s*/, ''))}</h3>`)
-    } else if (/^[-*]\s/.test(line)) {
-      if (!inUl) { closeList(); out.push('<ul>'); inUl = true }
-      out.push(`<li>${inlineFormat(line.replace(/^[-*]\s*/, ''))}</li>`)
-    } else if (/^\d+\.\s/.test(line)) {
-      if (!inOl) { closeList(); out.push('<ol>'); inOl = true }
-      out.push(`<li>${inlineFormat(line.replace(/^\d+\.\s*/, ''))}</li>`)
-    } else if (/^---+$/.test(line.trim())) {
-      closeList()
-      out.push('<hr>')
-    } else if (line.trim() === '') {
-      closeList()
-      out.push('')
-    } else {
-      closeList()
-      out.push(`<p>${inlineFormat(line)}</p>`)
-    }
+      if (node.tagName === 'img' && typeof node.properties?.src === 'string') {
+        const safe = safeImageSrc(node.properties.src)
+        if (safe) node.properties.src = safe
+        else delete node.properties.src
+      }
+    })
   }
-  closeList()
-
-  return out.join('\n')
 }
 
-function inlineFormat(s: string): string {
-  return escapeHtml(s)
-    .replace(/\*\*(.+?)\*\*/g, '<strong>$1</strong>')
-    .replace(/__(.+?)__/g, '<strong>$1</strong>')
-    .replace(/\*(.+?)\*/g, '<em>$1</em>')
-    .replace(/_(.+?)_/g, '<em>$1</em>')
-    .replace(/`(.+?)`/g, '<code>$1</code>')
-}
+const printableMarkdown = unified()
+  .use(remarkParse)
+  .use(remarkGfm)
+  .use(demoteHeadings)
+  .use(htmlAsText)
+  .use(remarkRehype)
+  .use(sanitizeUrls)
+  .use(rehypeStringify)

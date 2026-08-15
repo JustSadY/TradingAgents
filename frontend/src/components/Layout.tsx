@@ -6,13 +6,11 @@ import { useCurrency, CURRENCIES, type Currency } from '../contexts/CurrencyCont
 import {
   LayoutDashboard, Search, BookMarked, Briefcase,
   Settings, ScrollText, TrendingUp, LogOut, Clock,
-  FlaskConical, PieChart, Loader2, ChevronRight,
-  AlertCircle, AlertTriangle, CheckCircle, Info, X,
+  FlaskConical, PieChart, Loader2, ChevronRight, X,
   BarChart2, Bell, Menu, GitCompare, Shield, UserCircle, History, Filter, Globe2, CalendarDays,
 } from 'lucide-react'
-import { useEffect, useState, useCallback, Suspense } from 'react'
+import { useState, Suspense } from 'react'
 import { useCronCronStatus } from '../api/generated/cron/cron'
-import type { Notification } from '../utils/notify'
 import UpdateBanner from './UpdateBanner'
 import { PortfolioAssistant } from './assistant/PortfolioAssistant'
 
@@ -88,31 +86,6 @@ export default function Layout() {
 
   const handleLogout = () => { logout(); navigate('/login') }
 
-  const [toasts, setToasts] = useState<Notification[]>([])
-  const { isOwner, isAdmin: isAtLeastAdmin } = useAuth()
-
-  const dismiss = useCallback((id: string) => {
-    setToasts(prev => prev.filter(t => t.id !== id))
-  }, [])
-
-  useEffect(() => {
-    const handler = (e: Event) => {
-      const n = (e as CustomEvent<Notification>).detail
-      const vis = n.visibility || 'all'
-      let visible = false
-      if (vis === 'all') visible = true
-      else if (vis === 'admin') visible = isAtLeastAdmin
-      else if (vis === 'owner') visible = isOwner
-
-      if (!visible) return
-
-      setToasts(prev => [...prev.slice(-4), n])
-      const ms = n.type === 'error' ? 6000 : 4000
-      setTimeout(() => dismiss(n.id), ms)
-    }
-    window.addEventListener('ta-notify', handler)
-    return () => window.removeEventListener('ta-notify', handler)
-  }, [dismiss, isAtLeastAdmin, isOwner])
 
   return (
     <div className="flex min-h-screen bg-[#030712] text-slate-100 font-sans">
@@ -331,42 +304,7 @@ export default function Layout() {
       {/* Portfolio Assistant floating widget */}
       <PortfolioAssistant />
 
-      {/* Notification Toast Stream */}
-      {toasts.length > 0 && (
-        <div className="fixed bottom-5 right-3 z-50 flex flex-col gap-2 w-[calc(100vw-1.5rem)] max-w-sm sm:w-96 sm:right-5 sm:max-w-none">
-          {toasts.map(t => <Toast key={t.id} n={t} onDismiss={dismiss} />)}
-        </div>
-      )}
     </div>
   )
 }
 
-const TOAST_STYLES = {
-  error:   { bar: 'bg-red-500',    bg: 'bg-red-950/20 border-red-500/20',    icon: AlertCircle,   text: 'text-red-400'    },
-  warning: { bar: 'bg-yellow-500', bg: 'bg-yellow-950/20 border-yellow-500/20', icon: AlertTriangle, text: 'text-yellow-400' },
-  success: { bar: 'bg-emerald-500',bg: 'bg-emerald-950/20 border-emerald-500/20',icon: CheckCircle,   text: 'text-emerald-400'},
-  info:    { bar: 'bg-blue-500',   bg: 'bg-blue-950/20 border-blue-500/20',   icon: Info,          text: 'text-blue-400'   },
-}
-
-function Toast({ n, onDismiss }: { n: Notification; onDismiss: (id: string) => void }) {
-  const s = TOAST_STYLES[n.type]
-  const Icon = s.icon
-  return (
-    <div className={`relative overflow-hidden rounded-2xl border shadow-xl shadow-black/60 backdrop-blur-md ${s.bg} animate-in slide-in-from-right-4 duration-300`}>
-      <div className={`absolute left-0 top-0 bottom-0 w-1.5 ${s.bar}`} />
-      <div className="flex items-start gap-3 px-4 py-3.5 pl-5">
-        <Icon size={16} className={`${s.text} shrink-0 mt-0.5`} />
-        <div className="flex-1 min-w-0">
-          {n.title && <p className={`text-xs font-bold mb-0.5 ${s.text}`}>{n.title}</p>}
-          <p className="text-slate-300 text-xs leading-relaxed break-words">{n.message}</p>
-        </div>
-        <button
-          onClick={() => onDismiss(n.id)}
-          className="text-slate-500 hover:text-white transition-colors shrink-0 p-0.5 hover:bg-white/5 rounded"
-        >
-          <X size={13} />
-        </button>
-      </div>
-    </div>
-  )
-}

@@ -1,9 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect } from 'react'
+import { useSnackbar } from 'notistack'
 import { useAuth } from '../../contexts/AuthContext'
 import type { Notification } from '../../utils/notify'
-import { AppSnackbar } from './AppPrimitives'
 
-const MAX_VISIBLE = 5
+/** Errors stay up longer because they usually need reading, not just noticing. */
+const ERROR_DURATION_MS = 6000
+const DEFAULT_DURATION_MS = 4000
 
 function isVisible(notification: Notification, isAdmin: boolean, isOwner: boolean): boolean {
   const visibility = notification.visibility ?? 'all'
@@ -12,57 +14,37 @@ function isVisible(notification: Notification, isAdmin: boolean, isOwner: boolea
   return isOwner
 }
 
+/**
+ * Bridges the app's `ta-notify` event contract onto notistack.
+ *
+ * The event stays the public API because `notify()` is called from places with
+ * no React context — most importantly the axios interceptors — so this listener
+ * is the only thing that needs to live inside the provider. What remains here
+ * is the part no snackbar library knows about: which roles may see a given
+ * notification, and how long each severity should stay up.
+ */
 export function NotificationAdapter() {
   const { isAdmin, isOwner } = useAuth()
-  const [notifications, setNotifications] = useState<Notification[]>([])
-  const timers = useRef(new Map<string, ReturnType<typeof setTimeout>>())
-
-  const dismiss = useCallback((id: string) => {
-    const timer = timers.current.get(id)
-    if (timer) clearTimeout(timer)
-    timers.current.delete(id)
-    setNotifications(current => current.filter(notification => notification.id !== id))
-  }, [])
+  const { enqueueSnackbar } = useSnackbar()
 
   useEffect(() => {
-    const activeTimers = timers.current
     const handler = (event: Event) => {
-      // Layout historically listened to the same contract. Capture the event
-      // first so this adapter is the single renderer while keeping the public
-      // `ta-notify` event contract unchanged for axios and callers.
-      event.stopImmediatePropagation()
       const notification = (event as CustomEvent<Notification>).detail
       if (!notification || !isVisible(notification, isAdmin, isOwner)) return
 
-      setNotifications(current => [...current.filter(item => item.id !== notification.id).slice(-(MAX_VISIBLE - 1)), notification])
-      const timeout = setTimeout(() => dismiss(notification.id), notification.type === 'error' ? 6000 : 4000)
-      activeTimers.set(notification.id, timeout)
+      enqueueSnackbar(notification.message, {
+        key: notification.id,
+        variant: notification.type,
+        autoHideDuration: notification.type === 'error' ? ERROR_DURATION_MS : DEFAULT_DURATION_MS,
+        title: notification.title,
+      })
     }
 
-    window.addEventListener('ta-notify', handler, true)
-    return () => {
-      window.removeEventListener('ta-notify', handler, true)
-      activeTimers.forEach(timer => clearTimeout(timer))
-      activeTimers.clear()
-    }
-  }, [dismiss, isAdmin, isOwner])
+    window.addEventListener('ta-notify', handler)
+    return () => window.removeEventListener('ta-notify', handler)
+  }, [enqueueSnackbar, isAdmin, isOwner])
 
-  return (
-    <>
-      {notifications.map((notification, index) => (
-        <AppSnackbar
-          key={notification.id}
-          open
-          title={notification.title}
-          message={notification.message}
-          severity={notification.type}
-          autoHideDuration={null}
-          bottomOffset={24 + index * 82}
-          onClose={() => dismiss(notification.id)}
-        />
-      ))}
-    </>
-  )
+  return null
 }
 
 export default NotificationAdapter
