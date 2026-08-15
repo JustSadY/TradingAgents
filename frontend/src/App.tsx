@@ -1,9 +1,10 @@
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom'
-import React, { lazy, Suspense } from 'react'
+import { lazy, Suspense } from 'react'
 import { ThemeProvider } from '@mui/material/styles'
 import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PermissionsProvider } from './contexts/PermissionsContext'
 import RequirePage from './components/RequirePage'
+import { ErrorBoundary } from './components/ErrorBoundary'
 import Layout from './components/Layout'
 import { SnackbarProvider } from 'notistack'
 import NotificationAdapter from './components/ui/NotificationAdapter'
@@ -48,29 +49,30 @@ const notificationComponents = {
   default: NotificationContent,
 }
 
-class ErrorBoundary extends React.Component<
-  { children: React.ReactNode },
-  { error: Error | null }
-> {
-  constructor(props: { children: React.ReactNode }) {
-    super(props)
-    this.state = { error: null }
-  }
-  static getDerivedStateFromError(error: Error) { return { error } }
-  render() {
-    if (this.state.error) {
-      return (
-        <div style={{ padding: 32, fontFamily: 'monospace', color: '#f87171', background: '#0f172a', minHeight: '100vh' }}>
-          <h2 style={{ color: '#fca5a5', marginBottom: 12 }}>⚠ App Error</h2>
-          <pre style={{ whiteSpace: 'pre-wrap', wordBreak: 'break-word', background: '#1e293b', padding: 16, borderRadius: 8, fontSize: 12 }}>
-            {this.state.error.message}
-          </pre>
-          <button style={{ marginTop: 16, padding: '8px 16px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }} onClick={() => window.location.reload()}>Refresh</button>
-        </div>
-      )
-    }
-    return this.props.children
-  }
+/**
+ * Whole-app fallback.
+ *
+ * Deliberately does not render the exception message. A crash here is most
+ * likely to be seen by an ordinary user, and the message can carry internals
+ * — a stack frame, a URL, a serialised payload. `ErrorBoundary` already logs
+ * the real error and component stack to the console for whoever is debugging.
+ */
+function AppCrashFallback() {
+  return (
+    <div style={{ padding: 32, color: '#e2e8f0', background: '#0f172a', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, textAlign: 'center' }}>
+      <h2 style={{ color: '#fca5a5', margin: 0 }}>Something went wrong</h2>
+      <p style={{ color: '#94a3b8', fontSize: 14, maxWidth: 420, lineHeight: 1.6, margin: 0 }}>
+        The application could not finish loading. Reloading usually clears it; if
+        it keeps happening, the details are in the browser console.
+      </p>
+      <button
+        style={{ padding: '8px 16px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
+        onClick={() => window.location.reload()}
+      >
+        Reload
+      </button>
+    </div>
+  )
 }
 
 function AppRoutes() {
@@ -116,7 +118,7 @@ function AppRoutes() {
 
 export default function App() {
   return (
-    <ErrorBoundary>
+    <ErrorBoundary name="App" fallback={<AppCrashFallback />}>
       <ThemeProvider theme={appTheme}>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>

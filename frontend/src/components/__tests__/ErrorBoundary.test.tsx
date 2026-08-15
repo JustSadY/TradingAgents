@@ -48,6 +48,25 @@ describe('ErrorBoundary', () => {
     expect(screen.getByText(/TestWidget/)).toBeInTheDocument()
   })
 
+  it('does not put the exception message on screen', () => {
+    // The app-level boundary is what an ordinary user hits, and an exception
+    // message can carry internals — a stack frame, a URL, a serialised payload.
+    // The real error still goes to the console for whoever is debugging.
+    const secret = 'connection string postgres://user:pw@host/db'
+    function Boom(): never {
+      throw new Error(secret)
+    }
+
+    render(
+      <ErrorBoundary name="App">
+        <Boom />
+      </ErrorBoundary>,
+    )
+
+    expect(screen.queryByText(new RegExp(secret))).not.toBeInTheDocument()
+    expect(document.body.textContent).not.toContain('postgres://')
+  })
+
   it('resets when children change', () => {
     const { rerender } = render(
       <ErrorBoundary>
