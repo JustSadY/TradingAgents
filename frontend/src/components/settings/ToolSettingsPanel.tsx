@@ -74,14 +74,14 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
           ? await saveOtherUser.mutateAsync({ userId, data: body })
           : await saveOwn.mutateAsync({ data: body })
       setSettings(response as unknown as ToolSettings)
-      notify('success', 'Tool settings saved successfully.')
+      notify('success', t('settings.tools_saved'))
     } catch (error: unknown) {
       const message = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-        || 'Failed to save tool settings.'
+        || t('settings.tools_save_failed')
       notify('error', message, 'Tool settings')
       throw new Error(message, { cause: error })
     }
-  }, [saveOtherUser, saveOwn, saveServer, serverScope, settings, userId])
+  }, [saveOtherUser, saveOwn, saveServer, serverScope, settings, t, userId])
 
   useImperativeHandle(ref, () => ({ save }), [save])
 
@@ -121,22 +121,22 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
   }
 
   if (activeQuery.isPending) {
-    return <div className="text-slate-500 text-xs font-semibold p-4">{t('common.loading') || 'Loading...'}</div>
+    return <div className="text-slate-500 text-xs font-semibold p-4">{t('common.loading')}</div>
   }
 
   if (activeQuery.error) {
-    return <AppAlert severity="error">Failed to load tool settings.</AppAlert>
+    return <AppAlert severity="error">{t('settings.tools_load_failed')}</AppAlert>
   }
 
   if (tools.length === 0) {
-    return <AppAlert severity="info">No tool configurations found in meta database.</AppAlert>
+    return <AppAlert severity="info">{t('settings.tools_empty')}</AppAlert>
   }
 
   return (
     <div className="space-y-6">
       <div className="flex justify-between items-center gap-3 bg-white/[0.01] border border-white/[0.04] p-3 rounded-2xl">
         <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-          {serverScope ? 'Global Server Tool Overrides' : 'Personal Agent Tool Configuration'}
+          {t(serverScope ? 'settings.server_tool_overrides' : 'settings.personal_tool_config')}
         </span>
         {!hideSaveButton ? (
           <AppButton
@@ -144,7 +144,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
             disabled={saving}
             startIcon={saving ? <RefreshCw size={14} className="animate-spin" /> : <Save size={14} />}
           >
-            {saving ? 'Saving...' : 'Save Tools'}
+            {t(saving ? 'settings.saving' : 'settings.save_tools')}
           </AppButton>
         ) : null}
       </div>

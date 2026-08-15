@@ -40,7 +40,7 @@ export function AnalysisChatWidget({ analysisId }: { analysisId: number }) {
         onSuccess: (data) => setMessages(prev => [...prev, data as ChatMessage]),
         onError: (err) => {
           const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-          notify('error', detail || t('analysis.chat.error') || 'Chat error', 'Hata')
+          notify('error', detail || t('analysis.chat.error'), 'Hata')
         },
       },
     )

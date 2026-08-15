@@ -23,6 +23,12 @@ const dashboard = {
     'dashboard.scorecard_empty_sub': 'Run historical analyses to build scorecard metrics',
     'dashboard.scorecard_predictions': 'predictions',
     'dashboard.scorecard_accuracy': 'Accuracy',
+    'dashboard.synchronizing': 'Synchronizing Engine...',
+    'dashboard.subtitle': 'Multi-agent portfolio summary and live market intelligence',
+    'dashboard.morning_brief': 'AI Morning Brief',
+    'dashboard.generate': 'Generate',
+    'dashboard.news_live': 'Live feed',
+    'dashboard.news_empty': 'No news for your watchlist tickers',
   },
   tr: {
     'dashboard.title': 'Dashboard',
@@ -48,6 +54,12 @@ const dashboard = {
     'dashboard.scorecard_empty_sub': 'Skor kartı metriklerini oluşturmak için geçmiş analizleri çalıştırın',
     'dashboard.scorecard_predictions': 'tahmin',
     'dashboard.scorecard_accuracy': 'İsabet',
+    'dashboard.synchronizing': 'Motor eşitleniyor...',
+    'dashboard.subtitle': 'Çok ajanlı portföy özeti ve canlı piyasa istihbaratı',
+    'dashboard.morning_brief': 'AI Sabah Brifingi',
+    'dashboard.generate': 'Oluştur',
+    'dashboard.news_live': 'Canlı akış',
+    'dashboard.news_empty': 'İzleme listenizdeki semboller için haber yok',
   },
 }
 

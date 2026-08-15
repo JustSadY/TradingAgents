@@ -393,15 +393,15 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const languages = meta?.languages ?? [{ value: 'English', label: 'English' }, { value: 'Turkish', label: 'Türkçe' }]
 
   const TABS = [
-    { key: 'general',  label: t('settings.general') || 'Preferences',      icon: <SettingsIcon size={14} /> },
+    { key: 'general',  label: t('settings.general'),      icon: <SettingsIcon size={14} /> },
     { key: 'agents',   label: t('settings.tab_agents'),                    icon: <Brain size={14} /> },
-    { key: 'tools',    label: t('settings.section_tools') || 'Agent Tools', icon: <Wrench size={14} /> },
-    { key: 'risk',     label: t('settings.section_risk') || 'Risk & Safety', icon: <ShieldAlert size={14} /> },
+    { key: 'tools',    label: t('settings.section_tools'), icon: <Wrench size={14} /> },
+    { key: 'risk',     label: t('settings.section_risk'), icon: <ShieldAlert size={14} /> },
     { key: 'alerts',   label: t('settings.section_alert_guardrails'),       icon: <Bell size={14} /> },
-    { key: 'webhooks', label: t('settings.section_notifications') || 'Alerts', icon: <Bell size={14} /> },
-    { key: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler', icon: <Clock size={14} /> },
+    { key: 'webhooks', label: t('settings.section_notifications'), icon: <Bell size={14} /> },
+    { key: 'cron',     label: t('settings.cron_settings'), icon: <Clock size={14} /> },
     { key: 'memory',   label: t('settings.tab_memory'),                    icon: <Database size={14} /> },
-    { key: 'presets',  label: t('settings.section_presets') || 'Templates',  icon: <BookmarkPlus size={14} /> },
+    { key: 'presets',  label: t('settings.section_presets'),  icon: <BookmarkPlus size={14} /> },
     { key: 'personas', label: t('settings.tab_personas'),                  icon: <UserCircle size={14} /> },
   ].filter(tab => isAdmin || allowedSettings.includes(tab.key))
 
@@ -450,7 +450,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           {activeTab === 'general' && (
             <ErrorBoundary name="SettingsGeneral">
               <div className="space-y-4">
-                <Section title={t('settings.general') || 'Preferences'}>
+                <Section title={t('settings.general')}>
                   <Row label={t('settings.row_output_language')}>
                     <select className={Input} value={s.output_language} onChange={e => update('output_language', e.target.value)}>
                       {languages.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
@@ -483,12 +483,12 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                 </Section>
 
                 {allowedSettings.includes('llm') && (
-                  <Section title={t('settings.llm_settings') || 'Core Engine Configuration'}>
+                  <Section title={t('settings.llm_settings')}>
                     <p className="text-[10px] text-slate-500 -mt-1 leading-relaxed mb-2">
                       {t('settings.llm_settings_description')}
                     </p>
 
-                    <Row label={t('settings.row_llm_provider') || 'LLM Provider'}>
+                    <Row label={t('settings.row_llm_provider')}>
                       <select
                         className={Input}
                         value={s.llm_provider}
@@ -502,7 +502,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                         ))}
                       </select>
                     </Row>
-                    <Row label={t('settings.row_llm_model') || 'LLM Model'}>
+                    <Row label={t('settings.row_llm_model')}>
                       <div className="space-y-2">
                         <select
                           className={Input}
@@ -672,7 +672,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       <ShieldAlert className="w-4 h-4" />
                     </div>
                     <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
-                      {t('settings.section_risk') || 'Risk & Capital Limits'}
+                      {t('settings.section_risk')}
                     </h3>
                   </div>
 
@@ -741,7 +741,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       <Brain className="w-4 h-4" />
                     </div>
                     <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
-                      {t('settings.section_execution_rules') || 'Debate & Execution Rules'}
+                      {t('settings.section_execution_rules')}
                     </h3>
                   </div>
 
@@ -800,16 +800,16 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       <RefreshCw className="w-4 h-4" />
                     </div>
                     <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
-                      {t('settings.section_agent_resilience') || 'Agent Resilience & Timeouts'}
+                      {t('settings.section_agent_resilience')}
                     </h3>
                   </div>
 
                   <p className="text-[11px] text-slate-400 leading-relaxed -mt-1">
-                    {t('settings.hard_timeout_hint') || 'Hard wall-clock limits per node / tool. If exceeded the call is treated as a transient error and retried automatically.'}
+                    {t('settings.hard_timeout_hint')}
                   </p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-                    <RiskRowItem label={t('settings.row_node_retry_attempts') || 'Node Retry Attempts'} unit="deneme">
+                    <RiskRowItem label={t('settings.row_node_retry_attempts')} unit="deneme">
                       <input
                         type="number"
                         min="1"
@@ -820,7 +820,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       />
                     </RiskRowItem>
 
-                    <RiskRowItem label={t('settings.row_node_retry_base_delay') || 'Retry Base Delay'} unit="sn">
+                    <RiskRowItem label={t('settings.row_node_retry_base_delay')} unit="sn">
                       <input
                         type="number"
                         step="0.1"
@@ -832,7 +832,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       />
                     </RiskRowItem>
 
-                    <RiskRowItem label={t('settings.row_node_timeout_seconds') || 'Node Timeout'} unit="sn">
+                    <RiskRowItem label={t('settings.row_node_timeout_seconds')} unit="sn">
                       <input
                         type="number"
                         step="10"
@@ -844,7 +844,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       />
                     </RiskRowItem>
 
-                    <RiskRowItem label={t('settings.row_tool_timeout_seconds') || 'Tool Timeout'} unit="sn">
+                    <RiskRowItem label={t('settings.row_tool_timeout_seconds')} unit="sn">
                       <input
                         type="number"
                         step="5"
@@ -865,14 +865,14 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       <Clock className="w-4 h-4" />
                     </div>
                     <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
-                      {t('settings.section_circuit_stall') || 'Circuit Breaker & Stall Protection'}
+                      {t('settings.section_circuit_stall')}
                     </h3>
                   </div>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <RiskRowItem
-                      label={t('settings.row_circuit_breaker_threshold') || 'Circuit Breaker Threshold'}
-                      hint={t('settings.circuit_breaker_hint') || 'After N consecutive failures, skip to fallback.'}
+                      label={t('settings.row_circuit_breaker_threshold')}
+                      hint={t('settings.circuit_breaker_hint')}
                       unit="hata"
                       className="md:col-span-2"
                     >
@@ -886,7 +886,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       />
                     </RiskRowItem>
 
-                    <RiskRowItem label={t('settings.row_circuit_breaker_cooldown') || 'Circuit Breaker Cooldown'} unit="sn">
+                    <RiskRowItem label={t('settings.row_circuit_breaker_cooldown')} unit="sn">
                       <input
                         type="number"
                         step="10"
@@ -899,8 +899,8 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     </RiskRowItem>
 
                     <RiskRowItem
-                      label={t('settings.row_stall_timeout_seconds') || 'Stall Timeout'}
-                      hint={t('settings.stall_hint') || 'Warning if no output emitted for N seconds.'}
+                      label={t('settings.row_stall_timeout_seconds')}
+                      hint={t('settings.stall_hint')}
                       unit="sn"
                     >
                       <input
@@ -923,23 +923,23 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       <Database className="w-4 h-4" />
                     </div>
                     <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
-                      {t('settings.token_budget') || 'Token Budget & Optimization'}
+                      {t('settings.token_budget')}
                     </h3>
                   </div>
 
                   <p className="text-[11px] text-slate-400 leading-relaxed -mt-1">
-                    {t('settings.token_budget_hint') || 'Lower values reduce LLM token cost per analysis.'}
+                    {t('settings.token_budget_hint')}
                   </p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <ToggleItem
-                      label={t('settings.row_prompt_caching') || 'Anthropic Prompt Caching'}
+                      label={t('settings.row_prompt_caching')}
                       checked={s.anthropic_prompt_caching ?? true}
                       onChange={v => update('anthropic_prompt_caching', v)}
                       className="md:col-span-2"
                     />
 
-                    <RiskRowItem label={t('settings.row_max_report_chars') || 'Max Report Chars'} unit="karakter">
+                    <RiskRowItem label={t('settings.row_max_report_chars')} unit="karakter">
                       <input
                         type="number"
                         min="500"
@@ -951,7 +951,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       />
                     </RiskRowItem>
 
-                    <RiskRowItem label={t('settings.row_max_debate_history') || 'Max Debate History'} unit="karakter">
+                    <RiskRowItem label={t('settings.row_max_debate_history')} unit="karakter">
                       <input
                         type="number"
                         min="1000"
@@ -963,7 +963,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       />
                     </RiskRowItem>
 
-                    <RiskRowItem label={t('settings.row_max_tool_output') || 'Max Tool Output'} unit="karakter" className="md:col-span-2">
+                    <RiskRowItem label={t('settings.row_max_tool_output')} unit="karakter" className="md:col-span-2">
                       <input
                         type="number"
                         min="1000"
@@ -976,22 +976,22 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     </RiskRowItem>
 
                     <ToggleItem
-                      label={t('settings.row_summary_only_mode') || 'Summary-Only Reports'}
-                      hint={t('settings.summary_only_mode_hint') || 'Downstream agents only see executive summaries.'}
+                      label={t('settings.row_summary_only_mode')}
+                      hint={t('settings.summary_only_mode_hint')}
                       checked={s.summary_only_mode ?? false}
                       onChange={v => update('summary_only_mode', v)}
                     />
 
                     <ToggleItem
-                      label={t('settings.row_prefilter_enabled') || 'Pre-screen Weak Analysts'}
-                      hint={t('settings.prefilter_hint') || 'Skip analysts with poor past hit rate on this ticker.'}
+                      label={t('settings.row_prefilter_enabled')}
+                      hint={t('settings.prefilter_hint')}
                       checked={s.analyst_prefilter_enabled ?? false}
                       onChange={v => update('analyst_prefilter_enabled', v)}
                     />
 
                     {s.analyst_prefilter_enabled && (
                       <>
-                        <RiskRowItem label={t('settings.row_prefilter_min_samples') || 'Min. Graded Calls'} unit="çağrı">
+                        <RiskRowItem label={t('settings.row_prefilter_min_samples')} unit="çağrı">
                           <input
                             type="number"
                             min="1"
@@ -1002,7 +1002,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                           />
                         </RiskRowItem>
 
-                        <RiskRowItem label={t('settings.row_prefilter_max_win_rate') || 'Drop Below Win Rate'} unit="%">
+                        <RiskRowItem label={t('settings.row_prefilter_max_win_rate')} unit="%">
                           <input
                             type="number"
                             min="0"
@@ -1025,7 +1025,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       <Wrench className="w-4 h-4" />
                     </div>
                     <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
-                      {t('settings.section_institutional_features') || 'Institutional Risk Features'}
+                      {t('settings.section_institutional_features')}
                     </h3>
                   </div>
 
@@ -1084,43 +1084,43 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       <Brain className="w-4 h-4" />
                     </div>
                     <h3 className="text-xs font-bold text-slate-100 uppercase tracking-wider">
-                      {t('settings.section_strategy_continuity') || 'Strategy Continuity & Decision Stability'}
+                      {t('settings.section_strategy_continuity')}
                     </h3>
                   </div>
 
                   <p className="text-[11px] text-slate-400 leading-relaxed -mt-1">
-                    {t('settings.strategy_continuity_hint') || 'Shadow mode records the controller’s counterfactual without changing the Portfolio Manager’s executable decision.'}
+                    {t('settings.strategy_continuity_hint')}
                   </p>
 
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                     <ToggleItem
-                      label={t('settings.row_strategy_learning') || 'Learn Active Asset Strategies'}
-                      hint={t('settings.strategy_learning_hint') || 'Persist live strategy revisions and use them as context for later analyses.'}
+                      label={t('settings.row_strategy_learning')}
+                      hint={t('settings.strategy_learning_hint')}
                       checked={s.strategy_learning_enabled ?? true}
                       onChange={v => update('strategy_learning_enabled', v)}
                     />
 
                     <RiskRowItem
-                      label={t('settings.row_decision_stability_mode') || 'Decision Stability Mode'}
+                      label={t('settings.row_decision_stability_mode')}
                       hint={s.decision_stability_mode === 'enforce'
-                        ? t('settings.decision_stability_enforce_warning') || 'Enforce can replace a proposal with Hold when change evidence is insufficient.'
+                        ? t('settings.decision_stability_enforce_warning')
                         : undefined}
                     >
                       <select
-                        aria-label={t('settings.row_decision_stability_mode') || 'Decision Stability Mode'}
+                        aria-label={t('settings.row_decision_stability_mode')}
                         className={CompactInputStyle}
                         value={s.decision_stability_mode ?? 'shadow'}
                         onChange={e => update('decision_stability_mode', e.target.value)}
                       >
-                        <option value="off">{t('settings.decision_stability_off') || 'Off'}</option>
-                        <option value="shadow">{t('settings.decision_stability_shadow') || 'Shadow'}</option>
-                        <option value="enforce">{t('settings.decision_stability_enforce') || 'Enforce'}</option>
+                        <option value="off">{t('settings.decision_stability_off')}</option>
+                        <option value="shadow">{t('settings.decision_stability_shadow')}</option>
+                        <option value="enforce">{t('settings.decision_stability_enforce')}</option>
                       </select>
                     </RiskRowItem>
 
-                    <RiskRowItem label={t('settings.row_stability_min_quality') || 'Min. Change Quality'} unit="%">
+                    <RiskRowItem label={t('settings.row_stability_min_quality')} unit="%">
                       <input
-                        aria-label={t('settings.row_stability_min_quality') || 'Min. Change Quality'}
+                        aria-label={t('settings.row_stability_min_quality')}
                         type="number"
                         min="0"
                         max="100"
@@ -1131,9 +1131,9 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       />
                     </RiskRowItem>
 
-                    <RiskRowItem label={t('settings.row_stability_min_confidence') || 'Min. Calibrated Confidence'} unit="0–1">
+                    <RiskRowItem label={t('settings.row_stability_min_confidence')} unit="0–1">
                       <input
-                        aria-label={t('settings.row_stability_min_confidence') || 'Min. Calibrated Confidence'}
+                        aria-label={t('settings.row_stability_min_confidence')}
                         type="number"
                         min="0"
                         max="1"
@@ -1144,9 +1144,9 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                       />
                     </RiskRowItem>
 
-                    <RiskRowItem label={t('settings.row_stability_min_evidence_groups') || 'Min. Independent Evidence Groups'} unit="#" className="md:col-span-2">
+                    <RiskRowItem label={t('settings.row_stability_min_evidence_groups')} unit="#" className="md:col-span-2">
                       <input
-                        aria-label={t('settings.row_stability_min_evidence_groups') || 'Min. Independent Evidence Groups'}
+                        aria-label={t('settings.row_stability_min_evidence_groups')}
                         type="number"
                         min="1"
                         max="10"
@@ -1158,22 +1158,22 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                     </RiskRowItem>
 
                     <ToggleItem
-                      label={t('settings.row_reversal_verifier') || 'Verify Major Reversals'}
-                      hint={t('settings.reversal_verifier_hint') || 'Require an extra independent-evidence check before a major BUY↔SELL reversal is accepted.'}
+                      label={t('settings.row_reversal_verifier')}
+                      hint={t('settings.reversal_verifier_hint')}
                       checked={s.reversal_verifier_enabled ?? true}
                       onChange={v => update('reversal_verifier_enabled', v)}
                     />
 
                     <ToggleItem
-                      label={t('settings.row_confidence_calibration') || 'Calibrate PM Confidence'}
-                      hint={t('settings.confidence_calibration_hint') || 'Use realised outcomes to adjust raw Portfolio Manager confidence before stability checks.'}
+                      label={t('settings.row_confidence_calibration')}
+                      hint={t('settings.confidence_calibration_hint')}
                       checked={s.confidence_calibration_enabled ?? false}
                       onChange={v => update('confidence_calibration_enabled', v)}
                     />
 
                     <ToggleItem
-                      label={t('settings.row_regime_aware_weighting') || 'Regime-Aware Analyst Weighting'}
-                      hint={t('settings.regime_aware_weighting_hint') || 'Weight analyst history by the current market regime when enough realised evidence exists.'}
+                      label={t('settings.row_regime_aware_weighting')}
+                      hint={t('settings.regime_aware_weighting_hint')}
                       checked={s.regime_aware_weighting_enabled ?? false}
                       onChange={v => update('regime_aware_weighting_enabled', v)}
                       className="md:col-span-2"
@@ -1234,7 +1234,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           {/* Webhooks & Alerts */}
           {activeTab === 'webhooks' && (
             <ErrorBoundary name="SettingsWebhooks">
-            <Section title={t('settings.section_notifications') || 'Alerts & Webhooks'}>
+            <Section title={t('settings.section_notifications')}>
               <Row label={t('settings.row_webhook_url')}>
                 <div className="flex flex-col gap-1">
                   <input
@@ -1349,7 +1349,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           {/* Presets / Templates */}
           {activeTab === 'presets' && (
             <ErrorBoundary name="SettingsPresets">
-            <Section title={t('settings.section_presets') || 'Presets Templates'}>
+            <Section title={t('settings.section_presets')}>
               <div className="flex gap-2">
                 <input
                   className={Input}
@@ -1392,7 +1392,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
           {/* Cron Scheduler */}
           {activeTab === 'cron' && (
             <ErrorBoundary name="SettingsCron">
-            <Section title={t('settings.section_cron') || 'Cron Scheduler'}>
+            <Section title={t('settings.section_cron')}>
               <div className="flex items-center justify-between bg-white/[0.02] border border-white/[0.04] p-3 rounded-xl mb-2">
                 <div className="flex flex-col">
                   <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">{t('settings.cron_engine_status')}</span>

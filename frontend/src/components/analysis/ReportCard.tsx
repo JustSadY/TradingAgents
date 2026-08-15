@@ -50,7 +50,7 @@ export function ReportCard({ label, content, defaultOpen, isStreaming }: ReportC
         {isStreaming && content.includes('IMAGE_DATA:') && (
           <div className="rounded-xl overflow-hidden border border-violet-500/10 bg-violet-500/5 p-4 animate-pulse flex items-center justify-center gap-2 text-violet-400 text-xs">
             <Loader2 className="animate-spin" size={12} />
-            <span>Generating chart visualization...</span>
+            <span>{t('analysis.generating_chart')}</span>
           </div>
         )}
         {imageSrc && (

@@ -23,6 +23,7 @@ const profile = {
     'profile.delete_key': 'Delete key',
     'profile.cancel': 'Cancel',
     'profile.key_placeholder': 'sk-...',
+    'profile.broker_owner_only': 'Broker Integration (Owner Only)',
   },
   tr: {
     'profile.title': 'Profil',
@@ -48,6 +49,7 @@ const profile = {
     'profile.delete_key': 'Anahtarı sil',
     'profile.cancel': 'İptal',
     'profile.key_placeholder': 'sk-...',
+    'profile.broker_owner_only': 'Aracı Kurum Entegrasyonu (Yalnızca Sahip)',
   },
 }
 

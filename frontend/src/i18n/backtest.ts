@@ -33,6 +33,7 @@ const translations = {
     'backtest.error_dates': 'Please specify valid start and end dates.',
     'backtest.error_load': 'Backtest execution failed.',
     'nav.backtest': 'Backtesting Desk',
+    'backtest.no_trades': 'No trades executed during this simulation period.',
   },
   tr: {
     'backtest.title': 'Geriye Dönük Backtest ve Simülasyon',
@@ -68,6 +69,7 @@ const translations = {
     'backtest.error_dates': 'Lütfen geçerli bir başlangıç ve bitiş tarihi seçin.',
     'backtest.error_load': 'Backtest hesaplaması başarısız oldu.',
     'nav.backtest': 'Backtest Masası',
+    'backtest.no_trades': 'Bu simülasyon döneminde hiç işlem yapılmadı.',
   },
 }
 

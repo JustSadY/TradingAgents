@@ -167,7 +167,7 @@ export default function Alerts() {
     <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">
       <div>
         <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('alerts.title')}</h2>
-        <p className="text-xs text-slate-500 mt-1">Set price threshold targets to dispatch webhook triggers or auto-run graphs</p>
+        <p className="text-xs text-slate-500 mt-1">{t('alerts.subtitle')}</p>
       </div>
 
       <div className="glass-panel rounded-2xl p-5 space-y-4">

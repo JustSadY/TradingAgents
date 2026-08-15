@@ -59,13 +59,13 @@ export default function Watchlist() {
             <Star className="text-violet-400 fill-violet-400/20" size={20} />
             {t('watchlist.title')}
           </h2>
-          <p className="text-xs text-slate-500 mt-1">Track and monitor your favorite assets and prompt live analyses</p>
+          <p className="text-xs text-slate-500 mt-1">{t('watchlist.subtitle')}</p>
         </div>
         <button
           onClick={() => fetchWatchlist()}
           disabled={loading}
           className="flex items-center justify-center p-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white transition-all cursor-pointer"
-          title="Refresh"
+          title={t('watchlist.refresh')}
         >
           <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
         </button>
@@ -73,7 +73,7 @@ export default function Watchlist() {
 
       {/* Add Ticker Section */}
       <div className="glass-panel rounded-2xl p-5 space-y-4">
-        <h3 className="text-xs font-bold text-violet-400 uppercase tracking-widest">{t('watchlist.add_title') || 'Add New Asset'}</h3>
+        <h3 className="text-xs font-bold text-violet-400 uppercase tracking-widest">{t('watchlist.add_title')}</h3>
         <div className="flex flex-col sm:flex-row gap-3">
           <input
             className="flex-1 glass-input rounded-xl px-4 py-2.5 text-sm uppercase font-mono font-bold tracking-wider outline-none"
@@ -87,7 +87,7 @@ export default function Watchlist() {
             className="flex items-center justify-center gap-2 bg-violet-600 hover:bg-violet-500 text-white rounded-xl px-5 py-2.5 font-semibold text-xs transition duration-200 cursor-pointer shadow-lg shadow-violet-600/25 shrink-0"
           >
             <Plus size={14} strokeWidth={2.5} />
-            <span>{t('watchlist.add') || 'Add'}</span>
+            <span>{t('watchlist.add')}</span>
           </button>
         </div>
       </div>
@@ -101,7 +101,7 @@ export default function Watchlist() {
         <div className="glass-panel rounded-2xl p-12 text-center">
           <Star size={32} className="mx-auto text-slate-600 mb-3 opacity-30" />
           <p className="text-slate-400 text-xs font-semibold">{t('watchlist.empty')}</p>
-          <p className="text-[10px] text-slate-500 mt-1">Add symbols using the form above to start tracking them</p>
+          <p className="text-[10px] text-slate-500 mt-1">{t('watchlist.empty_hint')}</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
@@ -116,7 +116,7 @@ export default function Watchlist() {
                 </div>
                 <div>
                   <span className="font-mono font-bold text-white tracking-wide text-sm block">{item}</span>
-                  <span className="text-[9px] text-slate-500 font-semibold uppercase tracking-wider block mt-0.5">Asset Tracker</span>
+                  <span className="text-[9px] text-slate-500 font-semibold uppercase tracking-wider block mt-0.5">{t('watchlist.asset_tracker')}</span>
                 </div>
               </div>
               <div className="flex items-center gap-2">
@@ -137,7 +137,7 @@ export default function Watchlist() {
                 <button
                   onClick={() => remove(item)}
                   className="text-slate-500 hover:text-rose-400 transition-colors p-2 hover:bg-white/5 rounded-lg shrink-0 cursor-pointer"
-                  title="Remove"
+                  title={t('watchlist.remove')}
                 >
                   <Trash2 size={14} />
                 </button>

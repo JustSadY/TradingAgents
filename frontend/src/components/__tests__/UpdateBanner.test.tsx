@@ -4,6 +4,10 @@ import userEvent from '@testing-library/user-event'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import UpdateBanner from '../UpdateBanner'
 
+vi.mock('../../contexts/LanguageContext', async () => ({
+  useTranslation: (await import('../../test/i18nMock')).useTranslationMock,
+}))
+
 const mocks = vi.hoisted(() => ({
   useAuth: vi.fn(),
   statusQuery: {
@@ -95,34 +99,34 @@ describe('UpdateBanner', () => {
   it('renders nothing for non-owner when update is available', () => {
     mocks.useAuth.mockReturnValue({ isOwner: false })
     renderBanner()
-    expect(screen.queryByText(/Yeni sürüm/)).not.toBeInTheDocument()
+    expect(screen.queryByText(/A new version is available/)).not.toBeInTheDocument()
   })
 
   it('shows update available banner for owner', () => {
     renderBanner()
-    expect(screen.getByText(/Yeni sürüm/)).toBeInTheDocument()
-    expect(screen.getByText(/3 commit geride/)).toBeInTheDocument()
-    expect(screen.getByRole('button', { name: /Güncelle/ })).toBeInTheDocument()
+    expect(screen.getByText(/A new version is available/)).toBeInTheDocument()
+    expect(screen.getByText(/3 commits behind/)).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: /Update/ })).toBeInTheDocument()
   })
 
   it('shows updating state when server reports an active update', () => {
     mocks.statusQuery.data = { ...defaultStatus, updating: true }
     renderBanner()
-    expect(screen.getByText(/Güncelleniyor/)).toBeInTheDocument()
+    expect(screen.getByText(/Updating —/)).toBeInTheDocument()
   })
 
   it('dismisses the available update banner', async () => {
     const user = userEvent.setup()
     renderBanner()
-    await user.click(screen.getByTitle('Gizle'))
-    expect(screen.queryByText(/Yeni sürüm/)).not.toBeInTheDocument()
+    await user.click(screen.getByTitle('Dismiss'))
+    expect(screen.queryByText(/A new version is available/)).not.toBeInTheDocument()
   })
 
   it('starts the generated update mutation and invalidates status on success', async () => {
     const user = userEvent.setup()
     const { invalidateSpy } = renderBanner()
 
-    await user.click(screen.getByRole('button', { name: /Güncelle/ }))
+    await user.click(screen.getByRole('button', { name: /Update/ }))
     expect(window.confirm).toHaveBeenCalled()
     expect(mocks.applyMutate).toHaveBeenCalledTimes(1)
 
@@ -130,16 +134,16 @@ describe('UpdateBanner', () => {
     await waitFor(() => {
       expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['/api/update/status'] })
     })
-    expect(mocks.notify).toHaveBeenCalledWith('info', expect.stringContaining('Güncelleme başlatıldı'), 'Güncelleme', 'owner')
+    expect(mocks.notify).toHaveBeenCalledWith('info', expect.stringContaining('Update started'), 'Update', 'owner')
   })
 
   it('reports generated update mutation errors through notify', async () => {
     const user = userEvent.setup()
     renderBanner()
 
-    await user.click(screen.getByRole('button', { name: /Güncelle/ }))
+    await user.click(screen.getByRole('button', { name: /Update/ }))
     mocks.applyError?.({ response: { data: { detail: 'update failed' } } })
 
-    expect(mocks.notify).toHaveBeenCalledWith('error', 'update failed', 'Güncelleme', 'owner')
+    expect(mocks.notify).toHaveBeenCalledWith('error', 'update failed', 'Update', 'owner')
   })
 })

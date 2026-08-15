@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { NewsFeed } from '../NewsFeed'
+import { translate } from '../../../test/i18nMock'
 
 vi.mock('../../../contexts/LanguageContext', () => ({
-  useTranslation: () => ({ t: (k: string) => k }),
+  useTranslation: useTranslationMock,
 }))
 
 const news = [
@@ -13,7 +14,7 @@ const news = [
 
 describe('NewsFeed', () => {
   it('renders news items with ticker, title, source', () => {
-    render(<NewsFeed news={news} t={(k: string) => k} />)
+    render(<NewsFeed news={news} t={translate} />)
     expect(screen.getByText('AAPL')).toBeInTheDocument()
     expect(screen.getByText('TSLA')).toBeInTheDocument()
     expect(screen.getByText('AAPL hits all-time high')).toBeInTheDocument()
@@ -22,12 +23,12 @@ describe('NewsFeed', () => {
   })
 
   it('shows empty state when no news', () => {
-    render(<NewsFeed news={[]} t={(k: string) => k} />)
+    render(<NewsFeed news={[]} t={translate} />)
     expect(screen.getByText(/No news for your watchlist tickers/i)).toBeInTheDocument()
   })
 
   it('renders external links with target=_blank', () => {
-    render(<NewsFeed news={news} t={(k: string) => k} />)
+    render(<NewsFeed news={news} t={translate} />)
     const links = screen.getAllByRole('link')
     expect(links[0]).toHaveAttribute('href', 'https://example.com/aapl')
     expect(links[0]).toHaveAttribute('target', '_blank')

@@ -315,7 +315,7 @@ export default function Profile() {
 
       {/* Owner Broker credentials */}
       {profile.role === 'owner' && (
-        <Section title="Broker Integration (Owner Only)">
+        <Section title={t('profile.broker_owner_only')}>
           <p className="text-[10px] text-slate-500 font-semibold pb-1.5 border-b border-white/[0.04] mb-3">
             Configure live trading credentials. These keys are stored encrypted and are only used for owner executions.
           </p>

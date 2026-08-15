@@ -1,5 +1,6 @@
 import React from 'react'
 import { BarChart2 } from 'lucide-react'
+import { useTranslation } from '../../contexts/LanguageContext'
 import { 
   ResponsiveContainer, ComposedChart, CartesianGrid, XAxis, YAxis, Tooltip, 
   Bar, Cell, Line, ReferenceLine, AreaChart, Area, LineChart 
@@ -22,6 +23,7 @@ export const CustomIndicatorPane: React.FC<CustomIndicatorPaneProps> = ({
   showRSI, showMACD, showSentiment, candles, sentimentChartData,
   customIndicators, userIndicatorData, userIndicatorLabel
 }) => {
+  const { t } = useTranslation()
   if (!showRSI && !showMACD && !showSentiment && customIndicators.length === 0 && userIndicatorData.length === 0) {
     return null
   }
@@ -30,7 +32,7 @@ export const CustomIndicatorPane: React.FC<CustomIndicatorPaneProps> = ({
     <div className="space-y-6 mt-6 pb-12">
       {showRSI && (
         <div className="glass-panel rounded-2xl p-4">
-          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">Relative Strength Index (14)</h4>
+          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">{t('chart.rsi_pane')}</h4>
           <div className="h-40 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <LineChart data={candles}>
@@ -78,7 +80,7 @@ export const CustomIndicatorPane: React.FC<CustomIndicatorPaneProps> = ({
 
       {showSentiment && (
         <div className="glass-panel rounded-2xl p-4">
-          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">AI Consensus Sentiment History</h4>
+          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-4">{t('chart.sentiment_pane')}</h4>
           <div className="h-40 w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={sentimentChartData}>

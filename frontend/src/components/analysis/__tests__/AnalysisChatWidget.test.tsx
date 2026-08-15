@@ -26,18 +26,8 @@ vi.mock('axios', () => {
   return { default: instance, get, post, interceptors: instance.interceptors }
 })
 
-vi.mock('../../../contexts/LanguageContext', () => ({
-  useTranslation: () => ({ t: (k: string) => {
-    const map: Record<string, string> = {
-      'analysis.chat.welcome_title': 'Ask questions about this analysis',
-      'analysis.chat.welcome_desc': 'The AI can explain reports, compare tickers, etc.',
-      'analysis.chat.placeholder': 'Type your question...',
-      'analysis.chat.send': 'Send',
-      'analysis.chat.thinking': 'Thinking...',
-      'analysis.chat.error': 'Chat error',
-    }
-    return map[k] || k
-  }}),
+vi.mock('../../../contexts/LanguageContext', async () => ({
+  useTranslation: (await import('../../../test/i18nMock')).useTranslationMock,
 }))
 
 describe('AnalysisChatWidget', () => {
@@ -50,7 +40,7 @@ describe('AnalysisChatWidget', () => {
     await act(async () => {
       renderWithQuery(<AnalysisChatWidget analysisId={1} />)
     })
-    expect(screen.getByText('Ask questions about this analysis')).toBeInTheDocument()
+    expect(screen.getByText('Start a conversation with the analyst on this report.')).toBeInTheDocument()
   })
 
   it('loads existing chat messages on mount', async () => {
@@ -77,7 +67,7 @@ describe('AnalysisChatWidget', () => {
       renderWithQuery(<AnalysisChatWidget analysisId={1} />)
     })
 
-    const input = screen.getByPlaceholderText('Type your question...')
+    const input = screen.getByPlaceholderText('Ask a question about the report...')
     const sendBtn = screen.getByText('Send')
 
     await act(async () => {
@@ -101,7 +91,7 @@ describe('AnalysisChatWidget', () => {
       renderWithQuery(<AnalysisChatWidget analysisId={1} />)
     })
 
-    const input = screen.getByPlaceholderText('Type your question...')
+    const input = screen.getByPlaceholderText('Ask a question about the report...')
     const sendBtn = screen.getByText('Send')
 
     await act(async () => {

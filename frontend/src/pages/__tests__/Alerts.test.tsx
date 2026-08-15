@@ -13,8 +13,8 @@ const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
 }))
 
-vi.mock('../../contexts/LanguageContext', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+vi.mock('../../contexts/LanguageContext', async () => ({
+  useTranslation: (await import('../../test/i18nMock')).useTranslationMock,
 }))
 
 vi.mock('../../api/generated/alerts/alerts', () => ({
@@ -60,20 +60,20 @@ describe('Alerts', () => {
   it('renders generated API alert data through AppDataGrid', async () => {
     renderPage()
     expect(await screen.findByText('AAPL')).toBeInTheDocument()
-    expect(screen.getByText('alerts.status_active')).toBeInTheDocument()
+    expect(screen.getByText('Active')).toBeInTheDocument()
   })
 
   it('preserves create validation and generated mutation payload', async () => {
     const user = userEvent.setup()
     renderPage()
 
-    await user.click(screen.getByRole('button', { name: 'alerts.add_button' }))
-    expect(screen.getByText('alerts.error_invalid')).toBeInTheDocument()
+    await user.click(screen.getByRole('button', { name: 'Add Alert' }))
+    expect(screen.getByText('Enter a valid symbol and price.')).toBeInTheDocument()
     expect(mocks.create).not.toHaveBeenCalled()
 
-    await user.type(screen.getByLabelText('alerts.symbol'), 'msft')
-    await user.type(screen.getByLabelText('alerts.target_price'), '250')
-    await user.click(screen.getByRole('button', { name: 'alerts.add_button' }))
+    await user.type(screen.getByLabelText('Symbol'), 'msft')
+    await user.type(screen.getByLabelText('Target Price ($)'), '250')
+    await user.click(screen.getByRole('button', { name: 'Add Alert' }))
 
     expect(mocks.create).toHaveBeenCalledWith(
       {

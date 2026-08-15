@@ -11,8 +11,8 @@ vi.mock('react-router-dom', () => ({
   useParams: () => ({ token: 'public-token' }),
 }))
 
-vi.mock('../../contexts/LanguageContext', () => ({
-  useTranslation: () => ({ t: (key: string) => key }),
+vi.mock('../../contexts/LanguageContext', async () => ({
+  useTranslation: (await import('../../test/i18nMock')).useTranslationMock,
 }))
 
 vi.mock('../../components/analysis/DebateHistoryWidget', () => ({
@@ -77,17 +77,17 @@ describe('SharedReport', () => {
 
     // Wait for rendered content rather than the request itself: the fetch fires
     // one tick before the data is committed to the DOM.
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Final Decision' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Final Decision (Portfolio Manager)' })).toBeInTheDocument())
     expect(axios.get).toHaveBeenCalledWith('/api/share/public-token', expect.anything())
 
     for (const label of [
-      'Final Decision',
+      'Final Decision (Portfolio Manager)',
       'Market Analysis',
       'Fundamental Analysis',
       'Short Interest',
       'Cross-Examination',
       'Bull Arguments',
-      'Consensus & Risk Debate',
+      'Debate',
       'Risk Metrics',
     ]) {
       expect(screen.getByRole('button', { name: label })).toBeInTheDocument()
@@ -96,7 +96,7 @@ describe('SharedReport', () => {
     await userEvent.click(screen.getByRole('button', { name: 'Market Analysis' }))
     expect(screen.getByText('Market report body')).toBeInTheDocument()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Consensus & Risk Debate' }))
+    await userEvent.click(screen.getByRole('button', { name: 'Debate' }))
     expect(screen.getByTestId('shared-debates')).toHaveTextContent('Consensus argument')
     expect(screen.getByTestId('shared-debates')).toHaveTextContent('Risk argument')
   })

@@ -5,6 +5,7 @@ import {
 } from 'lucide-react'
 import { useAssistantChat, useAssistantClearHistory, useAssistantGetHistory } from '../../api/generated/assistant/assistant'
 import { useAuth } from '../../contexts/AuthContext'
+import { useTranslation } from '../../contexts/LanguageContext'
 
 interface Message {
   id: number
@@ -13,11 +14,13 @@ interface Message {
   created_at: string
 }
 
-const QUICK_PROMPTS = [
-  "What's my portfolio balance?",
-  "Show me my recent analyses",
-  "Analyze NVDA for me",
-  "Set an alert when AAPL goes above $200",
+// Clicking one of these sends it verbatim as the user's message, so the text
+// itself is translated rather than a label in front of an English prompt.
+const QUICK_PROMPT_KEYS = [
+  'assistant.prompt_balance',
+  'assistant.prompt_recent',
+  'assistant.prompt_analyze',
+  'assistant.prompt_alert',
 ]
 
 const MessageBubble = React.memo(function MessageBubble({ msg }: { msg: Message }) {
@@ -44,6 +47,7 @@ const MessageBubble = React.memo(function MessageBubble({ msg }: { msg: Message 
 })
 
 export function PortfolioAssistant() {
+  const { t } = useTranslation()
   const { isAuthenticated } = useAuth()
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
@@ -138,22 +142,22 @@ export function PortfolioAssistant() {
                 <TrendingUp size={13} className="text-white" strokeWidth={2.5} />
               </div>
               <div>
-                <p className="text-[11px] font-bold text-white leading-none">Portfolio Assistant</p>
-                <p className="text-[9px] text-slate-500 mt-0.5 uppercase tracking-wider">AI · TradingAgents</p>
+                <p className="text-[11px] font-bold text-white leading-none">{t('assistant.title')}</p>
+                <p className="text-[9px] text-slate-500 mt-0.5 uppercase tracking-wider">{t('assistant.subtitle')}</p>
               </div>
             </div>
             <div className="flex items-center gap-1">
               <button
                 onClick={clearHistory}
                 className="p-1.5 text-slate-600 hover:text-slate-300 rounded-lg hover:bg-white/5 transition"
-                title="Clear history"
+                title={t('assistant.clear_history')}
               >
                 <Trash2 size={12} />
               </button>
               <button
                 onClick={() => setOpen(false)}
                 className="p-1.5 text-slate-600 hover:text-slate-300 rounded-lg hover:bg-white/5 transition"
-                title="Minimize"
+                title={t('assistant.minimize')}
               >
                 <ChevronDown size={14} />
               </button>
@@ -167,18 +171,18 @@ export function PortfolioAssistant() {
                 <div className="w-14 h-14 rounded-2xl bg-violet-500/10 border border-violet-500/20 flex items-center justify-center mb-4">
                   <BotMessageSquare size={26} className="text-violet-400" />
                 </div>
-                <p className="text-sm font-semibold text-slate-200">Portfolio Assistant</p>
+                <p className="text-sm font-semibold text-slate-200">{t('assistant.title')}</p>
                 <p className="text-[11px] text-slate-500 mt-1.5 max-w-[260px] leading-relaxed">
-                  Ask me about your portfolio, past analyses, alerts — or have me run a new stock analysis.
+                  {t('assistant.intro')}
                 </p>
                 <div className="mt-5 flex flex-col gap-2 w-full">
-                  {QUICK_PROMPTS.map(p => (
+                  {QUICK_PROMPT_KEYS.map(key => (
                     <button
-                      key={p}
-                      onClick={() => send(p)}
+                      key={key}
+                      onClick={() => send(t(key))}
                       className="text-left text-[11px] text-slate-400 px-3 py-2.5 rounded-xl border border-white/[0.06] hover:bg-white/[0.04] hover:text-slate-300 hover:border-violet-500/20 transition"
                     >
-                      {p}
+                      {t(key)}
                     </button>
                   ))}
                 </div>
@@ -196,7 +200,7 @@ export function PortfolioAssistant() {
                 </div>
                 <div className="bg-white/[0.05] text-slate-400 border border-white/[0.05] rounded-2xl rounded-tl-none px-3.5 py-2.5 text-xs flex items-center gap-2">
                   <Loader2 className="animate-spin" size={11} />
-                  <span>Thinking…</span>
+                  <span>{t('assistant.thinking')}</span>
                 </div>
               </div>
             )}
@@ -218,7 +222,7 @@ export function PortfolioAssistant() {
                   send()
                 }
               }}
-              placeholder="Ask about your portfolio…"
+              placeholder={t('assistant.input_placeholder')}
               disabled={loading}
               className="flex-1 bg-white/[0.04] border border-white/[0.07] rounded-xl px-3 py-2 text-xs text-white placeholder-slate-600 outline-none focus:border-violet-500/40 transition"
             />
@@ -241,7 +245,7 @@ export function PortfolioAssistant() {
             ? 'bg-violet-600 text-white shadow-violet-600/40'
             : 'bg-[#0d1225] border border-white/10 text-violet-400 hover:border-violet-500/40 hover:text-violet-300 shadow-black/40'
         }`}
-        title="Portfolio Assistant"
+        title={t('assistant.title')}
       >
         {open ? <X size={17} /> : <BotMessageSquare size={18} />}
       </button>

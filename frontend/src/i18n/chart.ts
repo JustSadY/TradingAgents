@@ -43,6 +43,10 @@ const chart = {
     'chart.ai_generate': 'AI Formula',
     'chart.ai_generating': 'Generating…',
     'chart.patterns': 'Patterns',
+    'chart.detected_patterns': 'Detected Patterns',
+    'chart.no_patterns': 'No significant patterns detected for this period.',
+    'chart.rsi_pane': 'Relative Strength Index (14)',
+    'chart.sentiment_pane': 'AI Consensus Sentiment History',
   },
   tr: {
     'chart.title': 'Trading Grafik',
@@ -88,6 +92,10 @@ const chart = {
     'chart.ai_generate': 'AI Formül',
     'chart.ai_generating': 'Üretiliyor…',
     'chart.patterns': 'Formasyonlar',
+    'chart.detected_patterns': 'Tespit Edilen Formasyonlar',
+    'chart.no_patterns': 'Bu dönem için anlamlı bir formasyon tespit edilmedi.',
+    'chart.rsi_pane': 'Göreceli Güç Endeksi (14)',
+    'chart.sentiment_pane': 'AI Konsensüs Duyarlılık Geçmişi',
   },
 }
 

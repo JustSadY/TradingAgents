@@ -5,6 +5,7 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PermissionsProvider } from './contexts/PermissionsContext'
 import RequirePage from './components/RequirePage'
 import { ErrorBoundary } from './components/ErrorBoundary'
+import i18n from './i18n'
 import Layout from './components/Layout'
 import { SnackbarProvider } from 'notistack'
 import NotificationAdapter from './components/ui/NotificationAdapter'
@@ -60,16 +61,15 @@ const notificationComponents = {
 function AppCrashFallback() {
   return (
     <div style={{ padding: 32, color: '#e2e8f0', background: '#0f172a', minHeight: '100vh', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 16, textAlign: 'center' }}>
-      <h2 style={{ color: '#fca5a5', margin: 0 }}>Something went wrong</h2>
+      <h2 style={{ color: '#fca5a5', margin: 0 }}>{i18n.t('crash.app_title')}</h2>
       <p style={{ color: '#94a3b8', fontSize: 14, maxWidth: 420, lineHeight: 1.6, margin: 0 }}>
-        The application could not finish loading. Reloading usually clears it; if
-        it keeps happening, the details are in the browser console.
+        {i18n.t('crash.app_body')}
       </p>
       <button
         style={{ padding: '8px 16px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 6, cursor: 'pointer' }}
         onClick={() => window.location.reload()}
       >
-        Reload
+        {i18n.t('crash.reload')}
       </button>
     </div>
   )

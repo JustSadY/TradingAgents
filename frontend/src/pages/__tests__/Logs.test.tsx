@@ -17,21 +17,8 @@ vi.mock('axios', () => {
   return { default: instance, get, post }
 })
 
-vi.mock('../../contexts/LanguageContext', () => ({
-  useTranslation: () => ({
-    t: (key: string) => {
-      const map: Record<string, string> = {
-        'logs.title': 'System Logs',
-        'logs.all_sources': 'All Sources',
-        'logs.all_levels': 'All Levels',
-        'logs.no_logs': 'No logs found',
-        'common.loading': 'Loading Logs...',
-      }
-      return map[key] || key
-    },
-    language: 'en',
-    setLanguage: vi.fn(),
-  }),
+vi.mock('../../contexts/LanguageContext', async () => ({
+  useTranslation: (await import('../../test/i18nMock')).useTranslationMock,
 }))
 
 vi.mock('../../contexts/AuthContext', () => ({

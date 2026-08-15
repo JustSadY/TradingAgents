@@ -86,7 +86,7 @@ function AgentNode({
         <button
           type="button"
           className="mt-0.5 text-slate-500 hover:text-slate-300 transition-colors cursor-pointer shrink-0"
-          aria-label={expanded ? 'Collapse agent' : 'Expand agent'}
+          aria-label={translate(expanded ? 'settings.collapse_agent' : 'settings.expand_agent')}
           onClick={() => setExpanded(value => !value)}
         >
           {expanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
@@ -116,7 +116,7 @@ function AgentNode({
                     startIcon={<Settings2 size={12} />}
                     onClick={() => setSettingsOpen(value => !value)}
                   >
-                    {settingsOpen ? 'Hide LLM settings' : 'Configure LLM settings'}
+                    {translate(settingsOpen ? 'settings.hide_llm_settings' : 'settings.configure_llm_settings')}
                   </AppButton>
                   {settingsOpen ? (
                     <AppSchemaForm
@@ -132,7 +132,7 @@ function AgentNode({
 
               {children.length ? (
                 <div className={`space-y-2 ${!enabled ? 'pointer-events-none opacity-50' : ''}`}>
-                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-600">Sub-Agents</p>
+                  <p className="text-[9px] font-bold uppercase tracking-widest text-slate-600">{translate('settings.sub_agents')}</p>
                   {children.map(child => (
                     <AgentNode
                       key={child.key}
@@ -192,10 +192,10 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
           : await saveOwn.mutateAsync({ data: body })
       setSettings(response as unknown as AgentSettingsData)
       triggerMetaRefetch()
-      notify('success', 'Agent settings saved successfully.')
+      notify('success', t('settings.agents_saved'))
     } catch (error: unknown) {
       const message = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
-        || 'Failed to save agent settings.'
+        || t('settings.agents_save_failed')
       notify('error', message, 'Agent settings')
       throw new Error(message, { cause: error })
     }
@@ -236,7 +236,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
   }
 
   if (activeQuery.isPending) {
-    return <div className="text-slate-500 text-xs font-semibold p-4">{t('common.loading') || 'Loading…'}</div>
+    return <div className="text-slate-500 text-xs font-semibold p-4">{t('common.loading')}</div>
   }
 
   if (activeQuery.error) {
@@ -245,11 +245,11 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
   }
 
   if (agents.length === 0) {
-    return <AppAlert severity="info">No agent configurations found in meta database.</AppAlert>
+    return <AppAlert severity="info">{t('settings.agents_empty')}</AppAlert>
   }
 
   if (!settings) {
-    return <AppAlert severity="error">Could not load agent settings.</AppAlert>
+    return <AppAlert severity="error">{t('settings.agents_load_failed')}</AppAlert>
   }
 
   const portfolioManagerEnabled = settings.agents.portfolio_manager?.enabled ?? true
@@ -275,8 +275,8 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
       </div>
 
       <div className="text-[10px] text-slate-600 bg-white/[0.01] border border-white/[0.03] rounded-xl px-3 py-2 leading-relaxed">
-        <span className="text-violet-400 font-bold">Hierarchy:</span>{' '}
-        Portfolio Manager (root) → Market Intelligence / Research Manager / Risk Debate. Disabling a parent disables its sub-tree.
+        <span className="text-violet-400 font-bold">{t('settings.hierarchy_label')}</span>{' '}
+        {t('settings.hierarchy_hint')}
       </div>
 
       <div className="space-y-4">

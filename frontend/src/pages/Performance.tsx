@@ -45,7 +45,7 @@ export default function Performance() {
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
           <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('performance.title')}</h2>
-          <p className="text-xs text-slate-500 mt-1">Audit analyst correctness rates, historical signal gains, and weights allocation</p>
+          <p className="text-xs text-slate-500 mt-1">{t('performance.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <div className="flex items-center gap-2 bg-slate-900 border border-white/[0.08] rounded-xl px-3 py-1.5 focus-within:border-violet-500/50 transition-colors">
@@ -69,28 +69,28 @@ export default function Performance() {
             <div className="glass-panel rounded-2xl overflow-hidden border border-white/[0.04]">
               <div className="px-5 py-3.5 border-b border-white/[0.04] flex items-center gap-2">
                 <Activity size={14} className="text-violet-400" />
-                <span className="text-sm font-bold text-white">Paper Trading Performance</span>
-                <span className="text-[10px] text-slate-500 ml-1">— closed positions</span>
+                <span className="text-sm font-bold text-white">{t('performance.paper_trading')}</span>
+                <span className="text-[10px] text-slate-500 ml-1">— {t('performance.closed_positions')}</span>
               </div>
               <div className="p-5 space-y-5">
                 {/* KPI row */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   {[
-                    { label: 'Trades Closed', value: String(tradingStats.total_trades), icon: <Activity size={13} />, color: 'text-white' },
+                    { label: t('performance.trades_closed'), value: String(tradingStats.total_trades), icon: <Activity size={13} />, color: 'text-white' },
                     {
-                      label: 'Trade Win Rate',
+                      label: t('performance.trade_win_rate'),
                       value: `${tradingStats.win_rate.toFixed(1)}%`,
                       icon: <Target size={13} />,
                       color: tradingStats.win_rate >= 50 ? 'text-emerald-400' : 'text-rose-400',
                     },
                     {
-                      label: 'Sharpe Ratio',
+                      label: t('performance.sharpe_ratio'),
                       value: tradingStats.sharpe_ratio !== null ? tradingStats.sharpe_ratio.toFixed(2) : '—',
                       icon: <TrendingUp size={13} />,
                       color: tradingStats.sharpe_ratio !== null && tradingStats.sharpe_ratio >= 1 ? 'text-emerald-400' : tradingStats.sharpe_ratio !== null && tradingStats.sharpe_ratio < 0 ? 'text-rose-400' : 'text-amber-400',
                     },
                     {
-                      label: 'Max Drawdown',
+                      label: t('performance.max_drawdown'),
                       value: tradingStats.max_drawdown_pct !== null ? `${tradingStats.max_drawdown_pct.toFixed(1)}%` : '—',
                       icon: <ShieldAlert size={13} />,
                       color: tradingStats.max_drawdown_pct !== null && tradingStats.max_drawdown_pct < -20 ? 'text-rose-400' : 'text-amber-400',
@@ -113,7 +113,7 @@ export default function Performance() {
                       <div className="flex items-center gap-3 p-3 rounded-xl bg-emerald-500/5 border border-emerald-500/10">
                         <Trophy size={14} className="text-emerald-400 shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">Best Trade</p>
+                          <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">{t('performance.best_trade')}</p>
                           <p className="text-xs font-mono font-bold text-white">{tradingStats.best_trade.ticker}
                             <span className="text-emerald-400 ml-2">{tradingStats.best_trade.pnl_pct >= 0 ? '+' : ''}{tradingStats.best_trade.pnl_pct.toFixed(1)}%</span>
                           </p>
@@ -125,7 +125,7 @@ export default function Performance() {
                       <div className="flex items-center gap-3 p-3 rounded-xl bg-rose-500/5 border border-rose-500/10">
                         <Skull size={14} className="text-rose-400 shrink-0" />
                         <div className="min-w-0">
-                          <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">Worst Trade</p>
+                          <p className="text-[9px] text-slate-500 uppercase font-bold tracking-wider">{t('performance.worst_trade')}</p>
                           <p className="text-xs font-mono font-bold text-white">{tradingStats.worst_trade.ticker}
                             <span className="text-rose-400 ml-2">{tradingStats.worst_trade.pnl_pct.toFixed(1)}%</span>
                           </p>
@@ -142,10 +142,10 @@ export default function Performance() {
                     <table className="w-full text-xs min-w-[380px]">
                       <thead>
                         <tr className="text-[9px] uppercase tracking-wider text-slate-500 bg-white/[0.01]">
-                          <th className="px-4 py-2.5 text-left font-bold">Ticker</th>
-                          <th className="px-4 py-2.5 text-center font-bold">Trades</th>
-                          <th className="px-4 py-2.5 text-center font-bold">Win Rate</th>
-                          <th className="px-4 py-2.5 text-right font-bold">Total P&L</th>
+                          <th className="px-4 py-2.5 text-left font-bold">{t('performance.col_ticker')}</th>
+                          <th className="px-4 py-2.5 text-center font-bold">{t('performance.col_trades')}</th>
+                          <th className="px-4 py-2.5 text-center font-bold">{t('performance.col_win_rate')}</th>
+                          <th className="px-4 py-2.5 text-right font-bold">{t('performance.col_total_pnl')}</th>
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-white/[0.02]">
@@ -328,7 +328,7 @@ export default function Performance() {
         <div className="glass-panel rounded-2xl overflow-hidden border border-white/[0.04]">
           <div className="px-5 py-3.5 border-b border-white/[0.04] flex items-center gap-2">
             <Zap size={14} className="text-amber-400" />
-            <span className="text-sm font-bold text-white">LLM Token & Cost Usage</span>
+            <span className="text-sm font-bold text-white">{t('performance.token_usage_title')}</span>
             <span className="text-[10px] text-slate-500 ml-1">— estimated based on public pricing</span>
           </div>
           <div className="p-5 space-y-5">
@@ -354,7 +354,7 @@ export default function Performance() {
               {/* Provider cost pie */}
               {tokenUsage.breakdown.length > 1 && (
                 <div>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Cost by Provider</p>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">{t('performance.cost_by_provider')}</p>
                   <div className="h-44">
                     <ResponsiveContainer width="100%" height="100%">
                       <PieChart>
@@ -384,7 +384,7 @@ export default function Performance() {
               {/* Daily token trend */}
               {tokenUsage.daily.length > 1 && (
                 <div>
-                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Daily Token Usage (last 30 days)</p>
+                  <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">{t('performance.daily_token_usage')}</p>
                   <div className="h-44">
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={tokenUsage.daily} barCategoryGap="30%">
@@ -407,17 +407,17 @@ export default function Performance() {
 
             {/* Provider / model breakdown table */}
             <div>
-              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Model Breakdown</p>
+              <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">{t('performance.model_breakdown')}</p>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs text-slate-300 min-w-[480px]">
                   <thead>
                     <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
-                      <th className="px-4 py-2.5 text-left font-bold">Provider</th>
-                      <th className="px-4 py-2.5 text-left font-bold">Model</th>
-                      <th className="px-4 py-2.5 text-right font-bold">Analyses</th>
-                      <th className="px-4 py-2.5 text-right font-bold">Input Tokens</th>
-                      <th className="px-4 py-2.5 text-right font-bold">Output Tokens</th>
-                      <th className="px-4 py-2.5 text-right font-bold">Est. Cost</th>
+                      <th className="px-4 py-2.5 text-left font-bold">{t('performance.col_provider')}</th>
+                      <th className="px-4 py-2.5 text-left font-bold">{t('performance.col_model')}</th>
+                      <th className="px-4 py-2.5 text-right font-bold">{t('performance.col_analyses')}</th>
+                      <th className="px-4 py-2.5 text-right font-bold">{t('performance.col_input_tokens')}</th>
+                      <th className="px-4 py-2.5 text-right font-bold">{t('performance.col_output_tokens')}</th>
+                      <th className="px-4 py-2.5 text-right font-bold">{t('performance.col_est_cost')}</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-white/[0.02]">

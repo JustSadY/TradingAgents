@@ -220,7 +220,7 @@ export default function Backtest() {
               <h3 className="text-xs font-bold text-slate-400 uppercase tracking-widest">{t('backtest.trades_title')} ({results.trades_count})</h3>
             </div>
             {results.trades.length === 0 ? (
-              <div className="p-8 text-slate-600 text-xs text-center font-medium">No trades executed during this simulation period.</div>
+              <div className="p-8 text-slate-600 text-xs text-center font-medium">{t('backtest.no_trades')}</div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs text-slate-300 min-w-[500px]">

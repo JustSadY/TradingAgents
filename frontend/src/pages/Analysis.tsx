@@ -1010,7 +1010,7 @@ function RunTab() {
               {/* Engine Status & Mental Model */}
               <div className="glass-panel p-4 rounded-2xl space-y-4">
                 <div className="flex items-center justify-between">
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Engine Status</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('analysis.engine_status')}</span>
                   {running ? (
                     <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-violet-500/10 text-violet-400 border border-violet-500/20">
                       <span className="h-1.5 w-1.5 rounded-full bg-violet-500 animate-pulse" />
@@ -1035,7 +1035,7 @@ function RunTab() {
 
                 {running && currentStep && (
                   <div className="space-y-1.5 animate-in fade-in duration-300">
-                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block">Current Action</span>
+                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block">{t('analysis.current_action')}</span>
                     <p className="text-white text-xs font-semibold truncate flex items-center gap-1.5">
                       <Loader2 size={11} className="animate-spin text-violet-400 shrink-0" />
                       {currentStep.label}
@@ -1045,7 +1045,7 @@ function RunTab() {
 
                 {running && mentalModel && (
                   <div className="border-t border-white/[0.04] pt-3 mt-3 animate-in fade-in duration-500">
-                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">Agent Thought Process</span>
+                    <span className="text-[10px] font-semibold text-slate-500 uppercase tracking-wide block mb-1">{t('analysis.thought_process')}</span>
                     <MentalModelTicker agent={mentalModel.agent} thought={mentalModel.thought} />
                   </div>
                 )}
@@ -1059,11 +1059,11 @@ function RunTab() {
               {(stats || detail) && (
                 <div className="glass-panel p-4 rounded-2xl grid grid-cols-3 gap-2">
                   <div className="text-center p-2 rounded-xl bg-slate-900/40 border border-white/[0.03]">
-                    <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">LLM Calls</span>
+                    <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">{t('analysis.llm_calls')}</span>
                     <span className="text-sm font-bold text-white font-mono">{detail ? detail.llm_calls : stats?.llmCalls || 0}</span>
                   </div>
                   <div className="text-center p-2 rounded-xl bg-slate-900/40 border border-white/[0.03]">
-                    <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">Tokens</span>
+                    <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">{t('analysis.tokens')}</span>
                     <span className="text-sm font-bold text-white font-mono">
                       {detail 
                         ? ((detail.tokens_in + detail.tokens_out).toLocaleString()) 
@@ -1072,7 +1072,7 @@ function RunTab() {
                     </span>
                   </div>
                   <div className="text-center p-2 rounded-xl bg-slate-900/40 border border-white/[0.03]">
-                    <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">Cost Est.</span>
+                    <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">{t('analysis.cost_est')}</span>
                     <span className="text-sm font-bold text-emerald-400 font-mono">
                       ${detail?.estimated_cost_usd
                         ? detail.estimated_cost_usd.toFixed(4)
@@ -1089,7 +1089,7 @@ function RunTab() {
               <div className="glass-panel rounded-2xl overflow-hidden flex flex-col h-[28vh] sm:h-[35vh]">
                 <div className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900/40 border-b border-white/[0.04]">
                   <Terminal size={12} className="text-slate-400" />
-                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">System Progress Log</span>
+                  <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('analysis.progress_log')}</span>
                 </div>
                 <div className="flex-1 overflow-y-auto p-4 custom-scrollbar bg-slate-950/40 space-y-2 font-mono text-[10px]">
                   {log.map((line, i) => (
@@ -1108,7 +1108,7 @@ function RunTab() {
                   {log.length === 0 && (
                     <div className="h-full flex flex-col items-center justify-center opacity-25 py-12 text-slate-500 font-sans">
                       <History size={20} className="mb-1.5" />
-                      <p className="text-[9px] uppercase tracking-widest font-semibold">Logs are empty</p>
+                      <p className="text-[9px] uppercase tracking-widest font-semibold">{t('analysis.logs_empty')}</p>
                     </div>
                   )}
                 </div>
@@ -1168,7 +1168,7 @@ function RunTab() {
                     {/* Signal & Sizing Section */}
                     <div className="flex flex-wrap gap-4 items-center justify-between p-4 bg-slate-900/50 border border-white/[0.04] rounded-2xl">
                       <div className="space-y-1">
-                        <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest block">Consensus Recommendation</span>
+                        <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest block">{t('analysis.consensus_recommendation')}</span>
                         <div className="flex items-center gap-2">
                           <SignalBadge signal={activeSignal} large />
                           {detail?.quality ? <QualityBadge quality={detail.quality as RunQuality} /> : null}
@@ -1362,7 +1362,7 @@ function RunTab() {
                     ) : (
                       <div className="flex flex-col items-center justify-center py-20 text-slate-500">
                         <History size={36} className="opacity-25 mb-3" />
-                        <p className="text-xs font-semibold">Time Travel checkpoints will be available once the analysis is completed.</p>
+                        <p className="text-xs font-semibold">{t('analysis.time_travel_pending')}</p>
                       </div>
                     )}
                   </div>
@@ -2039,14 +2039,14 @@ function HistoryTab({
                       onClick={() => shareReport(detail.id)}
                       disabled={sharing}
                       className="flex items-center gap-1 bg-violet-500/10 hover:bg-violet-500/20 border border-violet-500/20 text-[10px] font-bold text-violet-400 px-2.5 py-1.5 rounded-lg transition cursor-pointer disabled:opacity-40"
-                      title="Share report link (48h)"
+                      title={t('analysis.share_report')}
                     >
                       {sharing ? <Loader2 size={12} className="animate-spin" /> : <Share2 size={12} />} Share
                     </button>
                     {shareLink && (
                       <div className="flex items-center gap-1 max-w-[min(24rem,50vw)]">
                         <input
-                          aria-label="Share link"
+                          aria-label={t('analysis.share_link')}
                           readOnly
                           value={shareLink}
                           onFocus={event => event.currentTarget.select()}
@@ -2064,7 +2064,7 @@ function HistoryTab({
                             }
                           }}
                           className="shrink-0 flex items-center gap-1 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-[10px] font-bold text-emerald-400 px-2 py-1.5 rounded-lg transition cursor-pointer"
-                          title="Copy share link"
+                          title={t('analysis.copy_share_link')}
                         >
                           <Copy size={11} /> Copy
                         </button>
@@ -2141,7 +2141,7 @@ function HistoryTab({
                       ))}
                       {(detail.bull_history || detail.bear_history || detail.judge_decision) && (
                         <div className="border-t border-white/[0.04] pt-3 mt-4">
-                          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">Debate Records</h4>
+                          <h4 className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-2">{t('analysis.debate_records')}</h4>
                           <div className="space-y-2">
                             {detail.bull_history ? <ReportCard label="Bull" content={detail.bull_history as string} /> : null}
                             {detail.bear_history ? <ReportCard label="Bear" content={detail.bear_history as string} /> : null}
@@ -2192,7 +2192,7 @@ export default function Analysis() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('analysis.title')}</h2>
-          <p className="text-xs text-slate-500 mt-1">Deploy multi-agent consensus networks for specialized asset research</p>
+          <p className="text-xs text-slate-500 mt-1">{t('analysis.multi_subtitle')}</p>
         </div>
       </div>
 

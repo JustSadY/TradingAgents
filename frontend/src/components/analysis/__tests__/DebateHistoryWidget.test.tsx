@@ -2,15 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, fireEvent } from '@testing-library/react'
 import { DebateHistoryWidget, parseDebateHistory, parseDebateMessage, getSenderStyles } from '../DebateHistoryWidget'
 
-vi.mock('../../../contexts/LanguageContext', () => ({
-  useTranslation: () => ({ t: (k: string) => {
-    const map: Record<string, string> = {
-      'analysis.section.risk_debate_history': 'Risk Debate',
-      'analysis.reports.empty': 'No debate messages yet.',
-      'analysis.debate.consensus': 'Consensus Debate',
-    }
-    return map[k] || k
-  }}),
+vi.mock('../../../contexts/LanguageContext', async () => ({
+  useTranslation: (await import('../../../test/i18nMock')).useTranslationMock,
 }))
 
 describe('parseDebateMessage', () => {
@@ -103,7 +96,7 @@ describe('DebateHistoryWidget', () => {
 
   it('shows empty state when no messages', () => {
     render(<DebateHistoryWidget investmentHistory={null} riskHistory={null} />)
-    expect(screen.getByText('No debate messages yet.')).toBeInTheDocument()
+    expect(screen.getByText('Reports will appear here during analysis.')).toBeInTheDocument()
   })
 
   it('renders investment debate messages', () => {

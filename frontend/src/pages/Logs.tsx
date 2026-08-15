@@ -97,7 +97,8 @@ function parseRunEvent(message: string): RunEventPayload | null {
   return null
 }
 
-function renderLogMessage(l: Log) {
+/** Standalone so the switch stays flat; `t` is passed in rather than hooked. */
+function renderLogMessage(l: Log, t: (key: string) => string) {
   if (l.source === 'tradingagents.run') {
     const payload = parseRunEvent(l.message)
     if (payload) {
@@ -132,7 +133,7 @@ function renderLogMessage(l: Log) {
           return (
             <span className="flex flex-col gap-1 w-full">
               <span className="flex items-center gap-2 flex-wrap">
-                <span className="text-amber-400 font-bold shrink-0">Retry</span>
+                <span className="text-amber-400 font-bold shrink-0">{t('logs.retry')}</span>
                 <span className="text-slate-400 font-mono text-[10px] bg-white/[0.04] px-2 py-0.5 rounded border border-white/[0.04] shrink-0 font-semibold">{label}</span>
                 <span className="text-amber-500 font-mono text-xs font-semibold bg-amber-500/10 border border-amber-500/15 px-2 py-0.5 rounded shrink-0">Attempt {attempt}/{attempts}</span>
                 <span className="text-slate-400 font-mono text-xs shrink-0">(backoff {delay}s)</span>
@@ -144,7 +145,7 @@ function renderLogMessage(l: Log) {
           return (
             <span className="flex flex-col gap-1 w-full">
               <span className="flex items-center gap-2">
-                <span className="text-rose-400 font-bold shrink-0">Error</span>
+                <span className="text-rose-400 font-bold shrink-0">{t('logs.error')}</span>
                 <span className="text-slate-400 capitalize shrink-0">{kind}:</span>
                 <span className="text-white font-semibold font-mono break-all">{node}</span>
               </span>
@@ -154,7 +155,7 @@ function renderLogMessage(l: Log) {
         case 'node_skipped':
           return (
             <span className="flex items-center gap-2 flex-wrap">
-              <span className="text-amber-400 font-bold shrink-0">Fallback</span>
+              <span className="text-amber-400 font-bold shrink-0">{t('logs.fallback')}</span>
               <span className="text-slate-400 capitalize shrink-0">{kind}:</span>
               <span className="text-white font-semibold font-mono break-all">{node}</span>
               <span className="text-slate-500 text-xs italic shrink-0">(skipped on retry exhaustion)</span>
@@ -176,14 +177,14 @@ function renderLogMessage(l: Log) {
                 {timeout_seconds !== undefined && <span className="text-slate-400 text-xs">after {timeout_seconds}s</span>}
               </span>
               {error && <span className="text-[11px] text-rose-400/80 font-mono pl-2 border-l border-rose-500/20">{error}</span>}
-              {action === 'continue_without_tool' && <span className="text-[11px] text-slate-500 italic">Continuing with remaining tools and data; no blind retry was sent.</span>}
+              {action === 'continue_without_tool' && <span className="text-[11px] text-slate-500 italic">{t('logs.tool_continue')}</span>}
             </span>
           )
         case 'fallback_error':
           return (
             <span className="flex flex-col gap-1 w-full">
               <span className="flex items-center gap-2">
-                <span className="text-red-400 font-bold shrink-0">Fallback Failed</span>
+                <span className="text-red-400 font-bold shrink-0">{t('logs.fallback_failed')}</span>
                 <span className="text-slate-400 shrink-0">node:</span>
                 <span className="text-white font-semibold font-mono break-all">{node}</span>
               </span>
@@ -233,14 +234,14 @@ export default function Logs() {
             <Terminal className="text-violet-400" size={20} />
             {t('logs.title')}
           </h2>
-          <p className="text-xs text-slate-500 mt-1">Audit active process outputs, exception callstacks, and database migrations events</p>
+          <p className="text-xs text-slate-500 mt-1">{t('logs.subtitle')}</p>
         </div>
         
         <div className="flex items-center gap-3 w-full sm:w-auto justify-between sm:justify-end flex-wrap sm:flex-nowrap">
           {isAdmin && (
             <input
               type="number"
-              placeholder="User ID"
+              placeholder={t('logs.user_id_placeholder')}
               className="glass-input rounded-xl px-3 py-2 text-xs outline-none w-20 sm:w-24 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
               value={userIdFilter}
               onChange={e => setUserIdFilter(e.target.value)}
@@ -251,7 +252,7 @@ export default function Logs() {
             value={source}
             onChange={e => setSource(e.target.value)}
           >
-            <option value="">{t('logs.all_sources') || 'All Sources'}</option>
+            <option value="">{t('logs.all_sources')}</option>
             <option value="tradingagents.run">🤖 AI Run Trace</option>
             <option value="backend.services.analysis_service">📊 Analysis Service</option>
             <option value="backend.services.trading_orchestrator">💼 Trading Orchestrator</option>
@@ -271,7 +272,7 @@ export default function Logs() {
             onClick={fetch}
             disabled={loading}
             className="flex items-center justify-center p-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white transition-all cursor-pointer shrink-0"
-            title="Refresh"
+            title={t('logs.refresh')}
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -280,13 +281,13 @@ export default function Logs() {
 
       {loading && logs.length === 0 ? (
         <div className="flex items-center justify-center py-12">
-          <p className="text-slate-400 text-sm">{t('common.loading') || 'Loading Logs...'}</p>
+          <p className="text-slate-400 text-sm">{t('common.loading')}</p>
         </div>
       ) : logs.length === 0 ? (
         <div className="glass-panel rounded-2xl p-12 text-center">
           <Terminal size={32} className="mx-auto text-slate-600 mb-3 opacity-30" />
           <p className="text-slate-400 text-xs font-semibold">{t('logs.no_logs')}</p>
-          <p className="text-[10px] text-slate-500 mt-1">No system logs recorded for the selected severity level</p>
+          <p className="text-[10px] text-slate-500 mt-1">{t('logs.empty_for_level')}</p>
         </div>
       ) : (
         <div className="space-y-3">
@@ -331,7 +332,7 @@ export default function Logs() {
 
                   {/* Message */}
                   <span className="text-slate-300 flex-1 text-xs md:text-sm font-sans leading-relaxed break-words font-medium pr-4">
-                    {renderLogMessage(l)}
+                    {renderLogMessage(l, t)}
                   </span>
 
                   {/* Expand Indicator */}

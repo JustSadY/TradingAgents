@@ -56,7 +56,7 @@ export default function Dashboard() {
   if (loading || portfolioLoading) return (
     <div className="h-[80vh] flex flex-col items-center justify-center space-y-4 opacity-50">
         <Activity className="text-violet-500 animate-pulse" size={32} />
-        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">Synchronizing Engine...</p>
+        <p className="text-[10px] font-bold uppercase tracking-widest text-slate-500">{t('dashboard.synchronizing')}</p>
     </div>
   )
 
@@ -65,7 +65,7 @@ export default function Dashboard() {
       <div className="flex items-center justify-between">
         <div>
           <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('dashboard.title')}</h2>
-          <p className="text-xs text-slate-500 mt-1">Multi-agent portfolio summary and live market intelligence</p>
+          <p className="text-xs text-slate-500 mt-1">{t('dashboard.subtitle')}</p>
         </div>
       </div>
 
@@ -81,7 +81,7 @@ export default function Dashboard() {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Newspaper size={14} className="text-violet-400" />
-            <span className="text-xs font-bold text-white uppercase tracking-widest">AI Morning Brief</span>
+            <span className="text-xs font-bold text-white uppercase tracking-widest">{t('dashboard.morning_brief')}</span>
             {summary && <span className="text-[10px] text-slate-600 font-mono">{summary.date}</span>}
           </div>
           <button
@@ -96,7 +96,7 @@ export default function Dashboard() {
 
         {!summary && !summaryLoading && (
           <p className="text-[11px] text-slate-600 italic">
-            Click <strong className="text-slate-500">Generate</strong> to create today's AI market brief — covers watchlist movers and sector rotation.
+            Click <strong className="text-slate-500">{t('dashboard.generate')}</strong> to create today's AI market brief — covers watchlist movers and sector rotation.
           </p>
         )}
 

@@ -177,7 +177,7 @@ export default function ChartPage() {
                       }`}
                     >
                       <ScanSearch size={11} />
-                      {t('chart.patterns') || 'Patterns'}
+                      {t('chart.patterns')}
                     </button>
                   </div>
               </div>
@@ -211,7 +211,7 @@ export default function ChartPage() {
                   <BarChart2 className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-500 group-focus-within:text-violet-400 transition-colors" size={14} />
                   <input
                     className="glass-input pl-10 pr-4 py-2.5 w-full rounded-xl text-xs font-mono placeholder-slate-600 outline-none transition-all"
-                    placeholder={t('chart.custom_formula_placeholder') || 'Custom Formula (e.g. SMA(20) / Close)'}
+                    placeholder={t('chart.custom_formula_placeholder')}
                     value={userFormula}
                     onChange={e => setUserFormula(e.target.value)}
                     onKeyDown={e => e.key === 'Enter' && handleCalculateUserIndicator()}
@@ -231,13 +231,13 @@ export default function ChartPage() {
                 <div className="rounded-2xl bg-white/[0.02] border border-white/[0.05] p-4 space-y-3">
                   <div className="flex items-center gap-2">
                     <ScanSearch size={13} className="text-violet-400" />
-                    <span className="text-xs font-bold text-white">Detected Patterns</span>
+                    <span className="text-xs font-bold text-white">{t('chart.detected_patterns')}</span>
                     {patternsLoading && <Loader2 size={11} className="animate-spin text-violet-400 ml-1" />}
                     {!patternsLoading && <span className="text-[10px] text-slate-600">· {patterns.length} found in {period} history</span>}
                   </div>
 
                   {!patternsLoading && patterns.length === 0 && (
-                    <p className="text-[10px] text-slate-600 italic">No significant patterns detected for this period.</p>
+                    <p className="text-[10px] text-slate-600 italic">{t('chart.no_patterns')}</p>
                   )}
 
                   {patterns.length > 0 && (

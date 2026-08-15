@@ -2,6 +2,10 @@ import { describe, it, expect } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { CustomIndicatorPane } from '../CustomIndicatorPane'
 
+vi.mock('../../../contexts/LanguageContext', async () => ({
+  useTranslation: (await import('../../../test/i18nMock')).useTranslationMock,
+}))
+
 const baseCandles = [
   { time: '2024-01-01', rsi: 55, macd_line: 0.5, macd_signal: 0.3, macd_hist: 0.2 },
   { time: '2024-01-02', rsi: 60, macd_line: 0.6, macd_signal: 0.4, macd_hist: 0.2 },

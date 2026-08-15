@@ -137,7 +137,7 @@ export default function Layout() {
             </div>
             <div>
               <p className="text-white font-display font-bold text-sm tracking-tight leading-none">TradingAgents</p>
-              <p className="text-slate-500 text-[10px] font-medium mt-1 uppercase tracking-wider">AI Portfolio manager</p>
+              <p className="text-slate-500 text-[10px] font-medium mt-1 uppercase tracking-wider">{t('nav.tagline')}</p>
             </div>
           </div>
           <button
@@ -258,7 +258,7 @@ export default function Layout() {
             </div>
           </div>
           <div className="flex items-center justify-between px-3 text-[10px] text-slate-500 font-medium">
-            <span>Currency</span>
+            <span>{t('nav.currency')}</span>
             <select
               value={currency}
               onChange={e => setCurrency(e.target.value as Currency)}

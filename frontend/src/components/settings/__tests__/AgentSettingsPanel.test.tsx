@@ -7,8 +7,8 @@ import AgentSettingsPanel from '../AgentSettingsPanel'
 // Use mutable mock to avoid object-reference infinite re-render loop
 const mockUseMeta = vi.fn()
 
-vi.mock('../../../contexts/LanguageContext', () => ({
-  useTranslation: () => ({ t: (k: string) => k }),
+vi.mock('../../../contexts/LanguageContext', async () => ({
+  useTranslation: (await import('../../../test/i18nMock')).useTranslationMock,
 }))
 
 vi.mock('../../../hooks/useMeta', () => ({
@@ -69,7 +69,7 @@ describe('AgentSettingsPanel', () => {
   it('shows loading state initially', () => {
     vi.spyOn(axios, 'get').mockImplementation(() => new Promise(() => {}))
     renderWithQuery(<AgentSettingsPanel />)
-    expect(screen.getByText('common.loading')).toBeInTheDocument()
+    expect(screen.getByText('Loading...')).toBeInTheDocument()
   })
 
   it('renders agent settings after loading', async () => {
