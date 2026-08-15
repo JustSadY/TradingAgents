@@ -5,5 +5,11 @@
  * AI-powered trading dashboard with simulation and live trading support
  * OpenAPI spec version: 1.0.0
  */
+import type { OhlcvCandle } from './ohlcvCandle';
 
-export type UsersGetAgentAccess200 = {[key: string]: boolean};
+export interface OhlcvResponse {
+  candles: OhlcvCandle[];
+  end_date: string;
+  start_date: string;
+  ticker: string;
+}

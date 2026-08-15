@@ -7,61 +7,6 @@ import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieCha
 import { useTranslation } from '../contexts/LanguageContext'
 import { signalTone, TONE_TEXT_CLASS } from '../utils/signalTone'
 
-interface TradingStats {
-  total_trades: number
-  winning_trades: number
-  win_rate: number
-  avg_return_pct: number | null
-  best_trade: { ticker: string; pnl_pct: number; date: string } | null
-  worst_trade: { ticker: string; pnl_pct: number; date: string } | null
-  total_realized_pnl: number
-  sharpe_ratio: number | null
-  max_drawdown_pct: number | null
-  by_ticker: { ticker: string; trades: number; wins: number; win_rate: number; total_pnl: number }[]
-}
-
-interface PerfData {
-  total: number
-  win_rate: number | null
-  avg_raw_return: number | null
-  avg_alpha_return: number | null
-  by_signal: Record<string, { count: number; wins: number; win_rate: number; avg_return: number }>
-}
-
-interface HistoryItem {
-  id: number; ticker: string; trade_date: string; signal: string | null
-  raw_return: number | null; alpha_return: number | null; holding_days: number | null
-  duration_seconds: number; created_at: string
-}
-
-interface AttributionItem {
-  key: string
-  label: string
-  total_predictions: number
-  correct_predictions: number
-  win_rate: number
-  weight: number
-  chronic_underperformer?: boolean
-}
-
-interface TokenBreakdown {
-  provider: string
-  model: string
-  tokens_in: number
-  tokens_out: number
-  analyses: number
-  estimated_cost_usd: number
-}
-
-interface TokenUsage {
-  total_tokens_in: number
-  total_tokens_out: number
-  total_tokens: number
-  total_cost_usd: number
-  breakdown: TokenBreakdown[]
-  daily: { day: string; tokens_in: number; tokens_out: number; analyses: number }[]
-}
-
 function ReturnCell({ value }: { value: number | null }) {
   if (value === null) return <span className="text-slate-600 font-semibold">—</span>
   const pct = (value * 100).toFixed(2)
@@ -81,12 +26,11 @@ export default function Performance() {
   const statsQuery = useTradingGetPortfolioStats()
   const tokenUsageQuery = useAnalyticsGetTokenUsage()
 
-  const perf = (perfQuery.data ?? null) as unknown as PerfData | null
-  const history = ((Array.isArray(historyQuery.data) ? historyQuery.data : []) as unknown as HistoryItem[])
-    .filter(x => x.raw_return !== null)
-  const attribution = (((attributionQuery.data as { attribution?: AttributionItem[] } | undefined)?.attribution) ?? []) as AttributionItem[]
-  const tradingStats = (statsQuery.data ?? null) as unknown as TradingStats | null
-  const tokenUsage = (tokenUsageQuery.data ?? null) as unknown as TokenUsage | null
+  const perf = perfQuery.data ?? null
+  const history = (historyQuery.data ?? []).filter(x => x.raw_return != null)
+  const attribution = attributionQuery.data?.attribution ?? []
+  const tradingStats = statsQuery.data ?? null
+  const tokenUsage = tokenUsageQuery.data ?? null
   const loading = perfQuery.isPending || historyQuery.isPending
 
   const handleFilter = () => setFilterTicker(ticker)

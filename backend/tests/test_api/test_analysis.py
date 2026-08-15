@@ -108,6 +108,37 @@ class TestAnalysisAPI:
         data = resp.json()
         assert len(data) == 3
 
+    async def test_list_analysis_history_carries_realized_outcome(
+        self, auth_client: AsyncClient, db: AsyncSession, test_user
+    ):
+        """The performance page's history table renders these three columns.
+
+        They live on the row but were not in the response model, so the page
+        filtered on `raw_return !== null`, matched nothing, and hid the whole
+        panel.
+        """
+        db.add(
+            AnalysisResult(
+                user_id=test_user.id,
+                ticker="AAPL",
+                trade_date="2026-07-18",
+                signal="Buy",
+                status="completed",
+                raw_return=0.12,
+                alpha_return=0.04,
+                holding_days=21,
+            )
+        )
+        await db.flush()
+
+        resp = await auth_client.get("/api/analysis/history")
+
+        assert resp.status_code == 200
+        item = resp.json()[0]
+        assert item["raw_return"] == 0.12
+        assert item["alpha_return"] == 0.04
+        assert item["holding_days"] == 21
+
     async def test_list_analysis_history_filter_ticker(self, auth_client: AsyncClient, db: AsyncSession, test_user):
         for ticker in ["AAPL", "GOOGL"]:
             db.add(

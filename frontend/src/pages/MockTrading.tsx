@@ -7,6 +7,7 @@ import {
 import { useTranslation } from '../contexts/LanguageContext'
 import type { OrderResponse } from '../api/generated/model'
 import type { BackendSchemasTradingPerformanceResponse } from '../api/generated/model'
+import { errorDetail } from '../utils/errorDetail'
 
 type PortfolioData = BackendSchemasTradingPerformanceResponse
 
@@ -133,7 +134,7 @@ export default function MockTrading() {
           void perfQuery.refetch()
         },
         onError: (err) => {
-          const detail = (err as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+          const detail = errorDetail(err)
           setOrderResult({ ok: false, msg: detail || t('mocktrading.order_error_default') })
         },
       },

@@ -53,7 +53,9 @@ export interface ChartAnalysis {
   id: number
   trade_date: string
   signal: string | null
-  chart_annotations: string | ChartAnnotations | null
+  // Persisted as JSON, so the API declares it as free-form and it arrives
+  // either already-parsed or as a string. Both are handled below.
+  chart_annotations?: unknown
 }
 
 export function usePriceChart(
@@ -226,7 +228,8 @@ export function usePriceChart(
 
     const getAnn = (a: ChartAnalysis): ChartAnnotations => {
         if (!a.chart_annotations) return {}
-        if (typeof a.chart_annotations === 'object') return a.chart_annotations
+        if (typeof a.chart_annotations === 'object') return a.chart_annotations as ChartAnnotations
+        if (typeof a.chart_annotations !== 'string') return {}
         try {
             return JSON.parse(a.chart_annotations) as ChartAnnotations
         } catch (e) {

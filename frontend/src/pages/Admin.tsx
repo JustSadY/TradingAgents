@@ -26,6 +26,7 @@ import {
   getUsersListUserApiKeysQueryKey,
 } from '../api/generated/users/users'
 import { useSystemSettingsGetSystemSettings, useSystemSettingsUpdateSystemSettings } from '../api/generated/system-settings/system-settings'
+import type { UsersGetToolAccess200, UsersGetToolFieldAccess200 } from '../api/generated/model'
 import { useAnalyticsGetSystemMetrics, useAnalyticsGetSystemHealth } from '../api/generated/analytics/analytics'
 import { Save, Trash2, Plus, UserCog, ShieldCheck, Globe, CheckCircle2, Key, Sliders, BarChart3, RefreshCw, Zap, AlertTriangle, Clock, Wifi } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
@@ -73,29 +74,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 type Tab = 'users' | 'permissions' | 'system' | 'api-keys' | 'user-settings' | 'metrics'
 
-interface SystemMetrics {
-  total_runs: number
-  error_rate_pct: number
-  analysis_runs: Record<string, number>
-  analysis_duration: { count: number; sum_seconds: number; avg_seconds: number }
-  node_errors: Record<string, number>
-  node_fallbacks: Record<string, number>
-  node_retries: number
-  websocket_connections: number
-}
-
-interface SystemHealth {
-  signal_parse_fallbacks: number
-  auto_order_skipped: Record<string, number>
-  quality: {
-    period_days: number
-    total_runs: number
-    unknown: number
-    confidence_counts: { high: number; medium: number; low: number }
-    avg_score: number | null
-  }
-}
-
 export default function Admin() {
   const { t } = useTranslation()
   const { isOwner } = useAuth()
@@ -107,8 +85,8 @@ export default function Admin() {
   const [permissions, setPermissions] = useState<Record<string, boolean>>({})
   const [settingPermissions, setSettingPermissions] = useState<Record<string, boolean>>({})
   const [agentAccess, setAgentAccess] = useState<Record<string, boolean>>({})
-  const [toolAccess, setToolAccess] = useState<Record<string, Record<string, boolean>>>({})
-  const [toolFieldAccess, setToolFieldAccess] = useState<Record<string, Record<string, { can_view: boolean, can_edit: boolean }>>>({})
+  const [toolAccess, setToolAccess] = useState<UsersGetToolAccess200>({})
+  const [toolFieldAccess, setToolFieldAccess] = useState<UsersGetToolFieldAccess200>({})
   const [permSaved, setPermSaved] = useState(false)
   const [newUser, setNewUser] = useState({ username: '', password: '', email: '', display_name: '', role: 'user' })
   const [creating, setCreating] = useState(false)
@@ -151,8 +129,8 @@ export default function Admin() {
   const [metricsEnabled, setMetricsEnabled] = useState(false)
   const metricsQuery = useAnalyticsGetSystemMetrics({ query: { enabled: metricsEnabled } })
   const healthQuery = useAnalyticsGetSystemHealth({ query: { enabled: metricsEnabled } })
-  const sysMetrics = (metricsQuery.data ?? null) as unknown as SystemMetrics | null
-  const sysHealth = (healthQuery.data ?? null) as unknown as SystemHealth | null
+  const sysMetrics = metricsQuery.data ?? null
+  const sysHealth = healthQuery.data ?? null
   const metricsLoading = metricsEnabled && (metricsQuery.isFetching || healthQuery.isFetching)
   // Each panel degrades independently, matching the previous allSettled().
   const loadMetrics = useCallback(() => {
@@ -191,11 +169,11 @@ export default function Admin() {
           queryFn: () => usersGetToolFieldAccess(userId),
         }),
       ])
-      setPermissions((pRes as unknown as { permissions: Record<string, boolean> }).permissions)
-      setSettingPermissions((sRes as unknown as { permissions: Record<string, boolean> }).permissions)
-      setAgentAccess(agentRes as never)
-      setToolAccess(toolRes as never)
-      setToolFieldAccess(toolFieldRes as never)
+      setPermissions(pRes.permissions)
+      setSettingPermissions(sRes.permissions)
+      setAgentAccess(agentRes)
+      setToolAccess(toolRes)
+      setToolFieldAccess(toolFieldRes)
       setSelectedUserId(userId)
     } catch {
       setErrorMsg('Failed to load user permissions')
@@ -207,7 +185,7 @@ export default function Admin() {
       queryKey: getUsersListUserApiKeysQueryKey(userId),
       queryFn: () => usersListUserApiKeys(userId),
     })
-    return ((res as { providers?: string[] })?.providers ?? []) as string[]
+    return res.providers ?? []
   }
 
   const loadUserApiKeys = async (userId: number) => {

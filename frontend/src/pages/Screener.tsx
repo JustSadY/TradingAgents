@@ -4,6 +4,7 @@ import { useAnalysisRunAnalysis } from '../api/generated/analysis/analysis'
 import { Filter, Play, TrendingUp, Loader2, ExternalLink, BarChart2 } from 'lucide-react'
 import { notify } from '../utils/notify'
 import { useTranslation } from '../contexts/LanguageContext'
+import { errorDetail } from '../utils/errorDetail'
 
 interface ScreenResult {
   ticker: string
@@ -33,7 +34,7 @@ export default function Screener() {
   const [analyzing, setAnalyzing] = useState<string | null>(null)
 
   const onScanError = (err: unknown) => {
-    const detail = (err as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+    const detail = errorDetail(err)
     notify('error', detail || 'Screener failed', 'Screener')
   }
   const onScanSuccess = (data: unknown) => {
@@ -68,7 +69,7 @@ export default function Screener() {
       {
         onSuccess: () => notify('success', `Analysis started for ${ticker}`, 'Analysis'),
         onError: (err) => {
-          const detail = (err as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+          const detail = errorDetail(err)
           notify('error', detail || 'Failed to start analysis', 'Analysis')
         },
         onSettled: () => setAnalyzing(null),

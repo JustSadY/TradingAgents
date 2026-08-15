@@ -143,6 +143,12 @@ class AnalysisListItem(BaseModel):
     llm_model: str | None = None
     preset_name: str | None = None
 
+    # Realized outcome, backfilled after the holding period. Null until then —
+    # the performance page renders only the rows that have one.
+    raw_return: float | None = None
+    alpha_return: float | None = None
+    holding_days: int | None = None
+
     @field_validator("signal", mode="before")
     @classmethod
     def validate_signal(cls, v: object) -> str | None:

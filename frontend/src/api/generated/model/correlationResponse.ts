@@ -8,7 +8,7 @@
 
 export interface CorrelationResponse {
   avg_correlation: number | null;
-  matrix: unknown[][];
+  matrix: ((number | null)[])[];
   tickers: string[];
   warning: string | null;
 }

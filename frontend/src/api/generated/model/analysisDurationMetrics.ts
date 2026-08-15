@@ -6,4 +6,8 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type MarketCustomIndicator200 = { [key: string]: unknown };
+export interface AnalysisDurationMetrics {
+  avg_seconds?: number;
+  count?: number;
+  sum_seconds?: number;
+}

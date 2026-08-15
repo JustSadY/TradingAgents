@@ -7,6 +7,7 @@ import { useQueryErrorToast } from '../api/useQueryErrorToast'
 import AppDataGrid from '../components/ui/AppDataGrid'
 import { notify } from '../utils/notify'
 import { useTranslation } from '../contexts/LanguageContext'
+import { errorDetail } from '../utils/errorDetail'
 
 interface EarningsEntry {
   ticker: string
@@ -120,7 +121,7 @@ export default function EarningsCalendar() {
       {
         onSuccess: () => notify('success', `Analysis started for ${ticker}`, 'Analysis'),
         onError: (err) => {
-          const detail = (err as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+          const detail = errorDetail(err)
           notify('error', detail || 'Failed to start analysis.', 'Analysis')
         },
         onSettled: () => setAnalyzing(null),

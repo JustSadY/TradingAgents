@@ -6,4 +6,7 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type AnalyticsGetSystemMetrics200 = { [key: string]: unknown };
+export interface ToolFieldAccessPermsUpdate {
+  can_edit?: boolean | null;
+  can_view?: boolean | null;
+}

@@ -6,4 +6,8 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type PersonasListAllPersonas200Item = { [key: string]: unknown };
+export interface CronStatusResponse {
+  job_configured: boolean;
+  next_run_time?: string | null;
+  running: boolean;
+}

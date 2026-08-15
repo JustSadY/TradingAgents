@@ -7,14 +7,17 @@
  */
 
 export interface AnalysisListItem {
+  alpha_return?: number | null;
   asset_type: string;
   chart_annotations?: unknown;
   created_at: string;
   duration_seconds: number;
+  holding_days?: number | null;
   id: number;
   llm_model?: string | null;
   llm_provider?: string | null;
   preset_name?: string | null;
+  raw_return?: number | null;
   signal: string | null;
   ticker: string;
   trade_date: string;

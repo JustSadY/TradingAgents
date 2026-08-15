@@ -45,7 +45,7 @@ import ToolSettingsPanel from '../components/settings/ToolSettingsPanel'
 import type { ToolSettingsPanelHandle } from '../components/settings/ToolSettingsPanel'
 import AgentSettingsPanel from '../components/settings/AgentSettingsPanel'
 import type { AgentSettingsPanelHandle } from '../components/settings/AgentSettingsPanel'
-import type { WebhookDeliveryRead, SettingsRead, PresetRead } from '../api/generated/model'
+import type { PersonaRead, SettingsRead } from '../api/generated/model'
 
 type Settings = SettingsRead
 type LlmModelOption = { value: string; label: string; supported_output_languages?: string[] }
@@ -196,7 +196,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     userId ? { user_id: userId } : undefined,
     { query: { enabled: false } },
   )
-  const deliveries = (deliveriesQuery.data ?? []) as unknown as WebhookDeliveryRead[]
+  const deliveries = deliveriesQuery.data ?? []
   const loadingDeliveries = deliveriesQuery.isFetching
   // Deliveries are only fetched when the webhooks tab asks for them.
   const loadDeliveries = useCallback(() => { void deliveriesQuery.refetch() }, [deliveriesQuery])
@@ -233,11 +233,11 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const ownPermsQuery = useUsersGetMySettingPermissions({ query: { enabled: !userId } })
   const otherPermsQuery = useUsersGetUserSettingPermissions(userId ?? 0, { query: { enabled: Boolean(userId) } })
   const permsQuery = userId ? otherPermsQuery : ownPermsQuery
-  const presets = (presetsQuery.data ?? []) as unknown as PresetRead[]
+  const presets = presetsQuery.data ?? []
   const cronQuery = useCronCronStatus()
   const catalogQuery = useSettingsGetLlmCatalog()
 
-  const cronStatus = (cronQuery.data ?? null) as { running: boolean; job_configured: boolean; next_run_time: string | null } | null
+  const cronStatus = cronQuery.data ?? null
   const llmCatalog = useMemo(
     () => (catalogQuery.data ? normalizeLlmCatalog(catalogQuery.data) : {}),
     [catalogQuery.data],
@@ -249,7 +249,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     const permPayload = permsQuery.data as { allowed_settings?: string[]; permissions?: string[] } | undefined
     const allowedSet = permPayload?.allowed_settings || permPayload?.permissions || []
     {
-      setS(settings as never)
+      setS(settings)
       setAllowedSettings(userId ? ['general', 'agents', 'tools', 'risk', 'alerts', 'webhooks', 'cron', 'memory', 'presets', 'personas'] : allowedSet)
 
       const defaultTabs = ['general', 'agents', 'tools', 'risk', 'alerts', 'webhooks', 'cron']
@@ -284,7 +284,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     await applyPresetMutation.mutateAsync({ presetId: id, params: userId ? { user_id: userId } : undefined })
     // Re-read the settings the preset just wrote rather than guessing them.
     const refreshed = await settingsQuery.refetch()
-    if (refreshed.data) setS(refreshed.data as never)
+    if (refreshed.data) setS(refreshed.data)
   }
 
   const deletePreset = async (id: number) => {
@@ -1549,14 +1549,6 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   )
 }
 
-interface PersonaItem {
-  key: string
-  label: string
-  description: string
-  instructions: string
-  is_builtin: boolean
-}
-
 function PersonaEditor({ userId }: { userId?: number } = {}) {
   const { t } = useTranslation()
   const [showForm, setShowForm] = useState(false)
@@ -1566,7 +1558,7 @@ function PersonaEditor({ userId }: { userId?: number } = {}) {
   const [error, setError] = useState<string | null>(null)
 
   const personasQuery = usePersonasListAllPersonas(userId ? { user_id: userId } : undefined)
-  const personas = (personasQuery.data ?? []) as unknown as PersonaItem[]
+  const personas = personasQuery.data ?? []
   const loading = personasQuery.isPending
   const load = useCallback(() => personasQuery.refetch(), [personasQuery])
 
@@ -1575,7 +1567,7 @@ function PersonaEditor({ userId }: { userId?: number } = {}) {
   const deletePersona = usePersonasDeletePersona()
 
   const openCreate = () => { setForm({ key: '', label: '', description: '', instructions: '' }); setEditKey(null); setShowForm(true); setError(null) }
-  const openEdit = (p: PersonaItem) => { setForm({ key: p.key, label: p.label, description: p.description, instructions: p.instructions }); setEditKey(p.key); setShowForm(true); setError(null) }
+  const openEdit = (p: PersonaRead) => { setForm({ key: p.key, label: p.label, description: p.description, instructions: p.instructions }); setEditKey(p.key); setShowForm(true); setError(null) }
 
   const save = async () => {
     if (!form.label.trim()) { setError(t('settings.persona_label_required')); return }

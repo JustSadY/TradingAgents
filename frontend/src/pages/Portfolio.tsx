@@ -9,6 +9,7 @@ import { notify } from '../utils/notify'
 import { exportPortfolioCSV } from '../utils/csvExport'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import type { HoldingRead, PortfolioRead, RiskDashboardResponse, RebalanceResponse } from '../api/generated/model'
+import { errorDetail } from '../utils/errorDetail'
 
 const LONG_HOLD_DAYS = 30
 
@@ -76,9 +77,9 @@ export default function Portfolio() {
   const rebalancing = rebalanceMutation.isPending
   const runRebalance = useCallback(() => {
     rebalanceMutation.mutate(undefined, {
-      onSuccess: (data) => setRebalanceResult(data as unknown as RebalanceResponse),
+      onSuccess: setRebalanceResult,
       onError: (err) => {
-        const detail = (err as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        const detail = errorDetail(err)
         notify('error', detail || 'Rebalance failed', 'AI Rebalance')
       },
     })
@@ -574,13 +575,6 @@ export default function Portfolio() {
   )
 }
 
-interface CorrData {
-  tickers: string[]
-  matrix: number[][]
-  avg_correlation: number | null
-  warning: string | null
-}
-
 function corrColor(v: number, isDiag: boolean): string {
   if (isDiag) return 'bg-slate-800/60 text-slate-500'
   if (v < 0) return 'bg-sky-500/20 text-sky-300'
@@ -593,7 +587,7 @@ function CorrelationHeatmap() {
   const [period, setPeriod] = useState('90d')
 
   const query = useTradingGetCorrelation({ period })
-  const data = (query.data ?? null) as unknown as CorrData | null
+  const data = query.data ?? null
   const loading = query.isPending
 
   const diversificationLabel = (avg: number | null) => {

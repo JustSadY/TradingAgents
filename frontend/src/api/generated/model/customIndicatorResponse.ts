@@ -5,5 +5,10 @@
  * AI-powered trading dashboard with simulation and live trading support
  * OpenAPI spec version: 1.0.0
  */
+import type { CustomIndicatorPoint } from './customIndicatorPoint';
 
-export type MarketOhlcv200 = { [key: string]: unknown };
+export interface CustomIndicatorResponse {
+  formula: string;
+  series: CustomIndicatorPoint[];
+  ticker: string;
+}

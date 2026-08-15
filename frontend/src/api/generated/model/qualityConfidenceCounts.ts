@@ -6,4 +6,8 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type NewsNewsFeed200Item = { [key: string]: unknown };
+export interface QualityConfidenceCounts {
+  high?: number;
+  low?: number;
+  medium?: number;
+}

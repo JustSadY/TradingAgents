@@ -6,4 +6,10 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type PersonasUpdatePersona200 = { [key: string]: unknown };
+/**
+ * What a user may do with one setting field of one tool.
+ */
+export interface ToolFieldAccessPerms {
+  can_edit: boolean;
+  can_view: boolean;
+}

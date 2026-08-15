@@ -5,10 +5,10 @@
  * AI-powered trading dashboard with simulation and live trading support
  * OpenAPI spec version: 1.0.0
  */
-import type { PatternsResponsePatternsItem } from './patternsResponsePatternsItem';
+import type { DetectedPattern } from './detectedPattern';
 
 export interface PatternsResponse {
-  patterns: PatternsResponsePatternsItem[];
+  patterns: DetectedPattern[];
   period: string;
   ticker: string;
 }

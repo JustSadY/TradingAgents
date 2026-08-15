@@ -230,7 +230,9 @@
       "AgentAccessUpdateResponse": {
         "properties": {
           "agents": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "type": "boolean"
+            },
             "title": "Agents",
             "type": "object"
           },
@@ -634,8 +636,40 @@
         "title": "AlertUpdate",
         "type": "object"
       },
+      "AnalysisDurationMetrics": {
+        "properties": {
+          "avg_seconds": {
+            "default": 0.0,
+            "title": "Avg Seconds",
+            "type": "number"
+          },
+          "count": {
+            "default": 0,
+            "title": "Count",
+            "type": "integer"
+          },
+          "sum_seconds": {
+            "default": 0.0,
+            "title": "Sum Seconds",
+            "type": "number"
+          }
+        },
+        "title": "AnalysisDurationMetrics",
+        "type": "object"
+      },
       "AnalysisListItem": {
         "properties": {
+          "alpha_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Alpha Return"
+          },
           "asset_type": {
             "title": "Asset Type",
             "type": "string"
@@ -651,6 +685,17 @@
           "duration_seconds": {
             "title": "Duration Seconds",
             "type": "number"
+          },
+          "holding_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Holding Days"
           },
           "id": {
             "title": "Id",
@@ -688,6 +733,17 @@
               }
             ],
             "title": "Preset Name"
+          },
+          "raw_return": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Raw Return"
           },
           "signal": {
             "anyOf": [
@@ -2157,7 +2213,16 @@
           },
           "matrix": {
             "items": {
-              "items": {},
+              "items": {
+                "anyOf": [
+                  {
+                    "type": "number"
+                  },
+                  {
+                    "type": "null"
+                  }
+                ]
+              },
               "type": "array"
             },
             "title": "Matrix",
@@ -2229,6 +2294,86 @@
         "title": "CostEstimateResponse",
         "type": "object"
       },
+      "CronStatusResponse": {
+        "properties": {
+          "job_configured": {
+            "title": "Job Configured",
+            "type": "boolean"
+          },
+          "next_run_time": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Next Run Time"
+          },
+          "running": {
+            "title": "Running",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "running",
+          "job_configured"
+        ],
+        "title": "CronStatusResponse",
+        "type": "object"
+      },
+      "CustomIndicatorPoint": {
+        "properties": {
+          "time": {
+            "title": "Time",
+            "type": "string"
+          },
+          "value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Value"
+          }
+        },
+        "required": [
+          "time",
+          "value"
+        ],
+        "title": "CustomIndicatorPoint",
+        "type": "object"
+      },
+      "CustomIndicatorResponse": {
+        "properties": {
+          "formula": {
+            "title": "Formula",
+            "type": "string"
+          },
+          "series": {
+            "items": {
+              "$ref": "#/components/schemas/CustomIndicatorPoint"
+            },
+            "title": "Series",
+            "type": "array"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "formula",
+          "series"
+        ],
+        "title": "CustomIndicatorResponse",
+        "type": "object"
+      },
       "DailySummaryResponse": {
         "properties": {
           "date": {
@@ -2298,6 +2443,56 @@
           "deleted"
         ],
         "title": "DeleteResponse",
+        "type": "object"
+      },
+      "DetectedPattern": {
+        "properties": {
+          "confidence": {
+            "title": "Confidence",
+            "type": "number"
+          },
+          "direction": {
+            "enum": [
+              "bullish",
+              "bearish"
+            ],
+            "title": "Direction",
+            "type": "string"
+          },
+          "end_date": {
+            "title": "End Date",
+            "type": "string"
+          },
+          "key_points": {
+            "items": {
+              "$ref": "#/components/schemas/PatternKeyPoint"
+            },
+            "title": "Key Points",
+            "type": "array"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "start_date": {
+            "title": "Start Date",
+            "type": "string"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "label",
+          "direction",
+          "start_date",
+          "end_date",
+          "key_points",
+          "confidence"
+        ],
+        "title": "DetectedPattern",
         "type": "object"
       },
       "EarningsCalendarResponse": {
@@ -3275,6 +3470,215 @@
         "title": "MultiTickerRunResponse",
         "type": "object"
       },
+      "NewsItem": {
+        "description": "One headline, normalised across the shapes the vendor returns.\n\n`news_service` writes exactly these keys into the cache table, so cached\nand freshly fetched items validate against the same model.",
+        "properties": {
+          "published_at": {
+            "title": "Published At",
+            "type": "string"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          },
+          "summary": {
+            "title": "Summary",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "url": {
+            "title": "Url",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "title",
+          "summary",
+          "url",
+          "published_at",
+          "source"
+        ],
+        "title": "NewsItem",
+        "type": "object"
+      },
+      "OhlcvCandle": {
+        "description": "One trading day plus the indicators the chart overlays on it.\n\nEvery indicator is nullable: the leading rows of a series have no rolling\nwindow behind them yet, and `_compute_candles` emits ``None`` there rather\nthan dropping the candle.",
+        "properties": {
+          "close": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Close"
+          },
+          "ema": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Ema"
+          },
+          "high": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "High"
+          },
+          "low": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Low"
+          },
+          "macd_hist": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Macd Hist"
+          },
+          "macd_line": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Macd Line"
+          },
+          "macd_signal": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Macd Signal"
+          },
+          "open": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Open"
+          },
+          "rsi": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Rsi"
+          },
+          "sma": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Sma"
+          },
+          "time": {
+            "title": "Time",
+            "type": "string"
+          },
+          "volume": {
+            "title": "Volume",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "time",
+          "open",
+          "high",
+          "low",
+          "close",
+          "volume",
+          "sma",
+          "ema",
+          "rsi",
+          "macd_line",
+          "macd_signal",
+          "macd_hist"
+        ],
+        "title": "OhlcvCandle",
+        "type": "object"
+      },
+      "OhlcvResponse": {
+        "properties": {
+          "candles": {
+            "items": {
+              "$ref": "#/components/schemas/OhlcvCandle"
+            },
+            "title": "Candles",
+            "type": "array"
+          },
+          "end_date": {
+            "title": "End Date",
+            "type": "string"
+          },
+          "start_date": {
+            "title": "Start Date",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "start_date",
+          "end_date",
+          "candles"
+        ],
+        "title": "OhlcvResponse",
+        "type": "object"
+      },
       "OkResponse": {
         "properties": {
           "ok": {
@@ -3511,12 +3915,35 @@
         "title": "PagePermissionsUpdate",
         "type": "object"
       },
+      "PatternKeyPoint": {
+        "description": "A point the chart annotates, e.g. the neckline of a double top.",
+        "properties": {
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "price": {
+            "title": "Price",
+            "type": "number"
+          }
+        },
+        "required": [
+          "date",
+          "price",
+          "label"
+        ],
+        "title": "PatternKeyPoint",
+        "type": "object"
+      },
       "PatternsResponse": {
         "properties": {
           "patterns": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/DetectedPattern"
             },
             "title": "Patterns",
             "type": "array"
@@ -3591,6 +4018,40 @@
           "label"
         ],
         "title": "PersonaCreate",
+        "type": "object"
+      },
+      "PersonaRead": {
+        "description": "A persona as the API returns it, built-in or user-created.\n\nThe two sources are flattened into one shape so the client does not have to\nknow which table a persona came from; `is_builtin` is what decides whether\nit can be edited or deleted.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "instructions": {
+            "title": "Instructions",
+            "type": "string"
+          },
+          "is_builtin": {
+            "title": "Is Builtin",
+            "type": "boolean"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "description",
+          "instructions",
+          "is_builtin"
+        ],
+        "title": "PersonaRead",
         "type": "object"
       },
       "PersonaUpdate": {
@@ -3980,6 +4441,27 @@
         "title": "ProfileUpdate",
         "type": "object"
       },
+      "QualityConfidenceCounts": {
+        "properties": {
+          "high": {
+            "default": 0,
+            "title": "High",
+            "type": "integer"
+          },
+          "low": {
+            "default": 0,
+            "title": "Low",
+            "type": "integer"
+          },
+          "medium": {
+            "default": 0,
+            "title": "Medium",
+            "type": "integer"
+          }
+        },
+        "title": "QualityConfidenceCounts",
+        "type": "object"
+      },
       "RebalanceResponse": {
         "properties": {
           "issues": {
@@ -4200,6 +4682,44 @@
           }
         },
         "title": "RiskDashboardResponse",
+        "type": "object"
+      },
+      "RunQualitySummary": {
+        "properties": {
+          "avg_score": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Avg Score"
+          },
+          "confidence_counts": {
+            "$ref": "#/components/schemas/QualityConfidenceCounts"
+          },
+          "period_days": {
+            "title": "Period Days",
+            "type": "integer"
+          },
+          "total_runs": {
+            "title": "Total Runs",
+            "type": "integer"
+          },
+          "unknown": {
+            "title": "Unknown",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "period_days",
+          "total_runs",
+          "unknown",
+          "confidence_counts"
+        ],
+        "title": "RunQualitySummary",
         "type": "object"
       },
       "SchemaBundle": {
@@ -6177,6 +6697,114 @@
         "title": "SignalMeta",
         "type": "object"
       },
+      "SystemHealthRead": {
+        "properties": {
+          "auto_order_skipped": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Auto Order Skipped",
+            "type": "object"
+          },
+          "quality": {
+            "$ref": "#/components/schemas/RunQualitySummary"
+          },
+          "signal_parse_fallbacks": {
+            "title": "Signal Parse Fallbacks",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "signal_parse_fallbacks",
+          "auto_order_skipped",
+          "quality"
+        ],
+        "title": "SystemHealthRead",
+        "type": "object"
+      },
+      "SystemMetricsRead": {
+        "description": "Key Prometheus counters, flattened for the admin dashboard.\n\nEvery field carries a default because the collector returns only ``error``\nwhen ``prometheus_client`` cannot be imported.",
+        "properties": {
+          "analysis_duration": {
+            "$ref": "#/components/schemas/AnalysisDurationMetrics",
+            "default": {
+              "avg_seconds": 0.0,
+              "count": 0,
+              "sum_seconds": 0.0
+            }
+          },
+          "analysis_runs": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Analysis Runs",
+            "type": "object"
+          },
+          "auto_order_skipped": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Auto Order Skipped",
+            "type": "object"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "error_rate_pct": {
+            "default": 0.0,
+            "title": "Error Rate Pct",
+            "type": "number"
+          },
+          "node_errors": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Node Errors",
+            "type": "object"
+          },
+          "node_fallbacks": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "default": {},
+            "title": "Node Fallbacks",
+            "type": "object"
+          },
+          "node_retries": {
+            "default": 0,
+            "title": "Node Retries",
+            "type": "integer"
+          },
+          "signal_parse_fallbacks": {
+            "default": 0,
+            "title": "Signal Parse Fallbacks",
+            "type": "integer"
+          },
+          "total_runs": {
+            "default": 0,
+            "title": "Total Runs",
+            "type": "integer"
+          },
+          "websocket_connections": {
+            "default": 0,
+            "title": "Websocket Connections",
+            "type": "integer"
+          }
+        },
+        "title": "SystemMetricsRead",
+        "type": "object"
+      },
       "SystemSettingsRead": {
         "properties": {
           "active_broker": {
@@ -6431,12 +7059,220 @@
         "title": "TokenResponse",
         "type": "object"
       },
+      "TokenUsageBreakdown": {
+        "description": "Cost and volume for one provider/model pair.",
+        "properties": {
+          "analyses": {
+            "title": "Analyses",
+            "type": "integer"
+          },
+          "estimated_cost_usd": {
+            "title": "Estimated Cost Usd",
+            "type": "number"
+          },
+          "model": {
+            "title": "Model",
+            "type": "string"
+          },
+          "pricing_is_fallback": {
+            "title": "Pricing Is Fallback",
+            "type": "boolean"
+          },
+          "pricing_source": {
+            "enum": [
+              "exact",
+              "model_id",
+              "provider_fallback",
+              "unknown_provider",
+              "local"
+            ],
+            "title": "Pricing Source",
+            "type": "string"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "tokens_in": {
+            "title": "Tokens In",
+            "type": "integer"
+          },
+          "tokens_out": {
+            "title": "Tokens Out",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "provider",
+          "model",
+          "tokens_in",
+          "tokens_out",
+          "analyses",
+          "estimated_cost_usd",
+          "pricing_source",
+          "pricing_is_fallback"
+        ],
+        "title": "TokenUsageBreakdown",
+        "type": "object"
+      },
+      "TokenUsageDay": {
+        "properties": {
+          "analyses": {
+            "title": "Analyses",
+            "type": "integer"
+          },
+          "day": {
+            "title": "Day",
+            "type": "string"
+          },
+          "tokens_in": {
+            "title": "Tokens In",
+            "type": "integer"
+          },
+          "tokens_out": {
+            "title": "Tokens Out",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "day",
+          "tokens_in",
+          "tokens_out",
+          "analyses"
+        ],
+        "title": "TokenUsageDay",
+        "type": "object"
+      },
+      "TokenUsageRead": {
+        "properties": {
+          "breakdown": {
+            "items": {
+              "$ref": "#/components/schemas/TokenUsageBreakdown"
+            },
+            "title": "Breakdown",
+            "type": "array"
+          },
+          "daily": {
+            "items": {
+              "$ref": "#/components/schemas/TokenUsageDay"
+            },
+            "title": "Daily",
+            "type": "array"
+          },
+          "total_cost_usd": {
+            "title": "Total Cost Usd",
+            "type": "number"
+          },
+          "total_tokens": {
+            "title": "Total Tokens",
+            "type": "integer"
+          },
+          "total_tokens_in": {
+            "title": "Total Tokens In",
+            "type": "integer"
+          },
+          "total_tokens_out": {
+            "title": "Total Tokens Out",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total_tokens_in",
+          "total_tokens_out",
+          "total_tokens",
+          "total_cost_usd",
+          "breakdown",
+          "daily"
+        ],
+        "title": "TokenUsageRead",
+        "type": "object"
+      },
+      "ToolAccessPerms": {
+        "description": "What a user may do with one tool.",
+        "properties": {
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "can_enable": {
+            "title": "Can Enable",
+            "type": "boolean"
+          },
+          "can_use": {
+            "title": "Can Use",
+            "type": "boolean"
+          },
+          "can_view": {
+            "title": "Can View",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "can_view",
+          "can_use",
+          "can_edit",
+          "can_enable"
+        ],
+        "title": "ToolAccessPerms",
+        "type": "object"
+      },
+      "ToolAccessPermsUpdate": {
+        "additionalProperties": false,
+        "description": "A partial permission change; omitted keys keep their stored value.\n\n``extra=\"forbid\"`` keeps the guarantee the service used to enforce by hand,\nthat an unrecognised permission name is rejected rather than ignored.",
+        "properties": {
+          "can_edit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Edit"
+          },
+          "can_enable": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Enable"
+          },
+          "can_use": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Use"
+          },
+          "can_view": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can View"
+          }
+        },
+        "title": "ToolAccessPermsUpdate",
+        "type": "object"
+      },
       "ToolAccessUpdate": {
         "properties": {
           "tools": {
             "additionalProperties": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/ToolAccessPermsUpdate"
             },
             "title": "Tools",
             "type": "object"
@@ -6455,7 +7291,9 @@
             "type": "string"
           },
           "tools": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ToolAccessPerms"
+            },
             "title": "Tools",
             "type": "object"
           }
@@ -6467,13 +7305,60 @@
         "title": "ToolAccessUpdateResponse",
         "type": "object"
       },
+      "ToolFieldAccessPerms": {
+        "description": "What a user may do with one setting field of one tool.",
+        "properties": {
+          "can_edit": {
+            "title": "Can Edit",
+            "type": "boolean"
+          },
+          "can_view": {
+            "title": "Can View",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "can_view",
+          "can_edit"
+        ],
+        "title": "ToolFieldAccessPerms",
+        "type": "object"
+      },
+      "ToolFieldAccessPermsUpdate": {
+        "additionalProperties": false,
+        "properties": {
+          "can_edit": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can Edit"
+          },
+          "can_view": {
+            "anyOf": [
+              {
+                "type": "boolean"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Can View"
+          }
+        },
+        "title": "ToolFieldAccessPermsUpdate",
+        "type": "object"
+      },
       "ToolFieldAccessUpdate": {
         "properties": {
           "fields": {
             "additionalProperties": {
               "additionalProperties": {
-                "additionalProperties": true,
-                "type": "object"
+                "$ref": "#/components/schemas/ToolFieldAccessPermsUpdate"
               },
               "type": "object"
             },
@@ -6494,7 +7379,12 @@
             "type": "string"
           },
           "fields": {
-            "additionalProperties": true,
+            "additionalProperties": {
+              "additionalProperties": {
+                "$ref": "#/components/schemas/ToolFieldAccessPerms"
+              },
+              "type": "object"
+            },
             "title": "Fields",
             "type": "object"
           }
@@ -7414,9 +8304,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Analytics Get System Health",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SystemHealthRead"
                 }
               }
             },
@@ -7443,9 +8331,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Analytics Get System Metrics",
-                  "type": "object"
+                  "$ref": "#/components/schemas/SystemMetricsRead"
                 }
               }
             },
@@ -8801,9 +9687,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Analytics Get Token Usage",
-                  "type": "object"
+                  "$ref": "#/components/schemas/TokenUsageRead"
                 }
               }
             },
@@ -8922,9 +9806,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Cron Cron Status",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CronStatusResponse"
                 }
               }
             },
@@ -9212,9 +10094,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Market Custom Indicator",
-                  "type": "object"
+                  "$ref": "#/components/schemas/CustomIndicatorResponse"
                 }
               }
             },
@@ -9500,9 +10380,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Market Ohlcv",
-                  "type": "object"
+                  "$ref": "#/components/schemas/OhlcvResponse"
                 }
               }
             },
@@ -9742,8 +10620,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/NewsItem"
                   },
                   "title": "Response News News Feed",
                   "type": "array"
@@ -9801,8 +10678,7 @@
               "application/json": {
                 "schema": {
                   "items": {
-                    "additionalProperties": true,
-                    "type": "object"
+                    "$ref": "#/components/schemas/PersonaRead"
                   },
                   "title": "Response Personas List All Personas",
                   "type": "array"
@@ -9867,9 +10743,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Personas Create Persona",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PersonaRead"
                 }
               }
             },
@@ -10005,9 +10879,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Personas Update Persona",
-                  "type": "object"
+                  "$ref": "#/components/schemas/PersonaRead"
                 }
               }
             },
@@ -12524,7 +13396,9 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "type": "boolean"
+                  },
                   "title": "Response Users Get Agent Access",
                   "type": "object"
                 }
@@ -13008,7 +13882,9 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "$ref": "#/components/schemas/ToolAccessPerms"
+                  },
                   "title": "Response Users Get Tool Access",
                   "type": "object"
                 }
@@ -13112,7 +13988,12 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
+                  "additionalProperties": {
+                    "additionalProperties": {
+                      "$ref": "#/components/schemas/ToolFieldAccessPerms"
+                    },
+                    "type": "object"
+                  },
                   "title": "Response Users Get Tool Field Access",
                   "type": "object"
                 }

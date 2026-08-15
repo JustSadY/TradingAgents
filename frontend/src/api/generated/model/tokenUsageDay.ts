@@ -6,4 +6,9 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type PersonasCreatePersona201 = { [key: string]: unknown };
+export interface TokenUsageDay {
+  analyses: number;
+  day: string;
+  tokens_in: number;
+  tokens_out: number;
+}

@@ -6,4 +6,12 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type AnalyticsGetSystemHealth200 = { [key: string]: unknown };
+/**
+ * What a user may do with one tool.
+ */
+export interface ToolAccessPerms {
+  can_edit: boolean;
+  can_enable: boolean;
+  can_use: boolean;
+  can_view: boolean;
+}

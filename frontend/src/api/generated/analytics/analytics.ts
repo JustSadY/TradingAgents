@@ -21,9 +21,9 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  AnalyticsGetSystemHealth200,
-  AnalyticsGetSystemMetrics200,
-  AnalyticsGetTokenUsage200
+  SystemHealthRead,
+  SystemMetricsRead,
+  TokenUsageRead
 } from '../model';
 
 import { customInstance } from '../../mutator';
@@ -58,7 +58,7 @@ export const analyticsGetSystemHealth = (
 ) => {
 
 
-      return customInstance<AnalyticsGetSystemHealth200>(
+      return customInstance<SystemHealthRead>(
       {url: `/api/admin/system-health`, method: 'GET', signal
     },
       options);
@@ -151,7 +151,7 @@ export const analyticsGetSystemMetrics = (
 ) => {
 
 
-      return customInstance<AnalyticsGetSystemMetrics200>(
+      return customInstance<SystemMetricsRead>(
       {url: `/api/admin/system-metrics`, method: 'GET', signal
     },
       options);
@@ -243,7 +243,7 @@ export const analyticsGetTokenUsage = (
 ) => {
 
 
-      return customInstance<AnalyticsGetTokenUsage200>(
+      return customInstance<TokenUsageRead>(
       {url: `/api/analytics/token-usage`, method: 'GET', signal
     },
       options);

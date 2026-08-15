@@ -6,4 +6,11 @@
  * OpenAPI spec version: 1.0.0
  */
 
-export type UsersGetAgentAccess200 = {[key: string]: boolean};
+/**
+ * A point the chart annotates, e.g. the neckline of a double top.
+ */
+export interface PatternKeyPoint {
+  date: string;
+  label: string;
+  price: number;
+}

@@ -21,7 +21,7 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  CronCronStatus200
+  CronStatusResponse
 } from '../model';
 
 import { customInstance } from '../../mutator';
@@ -55,7 +55,7 @@ export const cronCronStatus = (
 ) => {
 
 
-      return customInstance<CronCronStatus200>(
+      return customInstance<CronStatusResponse>(
       {url: `/api/cron/status`, method: 'GET', signal
     },
       options);
