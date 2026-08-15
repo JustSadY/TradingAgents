@@ -12,7 +12,6 @@ Usage:
 
 from __future__ import annotations
 
-import json
 import os
 import sys
 from pathlib import Path
@@ -29,15 +28,14 @@ os.environ.setdefault("ANALYSIS_QUEUE_MODE", "inline")
 
 
 def main() -> int:
-    from backend.main import app
+    from backend.core.openapi_contract import build_validated_openapi, render_openapi
 
     destination = Path(sys.argv[1]) if len(sys.argv) > 1 else _REPO_ROOT / "frontend" / "openapi.json"
     destination.parent.mkdir(parents=True, exist_ok=True)
 
-    schema = app.openapi()
-    # sort_keys keeps the output stable so a regenerated file only differs when
-    # the API actually changed.
-    destination.write_text(json.dumps(schema, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    schema = build_validated_openapi()
+    # Stable rendering keeps generated-client diffs tied to API changes only.
+    destination.write_text(render_openapi(schema), encoding="utf-8")
 
     print(f"Wrote {len(schema.get('paths', {}))} paths to {destination}")
     return 0

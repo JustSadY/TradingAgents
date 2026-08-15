@@ -245,13 +245,15 @@ CHART_PERIODS: list[dict] = [
 ]
 
 async def build_meta(db=None, user=None) -> dict:
+    from backend.schemas.meta import AgentMeta
+    from backend.schemas.tool_settings import ToolMeta
     from backend.services.agent_settings_service import build_agent_runtime_context
     from backend.trading_agents.agent_catalog import list_agents
     from backend.trading_agents.agents.hierarchy import AgentHierarchy
     from backend.trading_agents.agents.tools import registry
 
-    tools_list = registry.metadata()
-    agents_list = [a.metadata() for a in list_agents()]
+    tools_list = [ToolMeta.model_validate(item).model_dump() for item in registry.metadata()]
+    agents_list = [AgentMeta.model_validate(a.metadata()).model_dump() for a in list_agents()]
     if db is not None and user is not None:
         from backend.services.tool_access_service import get_user_tool_access
 

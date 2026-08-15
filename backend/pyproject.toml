@@ -97,6 +97,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests (require external services)",
     "llm: marks tests that call LLM endpoints",
+    "postgres_rls: PostgreSQL integration tests for runtime RLS contexts",
 ]
 addopts = "-q --tb=short --strict-markers"
 
@@ -107,8 +108,9 @@ omit = ["backend/tests/*"]
 [tool.pyright]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
-include = ["backend/core/temporal.py", "backend/schemas"]
-exclude = ["backend/tests"]
+include = ["core/temporal.py", "schemas"]
+exclude = ["tests", "postgres_tests"]
+extraPaths = [".."]
 reportMissingImports = "warning"
 reportGeneralTypeIssues = "warning"
 reportMissingTypeStubs = "none"

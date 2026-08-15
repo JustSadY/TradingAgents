@@ -2,7 +2,8 @@ from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.database import get_db, set_tenant_context
+from backend.core.database import get_db
+from backend.core.rls_context import set_request_admin_context, set_request_tenant_context
 from backend.core.security import decode_token_payload
 from backend.models.user import User
 from backend.repositories.permissions import get_user_page_permission, get_user_setting_permission
@@ -58,7 +59,10 @@ async def get_user_from_access_token(token: str, db: AsyncSession) -> User:
     if payload.get("ver", 0) != getattr(user, "token_version", 0):
         raise credentials_exc
 
-    await set_tenant_context(db, user_id=user.id, is_admin=user.is_admin)
+    if user.is_admin:
+        await set_request_admin_context(db, user.id)
+    else:
+        await set_request_tenant_context(db, user.id)
     return user
 
 

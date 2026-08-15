@@ -59,6 +59,7 @@ async def extract_and_save_annotations(
     support_levels: list = None,
     resistance_levels: list = None,
     output_language: str = "English",
+    user_id: int | None = None,
 ) -> None:
     try:
         annotations = await extract_chart_annotations(
@@ -83,6 +84,10 @@ async def extract_and_save_annotations(
         if not annotations:
             return
         async with AsyncSessionLocal() as s:
+            if user_id is not None:
+                from backend.core.rls_context import set_user_background_context
+
+                await set_user_background_context(s, user_id)
             from backend.repositories.analysis import get_analysis_by_id as _repo_get
 
             row = await _repo_get(s, analysis_id)

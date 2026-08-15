@@ -276,7 +276,8 @@ async def test_worker_treats_cancelled_analysis_as_terminal(monkeypatch):
 
     terminal: list[tuple[str, str]] = []
 
-    async def mark_terminal(task_id, status):
+    async def mark_terminal(task_id, status, user_id=None):
+        assert user_id is None
         terminal.append((task_id, status))
 
     monkeypatch.setattr(database, "AsyncSessionLocal", lambda: _Session())

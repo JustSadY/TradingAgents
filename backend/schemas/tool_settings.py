@@ -49,3 +49,7 @@ class ToolMeta(BaseModel):
     label_key: str
     description_key: str
     settings_schema: list[ToolSettingFieldMeta]
+    requires_secret: bool
+    requires_network: bool
+    requires_db: bool
+    temporal_semantics: str

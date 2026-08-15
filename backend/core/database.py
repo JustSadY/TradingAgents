@@ -77,17 +77,13 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
 
 
 async def set_tenant_context(db: AsyncSession, *, user_id: int, is_admin: bool = False) -> None:
-    """Set transaction-local PostgreSQL values consumed by tenant RLS policies."""
-    bind = db.get_bind()
-    if bind.dialect.name != "postgresql":
-        return
-    await db.execute(
-        text(
-            "SELECT set_config('app.user_id', :user_id, true), "
-            "set_config('app.is_admin', :is_admin, true)"
-        ),
-        {"user_id": str(int(user_id)), "is_admin": "true" if is_admin else "false"},
-    )
+    """Compatibility wrapper for authenticated request context."""
+    from backend.core.rls_context import set_request_admin_context, set_request_tenant_context
+
+    if is_admin:
+        await set_request_admin_context(db, user_id)
+    else:
+        await set_request_tenant_context(db, user_id)
 
 
 async def _has_alembic_version(conn) -> bool:

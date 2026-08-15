@@ -67,10 +67,10 @@ async def lifespan(app: FastAPI):
     await _migrate_analysis_subpage_permissions()
 
     try:
-        from backend.core.database import AsyncSessionLocal
+        from backend.core.rls_context import BackgroundCapability, trusted_background_session
         from backend.repositories.analysis import cleanup_stale_analyses
 
-        async with AsyncSessionLocal() as db:
+        async with trusted_background_session(BackgroundCapability.STARTUP_CLEANUP) as db:
             count = await cleanup_stale_analyses(db)
             if count > 0:
                 _logger.info("Marked %d stale analyses as failed.", count)
@@ -186,11 +186,11 @@ async def _seed_setting_permissions():
     from sqlalchemy import select
 
     from backend.core.constants import SETTING_KEYS
-    from backend.core.database import AsyncSessionLocal
+    from backend.core.rls_context import BackgroundCapability, trusted_background_session
     from backend.models.page_permission import UserSettingPermission
     from backend.models.user import User
 
-    async with AsyncSessionLocal() as db:
+    async with trusted_background_session(BackgroundCapability.STARTUP_SEED) as db:
         res = await db.execute(select(User))
         users = res.scalars().all()
         for u in users:
@@ -217,12 +217,12 @@ async def _migrate_analysis_subpage_permissions():
     """
     from sqlalchemy import select
 
-    from backend.core.database import AsyncSessionLocal
+    from backend.core.rls_context import BackgroundCapability, trusted_background_session
     from backend.models.page_permission import UserPagePermission
     from backend.models.user import User
 
     new_keys = ("screener", "sector-rotation", "earnings")
-    async with AsyncSessionLocal() as db:
+    async with trusted_background_session(BackgroundCapability.STARTUP_SEED) as db:
         res = await db.execute(select(User))
         users = res.scalars().all()
         for u in users:
@@ -248,10 +248,10 @@ async def _load_cron_settings(cron):
     try:
         from sqlalchemy import select
 
-        from backend.core.database import AsyncSessionLocal
+        from backend.core.rls_context import BackgroundCapability, trusted_background_session
         from backend.models.settings import AppSettings
 
-        async with AsyncSessionLocal() as db:
+        async with trusted_background_session(BackgroundCapability.CRON_BOOTSTRAP) as db:
             app_res = await db.execute(select(AppSettings).where(AppSettings.cron_enabled))
             for app_settings in app_res.scalars():
                 await cron.apply_user_settings(app_settings)
