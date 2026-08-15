@@ -1,237 +1,38 @@
-import React, { createContext, useContext, useState, useCallback } from 'react'
+import React, { createContext, useContext, useCallback } from 'react'
+import { I18nextProvider, useTranslation as useI18nextTranslation } from 'react-i18next'
 import { getAccessToken } from './AuthContext'
+import i18n, { LANGUAGE_STORAGE_KEY, readStoredLanguage, type Language } from '../i18n'
 
-export type Language = 'en' | 'tr'
+export type { Language }
 
 interface LanguageContextType {
   language: Language
   setLanguage: (lang: Language) => void
-  t: (key: string) => string
-}
-
-const TRANSLATIONS: Record<Language, Record<string, string>> = {
-  en: {
-
-    'nav.dashboard': 'Dashboard',
-    'nav.analysis': 'Agent Analysis',
-    'nav.chart': 'Technical Charts',
-    'nav.simulation': 'Paper Trading',
-    'nav.portfolio': 'My Portfolio',
-    'nav.watchlist': 'Watchlist',
-    'nav.orders': 'Order History',
-    'nav.performance': 'Performance Stats',
-    'nav.alerts': 'Price Alerts',
-    'nav.screener': 'Stock Screener',
-    'nav.sector_rotation': 'Sector Map',
-    'nav.earnings_calendar': 'Earnings Calendar',
-    'nav.settings': 'Preferences',
-    'nav.ab_testing': 'A/B Testing',
-    'nav.logs': 'System Logs',
-    'nav.profile': 'Account & API Keys',
-    'nav.admin': 'Admin Control Panel',
-    'nav.logout': 'Logout',
-    'nav.analyzing': 'Analyzing...',
-    'nav.running_in_bg': 'Running in background...',
-    'nav.next_run': 'Next:',
-    'nav.section.trading_desk': 'Trading Desk',
-    'nav.section.portfolio_trading': 'Portfolio & Trading',
-    'nav.section.market_tools': 'Market Tools',
-    'nav.section.system_config': 'Management & Settings',
-
-
-    'dashboard.title': 'Dashboard',
-    'dashboard.new_analysis': 'New Analysis',
-    'dashboard.recent_analyses': 'Recent Analyses',
-    'dashboard.all': 'All',
-    'dashboard.ticker': 'Symbol',
-    'dashboard.date': 'Date',
-    'dashboard.signal': 'Signal',
-    'dashboard.duration': 'Duration',
-    'dashboard.no_analyses': 'No analyses run yet.',
-    'dashboard.open_positions': 'Open Positions',
-    'dashboard.no_open_positions': 'No open positions.',
-    'dashboard.quantity': 'Quantity',
-    'dashboard.price': 'Price',
-    'dashboard.pnl': 'P&L',
-    'dashboard.watchlist_news': 'Watchlist News Feed',
-    'dashboard.portfolio_value': 'Portfolio Value',
-    'dashboard.total_return': 'Total Return',
-    'dashboard.cash': 'Cash',
-    'dashboard.unrealized_pnl': 'Unrealized P&L',
-    'dashboard.win_rate': 'Signal Win Rate',
-    'dashboard.analyses': 'analyses',
-
-
-    'watchlist.title': 'Watchlist',
-    'watchlist.add': 'Add',
-    'watchlist.add_title': 'Add New Asset',
-    'watchlist.loading': 'Loading...',
-    'watchlist.empty': 'Watchlist is empty.',
-    'watchlist.placeholder': 'Enter symbol (e.g. AAPL)',
-
-
-    'common.loading': 'Loading...',
-    'common.save': 'Save',
-    'common.cancel': 'Cancel',
-    'common.error': 'Error',
-    'common.success': 'Success',
-    'common.delete': 'Delete',
-    'common.add': 'Add',
-    'common.no_data': 'No data available',
-    'common.retry': 'Retry Connection',
-
-
-    'settings.title': 'Preferences',
-    'settings.subtitle': 'Configure your personal trading agent preferences and models',
-    'settings.general': 'General Preferences',
-    'settings.language': 'App Language',
-    'settings.llm_settings': 'LLM Settings',
-    'settings.llm_settings_description': 'Global LLM settings and performance parameters. Per-agent models are configured in the AI Configuration tab.',
-    'settings.saving': 'Saving...',
-    'settings.webhook_no_deliveries': 'No deliveries logged yet. Webhook events will appear here after they fire.',
-    'settings.memory_needs_openai_key': 'Add your OpenAI API key in Profile to use the OpenAI embedder.',
-    'settings.row_agent_qa': 'Inter-Agent Q&A',
-    'settings.agent_qa_description': 'Analysts question each other after their reports',
-    'settings.personas_title': 'Investor Personas',
-    'settings.personas_description': "Create custom investor personas that guide the Portfolio Manager's decision style",
-    'settings.persona_new': 'New Persona',
-    'settings.persona_edit': 'Edit Persona',
-    'settings.personas_loading': 'Loading personas…',
-    'settings.cron_settings': 'Scheduler (Cron) Settings',
-    'settings.watchlist': 'Watchlist Assets',
-    'settings.save_success': 'Preferences saved successfully.',
-    'settings.save_error': 'Failed to save preferences.',
-
-
-    'logs.title': 'System Logs',
-    'logs.all_levels': 'All Levels',
-    'logs.no_logs': 'No logs available.',
-  },
-  tr: {
-
-    'nav.dashboard': 'Pano (Dashboard)',
-    'nav.analysis': 'Ajan Analizi',
-    'nav.chart': 'Teknik Grafikler',
-    'nav.simulation': 'Sanal İşlemler',
-    'nav.portfolio': 'Portföyüm',
-    'nav.watchlist': 'İzleme Listesi',
-    'nav.orders': 'Emir Geçmişi',
-    'nav.performance': 'Performans Analizi',
-    'nav.alerts': 'Fiyat Alarmları',
-    'nav.screener': 'Hisse Tarayıcı',
-    'nav.sector_rotation': 'Sektör Haritası',
-    'nav.earnings_calendar': 'Kazanç Takvimi',
-    'nav.settings': 'Tercihler',
-    'nav.ab_testing': 'A/B Testi',
-    'nav.logs': 'Sistem Günlükleri',
-    'nav.profile': 'Profil & API Anahtarları',
-    'nav.admin': 'Yönetim Paneli',
-    'nav.logout': 'Çıkış Yap',
-    'nav.analyzing': 'analiz ediliyor',
-    'nav.running_in_bg': 'Arka planda çalışıyor...',
-    'nav.next_run': 'Sonraki:',
-    'nav.section.trading_desk': 'İşlem Masası',
-    'nav.section.portfolio_trading': 'Portföy & Yatırım',
-    'nav.section.market_tools': 'Piyasa Takibi',
-    'nav.section.system_config': 'Sistem & Ayarlar',
-
-
-    'dashboard.title': 'Dashboard',
-    'dashboard.new_analysis': 'Yeni Analiz',
-    'dashboard.recent_analyses': 'Son Analizler',
-    'dashboard.all': 'Tümü',
-    'dashboard.ticker': 'Sembol',
-    'dashboard.date': 'Tarih',
-    'dashboard.signal': 'Sinyal',
-    'dashboard.duration': 'Süre',
-    'dashboard.no_analyses': 'Henüz analiz yapılmadı.',
-    'dashboard.open_positions': 'Açık Pozisyonlar',
-    'dashboard.no_open_positions': 'Açık pozisyon yok.',
-    'dashboard.quantity': 'Miktar',
-    'dashboard.price': 'Fiyat',
-    'dashboard.pnl': 'K/Z',
-    'dashboard.watchlist_news': 'İzleme Listesi Haberleri',
-    'dashboard.portfolio_value': 'Portföy Değeri',
-    'dashboard.total_return': 'Toplam Getiri',
-    'dashboard.cash': 'Nakit',
-    'dashboard.unrealized_pnl': 'Gerçekleşmemiş K/Z',
-    'dashboard.win_rate': 'Sinyal Kazanma Oranı',
-    'dashboard.analyses': 'analiz',
-
-
-    'watchlist.title': 'İzleme Listesi',
-    'watchlist.add': 'Ekle',
-    'watchlist.add_title': 'Yeni Varlık Ekle',
-    'watchlist.loading': 'Yükleniyor...',
-    'watchlist.empty': 'İzleme listesi boş.',
-    'watchlist.placeholder': 'Sembol girin (örn. AAPL)',
-
-
-    'common.loading': 'Yükleniyor...',
-    'common.save': 'Kaydet',
-    'common.cancel': 'İptal',
-    'common.error': 'Hata',
-    'common.success': 'Başarılı',
-    'common.delete': 'Sil',
-    'common.add': 'Ekle',
-    'common.no_data': 'Veri bulunamadı',
-    'common.retry': 'Yeniden Bağlan',
-
-
-    'settings.title': 'Ayarlar',
-    'settings.subtitle': 'Kişisel trading agent tercihlerinizi ve modellerinizi yapılandırın',
-    'settings.general': 'Genel Ayarlar',
-    'settings.language': 'Uygulama Dili',
-    'settings.llm_settings': 'LLM Ayarları',
-    'settings.llm_settings_description': 'Genel LLM ayarları ve performans parametreleri. Ajan bazlı modeller AI Yapılandırması sekmesinde ayarlanır.',
-    'settings.saving': 'Kaydediliyor...',
-    'settings.webhook_no_deliveries': 'Henüz iletim kaydı yok. Webhook olayları tetiklendikçe burada görünecek.',
-    'settings.memory_needs_openai_key': 'OpenAI embedder kullanmak için Profil sayfasından OpenAI API anahtarınızı ekleyin.',
-    'settings.row_agent_qa': 'Ajanlar Arası Soru-Cevap',
-    'settings.agent_qa_description': 'Analistler raporlarından sonra birbirini sorgular',
-    'settings.personas_title': 'Yatırımcı Personaları',
-    'settings.personas_description': 'Portfolio Manager\'ın karar tarzını yönlendiren özel yatırımcı personaları oluşturun',
-    'settings.persona_new': 'Yeni Persona',
-    'settings.persona_edit': 'Personayı Düzenle',
-    'settings.personas_loading': 'Personalar yükleniyor…',
-    'settings.cron_settings': 'Zamanlayıcı (Cron) Ayarları',
-    'settings.watchlist': 'İzlenecek Varlıklar',
-    'settings.save_success': 'Ayarlar başarıyla kaydedildi.',
-    'settings.save_error': 'Ayarlar kaydedilemedi.',
-
-
-    'logs.title': 'Sistem Logları',
-    'logs.all_levels': 'Tüm Seviyeler',
-    'logs.no_logs': 'Log yok.',
-  }
+  /**
+   * Translate a key. Accepts i18next interpolation values, so a string with a
+   * `{{placeholder}}` can keep its word order in every locale instead of being
+   * assembled by concatenation at the call site.
+   */
+  t: (key: string, options?: Record<string, unknown>) => string
 }
 
 const LanguageContext = createContext<LanguageContextType | undefined>(undefined)
 
-
-
-
-
-
-const _modules = import.meta.glob('../i18n/*.ts', { eager: true }) as Record<
-  string,
-  { default?: { en?: Record<string, string>; tr?: Record<string, string> } }
->
-for (const mod of Object.values(_modules)) {
-  const data = mod.default
-  if (!data) continue
-  Object.assign(TRANSLATIONS.en, data.en || {})
-  Object.assign(TRANSLATIONS.tr, data.tr || {})
-}
-
-export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [language, setLanguageState] = useState<Language>(() => {
-    return (localStorage.getItem('ta_language') as Language) || 'en'
-  })
+/**
+ * App-facing language state, backed by i18next.
+ *
+ * The context deliberately keeps its own `{ language, setLanguage, t }` shape
+ * rather than exposing react-i18next's `{ t, i18n }`: it also owns persistence
+ * and the `/api/settings` write, and keeping the shape means the ~52 consuming
+ * components did not have to change when i18next was introduced.
+ */
+const LanguageStateProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
+  const { t: translate, i18n: instance } = useI18nextTranslation()
+  const language = (instance.resolvedLanguage || readStoredLanguage()) as Language
 
   const setLanguage = useCallback((lang: Language) => {
-    localStorage.setItem('ta_language', lang)
-    setLanguageState(lang)
+    localStorage.setItem(LANGUAGE_STORAGE_KEY, lang)
+    void instance.changeLanguage(lang)
     const langMap: Record<Language, string> = { en: 'English', tr: 'Turkish' }
     const token = getAccessToken()
     if (token) {
@@ -241,11 +42,12 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
         body: JSON.stringify({ output_language: langMap[lang] }),
       }).catch(() => {})
     }
-  }, [])
+  }, [instance])
 
-  const t = useCallback((key: string): string => {
-    return TRANSLATIONS[language]?.[key] || TRANSLATIONS['en']?.[key] || key
-  }, [language])
+  const t = useCallback(
+    (key: string, options?: Record<string, unknown>) => translate(key, options),
+    [translate],
+  )
 
   return (
     <LanguageContext.Provider value={{ language, setLanguage, t }}>
@@ -254,6 +56,12 @@ export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ chil
   )
 }
 
+export const LanguageProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => (
+  <I18nextProvider i18n={i18n}>
+    <LanguageStateProvider>{children}</LanguageStateProvider>
+  </I18nextProvider>
+)
+
 export const useTranslation = () => {
   const context = useContext(LanguageContext)
   if (!context) {
@@ -261,4 +69,3 @@ export const useTranslation = () => {
   }
   return context
 }
-

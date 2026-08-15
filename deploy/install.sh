@@ -163,7 +163,7 @@ if [ ! -f "$ENV_FILE" ]; then
     DB_PASS=$("$PYTHON" -c 'import secrets;print(secrets.token_urlsafe(24))')
     ADMIN_PASSWORD="${ADMIN_PASSWORD:-$("$PYTHON" -c 'import secrets;print(secrets.token_urlsafe(12))')}"
     GENERATED_ADMIN_PW="$ADMIN_PASSWORD"
-    ADMIN_HASH=$("$VENV/bin/python" -c 'import bcrypt,sys;print(bcrypt.hashpw(sys.argv[1].encode(),bcrypt.gensalt()).decode())' "$ADMIN_PASSWORD")
+    ADMIN_HASH=$("$VENV/bin/python" -c 'import sys;from pwdlib import PasswordHash;print(PasswordHash.recommended().hash(sys.argv[1]))' "$ADMIN_PASSWORD")
 
     {
         printf "ENVIRONMENT='production'\n"

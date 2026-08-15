@@ -349,4 +349,4 @@ The `AnalystReportCache` table is defined in
 - `analysis_result` — the cached report text
 - `created_at` — timestamp (auto-set)
 
-The table is cleaned via an idempotent migration in `core/migrations.py` (no Alembic needed).
+The table is created and maintained through the Alembic revision chain.

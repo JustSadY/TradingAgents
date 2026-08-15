@@ -230,7 +230,7 @@ In single-process mode the event bus can forward events directly to the WebSocke
 
 PostgreSQL stores application users, settings, encrypted provider credentials, analyses, portfolio/trading state, logs, alerts, and other feature data.
 
-On startup the backend creates missing tables and supports additive idempotent column migration for databases that have not been placed under Alembic management. Once an Alembic baseline/version is present, startup migration logic defers to Alembic for that database.
+Alembic is the sole schema authority for PostgreSQL. Outside production the backend upgrades the database to the Alembic head on startup; in production it verifies the database is already at head and refuses to serve otherwise. A pre-Alembic installation is stamped at the checked-in baseline and then upgraded through every later revision.
 
 Destructive schema changes such as drops, renames, and incompatible type changes require an explicit migration strategy.
 

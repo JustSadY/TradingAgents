@@ -23,7 +23,7 @@ SECRET_KEY=change-me-to-a-random-32-character-string
 
 # Administrator Settings
 ADMIN_USERNAME=admin
-# Optional bcrypt hash. If empty, defaults to hash of "changeme" or a randomly printed installer password
+# Optional Argon2 or bcrypt hash. If empty, defaults to hash of "changeme" or a randomly printed installer password
 ADMIN_PASSWORD_HASH=
 
 # DB Credential Encryption Key (Required)

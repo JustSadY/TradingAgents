@@ -17,7 +17,7 @@ from backend.core.security import (
     hash_password,
     new_token_id,
     token_id_hash,
-    verify_password,
+    verify_and_update_password,
 )
 from backend.models.refresh_session import RefreshSession
 from backend.models.user import User
@@ -71,10 +71,16 @@ async def _issue_session(db: AsyncSession, user: User) -> str:
 @limiter.limit("10/minute")
 async def login(request: Request, response: Response, body: LoginRequest, db: Annotated[AsyncSession, Depends(get_db)]):
     user = await get_user_by_username(db, body.username)
-    password_ok = verify_password(body.password, user.hashed_password if user else _DUMMY_PASSWORD_HASH)
+    password_ok, upgraded_hash = verify_and_update_password(
+        body.password, user.hashed_password if user else _DUMMY_PASSWORD_HASH
+    )
     if not user or not password_ok or not user.is_active:
         _clear_refresh_cookie(response)
         raise HTTPException(status_code=401, detail="Incorrect username or password")
+    if upgraded_hash:
+        # Password was still stored under bcrypt (or outdated Argon2 parameters);
+        # re-store it now that we have the plaintext to hash.
+        user.hashed_password = upgraded_hash
     token = await _issue_session(db, user)
     _set_refresh_cookie(response, token)
     return TokenResponse(access_token=create_access_token(user.username, role=user.role, token_version=user.token_version))

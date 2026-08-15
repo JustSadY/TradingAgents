@@ -173,23 +173,13 @@ async def create_all_tables():
     import backend.models  # noqa: F401
 
     if engine.dialect.name == "sqlite":
+        # SQLite is a development and test convenience only; PostgreSQL is the
+        # supported database and Alembic is its sole schema authority. Build the
+        # schema straight from the ORM metadata. There is deliberately no
+        # catch-up layer for an existing SQLite file — delete it and let this
+        # recreate it.
         async with engine.begin() as conn:
             await conn.run_sync(Base.metadata.create_all)
-            from backend.core.migrations import (
-                apply_column_migrations,
-                apply_type_migrations,
-                normalize_sqlite_analysis_signals,
-                normalize_sqlite_settings_collections,
-                normalize_sqlite_simulation_entry_commissions,
-                normalize_sqlite_temporal_and_share_schema,
-            )
-
-            await apply_column_migrations(conn)
-            await apply_type_migrations(conn)
-            await normalize_sqlite_temporal_and_share_schema(conn)
-            await normalize_sqlite_analysis_signals(conn)
-            await normalize_sqlite_settings_collections(conn)
-            await normalize_sqlite_simulation_entry_commissions(conn)
         return
 
     if settings.ENVIRONMENT.strip().lower() == "production":

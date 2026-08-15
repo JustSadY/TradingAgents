@@ -44,8 +44,8 @@ api (routers)  →  services (business logic)  →  repositories (DB access)  �
 | `repositories/users.py` | `get_user_by_username`, `get_user_by_id`. |
 | `core/config.py` | Pydantic `Settings` from `.env` (infra secrets only — see §5). `get_settings()` is `lru_cache`d. |
 | `core/database.py` | Async `engine`, `AsyncSessionLocal`, `get_db()` (commits on success / rolls back on error), `Base`, `create_all_tables()`, and the **`MONEY`** column type. |
-| `core/migrations.py` | Additive, idempotent schema migrations (no Alembic — see §5). |
-| `core/security.py` | bcrypt hashing, JWT encode/decode, Fernet `encrypt_secret`/`decrypt_secret`. |
+| `core/security.py` | JWT encode/decode, Fernet `encrypt_secret`/`decrypt_secret`, re-exports the hashing helpers. |
+| `core/password_hashing.py` | Argon2 hashing via `pwdlib`, with bcrypt kept registered to verify pre-migration hashes. Import-cycle-free so `core/config.py` can validate `ADMIN_PASSWORD_HASH`. |
 | `core/websocket.py` | `ws_manager` for real-time progress feeds. |
 | `core/redis_bus.py`, `event_bus.py`, `task_store.py` | **Opt-in Redis scaling layer** (enabled via `REDIS_URL`): shared Redis client, analysis-event pub/sub fan-out, cross-process task registry/ownership + cancel control channel. No-ops when Redis is unset. |
 | `core/body_limit.py`, `core/limiter.py` | Request body size limit middleware (413) + slowapi rate limiter. |
@@ -85,13 +85,18 @@ add request/response DTOs in `schemas/`. Reuse `Depends(get_current_user)` /
 the query with `repositories.common.scope_to_user(q, Model, current_user)`
 instead of hand-writing the `if not is_admin` filter.
 
-**Add a model/column:** add the column to the `models/*.py` class **and** append
-a `(table, column, type)` tuple to `core/migrations.py::_NEW_COLUMNS` so existing
-databases get it on startup. For money/price/quantity use the `MONEY` type from
+**Add a model/column:** add the column to the `models/*.py` class **and** create
+an Alembic revision (`alembic -c backend/alembic.ini revision --autogenerate`).
+Alembic is authoritative for PostgreSQL and `create_all_tables()` refuses to
+serve a production database that is not at head, so a model change without a
+revision means the column exists in the ORM and passes the test suite while
+being absent from PostgreSQL. Note that the test suite builds its schema from
+ORM metadata rather than from the revision chain, so it cannot catch a missing
+or broken revision for you. For money/price/quantity use the `MONEY` type from
 `core.database` (see §5), not `Float`.
 
-**Add an AppSettings field:** add it to the model + `_NEW_COLUMNS`, to
-`schemas/settings.py`, and to `settings_service.settings_to_read`.
+**Add an AppSettings field:** add it to the model, create an Alembic revision,
+then update `schemas/settings.py` and `settings_service.settings_to_read`.
 
 **Long-running work from a route:** don't `await` it in the handler. Add a
 `*_task` coroutine to the service and schedule it via `BackgroundTasks`
@@ -116,7 +121,7 @@ import engine modules lazily inside functions (they pull heavy deps).
 
 ## 5. Conventions & gotchas (read before changing infra)
 
-- **No active Alembic workflow.** Migrations are additive only, applied on startup via `core/migrations.apply_column_migrations` (`ADD COLUMN IF NOT EXISTS`) and `apply_type_migrations` (float→`NUMERIC(20,8)` for money columns on Postgres). While `alembic` is present in the environment for potential future migration paths or baseline checks, it is not used for day-to-day schema changes. Renames / drops / non-additive type changes must be done with manual SQL.
+- **Alembic is the only schema authority for PostgreSQL.** Every schema change needs a revision, additive or not. `create_all_tables()` verifies the database sits at the Alembic head before serving in production and refuses to boot otherwise; outside production it upgrades to head. SQLite builds from ORM metadata and has no migration path — delete the file to pick up model changes.
 - **Money columns use `MONEY = Numeric(20, 8, asdecimal=True)`** (from
   `core.database`): exact decimal storage, and Python values are processed as `Decimal`
   to avoid rounding errors. End-to-end calculation and schema conversions are fully
@@ -131,7 +136,10 @@ import engine modules lazily inside functions (they pull heavy deps).
   keys, data-vendor keys and SearXNG are configured at runtime in the Web UI and
   stored (encrypted) in the DB — never read from the environment by
   `core/config.py`.
-- **Passwords** are hashed with `bcrypt` directly (not passlib).
+- **Passwords** are hashed with Argon2 through `pwdlib`. bcrypt stays registered so hashes
+  written before the migration keep verifying, and `verify_and_update_password` re-stores them
+  as Argon2 on the next successful login. Argon2 also lifts bcrypt's 72-*byte* input limit,
+  which ~37 Turkish characters already exceeded.
 - **`get_db` auto-commits** on a clean return and rolls back on exception, so a
   route doesn't strictly need an explicit commit — but background-task sessions
   manage their own commit/rollback.
@@ -242,5 +250,5 @@ Each tool is a `BaseAgentTool` (or a `FunctionToolAdapter` wrapping an existing
   `alpha_vantage_api_key`) lives **only** in the tool system (as `ToolSettingField`s
   on the `reddit_sentiment` / `search_web` / `core_stock_data` tools), is injected
   at runtime, and is read in the engine via `get_config()`. Do **not** re-add these
-  as `SystemSettings`/`system_settings` columns — the old orphaned columns were
-  removed from `core/migrations.py`.
+  as `SystemSettings`/`system_settings` columns — the old orphaned columns have
+  been removed.
