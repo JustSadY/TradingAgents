@@ -8,7 +8,7 @@
 import type { QualityConfidenceCounts } from './qualityConfidenceCounts';
 
 export interface RunQualitySummary {
-  avg_score?: number | null;
+  avg_score: number | null;
   confidence_counts: QualityConfidenceCounts;
   period_days: number;
   total_runs: number;

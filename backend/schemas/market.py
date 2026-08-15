@@ -6,16 +6,17 @@ from pydantic import BaseModel
 class OhlcvCandle(BaseModel):
     """One trading day plus the indicators the chart overlays on it.
 
-    Every indicator is nullable: the leading rows of a series have no rolling
-    window behind them yet, and `_compute_candles` emits ``None`` there rather
-    than dropping the candle.
+    OHLC is never null — `_compute_candles` drops rows missing any of the four
+    before it computes anything. The indicators are: the leading rows of a
+    series have no rolling window behind them yet, and those emit ``None``
+    rather than dropping the candle.
     """
 
     time: str
-    open: float | None
-    high: float | None
-    low: float | None
-    close: float | None
+    open: float
+    high: float
+    low: float
+    close: float
     volume: int
     sma: float | None
     ema: float | None

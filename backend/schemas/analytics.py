@@ -9,6 +9,7 @@ of the payload.
 from pydantic import BaseModel
 
 from backend.core.model_pricing import PricingSource
+from backend.schemas.common import ApiResponse
 
 
 class TokenUsageBreakdown(BaseModel):
@@ -40,13 +41,13 @@ class TokenUsageRead(BaseModel):
     daily: list[TokenUsageDay]
 
 
-class AnalysisDurationMetrics(BaseModel):
+class AnalysisDurationMetrics(ApiResponse):
     count: int = 0
     sum_seconds: float = 0.0
     avg_seconds: float = 0.0
 
 
-class SystemMetricsRead(BaseModel):
+class SystemMetricsRead(ApiResponse):
     """Key Prometheus counters, flattened for the admin dashboard.
 
     Every field carries a default because the collector returns only ``error``
@@ -66,13 +67,13 @@ class SystemMetricsRead(BaseModel):
     error: str | None = None
 
 
-class QualityConfidenceCounts(BaseModel):
+class QualityConfidenceCounts(ApiResponse):
     high: int = 0
     medium: int = 0
     low: int = 0
 
 
-class RunQualitySummary(BaseModel):
+class RunQualitySummary(ApiResponse):
     period_days: int
     total_runs: int
     #: Completed runs with no usable quality assessment, counted rather than

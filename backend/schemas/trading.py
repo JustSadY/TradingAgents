@@ -1,5 +1,7 @@
 from pydantic import BaseModel, Field
 
+from backend.schemas.common import ApiResponse
+
 
 class AutoCloseRecord(BaseModel):
     ticker: str
@@ -117,7 +119,7 @@ class TickerBreakdownRecord(BaseModel):
     win_rate: float
     total_pnl: float
 
-class PortfolioStatsResponse(BaseModel):
+class PortfolioStatsResponse(ApiResponse):
     total_trades: int
     winning_trades: int
     win_rate: float
@@ -151,7 +153,7 @@ class RiskBreach(BaseModel):
     threshold: float
     sector: str | None = None
 
-class RiskDashboardResponse(BaseModel):
+class RiskDashboardResponse(ApiResponse):
     beta: float | None = None
     volatility: float | None = None
     sector_weights: list[SectorWeight] = []
@@ -167,7 +169,7 @@ class RebalanceSuggestion(BaseModel):
     rationale: str
     urgency: str
 
-class RebalanceResponse(BaseModel):
+class RebalanceResponse(ApiResponse):
     summary: str
     score: int
     issues: list[str] = []

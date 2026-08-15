@@ -9,19 +9,20 @@
 /**
  * One trading day plus the indicators the chart overlays on it.
  *
- * Every indicator is nullable: the leading rows of a series have no rolling
- * window behind them yet, and `_compute_candles` emits ``None`` there rather
- * than dropping the candle.
+ * OHLC is never null — `_compute_candles` drops rows missing any of the four
+ * before it computes anything. The indicators are: the leading rows of a
+ * series have no rolling window behind them yet, and those emit ``None``
+ * rather than dropping the candle.
  */
 export interface OhlcvCandle {
-  close: number | null;
+  close: number;
   ema: number | null;
-  high: number | null;
-  low: number | null;
+  high: number;
+  low: number;
   macd_hist: number | null;
   macd_line: number | null;
   macd_signal: number | null;
-  open: number | null;
+  open: number;
   rsi: number | null;
   sma: number | null;
   time: string;

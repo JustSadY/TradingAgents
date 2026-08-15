@@ -268,9 +268,10 @@ export default function Settings({ userId }: { userId?: number } = {}) {
     if (!presetName.trim() || !s) return
     setPresetSaving(true)
     try {
-      const presetSettings = { ...s }
-      delete presetSettings.updated_at
-      delete presetSettings.active_preset_name
+      // A preset carries settings, not bookkeeping: when it was last saved and
+      // which preset was active are properties of the account, not of the
+      // preset being created from it.
+      const { updated_at, active_preset_name, ...presetSettings } = s
       await createPreset.mutateAsync({
         params: userId ? { user_id: userId } : undefined,
         data: { name: presetName.trim(), settings_json: JSON.stringify(presetSettings) },

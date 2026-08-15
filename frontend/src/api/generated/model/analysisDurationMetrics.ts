@@ -7,7 +7,7 @@
  */
 
 export interface AnalysisDurationMetrics {
-  avg_seconds?: number;
-  count?: number;
-  sum_seconds?: number;
+  avg_seconds: number;
+  count: number;
+  sum_seconds: number;
 }

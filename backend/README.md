@@ -104,6 +104,31 @@ To support flexible tool execution inside analyst nodes, the platform implements
     *   `/api/users/{id}/agent-access` (`GET/PUT`): Admin-only route to manage which analyst nodes a user is permitted to invoke.
     *   `/api/users/{id}/tool-access` (`GET/PUT`): Admin-only route to configure tool-level user permissions.
 
+### 5. Response Schemas and the Generated Client
+
+The frontend does not hand-write API types. `frontend/openapi.json` is exported
+from the running app and `orval` turns it into typed hooks, so a route's
+`response_model` is the only description of its payload. Two rules keep that
+description honest:
+
+*   **Never `response_model=dict[str, Any]`.** OpenAPI renders it as a
+    free-form object, the generated type carries no information, and the
+    consuming page ends up with its own copy of the shape plus a cast. Declare
+    the payload, even when the keys are dynamic — `dict[str, ToolAccessPerms]`
+    tells the client far more than `dict`.
+*   **Response models with defaulted fields inherit `ApiResponse`**
+    (`backend/schemas/common.py`). FastAPI publishes the *validation* schema,
+    where a default makes a field optional; a response model always serialises
+    every field, so without this the client is told a value may be missing when
+    it never is. Request bodies keep plain `BaseModel` — their defaults really
+    are optional.
+
+After changing a schema, regenerate both artefacts:
+
+```bash
+cd frontend && npm run generate:api
+```
+
 ---
 
 ## 🚀 Setup & Developer Onboarding

@@ -5,6 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from backend.schemas.common import ApiResponse
+
 logger = logging.getLogger(__name__)
 
 _CANONICAL_SIGNALS = frozenset({"Buy", "Overweight", "Hold", "Underweight", "Sell"})
@@ -129,7 +131,7 @@ class AnalysisResultRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-class AnalysisListItem(BaseModel):
+class AnalysisListItem(ApiResponse):
     id: int
     ticker: str
     trade_date: str

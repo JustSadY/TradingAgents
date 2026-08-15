@@ -654,6 +654,11 @@
             "type": "number"
           }
         },
+        "required": [
+          "count",
+          "sum_seconds",
+          "avg_seconds"
+        ],
         "title": "AnalysisDurationMetrics",
         "type": "object"
       },
@@ -777,7 +782,14 @@
           "signal",
           "duration_seconds",
           "triggered_by",
-          "created_at"
+          "created_at",
+          "chart_annotations",
+          "llm_provider",
+          "llm_model",
+          "preset_name",
+          "raw_return",
+          "alpha_return",
+          "holding_days"
         ],
         "title": "AnalysisListItem",
         "type": "object"
@@ -3510,18 +3522,11 @@
         "type": "object"
       },
       "OhlcvCandle": {
-        "description": "One trading day plus the indicators the chart overlays on it.\n\nEvery indicator is nullable: the leading rows of a series have no rolling\nwindow behind them yet, and `_compute_candles` emits ``None`` there rather\nthan dropping the candle.",
+        "description": "One trading day plus the indicators the chart overlays on it.\n\nOHLC is never null \u2014 `_compute_candles` drops rows missing any of the four\nbefore it computes anything. The indicators are: the leading rows of a\nseries have no rolling window behind them yet, and those emit ``None``\nrather than dropping the candle.",
         "properties": {
           "close": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Close"
+            "title": "Close",
+            "type": "number"
           },
           "ema": {
             "anyOf": [
@@ -3535,26 +3540,12 @@
             "title": "Ema"
           },
           "high": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "High"
+            "title": "High",
+            "type": "number"
           },
           "low": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Low"
+            "title": "Low",
+            "type": "number"
           },
           "macd_hist": {
             "anyOf": [
@@ -3590,15 +3581,8 @@
             "title": "Macd Signal"
           },
           "open": {
-            "anyOf": [
-              {
-                "type": "number"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Open"
+            "title": "Open",
+            "type": "number"
           },
           "rsi": {
             "anyOf": [
@@ -4304,7 +4288,13 @@
           "total_trades",
           "winning_trades",
           "win_rate",
-          "total_realized_pnl"
+          "avg_return_pct",
+          "best_trade",
+          "worst_trade",
+          "total_realized_pnl",
+          "sharpe_ratio",
+          "max_drawdown_pct",
+          "by_ticker"
         ],
         "title": "PortfolioStatsResponse",
         "type": "object"
@@ -4459,6 +4449,11 @@
             "type": "integer"
           }
         },
+        "required": [
+          "high",
+          "medium",
+          "low"
+        ],
         "title": "QualityConfidenceCounts",
         "type": "object"
       },
@@ -4491,7 +4486,9 @@
         },
         "required": [
           "summary",
-          "score"
+          "score",
+          "issues",
+          "suggestions"
         ],
         "title": "RebalanceResponse",
         "type": "object"
@@ -4681,6 +4678,15 @@
             "title": "Volatility"
           }
         },
+        "required": [
+          "beta",
+          "volatility",
+          "sector_weights",
+          "correlation",
+          "holdings_risk",
+          "breaches",
+          "message"
+        ],
         "title": "RiskDashboardResponse",
         "type": "object"
       },
@@ -4717,7 +4723,8 @@
           "period_days",
           "total_runs",
           "unknown",
-          "confidence_counts"
+          "confidence_counts",
+          "avg_score"
         ],
         "title": "RunQualitySummary",
         "type": "object"
@@ -5422,6 +5429,80 @@
             "title": "Webhook Url"
           }
         },
+        "required": [
+          "cron_enabled",
+          "cron_schedule",
+          "price_tolerance_pct",
+          "watchlist",
+          "output_language",
+          "llm_provider",
+          "llm_model",
+          "fallback_llm_chain",
+          "investor_persona",
+          "analyst_concurrency_limit",
+          "max_recur_limit",
+          "benchmark_ticker",
+          "max_debate_rounds",
+          "max_risk_rounds",
+          "max_position_size_pct",
+          "max_risk_per_trade_pct",
+          "auto_execute_signals",
+          "allow_short_selling",
+          "max_concentration_pct",
+          "max_gross_exposure",
+          "strict_stop_loss_mode",
+          "correlation_risk_enabled",
+          "quality_gate_enabled",
+          "drawdown_breaker_enabled",
+          "max_portfolio_drawdown_pct",
+          "openai_reasoning_effort",
+          "anthropic_effort",
+          "google_thinking_level",
+          "node_retry_attempts",
+          "node_retry_base_delay",
+          "node_timeout_seconds",
+          "tool_timeout_seconds",
+          "circuit_breaker_threshold",
+          "circuit_breaker_cooldown",
+          "stall_timeout_seconds",
+          "max_active_alerts",
+          "max_ai_alerts_per_run",
+          "ai_alert_cooldown_hours",
+          "webhook_url",
+          "webhook_enabled",
+          "webhook_events",
+          "active_preset_name",
+          "memory_store",
+          "pinecone_index",
+          "pinecone_cloud",
+          "pinecone_region",
+          "memory_embedder",
+          "pinecone_embed_model",
+          "memory_openai_embed_model",
+          "memory_ollama_embed_model",
+          "agent_qa_enabled",
+          "anthropic_prompt_caching",
+          "max_report_chars_in_prompts",
+          "max_debate_history_chars",
+          "max_tool_output_chars",
+          "analyst_prefilter_enabled",
+          "analyst_prefilter_min_samples",
+          "analyst_prefilter_max_win_rate",
+          "strategy_learning_enabled",
+          "decision_stability_mode",
+          "decision_stability_min_quality",
+          "decision_stability_min_confidence",
+          "decision_stability_min_evidence_groups",
+          "reversal_verifier_enabled",
+          "confidence_calibration_enabled",
+          "regime_aware_weighting_enabled",
+          "memory_recall_count",
+          "summary_only_mode",
+          "news_article_limit",
+          "global_news_article_limit",
+          "global_news_lookback_days",
+          "updated_at"
+        ],
         "title": "SettingsRead",
         "type": "object"
       },
@@ -6802,6 +6883,19 @@
             "type": "integer"
           }
         },
+        "required": [
+          "analysis_runs",
+          "analysis_duration",
+          "node_errors",
+          "node_fallbacks",
+          "node_retries",
+          "websocket_connections",
+          "signal_parse_fallbacks",
+          "auto_order_skipped",
+          "total_runs",
+          "error_rate_pct",
+          "error"
+        ],
         "title": "SystemMetricsRead",
         "type": "object"
       },

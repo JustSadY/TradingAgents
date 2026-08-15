@@ -18,15 +18,15 @@ import type { SystemMetricsReadNodeFallbacks } from './systemMetricsReadNodeFall
  * when ``prometheus_client`` cannot be imported.
  */
 export interface SystemMetricsRead {
-  analysis_duration?: AnalysisDurationMetrics;
-  analysis_runs?: SystemMetricsReadAnalysisRuns;
-  auto_order_skipped?: SystemMetricsReadAutoOrderSkipped;
-  error?: string | null;
-  error_rate_pct?: number;
-  node_errors?: SystemMetricsReadNodeErrors;
-  node_fallbacks?: SystemMetricsReadNodeFallbacks;
-  node_retries?: number;
-  signal_parse_fallbacks?: number;
-  total_runs?: number;
-  websocket_connections?: number;
+  analysis_duration: AnalysisDurationMetrics;
+  analysis_runs: SystemMetricsReadAnalysisRuns;
+  auto_order_skipped: SystemMetricsReadAutoOrderSkipped;
+  error: string | null;
+  error_rate_pct: number;
+  node_errors: SystemMetricsReadNodeErrors;
+  node_fallbacks: SystemMetricsReadNodeFallbacks;
+  node_retries: number;
+  signal_parse_fallbacks: number;
+  total_runs: number;
+  websocket_connections: number;
 }

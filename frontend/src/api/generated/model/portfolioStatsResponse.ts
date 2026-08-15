@@ -9,14 +9,14 @@ import type { TickerBreakdownRecord } from './tickerBreakdownRecord';
 import type { TradeSummaryRecord } from './tradeSummaryRecord';
 
 export interface PortfolioStatsResponse {
-  avg_return_pct?: number | null;
-  best_trade?: TradeSummaryRecord | null;
-  by_ticker?: TickerBreakdownRecord[];
-  max_drawdown_pct?: number | null;
-  sharpe_ratio?: number | null;
+  avg_return_pct: number | null;
+  best_trade: TradeSummaryRecord | null;
+  by_ticker: TickerBreakdownRecord[];
+  max_drawdown_pct: number | null;
+  sharpe_ratio: number | null;
   total_realized_pnl: number;
   total_trades: number;
   win_rate: number;
   winning_trades: number;
-  worst_trade?: TradeSummaryRecord | null;
+  worst_trade: TradeSummaryRecord | null;
 }

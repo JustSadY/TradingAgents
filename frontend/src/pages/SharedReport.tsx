@@ -165,7 +165,9 @@ function PortfolioDecisionContent({ decision }: { decision: SharedReportResponse
   const summary = stringValue('executive_summary')
   const thesis = stringValue('investment_thesis')
   const confidence = numberValue('confidence_score')
-  const values: Array<[string, string, number | null, (value: number) => string]> = [
+  // Annotated before the filter, not after: a type annotation on the const
+  // would override what the type guard narrows to.
+  const allValues: Array<[string, string, number | null, (value: number) => string]> = [
     ['entry_price', label('analysis.pm.entry', 'Entry'), numberValue('entry_price'), money],
     ['stop_loss', label('analysis.pm.stop', 'Stop Loss'), numberValue('stop_loss'), money],
     ['take_profit_price', label('analysis.pm.target', 'Take Profit'), numberValue('take_profit_price'), money],
@@ -174,7 +176,10 @@ function PortfolioDecisionContent({ decision }: { decision: SharedReportResponse
     ['price_target', label('analysis.pm.price_target', 'Price Target'), numberValue('price_target'), money],
     ['recommended_leverage', label('analysis.pm.leverage', 'Leverage'), numberValue('recommended_leverage'), (value: number) => `${value.toFixed(1)}x`],
     ['liquidation_price', label('analysis.pm.liquidation', 'Liquidation Price'), numberValue('liquidation_price'), money],
-  ].filter((item): item is [string, string, number, (value: number) => string] => item[2] !== null)
+  ]
+  const values = allValues.filter(
+    (item): item is [string, string, number, (value: number) => string] => item[2] !== null,
+  )
   const timeHorizon = stringValue('time_horizon')
 
   return (

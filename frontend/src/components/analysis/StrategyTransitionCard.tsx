@@ -134,7 +134,8 @@ function DecisionSummary({
 }: {
   title: string
   decision: JsonObject | null
-  confidence: number | null
+  // `??` below handles the absent case, so undefined is as usable as null.
+  confidence: number | null | undefined
   accepted?: boolean
 }) {
   const { t } = useTranslation()

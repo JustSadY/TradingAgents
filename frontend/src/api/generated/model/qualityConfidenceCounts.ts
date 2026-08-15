@@ -7,7 +7,7 @@
  */
 
 export interface QualityConfidenceCounts {
-  high?: number;
-  low?: number;
-  medium?: number;
+  high: number;
+  low: number;
+  medium: number;
 }

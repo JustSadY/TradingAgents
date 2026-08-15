@@ -575,8 +575,10 @@ export default function Portfolio() {
   )
 }
 
-function corrColor(v: number, isDiag: boolean): string {
-  if (isDiag) return 'bg-slate-800/60 text-slate-500'
+function corrColor(v: number | null, isDiag: boolean): string {
+  // Null where two tickers share no overlapping price history, so the pair has
+  // no correlation to colour rather than a correlation of zero.
+  if (isDiag || v === null) return 'bg-slate-800/60 text-slate-500'
   if (v < 0) return 'bg-sky-500/20 text-sky-300'
   if (v < 0.3) return 'bg-emerald-500/20 text-emerald-300'
   if (v < 0.7) return 'bg-amber-500/20 text-amber-300'
@@ -661,7 +663,7 @@ function CorrelationHeatmap() {
                         const v = data.matrix[i][j]
                         return (
                           <td key={j} className={`text-center rounded px-1 py-1.5 ${corrColor(v, i === j)}`}>
-                            {i === j ? '—' : v.toFixed(2)}
+                            {i === j || v === null ? '—' : v.toFixed(2)}
                           </td>
                         )
                       })}

@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from backend.core.constants import WEBHOOK_EVENTS
+from backend.schemas.common import ApiResponse
 from backend.trading_agents.config import MAX_FALLBACK_LLM_CHAIN_LENGTH, FallbackLLMConfig
 
 _MAX_WATCHLIST_ITEMS = 100
@@ -155,7 +156,7 @@ class SettingsBase(BaseModel):
     def validate_webhook_events(cls, value: list[str]) -> list[str]:
         return _normalize_webhook_events(value)
 
-class SettingsRead(SettingsBase):
+class SettingsRead(SettingsBase, ApiResponse):
     updated_at: datetime | None = None
 
     model_config = ConfigDict(from_attributes=True)
