@@ -1,7 +1,22 @@
 import { describe, it, expect } from 'vitest'
-import { TRANSLATIONS_EN, TRANSLATIONS_TR } from './i18n-data'
+import { TRANSLATIONS } from '../index'
+
+// Read the same merged table the app resolves `t()` against. This used to run
+// against a hand-copied duplicate of the shell keys, which meant 13 of them
+// were never actually parity-checked.
+const TRANSLATIONS_EN = TRANSLATIONS.en
+const TRANSLATIONS_TR = TRANSLATIONS.tr
 
 describe('i18n translation coverage', () => {
+  it('loads the shell keys as well as the per-page modules', () => {
+    // Guards the glob in ../index.ts: a pattern that stopped matching would
+    // otherwise leave every assertion below trivially passing on {}.
+    expect(TRANSLATIONS_EN['nav.dashboard']).toBeTruthy()
+    expect(TRANSLATIONS_EN['settings.personas_title']).toBeTruthy()
+    expect(TRANSLATIONS_EN['analysis.strategy.version']).toBeTruthy()
+    expect(Object.keys(TRANSLATIONS_EN).length).toBeGreaterThan(900)
+  })
+
   it('all English keys have Turkish translations', () => {
     const enKeys = Object.keys(TRANSLATIONS_EN)
     const trKeys = new Set(Object.keys(TRANSLATIONS_TR))
