@@ -41,7 +41,7 @@ import type { AnalysisListItem, AnalysisResultRead, MultiTickerListItem, MultiTi
 import { SignalBadge } from '../components/analysis/SignalBadge'
 import { ReportCard } from '../components/analysis/ReportCard'
 import { MarkdownReport } from '../components/report/MarkdownReport'
-import { AnalysisControls, type AnalysisStartError, type TickerSuggestion } from '../components/analysis/AnalysisControls'
+import { AnalysisControls, type AnalysisStartError } from '../components/analysis/AnalysisControls'
 
 import { DebateBubble, DebateHistoryWidget, parseDebateMessage } from '../components/analysis/DebateHistoryWidget'
 import { AnalysisChatWidget } from '../components/analysis/AnalysisChatWidget'
@@ -49,6 +49,38 @@ import { RiskMetricsCard } from '../components/analysis/RiskMetricsCard'
 import { MentalModelTicker } from '../components/analysis/MentalModelTicker'
 import { StrategyTransitionCard } from '../components/analysis/StrategyTransitionCard'
 import { ErrorBoundary } from '../components/ErrorBoundary'
+import {
+  WS_KEEPALIVE_INTERVAL_MS,
+  WS_KEEPALIVE_MESSAGE,
+  WS_MAX_RECONNECT_RETRIES,
+  WS_NORMAL_CLOSE_CODE,
+  WS_OPEN,
+  closeAnalysisWebSocket,
+  openAnalysisWebSocket,
+  probeActiveTask,
+} from '../analysis/analysisSocket'
+import { isRecord } from '../utils/isRecord'
+import {
+  readableSectionLabel,
+  reportKeyForStreamingAgent,
+  visibleReportEntries,
+} from '../analysis/streamingReports'
+import {
+  orderActionLabel,
+  orderResultLogLine,
+  readOrderResult,
+  sameOrderResult,
+  type AnalysisOrderResult,
+} from '../analysis/orderResult'
+import {
+  STORAGE_KEY,
+  TASK_KEY,
+  clearTaskMarkerFor,
+  loadRunState,
+  type SavedRun,
+} from '../analysis/runStorage'
+import { readPortfolioDecision } from '../analysis/portfolioDecision'
+import { analysisStartError } from '../analysis/startError'
 
 interface WsEvent {
   type: string; section?: string; content?: string; signal?: string
@@ -64,66 +96,7 @@ interface WsEvent {
   price?: number; filled_quantity?: number; filled_price?: number
   reason?: string; reason_code?: string
 }
-const STORAGE_KEY = 'ta_last_run'
-const TASK_KEY = 'ta_task_running'
 const TERMINAL_TASK_CONFIRMATION_DELAY_MS = 250
-const WS_KEEPALIVE_INTERVAL_MS = 20_000
-const WS_KEEPALIVE_MESSAGE = '__tradingagents_keepalive__'
-const WS_NORMAL_CLOSE_CODE = 1000
-const WS_CONNECTING = 0
-const WS_OPEN = 1
-const WS_CLOSING = 2
-const WS_CLOSED = 3
-const WS_MAX_RECONNECT_RETRIES = 3
-
-// Build an absolute ws(s)://host URL rather than a bare relative path —
-// `new WebSocket('/path')` (protocol-relative-by-omission) is only reliably
-// supported by fairly recent browsers; older ones throw a SyntaxError.
-function analysisWsUrl(taskId: string): string {
-  const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:'
-  return `${protocol}//${window.location.host}/ws/analysis/${taskId}`
-}
-
-// Native browser WebSockets cannot set Authorization. Carry the JWT in a
-// private handshake subprotocol instead of the URL so proxy/access logs never
-// receive a bearer token in their request line. The fixed application
-// protocol is the only value the backend selects in its 101 response; it
-// makes the handshake valid for strict WebSocket clients without echoing JWT.
-const WS_APPLICATION_SUBPROTOCOL = 'tradingagents.v1'
-const WS_TOKEN_SUBPROTOCOL_PREFIX = 'tradingagents.jwt.'
-
-function openAnalysisWebSocket(taskId: string, token: string | null): WebSocket {
-  const url = analysisWsUrl(taskId)
-  const protocols = [WS_APPLICATION_SUBPROTOCOL]
-  if (token) protocols.push(`${WS_TOKEN_SUBPROTOCOL_PREFIX}${token}`)
-  return new WebSocket(url, protocols)
-}
-
-/** Retire a client-owned socket with a normal close frame when possible. */
-function closeAnalysisWebSocket(socket: WebSocket, reason: string): void {
-  socket.onopen = null
-  socket.onmessage = null
-  socket.onerror = null
-  socket.onclose = null
-
-  const closeNormally = () => {
-    if (socket.readyState === WS_CLOSING || socket.readyState === WS_CLOSED) return
-    try {
-      socket.close(WS_NORMAL_CLOSE_CODE, reason)
-    } catch {
-      // The browser owns the final close event.
-    }
-  }
-
-  // Calling close while CONNECTING aborts the handshake and can produce an
-  // abnormal 1005/1006 pair, so wait until the connection opens.
-  if (socket.readyState === WS_CONNECTING) {
-    socket.onopen = closeNormally
-    return
-  }
-
-  closeNormally()
-}
 
 interface QualityFields {
   score: number; confidence: string; reports_total: number; reports_present: number; reports_degraded: number; fallback_used: boolean
@@ -150,485 +123,6 @@ function QualityBadge({ quality }: { quality: RunQuality }) {
       {quality.confidence ? t(`analysis.quality.${quality.confidence}`) : '?'} · {quality.score}
     </span>
   )
-}
-
-type RunStatus = 'idle' | 'running' | 'done' | 'error'
-type LiveDebateMessage = { sender: string; content: string; type: string }
-type OrderOutcome = 'filled' | 'skipped' | 'rejected' | 'error'
-type AnalysisOrderResult = {
-  outcome: OrderOutcome
-  action?: 'BUY' | 'SELL'
-  ticker: string
-  quantity?: number
-  price?: number
-  reason?: string
-  message?: string
-  analysisId?: number
-}
-type SavedRun = {
-  ticker: string
-  date: string
-  assetType: string
-  runStatus: RunStatus
-  signal: string | null
-  reports: Record<string, string>
-  log: string[]
-  activeSection: string | null
-  analysisId: number | null
-  liveDebate: LiveDebateMessage[]
-  orderResult: AnalysisOrderResult | null
-}
-
-function emptyRun(): SavedRun {
-  return {
-    ticker: '', date: new Date().toISOString().slice(0, 10), assetType: 'stock',
-    runStatus: 'idle', signal: null, reports: {}, log: [], activeSection: null,
-    analysisId: null, liveDebate: [], orderResult: null,
-  }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
-
-/**
- * ``/api/analysis/active`` is the authoritative live-task registry.  A
- * WebSocket can close after the worker has already reached a terminal state
- * (for example if it could not flush its final event), so its close alone is
- * not enough evidence that the browser should keep reconnecting.
- *
- * ``null`` means the probe itself was unusable.  In that case callers retain
- * the bounded reconnect behaviour rather than treating a transient API
- * failure as a failed analysis.
- */
-function activeTaskState(value: unknown, taskId: string): boolean | null {
-  if (!Array.isArray(value)) return null
-  return value.some(task => isRecord(task) && task.task_id === taskId)
-}
-
-type ActiveTaskProbeState = 'active' | 'inactive' | 'unauthorized' | 'forbidden' | 'unavailable'
-
-/**
- * Resolve whether a task is still live before reconnecting its WebSocket.
- * A WebSocket close is transport state, not job state: blindly reconnecting
- * after a worker has already reached a terminal state causes noisy connection
- * churn and makes the UI look as if it is repeatedly restarting.
- */
-async function probeActiveTask(taskId: string): Promise<ActiveTaskProbeState> {
-  try {
-    const { data } = await axios.get('/api/analysis/active', { timeout: 2_000 })
-    const state = activeTaskState(data, taskId)
-    if (state === true) return 'active'
-    if (state === false) return 'inactive'
-    return 'unavailable'
-  } catch (error) {
-    // Axios has already attempted its normal token refresh. Retrying a
-    // WebSocket with an explicitly rejected session/permission cannot help.
-    const status = (error as { response?: { status?: number } }).response?.status
-    if (status === 401) return 'unauthorized'
-    if (status === 403) return 'forbidden'
-    return 'unavailable'
-  }
-}
-
-function tickerSuggestions(value: unknown): TickerSuggestion[] {
-  if (!Array.isArray(value)) return []
-  return value.flatMap(item => {
-    if (!isRecord(item) || typeof item.symbol !== 'string' || !item.symbol.trim()) return []
-    return [{
-      symbol: item.symbol.trim().toUpperCase(),
-      name: typeof item.name === 'string' ? item.name : null,
-      quote_type: typeof item.quote_type === 'string' ? item.quote_type : null,
-    }]
-  })
-}
-
-function analysisStartError(error: unknown, fallback: string): AnalysisStartError {
-  const response = error as { response?: { data?: { detail?: unknown } } }
-  const detail = response.response?.data?.detail
-  if (isRecord(detail)) {
-    return {
-      code: typeof detail.code === 'string' ? detail.code : undefined,
-      message: typeof detail.message === 'string' && detail.message.trim() ? detail.message : fallback,
-      ticker: typeof detail.ticker === 'string' ? detail.ticker : undefined,
-      suggestions: tickerSuggestions(detail.suggestions),
-    }
-  }
-  return {
-    message: typeof detail === 'string' && detail.trim() ? detail : fallback,
-    suggestions: [],
-  }
-}
-
-function stringRecord(value: unknown): Record<string, string> {
-  if (!isRecord(value)) return {}
-  const reports: Record<string, string> = {}
-  for (const [section, report] of Object.entries(value)) {
-    if (typeof report === 'string') reports[section] = report
-  }
-  return reports
-}
-
-/**
- * The backend's analyst registry can add report fields without a frontend
- * release.  Keep the familiar built-in order, then expose any additional
- * ``*_report`` field instead of silently dropping it from the Reports tab.
- */
-const KNOWN_REPORT_KEYS = [
-  'market_report', 'sentiment_report', 'news_report',
-  'fundamentals_report', 'macro_report', 'options_report',
-  'quant_report', 'earnings_report', 'insider_report',
-  'ownership_report', 'ratings_report', 'short_interest_report',
-  'valuation_report', 'catalyst_report', 'review_report',
-  'synthesis_report', 'audit_report', 'agent_qa_report',
-] as const
-
-function visibleReportEntries(value: unknown): Array<[string, string]> {
-  if (!isRecord(value)) return []
-
-  const readable = (key: string): string | null => {
-    const report = value[key]
-    return typeof report === 'string' && report.trim() ? report : null
-  }
-  const known = KNOWN_REPORT_KEYS.flatMap(key => {
-    const report = readable(key)
-    return report === null ? [] : [[key, report] as [string, string]]
-  })
-  const knownKeys = new Set<string>(KNOWN_REPORT_KEYS)
-  const extra = Object.keys(value)
-    .filter(key => key.endsWith('_report') && !knownKeys.has(key))
-    .sort()
-    .flatMap(key => {
-      const report = readable(key)
-      return report === null ? [] : [[key, report] as [string, string]]
-    })
-  return [...known, ...extra]
-}
-
-function readableSectionLabel(sectionLabels: Record<string, string>, key: string): string {
-  const configured = sectionLabels[key]
-  if (configured) return configured
-  // Preserve the existing fallback for built-in API fields while metadata is
-  // still loading. New registry fields get a readable fallback below.
-  if ((KNOWN_REPORT_KEYS as readonly string[]).includes(key)) return key
-  return key
-    .replace(/_report$/, '')
-    .split('_')
-    .filter(Boolean)
-    .map(part => `${part.charAt(0).toUpperCase()}${part.slice(1)}`)
-    .join(' ')
-}
-
-/** Map streaming callback names to their persisted report fields. */
-const STREAMING_REPORT_KEYS: Record<string, string> = {
-  market: 'market_report',
-  market_analyst: 'market_report',
-  social: 'sentiment_report',
-  sentiment: 'sentiment_report',
-  sentiment_analyst: 'sentiment_report',
-  news: 'news_report',
-  news_analyst: 'news_report',
-  fundamentals: 'fundamentals_report',
-  fundamentals_analyst: 'fundamentals_report',
-  macro: 'macro_report',
-  macro_analyst: 'macro_report',
-  options: 'options_report',
-  options_analyst: 'options_report',
-  quant: 'quant_report',
-  quant_analyst: 'quant_report',
-  earnings: 'earnings_report',
-  earnings_analyst: 'earnings_report',
-  insider: 'insider_report',
-  insider_activity: 'insider_report',
-  insider_activity_analyst: 'insider_report',
-  ownership: 'ownership_report',
-  institutional_ownership: 'ownership_report',
-  institutional_ownership_analyst: 'ownership_report',
-  ratings: 'ratings_report',
-  analyst_ratings: 'ratings_report',
-  analyst_ratings_analyst: 'ratings_report',
-  short_interest: 'short_interest_report',
-  short_interest_analyst: 'short_interest_report',
-  valuation: 'valuation_report',
-  valuation_analyst: 'valuation_report',
-  catalyst: 'catalyst_report',
-  catalyst_calendar: 'catalyst_report',
-  catalyst_calendar_analyst: 'catalyst_report',
-  review: 'review_report',
-  performance_review: 'review_report',
-  performance_review_analyst: 'review_report',
-  synthesis_manager: 'synthesis_report',
-  auditor: 'audit_report',
-  agent_qa: 'agent_qa_report',
-  portfolio_manager: 'final_decision',
-  research_manager: 'investment_plan',
-  trader: 'trader_plan',
-}
-
-function reportKeyForStreamingAgent(agent: string): string | null {
-  const normalized = agent
-    .trim()
-    .replace(/([a-z])([A-Z])/g, '$1_$2')
-    .toLowerCase()
-    .replace(/[\s-]+/g, '_')
-    .replace(/_+/g, '_')
-    .replace(/^_|_$/g, '')
-  if (!normalized || normalized === 'thinking' || normalized === 'system') return null
-  return STREAMING_REPORT_KEYS[normalized]
-    ?? (normalized.endsWith('_report') ? normalized : null)
-}
-
-function liveDebateMessages(value: unknown): LiveDebateMessage[] {
-  if (!Array.isArray(value)) return []
-  return value.flatMap(item => {
-    if (!isRecord(item) || typeof item.sender !== 'string' || typeof item.content !== 'string' || typeof item.type !== 'string') return []
-    return [{ sender: item.sender, content: item.content, type: item.type }]
-  })
-}
-
-function isFiniteNumeric(value: unknown): value is number {
-  return typeof value === 'number' && Number.isFinite(value)
-}
-
-function normalizedOrderOutcome(value: unknown): OrderOutcome | null {
-  if (typeof value !== 'string') return null
-  switch (value.trim().toLowerCase()) {
-    case 'filled':
-    case 'executed':
-    case 'success':
-      return 'filled'
-    case 'skipped':
-    case 'no_trade':
-    case 'no-trade':
-      return 'skipped'
-    case 'rejected':
-    case 'blocked':
-    case 'denied':
-      return 'rejected'
-    case 'error':
-    case 'failed':
-      return 'error'
-    default:
-      return null
-  }
-}
-
-/**
- * Normalise the execution event at the UI boundary.  The execution service
- * intentionally emits a small, transport-safe payload, but old workers used
- * `status` rather than `outcome`; accepting both makes reconnect/replay and
- * rolling deployment harmless without treating arbitrary payloads as fills.
- */
-function readOrderResult(value: unknown, fallbackTicker: string): AnalysisOrderResult | null {
-  if (!isRecord(value)) return null
-  const outcome = normalizedOrderOutcome(value.outcome ?? value.status)
-  if (!outcome) return null
-
-  const rawAction = typeof value.action === 'string' ? value.action.trim().toUpperCase() : ''
-  const action = rawAction === 'BUY' || rawAction === 'SELL' ? rawAction : undefined
-  const rawTicker = typeof value.ticker === 'string' ? value.ticker.trim().toUpperCase() : ''
-  const ticker = rawTicker || fallbackTicker.trim().toUpperCase()
-  if (!ticker) return null
-
-  return {
-    outcome,
-    action,
-    ticker,
-    quantity: isFiniteNumeric(value.quantity) && value.quantity > 0
-      ? value.quantity
-      : isFiniteNumeric(value.filled_quantity) && value.filled_quantity > 0
-        ? value.filled_quantity
-        : undefined,
-    price: isFiniteNumeric(value.price) && value.price >= 0
-      ? value.price
-      : isFiniteNumeric(value.filled_price) && value.filled_price >= 0
-        ? value.filled_price
-        : undefined,
-    reason: typeof value.reason === 'string' && value.reason.trim()
-      ? value.reason.trim()
-      : typeof value.reason_code === 'string' && value.reason_code.trim()
-        ? value.reason_code.trim()
-        : undefined,
-    message: typeof value.message === 'string' && value.message.trim() ? value.message.trim() : undefined,
-    analysisId: isFiniteNumeric(value.analysis_id) && value.analysis_id > 0 ? value.analysis_id : undefined,
-  }
-}
-
-function sameOrderResult(left: AnalysisOrderResult | null, right: AnalysisOrderResult): boolean {
-  return !!left && left.outcome === right.outcome && left.action === right.action &&
-    left.ticker === right.ticker && left.quantity === right.quantity && left.price === right.price &&
-    left.reason === right.reason && left.message === right.message && left.analysisId === right.analysisId
-}
-
-function orderActionLabel(action: AnalysisOrderResult['action'], t: (key: string) => string): string | null {
-  if (!action) return null
-  return t(action === 'BUY' ? 'analysis.order.action.buy' : 'analysis.order.action.sell')
-}
-
-function orderResultLogLine(result: AnalysisOrderResult, t: (key: string) => string): string {
-  const marker = result.outcome === 'filled' ? '✓' : result.outcome === 'skipped' ? '⚠' : '❌'
-  const details = [
-    orderActionLabel(result.action, t),
-    result.quantity !== undefined ? String(result.quantity) : null,
-    result.ticker,
-    result.price !== undefined ? `@ $${result.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : null,
-  ].filter((part): part is string => !!part)
-  const reason = result.message ?? result.reason
-  return [
-    `${marker} ${t('analysis.order.log_prefix')}`,
-    t(`analysis.order.outcome.${result.outcome}`),
-    details.join(' '),
-    reason,
-  ].filter((part): part is string => !!part).join(' — ')
-}
-
-function hasValidRunningTask(): boolean {
-  const raw = sessionStorage.getItem(TASK_KEY)
-  if (!raw) return false
-  try {
-    const task = JSON.parse(raw)
-    if (isRecord(task) && typeof task.taskId === 'string' && task.taskId.trim()) return true
-  } catch {
-    // Fall through and remove the bad task marker below.
-  }
-  sessionStorage.removeItem(TASK_KEY)
-  return false
-}
-
-// A late start response must never remove a newer task marker.  Only discard
-// the marker when it belongs to the response we are deliberately abandoning.
-function clearTaskMarkerFor(taskId: string): void {
-  const raw = sessionStorage.getItem(TASK_KEY)
-  if (!raw) return
-  try {
-    const task = JSON.parse(raw)
-    if (!isRecord(task) || task.taskId === taskId) {
-      sessionStorage.removeItem(TASK_KEY)
-    }
-  } catch {
-    sessionStorage.removeItem(TASK_KEY)
-  }
-}
-
-function loadRunState(): SavedRun {
-  const fallback = emptyRun()
-  try {
-    const hasRunningTask = hasValidRunningTask()
-    const raw = sessionStorage.getItem(STORAGE_KEY)
-    if (!raw) return hasRunningTask ? { ...fallback, runStatus: 'running' } : fallback
-    const parsed: unknown = JSON.parse(raw)
-    if (!isRecord(parsed)) return fallback
-
-    const savedStatus = parsed.runStatus
-    const runStatus: RunStatus = savedStatus === 'error'
-      ? 'error'
-      : hasRunningTask
-        ? 'running'
-        : savedStatus === 'idle' || savedStatus === 'done'
-          ? savedStatus
-          : 'idle'
-
-    return {
-      ticker: typeof parsed.ticker === 'string' ? parsed.ticker : fallback.ticker,
-      date: typeof parsed.date === 'string' ? parsed.date : fallback.date,
-      assetType: typeof parsed.assetType === 'string' && parsed.assetType.trim() ? parsed.assetType : fallback.assetType,
-      runStatus,
-      signal: typeof parsed.signal === 'string' ? parsed.signal : null,
-      reports: stringRecord(parsed.reports),
-      log: Array.isArray(parsed.log) ? parsed.log.filter((line): line is string => typeof line === 'string') : [],
-      activeSection: typeof parsed.activeSection === 'string' ? parsed.activeSection : null,
-      analysisId: typeof parsed.analysisId === 'number' && Number.isSafeInteger(parsed.analysisId) && parsed.analysisId > 0
-        ? parsed.analysisId
-        : null,
-      liveDebate: liveDebateMessages(parsed.liveDebate),
-      orderResult: readOrderResult(parsed.orderResult, typeof parsed.ticker === 'string' ? parsed.ticker : fallback.ticker),
-    }
-  } catch {
-    return fallback
-  }
-}
-
-type PortfolioDecisionPreview = {
-  source: 'portfolio_manager' | 'legacy_trader'
-  rating?: string
-  confidenceScore?: number
-  entryPrice?: number
-  stopLoss?: number
-  takeProfit?: number
-  positionSizePct?: number
-  suggestedCapital?: number
-  recommendedLeverage?: number
-}
-
-function objectFromJson(value: unknown): Record<string, unknown> | null {
-  if (isRecord(value)) return value
-  if (typeof value !== 'string' || !value.trim()) return null
-  try {
-    const parsed: unknown = JSON.parse(value)
-    return isRecord(parsed) ? parsed : null
-  } catch {
-    return null
-  }
-}
-
-function decisionNumber(value: unknown): number | undefined {
-  return isFiniteNumeric(value) ? value : undefined
-}
-
-function unwrapCanonicalPortfolioDecision(value: unknown): Record<string, unknown> | null {
-  const record = objectFromJson(value)
-  if (!record) return null
-  if (typeof record.rating === 'string' || typeof record.action === 'string') return record
-  const nested = objectFromJson(record.decision) ?? objectFromJson(record.accepted_decision)
-  return nested ? unwrapCanonicalPortfolioDecision(nested) : null
-}
-
-/**
- * New runs persist the controller-accepted canonical decision directly.  The
- * chart annotation remains a backwards-compatible fallback for older rows,
- * while the Trader JSON is read only for historical legacy analyses.
- */
-function readPortfolioDecision(
-  acceptedPortfolioDecision?: unknown,
-  chartAnnotations?: unknown,
-  legacyTraderJson?: string | null,
-  streamedPortfolioDecision?: unknown,
-): PortfolioDecisionPreview | null {
-  const annotations = objectFromJson(chartAnnotations)
-  const decision = unwrapCanonicalPortfolioDecision(
-    acceptedPortfolioDecision ?? annotations?.portfolio_decision ?? annotations?.portfolio_decision_json ?? streamedPortfolioDecision,
-  )
-  if (decision) {
-    const rating = typeof decision.rating === 'string' && decision.rating.trim() ? decision.rating.trim() : undefined
-    const preview: PortfolioDecisionPreview = {
-      source: 'portfolio_manager',
-      rating,
-      confidenceScore: decisionNumber(decision.confidence_score),
-      entryPrice: decisionNumber(decision.entry_price),
-      stopLoss: decisionNumber(decision.stop_loss),
-      takeProfit: decisionNumber(decision.take_profit_price ?? decision.take_profit),
-      positionSizePct: decisionNumber(decision.position_size_pct),
-      suggestedCapital: decisionNumber(decision.suggested_capital),
-      recommendedLeverage: decisionNumber(decision.recommended_leverage),
-    }
-    if (Object.entries(preview).some(([key, value]) => key !== 'source' && value !== undefined)) return preview
-  }
-
-  const legacy = objectFromJson(legacyTraderJson)
-  if (!legacy) return null
-  const kellySize = decisionNumber(legacy.kelly_size)
-  const preview: PortfolioDecisionPreview = {
-    source: 'legacy_trader',
-    rating: typeof legacy.action === 'string' && legacy.action.trim() ? legacy.action.trim() : undefined,
-    confidenceScore: decisionNumber(legacy.confidence_score),
-    entryPrice: decisionNumber(legacy.entry_price),
-    stopLoss: decisionNumber(legacy.stop_loss),
-    takeProfit: decisionNumber(legacy.take_profit_price ?? legacy.take_profit),
-    positionSizePct: kellySize === undefined ? decisionNumber(legacy.position_size_pct) : (kellySize <= 1 ? kellySize * 100 : kellySize),
-    suggestedCapital: decisionNumber(legacy.suggested_capital),
-    recommendedLeverage: decisionNumber(legacy.recommended_leverage),
-  }
-  return Object.entries(preview).some(([key, value]) => key !== 'source' && value !== undefined) ? preview : null
 }
 
 function PortfolioDecisionCard({

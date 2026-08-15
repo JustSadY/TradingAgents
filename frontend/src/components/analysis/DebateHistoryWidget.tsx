@@ -1,6 +1,7 @@
 import { useState, type ReactNode } from 'react'
 import { TrendingUp, TrendingDown, Zap, Shield, Scale, User } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
+import { isRecord } from '../../utils/isRecord'
 
 export interface DebateMessage { sender: string; content: string }
 
@@ -66,10 +67,6 @@ export function parseDebateMessage(msg: string): DebateMessage {
     }
   }
   return { sender: 'System', content: cleanContent(msg) }
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
 }
 
 /**

@@ -8,12 +8,9 @@ import { useTranslation } from '../contexts/LanguageContext'
 import type { OrderResponse } from '../api/generated/model'
 import type { BackendSchemasTradingPerformanceResponse } from '../api/generated/model'
 import { errorDetail } from '../utils/errorDetail'
+import { isRecord } from '../utils/isRecord'
 
 type PortfolioData = BackendSchemasTradingPerformanceResponse
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
