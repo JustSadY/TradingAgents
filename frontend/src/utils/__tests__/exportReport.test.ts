@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import type { AnalysisResultRead } from '../../api/generated/model'
+import i18n from '../../i18n'
+import { REPORT_SECTIONS } from '../../report/reportSections'
 import { buildExportSections, markdownToHtml } from '../exportReport'
+import { EXPECTED_EXPORT_LABELS, EXPECTED_EXPORT_ORDER } from './exportLabels.fixture'
 
 function analysisWith(overrides: Record<string, unknown>): AnalysisResultRead {
   return {
@@ -146,5 +149,42 @@ describe('markdownToHtml', () => {
       expect(html).not.toContain('<script>')
       expect(html).toMatch(/&(lt|#x3C);script/i)
     })
+  })
+})
+
+describe('export section headings', () => {
+  it('keeps every heading and its order byte-identical in both languages', () => {
+    // Guards a user-facing artefact: consolidating three metadata sources into
+    // one registry must not silently reword what a downloaded report says.
+    const exportable = REPORT_SECTIONS
+      .filter(section => section.exportLabelKey)
+      .sort((a, b) => (a.exportOrder ?? 0) - (b.exportOrder ?? 0))
+
+    expect(exportable.map(section => section.key)).toEqual([...EXPECTED_EXPORT_ORDER])
+
+    for (const lang of ['en', 'tr'] as const) {
+      for (const section of exportable) {
+        expect(i18n.t(section.exportLabelKey!, { lng: lang })).toBe(
+          EXPECTED_EXPORT_LABELS[lang][section.key],
+        )
+      }
+    }
+  })
+
+  it('resolves headings for the requested language, not the active one', async () => {
+    await i18n.changeLanguage('en')
+    const turkish = i18n.t('export.section.market_report', { lng: 'tr' })
+    expect(turkish).toBe(EXPECTED_EXPORT_LABELS.tr.market_report)
+    expect(turkish).not.toBe(EXPECTED_EXPORT_LABELS.en.market_report)
+  })
+
+  it('marks the share-only sections as not exportable', () => {
+    const shareOnly = REPORT_SECTIONS.filter(s => s.shareable && !s.exportLabelKey).map(s => s.key)
+    expect(shareOnly).toEqual([
+      'portfolio_decision',
+      'trader_proposal_json',
+      'debates',
+      'risk_metrics',
+    ])
   })
 })

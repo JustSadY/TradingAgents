@@ -8,6 +8,7 @@ import {
 import { useTranslation } from '../contexts/LanguageContext'
 import type { SharedReportResponse } from '../api/generated/model'
 import { DebateHistoryWidget } from '../components/analysis/DebateHistoryWidget'
+import { REPORT_SECTIONS } from '../report/reportSections'
 import { MarkdownReport } from '../components/report/MarkdownReport'
 import { formatSharedReportValue } from '../utils/sharedReport'
 
@@ -22,42 +23,57 @@ interface SectionDef {
   kind?: 'text' | 'structured' | 'debates' | 'portfolioDecision'
 }
 
-// Keep this list aligned with the public API contract.  The original shared
-// page only listed the three final decision fields even though the API already
-// returned every analyst report and both debate histories.  That made a valid
-// share link look like it had lost most of its analysis.
-const SHARED_REPORT_SECTION_DEFS: SectionDef[] = [
-  { key: 'portfolio_decision', labelKey: 'analysis.pm.title', fallbackLabel: 'Portfolio Manager Recommendation', icon: Scale, category: 'decision', kind: 'portfolioDecision' },
-  { key: 'final_decision', labelKey: 'analysis.section.final_trade_decision', fallbackLabel: 'Final Decision', icon: Scale, category: 'decision' },
-  { key: 'investment_plan', labelKey: 'analysis.section.investment_plan', fallbackLabel: 'Research Evidence Summary', icon: BookOpen, category: 'decision' },
-  { key: 'trader_plan', labelKey: 'analysis.section.trader_investment_plan', fallbackLabel: 'Legacy Trader Proposal', icon: Zap, category: 'decision' },
-  { key: 'judge_decision', labelKey: 'analysis.section.judge_decision', fallbackLabel: 'Judge Decision', icon: Scale, category: 'decision' },
-  { key: 'trader_proposal_json', labelKey: 'analysis.section.trader_proposal_json', fallbackLabel: 'Legacy Trade Proposal Details', icon: Zap, category: 'decision', kind: 'structured' },
+// Icons stay here rather than in the registry: they are a presentation choice
+// for this page, and importing them into a shared module would pull lucide
+// into the export path, which has no use for it.
+const SECTION_ICONS: Record<string, SectionDef['icon']> = {
+  portfolio_decision: Scale,
+  final_decision: Scale,
+  investment_plan: BookOpen,
+  trader_plan: Zap,
+  judge_decision: Scale,
+  trader_proposal_json: Zap,
+  market_report: TrendingUp,
+  fundamentals_report: BookOpen,
+  news_report: FileText,
+  sentiment_report: TrendingUp,
+  macro_report: FileText,
+  options_report: FileText,
+  quant_report: FileText,
+  earnings_report: FileText,
+  insider_report: FileText,
+  ownership_report: FileText,
+  ratings_report: FileText,
+  short_interest_report: FileText,
+  valuation_report: FileText,
+  catalyst_report: FileText,
+  review_report: FileText,
+  synthesis_report: FileText,
+  audit_report: FileText,
+  agent_qa_report: FileText,
+  bull_history: TrendingUp,
+  bear_history: TrendingDown,
+  debates: Scale,
+  risk_metrics: Scale,
+}
 
-  { key: 'market_report', labelKey: 'analysis.section.market_report', fallbackLabel: 'Market Analysis', icon: TrendingUp, category: 'analyst' },
-  { key: 'fundamentals_report', labelKey: 'analysis.section.fundamentals_report', fallbackLabel: 'Fundamental Analysis', icon: BookOpen, category: 'analyst' },
-  { key: 'news_report', labelKey: 'analysis.section.news_report', fallbackLabel: 'News Analysis', icon: FileText, category: 'analyst' },
-  { key: 'sentiment_report', labelKey: 'analysis.section.sentiment_report', fallbackLabel: 'Sentiment Analysis', icon: TrendingUp, category: 'analyst' },
-  { key: 'macro_report', labelKey: 'analysis.section.macro_report', fallbackLabel: 'Macro Analysis', icon: FileText, category: 'analyst' },
-  { key: 'options_report', labelKey: 'analysis.section.options_report', fallbackLabel: 'Options Analysis', icon: FileText, category: 'analyst' },
-  { key: 'quant_report', labelKey: 'analysis.section.quant_report', fallbackLabel: 'Quantitative Analysis', icon: FileText, category: 'analyst' },
-  { key: 'earnings_report', labelKey: 'analysis.section.earnings_report', fallbackLabel: 'Earnings Analysis', icon: FileText, category: 'analyst' },
-  { key: 'insider_report', labelKey: 'analysis.section.insider_report', fallbackLabel: 'Insider Activity', icon: FileText, category: 'analyst' },
-  { key: 'ownership_report', labelKey: 'analysis.section.ownership_report', fallbackLabel: 'Institutional Ownership', icon: FileText, category: 'analyst' },
-  { key: 'ratings_report', labelKey: 'analysis.section.ratings_report', fallbackLabel: 'Analyst Ratings', icon: FileText, category: 'analyst' },
-  { key: 'short_interest_report', labelKey: 'analysis.section.short_interest_report', fallbackLabel: 'Short Interest', icon: FileText, category: 'analyst' },
-  { key: 'valuation_report', labelKey: 'analysis.section.valuation_report', fallbackLabel: 'Valuation Comparison', icon: FileText, category: 'analyst' },
-  { key: 'catalyst_report', labelKey: 'analysis.section.catalyst_report', fallbackLabel: 'Upcoming Catalysts', icon: FileText, category: 'analyst' },
-  { key: 'review_report', labelKey: 'analysis.section.review_report', fallbackLabel: 'Performance Review', icon: FileText, category: 'analyst' },
-  { key: 'synthesis_report', labelKey: 'analysis.section.synthesis_report', fallbackLabel: 'Synthesis', icon: FileText, category: 'analyst' },
-  { key: 'audit_report', labelKey: 'analysis.section.audit_report', fallbackLabel: 'Audit', icon: FileText, category: 'analyst' },
-  { key: 'agent_qa_report', labelKey: 'analysis.section.agent_qa_report', fallbackLabel: 'Cross-Examination', icon: FileText, category: 'analyst' },
-
-  { key: 'bull_history', labelKey: 'analysis.section.bull_history', fallbackLabel: 'Bull Arguments', icon: TrendingUp, category: 'research', kind: 'structured' },
-  { key: 'bear_history', labelKey: 'analysis.section.bear_history', fallbackLabel: 'Bear Arguments', icon: TrendingDown, category: 'research', kind: 'structured' },
-  { key: 'debates', labelKey: 'analysis.section.investment_debate_history', fallbackLabel: 'Consensus & Risk Debate', icon: Scale, category: 'research', kind: 'debates' },
-  { key: 'risk_metrics', labelKey: 'analysis.section.risk_metrics', fallbackLabel: 'Risk Metrics', icon: Scale, category: 'research', kind: 'structured' },
-]
+/**
+ * Sections this page can render, taken from the shared registry.
+ *
+ * The registry is the single source for which sections exist, what they are
+ * called and how they are grouped; `shareable` is what selects the subset the
+ * public page shows.
+ */
+const SHARED_REPORT_SECTION_DEFS: SectionDef[] = REPORT_SECTIONS
+  .filter(section => section.shareable)
+  .map(section => ({
+    key: section.key,
+    labelKey: section.labelKey,
+    fallbackLabel: section.fallbackLabel,
+    icon: SECTION_ICONS[section.key] ?? FileText,
+    category: section.category,
+    kind: section.kind,
+  }))
 
 // ── Sub-components ───────────────────────────────────────────────────────────
 

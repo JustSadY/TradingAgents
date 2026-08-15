@@ -6,78 +6,36 @@ import remarkParse from 'remark-parse'
 import remarkRehype from 'remark-rehype'
 import { unified } from 'unified'
 import { visit } from 'unist-util-visit'
+import i18n from '../i18n'
+import { REPORT_SECTIONS } from '../report/reportSections'
 import { safeImageSrc, safeLinkHref } from './safeUrl'
 import type { AnalysisResultRead } from '../api/generated/model'
 
 type Lang = 'en' | 'tr'
 
-const SECTION_LABELS: Record<Lang, Record<string, string>> = {
-  en: {
-    market_report:     'Market Analysis',
-    sentiment_report:  'Sentiment Analysis',
-    news_report:       'News Analysis',
-    fundamentals_report: 'Fundamentals',
-    macro_report:      'Macro Analysis',
-    options_report:    'Options Analysis',
-    quant_report:      'Quantitative Analysis',
-    earnings_report:   'Earnings Analysis',
-    insider_report:    'Insider Activity',
-    ownership_report:  'Institutional Ownership',
-    ratings_report:    'Analyst Ratings',
-    short_interest_report: 'Short Interest',
-    valuation_report: 'Valuation Comparison',
-    catalyst_report:   'Upcoming Catalysts',
-    review_report:     'Review',
-    synthesis_report:  'Synthesis',
-    audit_report:      'Audit',
-    agent_qa_report:   'Agent Cross-Examination',
-    investment_plan:   'Research Evidence Summary',
-    trader_plan:       'Legacy Trader Proposal (historical only)',
-    final_decision:    'Final Decision (Portfolio Manager)',
-    bull_history:      'Bull Arguments',
-    bear_history:      'Bear Arguments',
-    investment_debate_history: 'Investment Debate',
-    risk_debate_history:      'Risk Debate',
-    judge_decision:    'Judge Decision',
-  },
-  tr: {
-    market_report:     'Piyasa Analizi',
-    sentiment_report:  'Duygu Analizi',
-    news_report:       'Haber Analizi',
-    fundamentals_report: 'Temel Analiz',
-    macro_report:      'Makro Analiz',
-    options_report:    'Opsiyon Analizi',
-    quant_report:      'Kantitatif Analiz',
-    earnings_report:   'Kazanç Analizi',
-    insider_report:    'İçeriden İşlem',
-    ownership_report:  'Kurumsal Sahiplik',
-    ratings_report:    'Analist Tavsiyeleri',
-    short_interest_report: 'Açığa Satış',
-    valuation_report: 'Değerleme Karşılaştırması',
-    catalyst_report:   'Yaklaşan Katalizörler',
-    review_report:     'Performans İnceleme',
-    synthesis_report:  'Sentez',
-    audit_report:      'Denetim',
-    agent_qa_report:   'Ajan Çapraz Sorgu',
-    investment_plan:   'Araştırma Kanıt Özeti',
-    trader_plan:       'Eski Trader Önerisi (yalnız geçmiş kayıt)',
-    final_decision:    'Nihai Karar (Portfolio Manager)',
-    bull_history:      'Boğa Argümanları',
-    bear_history:      'Ayı Argümanları',
-    investment_debate_history: 'Yatırım Tartışması',
-    risk_debate_history:      'Risk Tartışması',
-    judge_decision:    'Hakem Kararı',
-  },
-}
+/**
+ * Export order and headings both come from the shared section registry.
+ *
+ * The registry array is in share-page order, so documents sort by the explicit
+ * `exportOrder` instead of reusing the array sequence.
+ */
+const EXPORT_SECTIONS = REPORT_SECTIONS
+  .filter(section => section.exportLabelKey)
+  .sort((a, b) => (a.exportOrder ?? 0) - (b.exportOrder ?? 0))
+const SECTION_ORDER = EXPORT_SECTIONS.map(section => section.key)
 
-const SECTION_ORDER = [
-  'final_decision', 'investment_plan', 'trader_plan',
-  'market_report', 'fundamentals_report', 'news_report', 'sentiment_report',
-  'macro_report', 'options_report', 'quant_report', 'earnings_report',
-  'insider_report', 'ownership_report', 'ratings_report', 'short_interest_report', 'valuation_report', 'catalyst_report',
-  'review_report', 'synthesis_report', 'audit_report', 'agent_qa_report',
-  'bull_history', 'bear_history', 'investment_debate_history', 'risk_debate_history', 'judge_decision',
-]
+/**
+ * Heading for a section in a downloaded document.
+ *
+ * Resolved for the language the user picked for this export, which is not
+ * necessarily the language the app is currently displaying, so the lookup is
+ * pinned with `lng` rather than reading the active locale.
+ */
+function sectionHeading(key: string, language: Lang): string {
+  const section = EXPORT_SECTIONS.find(entry => entry.key === key)
+  if (!section?.exportLabelKey) return key
+  return i18n.t(section.exportLabelKey, { lng: language, defaultValue: section.fallbackLabel })
+}
 
 export interface ExportSection {
   key: string
@@ -149,7 +107,6 @@ export function buildExportSections(analysis: AnalysisResultRead): ExportSection
 // ── Markdown export ──────────────────────────────────────────────────────────
 
 export function exportMarkdown(analysis: AnalysisResultRead, language: Lang = 'en'): void {
-  const labels = SECTION_LABELS[language]
   const meta = _metaLines(analysis, language)
   const lines: string[] = [
     `# ${analysis.ticker} — ${language === 'tr' ? 'Analiz Raporu' : 'Analysis Report'}`,
@@ -161,7 +118,7 @@ export function exportMarkdown(analysis: AnalysisResultRead, language: Lang = 'e
   ]
 
   for (const { key, content } of buildExportSections(analysis)) {
-    lines.push(`## ${labels[key] ?? key}`, '', content, '', '---', '')
+    lines.push(`## ${sectionHeading(key, language)}`, '', content, '', '---', '')
   }
 
   const blob = new Blob([lines.join('\n')], { type: 'text/markdown;charset=utf-8' })
@@ -176,7 +133,6 @@ export function exportMarkdown(analysis: AnalysisResultRead, language: Lang = 'e
 // ── PDF export ───────────────────────────────────────────────────────────────
 
 export function exportPDF(analysis: AnalysisResultRead, language: Lang = 'en'): void {
-  const labels = SECTION_LABELS[language]
   const meta = _metaLines(analysis, language)
 
   const metaHtml = meta.map(l => `<p class="meta-line">${escapeHtml(l)}</p>`).join('')
@@ -185,7 +141,7 @@ export function exportPDF(analysis: AnalysisResultRead, language: Lang = 'en'): 
   for (const { key, content } of buildExportSections(analysis)) {
     sectionsHtml += `
       <div class="section">
-        <h2>${escapeHtml(labels[key] ?? key)}</h2>
+        <h2>${escapeHtml(sectionHeading(key, language))}</h2>
         <div class="section-body">${markdownToHtml(content)}</div>
       </div>`
   }

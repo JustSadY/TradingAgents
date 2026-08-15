@@ -1,3 +1,4 @@
+import { REPORT_SECTIONS } from '../../report/reportSections'
 import { describe, expect, it, vi, beforeEach } from 'vitest'
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -135,5 +136,28 @@ describe('formatSharedReportValue', () => {
     expect(formatSharedReportValue([{ sender: 'Aggressive Analyst', content: 'Use a tight stop' }]))
       .toBe('Aggressive Analyst: Use a tight stop')
     expect(formatSharedReportValue('{}')).toBe('')
+  })
+})
+
+describe('shared report section registry', () => {
+  it('renders exactly the sections marked shareable, in registry order', () => {
+    // The share page used to hold its own copy of this list. Pinning the derived
+    // list keeps a registry edit from silently adding or dropping a section from
+    // a public link.
+    const shareable = REPORT_SECTIONS.filter(section => section.shareable).map(s => s.key)
+
+    expect(shareable.slice(0, 6)).toEqual([
+      'portfolio_decision', 'final_decision', 'investment_plan',
+      'trader_plan', 'judge_decision', 'trader_proposal_json',
+    ])
+    expect(shareable.at(-1)).toBe('risk_metrics')
+    expect(shareable).toHaveLength(28)
+  })
+
+  it('gives every shareable section a label key and a category', () => {
+    for (const section of REPORT_SECTIONS.filter(s => s.shareable)) {
+      expect(section.labelKey).toBeTruthy()
+      expect(['decision', 'analyst', 'research']).toContain(section.category)
+    }
   })
 })
