@@ -5,7 +5,9 @@ import { AuthProvider, useAuth } from './contexts/AuthContext'
 import { PermissionsProvider } from './contexts/PermissionsContext'
 import RequirePage from './components/RequirePage'
 import Layout from './components/Layout'
+import { SnackbarProvider } from 'notistack'
 import NotificationAdapter from './components/ui/NotificationAdapter'
+import { NotificationContent } from './components/ui/NotificationContent'
 
 // Login eagerly (it's the entry point); every protected page is code-split so
 // the initial bundle stays small and each page loads on demand.
@@ -35,6 +37,16 @@ import { LanguageProvider } from './contexts/LanguageContext'
 import { CurrencyProvider } from './contexts/CurrencyContext'
 import { queryClient } from './api/queryClient'
 import { appTheme } from './theme/appTheme'
+
+// Every severity uses the same alert; notistack still needs one entry per
+// variant so it can type the options passed to `enqueueSnackbar`.
+const notificationComponents = {
+  success: NotificationContent,
+  error: NotificationContent,
+  warning: NotificationContent,
+  info: NotificationContent,
+  default: NotificationContent,
+}
 
 class ErrorBoundary extends React.Component<
   { children: React.ReactNode },
@@ -108,7 +120,13 @@ export default function App() {
       <ThemeProvider theme={appTheme}>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <NotificationAdapter />
+            <SnackbarProvider
+              maxSnack={5}
+              anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+              Components={notificationComponents}
+            >
+              <NotificationAdapter />
+            </SnackbarProvider>
             <PermissionsProvider>
               <LanguageProvider>
                 <CurrencyProvider>
