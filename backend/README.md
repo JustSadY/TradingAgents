@@ -49,7 +49,7 @@ backend/
 │   ├── config.py         # Pydantic settings loaded from .env
 │   ├── database.py       # Async engine/session + table creation
 │   ├── migrations.py     # Additive, idempotent column migrations (see note below)
-│   ├── security.py       # bcrypt hashing, JWT, Fernet secret encryption
+│   ├── security.py       # JWT, Fernet secret encryption (hashing: password_hashing.py)
 │   ├── log_handler.py    # Async DB log handler
 │   ├── websocket.py      # WS connection manager for real-time progress feeds
 │   ├── redis_bus.py      # Opt-in Redis client (REDIS_URL) for horizontal scaling

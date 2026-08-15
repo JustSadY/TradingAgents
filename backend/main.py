@@ -136,6 +136,7 @@ async def _seed_admin_user():
     from sqlalchemy import select
 
     from backend.core.database import AsyncSessionLocal
+    from backend.core.password_hashing import is_supported_password_hash
     from backend.core.security import hash_password
     from backend.models.user import User
 
@@ -146,16 +147,14 @@ async def _seed_admin_user():
         existing = result.scalar_one_or_none()
         if existing is None:
             raw_hash = settings.ADMIN_PASSWORD_HASH
-            if raw_hash:
-                try:
-                    import bcrypt
-
-                    bcrypt.checkpw(b"test", raw_hash.encode())
-                except Exception as exc:
-                    if settings.ENVIRONMENT.strip().lower() == "production":
-                        raise RuntimeError("ADMIN_PASSWORD_HASH is not a valid bcrypt hash") from exc
-                    _logger.warning("ADMIN_PASSWORD_HASH in .env is not a valid bcrypt hash; using development fallback.")
-                    raw_hash = None
+            if raw_hash and not is_supported_password_hash(raw_hash):
+                if settings.ENVIRONMENT.strip().lower() == "production":
+                    raise RuntimeError("ADMIN_PASSWORD_HASH is not a valid Argon2 or bcrypt hash")
+                _logger.warning(
+                    "ADMIN_PASSWORD_HASH in .env is not a valid Argon2 or bcrypt hash; "
+                    "using development fallback."
+                )
+                raw_hash = None
             if raw_hash:
                 hashed = raw_hash
                 bootstrap_password = None
@@ -168,7 +167,7 @@ async def _seed_admin_user():
             await db.commit()
             if bootstrap_password:
                 # Development-only fallback. Production configuration validation
-                # requires an operator-controlled bcrypt hash before boot.
+                # requires an operator-controlled password hash before boot.
                 _logger.warning(
                     "Owner user %s created with a one-time development bootstrap password: %s. "
                     "Change it immediately.",

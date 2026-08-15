@@ -2,12 +2,34 @@ import hashlib
 import secrets
 from datetime import UTC, datetime, timedelta
 
-import bcrypt as _bcrypt
-from jose import JWTError, jwt
+import jwt
 
 from .config import get_settings
+from .password_hashing import (
+    hash_password,
+    is_supported_password_hash,
+    verify_and_update_password,
+    verify_password,
+)
 
 settings = get_settings()
+
+# Re-exported so the existing ``from backend.core.security import ...`` call
+# sites keep working; the implementations live in ``core.password_hashing``.
+__all__ = [
+    "create_access_token",
+    "create_refresh_token",
+    "decode_token",
+    "decode_token_payload",
+    "decrypt_secret",
+    "encrypt_secret",
+    "hash_password",
+    "is_supported_password_hash",
+    "new_token_id",
+    "token_id_hash",
+    "verify_and_update_password",
+    "verify_password",
+]
 
 def encrypt_secret(value: str) -> str:
     """Fernet-encrypt an arbitrary secret string (e.g. a tool credential)."""
@@ -21,15 +43,6 @@ def decrypt_secret(value: str) -> str:
     plaintext values should catch that and fall back to the raw value.
     """
     return settings.get_fernet().decrypt(value.encode()).decode()
-
-def hash_password(password: str) -> str:
-    return _bcrypt.hashpw(password.encode(), _bcrypt.gensalt()).decode()
-
-def verify_password(plain: str, hashed: str) -> bool:
-    try:
-        return _bcrypt.checkpw(plain.encode(), hashed.encode())
-    except Exception:
-        return False
 
 def _make_token(data: dict, expires_delta: timedelta) -> str:
     payload = data.copy()
@@ -90,5 +103,5 @@ def decode_token_payload(token: str, expected_type: str = "access") -> dict:
         if not username:
             raise ValueError("Missing subject")
         return payload
-    except JWTError as exc:
+    except jwt.PyJWTError as exc:
         raise ValueError(f"Invalid token: {exc}") from exc

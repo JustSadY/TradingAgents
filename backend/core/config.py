@@ -108,14 +108,10 @@ class Settings(BaseSettings):
             if not self.ADMIN_PASSWORD_HASH:
                 problems.append("ADMIN_PASSWORD_HASH must be set to a durable, operator-controlled password hash")
             else:
-                try:
-                    import bcrypt
+                from backend.core.password_hashing import is_supported_password_hash
 
-                    if not self.ADMIN_PASSWORD_HASH.startswith(("$2a$", "$2b$", "$2y$")):
-                        raise ValueError("unsupported hash prefix")
-                    bcrypt.checkpw(b"configuration-validation", self.ADMIN_PASSWORD_HASH.encode())
-                except Exception:
-                    problems.append("ADMIN_PASSWORD_HASH must be a valid bcrypt hash")
+                if not is_supported_password_hash(self.ADMIN_PASSWORD_HASH):
+                    problems.append("ADMIN_PASSWORD_HASH must be a valid Argon2 or bcrypt hash")
             if problems:
                 raise ValueError("Insecure configuration for ENVIRONMENT=production: " + "; ".join(problems))
         return self

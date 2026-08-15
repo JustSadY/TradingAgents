@@ -44,8 +44,9 @@ api (routers)  →  services (business logic)  →  repositories (DB access)  �
 | `repositories/users.py` | `get_user_by_username`, `get_user_by_id`. |
 | `core/config.py` | Pydantic `Settings` from `.env` (infra secrets only — see §5). `get_settings()` is `lru_cache`d. |
 | `core/database.py` | Async `engine`, `AsyncSessionLocal`, `get_db()` (commits on success / rolls back on error), `Base`, `create_all_tables()`, and the **`MONEY`** column type. |
-| `core/migrations.py` | Additive, idempotent schema migrations (no Alembic — see §5). |
-| `core/security.py` | bcrypt hashing, JWT encode/decode, Fernet `encrypt_secret`/`decrypt_secret`. |
+| `core/migrations.py` | Additive, idempotent schema helpers for SQLite development/test databases. Production PostgreSQL is migrated by Alembic. |
+| `core/security.py` | JWT encode/decode, Fernet `encrypt_secret`/`decrypt_secret`, re-exports the hashing helpers. |
+| `core/password_hashing.py` | Argon2 hashing via `pwdlib`, with bcrypt kept registered to verify pre-migration hashes. Import-cycle-free so `core/config.py` can validate `ADMIN_PASSWORD_HASH`. |
 | `core/websocket.py` | `ws_manager` for real-time progress feeds. |
 | `core/redis_bus.py`, `event_bus.py`, `task_store.py` | **Opt-in Redis scaling layer** (enabled via `REDIS_URL`): shared Redis client, analysis-event pub/sub fan-out, cross-process task registry/ownership + cancel control channel. No-ops when Redis is unset. |
 | `core/body_limit.py`, `core/limiter.py` | Request body size limit middleware (413) + slowapi rate limiter. |
@@ -131,7 +132,10 @@ import engine modules lazily inside functions (they pull heavy deps).
   keys, data-vendor keys and SearXNG are configured at runtime in the Web UI and
   stored (encrypted) in the DB — never read from the environment by
   `core/config.py`.
-- **Passwords** are hashed with `bcrypt` directly (not passlib).
+- **Passwords** are hashed with Argon2 through `pwdlib`. bcrypt stays registered so hashes
+  written before the migration keep verifying, and `verify_and_update_password` re-stores them
+  as Argon2 on the next successful login. Argon2 also lifts bcrypt's 72-*byte* input limit,
+  which ~37 Turkish characters already exceeded.
 - **`get_db` auto-commits** on a clean return and rolls back on exception, so a
   route doesn't strictly need an explicit commit — but background-task sessions
   manage their own commit/rollback.
