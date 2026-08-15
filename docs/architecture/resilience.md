@@ -32,9 +32,15 @@ with the data it already has, instead of crashing. (Falls back to the default
 
 ## 3. Failing **agents** retry, then skip (don't abort)
 
-- **`retry_call(fn, …)`** retries with exponential backoff (`node_retry_attempts`
-  total tries, `node_retry_base_delay` seconds — read from engine config, default
-  `2` / `1.0s`). The analyst LLM turn in
+- **`retry_call(fn, …)`** retries with jittered exponential backoff
+  (`node_retry_attempts` total tries, `node_retry_base_delay` seconds — read from
+  engine config, default `2` / `1.0s`). It is a thin shell over
+  `tenacity.AsyncRetrying`: the library owns the loop, the wait and the
+  re-raise, while `_is_retryable` owns the decision. Each delay is drawn
+  uniformly from `[0, base * 2 ** attempt]` so concurrent analysts do not all
+  retry at the same instant after a shared rate limit. `CancelledError` and any
+  other non-`Exception` failure propagate immediately rather than being
+  retried. The analyst LLM turn in
   [`analyst_node_factory.run_tool_analyst`](../../backend/trading_agents/agents/runtime/analyst_node_factory.py)
   is wrapped in it.
 - **`guard_node(fn, name, kind, fallback)`** wraps every graph node
