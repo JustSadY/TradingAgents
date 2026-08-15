@@ -101,9 +101,9 @@ For financial amounts, preserve the repository's exact-decimal conventions rathe
 
 PostgreSQL is the supported primary database.
 
-On startup, the app creates missing tables and can apply supported additive/idempotent column migrations. Once a database is explicitly managed by Alembic, startup migration logic defers to Alembic.
+Alembic is the sole schema authority. Outside production the app upgrades the database to the Alembic head on startup; in production it refuses to serve a database that is not already at head, so the migration step must run before web/worker processes start.
 
-Do not treat startup additive migration as a replacement for destructive migrations. Renames, drops, incompatible type changes, and data transforms need an explicit migration plan.
+Every schema change needs a revision — additive ones included. SQLite is a development/test convenience only: it builds from ORM metadata via `create_all` and has no migration path, so delete the file to pick up model changes.
 
 ### LangGraph checkpoints
 

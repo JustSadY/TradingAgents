@@ -14,10 +14,11 @@ Run the commands below from `backend/`.
 - A complete pre-Alembic installation is stamped at the checked-in baseline,
   then upgraded through every later revision. Startup refuses to stamp a
   partial schema because that would claim missing baseline tables exist.
-- SQLite is only the lightweight local development/test path. It uses model
-  creation plus idempotent compatibility normalization in
-  `core/migrations.py`; it is not a substitute for PostgreSQL Alembic
-  revisions.
+- SQLite is only the lightweight local development/test path. It builds its
+  schema from the ORM metadata with `Base.metadata.create_all` and has no
+  migration history at all; it is not a substitute for PostgreSQL Alembic
+  revisions. An existing SQLite file is never migrated — delete it to pick up
+  model changes.
 
 ## Upgrade an existing database
 

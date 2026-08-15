@@ -176,7 +176,7 @@ Start the API:
 uvicorn backend.main:app --reload --port 8000
 ```
 
-The application creates missing tables and applies supported additive startup migrations automatically. Databases explicitly managed by Alembic defer to Alembic; see `backend/alembic/README.md` for that workflow.
+Alembic owns the schema. Outside production the application upgrades the database to the Alembic head on startup; in production it refuses to serve a database that is not already at head, so run the migration step first. See `backend/alembic/README.md`.
 
 Swagger is available at `http://localhost:8000/docs`.
 

@@ -44,7 +44,6 @@ api (routers)  →  services (business logic)  →  repositories (DB access)  �
 | `repositories/users.py` | `get_user_by_username`, `get_user_by_id`. |
 | `core/config.py` | Pydantic `Settings` from `.env` (infra secrets only — see §5). `get_settings()` is `lru_cache`d. |
 | `core/database.py` | Async `engine`, `AsyncSessionLocal`, `get_db()` (commits on success / rolls back on error), `Base`, `create_all_tables()`, and the **`MONEY`** column type. |
-| `core/migrations.py` | Additive, idempotent schema helpers for SQLite development/test databases. Production PostgreSQL is migrated by Alembic. |
 | `core/security.py` | JWT encode/decode, Fernet `encrypt_secret`/`decrypt_secret`, re-exports the hashing helpers. |
 | `core/password_hashing.py` | Argon2 hashing via `pwdlib`, with bcrypt kept registered to verify pre-migration hashes. Import-cycle-free so `core/config.py` can validate `ADMIN_PASSWORD_HASH`. |
 | `core/websocket.py` | `ws_manager` for real-time progress feeds. |
@@ -88,18 +87,16 @@ instead of hand-writing the `if not is_admin` filter.
 
 **Add a model/column:** add the column to the `models/*.py` class **and** create
 an Alembic revision (`alembic -c backend/alembic.ini revision --autogenerate`).
-Alembic is authoritative for PostgreSQL: `create_all_tables()` refuses to serve a
-production database that is not at head, and it never runs the startup column
-helpers there. Appending to `core/migrations.py::_NEW_COLUMNS` only affects
-SQLite development/test databases — do that *as well* if the column must appear
-in an existing local SQLite file, but a `_NEW_COLUMNS` entry alone means the
-column exists in the ORM and in your tests while being absent from PostgreSQL.
-For money/price/quantity use the `MONEY` type from `core.database` (see §5), not
-`Float`.
+Alembic is authoritative for PostgreSQL and `create_all_tables()` refuses to
+serve a production database that is not at head, so a model change without a
+revision means the column exists in the ORM and passes the test suite while
+being absent from PostgreSQL. Note that the test suite builds its schema from
+ORM metadata rather than from the revision chain, so it cannot catch a missing
+or broken revision for you. For money/price/quantity use the `MONEY` type from
+`core.database` (see §5), not `Float`.
 
-**Add an AppSettings field:** add it to the model, create an Alembic revision
-(plus `_NEW_COLUMNS` for SQLite), then update `schemas/settings.py` and
-`settings_service.settings_to_read`.
+**Add an AppSettings field:** add it to the model, create an Alembic revision,
+then update `schemas/settings.py` and `settings_service.settings_to_read`.
 
 **Long-running work from a route:** don't `await` it in the handler. Add a
 `*_task` coroutine to the service and schedule it via `BackgroundTasks`
@@ -124,7 +121,7 @@ import engine modules lazily inside functions (they pull heavy deps).
 
 ## 5. Conventions & gotchas (read before changing infra)
 
-- **No active Alembic workflow.** Migrations are additive only, applied on startup via `core/migrations.apply_column_migrations` (`ADD COLUMN IF NOT EXISTS`) and `apply_type_migrations` (float→`NUMERIC(20,8)` for money columns on Postgres). While `alembic` is present in the environment for potential future migration paths or baseline checks, it is not used for day-to-day schema changes. Renames / drops / non-additive type changes must be done with manual SQL.
+- **Alembic is the only schema authority for PostgreSQL.** Every schema change needs a revision, additive or not. `create_all_tables()` verifies the database sits at the Alembic head before serving in production and refuses to boot otherwise; outside production it upgrades to head. SQLite builds from ORM metadata and has no migration path — delete the file to pick up model changes.
 - **Money columns use `MONEY = Numeric(20, 8, asdecimal=True)`** (from
   `core.database`): exact decimal storage, and Python values are processed as `Decimal`
   to avoid rounding errors. End-to-end calculation and schema conversions are fully
@@ -253,5 +250,5 @@ Each tool is a `BaseAgentTool` (or a `FunctionToolAdapter` wrapping an existing
   `alpha_vantage_api_key`) lives **only** in the tool system (as `ToolSettingField`s
   on the `reddit_sentiment` / `search_web` / `core_stock_data` tools), is injected
   at runtime, and is read in the engine via `get_config()`. Do **not** re-add these
-  as `SystemSettings`/`system_settings` columns — the old orphaned columns were
-  removed from `core/migrations.py`.
+  as `SystemSettings`/`system_settings` columns — the old orphaned columns have
+  been removed.

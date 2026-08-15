@@ -48,7 +48,6 @@ backend/
 ├── core/                 # Platform: config, DB engine, security, WebSockets, logging
 │   ├── config.py         # Pydantic settings loaded from .env
 │   ├── database.py       # Async engine/session + table creation
-│   ├── migrations.py     # Additive, idempotent column migrations (see note below)
 │   ├── security.py       # JWT, Fernet secret encryption (hashing: password_hashing.py)
 │   ├── log_handler.py    # Async DB log handler
 │   ├── websocket.py      # WS connection manager for real-time progress feeds
@@ -71,7 +70,7 @@ backend/
 
 *   **FastAPI:** Modern, asynchronous web framework for Python. Provides interactive API documentation out-of-the-box (Swagger UI at `/docs`).
 *   **SQLAlchemy Async:** Async IO ORM targeting PostgreSQL via `asyncpg`.
-*   **Schema management:** On startup the app calls `Base.metadata.create_all` and then a small **additive, idempotent column migrator** ([core/migrations.py](core/migrations.py)) that issues `ALTER TABLE ... ADD COLUMN IF NOT EXISTS` for any newly added model columns — model changes that only *add* columns are picked up automatically; destructive changes (renames/drops/type changes) must be applied manually. **Alembic is scaffolded as the opt-in successor** (see [alembic/README.md](alembic/README.md)): once a database is stamped with a baseline (`alembic_version` table exists), the startup migrator automatically defers to Alembic for that database.
+*   **Schema management:** **Alembic owns the PostgreSQL schema** (see [alembic/README.md](alembic/README.md)). In production the app refuses to serve a database that is not at the Alembic head; outside production it upgrades to head on startup. Every schema change — additive or not — needs a revision. SQLite is a development/test convenience only and builds its schema straight from the ORM metadata via `Base.metadata.create_all`; there is no catch-up path for an existing SQLite file, so delete it and let startup recreate it.
 *   **APScheduler:** In-process, cron-like job scheduler for background analyses.
 *   **WebSockets:** Dynamic progress updates streaming for long-running agent workflows.
 
@@ -137,10 +136,11 @@ Ensure you have a PostgreSQL database server running and a database named `tradi
     `uv lock && ./scripts/export-requirements.sh`. Contributors with uv can use
     `uv sync` instead, which also installs the `dev` group (ruff, pyright, pytest).
 4.  **Database Setup / Migrations:**
-    Tables and additive column migrations are applied automatically on startup
-    (see [core/migrations.py](core/migrations.py)). No manual migration step is
-    required for a fresh database; only destructive schema changes need manual SQL.
-    To manage a database with Alembic instead, follow [alembic/README.md](alembic/README.md).
+    PostgreSQL schemas are managed by Alembic — see
+    [alembic/README.md](alembic/README.md). Outside production the app upgrades
+    to head on startup; in production it refuses to serve a database that is not
+    already at head, so run the migration step before starting web/worker
+    processes.
 5.  **Run Development Server:**
     ```bash
     uvicorn backend.main:app --reload --port 8000
