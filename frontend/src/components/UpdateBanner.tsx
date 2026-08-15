@@ -9,18 +9,6 @@ import {
 import { notify } from '../utils/notify'
 import { useAuth } from '../contexts/AuthContext'
 
-interface UpdateStatus {
-  git: boolean
-  update_supported: boolean
-  update_available: boolean
-  updating: boolean
-  current_short?: string | null
-  latest_short?: string | null
-  behind: number
-  commits?: string[]
-  last_update?: { state?: string; error?: string }
-}
-
 const POLL_IDLE_MS = 60 * 60 * 1000
 const POLL_BUSY_MS = 4_000
 const UPDATE_TIMEOUT_MS = 12 * 60 * 1000
@@ -36,12 +24,11 @@ export default function UpdateBanner() {
 
   useEffect(() => { busyRef.current = busy }, [busy])
 
-  const statusQuery = useUpdateUpdateStatus<UpdateStatus>({
+  const statusQuery = useUpdateUpdateStatus({
     query: {
       retry: false,
       refetchInterval: busy ? POLL_BUSY_MS : POLL_IDLE_MS,
       refetchOnWindowFocus: false,
-      select: data => data as UpdateStatus,
     },
   })
   const st = statusQuery.data ?? null

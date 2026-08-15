@@ -25,8 +25,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  UpdateUpdateApply200,
-  UpdateUpdateStatus200
+  UpdateApplyResult,
+  UpdateStatus
 } from '../model';
 
 import { customInstance } from '../../mutator';
@@ -60,7 +60,7 @@ export const updateUpdateApply = (
 ) => {
 
 
-      return customInstance<UpdateUpdateApply200>(
+      return customInstance<UpdateApplyResult>(
       {url: `/api/update/apply`, method: 'POST', signal
     },
       options);
@@ -122,7 +122,7 @@ export const updateUpdateStatus = (
 ) => {
 
 
-      return customInstance<UpdateUpdateStatus200>(
+      return customInstance<UpdateStatus>(
       {url: `/api/update/status`, method: 'GET', signal
     },
       options);

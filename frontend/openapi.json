@@ -246,6 +246,151 @@
         "title": "AgentAccessUpdateResponse",
         "type": "object"
       },
+      "AgentMeta": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "default_enabled": {
+            "title": "Default Enabled",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "parent_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Parent Key"
+          },
+          "settings_schema": {
+            "items": {
+              "$ref": "#/components/schemas/AgentSettingFieldMeta"
+            },
+            "title": "Settings Schema",
+            "type": "array"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "description",
+          "category",
+          "default_enabled"
+        ],
+        "title": "AgentMeta",
+        "type": "object"
+      },
+      "AgentSettingFieldMeta": {
+        "properties": {
+          "default": {
+            "title": "Default"
+          },
+          "description_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description Key"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label_key": {
+            "title": "Label Key",
+            "type": "string"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "options": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "placeholder_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Placeholder Key"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "type",
+          "label_key"
+        ],
+        "title": "AgentSettingFieldMeta",
+        "type": "object"
+      },
       "AgentSettingUpdateValue": {
         "properties": {
           "enabled": {
@@ -1067,6 +1212,34 @@
         "title": "AnalystAttributionItem",
         "type": "object"
       },
+      "AnalystMeta": {
+        "properties": {
+          "default": {
+            "title": "Default",
+            "type": "boolean"
+          },
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "description",
+          "default"
+        ],
+        "title": "AnalystMeta",
+        "type": "object"
+      },
       "ApiKeyProvidersResponse": {
         "properties": {
           "providers": {
@@ -1868,6 +2041,46 @@
           "ts"
         ],
         "title": "CheckpointItem",
+        "type": "object"
+      },
+      "Choice": {
+        "properties": {
+          "description": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "note": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Note"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label"
+        ],
+        "title": "Choice",
         "type": "object"
       },
       "ConsensusReportStats": {
@@ -2678,6 +2891,226 @@
           "detail"
         ],
         "title": "MessageResponse",
+        "type": "object"
+      },
+      "MetaResponse": {
+        "properties": {
+          "agents": {
+            "items": {
+              "$ref": "#/components/schemas/AgentMeta"
+            },
+            "title": "Agents",
+            "type": "array"
+          },
+          "analysts": {
+            "items": {
+              "$ref": "#/components/schemas/AnalystMeta"
+            },
+            "title": "Analysts",
+            "type": "array"
+          },
+          "asset_types": {
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "title": "Asset Types",
+            "type": "array"
+          },
+          "brokers": {
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "title": "Brokers",
+            "type": "array"
+          },
+          "chart_periods": {
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "title": "Chart Periods",
+            "type": "array"
+          },
+          "data_vendors": {
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "title": "Data Vendors",
+            "type": "array"
+          },
+          "effort_options": {
+            "additionalProperties": {
+              "items": {
+                "$ref": "#/components/schemas/Choice"
+              },
+              "type": "array"
+            },
+            "title": "Effort Options",
+            "type": "object"
+          },
+          "embedders": {
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "title": "Embedders",
+            "type": "array"
+          },
+          "investor_personas": {
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "title": "Investor Personas",
+            "type": "array"
+          },
+          "languages": {
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "title": "Languages",
+            "type": "array"
+          },
+          "memory_stores": {
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "title": "Memory Stores",
+            "type": "array"
+          },
+          "order_actions": {
+            "items": {
+              "$ref": "#/components/schemas/SignalMeta"
+            },
+            "title": "Order Actions",
+            "type": "array"
+          },
+          "order_statuses": {
+            "items": {
+              "$ref": "#/components/schemas/SignalMeta"
+            },
+            "title": "Order Statuses",
+            "type": "array"
+          },
+          "page_keys": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Page Keys",
+            "type": "array"
+          },
+          "provider_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Provider Labels",
+            "type": "object"
+          },
+          "section_labels": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Section Labels",
+            "type": "object"
+          },
+          "sections": {
+            "items": {
+              "$ref": "#/components/schemas/SectionMeta"
+            },
+            "title": "Sections",
+            "type": "array"
+          },
+          "setting_keys": {
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "title": "Setting Keys",
+            "type": "array"
+          },
+          "signals": {
+            "items": {
+              "$ref": "#/components/schemas/SignalMeta"
+            },
+            "title": "Signals",
+            "type": "array"
+          },
+          "tools": {
+            "items": {
+              "$ref": "#/components/schemas/ToolMeta"
+            },
+            "title": "Tools",
+            "type": "array"
+          },
+          "trading_modes": {
+            "items": {
+              "$ref": "#/components/schemas/Choice"
+            },
+            "title": "Trading Modes",
+            "type": "array"
+          },
+          "webhook_events": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Webhook Events",
+            "type": "array"
+          }
+        },
+        "required": [
+          "analysts",
+          "tools",
+          "agents",
+          "section_labels",
+          "signals",
+          "asset_types",
+          "languages",
+          "data_vendors",
+          "trading_modes",
+          "brokers",
+          "provider_labels",
+          "investor_personas",
+          "effort_options",
+          "order_statuses",
+          "order_actions",
+          "chart_periods",
+          "page_keys",
+          "setting_keys",
+          "sections",
+          "webhook_events",
+          "memory_stores",
+          "embedders"
+        ],
+        "title": "MetaResponse",
+        "type": "object"
+      },
+      "MetaSchemasResponse": {
+        "properties": {
+          "agents": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SchemaBundle"
+            },
+            "title": "Agents",
+            "type": "object"
+          },
+          "schema_version": {
+            "default": 1,
+            "title": "Schema Version",
+            "type": "integer"
+          },
+          "settings": {
+            "$ref": "#/components/schemas/SchemaBundle"
+          },
+          "tools": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SchemaBundle"
+            },
+            "title": "Tools",
+            "type": "object"
+          }
+        },
+        "required": [
+          "settings",
+          "tools",
+          "agents"
+        ],
+        "title": "MetaSchemasResponse",
         "type": "object"
       },
       "MultiTickerListItem": {
@@ -3764,6 +4197,41 @@
         "title": "RiskDashboardResponse",
         "type": "object"
       },
+      "SchemaBundle": {
+        "properties": {
+          "json_schema": {
+            "additionalProperties": true,
+            "title": "Json Schema",
+            "type": "object"
+          },
+          "settings_schema": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Settings Schema"
+          },
+          "ui_schema": {
+            "additionalProperties": true,
+            "title": "Ui Schema",
+            "type": "object"
+          }
+        },
+        "required": [
+          "json_schema",
+          "ui_schema"
+        ],
+        "title": "SchemaBundle",
+        "type": "object"
+      },
       "ScreenRequest": {
         "properties": {
           "tickers": {
@@ -3852,6 +4320,39 @@
           "rsi_14"
         ],
         "title": "ScreenResultItem",
+        "type": "object"
+      },
+      "SectionMeta": {
+        "properties": {
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "icon": {
+            "title": "Icon",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "order": {
+            "title": "Order",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "key",
+          "label",
+          "category",
+          "order",
+          "icon"
+        ],
+        "title": "SectionMeta",
         "type": "object"
       },
       "SectorRotationResponse": {
@@ -5629,6 +6130,29 @@
         "title": "SharedReportResponse",
         "type": "object"
       },
+      "SignalMeta": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "tone": {
+            "title": "Tone",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label",
+          "tone"
+        ],
+        "title": "SignalMeta",
+        "type": "object"
+      },
       "SystemSettingsRead": {
         "properties": {
           "active_broker": {
@@ -5958,6 +6482,173 @@
         "title": "ToolFieldAccessUpdateResponse",
         "type": "object"
       },
+      "ToolMeta": {
+        "properties": {
+          "allowed_analysts": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Allowed Analysts",
+            "type": "array"
+          },
+          "category": {
+            "title": "Category",
+            "type": "string"
+          },
+          "default_enabled": {
+            "title": "Default Enabled",
+            "type": "boolean"
+          },
+          "description_key": {
+            "title": "Description Key",
+            "type": "string"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label_key": {
+            "title": "Label Key",
+            "type": "string"
+          },
+          "requires_db": {
+            "title": "Requires Db",
+            "type": "boolean"
+          },
+          "requires_network": {
+            "title": "Requires Network",
+            "type": "boolean"
+          },
+          "requires_secret": {
+            "title": "Requires Secret",
+            "type": "boolean"
+          },
+          "settings_schema": {
+            "items": {
+              "$ref": "#/components/schemas/ToolSettingFieldMeta"
+            },
+            "title": "Settings Schema",
+            "type": "array"
+          },
+          "temporal_semantics": {
+            "title": "Temporal Semantics",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "category",
+          "default_enabled",
+          "allowed_analysts",
+          "label_key",
+          "description_key",
+          "settings_schema",
+          "requires_secret",
+          "requires_network",
+          "requires_db",
+          "temporal_semantics"
+        ],
+        "title": "ToolMeta",
+        "type": "object"
+      },
+      "ToolSettingFieldMeta": {
+        "properties": {
+          "advanced": {
+            "default": false,
+            "title": "Advanced",
+            "type": "boolean"
+          },
+          "default": {
+            "title": "Default"
+          },
+          "description_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Description Key"
+          },
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "label_key": {
+            "title": "Label Key",
+            "type": "string"
+          },
+          "max": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Max"
+          },
+          "min": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Min"
+          },
+          "options": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Options",
+            "type": "array"
+          },
+          "required": {
+            "default": false,
+            "title": "Required",
+            "type": "boolean"
+          },
+          "scope": {
+            "title": "Scope",
+            "type": "string"
+          },
+          "secret": {
+            "default": false,
+            "title": "Secret",
+            "type": "boolean"
+          },
+          "step": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Step"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "key",
+          "type",
+          "scope",
+          "label_key"
+        ],
+        "title": "ToolSettingFieldMeta",
+        "type": "object"
+      },
       "ToolSettingUpdateValue": {
         "properties": {
           "enabled": {
@@ -6076,6 +6767,135 @@
           "pnl_pct"
         ],
         "title": "TradeSummaryRecord",
+        "type": "object"
+      },
+      "UpdateApplyResult": {
+        "properties": {
+          "started": {
+            "title": "Started",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "started"
+        ],
+        "title": "UpdateApplyResult",
+        "type": "object"
+      },
+      "UpdateLastRun": {
+        "description": "State persisted by the updater unit between runs.",
+        "properties": {
+          "at": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "At"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "state": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "State"
+          }
+        },
+        "title": "UpdateLastRun",
+        "type": "object"
+      },
+      "UpdateStatus": {
+        "properties": {
+          "behind": {
+            "default": 0,
+            "title": "Behind",
+            "type": "integer"
+          },
+          "commits": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Commits",
+            "type": "array"
+          },
+          "current": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current"
+          },
+          "current_short": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Current Short"
+          },
+          "git": {
+            "title": "Git",
+            "type": "boolean"
+          },
+          "last_update": {
+            "$ref": "#/components/schemas/UpdateLastRun"
+          },
+          "latest_short": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Latest Short"
+          },
+          "update_available": {
+            "default": false,
+            "title": "Update Available",
+            "type": "boolean"
+          },
+          "update_supported": {
+            "title": "Update Supported",
+            "type": "boolean"
+          },
+          "updating": {
+            "default": false,
+            "title": "Updating",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "git",
+          "update_supported"
+        ],
+        "title": "UpdateStatus",
         "type": "object"
       },
       "UserAdminUpdate": {
@@ -8805,9 +9625,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Meta Get Meta",
-                  "type": "object"
+                  "$ref": "#/components/schemas/MetaResponse"
                 }
               }
             },
@@ -8820,6 +9638,33 @@
           }
         ],
         "summary": "Get Meta",
+        "tags": [
+          "meta"
+        ]
+      }
+    },
+    "/api/meta/schemas": {
+      "get": {
+        "description": "Return additive JSON Schema/UI contracts without user secret values.",
+        "operationId": "meta_get_meta_schemas",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MetaSchemasResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Meta Schemas",
         "tags": [
           "meta"
         ]
@@ -11140,9 +11985,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Update Update Apply",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UpdateApplyResult"
                 }
               }
             },
@@ -11171,9 +12014,7 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "additionalProperties": true,
-                  "title": "Response Update Update Status",
-                  "type": "object"
+                  "$ref": "#/components/schemas/UpdateStatus"
                 }
               }
             },

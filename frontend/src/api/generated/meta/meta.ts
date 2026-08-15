@@ -21,7 +21,8 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
-  MetaGetMeta200
+  MetaResponse,
+  MetaSchemasResponse
 } from '../model';
 
 import { customInstance } from '../../mutator';
@@ -55,7 +56,7 @@ export const metaGetMeta = (
 ) => {
 
 
-      return customInstance<MetaGetMeta200>(
+      return customInstance<MetaResponse>(
       {url: `/api/meta`, method: 'GET', signal
     },
       options);
@@ -127,6 +128,99 @@ export function useMetaGetMeta<TData = Awaited<ReturnType<typeof metaGetMeta>>, 
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
 
   const queryOptions = getMetaGetMetaQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+
+/**
+ * Return additive JSON Schema/UI contracts without user secret values.
+ * @summary Get Meta Schemas
+ */
+export const metaGetMetaSchemas = (
+
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<MetaSchemasResponse>(
+      {url: `/api/meta/schemas`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getMetaGetMetaSchemasQueryKey = () => {
+    return [
+    `/api/meta/schemas`
+    ] as const;
+    }
+
+
+export const getMetaGetMetaSchemasQueryOptions = <TData = Awaited<ReturnType<typeof metaGetMetaSchemas>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof metaGetMetaSchemas>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getMetaGetMetaSchemasQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof metaGetMetaSchemas>>> = ({ signal }) => metaGetMetaSchemas(requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof metaGetMetaSchemas>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type MetaGetMetaSchemasQueryResult = NonNullable<Awaited<ReturnType<typeof metaGetMetaSchemas>>>
+export type MetaGetMetaSchemasQueryError = unknown
+
+
+export function useMetaGetMetaSchemas<TData = Awaited<ReturnType<typeof metaGetMetaSchemas>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof metaGetMetaSchemas>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof metaGetMetaSchemas>>,
+          TError,
+          Awaited<ReturnType<typeof metaGetMetaSchemas>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useMetaGetMetaSchemas<TData = Awaited<ReturnType<typeof metaGetMetaSchemas>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof metaGetMetaSchemas>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof metaGetMetaSchemas>>,
+          TError,
+          Awaited<ReturnType<typeof metaGetMetaSchemas>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useMetaGetMetaSchemas<TData = Awaited<ReturnType<typeof metaGetMetaSchemas>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof metaGetMetaSchemas>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Get Meta Schemas
+ */
+
+export function useMetaGetMetaSchemas<TData = Awaited<ReturnType<typeof metaGetMetaSchemas>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof metaGetMetaSchemas>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getMetaGetMetaSchemasQueryOptions(options)
 
   const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
 
