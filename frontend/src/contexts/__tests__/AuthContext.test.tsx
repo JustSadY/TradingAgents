@@ -3,6 +3,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import axios from 'axios'
 import { AuthProvider, useAuth, getAccessToken } from '../AuthContext'
+import { queryClient } from '../../api/queryClient'
 import type { ReactNode } from 'react'
 
 // AuthContext registers its axios interceptors once, at module import time.
@@ -38,6 +39,7 @@ function renderWithAuth(children: ReactNode) {
 beforeEach(() => {
   localStorage.clear()
   sessionStorage.clear()
+  queryClient.clear()
   vi.clearAllMocks()
   vi.mocked(axios.post).mockRejectedValue(new Error('no refresh cookie'))
 })
@@ -45,6 +47,7 @@ beforeEach(() => {
 afterEach(() => {
   localStorage.clear()
   sessionStorage.clear()
+  queryClient.clear()
 })
 
 describe('AuthContext', () => {
@@ -89,18 +92,50 @@ describe('AuthContext', () => {
     expect(localStorage.getItem('ta_refresh')).toBeNull()
   })
 
-  it('logout clears sensitive browser state and calls the server', async () => {
+  it('clears query and mutation caches when the authenticated user changes', async () => {
     sessionStorage.setItem('ta_access', jwt('alice'))
+    localStorage.setItem('ta_user_scope', 'alice')
+    renderWithAuth(<TestConsumer />)
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('alice'))
+
+    queryClient.setQueryData(['alerts'], [{ id: 1, user: 'alice' }])
+    queryClient.getMutationCache().build(queryClient, {
+      mutationKey: ['settings', 'save'],
+      mutationFn: async () => ({ user: 'alice' }),
+    })
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(1)
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(1)
+
+    vi.mocked(axios.post).mockResolvedValueOnce({ data: { access_token: jwt('bob') } })
+    await userEvent.click(screen.getByTestId('login'))
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('bob'))
+
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(0)
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(0)
+  })
+
+  it('logout clears sensitive browser state, query caches and calls the server', async () => {
+    sessionStorage.setItem('ta_access', jwt('alice'))
+    localStorage.setItem('ta_user_scope', 'alice')
     sessionStorage.setItem('ta_last_run', JSON.stringify({ ticker: 'AAPL', reports: { market_report: 'private' } }))
     sessionStorage.setItem('ta_task_running', JSON.stringify({ taskId: 'alice-task' }))
     vi.mocked(axios.post).mockResolvedValue({ data: {} })
     renderWithAuth(<TestConsumer />)
     await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('alice'))
+
+    queryClient.setQueryData(['portfolio'], { user: 'alice' })
+    queryClient.getMutationCache().build(queryClient, {
+      mutationKey: ['portfolio', 'save'],
+      mutationFn: async () => ({ user: 'alice' }),
+    })
+
     await userEvent.click(screen.getByTestId('logout'))
     await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('null'))
     expect(sessionStorage.getItem('ta_access')).toBeNull()
     expect(sessionStorage.getItem('ta_last_run')).toBeNull()
     expect(sessionStorage.getItem('ta_task_running')).toBeNull()
+    expect(queryClient.getQueryCache().getAll()).toHaveLength(0)
+    expect(queryClient.getMutationCache().getAll()).toHaveLength(0)
     expect(vi.mocked(axios.post)).toHaveBeenCalledWith('/auth/logout')
   })
 
