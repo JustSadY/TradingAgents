@@ -21,10 +21,14 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import logging
+import random
 import time
 import traceback
 from collections.abc import Callable
 from typing import Any
+
+from tenacity import AsyncRetrying, RetryCallState, retry_if_exception, stop_after_attempt
+from tenacity.wait import wait_base
 
 # Error classification lives with the LLM clients so there is exactly one
 # taxonomy; re-exported here because callers and tests import it from the
@@ -237,37 +241,82 @@ async def retry_call(
     timeout_seconds = max(0.0, timeout_seconds * max(0.0, multiplier))
     effective_timeout = timeout_seconds if timeout_seconds > 0 else None
     attempts = max(1, attempts)
-    last: BaseException | None = None
-    import asyncio
 
-    for i in range(attempts):
-        try:
-            _touch_activity()
-            coro = _execute_fn(fn, run_in_thread)
-            if effective_timeout is None:
-                return await coro
-            return await asyncio.wait_for(coro, timeout=effective_timeout)
-        except Exception as exc:
-            last = exc
-            err_msg = str(exc).lower()
-            if "quota exhausted" in err_msg:
-                break
-            if "resourceexhausted" in err_msg and ("total" in err_msg or "quota" in err_msg):
-                break
-            if is_provider_function_degraded(exc):
-                break
-            if _is_timeout_error(exc) and not retry_timeouts:
-                break
-            if i + 1 >= attempts or (not retry_all and not is_transient(exc)):
-                break
+    async def _before_sleep(retry_state: RetryCallState) -> None:
+        # ``attempt_number`` is 1-based; the rest of the runtime reports
+        # attempts 0-based, so translate rather than change the log/metric shape.
+        index = retry_state.attempt_number - 1
+        delay = retry_state.next_action.sleep if retry_state.next_action else 0.0
+        exc = retry_state.outcome.exception() if retry_state.outcome else None
+        if exc is None:
+            return
+        _log_retry_metrics(label, index, attempts, delay, exc)
+        await _emit_retry_progress(label, index, attempts, exc)
 
-            delay = base_delay * (2**i)
-            _log_retry_metrics(label, i, attempts, delay, exc)
-            await _emit_retry_progress(label, i, attempts, exc)
-            await asyncio.sleep(delay)
+    async def _attempt() -> Any:
+        _touch_activity()
+        coro = _execute_fn(fn, run_in_thread)
+        if effective_timeout is None:
+            return await coro
+        return await asyncio.wait_for(coro, timeout=effective_timeout)
 
-    assert last is not None
-    raise last
+    retrying = AsyncRetrying(
+        stop=stop_after_attempt(attempts),
+        wait=_ExponentialBackoff(base_delay),
+        retry=retry_if_exception(
+            lambda exc: _is_retryable(exc, retry_all=retry_all, retry_timeouts=retry_timeouts)
+        ),
+        before_sleep=_before_sleep,
+        reraise=True,
+    )
+    return await retrying(_attempt)
+
+
+def _is_retryable(exc: BaseException, *, retry_all: bool, retry_timeouts: bool) -> bool:
+    """Whether ``retry_call`` should try ``fn`` again after ``exc``."""
+    # Cancellation and other non-``Exception`` failures must propagate on the
+    # first raise. Retrying a cancelled analysis would delay the user's stop and
+    # re-issue provider calls after they asked for it to end.
+    if not isinstance(exc, Exception):
+        return False
+
+    err_msg = str(exc).lower()
+    if "quota exhausted" in err_msg:
+        return False
+    # Narrow match: a bare ResourceExhausted is a rate limit worth retrying,
+    # while a total/quota one will fail identically every time.
+    if "resourceexhausted" in err_msg and ("total" in err_msg or "quota" in err_msg):
+        return False
+    if is_provider_function_degraded(exc):
+        return False
+    if _is_timeout_error(exc) and not retry_timeouts:
+        return False
+    return retry_all or is_transient(exc)
+
+
+class _ExponentialBackoff(wait_base):
+    """``base_delay * 2 ** attempt``, spread by full jitter.
+
+    Analysts run concurrently — ``market_intelligence`` gathers teams behind a
+    semaphore and ``agent_qa`` gathers its questions — so a provider rate limit
+    fails many calls within the same instant. On a bare ``base * 2 ** attempt``
+    schedule every one of them then retries at exactly the same offsets, which
+    lands the same burst on the provider again and makes the limit worse.
+
+    Jitter is applied over the whole interval (AWS's "full jitter"): the delay
+    is uniform in ``[0, base * 2 ** attempt]``, which keeps the ceiling growing
+    exponentially while decorrelating the callers. ``base_delay`` of 0 stays
+    exactly 0 so tests and zero-delay callers are unaffected.
+    """
+
+    def __init__(self, base_delay: float) -> None:
+        self.base_delay = max(0.0, float(base_delay))
+
+    def ceiling(self, retry_state: RetryCallState) -> float:
+        return self.base_delay * (2 ** (retry_state.attempt_number - 1))
+
+    def __call__(self, retry_state: RetryCallState) -> float:
+        return random.uniform(0.0, self.ceiling(retry_state))
 
 def _log_retry_metrics(label: str, i: int, attempts: int, delay: float, exc: Exception):
     log_event(

@@ -181,6 +181,15 @@ attempts and the fallback chain, so the engine now pins it to 0. An explicit
 `max_retries` in agent settings still wins. There is deliberately **no**
 analysis-level retry: `_maybe_retry_analysis` returns `False` on purpose.
 
+`retry_call` drives `tenacity.AsyncRetrying`; the loop, backoff and re-raise
+come from the library, while what counts as retryable stays in
+`_is_retryable`. Backoff uses **full jitter** — uniform in
+`[0, node_retry_base_delay * 2 ** attempt]`. Analysts run concurrently, so a
+provider rate limit fails many calls at once; an unjittered schedule would
+send them all back at identical offsets as one burst. `_is_retryable` also
+refuses anything that is not an `Exception`, so a cancelled analysis stops on
+the first raise instead of being retried.
+
 Node circuit-breaker state lives in `agents/runtime/circuit_breaker.py`. It is
 shared through Redis when `REDIS_URL` is set, so one worker's observation of a
 failing provider protects the others, and falls back to process memory
