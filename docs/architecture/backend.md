@@ -86,13 +86,20 @@ add request/response DTOs in `schemas/`. Reuse `Depends(get_current_user)` /
 the query with `repositories.common.scope_to_user(q, Model, current_user)`
 instead of hand-writing the `if not is_admin` filter.
 
-**Add a model/column:** add the column to the `models/*.py` class **and** append
-a `(table, column, type)` tuple to `core/migrations.py::_NEW_COLUMNS` so existing
-databases get it on startup. For money/price/quantity use the `MONEY` type from
-`core.database` (see §5), not `Float`.
+**Add a model/column:** add the column to the `models/*.py` class **and** create
+an Alembic revision (`alembic -c backend/alembic.ini revision --autogenerate`).
+Alembic is authoritative for PostgreSQL: `create_all_tables()` refuses to serve a
+production database that is not at head, and it never runs the startup column
+helpers there. Appending to `core/migrations.py::_NEW_COLUMNS` only affects
+SQLite development/test databases — do that *as well* if the column must appear
+in an existing local SQLite file, but a `_NEW_COLUMNS` entry alone means the
+column exists in the ORM and in your tests while being absent from PostgreSQL.
+For money/price/quantity use the `MONEY` type from `core.database` (see §5), not
+`Float`.
 
-**Add an AppSettings field:** add it to the model + `_NEW_COLUMNS`, to
-`schemas/settings.py`, and to `settings_service.settings_to_read`.
+**Add an AppSettings field:** add it to the model, create an Alembic revision
+(plus `_NEW_COLUMNS` for SQLite), then update `schemas/settings.py` and
+`settings_service.settings_to_read`.
 
 **Long-running work from a route:** don't `await` it in the handler. Add a
 `*_task` coroutine to the service and schedule it via `BackgroundTasks`

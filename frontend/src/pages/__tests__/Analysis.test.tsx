@@ -98,15 +98,6 @@ vi.mock('../../contexts/LanguageContext', () => ({
   }),
 }))
 
-vi.mock('../../utils/api', () => ({
-  default: {
-    get: vi.fn().mockResolvedValue({ data: {} }),
-    post: vi.fn().mockResolvedValue({ data: {} }),
-    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
-    defaults: {},
-  },
-}))
-
 vi.mock('lucide-react', () => ({
   Loader2: () => <div>Loader2</div>,
   CheckCircle: () => <div>CheckCircle</div>,
