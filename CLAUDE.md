@@ -263,25 +263,18 @@ Do not put JWTs into WebSocket query strings. Preserve the existing subprotocol-
 ### Backend
 
 ```bash
-python -m venv .venv
-
-# Windows PowerShell
-.venv\Scripts\activate
-
-# Linux/macOS
-source .venv/bin/activate
-
-pip install -r backend/requirements.txt
-cp .env.example .env
-uvicorn backend.main:app --reload --port 8000
+cd backend
+uv sync --frozen
+cp ../.env.example ../.env
+uv run uvicorn backend.main:app --reload --port 8000
 ```
 
 ### Dependencies
 
 `backend/pyproject.toml` is the single hand-edited dependency manifest, locked by
-`backend/uv.lock`. `backend/requirements.txt` is a generated, hash-pinned export
-of that lock — never edit it directly. Docker and the deploy scripts install from
-it because they use pip without uv.
+`backend/uv.lock`. There is no second dependency source: Docker, `deploy/install.sh`
+and `deploy/update.sh` all install with `uv sync --frozen`, so nothing can drift
+out of the lock.
 
 To change a dependency:
 
@@ -289,10 +282,10 @@ To change a dependency:
 cd backend
 # edit pyproject.toml, then:
 uv lock
-./scripts/export-requirements.sh
 ```
 
-CI fails if the committed export does not match the lock.
+Commit the updated lock alongside the manifest. `uv lock --check` fails if the
+two disagree, and every install path runs it before syncing.
 
 Configure infrastructure values such as `DATABASE_URL`, `SECRET_KEY`, and `ENCRYPTION_KEY` in `.env` as needed. Configure LLM/provider keys after login through the Web UI, not in `.env`.
 

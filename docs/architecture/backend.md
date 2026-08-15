@@ -210,7 +210,7 @@ them. The backend already exposes everything the UI needs:
 and filters `analysts` to the ones the user may run.
 
 **`GET /api/settings/llm-catalog`** returns the model dropdown per provider,
-sourced from `trading_agents/llm_clients/model_catalog.py`.
+sourced from `trading_agents/llm_clients/registry.py`.
 
 **Rule:** when the UI needs a new option list, add it to `core/catalog.py`
 (deriving from the engine where the engine owns the concept — e.g. personas,
