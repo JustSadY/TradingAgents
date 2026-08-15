@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 
 from sqlalchemy import delete
 
-from backend.core.database import AsyncSessionLocal
+from backend.core.rls_context import BackgroundCapability, trusted_background_session
 from backend.models.assistant import AssistantPendingAction
 from backend.models.news_cache import AnalystReportCache, NewsAnalysisCache, NewsCache
 from backend.models.shared_report import SharedReport
@@ -15,7 +15,7 @@ from backend.models.shared_report import SharedReport
 async def cleanup_transient_data() -> dict[str, int]:
     now = datetime.now(UTC)
     counts: dict[str, int] = {}
-    async with AsyncSessionLocal() as db:
+    async with trusted_background_session(BackgroundCapability.MAINTENANCE_CLEANUP) as db:
         statements = {
             "analyst_report_cache": delete(AnalystReportCache).where(
                 AnalystReportCache.created_at < now - timedelta(days=30)

@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict
 
+
 class HoldingRead(BaseModel):
     id: int
     ticker: str

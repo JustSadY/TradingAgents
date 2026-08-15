@@ -6,7 +6,7 @@
 #
 # Actions performed (all idempotent — safe to re-run):
 #   1. System dependencies: Python 3.10+, Node 20, PostgreSQL, git, curl
-#   2. Python virtual environment + backend/requirements.txt
+#   2. Python virtual environment + backend/pyproject.toml + backend/uv.lock
 #   3. Frontend build (npm) -> frontend/dist (served by backend)
 #   4. PostgreSQL database + user setup
 #   5. .env generation (secure random SECRET_KEY / ENCRYPTION_KEY / DB password /
@@ -43,6 +43,7 @@ UPDATE_UNIT="${SERVICE_NAME}-update"
 UPDATE_UNIT_FILE="/etc/systemd/system/${UPDATE_UNIT}.service"
 UPDATER_BIN="/usr/local/sbin/tradingagents-update"
 UPDATE_CONF="/etc/tradingagents/update.env"
+MIGRATION_ENV_FILE="/etc/tradingagents/migration.env"
 SUDOERS_FILE="/etc/sudoers.d/${SERVICE_NAME}-update"
 
 # Service execution user: defaults to the user who invoked sudo if not set.
@@ -57,7 +58,8 @@ die()  { err "$*"; exit 1; }
 
 # ── Pre-flight checks ───────────────────────────────────────────────────────────
 [ "$(id -u)" -eq 0 ] || die "This script requires root: sudo bash deploy/install.sh"
-[ -f "$PROJECT_ROOT/backend/requirements.txt" ] || die "backend/requirements.txt not found — run from project root."
+[ -f "$PROJECT_ROOT/backend/pyproject.toml" ] || die "backend/pyproject.toml not found — run from project root."
+[ -f "$PROJECT_ROOT/backend/uv.lock" ] || die "backend/uv.lock not found — run uv lock before deployment."
 [ -d "$PROJECT_ROOT/frontend" ] || die "frontend/ directory not found — unexpected project layout."
 command -v systemctl >/dev/null || die "systemd (systemctl) not found — this script is for systemd-based distributions."
 SYSTEMCTL_BIN="$(command -v systemctl)"
@@ -128,10 +130,14 @@ fi
 # ── 3. Python venv + dependencies ──────────────────────────────────────────────
 info "Preparing Python virtual environment: $VENV"
 [ -d "$VENV" ] || "$PYTHON" -m venv "$VENV"
-"$VENV/bin/pip" install --upgrade pip wheel >/dev/null
-info "Installing backend/requirements.txt (may take a few minutes)..."
-"$VENV/bin/pip" install -r "$PROJECT_ROOT/backend/requirements.txt"
-ok "Python dependencies installed."
+"$VENV/bin/pip" install --upgrade pip wheel uv >/dev/null
+info "Syncing backend dependencies from pyproject.toml + uv.lock..."
+(
+    cd "$PROJECT_ROOT/backend"
+    UV_PROJECT_ENVIRONMENT="$VENV" "$VENV/bin/uv" lock --check
+    UV_PROJECT_ENVIRONMENT="$VENV" "$VENV/bin/uv" sync --frozen --no-dev
+)
+ok "Frozen Python dependencies installed."
 
 # ── 4. Frontend build ───────────────────────────────────────────────────────────
 if [ "$BUILD_FRONTEND" = 1 ]; then
@@ -160,6 +166,8 @@ if [ ! -f "$ENV_FILE" ]; then
     ADMIN_HASH=$("$VENV/bin/python" -c 'import bcrypt,sys;print(bcrypt.hashpw(sys.argv[1].encode(),bcrypt.gensalt()).decode())' "$ADMIN_PASSWORD")
 
     {
+        printf "ENVIRONMENT='production'\n"
+        printf "RLS_STRICT_MODE='true'\n"
         printf "SECRET_KEY='%s'\n"          "$SECRET_KEY"
         printf "ENCRYPTION_KEY='%s'\n"      "$ENCRYPTION_KEY"
         printf "ADMIN_USERNAME='%s'\n"      "$ADMIN_USERNAME"
@@ -173,6 +181,18 @@ if [ ! -f "$ENV_FILE" ]; then
     ok ".env created."
 else
     info ".env already exists — preserving existing file (secrets not regenerated)."
+fi
+
+# Installer-managed systemd deployments are production and RLS fail-closed.
+if grep -q "^ENVIRONMENT=" "$ENV_FILE"; then
+    sed -i "s/^ENVIRONMENT=.*/ENVIRONMENT=production/" "$ENV_FILE"
+else
+    printf "\nENVIRONMENT=production\n" >> "$ENV_FILE"
+fi
+if grep -q "^RLS_STRICT_MODE=" "$ENV_FILE"; then
+    sed -i "s/^RLS_STRICT_MODE=.*/RLS_STRICT_MODE=true/" "$ENV_FILE"
+else
+    printf "RLS_STRICT_MODE=true\n" >> "$ENV_FILE"
 fi
 
 # Read DB credentials from .env for Postgres setup
@@ -203,6 +223,41 @@ else
 
     for _ in $(seq 1 10); do runuser -u postgres -- psql -d template1 -tAc 'SELECT 1' >/dev/null 2>&1 && break; sleep 1; done
 
+    # pgvector is a database-server extension. Prefer a distro package; when it is
+    # unavailable, build the pinned upstream release against the running server.
+    if ! runuser -u postgres -- psql -d template1 -tAc "SELECT 1 FROM pg_available_extensions WHERE name='vector'" | grep -q 1; then
+        info "Installing pgvector 0.8.6 for local PostgreSQL..."
+        PG_MAJOR="$(runuser -u postgres -- psql -d template1 -tAc 'SHOW server_version' | sed 's/\..*//')"
+        if [ "$PM" = apt ]; then
+            pm_install "postgresql-${PG_MAJOR}-pgvector" >/dev/null 2>&1 || true
+            if ! runuser -u postgres -- psql -d template1 -tAc "SELECT 1 FROM pg_available_extensions WHERE name='vector'" | grep -q 1; then
+                pm_install "postgresql-server-dev-${PG_MAJOR}"
+            fi
+        else
+            pm_install "pgvector_${PG_MAJOR}" >/dev/null 2>&1 || pm_install pgvector >/dev/null 2>&1 || true
+            if ! runuser -u postgres -- psql -d template1 -tAc "SELECT 1 FROM pg_available_extensions WHERE name='vector'" | grep -q 1; then
+                pm_install "postgresql${PG_MAJOR}-devel" >/dev/null 2>&1 || pm_install postgresql-devel
+            fi
+        fi
+
+        if ! runuser -u postgres -- psql -d template1 -tAc "SELECT 1 FROM pg_available_extensions WHERE name='vector'" | grep -q 1; then
+            PG_CONFIG_BIN="/usr/lib/postgresql/${PG_MAJOR}/bin/pg_config"
+            [ -x "$PG_CONFIG_BIN" ] || PG_CONFIG_BIN="$(command -v pg_config || true)"
+            [ -n "$PG_CONFIG_BIN" ] && [ -x "$PG_CONFIG_BIN" ] || die "pg_config not found after installing PostgreSQL development headers."
+            CONFIG_MAJOR="$($PG_CONFIG_BIN --version | grep -oE '[0-9]+' | head -1)"
+            [ "$CONFIG_MAJOR" = "$PG_MAJOR" ] || die "pg_config major $CONFIG_MAJOR does not match running PostgreSQL $PG_MAJOR."
+            rm -rf /tmp/tradingagents-pgvector
+            git clone --quiet --depth 1 --branch v0.8.6 https://github.com/pgvector/pgvector.git /tmp/tradingagents-pgvector
+            make -C /tmp/tradingagents-pgvector PG_CONFIG="$PG_CONFIG_BIN" >/dev/null
+            make -C /tmp/tradingagents-pgvector PG_CONFIG="$PG_CONFIG_BIN" install >/dev/null
+            rm -rf /tmp/tradingagents-pgvector
+        fi
+
+        runuser -u postgres -- psql -d template1 -tAc "SELECT 1 FROM pg_available_extensions WHERE name='vector'" | grep -q 1 \
+            || die "pgvector server extension installation failed."
+        ok "pgvector server extension installed."
+    fi
+
     psql_admin() { runuser -u postgres -- psql -d template1 -v ON_ERROR_STOP=1 "$@"; }
     if psql_admin -tAc "SELECT 1 FROM pg_roles WHERE rolname='$DB_USER'" | grep -q 1; then
         psql_admin -c "ALTER ROLE \"$DB_USER\" LOGIN PASSWORD '$DB_PASS';"
@@ -214,6 +269,30 @@ else
     fi
     ok "PostgreSQL ready (db=$DB_NAME, user=$DB_USER)."
 fi
+
+# ── 6b. Separate migration/runtime database roles + migrate ─────────────────
+if [ "$SKIP_DB" = 1 ]; then
+    [ -n "${MIGRATION_DATABASE_URL:-}" ] || die "SKIP_DB=1 requires MIGRATION_DATABASE_URL in the installer environment; it is never stored in the app .env."
+    install -d -m 700 "$(dirname "$MIGRATION_ENV_FILE")"
+    MIGRATION_DATABASE_URL="$MIGRATION_DATABASE_URL" "$PYTHON" - "$MIGRATION_ENV_FILE" <<'PY'
+import os, shlex, sys
+from pathlib import Path
+Path(sys.argv[1]).write_text("MIGRATION_DATABASE_URL=" + shlex.quote(os.environ["MIGRATION_DATABASE_URL"]) + "\n", encoding="utf-8")
+PY
+    chmod 600 "$MIGRATION_ENV_FILE"
+else
+    DB_USER="$DB_USER" DB_PASS="$DB_PASS" DB_NAME="$DB_NAME"         MIGRATION_ENV_FILE="$MIGRATION_ENV_FILE"         bash "$PROJECT_ROOT/deploy/provision-postgres-roles.sh"
+fi
+
+set -a
+# shellcheck disable=SC1090
+. "$MIGRATION_ENV_FILE"
+set +a
+: "${MIGRATION_DATABASE_URL:?migration URL was not provisioned}"
+info "Applying Alembic migrations with the isolated migration role..."
+PYTHONPATH="$PROJECT_ROOT" "$VENV/bin/alembic" -c "$PROJECT_ROOT/backend/alembic.ini" upgrade head
+unset MIGRATION_DATABASE_URL
+ok "Database migrations applied; runtime role remains non-owner/NOBYPASSRLS."
 
 # ── File Ownership ─────────────────────────────────────────────────────────────
 info "Giving file ownership to '$RUN_USER' user..."
@@ -255,6 +334,7 @@ PROJECT_ROOT=$PROJECT_ROOT
 SERVICE_NAME=$SERVICE_NAME
 RUN_USER=$RUN_USER
 VENV=$VENV
+MIGRATION_ENV_FILE=$MIGRATION_ENV_FILE
 EOF
 chmod 644 "$UPDATE_CONF"
 

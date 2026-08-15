@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import axios from 'axios'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import type { GridColDef } from '@mui/x-data-grid'
+import {
+  useTradingGetTradeNote,
+  useTradingSaveTradeNote,
+  useTradingGenerateTradeDebrief,
+  getTradingGetTradeNoteQueryKey,
+} from '../api/generated/trading/trading'
+import { usePortfolioListOrders } from '../api/generated/portfolio/portfolio'
 import { Briefcase, RefreshCw, NotebookPen, X, Save, Sparkles, Loader2, Bot, Download } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { notify } from '../utils/notify'
 import { exportOrdersCSV } from '../utils/csvExport'
 import { ErrorBoundary } from '../components/ErrorBoundary'
-import type { OrderRead, JournalNoteReadResponse } from '../api/types'
+import AppDataGrid from '../components/ui/AppDataGrid'
+import type { OrderRead } from '../api/generated/model'
 
 const STATUS_BADGES: Record<string, string> = {
   FILLED: 'bg-emerald-500/10 text-emerald-400 border border-emerald-500/20',
@@ -21,55 +30,47 @@ const ACTION_BADGES: Record<string, string> = {
 
 // ── Trade Journal Modal ────────────────────────────────────────────────────────
 function JournalModal({ order, onClose }: { order: OrderRead; onClose: () => void }) {
-  const [entry, setEntry] = useState<JournalNoteReadResponse | null>(null)
   const [note, setNote] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
-  const [debriefing, setDebriefing] = useState(false)
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const queryClient = useQueryClient()
+
+  const noteQuery = useTradingGetTradeNote(order.id)
+  const entry = noteQuery.data ?? null
+  const loading = noteQuery.isPending
+
+  // Seed the editable draft once the saved note arrives, without clobbering
+  // whatever the user has typed since.
+  useEffect(() => {
+    if (noteQuery.data) setNote(noteQuery.data.note || '')
+  }, [noteQuery.data])
 
   useEffect(() => {
-    axios.get<JournalNoteReadResponse>(`/api/trading/journal/${order.id}`)
-      .then(r => {
-        setEntry(r.data)
-        setNote(r.data.note || '')
-      })
-      .catch(() => setNote(''))
-      .finally(() => {
-        setLoading(false)
-        setTimeout(() => textareaRef.current?.focus(), 50)
-      })
-  }, [order.id])
+    if (!loading) setTimeout(() => textareaRef.current?.focus(), 50)
+  }, [loading])
 
-  const saveNote = async () => {
-    setSaving(true)
-    try {
-      const { data } = await axios.post<{ order_id: number; note: string; has_debrief: boolean }>(
-        `/api/trading/journal/${order.id}/note`,
-        { note }
-      )
-      setEntry(prev => prev ? { ...prev, note: data.note, has_debrief: data.has_debrief } : null)
-      notify('success', 'Note saved', 'Journal')
-    } catch {
-      notify('error', 'Failed to save note', 'Journal')
-    } finally {
-      setSaving(false)
-    }
-  }
+  const refreshNote = () =>
+    queryClient.invalidateQueries({ queryKey: getTradingGetTradeNoteQueryKey(order.id) })
 
-  const generateDebrief = async () => {
-    setDebriefing(true)
-    try {
-      const { data } = await axios.post<{ order_id: number; ai_debrief: string }>(
-        `/api/trading/journal/${order.id}/debrief`
-      )
-      setEntry(prev => prev ? { ...prev, ai_debrief: data.ai_debrief, has_debrief: true } : null)
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Debrief generation failed', 'AI Debrief')
-    } finally {
-      setDebriefing(false)
-    }
-  }
+  const saveMutation = useTradingSaveTradeNote({
+    mutation: {
+      onSuccess: () => { refreshNote(); notify('success', 'Note saved', 'Journal') },
+      onError: () => notify('error', 'Failed to save note', 'Journal'),
+    },
+  })
+  const debriefMutation = useTradingGenerateTradeDebrief({
+    mutation: {
+      onSuccess: refreshNote,
+      onError: (err) => {
+        const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        notify('error', detail || 'Debrief generation failed', 'AI Debrief')
+      },
+    },
+  })
+  const saving = saveMutation.isPending
+  const debriefing = debriefMutation.isPending
+
+  const saveNote = () => saveMutation.mutate({ orderId: order.id, data: { note } })
+  const generateDebrief = () => debriefMutation.mutate({ orderId: order.id })
 
   const pnl = order.realized_pnl ?? 0
   const pnlPct = order.total_value && order.total_value !== pnl
@@ -173,19 +174,114 @@ function JournalModal({ order, onClose }: { order: OrderRead; onClose: () => voi
 // ── Main Orders Page ───────────────────────────────────────────────────────────
 export default function Orders() {
   const { t } = useTranslation()
-  const [orders, setOrders] = useState<OrderRead[]>([])
-  const [loading, setLoading] = useState(true)
   const [journalOrder, setJournalOrder] = useState<OrderRead | null>(null)
 
-  const loadOrders = useCallback(() => {
-    setLoading(true)
-    axios.get('/api/portfolio/orders')
-      .then(r => setOrders(r.data))
-      .catch(e => console.error('Failed to load orders', e))
-      .finally(() => setLoading(false))
-  }, [])
+  const ordersQuery = usePortfolioListOrders()
+  const orders = (ordersQuery.data ?? []) as OrderRead[]
+  const loading = ordersQuery.isPending
+  const loadOrders = () => ordersQuery.refetch()
 
-  useEffect(() => { loadOrders() }, [loadOrders])
+  const columns = useMemo<GridColDef<OrderRead>[]>(() => [
+    {
+      field: 'ticker',
+      headerName: t('orders.col_symbol'),
+      minWidth: 105,
+      flex: 0.8,
+      renderCell: ({ value }) => <span className="font-mono font-bold text-white text-sm">{String(value ?? '')}</span>,
+    },
+    {
+      field: 'action',
+      headerName: t('orders.col_direction'),
+      minWidth: 105,
+      renderCell: ({ value }) => {
+        const action = String(value ?? '')
+        return <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-md ${ACTION_BADGES[action] || 'text-white'}`}>{action}</span>
+      },
+    },
+    {
+      field: 'quantity_filled',
+      headerName: t('orders.col_quantity'),
+      type: 'number',
+      minWidth: 105,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ value }) => <span className="font-mono font-semibold text-slate-300">{Number(value ?? 0).toFixed(4)}</span>,
+    },
+    {
+      field: 'price_per_share',
+      headerName: t('orders.col_price'),
+      type: 'number',
+      minWidth: 100,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ value }) => <span className="font-mono text-slate-300">{value == null ? '—' : `$${Number(value).toFixed(2)}`}</span>,
+    },
+    {
+      field: 'total_value',
+      headerName: t('orders.col_total'),
+      type: 'number',
+      minWidth: 105,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ value }) => <span className="font-mono font-semibold text-slate-300">{value == null ? '—' : `$${Number(value).toFixed(2)}`}</span>,
+    },
+    {
+      field: 'realized_pnl',
+      headerName: 'P&L',
+      type: 'number',
+      minWidth: 105,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => {
+        if (row.action !== 'SELL' || row.realized_pnl == null) return <span className="text-slate-600">—</span>
+        const pnl = row.realized_pnl
+        return <span className={`font-mono font-semibold ${pnl >= 0 ? 'text-emerald-400' : 'text-rose-400'}`}>{pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}</span>
+      },
+    },
+    {
+      field: 'status',
+      headerName: t('orders.col_status'),
+      minWidth: 120,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: ({ value }) => {
+        const status = String(value ?? '')
+        return <span className={`inline-flex items-center text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${STATUS_BADGES[status] || 'text-slate-300'}`}>{status}</span>
+      },
+    },
+    {
+      field: 'ai_signal',
+      headerName: t('orders.col_signal'),
+      minWidth: 145,
+      flex: 1,
+      renderCell: ({ value }) => <span className="text-slate-400 font-medium truncate">{String(value || '—')}</span>,
+    },
+    {
+      field: 'created_at',
+      headerName: t('orders.col_date'),
+      minWidth: 170,
+      renderCell: ({ value }) => <span className="text-slate-500 font-mono text-[10px]">{new Date(String(value)).toLocaleString()}</span>,
+    },
+    {
+      field: 'journal',
+      headerName: 'Journal',
+      minWidth: 90,
+      sortable: false,
+      filterable: false,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: ({ row }) => (
+        <button
+          onClick={() => setJournalOrder(row)}
+          className="p-1.5 rounded-lg text-slate-600 hover:text-violet-400 hover:bg-violet-500/10 transition cursor-pointer"
+          title="Open Trade Journal"
+          aria-label={`Open ${row.ticker} trade journal`}
+        >
+          <NotebookPen size={13} />
+        </button>
+      ),
+    },
+  ], [t])
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
@@ -220,88 +316,19 @@ export default function Orders() {
         </div>
       </div>
 
-      {/* Orders Table Container */}
-      {loading && orders.length === 0 ? (
-        <div className="flex items-center justify-center py-12">
-          <p className="text-slate-400 text-sm">{t('orders.loading')}</p>
-        </div>
-      ) : orders.length === 0 ? (
-        <div className="glass-panel rounded-2xl p-12 text-center">
-          <Briefcase size={32} className="mx-auto text-slate-600 mb-3 opacity-30" />
-          <p className="text-slate-400 text-xs font-semibold">{t('orders.empty')}</p>
-          <p className="text-[10px] text-slate-500 mt-1">No execution logs found matching your filter criteria</p>
-        </div>
-      ) : (
-        <ErrorBoundary name="OrdersTable">
-          <div className="glass-panel rounded-2xl overflow-hidden">
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs text-slate-300 min-w-[760px]">
-                <thead>
-                  <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
-                    <th className="px-5 py-3.5 text-left font-bold">{t('orders.col_symbol')}</th>
-                    <th className="px-5 py-3.5 text-left font-bold">{t('orders.col_direction')}</th>
-                    <th className="px-5 py-3.5 text-right font-bold">{t('orders.col_quantity')}</th>
-                    <th className="px-5 py-3.5 text-right font-bold">{t('orders.col_price')}</th>
-                    <th className="px-5 py-3.5 text-right font-bold">{t('orders.col_total')}</th>
-                    <th className="px-5 py-3.5 text-right font-bold">P&amp;L</th>
-                    <th className="px-5 py-3.5 text-center font-bold">{t('orders.col_status')}</th>
-                    <th className="px-5 py-3.5 text-left font-bold">{t('orders.col_signal')}</th>
-                    <th className="px-5 py-3.5 text-right font-bold">{t('orders.col_date')}</th>
-                    <th className="px-5 py-3.5 text-center font-bold">Journal</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-white/[0.02]">
-                  {orders.map(o => {
-                    const pnl = o.realized_pnl ?? 0
-                    return (
-                      <tr key={o.id} className="hover:bg-white/[0.01] transition-colors">
-                        <td className="px-5 py-3 font-mono font-bold text-white text-sm">{o.ticker}</td>
-                        <td className="px-5 py-3">
-                          <span className={`inline-flex items-center text-[10px] font-bold px-2 py-0.5 rounded-md ${ACTION_BADGES[o.action] || 'text-white'}`}>
-                            {o.action}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3 text-right font-mono font-semibold text-slate-300">{(o.quantity_filled ?? 0).toFixed(4)}</td>
-                        <td className="px-5 py-3 text-right font-mono text-slate-300">
-                          {o.price_per_share ? `$${(o.price_per_share).toFixed(2)}` : '—'}
-                        </td>
-                        <td className="px-5 py-3 text-right font-mono text-slate-300 font-semibold">
-                          {o.total_value ? `$${(o.total_value).toFixed(2)}` : '—'}
-                        </td>
-                        <td className="px-5 py-3 text-right font-mono">
-                          {o.action === 'SELL' && o.realized_pnl !== null ? (
-                            <span className={pnl >= 0 ? 'text-emerald-400 font-semibold' : 'text-rose-400 font-semibold'}>
-                              {pnl >= 0 ? '+' : ''}${pnl.toFixed(2)}
-                            </span>
-                          ) : <span className="text-slate-600">—</span>}
-                        </td>
-                        <td className="px-5 py-3 text-center">
-                          <span className={`inline-flex items-center text-[9px] font-bold px-2 py-0.5 rounded-full uppercase tracking-wider ${STATUS_BADGES[o.status] || 'text-slate-300'}`}>
-                            {o.status}
-                          </span>
-                        </td>
-                        <td className="px-5 py-3 text-slate-400 font-medium truncate max-w-[160px]">{o.ai_signal || '—'}</td>
-                        <td className="px-5 py-3 text-right text-slate-500 font-mono text-[10px]">
-                          {new Date(o.created_at).toLocaleString()}
-                        </td>
-                        <td className="px-5 py-3 text-center">
-                          <button
-                            onClick={() => setJournalOrder(o)}
-                            className="p-1.5 rounded-lg text-slate-600 hover:text-violet-400 hover:bg-violet-500/10 transition cursor-pointer"
-                            title="Open Trade Journal"
-                          >
-                            <NotebookPen size={13} />
-                          </button>
-                        </td>
-                      </tr>
-                    )
-                  })}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        </ErrorBoundary>
-      )}
+      <ErrorBoundary name="OrdersTable">
+        <AppDataGrid<OrderRead>
+          rows={orders}
+          columns={columns}
+          loading={loading}
+          error={ordersQuery.error}
+          emptyMessage={t('orders.empty')}
+          ariaLabel="Orders"
+          minHeight={320}
+          density="compact"
+          sx={{ minWidth: 1040 }}
+        />
+      </ErrorBoundary>
     </div>
   )
 }

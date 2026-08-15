@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useCallback, useEffect, type ReactNode } from 'react'
 import axios from 'axios'
-import { clearMetaCache } from '../hooks/useMeta'
+import { clearAuthenticatedCache } from '../api/authCache'
 import { formatErrorDetail, notify } from '../utils/notify'
 
 const TOKEN_KEY = 'ta_access'
@@ -41,7 +41,7 @@ function clearUserScopedBrowserState() {
     localStorage.removeItem(key) // purge data written by older releases
   })
   localStorage.removeItem(USER_SCOPE_KEY)
-  clearMetaCache()
+  clearAuthenticatedCache()
 }
 
 function activateUserScope(username: string) {
@@ -140,7 +140,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [applyAccessToken])
 
   const logout = useCallback(() => {
-    // Invalidate every in-flight init/refresh before clearing local state.
+    // Invalidate every in-flight init/refresh and TanStack request before the
+    // next auth scope can mount queries using the same generated query keys.
     _authEpoch += 1
     _queue.forEach(({ reject }) => reject(new Error('Session ended')))
     _queue = []

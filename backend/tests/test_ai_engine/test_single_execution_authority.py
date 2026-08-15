@@ -15,6 +15,7 @@ from backend.trading_agents.agents.schemas import (
     render_research_plan,
 )
 
+
 def test_research_plan_is_evidence_only_not_an_executable_rating():
     schema = ResearchPlan.model_json_schema()
     properties = schema["properties"]

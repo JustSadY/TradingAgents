@@ -5,6 +5,7 @@ from backend.models.portfolio import Holding, Portfolio
 from backend.models.user import User
 from backend.repositories.portfolio import get_active_holdings_by_portfolio_id, get_simulation_portfolio
 
+
 async def get_user_simulation_portfolio(db: AsyncSession, user_id: int) -> Portfolio | None:
     return await get_simulation_portfolio(db, user_id)
 

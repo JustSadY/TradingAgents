@@ -7,6 +7,7 @@ import pytest
 
 from backend.services.portfolio_stats_service import _closing_cost_basis, _closing_orders, _equity_max_drawdown_pct
 
+
 def _order(*, action: str, side: str, status: str, total_value: str = "1000", commission: str = "1"):
     return SimpleNamespace(
         action=action,

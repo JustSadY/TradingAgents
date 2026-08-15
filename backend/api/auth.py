@@ -9,6 +9,7 @@ from backend.api.deps import get_user_from_access_token
 from backend.core.config import get_settings
 from backend.core.database import get_db
 from backend.core.limiter import limiter
+from backend.core.rls_context import set_refresh_access_context
 from backend.core.security import (
     create_access_token,
     create_refresh_token,
@@ -57,6 +58,7 @@ def _clear_refresh_cookie(response: Response) -> None:
 async def _issue_session(db: AsyncSession, user: User) -> str:
     now = datetime.now(UTC)
     sid, jti = new_token_id(), new_token_id()
+    await set_refresh_access_context(db, session_id=sid, user_id=user.id)
     db.add(RefreshSession(
         id=sid, user_id=user.id, current_jti_hash=token_id_hash(jti),
         expires_at=now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
@@ -92,6 +94,7 @@ async def refresh(request: Request, response: Response, db: Annotated[AsyncSessi
         _clear_refresh_cookie(response)
         raise HTTPException(status_code=401, detail="Invalid refresh token") from None
 
+    await set_refresh_access_context(db, session_id=sid)
     row = await db.execute(select(RefreshSession).where(RefreshSession.id == sid).with_for_update())
     session = row.scalar_one_or_none()
     now = datetime.now(UTC)
@@ -133,6 +136,7 @@ async def logout(request: Request, response: Response, db: Annotated[AsyncSessio
             payload = decode_token_payload(raw, expected_type="refresh")
             sid = str(payload.get("sid", ""))
             if sid:
+                await set_refresh_access_context(db, session_id=sid)
                 row = await db.execute(select(RefreshSession).where(RefreshSession.id == sid).with_for_update())
                 session = row.scalar_one_or_none()
                 if session:

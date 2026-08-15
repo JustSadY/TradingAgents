@@ -315,7 +315,7 @@ async def backfill_returns(db) -> int:
 
                 client = create_llm_client(
                     provider=DEFAULT_CONFIG.get("llm_provider", "openai"),
-                    model=DEFAULT_CONFIG.get("llm_model", "gpt-4o-mini"),
+                    model=DEFAULT_CONFIG.get("llm_model", "gpt-5.6-luna"),
                 )
                 reflector = Reflector(client.get_llm())
 

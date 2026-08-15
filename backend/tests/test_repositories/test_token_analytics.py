@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.analysis import AnalysisResult
 from backend.repositories.token_analytics import get_daily_token_usage_rows, get_token_usage_rows
 
+
 class TestTokenAnalyticsRepository:
     async def _create_analysis(
         self,

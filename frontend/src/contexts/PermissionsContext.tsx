@@ -1,5 +1,5 @@
-import { createContext, useContext, useState, useEffect, useCallback, type ReactNode } from 'react'
-import axios from 'axios'
+import { createContext, useContext, useCallback, type ReactNode } from 'react'
+import { useUsersGetMyPermissions } from '../api/generated/users/users'
 import { useAuth } from './AuthContext'
 
 /**
@@ -25,23 +25,17 @@ const ALWAYS_ALLOWED = new Set(['settings', 'profile'])
 
 export function PermissionsProvider({ children }: { children: ReactNode }) {
   const { isAuthenticated, isAdmin } = useAuth()
-  const [allowedPages, setAllowedPages] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
+  const query = useUsersGetMyPermissions({ query: { enabled: isAuthenticated } })
 
-  const refresh = useCallback(() => {
-    if (!isAuthenticated) {
-      setAllowedPages([])
-      setLoading(false)
-      return
-    }
-    setLoading(true)
-    axios.get('/api/users/me/permissions')
-      .then(r => setAllowedPages(r.data.allowed_pages ?? []))
-      .catch(() => setAllowedPages(['settings', 'profile']))
-      .finally(() => setLoading(false))
-  }, [isAuthenticated])
-
-  useEffect(() => { refresh() }, [refresh])
+  // Fail closed to the two pages every account may reach, so a permissions
+  // outage cannot silently widen access.
+  const allowedPages = !isAuthenticated
+    ? []
+    : query.error
+      ? ['settings', 'profile']
+      : ((query.data as { allowed_pages?: string[] } | undefined)?.allowed_pages ?? [])
+  const loading = isAuthenticated && query.isPending
+  const refresh = useCallback(() => { query.refetch() }, [query])
 
   const canAccess = useCallback((page: string): boolean => {
     if (isAdmin) return true

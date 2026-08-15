@@ -6,31 +6,35 @@ import pandas as pd
 
 _logger = logging.getLogger(__name__)
 
+
+def _ta():
+    """Load the sole standard-indicator engine."""
+    try:
+        import pandas_ta_classic as ta
+    except ImportError as exc:
+        raise RuntimeError(
+            "pandas-ta-classic is required for technical indicators. Sync backend dependencies before calculating indicators."
+        ) from exc
+    return ta
+
+
+def _series(value, index: pd.Index, name: str) -> pd.Series:
+    if value is None:
+        return pd.Series(float("nan"), index=index, name=name, dtype="float64")
+    return pd.Series(value, index=index, dtype="float64", name=name)
+
+
 def calculate_ema(prices: pd.Series, span: int = 20) -> pd.Series:
-    """Compute Exponential Moving Average."""
-    return prices.ewm(span=span, adjust=False).mean()
+    """Compute EMA with pandas-ta-classic."""
+    prices = prices.astype(float)
+    return _series(_ta().ema(prices, length=span, talib=False), prices.index, f"EMA_{span}")
+
 
 def calculate_rsi(prices: pd.Series, period: int = 14) -> pd.Series:
-    """Compute RSI using Wilder's smoothed-average method.
+    """Compute RSI with pandas-ta-classic."""
+    prices = prices.astype(float)
+    return _series(_ta().rsi(prices, length=period, talib=False), prices.index, f"RSI_{period}")
 
-    Uses an exponential (Wilder) average with ``alpha = 1/period`` — the
-    standard RSI — rather than a plain rolling mean, and guards against a
-    zero average loss so a flat/rising window yields RSI≈100 instead of NaN.
-    """
-    delta = prices.diff()
-    gain = delta.where(delta > 0, 0.0)
-    loss = -delta.where(delta < 0, 0.0)
-    avg_gain = gain.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
-    avg_loss = loss.ewm(alpha=1 / period, min_periods=period, adjust=False).mean()
-    # RSI edge cases need explicit treatment: no gains and no losses is a
-    # flat, neutral market (50), while gains without losses is 100 and losses
-    # without gains is 0.
-    both_zero = (avg_gain == 0) & (avg_loss == 0)
-    no_losses = (avg_loss == 0) & (avg_gain > 0)
-    no_gains = (avg_gain == 0) & (avg_loss > 0)
-    rs = avg_gain / avg_loss.where(avg_loss != 0)
-    rsi = 100 - (100 / (1 + rs))
-    return rsi.mask(both_zero, 50.0).mask(no_losses, 100.0).mask(no_gains, 0.0)
 
 def calculate_macd(
     prices: pd.Series,
@@ -38,34 +42,47 @@ def calculate_macd(
     slow: int = 26,
     signal: int = 9,
 ) -> tuple[pd.Series, pd.Series]:
-    """Compute MACD line and signal line."""
-    ema_fast = calculate_ema(prices, fast)
-    ema_slow = calculate_ema(prices, slow)
-    macd_line = ema_fast - ema_slow
-    signal_line = calculate_ema(macd_line, signal)
-    return macd_line, signal_line
+    """Compute MACD and signal line with pandas-ta-classic."""
+    prices = prices.astype(float)
+    result = _ta().macd(prices, fast=fast, slow=slow, signal=signal, talib=False)
+    if result is None or result.empty:
+        empty = pd.Series(float("nan"), index=prices.index, dtype="float64")
+        return empty.copy(), empty.copy()
+
+    macd_col = next((c for c in result.columns if str(c).startswith("MACD_")), None)
+    signal_col = next((c for c in result.columns if str(c).startswith("MACDs_")), None)
+    if macd_col is None or signal_col is None:
+        raise RuntimeError(f"Unexpected pandas-ta-classic MACD columns: {list(result.columns)}")
+    return (
+        _series(result[macd_col], prices.index, str(macd_col)),
+        _series(result[signal_col], prices.index, str(signal_col)),
+    )
+
 
 def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Compute Average Directional Index (ADX)."""
-    high = df["High"]
-    low = df["Low"]
+    """Compute ADX with pandas-ta-classic."""
+    result = _ta().adx(
+        df["High"].astype(float),
+        df["Low"].astype(float),
+        df["Close"].astype(float),
+        length=period,
+    )
+    if result is None or result.empty:
+        return pd.Series(float("nan"), index=df.index, dtype="float64", name=f"ADX_{period}")
+    column = f"ADX_{period}"
+    if column not in result:
+        column = next((c for c in result.columns if str(c).startswith("ADX_")), None)
+    if column is None:
+        raise RuntimeError(f"Unexpected pandas-ta-classic ADX columns: {list(result.columns)}")
+    return _series(result[column], df.index, str(column))
 
-    up_move = high.diff()
-    down_move = low.shift(1) - low
-
-    plus_dm = up_move.where((up_move > down_move) & (up_move > 0), 0.0)
-    minus_dm = down_move.where((down_move > up_move) & (down_move > 0), 0.0)
-
-    atr = calculate_atr(df, period)
-
-    plus_di = 100 * (plus_dm.rolling(window=period).mean() / atr)
-    minus_di = 100 * (minus_dm.rolling(window=period).mean() / atr)
-    dx = 100 * ((plus_di - minus_di).abs() / (plus_di + minus_di))
-    adx = dx.rolling(window=period).mean()
-    return adx
 
 def calculate_ichimoku(df: pd.DataFrame) -> dict[str, pd.Series]:
-    """Compute Ichimoku Cloud components."""
+    """Compute product-shaped Ichimoku components.
+
+    The API owns these shifted output contracts; standard EMA/RSI/MACD/ADX/ATR
+    and rolling volume-weighted calculations are package-owned.
+    """
     high_9 = df["High"].rolling(window=9).max()
     low_9 = df["Low"].rolling(window=9).min()
     tenkan_sen = (high_9 + low_9) / 2
@@ -75,11 +92,9 @@ def calculate_ichimoku(df: pd.DataFrame) -> dict[str, pd.Series]:
     kijun_sen = (high_26 + low_26) / 2
 
     senkou_span_a = ((tenkan_sen + kijun_sen) / 2).shift(26)
-
     high_52 = df["High"].rolling(window=52).max()
     low_52 = df["Low"].rolling(window=52).min()
     senkou_span_b = ((high_52 + low_52) / 2).shift(26)
-
     chikou_span = df["Close"].shift(-26)
 
     return {
@@ -90,13 +105,12 @@ def calculate_ichimoku(df: pd.DataFrame) -> dict[str, pd.Series]:
         "chikou_span": chikou_span,
     }
 
-def calculate_fibonacci_levels(df: pd.DataFrame, period: int = 100) -> dict[str, float]:
-    """Calculate Fibonacci Retracement levels based on a period high/low."""
-    recent_df = df.tail(period)
-    high = recent_df["High"].max()
-    low = recent_df["Low"].min()
-    diff = high - low
 
+def calculate_fibonacci_levels(df: pd.DataFrame, period: int = 100) -> dict[str, float]:
+    """Calculate Fibonacci display levels based on a recent high/low."""
+    high = df["High"].tail(period).max()
+    low = df["Low"].tail(period).min()
+    diff = high - low
     return {
         "level_0": high,
         "level_236": high - 0.236 * diff,
@@ -107,19 +121,29 @@ def calculate_fibonacci_levels(df: pd.DataFrame, period: int = 100) -> dict[str,
         "level_100": low,
     }
 
+
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
-    """Compute Average True Range."""
-    high = df["High"]
-    low = df["Low"]
-    close = df["Close"]
-    tr = pd.concat([high - low, (high - close.shift(1)).abs(), (low - close.shift(1)).abs()], axis=1).max(axis=1)
-    return tr.rolling(window=period).mean()
+    """Compute ATR with pandas-ta-classic."""
+    result = _ta().atr(
+        df["High"].astype(float),
+        df["Low"].astype(float),
+        df["Close"].astype(float),
+        length=period,
+        talib=False,
+    )
+    return _series(result, df.index, f"ATR_{period}")
+
 
 def calculate_vwap(df: pd.DataFrame, period: int = 20) -> pd.Series:
-    """Compute rolling Volume-Weighted Average Price over *period* bars."""
-    typical_price = (df["High"] + df["Low"] + df["Close"]) / 3
-    price_volume = (typical_price * df["Volume"]).rolling(window=period).sum()
-    return price_volume / df["Volume"].rolling(window=period).sum()
+    """Compute rolling volume-weighted typical price with pandas-ta-classic.
+
+    ``vwma`` preserves this application's historical ``period`` semantics;
+    pandas-ta's session-anchored ``vwap`` has a different contract.
+    """
+    typical_price = (df["High"].astype(float) + df["Low"].astype(float) + df["Close"].astype(float)) / 3.0
+    result = _ta().vwma(typical_price, df["Volume"].astype(float), length=period)
+    return _series(result, df.index, f"VWAP_{period}")
+
 
 _FORMULA_FUNCS: dict = {
     "VOLSMA": lambda df, n: df["Volume"].rolling(window=n).mean(),
@@ -135,13 +159,9 @@ _FORMULA_FUNCS: dict = {
     "MIN": lambda df, n: df["Low"].rolling(window=n).min(),
 }
 
-def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
-    """Evaluate a bounded, causal arithmetic indicator expression.
 
-    Only current/past series and whitelisted rolling functions are permitted.
-    Attribute access, subscripting, arbitrary function calls, and future shifts
-    are rejected before pandas evaluates the expression.
-    """
+def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
+    """Evaluate a bounded, causal arithmetic indicator expression."""
     formula = (formula or "").strip()
     if not formula or len(formula) > 300:
         raise ValueError("Formula must contain between 1 and 300 characters")
@@ -166,11 +186,8 @@ def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
             col_name = f"{name}_{n}"
             if col_name not in local_dict:
                 local_dict[col_name] = func(df, n)
-            processed_formula = re.sub(
-                re.escape(match.group(0)), col_name, processed_formula, flags=re.IGNORECASE
-            )
+            processed_formula = re.sub(re.escape(match.group(0)), col_name, processed_formula, flags=re.IGNORECASE)
 
-    # Any letters followed by '(' are an unrecognized function call.
     if re.search(r"[A-Za-z_]\w*\s*\(", processed_formula):
         raise ValueError("Formula contains an unsupported function")
 
@@ -209,18 +226,21 @@ def evaluate_formula_safely(df: pd.DataFrame, formula: str) -> pd.Series:
             series = pd.Series([res] * len(df), index=df.index, dtype="float64")
         else:
             series = pd.to_numeric(pd.Series(res, index=df.index), errors="coerce")
+
         import numpy as np
 
-        finite = np.isfinite(series.to_numpy(dtype="float64", na_value=np.nan))
-        if not bool(finite.all()):
+        values = series.to_numpy(dtype="float64", na_value=np.nan)
+        if bool(np.isinf(values).any()):
             raise ValueError("Formula result contains non-finite values")
-        # Prevent huge finite values from later overflowing JSON/plotting code.
+        if not bool(np.isfinite(values).any()):
+            raise ValueError("Formula result has no finite values over this range")
         if bool((series.abs() > 1e100).any()):
             raise ValueError("Formula result is outside the supported numeric range")
         return series
     except Exception as exc:
         _logger.warning("Custom formula evaluation failed: %s", exc)
         raise ValueError("Formula could not be calculated") from exc
+
 
 async def fetch_sector(ticker: str) -> str:
     import asyncio

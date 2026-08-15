@@ -5,9 +5,9 @@ import pytest
 
 @pytest.mark.asyncio
 async def test_macro_analyst_does_not_receive_directional_past_context(monkeypatch):
+    from backend.trading_agents.agents.runtime import analyst_cache
     from backend.trading_agents.agents.sub.analysts import macro_analyst
     from backend.trading_agents.dataflows import interface
-    from backend.trading_agents.agents.runtime import analyst_cache
 
     captured: dict[str, str] = {}
 

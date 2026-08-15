@@ -18,15 +18,15 @@ from backend.services.analysis_service import list_analysis_checkpoints
 from backend.services.portfolio_assistant_service import clear_assistant_history, get_assistant_history
 from backend.services.preset_service import PresetError, create_user_preset
 from backend.services.settings_service import apply_preset_to_settings, apply_settings_update, get_or_create_settings
-from backend.trading_agents.graph.checkpointer import _db_path, checkpoint_scope, thread_id
+from backend.trading_agents.graph.checkpointer import checkpoint_scope, thread_id
+
 
 class TestCheckpointTenantIsolation:
-    def test_checkpoint_paths_and_threads_include_analysis_scope(self, tmp_path):
+    def test_checkpoint_threads_include_analysis_scope(self):
         first = checkpoint_scope(user_id=101, analysis_id=501)
         second = checkpoint_scope(user_id=202, analysis_id=502)
 
         assert first != second
-        assert _db_path(tmp_path, "AAPL", first) != _db_path(tmp_path, "AAPL", second)
         assert thread_id("AAPL", "2026-07-26", first) != thread_id("AAPL", "2026-07-26", second)
 
     async def test_checkpoint_listing_uses_owned_analysis_scope(self, db: AsyncSession, test_user: User, monkeypatch):
@@ -132,27 +132,33 @@ class TestOllamaEndpointHardening:
             ApiKeySet(provider="ollama", api_key=api_key)
 
     def test_ollama_runtime_discards_tenant_url_and_uses_server_endpoint(self, monkeypatch):
-        from backend.trading_agents.llm_clients import openai_client
+        from backend.core import config as config_module
+        from backend.trading_agents.llm_clients import litellm_client
 
         captured: dict = {}
 
-        class FakeChatOpenAI:
+        class FakeChatLiteLLM:
             def __init__(self, **kwargs):
                 captured.update(kwargs)
 
-        monkeypatch.setattr(openai_client, "NormalizedChatOpenAI", FakeChatOpenAI)
-        monkeypatch.setattr(openai_client, "get_ollama_base_url", lambda: "http://localhost:11434/v1")
+        monkeypatch.setattr(litellm_client, "GuardedChatLiteLLM", FakeChatLiteLLM)
+        monkeypatch.setattr(
+            config_module,
+            "get_settings",
+            lambda: SimpleNamespace(OLLAMA_BASE_URL="http://localhost:11434"),
+        )
 
-        client = openai_client.OpenAIClient(
+        client = litellm_client.LiteLLMClient(
             model="llama3.2",
             provider="ollama",
             api_key="http://169.254.169.254/latest/meta-data",
         )
         client.get_llm()
 
-        assert captured["base_url"] == "http://localhost:11434/v1"
-        assert captured["api_key"] == "ollama"
-        assert client.base_url is None
+        assert captured["model"] == "ollama/llama3.2"
+        assert captured["api_base"] == "http://localhost:11434"
+        assert "api_key" not in captured
+        assert client.base_url == "http://localhost:11434"
         assert "api_key" not in client.kwargs
 
 class TestPagePermissionEnforcement:

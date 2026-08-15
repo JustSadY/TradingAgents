@@ -7,6 +7,7 @@ from types import SimpleNamespace
 
 from backend.services import analysis_service
 
+
 class _Emitter:
     events: list[str] = []
 

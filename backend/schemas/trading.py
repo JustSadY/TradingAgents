@@ -1,5 +1,6 @@
 from pydantic import BaseModel, Field
 
+
 class AutoCloseRecord(BaseModel):
     ticker: str
     reason: str

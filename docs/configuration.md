@@ -131,7 +131,7 @@ docker run -d -p 8080:8080 searxng/searxng
 
 All of the runtime options below are no longer read from `.env` or system environment variables. They are fully managed through the application's **Web UI** under **Settings** (or **Admin Panel** for defaults) and stored in the database:
 
-*   **LLM Provider & Model:** E.g., `openai`, `gpt-4o-mini`.
+*   **LLM Provider & Model:** E.g., `openai`, `gpt-5.6-luna`.
 *   **Output Language:** Output language for markdown reports (English, Turkish, etc.).
 *   **Debate & Risk Rounds:** Number of discussion rounds for Bull/Bear researchers and Risk agents.
 *   **Analyst Concurrency Limit:** Concurrency control for parallel analyst nodes.

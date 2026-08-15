@@ -10,6 +10,7 @@ from backend.services.analysis.config_builder import build_analysis_config
 from backend.trading_agents.config import FallbackLLMConfig, TradingAgentsConfig, normalize_fallback_llm_chain
 from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
 
+
 def _graph_with_config(config: dict) -> TradingAgentsGraph:
     """Create the small graph shell needed by ``_with_fallback`` tests."""
     graph = object.__new__(TradingAgentsGraph)

@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react'
-import api from '../utils/api'
+import { useCallback } from 'react'
+import { useNewsNewsFeed } from '../api/generated/news/news'
 
 interface NewsItem {
   title: string
@@ -10,34 +10,17 @@ interface NewsItem {
 }
 
 export function useNewsFeed(tickers: string[], limit: number = 4) {
-  const [news, setNews] = useState<NewsItem[]>([])
-  const [loading, setLoading] = useState(false)
-
   const tickersKey = tickers.join(',')
 
-  const fetchNews = useCallback(async () => {
-    if (tickers.length === 0) {
-      setNews([])
-      return
-    }
-    setLoading(true)
-    try {
-      const { data } = await api.get('/api/news/feed', {
-        params: { tickers: tickersKey, limit }
-      })
-      setNews(data)
-    } catch (error) {
-      console.error('Failed to fetch news feed:', error)
-    } finally {
-      setLoading(false)
-    }
-  }, [tickersKey, limit])
-
-  useEffect(() => {
-    fetchNews()
-    const id = setInterval(fetchNews, 5 * 60 * 1000)
-    return () => clearInterval(id)
-  }, [fetchNews])
+  const query = useNewsNewsFeed(
+    { tickers: tickersKey, limit },
+    { query: { enabled: tickers.length > 0, refetchInterval: 5 * 60 * 1000 } },
+  )
+  // /api/news/feed items are typed as free-form objects in OpenAPI; the local
+  // NewsItem shape above stays the contract consumers render against.
+  const news = (query.data ?? []) as unknown as NewsItem[]
+  const loading = tickers.length > 0 && query.isPending
+  const fetchNews = useCallback(() => query.refetch(), [query])
 
   return { news, loading, refreshNews: fetchNews }
 }

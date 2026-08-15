@@ -18,6 +18,7 @@ from backend.repositories.portfolio import (
     list_portfolios,
 )
 
+
 class TestPortfolioRepository:
     async def _create_portfolio(self, db: AsyncSession, user_id: int, mode: str = "simulation") -> Portfolio:
         portfolio = Portfolio(

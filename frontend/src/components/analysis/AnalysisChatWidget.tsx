@@ -1,29 +1,31 @@
 import React, { useState, useEffect, useRef } from 'react'
-import axios from 'axios'
+import { useAnalysisGetAnalysisChat, useAnalysisAskAnalysisReport } from '../../api/generated/analysis/analysis'
 import { MessageSquare, Loader2 } from 'lucide-react'
 import { useTranslation } from '../../contexts/LanguageContext'
 import { notify } from '../../utils/notify'
 
 export function AnalysisChatWidget({ analysisId }: { analysisId: number }) {
   const { t } = useTranslation()
-  const [messages, setMessages] = useState<{ id: number; role: 'user' | 'assistant'; content: string }[]>([])
+  type ChatMessage = { id: number; role: 'user' | 'assistant'; content: string }
+  const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
 
+  // History is server state; the local list additionally holds the optimistic
+  // user message that is shown before the assistant replies.
+  const history = useAnalysisGetAnalysisChat(analysisId)
   useEffect(() => {
-    let cancelled = false
-    axios.get(`/api/analysis/${analysisId}/chat`)
-      .then(r => { if (!cancelled) setMessages(r.data) })
-      .catch(() => {})
-    return () => { cancelled = true }
-  }, [analysisId])
+    if (history.data) setMessages(history.data as ChatMessage[])
+  }, [history.data])
+
+  const askMutation = useAnalysisAskAnalysisReport()
+  const loading = askMutation.isPending
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [messages])
 
-  const handleSend = async (e?: React.FormEvent) => {
+  const handleSend = (e?: React.FormEvent) => {
     e?.preventDefault()
     const msg = input.trim()
     if (!msg || loading) return
@@ -31,17 +33,17 @@ export function AnalysisChatWidget({ analysisId }: { analysisId: number }) {
 
     const tempUserMsg = { id: Date.now(), role: 'user' as const, content: msg }
     setMessages(prev => [...prev, tempUserMsg])
-    setLoading(true)
 
-    try {
-      const { data } = await axios.post(`/api/analysis/${analysisId}/chat`, { message: msg })
-      setMessages(prev => [...prev, data])
-    } catch (err: any) {
-      const detail = err.response?.data?.detail
-      notify('error', detail || t('analysis.chat.error') || 'Chat error', 'Hata')
-    } finally {
-      setLoading(false)
-    }
+    askMutation.mutate(
+      { analysisId, data: { message: msg } },
+      {
+        onSuccess: (data) => setMessages(prev => [...prev, data as ChatMessage]),
+        onError: (err) => {
+          const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+          notify('error', detail || t('analysis.chat.error') || 'Chat error', 'Hata')
+        },
+      },
+    )
   }
 
   return (

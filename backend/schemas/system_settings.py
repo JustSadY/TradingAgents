@@ -3,6 +3,7 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict
 
+
 class SystemSettingsRead(BaseModel):
     id: int = 1
     trading_mode: str = "simulation"

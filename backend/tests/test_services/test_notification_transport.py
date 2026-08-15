@@ -2,6 +2,7 @@ import socket
 
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_webhook_resolution_returns_only_vetted_public_addresses(monkeypatch):
     from backend.services.notification_service import resolve_webhook_target

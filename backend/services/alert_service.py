@@ -7,6 +7,11 @@ import pandas as pd
 from sqlalchemy import or_, select, update
 
 from backend.core.database import AsyncSessionLocal
+from backend.core.rls_context import (
+    BackgroundCapability,
+    set_user_background_context,
+    trusted_background_session,
+)
 from backend.models.alert import PriceAlert
 from backend.models.alert_outbox import AlertOutbox
 from backend.models.analysis import AnalysisResult
@@ -176,15 +181,16 @@ async def _claim_alert(db, alert: PriceAlert, current_value: float | None) -> bo
 
 
 async def process_alert_outbox(limit: int = 50) -> None:
-    """Retry durable alert deliveries; safe after process crashes."""
-    async with AsyncSessionLocal() as db:
+    """Claim globally, then deliver each item in its owner's tenant context."""
+    async with trusted_background_session(BackgroundCapability.ALERT_OUTBOX) as db:
         stale_cutoff = datetime.now(UTC).timestamp() - 300
         rows = await db.execute(
             select(AlertOutbox)
             .where(
                 or_(
                     AlertOutbox.status == "pending",
-                    (AlertOutbox.status == "processing") & (AlertOutbox.claimed_at < datetime.fromtimestamp(stale_cutoff, UTC)),
+                    (AlertOutbox.status == "processing")
+                    & (AlertOutbox.claimed_at < datetime.fromtimestamp(stale_cutoff, UTC)),
                 )
             )
             .order_by(AlertOutbox.created_at)
@@ -192,96 +198,106 @@ async def process_alert_outbox(limit: int = 50) -> None:
             .with_for_update(skip_locked=True)
         )
         items = list(rows.scalars().all())
+        claimed: list[tuple[int, int | None]] = []
         for item in items:
             item.status = "processing"
             item.claimed_at = datetime.now(UTC)
             item.attempts = (item.attempts or 0) + 1
+            claimed.append((item.id, item.user_id))
         await db.commit()
 
-    for item_id in [item.id for item in items]:
+    for item_id, user_id in claimed:
         async with AsyncSessionLocal() as delivery_db:
-            row = await delivery_db.execute(
-                select(AlertOutbox).where(AlertOutbox.id == item_id).with_for_update()
-            )
-            item = row.scalar_one_or_none()
-            if not item or item.status != "processing":
+            if user_id is not None:
+                await set_user_background_context(delivery_db, user_id)
+            else:
+                # Legacy/system-owned outbox rows are rare but still need an
+                # explicit audited capability rather than an admin bypass.
+                async with trusted_background_session(BackgroundCapability.ALERT_OUTBOX) as system_db:
+                    await _deliver_outbox_item(system_db, item_id)
                 continue
-            alert = await delivery_db.get(PriceAlert, item.alert_id)
-            try:
-                if not alert:
-                    item.status = "completed"
-                    item.completed_at = datetime.now(UTC)
-                else:
-                    from backend.repositories.system_settings import get_system_settings
+            await _deliver_outbox_item(delivery_db, item_id)
 
-                    settings = await get_system_settings(delivery_db)
-                    value = float(item.current_value) if item.current_value is not None else None
-                    await _deliver_alert_side_effects(delivery_db, alert, settings, value)
-                    item.status = "completed"
-                    item.completed_at = datetime.now(UTC)
-                    item.last_error = None
-                await delivery_db.commit()
-            except Exception as exc:
-                await delivery_db.rollback()
-                async with AsyncSessionLocal() as failure_db:
-                    failed = await failure_db.get(AlertOutbox, item_id)
-                    if failed:
-                        failed.status = "pending" if failed.attempts < 10 else "failed"
-                        failed.last_error = str(exc)[:1000]
-                        await failure_db.commit()
-                _logger.exception("Alert outbox delivery failed id=%s", item_id)
+
+async def _deliver_outbox_item(db, item_id: int) -> None:
+    row = await db.execute(select(AlertOutbox).where(AlertOutbox.id == item_id).with_for_update())
+    item = row.scalar_one_or_none()
+    if not item or item.status != "processing":
+        return
+    alert = await db.get(PriceAlert, item.alert_id)
+    try:
+        if not alert:
+            item.status = "completed"
+            item.completed_at = datetime.now(UTC)
+        else:
+            from backend.repositories.system_settings import get_system_settings
+
+            settings = await get_system_settings(db)
+            value = float(item.current_value) if item.current_value is not None else None
+            await _deliver_alert_side_effects(db, alert, settings, value)
+            item.status = "completed"
+            item.completed_at = datetime.now(UTC)
+            item.last_error = None
+        await db.commit()
+    except Exception as exc:
+        await db.rollback()
+        if item.user_id is not None:
+            await set_user_background_context(db, item.user_id)
+        failed = await db.get(AlertOutbox, item_id)
+        if failed:
+            failed.status = "pending" if failed.attempts < 10 else "failed"
+            failed.last_error = str(exc)[:1000]
+            await db.commit()
+        _logger.exception("Alert outbox delivery failed id=%s", item_id)
+
+
+async def _claim_alert_for_owner(alert_id: int, user_id: int | None, current_value: float | None) -> bool:
+    if user_id is None:
+        async with trusted_background_session(BackgroundCapability.ALERT_CHECKER) as db:
+            alert = await db.get(PriceAlert, alert_id)
+            return bool(alert and await _claim_alert(db, alert, current_value))
+    async with AsyncSessionLocal() as db:
+        await set_user_background_context(db, user_id)
+        alert = await db.get(PriceAlert, alert_id)
+        return bool(alert and await _claim_alert(db, alert, current_value))
 
 
 async def check_price_alerts() -> None:
-    async with AsyncSessionLocal() as db:
+    # Cross-tenant discovery is the only system-scoped part of this job.
+    async with trusted_background_session(BackgroundCapability.ALERT_CHECKER) as db:
         from backend.repositories.alerts import get_enabled_alerts
 
-        alerts = await get_enabled_alerts(db)
-        if not alerts:
-            return
+        alerts = list(await get_enabled_alerts(db))
 
-        from backend.repositories.system_settings import get_system_settings
+    if not alerts:
+        return
+    price_alerts = [a for a in alerts if getattr(a, "alert_type", "price") not in _INDICATOR_ALERT_TYPES]
+    indicator_alerts = [a for a in alerts if getattr(a, "alert_type", "price") in _INDICATOR_ALERT_TYPES]
+    prices = await get_live_prices_batch([a.ticker for a in price_alerts]) if price_alerts else {}
 
-        settings = await get_system_settings(db)
+    for alert in price_alerts:
+        price = prices.get(alert.ticker)
+        if price is None:
+            continue
+        hit = (alert.condition == "above" and price >= alert.target_price) or (
+            alert.condition == "below" and price <= alert.target_price
+        )
+        if hit:
+            _logger.info("Alert triggered: %s %s $%.2f (current: $%.2f)", alert.ticker, alert.condition, alert.target_price, price)
+            await _claim_alert_for_owner(alert.id, alert.user_id, float(price))
 
-        price_alerts = [a for a in alerts if getattr(a, "alert_type", "price") not in _INDICATOR_ALERT_TYPES]
-        indicator_alerts = [a for a in alerts if getattr(a, "alert_type", "price") in _INDICATOR_ALERT_TYPES]
-
-        prices = await get_live_prices_batch([a.ticker for a in price_alerts]) if price_alerts else {}
-
-        for alert in price_alerts:
-            price = prices.get(alert.ticker)
-            if price is None:
-                continue
-
-            hit = (alert.condition == "above" and price >= alert.target_price) or (
-                alert.condition == "below" and price <= alert.target_price
-            )
-            if not hit:
-                continue
-
-            _logger.info(
-                "Alert triggered: %s %s $%.2f (current: $%.2f)",
-                alert.ticker,
-                alert.condition,
-                alert.target_price,
-                price,
-            )
-            await _claim_alert(db, alert, float(price))
-
-        for alert in indicator_alerts:
-            try:
-                hit, detail = await _check_indicator_alert(alert)
-            except Exception as exc:  # noqa: BLE001 — one bad ticker must not break the loop
-                _logger.warning("Indicator alert check failed for %s: %s", alert.ticker, exc)
-                continue
-            if not hit:
-                continue
-
+    for alert in indicator_alerts:
+        try:
+            hit, detail = await _check_indicator_alert(alert)
+        except Exception as exc:  # noqa: BLE001
+            _logger.warning("Indicator alert check failed for %s: %s", alert.ticker, exc)
+            continue
+        if hit:
             _logger.info("Indicator alert triggered: %s %s (%s)", alert.ticker, alert.alert_type, detail)
-            await _claim_alert(db, alert, None)
+            await _claim_alert_for_owner(alert.id, alert.user_id, None)
 
     await process_alert_outbox()
+
 
 async def _throttled_analyze(ticker: str, trade_date: str, user_id: int | None, semaphore: asyncio.Semaphore) -> None:
     """Acquire *semaphore* before running ``_auto_analyze`` to cap concurrency."""
@@ -291,16 +307,17 @@ async def _throttled_analyze(ticker: str, trade_date: str, user_id: int | None, 
 async def _auto_analyze(ticker: str, trade_date: str, user_id: int | None) -> None:
     try:
         async with AsyncSessionLocal() as new_db:
+            if user_id is not None:
+                await set_user_background_context(new_db, user_id)
             result = await new_db.execute(select(User).where(User.id == user_id))
             user = result.scalar_one_or_none()
             if not user:
                 return
             settings = await get_or_create_settings(new_db, user)
             task_id = str(uuid.uuid4())
+            from backend.repositories.analysis import create_analysis_result
             from backend.services.analysis_queue import dispatch_analysis
             from backend.services.analysis_service import register_queued_task
-
-            from backend.repositories.analysis import create_analysis_result
 
             await create_analysis_result(
                 new_db, task_id=task_id, user_id=user.id, ticker=ticker, trade_date=trade_date,
@@ -324,7 +341,7 @@ async def _auto_analyze(ticker: str, trade_date: str, user_id: int | None) -> No
 
 async def check_and_recover_lost_alerts() -> None:
     await process_alert_outbox()
-    async with AsyncSessionLocal() as db:
+    async with trusted_background_session(BackgroundCapability.ALERT_RECOVERY) as db:
         result = await db.execute(
             select(PriceAlert)
             .where(PriceAlert.triggered_at.isnot(None))

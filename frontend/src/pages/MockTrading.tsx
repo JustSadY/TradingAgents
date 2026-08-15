@@ -1,14 +1,14 @@
-import { useEffect, useState, useCallback } from 'react'
-import axios from 'axios'
+import { useState, useCallback } from 'react'
+import { useTradingGetPerformance, useTradingCreateOrder, useTradingResetPortfolio } from '../api/generated/trading/trading'
 import {
   TrendingUp, TrendingDown, DollarSign, ShoppingCart, BarChart2,
   RefreshCw, RotateCcw, AlertCircle, CheckCircle, Loader2
 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
-import type { OrderResponse } from '../api/types'
-import type { components } from '../api/schema'
+import type { OrderResponse } from '../api/generated/model'
+import type { BackendSchemasTradingPerformanceResponse } from '../api/generated/model'
 
-type PortfolioData = components['schemas']['backend__schemas__trading__PerformanceResponse']
+type PortfolioData = BackendSchemasTradingPerformanceResponse
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -81,82 +81,74 @@ function StatCard({
 
 export default function MockTrading() {
   const { t, language } = useTranslation()
-  const [portfolio, setPortfolio] = useState<PortfolioData | null>(null)
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [fetchError, setFetchError] = useState(false)
+  const orderMutation = useTradingCreateOrder()
+  const resetMutation = useTradingResetPortfolio()
+  const submitting = orderMutation.isPending
+  const resetting = resetMutation.isPending
 
   const [ticker, setTicker] = useState('')
   const [action, setAction] = useState<'BUY' | 'SELL'>('BUY')
   const [quantity, setQuantity] = useState('')
   const [leverage, setLeverage] = useState(1)
-  const [submitting, setSubmitting] = useState(false)
   const [orderResult, setOrderResult] = useState<{ ok: boolean; msg: string } | null>(null)
 
-  const [resetting, setResetting] = useState(false)
 
-  const fetchPortfolio = useCallback(async (silent = false) => {
-    if (!silent) setLoading(true)
-    else setRefreshing(true)
-    try {
-      const { data } = await axios.get<unknown>('/api/trading/performance')
-      if (!isPortfolioData(data)) throw new Error('Invalid portfolio response')
-      setPortfolio(data)
-      setFetchError(false)
-    } catch {
-      setFetchError(true)
-    } finally {
-      setLoading(false)
-      setRefreshing(false)
-    }
-  }, [])
+  const perfQuery = useTradingGetPerformance()
+  const loading = perfQuery.isPending
+  const refreshing = perfQuery.isFetching && !perfQuery.isPending
+  // The runtime guard is kept: a malformed payload must read as an error rather
+  // than being rendered as if it were a portfolio.
+  const portfolio = isPortfolioData(perfQuery.data) ? perfQuery.data : null
+  const fetchError = Boolean(perfQuery.error) || (perfQuery.isSuccess && !isPortfolioData(perfQuery.data))
+  const fetchPortfolio = useCallback(() => perfQuery.refetch(), [perfQuery])
 
-  useEffect(() => { fetchPortfolio() }, [fetchPortfolio])
-
-  const handleOrder = async (e: React.FormEvent) => {
+  const handleOrder = (e: React.FormEvent) => {
     e.preventDefault()
     if (!ticker.trim() || !quantity || Number.parseFloat(quantity) <= 0) return
-    setSubmitting(true)
     setOrderResult(null)
-    try {
-      const { data } = await axios.post<unknown>('/api/trading/order', {
-        ticker: ticker.toUpperCase(),
-        action,
-        quantity: Number.parseFloat(quantity),
-        leverage,
-        // A SELL with no existing long opens a short; closing a long ignores this.
-        allow_short: action === 'SELL',
-      })
-      if (!isOrderResponse(data)) throw new Error('Invalid order response')
-      const levTag = leverage > 1 ? ` (${leverage}x)` : ''
-      setOrderResult({
-        ok: true,
-        msg: `✓ ${data.action} ${data.quantity} ${data.ticker}${levTag} @ $${data.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} — Total: $${data.total_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
-      })
-      setTicker('')
-      setQuantity('')
-      await fetchPortfolio(true)
-    } catch (err: any) {
-      setOrderResult({
-        ok: false,
-        msg: err.response?.data?.detail || t('mocktrading.order_error_default'),
-      })
-    } finally {
-      setSubmitting(false)
-    }
+    orderMutation.mutate(
+      {
+        data: {
+          ticker: ticker.toUpperCase(),
+          action,
+          quantity: Number.parseFloat(quantity),
+          leverage,
+          // A SELL with no existing long opens a short; closing a long ignores this.
+          allow_short: action === 'SELL',
+        },
+      },
+      {
+        onSuccess: (data) => {
+          if (!isOrderResponse(data)) {
+            setOrderResult({ ok: false, msg: t('mocktrading.order_error_default') })
+            return
+          }
+          const levTag = leverage > 1 ? ` (${leverage}x)` : ''
+          setOrderResult({
+            ok: true,
+            msg: `✓ ${data.action} ${data.quantity} ${data.ticker}${levTag} @ $${data.price.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })} — Total: $${data.total_value.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`,
+          })
+          setTicker('')
+          setQuantity('')
+          void perfQuery.refetch()
+        },
+        onError: (err) => {
+          const detail = (err as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+          setOrderResult({ ok: false, msg: detail || t('mocktrading.order_error_default') })
+        },
+      },
+    )
   }
 
-  const handleReset = async () => {
+  const handleReset = () => {
     if (!confirm(t('mocktrading.reset_confirm'))) return
-    setResetting(true)
-    try {
-      await axios.post('/api/trading/reset', { initial_capital: 100000 })
-      await fetchPortfolio()
-    } catch (e) {
-      console.error('Portfolio reset failed:', e)
-    } finally {
-      setResetting(false)
-    }
+    resetMutation.mutate(
+      { data: { initial_capital: 100000 } },
+      {
+        onSuccess: () => { void perfQuery.refetch() },
+        onError: (e) => console.error('Portfolio reset failed:', e),
+      },
+    )
   }
 
   if (loading) {
@@ -200,7 +192,7 @@ export default function MockTrading() {
         </div>
         <div className="flex gap-2">
           <button
-            onClick={() => fetchPortfolio(true)}
+            onClick={() => fetchPortfolio()}
             disabled={refreshing}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-slate-900 border border-white/[0.04] text-slate-400 hover:text-white text-xs font-semibold transition disabled:opacity-50 cursor-pointer"
           >

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import Any
 
+
 def _total_samples(metric) -> list:
     """Samples of a metric whose name ends in ``_total`` (the counter values)."""
     return [s for s in metric.samples if s.name.endswith("_total")]

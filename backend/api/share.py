@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db, require_page
+from backend.core.rls_context import set_public_share_context
 from backend.models.user import User
 from backend.schemas.share import ShareCreateResponse, SharedReportResponse
 from backend.services import share_service
@@ -73,6 +74,7 @@ async def revoke_share(
     },
 )
 async def get_shared_report(token: str, db: AsyncSession = Depends(get_db)):
+    await set_public_share_context(db, token=token)
     share = await share_service.get_shared_report(db, token)
     if not share:
         raise HTTPException(status_code=404, detail="Report not found or expired")
@@ -82,6 +84,7 @@ async def get_shared_report(token: str, db: AsyncSession = Depends(get_db)):
     if expires < datetime.now(UTC):
         raise HTTPException(status_code=410, detail="This shared report has expired")
 
+    await set_public_share_context(db, token=token, analysis_id=share.analysis_id)
     analysis = await share_service.get_analysis_for_share(db, share.analysis_id)
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis data not found")

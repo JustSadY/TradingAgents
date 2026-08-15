@@ -2,6 +2,7 @@ from collections.abc import Iterable
 from dataclasses import dataclass
 from time import monotonic
 
+
 @dataclass(frozen=True)
 class AnalystNodeSpec:
     key: str

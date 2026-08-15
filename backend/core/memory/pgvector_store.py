@@ -1,18 +1,8 @@
 """PostgreSQL pgvector-backed :class:`MemoryStore`.
 
-Self-hosted alternative to Pinecone: episodes live in a ``memory_vectors``
-table inside the app's own PostgreSQL database. Embedding is always
-client-side (an :class:`Embedder` is required — there is no hosted inference).
-
-The table uses a dimension-less ``vector`` column with exact cosine scans:
-per-user episodic memory stays in the hundreds-to-thousands of rows, where a
-sequential scan beats maintaining an ANN index. Rows whose stored dimension
-differs from the active embed model are skipped via ``vector_dims`` so
-switching models never errors. Schema setup is lazy and idempotent; the
-``vector`` extension must be installable (``CREATE EXTENSION vector``).
-
-Queries never raise — a missing extension or transient error yields an empty
-result, matching the ``MemoryStore`` contract.
+The ``vector`` extension and ``memory_vectors`` table are owned by Alembic.
+Runtime code only verifies that the migration is present; it never performs
+schema DDL during an analysis request.
 """
 
 from __future__ import annotations
@@ -26,20 +16,10 @@ from .base import Embedder, MemoryHit, MemoryRecord
 
 _logger = logging.getLogger(__name__)
 
-_SCHEMA_STATEMENTS = (
-    "CREATE EXTENSION IF NOT EXISTS vector",
-    "CREATE TABLE IF NOT EXISTS memory_vectors ("
-    " namespace TEXT NOT NULL,"
-    " id TEXT NOT NULL,"
-    " text TEXT NOT NULL DEFAULT '',"
-    " metadata JSONB NOT NULL DEFAULT '{}'::jsonb,"
-    " embedding vector NOT NULL,"
-    " PRIMARY KEY (namespace, id)"
-    ")",
-)
 
 def _vector_literal(values: list[float]) -> str:
     return "[" + ",".join(str(float(v)) for v in values) + "]"
+
 
 class PgVectorMemoryStore:
     def __init__(self, embedder: Embedder, *, engine=None):
@@ -70,14 +50,24 @@ class PgVectorMemoryStore:
                 )
                 return False
             try:
-                async with engine.begin() as conn:
-                    for stmt in _SCHEMA_STATEMENTS:
-                        await conn.execute(sql_text(stmt))
-                self._ready = True
+                async with engine.connect() as conn:
+                    extension_ready = bool(
+                        (
+                            await conn.execute(
+                                sql_text("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')")
+                            )
+                        ).scalar_one()
+                    )
+                    table_ready = (
+                        await conn.execute(sql_text("SELECT to_regclass('memory_vectors') IS NOT NULL"))
+                    ).scalar_one()
+                self._ready = bool(extension_ready and table_ready)
+                if not self._ready:
+                    _logger.warning("pgvector memory schema is missing; run 'alembic upgrade head'")
             except Exception as exc:  # noqa: BLE001 — memory init must never break a run
-                _logger.warning("pgvector schema setup failed (is the extension available?): %s", exc)
+                _logger.warning("pgvector schema verification failed: %s", exc)
                 return False
-        return True
+        return self._ready
 
     async def upsert(self, namespace: str, records: list[MemoryRecord]) -> None:
         if not records:

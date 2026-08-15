@@ -22,6 +22,7 @@ from backend.services.margin_engine import (
     margin_required,
 )
 
+
 def _liquidation_for_position(
     side: str, quantity: Decimal, entry_price: Decimal, borrowed: Decimal, margin: Decimal, leverage: Decimal
 ) -> Decimal:

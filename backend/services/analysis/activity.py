@@ -13,6 +13,7 @@ import threading
 import time
 from collections.abc import Callable
 
+
 class AnalysisActivityTracker:
     """Record the most recent meaningful activity in one analysis task.
 

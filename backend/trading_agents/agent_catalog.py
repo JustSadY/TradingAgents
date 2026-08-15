@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import Any
 
+
 @dataclass(frozen=True)
 class AgentSettingField:
     key: str
@@ -55,6 +56,7 @@ class AgentInfo:
 
 from backend.trading_agents.llm_clients.registry import llm_registry
 
+
 def get_standard_agent_settings() -> list[AgentSettingField]:
     provider_options = [{"value": "", "label_key": "settings.analyst_default_provider"}]
     for p in llm_registry.list_providers():
@@ -74,7 +76,7 @@ def get_standard_agent_settings() -> list[AgentSettingField]:
             key="llm_model",
             type="string",
             label_key="Model Name",
-            description_key="Specify the model name (e.g. gpt-4o-mini or claude-3-5-sonnet)",
+            description_key="Specify the model name (e.g. gpt-5.6-luna or claude-sonnet-5)",
             placeholder_key="settings.analyst_default_model",
             default="",
             required=False,

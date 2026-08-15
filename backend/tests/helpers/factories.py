@@ -6,6 +6,7 @@ from backend.core.security import hash_password
 from backend.models.analysis import AnalysisResult
 from backend.models.user import User
 
+
 async def create_user(
     db: AsyncSession,
     username: str = "factoryuser",

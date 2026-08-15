@@ -3,7 +3,7 @@ import {
   BotMessageSquare, X, Send, Loader2, Trash2, TrendingUp,
   ChevronDown, Sparkles,
 } from 'lucide-react'
-import axios from 'axios'
+import { useAssistantChat, useAssistantClearHistory, useAssistantGetHistory } from '../../api/generated/assistant/assistant'
 import { useAuth } from '../../contexts/AuthContext'
 
 interface Message {
@@ -48,7 +48,9 @@ export function PortfolioAssistant() {
   const [open, setOpen] = useState(false)
   const [messages, setMessages] = useState<Message[]>([])
   const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
+  const chatMutation = useAssistantChat()
+  const clearMutation = useAssistantClearHistory()
+  const loading = chatMutation.isPending
   const [historyLoaded, setHistoryLoaded] = useState(false)
   const bottomRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLInputElement>(null)
@@ -58,16 +60,18 @@ export function PortfolioAssistant() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
   }, [])
 
+  // Only fetch once the panel is opened, and only until the local transcript
+  // takes over (it also holds optimistic and error messages).
+  const history = useAssistantGetHistory({ query: { enabled: open && !historyLoaded } })
   useEffect(() => {
     if (!open || historyLoaded) return
-    axios
-      .get('/api/assistant/history')
-      .then(r => {
-        setMessages(r.data)
-        setHistoryLoaded(true)
-      })
-      .catch(() => setHistoryLoaded(true))
-  }, [open, historyLoaded])
+    if (history.isSuccess) {
+      setMessages(history.data as Message[])
+      setHistoryLoaded(true)
+    } else if (history.isError) {
+      setHistoryLoaded(true)
+    }
+  }, [open, historyLoaded, history.isSuccess, history.isError, history.data])
 
   useEffect(() => {
     if (open) {
@@ -80,7 +84,7 @@ export function PortfolioAssistant() {
     scrollToBottom()
   }, [messages, loading, scrollToBottom])
 
-  const send = useCallback(async (text?: string) => {
+  const send = useCallback((text?: string) => {
     const msg = (text ?? input).trim()
     if (!msg || loading) return
     setInput('')
@@ -88,38 +92,34 @@ export function PortfolioAssistant() {
     const tempId = tempIdRef.current--
     const tempUser: Message = { id: tempId, role: 'user', content: msg, created_at: '' }
     setMessages(prev => [...prev, tempUser])
-    setLoading(true)
 
-    try {
-      const { data } = await axios.post<Message>('/api/assistant/chat', { message: msg })
-      setMessages(prev => [...prev, data])
-    } catch (err: any) {
-      const detail = err.response?.data?.detail || 'Assistant error. Please try again.'
-      const errMsg: Message = {
-        id: tempIdRef.current--,
-        role: 'assistant',
-        content: `⚠ ${detail}`,
-        created_at: '',
-      }
-      setMessages(prev => [...prev, errMsg])
-    } finally {
-      setLoading(false)
-    }
-  }, [input, loading])
+    chatMutation.mutate(
+      { data: { message: msg } },
+      {
+        onSuccess: (data) => setMessages(prev => [...prev, data as Message]),
+        onError: (err) => {
+          const detail =
+            (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+            || 'Assistant error. Please try again.'
+          const errMsg: Message = {
+            id: tempIdRef.current--,
+            role: 'assistant',
+            content: `⚠ ${detail}`,
+            created_at: '',
+          }
+          setMessages(prev => [...prev, errMsg])
+        },
+      },
+    )
+  }, [input, loading, chatMutation])
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault()
     send()
   }
 
-  const clearHistory = async () => {
-    try {
-      await axios.delete('/api/assistant/history')
-      setMessages([])
-    } catch {
-      /* ignore */
-    }
-  }
+  const clearHistory = () =>
+    clearMutation.mutate(undefined, { onSuccess: () => setMessages([]) })
 
   if (!isAuthenticated) return null
 

@@ -15,6 +15,7 @@ from backend.services.user_service import (
     set_user_api_key,
 )
 
+
 class TestUserService:
     def setup_method(self):
         self.fernet = Fernet(Fernet.generate_key())

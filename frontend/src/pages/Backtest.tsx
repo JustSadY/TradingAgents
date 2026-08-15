@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import axios from 'axios'
+import { useTradingRunBacktest } from '../api/generated/trading/trading'
 import {
   Play, BarChart2, TrendingUp, TrendingDown, Target, Search,
   Landmark, AlertCircle, Sparkles, Loader2
@@ -54,9 +54,11 @@ export default function Backtest() {
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0])
   const [initialCapital, setInitialCapital] = useState('100000')
 
-  const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [results, setResults] = useState<BacktestResults | null>(null)
+
+  const backtest = useTradingRunBacktest()
+  const loading = backtest.isPending
+  const results = (backtest.data ?? null) as BacktestResults | null
 
   const handleRun = async () => {
     const sym = ticker.trim().toUpperCase()
@@ -74,24 +76,27 @@ export default function Backtest() {
       return
     }
 
-    setLoading(true)
     setError(null)
-    setResults(null)
-
-    try {
-      const res = await axios.post('/api/trading/backtest', {
-        ticker: sym,
-        strategy_type: strategy,
-        start_date: startDate,
-        end_date: endDate,
-        initial_capital: cap,
-      })
-      setResults(res.data)
-    } catch (err: any) {
-      setError(err.response?.data?.detail || t('backtest.error_load'))
-    } finally {
-      setLoading(false)
-    }
+    // Clear the previous run first: useMutation keeps `data` until the next
+    // success, which would leave stale numbers on screen while pending.
+    backtest.reset()
+    backtest.mutate(
+      {
+        data: {
+          ticker: sym,
+          strategy_type: strategy,
+          start_date: startDate,
+          end_date: endDate,
+          initial_capital: cap,
+        },
+      },
+      {
+        onError: (err) => {
+          const detail = (err as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+          setError(detail || t('backtest.error_load'))
+        },
+      },
+    )
   }
 
   return (

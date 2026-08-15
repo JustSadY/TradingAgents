@@ -50,6 +50,7 @@ def get_category_for_method(method: str) -> str:
 class APICache:
     _init_lock = threading.Lock()
     _initialized_paths: set[str] = set()
+    _wal_paths: set[str] = set()
 
     @classmethod
     def get_cache_path(cls) -> Path:
@@ -83,8 +84,18 @@ class APICache:
     @classmethod
     def _connect(cls):
         path = str(cls.get_cache_path())
-        conn = sqlite3.connect(path, timeout=5.0, check_same_thread=False)
-        conn.execute("PRAGMA journal_mode=WAL")
+        conn = sqlite3.connect(path, timeout=30.0, check_same_thread=False)
+        # busy_timeout applies to lock waits that connect(timeout=...) alone does
+        # not cover, notably the exclusive lock a journal_mode change needs.
+        conn.execute("PRAGMA busy_timeout=30000")
+        # journal_mode is a persistent property of the database file, so set it
+        # once per path. Re-issuing it on every connection made concurrent
+        # writers race for that exclusive lock and raise "database is locked".
+        if path not in cls._wal_paths:
+            with cls._init_lock:
+                if path not in cls._wal_paths:
+                    conn.execute("PRAGMA journal_mode=WAL")
+                    cls._wal_paths.add(path)
         conn.execute("PRAGMA synchronous=NORMAL")
         cls._ensure_schema(conn, path)
         return conn

@@ -12,9 +12,9 @@ Memory is off (these become no-ops returning "") when no store is configured.
 from __future__ import annotations
 
 import logging
+from datetime import UTC, datetime
 
 from backend.core.memory import MemoryRecord, MemoryStore, build_pgvector_store, build_pinecone_store
-from datetime import UTC, datetime
 
 _logger = logging.getLogger(__name__)
 
@@ -37,6 +37,7 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
 
         from backend.core.config import get_settings
         from backend.core.database import AsyncSessionLocal
+        from backend.core.rls_context import set_user_background_context
         from backend.models.settings import AppSettings
         from backend.models.user import User
         from backend.services.user_service import get_user_api_key
@@ -46,6 +47,7 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
             user = await db.get(User, user_id)
             if not user:
                 return None
+            await set_user_background_context(db, user_id)
 
             row = (await db.execute(select(AppSettings).where(AppSettings.user_id == user_id))).scalar_one_or_none()
             store_kind = getattr(row, "memory_store", None) or "pinecone"

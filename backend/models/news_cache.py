@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
 
+
 class NewsCache(Base):
     __tablename__ = "news_cache"
 

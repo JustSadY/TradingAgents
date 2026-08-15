@@ -6,6 +6,7 @@ import pytest
 
 from backend.services import ticker_validation_service as ticker_validation
 
+
 @pytest.fixture(autouse=True)
 def _clear_validation_cache():
     ticker_validation._VALIDATION_CACHE.clear()

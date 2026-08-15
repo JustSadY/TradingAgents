@@ -13,7 +13,7 @@ Upon completion, navigate your browser to `http://SERVER_IP:8000` and log in usi
 ## What does it do?
 
 1.  **System Packages:** Installs Python 3.11–3.13, Node.js 20 (for Vite builds), PostgreSQL, git, and curl.
-2.  **Python Virtual Environment (`.venv`):** Configures a virtual environment and installs dependencies from `backend/requirements.txt`.
+2.  **Python Virtual Environment (`.venv`):** Configures a virtual environment and installs dependencies from `backend/pyproject.toml + backend/uv.lock`.
     *(No need for the pip `tradingagents` package — it imports the local copy at `backend/trading_agents` directly).*
 3.  **Frontend Compilation:** Compiles the React UI using `npm run build` and outputs to `frontend/dist`. The static files are served directly by the FastAPI backend (no separate web server required).
 4.  **PostgreSQL Instance:** Automatically provisions a local database and a user with a secure random password.

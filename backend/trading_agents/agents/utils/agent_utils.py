@@ -1,6 +1,6 @@
 import asyncio
 
-from langchain_core.messages import HumanMessage, RemoveMessage
+from langchain_core.messages import RemoveMessage
 
 from backend.trading_agents.agents.data.backtest_tools import run_strategy_backtest
 from backend.trading_agents.agents.data.core_stock_tools import get_stock_data

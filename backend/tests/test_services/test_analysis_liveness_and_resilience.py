@@ -14,6 +14,7 @@ from backend.services.analysis.streaming_handler import TokenStreamingCallbackHa
 from backend.trading_agents.agents.data.chart_tools import active_run_context
 from backend.trading_agents.agents.runtime import resilience
 
+
 class _Emitter:
     task_id = "liveness-test"
 

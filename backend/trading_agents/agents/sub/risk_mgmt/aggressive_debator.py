@@ -1,5 +1,6 @@
 from backend.trading_agents.agents.sub.risk_mgmt.base import make_risk_debator
 
+
 def _default_instruction() -> str:
     return (
         "As the Aggressive Risk Analyst, your role is to actively champion high-reward, high-risk "

@@ -2,137 +2,157 @@ from __future__ import annotations
 
 import hashlib
 import logging
-import sqlite3
+import threading
 from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
+from typing import Any
 
-from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-
-from backend.core.utils import safe_ticker_component
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 _logger = logging.getLogger(__name__)
 
-def checkpoint_scope(user_id: int | None, analysis_id: int | str) -> str:
-    """Return the stable namespace for one persisted analysis run.
+# LangGraph owns its checkpoint schema. setup() is idempotent/version-aware and
+# runs once per DSN per process. Application tables remain Alembic-owned.
+_pg_ready: set[str] = set()
+_pg_ready_lock = threading.Lock()
 
-    Checkpoints contain the complete LangGraph state, including reports and
-    tool outputs.  A ticker/date is therefore not a sufficient identity: two
-    users (or two independent runs by the same user) can legitimately analyse
-    the same asset on the same day.  Keep the owner and persisted analysis row
-    in every checkpoint identity so those runs can never resume each other.
-    """
+
+def checkpoint_scope(user_id: int | None, analysis_id: int | str) -> str:
+    """Return the stable namespace for one persisted analysis run."""
     if analysis_id is None or str(analysis_id) == "":
         raise ValueError("analysis_id is required for a checkpoint scope")
     owner = "system" if user_id is None else str(user_id)
     return f"user:{owner}:analysis:{analysis_id}"
 
-def _scope_component(scope: str) -> str:
-    if not isinstance(scope, str) or not scope:
-        raise ValueError("checkpoint scope is required")
-    return hashlib.sha256(scope.encode()).hexdigest()[:24]
-
-def _db_path(data_dir: str | Path, ticker: str, scope: str) -> Path:
-    safe = safe_ticker_component(ticker).upper()
-    p = Path(data_dir) / "checkpoints" / _scope_component(scope)
-    p.mkdir(parents=True, exist_ok=True)
-    return p / f"{safe}.db"
 
 def thread_id(ticker: str, date: str, scope: str) -> str:
     """Return a LangGraph thread id isolated to one persisted analysis."""
     return hashlib.sha256(f"{scope}:{ticker.upper()}:{date}".encode()).hexdigest()[:24]
 
+
+def postgres_dsn() -> str:
+    """Return the psycopg DSN; PostgreSQL is mandatory for checkpoints."""
+    from backend.core.config import get_settings
+
+    url = (get_settings().DATABASE_URL or "").strip()
+    scheme, sep, rest = url.partition("://")
+    if not sep or not scheme.lower().startswith("postgres"):
+        raise RuntimeError(
+            "LangGraph checkpoints require PostgreSQL. The SQLite checkpoint fallback has been removed."
+        )
+    return f"postgresql://{rest}"
+
+
+def _ensure_pg_schema(dsn: str) -> bool:
+    with _pg_ready_lock:
+        if dsn in _pg_ready:
+            return False
+        _pg_ready.add(dsn)
+        return True
+
+
 @contextmanager
-def get_checkpointer(data_dir: str | Path, ticker: str, scope: str) -> Generator[SqliteSaver, None, None]:
-    db = _db_path(data_dir, ticker, scope)
-    conn = sqlite3.connect(str(db), check_same_thread=False)
-    try:
-        saver = SqliteSaver(conn)
-        saver.setup()
+def get_checkpointer(data_dir: str | Path, ticker: str, scope: str) -> Generator[Any, None, None]:
+    del data_dir, ticker, scope
+    dsn = postgres_dsn()
+    with PostgresSaver.from_conn_string(dsn) as saver:
+        if _ensure_pg_schema(dsn):
+            saver.setup()
         yield saver
-    finally:
-        conn.close()
+
 
 @asynccontextmanager
 async def get_async_checkpointer(
-    data_dir: str | Path, ticker: str, scope: str
-) -> AsyncGenerator[AsyncSqliteSaver, None]:
-    db = _db_path(data_dir, ticker, scope)
-    async with AsyncSqliteSaver.from_conn_string(str(db)) as saver:
-        await saver.setup()
+    data_dir: str | Path,
+    ticker: str,
+    scope: str,
+) -> AsyncGenerator[Any, None]:
+    del data_dir, ticker, scope
+    dsn = postgres_dsn()
+    async with AsyncPostgresSaver.from_conn_string(dsn) as saver:
+        if _ensure_pg_schema(dsn):
+            await saver.setup()
         yield saver
 
+
 def checkpoint_step(data_dir: str | Path, ticker: str, date: str, scope: str) -> int | None:
-    db = _db_path(data_dir, ticker, scope)
-    if not db.exists():
-        return None
     tid = thread_id(ticker, date, scope)
     with get_checkpointer(data_dir, ticker, scope) as saver:
-        config = {"configurable": {"thread_id": tid}}
-        cp = saver.get_tuple(config)
+        cp = saver.get_tuple({"configurable": {"thread_id": tid}})
         if cp is None:
             return None
         return cp.metadata.get("step")
+
 
 async def async_checkpoint_step(data_dir: str | Path, ticker: str, date: str, scope: str) -> int | None:
-    db = _db_path(data_dir, ticker, scope)
-    if not db.exists():
-        return None
     tid = thread_id(ticker, date, scope)
     async with get_async_checkpointer(data_dir, ticker, scope) as saver:
-        config = {"configurable": {"thread_id": tid}}
-        cp = await saver.aget_tuple(config)
+        cp = await saver.aget_tuple({"configurable": {"thread_id": tid}})
         if cp is None:
             return None
         return cp.metadata.get("step")
 
-def clear_checkpoint(data_dir: str | Path, ticker: str, date: str, scope: str) -> None:
-    db = _db_path(data_dir, ticker, scope)
-    if not db.exists():
-        return
-    tid = thread_id(ticker, date, scope)
-    conn = sqlite3.connect(str(db))
-    try:
-        for table in ("writes", "checkpoints"):
-            conn.execute(f"DELETE FROM {table} WHERE thread_id = ?", (tid,))
-        conn.commit()
-    except sqlite3.OperationalError as exc:
-        _logger.debug("clear_checkpoint skipped for %s/%s: %s", ticker, date, exc)
-    finally:
-        conn.close()
 
-async def list_checkpoints_for_thread(data_dir: str | Path, ticker: str, date: str, scope: str) -> list[dict]:
-    """Retrieve all checkpoints for a thread from the saver database, ordered by step."""
-    db = _db_path(data_dir, ticker, scope)
-    if not db.exists():
-        return []
+def clear_checkpoint(data_dir: str | Path, ticker: str, date: str, scope: str) -> None:
+    tid = thread_id(ticker, date, scope)
+    try:
+        with get_checkpointer(data_dir, ticker, scope) as saver:
+            saver.delete_thread(tid)
+    except Exception as exc:
+        _logger.debug("clear_checkpoint skipped for %s/%s: %s", ticker, date, exc)
+
+
+def _advanced_node(seen: dict, previous_seen: dict) -> str:
+    for node, channels in seen.items():
+        if node.startswith("__"):
+            continue
+        if previous_seen.get(node) != channels:
+            return node
+    return "START"
+
+
+async def list_checkpoints_for_thread(
+    data_dir: str | Path,
+    ticker: str,
+    date: str,
+    scope: str,
+) -> list[dict]:
+    """Retrieve all checkpoints for a thread from PostgreSQL, ordered by step."""
+    from backend.core.catalog import node_progress
 
     tid = thread_id(ticker, date, scope)
     config = {"configurable": {"thread_id": tid}}
 
-    checkpoints = []
+    raw: list[tuple[int, str, dict, str]] = []
     async with get_async_checkpointer(data_dir, ticker, scope) as saver:
         async for cp in saver.alist(config):
             metadata = cp.metadata or {}
-            step = metadata.get("step", -1)
-            writes = metadata.get("writes") or {}
-            node_name = next(iter(writes.keys()), "START") if writes else "START"
-
-            from backend.core.catalog import node_progress
-
-            prog = node_progress(node_name)
-            node_label = prog.get("label") if prog else node_name
-
-            checkpoints.append(
-                {
-                    "checkpoint_id": cp.config["configurable"]["checkpoint_id"],
-                    "step": step,
-                    "node": node_name,
-                    "label": node_label,
-                    "ts": metadata.get("ts", ""),
-                }
+            checkpoint = cp.checkpoint or {}
+            raw.append(
+                (
+                    int(metadata.get("step", -1)),
+                    cp.config["configurable"]["checkpoint_id"],
+                    dict(checkpoint.get("versions_seen") or {}),
+                    str(checkpoint.get("ts") or metadata.get("ts") or ""),
+                )
             )
 
-    checkpoints.sort(key=lambda x: x["step"])
+    raw.sort(key=lambda item: item[0])
+    checkpoints = []
+    previous_seen: dict = {}
+    for step, checkpoint_id, seen, ts in raw:
+        node_name = _advanced_node(seen, previous_seen)
+        previous_seen = seen
+        prog = node_progress(node_name)
+        checkpoints.append(
+            {
+                "checkpoint_id": checkpoint_id,
+                "step": step,
+                "node": node_name,
+                "label": prog.get("label") if prog else node_name,
+                "ts": ts,
+            }
+        )
     return checkpoints

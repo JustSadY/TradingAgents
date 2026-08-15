@@ -1,10 +1,10 @@
-from datetime import datetime
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.analysis import AnalysisResult
 from backend.models.shared_report import SharedReport
+
 
 async def get_user_analysis_by_id(db: AsyncSession, analysis_id: int, user_id: int) -> AnalysisResult | None:
     result = await db.execute(

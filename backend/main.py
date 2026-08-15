@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.routing import APIRoute
 from fastapi.staticfiles import StaticFiles
 
 import backend.bootstrap  # noqa: F401  (import side-effect: see backend/bootstrap.py)
@@ -66,10 +67,10 @@ async def lifespan(app: FastAPI):
     await _migrate_analysis_subpage_permissions()
 
     try:
-        from backend.core.database import AsyncSessionLocal
+        from backend.core.rls_context import BackgroundCapability, trusted_background_session
         from backend.repositories.analysis import cleanup_stale_analyses
 
-        async with AsyncSessionLocal() as db:
+        async with trusted_background_session(BackgroundCapability.STARTUP_CLEANUP) as db:
             count = await cleanup_stale_analyses(db)
             if count > 0:
                 _logger.info("Marked %d stale analyses as failed.", count)
@@ -185,11 +186,11 @@ async def _seed_setting_permissions():
     from sqlalchemy import select
 
     from backend.core.constants import SETTING_KEYS
-    from backend.core.database import AsyncSessionLocal
+    from backend.core.rls_context import BackgroundCapability, trusted_background_session
     from backend.models.page_permission import UserSettingPermission
     from backend.models.user import User
 
-    async with AsyncSessionLocal() as db:
+    async with trusted_background_session(BackgroundCapability.STARTUP_SEED) as db:
         res = await db.execute(select(User))
         users = res.scalars().all()
         for u in users:
@@ -216,12 +217,12 @@ async def _migrate_analysis_subpage_permissions():
     """
     from sqlalchemy import select
 
-    from backend.core.database import AsyncSessionLocal
+    from backend.core.rls_context import BackgroundCapability, trusted_background_session
     from backend.models.page_permission import UserPagePermission
     from backend.models.user import User
 
     new_keys = ("screener", "sector-rotation", "earnings")
-    async with AsyncSessionLocal() as db:
+    async with trusted_background_session(BackgroundCapability.STARTUP_SEED) as db:
         res = await db.execute(select(User))
         users = res.scalars().all()
         for u in users:
@@ -247,10 +248,10 @@ async def _load_cron_settings(cron):
     try:
         from sqlalchemy import select
 
-        from backend.core.database import AsyncSessionLocal
+        from backend.core.rls_context import BackgroundCapability, trusted_background_session
         from backend.models.settings import AppSettings
 
-        async with AsyncSessionLocal() as db:
+        async with trusted_background_session(BackgroundCapability.CRON_BOOTSTRAP) as db:
             app_res = await db.execute(select(AppSettings).where(AppSettings.cron_enabled))
             for app_settings in app_res.scalars():
                 await cron.apply_user_settings(app_settings)
@@ -262,11 +263,26 @@ from slowapi.errors import RateLimitExceeded
 
 from backend.core.limiter import limiter
 
+
+def _operation_id(route: APIRoute) -> str:
+    """Give each endpoint a short, stable OpenAPI operationId.
+
+    FastAPI's default embeds the full path and method
+    (``get_watchlist_api_watchlist_get``), which the generated frontend client
+    turns into names like ``useGetWatchlistApiWatchlistGet``. The first tag is
+    included because a few handler names (``get_performance``, ``delete_user``,
+    ``clear_history``) repeat across routers.
+    """
+    tag = str(route.tags[0]) if route.tags else "default"
+    return f"{tag}_{route.name}"
+
+
 app = FastAPI(
     title="TradingAgents Web API",
     version="1.0.0",
     description="AI-powered trading dashboard with simulation and live trading support",
     lifespan=lifespan,
+    generate_unique_id_function=_operation_id,
 )
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)

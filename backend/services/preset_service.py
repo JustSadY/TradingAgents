@@ -10,6 +10,7 @@ from backend.repositories.permissions import get_user_setting_permission
 from backend.repositories.users import get_user_by_id
 from backend.schemas.settings import SettingsUpdate
 
+
 class PresetError(Exception):
     """Raised for client-correctable problems (missing user/template, no
     permission, name conflict) — the API layer translates ``status_code``

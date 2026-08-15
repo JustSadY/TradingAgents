@@ -99,6 +99,8 @@ class Settings(BaseSettings):
         """
         if self.ENVIRONMENT.strip().lower() == "production":
             problems = []
+            if not self.DATABASE_URL.lower().startswith("postgresql+asyncpg://"):
+                problems.append("DATABASE_URL must use PostgreSQL/asyncpg in production")
             if not self.SECRET_KEY or self.SECRET_KEY == _DEFAULT_SECRET_KEY:
                 problems.append("SECRET_KEY must be set to a long random value")
             if not self.ENCRYPTION_KEY:

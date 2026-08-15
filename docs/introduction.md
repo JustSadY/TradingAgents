@@ -68,7 +68,7 @@ PostgreSQL is the primary application database. Provider keys and other sensitiv
 The repository supports:
 
 - One-command Linux/systemd deployment through `deploy/install.sh`.
-- Docker Compose with PostgreSQL, Redis, backend, worker, frontend, Prometheus, Grafana, PostgreSQL exporter, and Redis exporter.
+- Docker Compose with PostgreSQL, Redis, backend, worker, frontend, Prometheus, PostgreSQL exporter, and Redis exporter.
 - Manual local development with PostgreSQL, a Python virtual environment, and the Vite development server.
 
 See [installation.md](installation.md) for the current commands and required environment values.

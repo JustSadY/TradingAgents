@@ -2,6 +2,7 @@ from redis.exceptions import ConnectionError
 
 from backend.core import task_store
 
+
 class _UnavailableRedis:
     async def smembers(self, _key):
         raise ConnectionError("Redis is offline")

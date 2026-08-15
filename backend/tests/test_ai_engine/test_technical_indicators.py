@@ -5,6 +5,7 @@ from __future__ import annotations
 import pandas as pd
 import pytest
 
+
 @pytest.mark.asyncio
 async def test_collect_indicators_sends_one_identifier_per_vendor_call(monkeypatch):
     from backend.trading_agents.agents.data import technical_indicators_tools

@@ -168,6 +168,9 @@ class CronService:
 
         current_user_id.set(user_id)
         async with AsyncSessionLocal() as db:
+            from backend.core.rls_context import set_user_background_context
+
+            await set_user_background_context(db, user_id)
             u_res = await db.execute(select(User).where(User.id == user_id))
             user = u_res.scalar_one_or_none()
             if not user or not user.is_active:
@@ -179,9 +182,10 @@ class CronService:
                 return
 
             trade_date = _trade_date_for_asset("stock")
+            username = user.username
             _logger.info(
                 "User cron watchlist scan started for user=%s (id=%d), date=%s",
-                user.username, user_id, trade_date,
+                username, user_id, trade_date,
             )
             from uuid import uuid4
 
@@ -193,7 +197,7 @@ class CronService:
                 task_id = str(uuid4())
                 queued_row = None
                 try:
-                    _logger.info("User=%s queueing ticker=%s", user.username, ticker)
+                    _logger.info("User=%s queueing ticker=%s", username, ticker)
                     queued_row = await create_analysis_result(
                         db,
                         task_id=task_id,
@@ -214,7 +218,7 @@ class CronService:
                         settings=app_settings, task_id=task_id, user=user, triggered_by="cron",
                     )
                 except Exception:
-                    _logger.exception("User cron scan failed for user=%s, ticker=%s", user.username, ticker)
+                    _logger.exception("User cron scan failed for user=%s, ticker=%s", username, ticker)
                     await db.rollback()
                     from backend.repositories.analysis import update_analysis_result
                     from backend.services.analysis_service import clear_task_owner
@@ -223,7 +227,7 @@ class CronService:
                             db, queued_row.id, status="failed", heartbeat_at=datetime.now(UTC)
                         )
                     await clear_task_owner(task_id)
-            _logger.info("User cron watchlist scan completed for user=%s (id=%d)", user.username, user_id)
+            _logger.info("User cron watchlist scan completed for user=%s (id=%d)", username, user_id)
 
     def get_status(self, user_id: int | None = None) -> dict:
         if not user_id:
@@ -249,7 +253,9 @@ async def _run_performance_backfill():
         async with _job_lock("perf_backfill") as acquired:
             if not acquired:
                 return
-            async with AsyncSessionLocal() as db:
+            from backend.core.rls_context import BackgroundCapability, trusted_background_session
+
+            async with trusted_background_session(BackgroundCapability.PERFORMANCE_BACKFILL) as db:
                 await backfill_returns(db)
     except Exception:
         _logger.exception("Performance backfill error")
@@ -260,9 +266,10 @@ async def _run_position_monitor():
         async with _job_lock("position_monitor") as acquired:
             if not acquired:
                 return
+            from backend.core.rls_context import BackgroundCapability, trusted_background_session
             from backend.services.mock_trading_service import monitor_open_positions
 
-            async with AsyncSessionLocal() as db:
+            async with trusted_background_session(BackgroundCapability.POSITION_MONITOR) as db:
                 closed = await monitor_open_positions(db)
                 await db.commit()
                 if closed:

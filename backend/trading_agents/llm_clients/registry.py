@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 
+
 @dataclass(frozen=True)
 class LLMProvider:
     key: str
@@ -70,11 +71,9 @@ llm_registry.register(
         is_openai_compatible=True,
         effort_options=_STANDARD_EFFORT,
         models=[
-            ("GPT-4o - Flagship model, balanced speed and intelligence", "gpt-4o"),
-            ("GPT-4o Mini - Lightweight and cost-efficient", "gpt-4o-mini"),
-            ("o1 - Frontier reasoning model", "o1"),
-            ("o1 Mini - Fast reasoning model", "o1-mini"),
-            ("o3 Mini - Latest reasoning model", "o3-mini"),
+            ("GPT-5.6 Sol - Frontier model for complex professional work", "gpt-5.6-sol"),
+            ("GPT-5.6 Terra - Balances intelligence and cost", "gpt-5.6-terra"),
+            ("GPT-5.6 Luna - Fastest and most affordable", "gpt-5.6-luna"),
         ],
     )
 )
@@ -85,9 +84,10 @@ llm_registry.register(
         label="Anthropic (Claude)",
         effort_options=_STANDARD_EFFORT,
         models=[
-            ("Claude 3.5 Sonnet - Flagship, SOTA on agentic workflows", "claude-3-5-sonnet-latest"),
-            ("Claude 3.5 Haiku - Balanced speed and intelligence", "claude-3-5-haiku-latest"),
-            ("Claude 3 Opus - Previous frontier model", "claude-3-opus-20240229"),
+            ("Claude Opus 5 - Flagship, complex agentic and enterprise work", "claude-opus-5"),
+            ("Claude Sonnet 5 - Best combination of speed and intelligence", "claude-sonnet-5"),
+            ("Claude Fable 5 - Next-generation intelligence for long-running agents", "claude-fable-5"),
+            ("Claude Haiku 4.5 - Fastest, near-frontier intelligence", "claude-haiku-4-5"),
         ],
     )
 )
@@ -103,9 +103,10 @@ llm_registry.register(
             {"value": "high", "label": "High"},
         ],
         models=[
-            ("Gemini 1.5 Pro - Flagship, deep analytical reasoning", "gemini-1.5-pro"),
-            ("Gemini 1.5 Flash - Lightweight and fast", "gemini-1.5-flash"),
-            ("Gemini 2.0 Flash - Next-gen balanced speed and intelligence", "gemini-2.0-flash"),
+            ("Gemini 3.7 Flash - Latest Flash, complex coding and agentic workflows", "gemini-3.7-flash"),
+            ("Gemini 3.1 Pro (Preview) - Flagship, deep analytical reasoning", "gemini-3.1-pro-preview"),
+            ("Gemini 3.6 Flash - Balanced speed across everyday tasks", "gemini-3.6-flash"),
+            ("Gemini 3.5 Flash Lite - Fastest and most cost-effective", "gemini-3.5-flash-lite"),
         ],
     )
 )
@@ -115,6 +116,9 @@ llm_registry.register(
         key="nvidia",
         label="NVIDIA NIM",
         is_openai_compatible=True,
+        # TODO: not re-verified against the current NIM catalog at
+        # https://build.nvidia.com/models — the Llama 3.1/3.2 entries below
+        # predate the Nemotron 3 generation and may no longer be served.
         models=[
             ("Nemotron 3 Super 120B A12B", "nvidia/nemotron-3-super-120b-a12b"),
             ("Llama-3.1-Nemotron-70B-Instruct", "nvidia/llama-3.1-nemotron-70b-instruct"),
@@ -133,13 +137,13 @@ llm_registry.register(
         label="Mistral AI",
         effort_options=_STANDARD_EFFORT,
         models=[
-            ("Mistral Large - Flagship, state-of-the-art reasoning", "mistral-large-latest"),
-            ("Mistral Small - Fast and cost-efficient", "mistral-small-latest"),
+            ("Mistral Medium 3.5 - Frontier-class, agentic and coding", "mistral-medium-3-5-26-04"),
+            ("Mistral Large 3 - Open-weight general-purpose multimodal", "mistral-large-3-25-12"),
+            ("Mistral Small 4 - Unified instruct, reasoning and coding", "mistral-small-4-0-26-03"),
+            ("Ministral 3 14B - Compact text and vision model", "ministral-3-14b-25-12"),
+            ("Ministral 3 8B - Efficient text and vision model", "ministral-3-8b-25-12"),
+            ("Ministral 3 3B - Lightweight text and vision model", "ministral-3-3b-25-12"),
             ("Codestral - Code generation specialist", "codestral-latest"),
-            ("Open Mistral Nemo - Open-weight balanced model", "open-mistral-nemo"),
-            ("Open Mixtral 8x22B - High-capacity MoE", "open-mixtral-8x22b"),
-            ("Open Mixtral 8x7B - Efficient MoE", "open-mixtral-8x7b"),
-            ("Open Mistral 7B - Lightweight open model", "open-mistral-7b"),
         ],
     )
 )
@@ -150,12 +154,11 @@ llm_registry.register(
         label="Groq (Fast Inference)",
         effort_options=_STANDARD_EFFORT,
         models=[
-            ("Llama 3.3 70B - Fast inference via Groq", "llama-3.3-70b-versatile"),
-            ("Llama 3.1 70B - Groq-hosted versatile model", "llama-3.1-70b-versatile"),
-            ("Llama 3.1 8B - Fast and lightweight", "llama-3.1-8b-instant"),
-            ("Llama Guard 3 8B - Safety classification", "llama-guard-3-8b"),
-            ("Mixtral 8x7B - Efficient MoE on Groq", "mixtral-8x7b-32768"),
-            ("Gemma 2 9B - Google's efficient model", "gemma2-9b-it"),
+            ("GPT-OSS 120B - Flagship open-weight model on Groq", "openai/gpt-oss-120b"),
+            ("GPT-OSS 20B - Highest throughput on Groq", "openai/gpt-oss-20b"),
+            ("Groq Compound - Built-in web search and code execution", "groq/compound"),
+            ("Groq Compound Mini - Lighter Compound variant", "groq/compound-mini"),
+            ("Qwen3.6 27B (Preview) - Multilingual open model", "qwen/qwen3.6-27b"),
         ],
     )
 )
@@ -166,9 +169,11 @@ llm_registry.register(
         label="DeepSeek",
         is_openai_compatible=True,
         effort_options=_STANDARD_EFFORT,
+        # The legacy ``deepseek-chat`` / ``deepseek-reasoner`` aliases were
+        # discontinued on 2026-07-24 and now return an error.
         models=[
-            ("DeepSeek V3 - Flagship, state-of-the-art reasoning", "deepseek-chat"),
-            ("DeepSeek R1 - Advanced reasoning with chain-of-thought", "deepseek-reasoner"),
+            ("DeepSeek V4 Pro - Flagship, 1M context, thinking mode", "deepseek-v4-pro"),
+            ("DeepSeek V4 Flash - Fast and cost-efficient", "deepseek-v4-flash"),
         ],
     )
 )
@@ -179,19 +184,17 @@ llm_registry.register(
         label="Ollama (Local)",
         is_openai_compatible=True,
         requires_api_key=False,
+        # Ollama tags are resolved against the user's local install, so these
+        # are suggestions rather than a hosted catalog; any pulled tag works.
         models=[
-            ("Llama 3.3 70B - Meta's latest 70B instruction model", "llama3.3"),
-            ("Llama 3.2 3B - Fast and lightweight", "llama3.2"),
-            ("Llama 3.1 8B - Balanced speed and quality", "llama3.1"),
-            ("Llama 3.1 70B - High-quality 70B model", "llama3.1:70b"),
-            ("Gemma 3 27B - Google's open model", "gemma3:27b"),
-            ("Gemma 3 12B - Compact Google model", "gemma3:12b"),
-            ("Qwen 2.5 72B - Alibaba's flagship open model", "qwen2.5:72b"),
-            ("Qwen 2.5 14B - Mid-size Qwen model", "qwen2.5:14b"),
+            ("Qwen3.6 27B - Agentic coding and reasoning", "qwen3.6:27b"),
+            ("Qwen3 14B - Mid-size general-purpose model", "qwen3:14b"),
+            ("Gemma 4 27B - Google's open model", "gemma4:27b"),
+            ("Gemma 4 12B - Compact Google model", "gemma4:12b"),
+            ("Llama 3.3 70B - Meta's 70B instruction model", "llama3.3"),
             ("DeepSeek R1 32B - Reasoning model", "deepseek-r1:32b"),
             ("DeepSeek R1 14B - Compact reasoning model", "deepseek-r1:14b"),
             ("Mistral 7B - Fast general-purpose model", "mistral"),
-            ("Phi-4 14B - Microsoft's small capable model", "phi4"),
         ],
     )
 )

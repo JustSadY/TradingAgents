@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, act } from '@testing-library/react'
+import { screen } from '@testing-library/react'
+import { renderWithQuery } from '../../../test/renderWithQuery'
 import axios from 'axios'
 import AgentSettingsPanel from '../AgentSettingsPanel'
 
@@ -67,45 +68,38 @@ describe('AgentSettingsPanel', () => {
 
   it('shows loading state initially', () => {
     vi.spyOn(axios, 'get').mockImplementation(() => new Promise(() => {}))
-    render(<AgentSettingsPanel />)
+    renderWithQuery(<AgentSettingsPanel />)
     expect(screen.getByText('common.loading')).toBeInTheDocument()
   })
 
   it('renders agent settings after loading', async () => {
     vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
-    await act(async () => {
-      render(<AgentSettingsPanel />)
-    })
-    expect(screen.getByText('Portfolio Manager')).toBeInTheDocument()
+    renderWithQuery(<AgentSettingsPanel />)
+    expect(await screen.findByText('Portfolio Manager')).toBeInTheDocument()
     expect(screen.getByText('Market Intelligence')).toBeInTheDocument()
   })
 
   it('shows empty state when no agents in meta', async () => {
     mockUseMeta.mockReturnValue({ agents: [], signals: [] })
     vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
-    await act(async () => {
-      render(<AgentSettingsPanel />)
-    })
-    expect(screen.getByText(/No agent configurations found/)).toBeInTheDocument()
+    renderWithQuery(<AgentSettingsPanel />)
+    expect(await screen.findByText(/No agent configurations found/)).toBeInTheDocument()
   })
 
   it('shows error state when settings is null', async () => {
     mockUseMeta.mockReturnValue({ agents: fullAgentsMeta, signals: [] })
     vi.spyOn(axios, 'get').mockRejectedValue({ response: { data: { detail: 'Failed to load.' } } })
-    await act(async () => {
-      render(<AgentSettingsPanel />)
-    })
-    expect(screen.getByText('Failed to load.')).toBeInTheDocument()
+    renderWithQuery(<AgentSettingsPanel />)
+    expect(await screen.findByText('Failed to load.')).toBeInTheDocument()
   })
 
   it('displays LLM settings fields for agents with schema', async () => {
     mockUseMeta.mockReturnValue({ agents: fullAgentsMeta, signals: [] })
     vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
-    await act(async () => {
-      render(<AgentSettingsPanel />)
-    })
+    renderWithQuery(<AgentSettingsPanel />)
+
     // Click the expand button to show LLM settings for portfolio_manager
-    const configureButtons = screen.getAllByText('Configure LLM settings')
+    const configureButtons = await screen.findAllByText('Configure LLM settings')
     expect(configureButtons.length).toBeGreaterThan(0)
   })
 })

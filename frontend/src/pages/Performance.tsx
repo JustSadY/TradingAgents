@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
-import axios from 'axios'
+import { useState } from 'react'
+import { useAnalysisGetPerformance, useAnalysisListAnalysis, useAnalysisGetPerformanceAttribution } from '../api/generated/analysis/analysis'
+import { useTradingGetPortfolioStats } from '../api/generated/trading/trading'
+import { useAnalyticsGetTokenUsage } from '../api/generated/analytics/analytics'
 import { BarChart2, TrendingUp, TrendingDown, Target, Search, Activity, Trophy, Skull, ShieldAlert, Zap, DollarSign } from 'lucide-react'
 import { BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, PieChart, Pie, Legend } from 'recharts'
 import { useTranslation } from '../contexts/LanguageContext'
@@ -68,37 +70,26 @@ function ReturnCell({ value }: { value: number | null }) {
 
 export default function Performance() {
   const { t } = useTranslation()
-  const [perf, setPerf] = useState<PerfData | null>(null)
-  const [history, setHistory] = useState<HistoryItem[]>([])
-  const [attribution, setAttribution] = useState<AttributionItem[]>([])
-  const [tradingStats, setTradingStats] = useState<TradingStats | null>(null)
   const [ticker, setTicker] = useState('')
   const [filterTicker, setFilterTicker] = useState('')
-  const [loading, setLoading] = useState(true)
-  const [tokenUsage, setTokenUsage] = useState<TokenUsage | null>(null)
+  // Queries are keyed on the *applied* filter, so typing in the box does not
+  // refetch; pressing Filter does.
+  const tickerParam = filterTicker ? { ticker: filterTicker } : {}
+  const perfQuery = useAnalysisGetPerformance(tickerParam)
+  const historyQuery = useAnalysisListAnalysis({ limit: 100, ...tickerParam })
+  const attributionQuery = useAnalysisGetPerformanceAttribution()
+  const statsQuery = useTradingGetPortfolioStats()
+  const tokenUsageQuery = useAnalyticsGetTokenUsage()
 
-  const load = async (ti?: string) => {
-    setLoading(true)
-    try {
-      const [p, h, attr, ts] = await Promise.all([
-        axios.get('/api/analysis/performance', { params: ti ? { ticker: ti } : {} }).then(r => r.data),
-        axios.get('/api/analysis/history', { params: { limit: 100, ...(ti ? { ticker: ti } : {}) } }).then(r => r.data),
-        axios.get('/api/analysis/performance-attribution').then(r => r.data).catch(() => ({ attribution: [] })),
-        axios.get('/api/trading/portfolio-stats').then(r => r.data).catch(() => null),
-      ])
-      setPerf(p)
-      setHistory(h.filter((x: HistoryItem) => x.raw_return !== null))
-      setAttribution(attr.attribution || [])
-      setTradingStats(ts)
-    } finally { setLoading(false) }
-  }
+  const perf = (perfQuery.data ?? null) as unknown as PerfData | null
+  const history = ((Array.isArray(historyQuery.data) ? historyQuery.data : []) as unknown as HistoryItem[])
+    .filter(x => x.raw_return !== null)
+  const attribution = (((attributionQuery.data as { attribution?: AttributionItem[] } | undefined)?.attribution) ?? []) as AttributionItem[]
+  const tradingStats = (statsQuery.data ?? null) as unknown as TradingStats | null
+  const tokenUsage = (tokenUsageQuery.data ?? null) as unknown as TokenUsage | null
+  const loading = perfQuery.isPending || historyQuery.isPending
 
-  useEffect(() => {
-    load()
-    axios.get('/api/analytics/token-usage').then(r => setTokenUsage(r.data)).catch(e => console.error('Failed to load token usage', e))
-  }, [])
-
-  const handleFilter = () => { setFilterTicker(ticker); load(ticker || undefined) }
+  const handleFilter = () => setFilterTicker(ticker)
 
   const bySignalData = perf ? Object.entries(perf.by_signal).map(([sig, d]) => ({
     signal: sig, win_rate: d.win_rate, avg_return: d.avg_return, count: d.count,
@@ -119,7 +110,7 @@ export default function Performance() {
               placeholder="AAPL" value={ticker} onChange={e => setTicker(e.target.value.toUpperCase())} onKeyDown={e => e.key === 'Enter' && handleFilter()} />
           </div>
           <button onClick={handleFilter} className="bg-violet-600 hover:bg-violet-500 text-white text-xs font-semibold px-4 py-2 rounded-xl transition cursor-pointer">{t('performance.filter_btn')}</button>
-          {filterTicker && <button onClick={() => { setTicker(''); setFilterTicker(''); load() }} className="text-slate-500 hover:text-white text-xs font-medium cursor-pointer">{t('performance.filter_clear')}</button>}
+          {filterTicker && <button onClick={() => { setTicker(''); setFilterTicker('') }} className="text-slate-500 hover:text-white text-xs font-medium cursor-pointer">{t('performance.filter_clear')}</button>}
         </div>
       </div>
 

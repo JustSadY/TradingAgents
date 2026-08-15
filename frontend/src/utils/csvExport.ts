@@ -29,17 +29,29 @@ export function exportPortfolioCSV(holdings: { ticker: string; quantity: number;
   downloadCSV(`portfolio_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows)
 }
 
-export function exportOrdersCSV(orders: { ticker: string; action: string; quantity_filled: number; price_per_share: number | null; total_value: number | null; realized_pnl: number | null; ai_signal: string; status: string; created_at: string }[]): void {
+// Optional fields mirror the generated OrderRead: the API omits them for
+// orders that never filled, and the body below already renders those as blank.
+export function exportOrdersCSV(orders: {
+  ticker: string
+  action: string
+  quantity_filled?: number | null
+  price_per_share?: number | null
+  total_value?: number | null
+  realized_pnl?: number | null
+  ai_signal?: string | null
+  status: string
+  created_at: string
+}[]): void {
   const headers = ['Date', 'Ticker', 'Action', 'Qty Filled', 'Price/Share', 'Total Value', 'Realized P&L', 'Signal', 'Status']
   const rows = orders.map(o => [
     o.created_at.slice(0, 10),
     o.ticker,
     o.action,
-    o.quantity_filled,
+    o.quantity_filled ?? '',
     o.price_per_share?.toFixed(4) ?? '',
     o.total_value?.toFixed(2) ?? '',
     o.realized_pnl?.toFixed(2) ?? '',
-    o.ai_signal,
+    o.ai_signal ?? '',
     o.status,
   ])
   downloadCSV(`orders_${new Date().toISOString().slice(0, 10)}.csv`, headers, rows)

@@ -9,6 +9,7 @@ from backend.repositories.system_settings import (
     update_system_settings_fields,
 )
 
+
 class TestSystemSettingsRepository:
     async def test_create_system_settings(self, db: AsyncSession):
         ss = await create_system_settings(db, ss_id=1)

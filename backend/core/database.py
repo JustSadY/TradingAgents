@@ -61,8 +61,10 @@ _BASELINE_APP_TABLES = frozenset(
     }
 )
 
+
 class Base(DeclarativeBase):
     pass
+
 
 async def get_db() -> AsyncGenerator[AsyncSession, None]:
     async with AsyncSessionLocal() as session:
@@ -73,6 +75,17 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             await session.rollback()
             raise
 
+
+async def set_tenant_context(db: AsyncSession, *, user_id: int, is_admin: bool = False) -> None:
+    """Compatibility wrapper for authenticated request context."""
+    from backend.core.rls_context import set_request_admin_context, set_request_tenant_context
+
+    if is_admin:
+        await set_request_admin_context(db, user_id)
+    else:
+        await set_request_tenant_context(db, user_id)
+
+
 async def _has_alembic_version(conn) -> bool:
     if conn.dialect.name == "sqlite":
         row = (
@@ -82,6 +95,7 @@ async def _has_alembic_version(conn) -> bool:
     row = (await conn.execute(text("SELECT to_regclass('public.alembic_version')"))).scalar_one_or_none()
     return row is not None
 
+
 def _alembic_config():
     from alembic.config import Config
 
@@ -90,6 +104,7 @@ def _alembic_config():
     cfg.set_main_option("sqlalchemy.url", settings.DATABASE_URL.replace("%", "%%"))
     return cfg
 
+
 async def _run_alembic(command_name: str, revision: str) -> None:
     """Run Alembic's synchronous command API off the event loop."""
     from alembic import command
@@ -97,13 +112,9 @@ async def _run_alembic(command_name: str, revision: str) -> None:
     fn = getattr(command, command_name)
     await asyncio.to_thread(fn, _alembic_config(), revision)
 
-def _is_complete_unversioned_app_schema(table_names: set[str]) -> bool:
-    """Return whether *table_names* can safely be stamped at the baseline.
 
-    A fresh database contains no application tables and should receive the
-    baseline via ``alembic upgrade head``.  A partial database cannot safely
-    be stamped because the baseline would falsely claim tables already exist.
-    """
+def _is_complete_unversioned_app_schema(table_names: set[str]) -> bool:
+    """Return whether *table_names* can safely be stamped at the baseline."""
     existing = table_names.intersection(_BASELINE_APP_TABLES)
     if not existing:
         return False
@@ -119,6 +130,7 @@ def _is_complete_unversioned_app_schema(table_names: set[str]) -> bool:
         )
     return True
 
+
 async def _has_complete_unversioned_app_schema(conn) -> bool:
     """Inspect the active PostgreSQL schema before an automatic baseline stamp."""
     rows = await conn.execute(
@@ -129,20 +141,35 @@ async def _has_complete_unversioned_app_schema(conn) -> bool:
     )
     return _is_complete_unversioned_app_schema(set(rows.scalars()))
 
-async def create_all_tables():
-    """Bring the schema to the current Alembic head before serving requests.
 
-    SQLAlchemy ``create_all`` cannot alter existing tables, so treating an
-    existing ``alembic_version`` table as a reason to return silently meant
-    every later migration was skipped.  PostgreSQL deployments now use
-    Alembic exclusively.  SQLite remains a lightweight development/test
-    fallback because the production migrations intentionally use PostgreSQL
-    foreign-key and index operations.
-    """
-    # Import the package rather than relying on whichever API router happened
-    # to be loaded before startup.  New exact-state tables (for example
-    # AssetStrategy) may otherwise be absent from SQLite ``create_all`` even
-    # though their model exists and PostgreSQL/Alembic knows about it.
+
+def _expected_alembic_heads() -> set[str]:
+    from alembic.script import ScriptDirectory
+
+    return set(ScriptDirectory.from_config(_alembic_config()).get_heads())
+
+
+async def _verify_schema_at_alembic_head() -> None:
+    async with engine.connect() as conn:
+        if not await _has_alembic_version(conn):
+            raise RuntimeError(
+                "Production database is not Alembic-managed. Run `alembic -c backend/alembic.ini upgrade head` "
+                "with the migration role before starting the application."
+            )
+        rows = await conn.execute(text("SELECT version_num FROM alembic_version"))
+        current = set(rows.scalars())
+
+    expected = _expected_alembic_heads()
+    if current != expected:
+        raise RuntimeError(
+            "Production database schema is not at Alembic head: "
+            f"current={sorted(current)}, expected={sorted(expected)}. "
+            "Run the migration step before starting web/worker processes."
+        )
+
+
+async def create_all_tables():
+    """Bring the schema to the current Alembic head before serving requests."""
     import backend.models  # noqa: F401
 
     if engine.dialect.name == "sqlite":
@@ -165,6 +192,13 @@ async def create_all_tables():
             await normalize_sqlite_simulation_entry_commissions(conn)
         return
 
+    if settings.ENVIRONMENT.strip().lower() == "production":
+        await _verify_schema_at_alembic_head()
+        from backend.core.rls import verify_runtime_rls_role
+
+        await verify_runtime_rls_role(engine)
+        return
+
     async with engine.begin() as conn:
         has_version = await _has_alembic_version(conn)
         legacy_schema = not has_version and await _has_complete_unversioned_app_schema(conn)
@@ -175,6 +209,9 @@ async def create_all_tables():
 
     try:
         await _run_alembic("upgrade", "head")
+        from backend.core.rls import verify_runtime_rls_role
+
+        await verify_runtime_rls_role(engine)
     except Exception:
-        _logger.exception("Alembic upgrade failed; refusing to start with an unknown schema state")
+        _logger.exception("Alembic upgrade or RLS runtime-role validation failed; refusing unknown database security state")
         raise

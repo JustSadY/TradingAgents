@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.log import SystemLog
 from backend.repositories.system_log import list_all_logs, list_user_logs
 
+
 class TestSystemLogRepository:
     async def _create_log(
         self,

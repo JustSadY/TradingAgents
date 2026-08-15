@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.alert import PriceAlert
 from backend.repositories.common import scope_to_user
 
+
 async def list_alerts(db: AsyncSession, user=None) -> list[PriceAlert]:
     q = select(PriceAlert).order_by(PriceAlert.created_at.desc())
     q = scope_to_user(q, PriceAlert, user)

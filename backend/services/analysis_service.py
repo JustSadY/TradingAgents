@@ -30,6 +30,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core import task_store
 from backend.core.database import AsyncSessionLocal
+from backend.core.rls_context import set_user_background_context
 from backend.models.settings import AppSettings
 from backend.services.execution.base import OrderResult
 from backend.services.trading_orchestrator import auto_execute_signals_enabled, place_signal_order
@@ -163,6 +164,8 @@ async def _heartbeat_loop(task_id: str, user_id: int | None) -> None:
                 from backend.models.analysis import AnalysisResult
 
                 async with AsyncSessionLocal() as db:
+                    if user_id is not None:
+                        await set_user_background_context(db, user_id)
                     await db.execute(
                         update(AnalysisResult)
                         .where(AnalysisResult.task_id == task_id)
@@ -377,6 +380,8 @@ async def run_analysis_task(
     retry_scheduled = False
     analysis_completed = False
     async with AsyncSessionLocal() as db:
+        if user is not None:
+            await set_user_background_context(db, user.id)
         try:
             _, row = await run_analysis(
                 ticker,
@@ -551,6 +556,8 @@ async def run_portfolio_task(
                 raise asyncio.CancelledError
 
         async with AsyncSessionLocal() as db:
+            if user is not None:
+                await set_user_background_context(db, user.id)
             await run_portfolio_analysis(
                 tickers,
                 trade_date,
@@ -688,6 +695,8 @@ async def rollback_and_resume_analysis(
                 user_id=resume_user_id,
             )
             async with AsyncSessionLocal() as session:
+                if current_user is not None:
+                    await set_user_background_context(session, current_user.id)
                 try:
                     from backend.services.analysis.orchestrator import run_individual_analysis
 

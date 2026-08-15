@@ -2,6 +2,7 @@ import pytest
 
 from backend.core.config import Settings
 
+
 @pytest.mark.parametrize(
     ("configured", "expected"),
     [

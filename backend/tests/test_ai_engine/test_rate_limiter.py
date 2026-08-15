@@ -4,6 +4,7 @@ import pytest
 
 from backend.trading_agents.dataflows.rate_limiter import TokenBucketRateLimiter
 
+
 def test_acquire_sync_grants_token():
     limiter = TokenBucketRateLimiter(calls=10, window_seconds=60.0)
     assert limiter.acquire_sync(timeout=1) is True

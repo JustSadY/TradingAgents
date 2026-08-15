@@ -2,6 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+
 class MultiTickerRunRequest(BaseModel):
     tickers: list[str] = Field(..., min_length=2, max_length=10)
     trade_date: str

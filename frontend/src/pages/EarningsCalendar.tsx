@@ -1,6 +1,10 @@
-import { useState, useCallback, useEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
+import type { GridColDef } from '@mui/x-data-grid'
 import { CalendarDays, Loader2, Search, Play, AlertTriangle } from 'lucide-react'
-import axios from '../utils/api'
+import { useEarningsEarningsCalendar } from '../api/generated/earnings/earnings'
+import { useAnalysisRunAnalysis } from '../api/generated/analysis/analysis'
+import { useQueryErrorToast } from '../api/useQueryErrorToast'
+import AppDataGrid from '../components/ui/AppDataGrid'
 import { notify } from '../utils/notify'
 import { useTranslation } from '../contexts/LanguageContext'
 
@@ -40,9 +44,7 @@ function SurpriseBadge({ pct }: { pct: number | null }) {
   if (pct === null) return <span className="text-slate-600 font-mono">—</span>
   const positive = pct >= 0
   return (
-    <span
-      className={`font-mono font-bold ${positive ? 'text-emerald-400' : 'text-rose-400'}`}
-    >
+    <span className={`font-mono font-bold ${positive ? 'text-emerald-400' : 'text-rose-400'}`}>
       {positive ? '+' : ''}{pct.toFixed(2)}%
     </span>
   )
@@ -79,58 +81,154 @@ function fmtDaysUntil(days: number | null): string {
 
 export default function EarningsCalendar() {
   const { t } = useTranslation()
-  const [results, setResults] = useState<EarningsEntry[]>([])
-  const [loading, setLoading] = useState(false)
   const [tickerInput, setTickerInput] = useState('')
   const [analyzing, setAnalyzing] = useState<string | null>(null)
-  const [hasLoaded, setHasLoaded] = useState(false)
 
-  const fetchEarnings = useCallback(async (overrideTickers?: string) => {
-    setLoading(true)
-    setResults([])
-    try {
-      const params: Record<string, string> = {}
-      const query = overrideTickers ?? tickerInput
-      if (query.trim()) {
-        params.tickers = query
-          .split(/[\s,]+/)
-          .map(t => t.trim().toUpperCase())
-          .filter(Boolean)
-          .join(',')
-      }
-      const r = await axios.get('/api/market/earnings-calendar', { params })
-      setResults(r.data.results || [])
-      setHasLoaded(true)
-      if ((r.data.results || []).length === 0) {
-        notify('info', 'No earnings data found for the selected tickers.', 'Earnings Calendar')
-      }
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Failed to load earnings data.', 'Earnings Calendar')
-    } finally {
-      setLoading(false)
+  // The submitted tickers, not the live input: typing must not refetch.
+  const [submitted, setSubmitted] = useState('')
+
+  const normalize = (query: string) =>
+    query
+      .split(/[\s,]+/)
+      .map(ticker => ticker.trim().toUpperCase())
+      .filter(Boolean)
+      .join(',')
+
+  const params = submitted.trim() ? { tickers: normalize(submitted) } : {}
+  const earningsQuery = useEarningsEarningsCalendar(params)
+  const loading = earningsQuery.isFetching
+  const results = ((earningsQuery.data as { results?: EarningsEntry[] } | undefined)?.results ?? []) as EarningsEntry[]
+
+  useEffect(() => {
+    if (!earningsQuery.isSuccess) return
+    if (results.length === 0) {
+      notify('info', 'No earnings data found for the selected tickers.', 'Earnings Calendar')
     }
+  }, [earningsQuery.isSuccess, earningsQuery.dataUpdatedAt, results.length])
+
+  useQueryErrorToast(earningsQuery.error, 'Failed to load earnings data.', 'Earnings Calendar')
+
+  const fetchEarnings = useCallback((overrideTickers?: string) => {
+    setSubmitted(overrideTickers ?? tickerInput)
   }, [tickerInput])
 
-  // Auto-load watchlist on mount
-  useEffect(() => {
-    fetchEarnings('')
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const runAnalysis = useCallback(async (ticker: string) => {
+  const analysisMutation = useAnalysisRunAnalysis()
+  const runAnalysis = useCallback((ticker: string) => {
     setAnalyzing(ticker)
-    try {
-      await axios.post('/api/analysis/run', {
-        ticker,
-        trade_date: new Date().toISOString().slice(0, 10),
-      })
-      notify('success', `Analysis started for ${ticker}`, 'Analysis')
-    } catch (err: any) {
-      notify('error', err.response?.data?.detail || 'Failed to start analysis.', 'Analysis')
-    } finally {
-      setAnalyzing(null)
-    }
-  }, [])
+    analysisMutation.mutate(
+      { data: { ticker, trade_date: new Date().toISOString().slice(0, 10) } },
+      {
+        onSuccess: () => notify('success', `Analysis started for ${ticker}`, 'Analysis'),
+        onError: (err) => {
+          const detail = (err as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+          notify('error', detail || 'Failed to start analysis.', 'Analysis')
+        },
+        onSettled: () => setAnalyzing(null),
+      },
+    )
+  }, [analysisMutation])
+
+  const columns = useMemo<GridColDef<EarningsEntry>[]>(() => [
+    {
+      field: 'ticker',
+      headerName: t('earnings.col_ticker'),
+      minWidth: 135,
+      flex: 0.8,
+      renderCell: ({ row }) => (
+        <div className="flex items-center gap-2">
+          <span className="font-mono font-bold text-white text-[11px]">{row.ticker}</span>
+          <EarningsSoonBadge days_until={row.days_until} t={t} />
+        </div>
+      ),
+    },
+    {
+      field: 'earnings_date',
+      headerName: t('earnings.col_date'),
+      minWidth: 145,
+      renderCell: ({ value }) => <span className="text-slate-300 font-mono text-[11px]">{fmtDate((value as string | null) ?? null)}</span>,
+    },
+    {
+      field: 'days_until',
+      headerName: t('earnings.col_days_until'),
+      type: 'number',
+      minWidth: 115,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ value }) => {
+        const days = value == null ? null : Number(value)
+        const tone = days !== null && days >= 0 && days <= 7
+          ? 'text-amber-400'
+          : days !== null && days >= 0
+            ? 'text-violet-400'
+            : 'text-slate-500'
+        return <span className={`font-mono font-bold text-[11px] ${tone}`}>{fmtDaysUntil(days)}</span>
+      },
+    },
+    {
+      field: 'eps_estimate',
+      headerName: t('earnings.col_eps_estimate'),
+      type: 'number',
+      minWidth: 120,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ value }) => <span className="font-mono text-slate-300 text-[11px]">{value == null ? '—' : `$${fmt(Number(value))}`}</span>,
+    },
+    {
+      field: 'reported_eps',
+      headerName: t('earnings.col_reported_eps'),
+      type: 'number',
+      minWidth: 125,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ row }) => {
+        if (row.reported_eps === null) return <span className="text-slate-600">—</span>
+        const tone = row.eps_estimate === null
+          ? 'text-slate-300'
+          : row.reported_eps >= row.eps_estimate
+            ? 'text-emerald-400 font-bold'
+            : 'text-rose-400 font-bold'
+        return <span className={`font-mono text-[11px] ${tone}`}>${fmt(row.reported_eps)}</span>
+      },
+    },
+    {
+      field: 'surprise_pct',
+      headerName: t('earnings.col_surprise'),
+      type: 'number',
+      minWidth: 115,
+      align: 'right',
+      headerAlign: 'right',
+      renderCell: ({ value }) => <SurpriseBadge pct={value == null ? null : Number(value)} />,
+    },
+    {
+      field: 'status',
+      headerName: t('earnings.col_status'),
+      minWidth: 115,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: ({ value }) => <StatusBadge status={String(value ?? 'unknown')} t={t} />,
+    },
+    {
+      field: 'action',
+      headerName: t('earnings.col_action'),
+      minWidth: 115,
+      sortable: false,
+      filterable: false,
+      align: 'center',
+      headerAlign: 'center',
+      renderCell: ({ row }) => (
+        <button
+          onClick={() => runAnalysis(row.ticker)}
+          disabled={analyzing === row.ticker}
+          title={t('earnings.run_analysis_title').replace('{ticker}', row.ticker)}
+          aria-label={`Analyse ${row.ticker}`}
+          className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-lg bg-violet-600/10 hover:bg-violet-600/20 text-violet-400 border border-violet-500/20 hover:border-violet-500/40 disabled:opacity-40 transition-all cursor-pointer"
+        >
+          {analyzing === row.ticker ? <Loader2 size={10} className="animate-spin" /> : <Play size={10} />}
+          {t('earnings.analyse')}
+        </button>
+      ),
+    },
+  ], [analyzing, runAnalysis, t])
 
   const handleSearch = useCallback(() => {
     fetchEarnings()
@@ -140,23 +238,22 @@ export default function EarningsCalendar() {
     <div className="p-4 md:p-6 space-y-6 max-w-6xl mx-auto">
       {/* Header */}
       <div>
-          <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight flex items-center gap-2">
-            <CalendarDays className="text-violet-400" size={20} />
-            {t('earnings.title')}
-          </h2>
-          <p className="text-xs text-slate-500 mt-1">
-            {t('earnings.subtitle')}
-          </p>
+        <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight flex items-center gap-2">
+          <CalendarDays className="text-violet-400" size={20} />
+          {t('earnings.title')}
+        </h2>
+        <p className="text-xs text-slate-500 mt-1">{t('earnings.subtitle')}</p>
       </div>
 
       {/* Controls */}
       <div className="glass-panel rounded-2xl p-5 space-y-4">
         <div className="flex gap-3 items-end">
           <div className="flex-1">
-            <label className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
+            <label htmlFor="earnings-tickers" className="block text-[10px] font-bold text-slate-500 uppercase tracking-wider mb-1.5">
               {t('earnings.ticker_label')}
             </label>
             <input
+              id="earnings-tickers"
               type="text"
               value={tickerInput}
               onChange={e => setTickerInput(e.target.value)}
@@ -170,175 +267,41 @@ export default function EarningsCalendar() {
             disabled={loading}
             className="flex items-center gap-2 bg-violet-600 hover:bg-violet-500 disabled:opacity-40 text-white text-xs font-bold rounded-xl px-4 py-2.5 shadow shadow-violet-600/25 transition-all cursor-pointer"
           >
-            {loading ? (
-              <Loader2 size={13} className="animate-spin" />
-            ) : (
-              <Search size={13} />
-            )}
+            {loading ? <Loader2 size={13} className="animate-spin" /> : <Search size={13} />}
             {loading ? t('earnings.loading') : t('earnings.search')}
           </button>
         </div>
       </div>
 
-      {/* Results Table */}
-      {loading ? (
-        <div className="glass-panel rounded-2xl p-12 text-center">
-          <Loader2 size={24} className="animate-spin text-violet-400 mx-auto mb-3" />
-          <p className="text-xs text-slate-500">{t('earnings.fetching')}</p>
-        </div>
-      ) : hasLoaded && results.length === 0 ? (
-        <div className="glass-panel rounded-2xl p-12 text-center">
-          <CalendarDays size={32} className="text-slate-600 opacity-30 mx-auto mb-3" />
-          <p className="text-sm font-semibold text-slate-400">{t('earnings.no_data')}</p>
-          <p className="text-xs text-slate-600 mt-1">
-            {t('earnings.no_data_hint')}
+      {results.length > 0 && (
+        <div className="flex items-center justify-between px-1">
+          <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
+            {results.length} {t('earnings.col_ticker')}{results.length !== 1 ? 's' : ''}
           </p>
+          <p className="text-[9px] text-slate-600 font-medium">{t('earnings.sorted_by_date')}</p>
         </div>
-      ) : results.length > 0 ? (
-        <div className="glass-panel rounded-2xl overflow-hidden">
-          {/* Table header */}
-          <div className="px-5 py-3.5 border-b border-white/[0.04] flex items-center justify-between">
-            <p className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">
-              {results.length} {t('earnings.col_ticker')}{results.length !== 1 ? 's' : ''}
-            </p>
-            <p className="text-[9px] text-slate-600 font-medium">
-              {t('earnings.sorted_by_date')}
-            </p>
-          </div>
+      )}
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="border-b border-white/[0.04]">
-                  <th className="px-4 py-2.5 text-left text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    {t('earnings.col_ticker')}
-                  </th>
-                  <th className="px-4 py-2.5 text-left text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    {t('earnings.col_date')}
-                  </th>
-                  <th className="px-4 py-2.5 text-right text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    {t('earnings.col_days_until')}
-                  </th>
-                  <th className="px-4 py-2.5 text-right text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    {t('earnings.col_eps_estimate')}
-                  </th>
-                  <th className="px-4 py-2.5 text-right text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    {t('earnings.col_reported_eps')}
-                  </th>
-                  <th className="px-4 py-2.5 text-right text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    {t('earnings.col_surprise')}
-                  </th>
-                  <th className="px-4 py-2.5 text-center text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    {t('earnings.col_status')}
-                  </th>
-                  <th className="px-4 py-2.5 text-center text-[9px] uppercase tracking-wider text-slate-500 font-bold">
-                    {t('earnings.col_action')}
-                  </th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-white/[0.02]">
-                {results.map(row => {
-                  const isPositiveSurprise = row.surprise_pct !== null && row.surprise_pct >= 0
-                  const rowHighlight =
-                    row.status === 'reported' && row.surprise_pct !== null
-                      ? isPositiveSurprise
-                        ? 'hover:bg-emerald-500/[0.03]'
-                        : 'hover:bg-rose-500/[0.03]'
-                      : 'hover:bg-white/[0.01]'
-
-                  return (
-                    <tr
-                      key={row.ticker}
-                      className={`transition-colors ${rowHighlight}`}
-                    >
-                      {/* Ticker */}
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono font-bold text-white text-[11px]">
-                            {row.ticker}
-                          </span>
-                          <EarningsSoonBadge days_until={row.days_until} t={t} />
-                        </div>
-                      </td>
-
-                      {/* Earnings Date */}
-                      <td className="px-4 py-3 text-slate-300 font-mono text-[11px]">
-                        {fmtDate(row.earnings_date)}
-                      </td>
-
-                      {/* Days Until */}
-                      <td className="px-4 py-3 text-right">
-                        <span
-                          className={`font-mono font-bold text-[11px] ${
-                            row.days_until !== null && row.days_until >= 0 && row.days_until <= 7
-                              ? 'text-amber-400'
-                              : row.days_until !== null && row.days_until >= 0
-                              ? 'text-violet-400'
-                              : 'text-slate-500'
-                          }`}
-                        >
-                          {fmtDaysUntil(row.days_until)}
-                        </span>
-                      </td>
-
-                      {/* EPS Estimate */}
-                      <td className="px-4 py-3 text-right font-mono text-slate-300 text-[11px]">
-                        {row.eps_estimate !== null ? `$${fmt(row.eps_estimate)}` : <span className="text-slate-600">—</span>}
-                      </td>
-
-                      {/* Reported EPS */}
-                      <td className="px-4 py-3 text-right font-mono text-[11px]">
-                        {row.reported_eps !== null ? (
-                          <span
-                            className={
-                              row.eps_estimate !== null
-                                ? row.reported_eps >= row.eps_estimate
-                                  ? 'text-emerald-400 font-bold'
-                                  : 'text-rose-400 font-bold'
-                                : 'text-slate-300'
-                            }
-                          >
-                            ${fmt(row.reported_eps)}
-                          </span>
-                        ) : (
-                          <span className="text-slate-600">—</span>
-                        )}
-                      </td>
-
-                      {/* Surprise % */}
-                      <td className="px-4 py-3 text-right text-[11px]">
-                        <SurpriseBadge pct={row.surprise_pct} />
-                      </td>
-
-                      {/* Status */}
-                      <td className="px-4 py-3 text-center">
-                        <StatusBadge status={row.status} t={t} />
-                      </td>
-
-                      {/* Analyse button */}
-                      <td className="px-4 py-3 text-center">
-                        <button
-                          onClick={() => runAnalysis(row.ticker)}
-                          disabled={analyzing === row.ticker}
-                          title={t('earnings.run_analysis_title').replace('{ticker}', row.ticker)}
-                          className="inline-flex items-center gap-1 text-[10px] font-bold px-2.5 py-1 rounded-lg bg-violet-600/10 hover:bg-violet-600/20 text-violet-400 border border-violet-500/20 hover:border-violet-500/40 disabled:opacity-40 transition-all cursor-pointer"
-                        >
-                          {analyzing === row.ticker ? (
-                            <Loader2 size={10} className="animate-spin" />
-                          ) : (
-                            <Play size={10} />
-                          )}
-                          {t('earnings.analyse')}
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                })}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      ) : null}
+      <AppDataGrid<EarningsEntry>
+        rows={results}
+        columns={columns}
+        getRowId={row => row.ticker}
+        loading={loading}
+        error={earningsQuery.error}
+        emptyMessage={t('earnings.no_data')}
+        ariaLabel="Earnings Calendar"
+        minHeight={320}
+        density="compact"
+        sx={{
+          minWidth: 900,
+          '& .earnings-positive:hover': { backgroundColor: 'rgba(16,185,129,.035)' },
+          '& .earnings-negative:hover': { backgroundColor: 'rgba(244,63,94,.035)' },
+        }}
+        getRowClassName={({ row }) => {
+          if (row.status !== 'reported' || row.surprise_pct === null) return ''
+          return row.surprise_pct >= 0 ? 'earnings-positive' : 'earnings-negative'
+        }}
+      />
     </div>
   )
 }

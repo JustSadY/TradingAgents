@@ -1,5 +1,6 @@
 from backend.trading_agents.agents.sub.researchers.base import make_researcher
 
+
 def _default_instruction(target_label: str) -> str:
     return (
         f"You are a High-Conviction Bull Analyst advocating for a long position in the {target_label}. "

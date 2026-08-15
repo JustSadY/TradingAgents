@@ -39,18 +39,6 @@ def _apply_slippage_decimal(price: Decimal, action: str, slippage_bps: Decimal) 
     factor = slippage_bps / Decimal(10_000)
     return price * (Decimal(1) + factor) if action == "BUY" else price * (Decimal(1) - factor)
 
-def _apply_slippage(price: float, action: str, slippage_bps: float) -> float:
-    """Worsen a fill price by ``slippage_bps`` in the trader's disadvantage.
-
-    ``action`` is the execution direction: "BUY" pays more, "SELL" receives less.
-    ``slippage_bps=0`` is a no-op (byte-identical to no slippage modeling).
-
-    This public helper keeps its float API for callers/tests.  The simulation
-    itself uses ``_apply_slippage_decimal`` and never brings this float back
-    into its cash or equity calculations.
-    """
-    return float(_apply_slippage_decimal(_decimal(price), action, _decimal(slippage_bps)))
-
 def _trade_pnl_decimal(
     side: str,
     entry_price: Decimal,
@@ -64,14 +52,6 @@ def _trade_pnl_decimal(
     entry_commission = _money(entry_price * size * rate)
     exit_commission = _money(exit_price * size * rate)
     return gross - entry_commission - exit_commission - financing_cost
-
-def _trade_pnl(side: str, entry_price: float, exit_price: float, size: float, rate: float) -> float:
-    """Realized P&L for closing ``size`` units, charging commission on both legs.
-
-    Float-compatible wrapper around the Decimal implementation used by the
-    simulator.
-    """
-    return float(_trade_pnl_decimal(side, _decimal(entry_price), _decimal(exit_price), _decimal(size), _decimal(rate)))
 
 def _close_position_decimal(
     side: str,
@@ -111,29 +91,6 @@ def _close_position_decimal(
         "reason": reason,
     }
     return cash_delta, trade
-
-def _close_position(
-    side: str,
-    entry_price: float,
-    exit_price: float,
-    size: float,
-    entry_date: str,
-    exit_date: str,
-    reason: str,
-    rate: float,
-) -> tuple[float, dict]:
-    """Float-compatible wrapper around the precise close implementation."""
-    cash_delta, trade = _close_position_decimal(
-        side,
-        _decimal(entry_price),
-        _decimal(exit_price),
-        _decimal(size),
-        entry_date,
-        exit_date,
-        reason,
-        _decimal(rate),
-    )
-    return float(cash_delta), trade
 
 def _prepare_data(data: pd.DataFrame, strategy_type: str) -> pd.DataFrame:
     """Sort by date and attach the indicator columns the strategy needs."""

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithQuery } from '../../test/renderWithQuery'
 import userEvent from '@testing-library/user-event'
 import axios from 'axios'
 import Screener from '../Screener'
@@ -50,11 +51,15 @@ describe('Screener', () => {
     })
 
     const user = userEvent.setup()
-    render(<Screener />)
+    renderWithQuery(<Screener />)
     await user.click(screen.getByRole('button', { name: 'Run Screen' }))
 
     await waitFor(() => {
-      expect(axios.post).toHaveBeenCalledWith('/api/screener/scan', { tickers: undefined, top_n: 10 })
+      // The generated client sends the body as config.data via axios(config).
+      expect(axios.post).toHaveBeenCalledWith(
+        '/api/screener/scan',
+        expect.objectContaining({ data: { tickers: undefined, top_n: 10 } }),
+      )
     })
     expect(screen.getByText('35')).toBeInTheDocument()
     expect(screen.queryByText('3500')).not.toBeInTheDocument()

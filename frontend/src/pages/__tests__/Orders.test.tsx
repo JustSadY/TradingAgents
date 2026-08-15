@@ -1,5 +1,10 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
+import { ThemeProvider } from '@mui/material/styles'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { appTheme } from '../../theme/appTheme'
+import { createTestQueryClient } from '../../test/renderWithQuery'
 import Orders from '../Orders'
 
 const mockOrder = {
@@ -23,20 +28,26 @@ const mockOrder = {
   executed_at: '2024-01-01T00:00:00Z',
 }
 
-const mockGet = vi.fn((url: string) => {
-  if (url === '/api/portfolio/orders') return Promise.resolve({ data: [mockOrder] })
-  return Promise.resolve({ data: [] })
-})
-
-vi.mock('axios', () => ({
-  default: {
-    get: (...args: [string]) => mockGet(...args),
-    post: vi.fn().mockResolvedValue({ data: {} }),
-    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
-    defaults: {},
+const mocks = vi.hoisted(() => ({
+  ordersQuery: {
+    data: [] as unknown[],
+    isPending: false,
+    error: null as unknown,
+    refetch: vi.fn(),
   },
-  get: (...args: [string]) => mockGet(...args),
-  post: vi.fn().mockResolvedValue({ data: {} }),
+  saveNote: vi.fn(),
+  debrief: vi.fn(),
+}))
+
+vi.mock('../../api/generated/portfolio/portfolio', () => ({
+  usePortfolioListOrders: () => mocks.ordersQuery,
+}))
+
+vi.mock('../../api/generated/trading/trading', () => ({
+  getTradingGetTradeNoteQueryKey: (orderId: number) => ['/api/trading/note', orderId],
+  useTradingGetTradeNote: () => ({ data: null, isPending: false }),
+  useTradingSaveTradeNote: () => ({ mutate: mocks.saveNote, isPending: false }),
+  useTradingGenerateTradeDebrief: () => ({ mutate: mocks.debrief, isPending: false }),
 }))
 
 vi.mock('../../contexts/LanguageContext', () => ({
@@ -57,43 +68,66 @@ vi.mock('../../contexts/LanguageContext', () => ({
       }
       return map[key] || key
     },
-    language: 'en',
-    setLanguage: vi.fn(),
   }),
 }))
 
 vi.mock('../../utils/notify', () => ({ notify: vi.fn() }))
 vi.mock('../../utils/csvExport', () => ({ exportOrdersCSV: vi.fn() }))
-vi.mock('../../components/ErrorBoundary', () => ({ ErrorBoundary: ({ children }: any) => children }))
+vi.mock('../../components/ErrorBoundary', () => ({ ErrorBoundary: ({ children }: { children: React.ReactNode }) => children }))
 
-vi.mock('lucide-react', () => ({
-  Briefcase: () => <div>Briefcase</div>,
-  RefreshCw: () => <div>RefreshCw</div>,
-  NotebookPen: () => <div>NotebookPen</div>,
-  X: () => <div>X</div>,
-  Save: () => <div>Save</div>,
-  Sparkles: () => <div>Sparkles</div>,
-  Loader2: () => <div>Loader2</div>,
-  Bot: () => <div>Bot</div>,
-  Download: () => <div>Download</div>,
-}))
+function renderPage() {
+  const queryClient = createTestQueryClient()
+  return render(
+    <ThemeProvider theme={appTheme}>
+      <QueryClientProvider client={queryClient}>
+        <Orders />
+      </QueryClientProvider>
+    </ThemeProvider>,
+  )
+}
+
+beforeEach(() => {
+  mocks.ordersQuery.data = [mockOrder]
+  mocks.ordersQuery.isPending = false
+  mocks.ordersQuery.error = null
+  mocks.ordersQuery.refetch.mockReset()
+  mocks.saveNote.mockReset()
+  mocks.debrief.mockReset()
+})
 
 describe('Orders', () => {
-  beforeEach(() => { vi.clearAllMocks() })
-
-  it('renders orders title', async () => {
-    render(<Orders />)
-    await waitFor(() => {
-      expect(screen.getByText('Orders')).toBeInTheDocument()
-    })
+  it('renders generated order data through AppDataGrid', async () => {
+    renderPage()
+    expect(await screen.findByText('AAPL')).toBeInTheDocument()
+    expect(screen.getByText('Symbol')).toBeInTheDocument()
+    expect(screen.getByText('Status')).toBeInTheDocument()
   })
 
-  it('renders order table columns', async () => {
-    render(<Orders />)
-    await waitFor(() => {
-      expect(screen.getByText('Symbol')).toBeInTheDocument()
-      expect(screen.getByText('Direction')).toBeInTheDocument()
-      expect(screen.getByText('Status')).toBeInTheDocument()
-    })
+  it('renders the shared loading state', () => {
+    mocks.ordersQuery.data = []
+    mocks.ordersQuery.isPending = true
+    renderPage()
+    expect(screen.getByLabelText('Orders loading')).toBeInTheDocument()
+  })
+
+  it('renders the shared error state', () => {
+    mocks.ordersQuery.data = []
+    mocks.ordersQuery.error = new Error('orders unavailable')
+    renderPage()
+    expect(screen.getByText('orders unavailable')).toBeInTheDocument()
+  })
+
+  it('renders the shared empty state', () => {
+    mocks.ordersQuery.data = []
+    renderPage()
+    expect(screen.getByText('No orders yet')).toBeInTheDocument()
+  })
+
+  it('opens the trade journal from a row action', async () => {
+    const user = userEvent.setup()
+    renderPage()
+    await user.click(await screen.findByRole('button', { name: 'Open AAPL trade journal' }))
+    expect(screen.getByText('Trade Journal')).toBeInTheDocument()
+    expect(screen.getByText('#1 · AAPL')).toBeInTheDocument()
   })
 })

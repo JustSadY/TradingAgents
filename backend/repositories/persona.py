@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.persona import UserPersona
 
+
 async def list_user_personas(db: AsyncSession, user_id: int) -> list[UserPersona]:
     result = await db.execute(select(UserPersona).where(UserPersona.user_id == user_id))
     return list(result.scalars().all())

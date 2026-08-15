@@ -3,6 +3,7 @@ from fastapi.security import OAuth2PasswordBearer
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.database import get_db
+from backend.core.rls_context import set_request_admin_context, set_request_tenant_context
 from backend.core.security import decode_token_payload
 from backend.models.user import User
 from backend.repositories.permissions import get_user_page_permission, get_user_setting_permission
@@ -16,28 +17,15 @@ oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
 WEBSOCKET_APPLICATION_SUBPROTOCOL = "tradingagents.v1"
 WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX = "tradingagents.jwt."
 
-def get_websocket_application_subprotocol(offered_subprotocols: str | None) -> str | None:
-    """Return the fixed response protocol when the client offered it.
 
-    Analysis streams require this protocol in addition to the private JWT
-    protocol.  The JWT-bearing offer is deliberately never returned here:
-    selecting it would expose credentials in the 101 response headers.
-    """
+def get_websocket_application_subprotocol(offered_subprotocols: str | None) -> str | None:
     offered = {protocol.strip() for protocol in (offered_subprotocols or "").split(",")}
     if WEBSOCKET_APPLICATION_SUBPROTOCOL in offered:
         return WEBSOCKET_APPLICATION_SUBPROTOCOL
     return None
 
-def get_websocket_access_token(
-    offered_subprotocols: str | None,
-) -> str | None:
-    """Return a JWT supplied through the WebSocket handshake.
 
-    Tokens are accepted only from the private ``Sec-WebSocket-Protocol``
-    offer.  Query-string credentials are intentionally unsupported because
-    normal proxy and access logs retain URLs.  The returned token still passes
-    the normal JWT validation in :func:`get_user_from_access_token`.
-    """
+def get_websocket_access_token(offered_subprotocols: str | None) -> str | None:
     for protocol in (offered_subprotocols or "").split(","):
         protocol = protocol.strip()
         if protocol.startswith(WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX):
@@ -46,6 +34,7 @@ def get_websocket_access_token(
                 return token
     return None
 
+
 def _credentials_exception() -> HTTPException:
     return HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
@@ -53,13 +42,9 @@ def _credentials_exception() -> HTTPException:
         headers={"WWW-Authenticate": "Bearer"},
     )
 
-async def get_user_from_access_token(token: str, db: AsyncSession) -> User:
-    """Resolve an active user from an access token, including revocation.
 
-    HTTP dependencies and WebSocket handshakes use this exact check so a
-    token-version bump (logout/password reset) invalidates both channels at
-    once rather than leaving a live WebSocket usable until expiry.
-    """
+async def get_user_from_access_token(token: str, db: AsyncSession) -> User:
+    """Resolve an active user and establish request-local tenant DB context."""
     credentials_exc = _credentials_exception()
     try:
         payload = decode_token_payload(token, expected_type="access")
@@ -73,7 +58,13 @@ async def get_user_from_access_token(token: str, db: AsyncSession) -> User:
         raise credentials_exc
     if payload.get("ver", 0) != getattr(user, "token_version", 0):
         raise credentials_exc
+
+    if user.is_admin:
+        await set_request_admin_context(db, user.id)
+    else:
+        await set_request_tenant_context(db, user.id)
     return user
+
 
 async def get_current_user(
     token: str = Depends(oauth2_scheme),
@@ -85,24 +76,19 @@ async def get_current_user(
     current_user_id.set(user.id)
     return user
 
-def require_admin(
-    current_user: User = Depends(get_current_user),
-) -> User:
+
+def require_admin(current_user: User = Depends(get_current_user)) -> User:
     if not current_user.is_admin:
         raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Admin access required")
     return current_user
 
-async def has_page_access(db: AsyncSession, user: User, page_key: str) -> bool:
-    """Return whether ``user`` may use a page-backed capability.
 
-    Page permissions are an API authorization boundary, not only a React
-    navigation hint.  Keep the check reusable for WebSockets, which cannot
-    use regular FastAPI HTTP dependencies.
-    """
+async def has_page_access(db: AsyncSession, user: User, page_key: str) -> bool:
     if user.is_admin or page_key == "settings":
         return True
     perm = await get_user_page_permission(db, user.id, page_key)
     return bool(perm and perm.allowed)
+
 
 def require_page(page_key: str):
     async def _check(
@@ -118,8 +104,8 @@ def require_page(page_key: str):
 
     return _check
 
+
 def require_any_page(*page_keys: str):
-    """Require at least one page entitlement for shared read endpoints."""
     if not page_keys:
         raise ValueError("require_any_page needs at least one page key")
 
@@ -138,13 +124,8 @@ def require_any_page(*page_keys: str):
 
     return _check
 
-async def enforce_setting_section_permission(db: AsyncSession, user: User, section: str) -> None:
-    """Require a non-admin to hold the named settings-section entitlement.
 
-    Settings pages are deliberately always navigable so users can inspect
-    their profile/configuration, but mutation endpoints must not let a hidden
-    section be modified through a direct HTTP call.
-    """
+async def enforce_setting_section_permission(db: AsyncSession, user: User, section: str) -> None:
     if user.is_admin:
         return
     permission = await get_user_setting_permission(db, user.id, section)
@@ -154,18 +135,12 @@ async def enforce_setting_section_permission(db: AsyncSession, user: User, secti
             detail=f"You do not have permission to modify settings in section: {section}",
         )
 
+
 async def enforce_tool_settings_permission(
     db: AsyncSession,
     user: User,
     body: ToolSettingsUpdate,
 ) -> None:
-    """Raise 403/400 if *user* may not apply the tool changes in *body*.
-
-    This must be called from inside the request handler, where the parsed body
-    is available. It cannot be a FastAPI dependency: FastAPI does not inject a
-    route's body model into a dependency parameter, so the previous
-    dependency-based version received ``None`` and silently allowed everything.
-    """
     if user.is_admin:
         return
 

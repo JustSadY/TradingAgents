@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback } from 'react'
-import axios from 'axios'
+import { useState } from 'react'
+import { useLogsListLogs, useLogsListMyLogs } from '../api/generated/logs/logs'
 import { RefreshCw, Terminal, Clock, ChevronDown, ChevronRight } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import { useAuth } from '../contexts/AuthContext'
@@ -201,33 +201,28 @@ function renderLogMessage(l: Log) {
 export default function Logs() {
   const { t } = useTranslation()
   const { isAdmin } = useAuth()
-  const [logs, setLogs] = useState<Log[]>([])
   const [level, setLevel] = useState('')
   const [source, setSource] = useState('')
   const [userIdFilter, setUserIdFilter] = useState('')
-  const [loading, setLoading] = useState(true)
   const [expanded, setExpanded] = useState<number | null>(null)
 
-  const fetch = useCallback(() => {
-    setLoading(true)
-    const queryParts: string[] = []
-    if (level) queryParts.push(`level=${level}`)
-    if (source) queryParts.push(`source=${source}`)
-    if (isAdmin && userIdFilter) queryParts.push(`user_id=${userIdFilter}`)
-    const params = queryParts.length > 0 ? `?${queryParts.join('&')}` : ''
-    
-    const endpoint = isAdmin ? '/api/logs' : '/api/logs/me'
-    axios.get(`${endpoint}${params}`)
-      .then(r => {
-        setLogs(r.data)
-        setLoading(false)
-      })
-      .catch(() => {
-        setLoading(false)
-      })
-  }, [level, source, userIdFilter, isAdmin])
-
-  useEffect(() => { fetch() }, [fetch])
+  // Admins read the tenant-wide log; everyone else is restricted to their own.
+  // Both hooks are declared unconditionally (rules of hooks) and only the one
+  // matching the current role is enabled.
+  const params = {
+    ...(level ? { level } : {}),
+    ...(source ? { source } : {}),
+    ...(isAdmin && userIdFilter ? { user_id: Number(userIdFilter) } : {}),
+  }
+  const adminQuery = useLogsListLogs(params, { query: { enabled: isAdmin } })
+  const myQuery = useLogsListMyLogs(
+    { ...(level ? { level } : {}) },
+    { query: { enabled: !isAdmin } },
+  )
+  const active = isAdmin ? adminQuery : myQuery
+  const logs = (active.data ?? []) as Log[]
+  const loading = active.isPending
+  const fetch = () => active.refetch()
 
   return (
     <div className="p-4 md:p-6 space-y-6 max-w-5xl mx-auto">

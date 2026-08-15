@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
+import { renderWithQuery } from '../../test/renderWithQuery'
 import Portfolio from '../Portfolio'
 
 vi.mock('axios', () => ({
@@ -69,7 +70,7 @@ describe('Portfolio', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
   it('renders loading state initially', () => {
-    render(<Portfolio />)
+    renderWithQuery(<Portfolio />)
     expect(screen.getByText('Loading portfolio...')).toBeInTheDocument()
   })
 })

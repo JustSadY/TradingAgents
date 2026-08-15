@@ -3,7 +3,8 @@ import json
 import logging
 import threading
 from collections import deque
-from typing import Any, Callable, Coroutine
+from collections.abc import Callable, Coroutine
+from typing import Any
 
 from fastapi import WebSocket
 

@@ -10,6 +10,7 @@ from backend.models.order import Order
 from backend.models.portfolio import Holding, Portfolio
 from backend.models.user import User
 
+
 def _make_portfolio(user_id: int, **overrides) -> Portfolio:
     defaults = {
         "user_id": user_id,

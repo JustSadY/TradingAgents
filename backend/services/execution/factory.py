@@ -7,6 +7,7 @@ _REGISTRY: dict[str, type[BaseTraderInterface]] = {
     "alpaca": AlpacaTrader,
 }
 
+
 def get_trader(
     mode: str,
     broker: str,
@@ -20,6 +21,6 @@ def get_trader(
         raise ValueError(
             f"No trader implementation for mode={mode!r} broker={broker!r}. Available: {list(_REGISTRY.keys())}"
         )
-    if cls == AlpacaTrader:
+    if cls is AlpacaTrader:
         return cls(portfolio_id=portfolio_id, initial_capital=initial_capital, db=db, mode=mode)
     return cls(portfolio_id=portfolio_id, initial_capital=initial_capital, db=db)

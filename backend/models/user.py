@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
 
+
 class User(Base):
     __tablename__ = "users"
     __table_args__ = (Index("ix_users_is_active", "is_active"),)

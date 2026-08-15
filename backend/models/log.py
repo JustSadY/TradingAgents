@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
 
+
 class SystemLog(Base):
     __tablename__ = "system_logs"
     __table_args__ = (Index("ix_system_logs_user_created", "user_id", "created_at"),)

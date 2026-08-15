@@ -746,6 +746,7 @@ async def run_individual_analysis(
                 getattr(ta, "support_levels", []),
                 getattr(ta, "resistance_levels", []),
                 output_language=settings.output_language,
+                user_id=user_id,
             ),
             task_id=emitter.task_id,
         )

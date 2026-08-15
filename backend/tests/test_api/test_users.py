@@ -4,6 +4,7 @@ from httpx import AsyncClient
 
 from backend.models.user import User
 
+
 class TestUserApiKeysAPI:
     async def test_set_api_key_response_matches_schema(self, auth_client: AsyncClient):
         resp = await auth_client.put("/api/users/me/api-keys", json={"provider": "openai", "api_key": "sk-test-123"})

@@ -63,7 +63,7 @@ class TradingAgentsConfig(BaseModel):
         ),
     )
     llm_provider: str = "openai"
-    llm_model: str = "gpt-4o-mini"
+    llm_model: str = "gpt-5.6-luna"
     fallback_llm_chain: list[FallbackLLMConfig] = Field(
         default_factory=list,
         max_length=MAX_FALLBACK_LLM_CHAIN_LENGTH,

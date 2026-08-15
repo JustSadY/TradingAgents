@@ -62,6 +62,12 @@ from .y_finance import (
     get_institutional_holdings as get_yfinance_institutional_holdings,
 )
 from .y_finance import (
+    get_macro_data as get_yfinance_macro_data,
+)
+from .y_finance import (
+    get_options_data as get_yfinance_options_data,
+)
+from .y_finance import (
     get_sec_filings as get_yfinance_sec_filings,
 )
 from .y_finance import (
@@ -72,8 +78,6 @@ from .y_finance import (
     get_yfin_data_online,
 )
 from .y_finance import (
-    get_macro_data as get_yfinance_macro_data,
-    get_options_data as get_yfinance_options_data,
     get_valuation_comparison as get_yfinance_valuation_comparison,
 )
 from .yfinance_news import get_global_news_yfinance, get_news_yfinance

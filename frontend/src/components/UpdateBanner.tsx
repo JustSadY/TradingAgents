@@ -1,107 +1,99 @@
-import { useEffect, useRef, useState, useCallback } from 'react'
-import axios from 'axios'
+import { useEffect, useRef, useState } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { Download, Loader2, X, RefreshCw } from 'lucide-react'
+import {
+  getUpdateUpdateStatusQueryKey,
+  useUpdateUpdateApply,
+  useUpdateUpdateStatus,
+} from '../api/generated/update/update'
 import { notify } from '../utils/notify'
 import { useAuth } from '../contexts/AuthContext'
 
-interface UpdateStatus {
-  git: boolean
-  update_supported: boolean
-  update_available: boolean
-  updating: boolean
-  current_short?: string | null
-  latest_short?: string | null
-  behind: number
-  commits?: string[]
-  last_update?: { state?: string; error?: string }
-}
-
-const POLL_IDLE_MS = 60 * 60 * 1000   // 1 saat — boşta
-const POLL_BUSY_MS = 4_000              // 4 saniye — güncelleme sırasında
-const UPDATE_TIMEOUT_MS = 12 * 60 * 1000 // 12 dakika — bu kadar sürer takılı sayılır
+const POLL_IDLE_MS = 60 * 60 * 1000
+const POLL_BUSY_MS = 4_000
+const UPDATE_TIMEOUT_MS = 12 * 60 * 1000
 
 export default function UpdateBanner() {
   const { isOwner } = useAuth()
-  const [st, setSt] = useState<UpdateStatus | null>(null)
+  const queryClient = useQueryClient()
   const [busy, setBusy] = useState(false)
   const [dismissed, setDismissed] = useState(false)
   const seenRef = useRef(false)
-  const sawDownRef = useRef(false)
   const busyRef = useRef(false)
   const busyStartRef = useRef<number | null>(null)
-  const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   useEffect(() => { busyRef.current = busy }, [busy])
 
-  const poll = useCallback(async () => {
-    // Timeout kontrolü: güncelleme 12 dakikadan uzun sürüyorsa hata göster
-    if (busyRef.current && busyStartRef.current && Date.now() - busyStartRef.current > UPDATE_TIMEOUT_MS) {
+  const statusQuery = useUpdateUpdateStatus({
+    query: {
+      retry: false,
+      refetchInterval: busy ? POLL_BUSY_MS : POLL_IDLE_MS,
+      refetchOnWindowFocus: false,
+    },
+  })
+  const st = statusQuery.data ?? null
+
+  useEffect(() => {
+    if (!busy || !busyStartRef.current) return
+    const remaining = UPDATE_TIMEOUT_MS - (Date.now() - busyStartRef.current)
+    const timeout = window.setTimeout(() => {
       setBusy(false)
+      busyRef.current = false
       busyStartRef.current = null
-      sawDownRef.current = false
       notify('error', 'Güncelleme çok uzun sürdü — sunucu logu kontrol edin.', 'Güncelleme', 'owner')
-      return
-    }
-
-    try {
-      const { data } = await axios.get<UpdateStatus>('/api/update/status')
-      setSt(data)
-
-      if (data.update_available && !data.updating && !seenRef.current) {
-        seenRef.current = true
-        notify('info', `Yeni güncelleme mevcut (${data.behind} commit).`, 'Güncelleme', 'owner')
-      }
-      if (!data.update_available) seenRef.current = false
-
-      if (busyRef.current && !data.updating) {
-        setBusy(false)
-        busyStartRef.current = null
-        sawDownRef.current = false
-        if (data.last_update?.state === 'failed') {
-          notify('error', data.last_update?.error || 'Güncelleme başarısız oldu.', 'Güncelleme', 'owner')
-        } else {
-          // Güncelleme başarılı, sayfa yenile
-          window.location.reload()
-        }
-      }
-    } catch {
-      // Sunucu yeniden başlıyor — bir sonraki başarılı yanıtta reload yapılacak
-      if (busyRef.current) sawDownRef.current = true
-    }
-  }, [])
-
-  // busy değiştiğinde polling hızını ayarla
-  useEffect(() => {
-    if (intervalRef.current) clearInterval(intervalRef.current)
-    const ms = busy ? POLL_BUSY_MS : POLL_IDLE_MS
-    intervalRef.current = setInterval(poll, ms)
-    return () => {
-      if (intervalRef.current) clearInterval(intervalRef.current)
-    }
-  }, [busy, poll])
+    }, Math.max(0, remaining))
+    return () => window.clearTimeout(timeout)
+  }, [busy])
 
   useEffect(() => {
-    poll()
-  }, [poll])
+    if (!st) return
 
-  const doUpdate = async () => {
-    if (!window.confirm('Uygulama en son sürüme güncellenip yeniden başlatılacak (~1-2 dk). Devam edilsin mi?')) return
-    setBusy(true); busyRef.current = true; busyStartRef.current = Date.now(); sawDownRef.current = false
-    try {
-      await axios.post('/api/update/apply')
-      notify('info', 'Güncelleme başlatıldı — lütfen bekleyin, sayfa otomatik yenilenecek.', 'Güncelleme', 'owner')
-      poll()
-    } catch (e: any) {
+    if (st.update_available && !st.updating && !seenRef.current) {
+      seenRef.current = true
+      notify('info', `Yeni güncelleme mevcut (${st.behind} commit).`, 'Güncelleme', 'owner')
+    }
+    if (!st.update_available) seenRef.current = false
+
+    // Only react to a fresh successful status response. A failed poll while the
+    // server restarts is intentionally silent; the active query keeps polling.
+    if (busyRef.current && !st.updating) {
       setBusy(false)
+      busyRef.current = false
       busyStartRef.current = null
-      notify('error', e?.response?.data?.detail || 'Güncelleme başlatılamadı.', 'Güncelleme', 'owner')
+      if (st.last_update?.state === 'failed') {
+        notify('error', st.last_update?.error || 'Güncelleme başarısız oldu.', 'Güncelleme', 'owner')
+      } else {
+        window.location.reload()
+      }
     }
+  }, [statusQuery.dataUpdatedAt, st])
+
+  const applyMutation = useUpdateUpdateApply<unknown>({
+    mutation: {
+      onSuccess: () => {
+        notify('info', 'Güncelleme başlatıldı — lütfen bekleyin, sayfa otomatik yenilenecek.', 'Güncelleme', 'owner')
+        void queryClient.invalidateQueries({ queryKey: getUpdateUpdateStatusQueryKey() })
+      },
+      onError: (error) => {
+        setBusy(false)
+        busyRef.current = false
+        busyStartRef.current = null
+        const detail = (error as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        notify('error', detail || 'Güncelleme başlatılamadı.', 'Güncelleme', 'owner')
+      },
+    },
+  })
+
+  const doUpdate = () => {
+    if (!window.confirm('Uygulama en son sürüme güncellenip yeniden başlatılacak (~1-2 dk). Devam edilsin mi?')) return
+    setBusy(true)
+    busyRef.current = true
+    busyStartRef.current = Date.now()
+    applyMutation.mutate()
   }
 
   if (!st || !st.update_supported) return null
   const updating = busy || st.updating
-
-
 
   if (!updating) {
     if (!isOwner || !st.update_available || dismissed) return null
@@ -130,7 +122,8 @@ export default function UpdateBanner() {
         <>
           <button
             onClick={doUpdate}
-            className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-gray-900 font-semibold text-xs transition-colors shrink-0"
+            disabled={applyMutation.isPending}
+            className="flex items-center gap-1.5 px-3 py-1 rounded-lg bg-amber-500 hover:bg-amber-400 text-gray-900 font-semibold text-xs transition-colors shrink-0 disabled:opacity-50"
           >
             <RefreshCw size={12} /> Güncelle
           </button>
@@ -142,4 +135,3 @@ export default function UpdateBanner() {
     </div>
   )
 }
-

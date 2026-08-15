@@ -3,6 +3,7 @@ from datetime import UTC, date, datetime, timedelta
 
 from .alpha_vantage_common import _make_api_request
 
+
 def _filter_reports_by_date(result, curr_date: str, *, frequency: str = "quarterly"):
     """Keep only reports that would conservatively have been public by curr_date."""
     if not curr_date:

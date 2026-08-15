@@ -1,10 +1,38 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.security import create_refresh_token, hash_password
+from backend.core.config import get_settings
+from backend.core.security import create_refresh_token, hash_password, new_token_id, token_id_hash
+from backend.models.refresh_session import RefreshSession
 from backend.models.user import User
+
+
+async def issue_refresh_token(db: AsyncSession, user: User, *, token_version: int | None = None) -> str:
+    """Mint a refresh token *and* the RefreshSession row it is bound to.
+
+    ``/auth/refresh`` looks the ``sid`` up in ``refresh_sessions`` and compares
+    the presented ``jti`` against the stored hash, so a token forged without a
+    matching row is rejected as "session expired or reused". Tests that assert a
+    *later* rejection reason (e.g. token-version revocation) would otherwise pass
+    for the wrong reason.
+    """
+    settings = get_settings()
+    sid, jti = new_token_id(), new_token_id()
+    db.add(
+        RefreshSession(
+            id=sid,
+            user_id=user.id,
+            current_jti_hash=token_id_hash(jti),
+            expires_at=datetime.now(UTC) + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
+        )
+    )
+    await db.flush()
+    version = user.token_version if token_version is None else token_version
+    return create_refresh_token(user.username, token_version=version, session_id=sid, token_id=jti)
 
 
 class TestAuthAPI:
@@ -71,7 +99,7 @@ class TestAuthAPI:
         db.add(user)
         await db.flush()
 
-        refresh = create_refresh_token(user.username, token_version=0)
+        refresh = await issue_refresh_token(db, user)
         async_client.cookies.set("ta_refresh", refresh, path="/auth")
         resp = await async_client.post("/auth/refresh", json={})
         assert resp.status_code == 200
@@ -91,7 +119,7 @@ class TestAuthAPI:
         )
         db.add(user)
         await db.flush()
-        refresh = create_refresh_token(user.username, token_version=0)
+        refresh = await issue_refresh_token(db, user)
         resp = await async_client.post("/auth/refresh", json={"refresh_token": refresh})
         assert resp.status_code == 200
         assert "access_token" in resp.json()
@@ -115,9 +143,12 @@ class TestAuthAPI:
         )
         db.add(user)
         await db.flush()
-        refresh = create_refresh_token(user.username, token_version=0)
+        # Session is valid; only the stale token_version (0 vs the user's 5)
+        # may cause the rejection.
+        refresh = await issue_refresh_token(db, user, token_version=0)
         resp = await async_client.post("/auth/refresh", json={"refresh_token": refresh})
         assert resp.status_code == 401
+        assert resp.json()["detail"] == "Refresh token has been revoked"
 
     async def test_logout_clears_refresh_cookie(self, auth_client: AsyncClient, db: AsyncSession, test_user: User):
         resp = await auth_client.post("/auth/logout")

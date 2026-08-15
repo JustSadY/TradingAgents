@@ -2,6 +2,7 @@ from typing import Any
 
 from backend.trading_agents.agents.utils.agent_utils import get_general_settings_block
 
+
 class Reflector:
     def __init__(self, llm: Any):
         self.llm = llm

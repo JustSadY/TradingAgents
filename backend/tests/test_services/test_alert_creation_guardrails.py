@@ -1,5 +1,9 @@
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
+from types import SimpleNamespace
+from unittest.mock import AsyncMock
+
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -11,6 +15,7 @@ from backend.services.alert_creation_service import (
     rearm_alert_with_guardrails,
 )
 from backend.services.settings_service import get_or_create_settings
+
 
 async def _settings(db: AsyncSession, user: User, **values):
     settings = await get_or_create_settings(db, user)
@@ -196,29 +201,64 @@ async def test_analysis_source_requires_a_run_id(db: AsyncSession, test_user: Us
         )
 
 class _AssistantSession:
+    """Fake session for the assistant's confirm-pending-action path.
+
+    The first ``execute`` serves the pending-action SELECT; the second is the
+    conditional claim UPDATE, which must report exactly one affected row.
+    """
+
+    def __init__(self, row) -> None:
+        self._row = row
+        self._calls = 0
+
     async def __aenter__(self):
         return self
 
     async def __aexit__(self, *_args):
         return None
 
+    async def execute(self, _statement):
+        self._calls += 1
+        if self._calls == 1:
+            return SimpleNamespace(scalar_one_or_none=lambda: self._row)
+        return SimpleNamespace(rowcount=1)
+
     async def commit(self):
         return None
 
-async def test_assistant_uses_manual_guardrail_path_and_returns_limit_message(monkeypatch):
-    from types import SimpleNamespace
+    async def rollback(self):
+        return None
 
-    from backend.core import database
+def _pending_alert_action(user_id: int = 7):
+    return SimpleNamespace(
+        id="a" * 32,
+        user_id=user_id,
+        action="create_price_alert",
+        payload={"ticker": "AAPL", "condition": "above", "target_price": 200.0},
+        consumed_at=None,
+        expires_at=datetime.now(UTC) + timedelta(minutes=5),
+    )
+
+async def test_assistant_preview_does_not_create_an_alert(monkeypatch):
+    """The tool stages a confirmation instead of creating the alert.
+
+    This is the fail-closed contract: nothing is written until the user approves
+    a specific action ID.
+    """
     from backend.services import alert_creation_service, portfolio_assistant_service
 
-    captured: dict[str, object] = {}
+    called = False
 
-    async def reject(*_args, **kwargs):
-        captured.update(kwargs)
-        raise AlertGuardrailViolation("active_limit", "Your active alert limit (1) has been reached.")
+    async def _unexpected(*_args, **_kwargs):
+        nonlocal called
+        called = True
 
-    monkeypatch.setattr(database, "AsyncSessionLocal", lambda: _AssistantSession())
-    monkeypatch.setattr(alert_creation_service, "create_alert_with_guardrails", reject)
+    monkeypatch.setattr(alert_creation_service, "create_alert_with_guardrails", _unexpected)
+    monkeypatch.setattr(
+        portfolio_assistant_service,
+        "_create_pending_action",
+        AsyncMock(return_value="b" * 32),
+    )
 
     message = await portfolio_assistant_service._tool_create_price_alert(
         SimpleNamespace(id=7, is_admin=False),
@@ -228,5 +268,32 @@ async def test_assistant_uses_manual_guardrail_path_and_returns_limit_message(mo
         200,
     )
 
+    assert not called
+    assert "Nothing has been created" in message
+    assert "b" * 32 in message
+
+async def test_assistant_confirmation_uses_the_assistant_guardrail_source(monkeypatch):
+    """Confirmed assistant alerts must be tagged so their own limits apply."""
+    from backend.core import database
+    from backend.services import alert_creation_service, portfolio_assistant_service
+
+    captured: dict[str, object] = {}
+
+    async def reject(*_args, **kwargs):
+        captured.update(kwargs)
+        raise AlertGuardrailViolation("active_limit", "Your active alert limit (1) has been reached.")
+
+    session = _AssistantSession(_pending_alert_action())
+    monkeypatch.setattr(database, "AsyncSessionLocal", lambda: session)
+    monkeypatch.setattr(alert_creation_service, "create_alert_with_guardrails", reject)
+
+    message = await portfolio_assistant_service._tool_confirm_pending_action(
+        SimpleNamespace(id=7, is_admin=False),
+        {"alerts"},
+        "a" * 32,
+    )
+
     assert captured["creation_source"] == "assistant"
-    assert message == "Alert was not created: Your active alert limit (1) has been reached."
+    # The confirm path funnels every failure into one generic reply, so the
+    # specific limit text is logged rather than surfaced to the user.
+    assert message == "The confirmed action was rejected or could not be completed safely."

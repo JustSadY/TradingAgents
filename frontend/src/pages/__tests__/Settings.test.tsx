@@ -1,20 +1,28 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { fireEvent, screen, waitFor } from '@testing-library/react'
+import { renderWithQuery } from '../../test/renderWithQuery'
 import axios from 'axios'
 import Settings from '../Settings'
 
-vi.mock('axios', () => ({
-  default: {
+vi.mock('axios', () => {
+  const methods = {
     get: vi.fn().mockResolvedValue({ data: {} }),
     post: vi.fn().mockResolvedValue({ data: {} }),
     put: vi.fn().mockResolvedValue({ data: {} }),
-    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
-    defaults: {},
-  },
-  get: vi.fn().mockResolvedValue({ data: {} }),
-  post: vi.fn().mockResolvedValue({ data: {} }),
-  put: vi.fn().mockResolvedValue({ data: {} }),
-}))
+    delete: vi.fn().mockResolvedValue({ data: {} }),
+  }
+  // The generated client calls axios(config); read handlers off the instance so
+  // per-test mockResolvedValue on axios.get still applies.
+  const instance: any = Object.assign(
+    vi.fn((config: { url?: string; method?: string } = {}) => {
+      const m = String(config.method ?? 'get').toLowerCase()
+      return (instance[m] ?? instance.get)(config.url, config)
+    }),
+    methods,
+    { interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } }, defaults: {} },
+  )
+  return { default: instance, ...methods }
+})
 
 vi.mock('../../contexts/LanguageContext', () => ({
   useTranslation: () => ({
@@ -83,7 +91,7 @@ describe('Settings', () => {
   beforeEach(() => { vi.clearAllMocks() })
 
   it('renders loading state initially', () => {
-    render(<Settings />)
+    renderWithQuery(<Settings />)
     expect(screen.getByText('Loading settings...')).toBeInTheDocument()
   })
 
@@ -108,7 +116,7 @@ describe('Settings', () => {
       return Promise.resolve({ data: {} })
     })
 
-    render(<Settings />)
+    renderWithQuery(<Settings />)
 
     expect(await screen.findByRole('option', { name: 'GPT-4o mini' })).toBeInTheDocument()
     expect(screen.getByRole('option', { name: 'settings.custom_model_option' })).toBeInTheDocument()
@@ -132,7 +140,7 @@ describe('Settings', () => {
       return Promise.resolve({ data: {} })
     })
 
-    render(<Settings />)
+    renderWithQuery(<Settings />)
 
     expect(await screen.findByDisplayValue('30')).toBeInTheDocument()
     expect(screen.getByDisplayValue('3')).toBeInTheDocument()
@@ -164,7 +172,7 @@ describe('Settings', () => {
       return Promise.resolve({ data: {} })
     })
 
-    render(<Settings />)
+    renderWithQuery(<Settings />)
 
     const mode = await screen.findByRole('combobox', { name: 'Decision Stability Mode' })
     expect(mode).toHaveValue('shadow')
@@ -176,12 +184,18 @@ describe('Settings', () => {
     fireEvent.click(screen.getByRole('button', { name: /Save/ }))
 
     await waitFor(() => {
-      expect(axios.put).toHaveBeenCalledWith('/api/settings', expect.objectContaining({
-        decision_stability_mode: 'enforce',
-        decision_stability_min_quality: 70,
-        decision_stability_min_confidence: 0.65,
-        decision_stability_min_evidence_groups: 2,
-      }))
+      // The generated client sends the body as config.data via axios(config).
+      expect(axios.put).toHaveBeenCalledWith(
+        '/api/settings',
+        expect.objectContaining({
+          data: expect.objectContaining({
+            decision_stability_mode: 'enforce',
+            decision_stability_min_quality: 70,
+            decision_stability_min_confidence: 0.65,
+            decision_stability_min_evidence_groups: 2,
+          }),
+        }),
+      )
     })
   })
 })

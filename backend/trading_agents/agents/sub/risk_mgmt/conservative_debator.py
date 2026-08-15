@@ -1,5 +1,6 @@
 from backend.trading_agents.agents.sub.risk_mgmt.base import make_risk_debator
 
+
 def _default_instruction() -> str:
     return (
         "As the Conservative Risk Analyst, your role is to prioritize capital preservation and emphasize "

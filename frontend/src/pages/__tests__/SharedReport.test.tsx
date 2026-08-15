@@ -1,7 +1,8 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import axios from 'axios'
+import { renderWithQuery } from '../../test/renderWithQuery'
 import SharedReport from '../SharedReport'
 import { formatSharedReportValue } from '../../utils/sharedReport'
 
@@ -71,9 +72,12 @@ describe('SharedReport', () => {
   })
 
   it('renders every non-empty public report section instead of only final decisions', async () => {
-    render(<SharedReport />)
+    renderWithQuery(<SharedReport />)
 
-    await waitFor(() => expect(axios.get).toHaveBeenCalledWith('/api/share/public-token'))
+    // Wait for rendered content rather than the request itself: the fetch fires
+    // one tick before the data is committed to the DOM.
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Final Decision' })).toBeInTheDocument())
+    expect(axios.get).toHaveBeenCalledWith('/api/share/public-token', expect.anything())
 
     for (const label of [
       'Final Decision',
@@ -114,7 +118,7 @@ describe('SharedReport', () => {
       },
     })
 
-    render(<SharedReport />)
+    renderWithQuery(<SharedReport />)
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Portfolio Manager Recommendation' })).toBeInTheDocument())
     expect(screen.queryByRole('button', { name: 'Legacy Trader Proposal' })).not.toBeInTheDocument()

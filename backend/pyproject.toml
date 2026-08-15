@@ -25,19 +25,17 @@ dependencies = [
     "redis>=5.0,<7.0",
     "arq>=0.26,<0.27",
     "langchain-core>=0.3.81,<2.0",
-    "langchain-anthropic>=0.3.15,<2.0",
     "langchain-experimental>=0.3.4,<1.0",
-    "langchain-google-genai>=4.0.0,<5.0",
-    "langchain-openai>=0.3.23,<2.0",
-    "langchain-mistralai>=1.1.0,<2.0",
-    "langchain-groq>=1.1.0,<2.0",
+    "langchain-litellm>=0.7.0,<1.0",
     "langgraph>=1.0.0,<2.0",
-    "langgraph-checkpoint-sqlite>=2.0.0,<4.0",
+    "langgraph-checkpoint-postgres>=2.0.0,<4.0",
+    "psycopg[binary,pool]>=3.2.0",
     "pinecone>=5.0.0",
+    "alpaca-py>=0.43.5,<1.0",
+    "pandas-ta-classic>=0.6.52,<1.0",
     "pandas>=2.3.0",
     "numpy>=2.0.0",
     "yfinance>=0.2.63",
-    "stockstats>=0.6.5",
     "mplfinance>=0.12.10b0",
     "matplotlib>=3.9.0",
     "lxml>=5.0.0",
@@ -48,38 +46,45 @@ dependencies = [
     "setuptools>=80.9.0",
     "typing-extensions>=4.14.0",
     "aiosqlite",
+]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.9.0",
+    "pyright>=1.1.390",
     "pytest>=8.0.0",
     "pytest-asyncio>=0.25.0",
     "pytest-cov>=6.0.0",
     "pytest-mock>=3.14.0",
 ]
-
-[project.optional-dependencies]
-dev = [
-    "ruff>=0.9.0",
-    "pyright>=1.1.390",
+research = [
+    "openbb>=4.7.2,<5.0",
+    "TA-Lib>=0.7.1,<1.0",
+    "vectorbt>=1.1.0,<2.0",
+    "empyrical-reloaded>=0.5.12,<1.0",
+    "quantstats>=0.0.81,<1.0",
+    "pyportfolioopt>=1.6.0,<2.0",
 ]
+observability = [
+    "opentelemetry-sdk>=1.44.0,<2.0",
+    "opentelemetry-exporter-otlp-proto-grpc>=1.44.0,<2.0",
+    "opentelemetry-instrumentation-fastapi>=0.64b0,<1.0",
+    "opentelemetry-instrumentation-httpx>=0.64b0,<1.0",
+    "opentelemetry-instrumentation-sqlalchemy>=0.64b0,<1.0",
+    "langfuse>=4.0.0,<5.0",
+]
+
+[tool.uv]
+package = false
+default-groups = ["dev"]
 
 [tool.ruff]
 line-length = 120
 target-version = "py311"
 
 [tool.ruff.lint]
-select = [
-    "E",   # pycodestyle errors
-    "W",   # pycodestyle warnings
-    "F",   # pyflakes
-    "I",   # isort
-    "C",   # flake8-comprehensions
-    "B",   # flake8-bugbear
-    "UP",  # pyupgrade
-]
-ignore = [
-    "B008", # FastAPI Depends calls in defaults
-    "C901", # legacy orchestrators are tracked for staged decomposition
-    "E501", # line too long
-    "E402", # module level import not at top of file
-]
+select = ["E", "W", "F", "I", "C", "B", "UP"]
+ignore = ["B008", "C901", "E501", "E402", "UP042"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["backend"]
@@ -92,6 +97,7 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests (require external services)",
     "llm: marks tests that call LLM endpoints",
+    "postgres_rls: PostgreSQL integration tests for runtime RLS contexts",
 ]
 addopts = "-q --tb=short --strict-markers"
 
@@ -99,12 +105,12 @@ addopts = "-q --tb=short --strict-markers"
 source = ["backend"]
 omit = ["backend/tests/*"]
 
-
 [tool.pyright]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
-include = ["backend/core/temporal.py", "backend/schemas"]
-exclude = ["backend/tests"]
+include = ["core/temporal.py", "schemas"]
+exclude = ["tests", "postgres_tests"]
+extraPaths = [".."]
 reportMissingImports = "warning"
 reportGeneralTypeIssues = "warning"
 reportMissingTypeStubs = "none"

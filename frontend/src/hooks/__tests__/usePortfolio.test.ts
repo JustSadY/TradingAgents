@@ -1,17 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { renderHook, waitFor } from '@testing-library/react'
+import axios from 'axios'
 import { usePortfolio } from '../usePortfolio'
+import { QueryWrapper } from '../../test/renderWithQuery'
 
 const mockGet = vi.hoisted(() => vi.fn())
 
-vi.mock('../../utils/api', () => ({
-  default: {
-    get: mockGet,
-    post: vi.fn().mockResolvedValue({ data: {} }),
-    interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
-    defaults: {},
-  },
-}))
+// The hook now goes through the generated client, which uses the global
+// axios mock installed in src/test/setup.ts.
 
 const makePortfolios = () => [
   {
@@ -33,10 +29,11 @@ describe('usePortfolio', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockGet.mockResolvedValue({ data: makePortfolios() })
+    vi.mocked(axios.get).mockImplementation(mockGet)
   })
 
   it('fetches portfolios on mount', async () => {
-    const { result } = renderHook(() => usePortfolio())
+    const { result } = renderHook(() => usePortfolio(), { wrapper: QueryWrapper })
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
     })
@@ -44,7 +41,7 @@ describe('usePortfolio', () => {
   })
 
   it('returns simulation portfolio as sim', async () => {
-    const { result } = renderHook(() => usePortfolio())
+    const { result } = renderHook(() => usePortfolio(), { wrapper: QueryWrapper })
     await waitFor(() => {
       expect(result.current.sim).toBeDefined()
     })
@@ -52,7 +49,7 @@ describe('usePortfolio', () => {
   })
 
   it('calculates P&L stats correctly', async () => {
-    const { result } = renderHook(() => usePortfolio())
+    const { result } = renderHook(() => usePortfolio(), { wrapper: QueryWrapper })
     await waitFor(() => {
       expect(result.current.stats.pnl).toBe(5000)
     })
@@ -61,7 +58,7 @@ describe('usePortfolio', () => {
   })
 
   it('builds allocation data with Cash', async () => {
-    const { result } = renderHook(() => usePortfolio())
+    const { result } = renderHook(() => usePortfolio(), { wrapper: QueryWrapper })
     await waitFor(() => {
       expect(result.current.allocationData.length).toBeGreaterThan(0)
     })
@@ -71,7 +68,7 @@ describe('usePortfolio', () => {
 
   it('handles empty portfolios gracefully', async () => {
     mockGet.mockResolvedValue({ data: null })
-    const { result } = renderHook(() => usePortfolio())
+    const { result } = renderHook(() => usePortfolio(), { wrapper: QueryWrapper })
     await waitFor(() => {
       expect(result.current.loading).toBe(false)
     })

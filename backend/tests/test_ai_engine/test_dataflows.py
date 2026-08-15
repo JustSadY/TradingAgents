@@ -14,6 +14,7 @@ from backend.trading_agents.dataflows import config as dataflow_config
 from backend.trading_agents.dataflows.cache import APICache
 from backend.trading_agents.dataflows.config import get_config, set_config
 
+
 @pytest.fixture(autouse=True)
 def _patch_cache_path(tmp_path):
     """Point the cache database to a temp directory so tests never collide."""

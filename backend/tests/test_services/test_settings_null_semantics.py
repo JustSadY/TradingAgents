@@ -9,6 +9,7 @@ from backend.models.preset import ConfigPreset
 from backend.schemas.settings import SettingsUpdate
 from backend.services import settings_service
 
+
 def test_settings_update_allows_omission_but_rejects_null_for_non_nullable_field() -> None:
     assert SettingsUpdate().model_dump(exclude_unset=True) == {}
     assert SettingsUpdate(benchmark_ticker=None).model_dump(exclude_unset=True) == {"benchmark_ticker": None}

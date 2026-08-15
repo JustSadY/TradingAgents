@@ -16,6 +16,7 @@ from backend.services.ticker_validation_service import (
     TickerValidationUnavailableError,
 )
 
+
 @pytest.mark.parametrize(
     ("signal", "expected"),
     [

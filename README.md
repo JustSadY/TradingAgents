@@ -130,7 +130,7 @@ Ensure a local PostgreSQL instance is running, create a database named `tradinga
     ```
 2.  Install dependencies:
     ```bash
-    pip install -r backend/requirements.txt
+    cd backend && uv sync --frozen
     ```
 3.  Configure your local `.env`.
 4.  Run the API server:
@@ -180,4 +180,4 @@ The platform features a secure, decoupled mechanism to automatically update itse
 
 ## 📈 License
 
-This project is licensed under the **MIT License**. See the `LICENSE` file for more details.
+This project is licensed under the **Apache License 2.0**. See the [`LICENSE`](LICENSE) file for more details.

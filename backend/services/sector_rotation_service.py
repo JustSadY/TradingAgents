@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 from typing import Any
 
@@ -7,6 +8,8 @@ import pandas as pd
 import yfinance as yf
 
 from backend.services.indicator_service import calculate_rsi
+
+_logger = logging.getLogger(__name__)
 
 SECTORS: dict[str, str] = {
     "XLK": "Technology",

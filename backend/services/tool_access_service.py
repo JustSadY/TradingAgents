@@ -7,6 +7,7 @@ from backend.models.tool_settings import UserAgentAccess, UserToolAccess, UserTo
 from backend.trading_agents.agents.analyst_registry import list_analysts
 from backend.trading_agents.agents.tools.registry import registry
 
+
 async def get_user_agent_access(db: AsyncSession, user_id: int) -> dict[str, bool]:
     analysts = list_analysts()
     access_map = dict.fromkeys(analysts, True)

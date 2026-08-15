@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.core.model_pricing import estimate_token_cost, resolve_model_pricing
 from backend.repositories import token_analytics as repo
 
+
 def estimate_cost(provider: str | None, model: str | None, tokens_in: int, tokens_out: int) -> float:
     """Estimate from the canonical pricing catalogue.
 

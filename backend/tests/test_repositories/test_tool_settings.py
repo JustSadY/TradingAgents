@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.tool_settings import AgentToolSetting
 from backend.repositories.tool_settings import get_server_tool_settings, get_user_tool_settings
 
+
 @pytest.fixture
 async def server_tool_setting(db: AsyncSession) -> AgentToolSetting:
     setting = AgentToolSetting(

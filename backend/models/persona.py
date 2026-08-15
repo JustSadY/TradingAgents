@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
 
+
 class UserPersona(Base):
     __tablename__ = "user_personas"
     __table_args__ = (UniqueConstraint("user_id", "key", name="uq_user_persona_user_key"),)

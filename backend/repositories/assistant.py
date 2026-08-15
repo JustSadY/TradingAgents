@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.assistant import AssistantMessage
 
+
 async def get_messages(db: AsyncSession, user_id: int, limit: int = 30) -> list[AssistantMessage]:
     """Return only one user's private assistant conversation.
 

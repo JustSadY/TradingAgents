@@ -6,6 +6,7 @@ from langchain_core.tools import tool
 from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 
+
 @tool
 async def _unavailable_tool(ticker: str) -> str:
     """A deterministic external-data failure for ToolNode telemetry tests."""

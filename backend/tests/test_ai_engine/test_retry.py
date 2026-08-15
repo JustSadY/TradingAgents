@@ -2,6 +2,7 @@ import pytest
 
 from backend.trading_agents.dataflows.retry import retry_async, retry_sync
 
+
 class _RetryableError(ValueError):
     pass
 

@@ -29,6 +29,7 @@ from .propagation import Propagator
 from .setup import GraphSetup
 from .signal_processing import SignalProcessor
 
+
 def _cap_tool_outputs(tool_node: ToolNode, max_chars: int, *, analyst_key: str):
     """Wrap a ToolNode so oversized tool results are middle-truncated before
     they enter the analyst's conversation, and a hard timeout prevents a hung
@@ -130,7 +131,7 @@ class TradingAgentsGraph:
         pm_settings = pm_state.get("settings") or {}
 
         main_prov = pm_settings.get("llm_provider") or self.config.get("llm_provider") or "openai"
-        main_model = pm_settings.get("llm_model") or self.config.get("llm_model") or "gpt-4o-mini"
+        main_model = pm_settings.get("llm_model") or self.config.get("llm_model") or "gpt-5.6-luna"
         self.llm_provider = main_prov
         self.llm_model = main_model
 

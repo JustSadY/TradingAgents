@@ -1,5 +1,6 @@
 from collections import OrderedDict
 
+
 def test_dynamic_redaction_literals_are_bounded_lru(monkeypatch):
     from backend.core import log_redaction
 

@@ -1,5 +1,4 @@
-import { useEffect, useState } from 'react'
-import axios from 'axios'
+import { useAnalysisGetAbComparison } from '../api/generated/analysis/analysis'
 import { GitCompare, Loader2, DollarSign, Clock, Award, Zap, BarChart2, TrendingUp } from 'lucide-react'
 import {
   ResponsiveContainer, BarChart, Bar, XAxis, YAxis,
@@ -23,16 +22,10 @@ interface ABMetric {
 
 export default function ABTesting() {
   const { t, language } = useTranslation()
-  const [data, setData] = useState<ABMetric[]>([])
-  const [loading, setLoading] = useState(true)
-  const [error, setError] = useState<string | null>(null)
-
-  useEffect(() => {
-    axios.get('/api/analysis/ab-comparison')
-      .then(r => setData(r.data))
-      .catch(() => setError(t('common.error')))
-      .finally(() => setLoading(false))
-  }, [language])
+  const query = useAnalysisGetAbComparison()
+  const data = (query.data ?? []) as ABMetric[]
+  const loading = query.isPending
+  const error = query.error ? t('common.error') : null
 
   if (loading) {
     return (

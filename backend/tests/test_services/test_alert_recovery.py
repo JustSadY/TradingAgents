@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock
 
 from backend.services import alert_service
 
+
 class _SessionContext:
     """Expose a fake session through AsyncSessionLocal's context-manager API."""
 
@@ -60,8 +61,11 @@ async def test_recovery_accepts_multiple_existing_alert_analyses(monkeypatch):
     session = _RecoverySession([_triggered_alert(user_id=7)], [101])
 
     throttled_analyze = AsyncMock()
-    monkeypatch.setattr(alert_service, "AsyncSessionLocal", lambda: _SessionContext(session))
+    monkeypatch.setattr(alert_service, "trusted_background_session", lambda _cap: _SessionContext(session))
     monkeypatch.setattr(alert_service, "_throttled_analyze", throttled_analyze)
+    # check_and_recover_lost_alerts() drains the outbox first; that path has its
+    # own coverage and would otherwise consume this fake session's statements.
+    monkeypatch.setattr(alert_service, "process_alert_outbox", AsyncMock())
 
     await alert_service.check_and_recover_lost_alerts()
 
@@ -74,8 +78,11 @@ async def test_recovery_deduplicates_identical_alert_targets(monkeypatch):
     session = _RecoverySession([_triggered_alert(user_id=7), _triggered_alert(user_id=7)], [None, None])
 
     throttled_analyze = AsyncMock()
-    monkeypatch.setattr(alert_service, "AsyncSessionLocal", lambda: _SessionContext(session))
+    monkeypatch.setattr(alert_service, "trusted_background_session", lambda _cap: _SessionContext(session))
     monkeypatch.setattr(alert_service, "_throttled_analyze", throttled_analyze)
+    # check_and_recover_lost_alerts() drains the outbox first; that path has its
+    # own coverage and would otherwise consume this fake session's statements.
+    monkeypatch.setattr(alert_service, "process_alert_outbox", AsyncMock())
 
     await alert_service.check_and_recover_lost_alerts()
 

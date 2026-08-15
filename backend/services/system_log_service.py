@@ -3,6 +3,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.log import SystemLog
 from backend.repositories.system_log import list_all_logs, list_user_logs
 
+
 async def get_user_logs(
     db: AsyncSession,
     user,

@@ -1,22 +1,30 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react'
+import { screen, fireEvent, act, waitFor } from '@testing-library/react'
+import { renderWithQuery } from '../../../test/renderWithQuery'
 import { AnalysisChatWidget } from '../AnalysisChatWidget'
 
 const mockAxiosGet = vi.fn()
 const mockAxiosPost = vi.fn()
 
-vi.mock('axios', () => ({
-  default: {
-    get: (...args: any[]) => mockAxiosGet(...args),
-    post: (...args: any[]) => mockAxiosPost(...args),
-  },
-  get: (...args: any[]) => mockAxiosGet(...args),
-  post: (...args: any[]) => mockAxiosPost(...args),
-  interceptors: {
-    request: { use: vi.fn() },
-    response: { use: vi.fn() },
-  },
-}))
+vi.mock('axios', () => {
+  const get = (...args: any[]) => mockAxiosGet(...args)
+  const post = (...args: any[]) => mockAxiosPost(...args)
+  // The generated client calls axios(config); dispatch to the same spies.
+  const instance = Object.assign(
+    vi.fn((config: { url?: string; method?: string; data?: unknown } = {}) =>
+      String(config.method ?? 'get').toLowerCase() === 'get'
+        ? get(config.url, config)
+        : post(config.url, config.data, config),
+    ),
+    {
+      get,
+      post,
+      interceptors: { request: { use: vi.fn() }, response: { use: vi.fn() } },
+      defaults: {},
+    },
+  )
+  return { default: instance, get, post, interceptors: instance.interceptors }
+})
 
 vi.mock('../../../contexts/LanguageContext', () => ({
   useTranslation: () => ({ t: (k: string) => {
@@ -40,7 +48,7 @@ describe('AnalysisChatWidget', () => {
   it('renders welcome state when no messages', async () => {
     mockAxiosGet.mockResolvedValue({ data: [] })
     await act(async () => {
-      render(<AnalysisChatWidget analysisId={1} />)
+      renderWithQuery(<AnalysisChatWidget analysisId={1} />)
     })
     expect(screen.getByText('Ask questions about this analysis')).toBeInTheDocument()
   })
@@ -51,10 +59,11 @@ describe('AnalysisChatWidget', () => {
       { id: 2, role: 'assistant', content: 'The signal is Buy.' },
     ]
     mockAxiosGet.mockResolvedValue({ data: messages })
-    await act(async () => {
-      render(<AnalysisChatWidget analysisId={1} />)
-    })
-    expect(screen.getByText('What is the signal?')).toBeInTheDocument()
+    renderWithQuery(<AnalysisChatWidget analysisId={1} />)
+
+    // History lands through the query cache, so wait for the commit rather
+    // than asserting synchronously after render.
+    expect(await screen.findByText('What is the signal?')).toBeInTheDocument()
     expect(screen.getByText('The signal is Buy.')).toBeInTheDocument()
   })
 
@@ -65,7 +74,7 @@ describe('AnalysisChatWidget', () => {
     })
 
     await act(async () => {
-      render(<AnalysisChatWidget analysisId={1} />)
+      renderWithQuery(<AnalysisChatWidget analysisId={1} />)
     })
 
     const input = screen.getByPlaceholderText('Type your question...')
@@ -89,7 +98,7 @@ describe('AnalysisChatWidget', () => {
     mockAxiosPost.mockImplementation(() => new Promise(() => {}))
 
     await act(async () => {
-      render(<AnalysisChatWidget analysisId={1} />)
+      renderWithQuery(<AnalysisChatWidget analysisId={1} />)
     })
 
     const input = screen.getByPlaceholderText('Type your question...')

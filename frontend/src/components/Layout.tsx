@@ -11,7 +11,7 @@ import {
   BarChart2, Bell, Menu, GitCompare, Shield, UserCircle, History, Filter, Globe2, CalendarDays,
 } from 'lucide-react'
 import { useEffect, useState, useCallback, Suspense } from 'react'
-import axios from 'axios'
+import { useCronCronStatus } from '../api/generated/cron/cron'
 import type { Notification } from '../utils/notify'
 import UpdateBanner from './UpdateBanner'
 import { PortfolioAssistant } from './assistant/PortfolioAssistant'
@@ -80,16 +80,11 @@ export default function Layout() {
   const { language, setLanguage, t } = useTranslation()
   const { currency, setCurrency } = useCurrency()
   const [sidebarOpen, setSidebarOpen] = useState(false)
-  const [cronStatus, setCronStatus] = useState<{ next_run_time: string | null }>({ next_run_time: null })
   const { activeTasks } = useActiveTasks()
   const activeTask = activeTasks[0] || null
 
-  useEffect(() => {
-    const fetch = () => axios.get('/api/cron/status').then(r => setCronStatus(r.data)).catch(() => {})
-    fetch()
-    const id = setInterval(fetch, 30_000)
-    return () => clearInterval(id)
-  }, [])
+  const cronQuery = useCronCronStatus({ query: { refetchInterval: 30_000 } })
+  const cronStatus = (cronQuery.data ?? { next_run_time: null }) as { next_run_time: string | null }
 
   const handleLogout = () => { logout(); navigate('/login') }
 

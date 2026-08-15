@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { screen } from '@testing-library/react'
+import { renderWithQuery } from '../../test/renderWithQuery'
 import { MemoryRouter } from 'react-router-dom'
 import Layout from '../Layout'
 
@@ -70,7 +71,7 @@ beforeEach(() => {
 
 describe('Layout', () => {
   it('renders brand name', () => {
-    render(
+    renderWithQuery(
       <MemoryRouter>
         <Layout />
       </MemoryRouter>
@@ -79,7 +80,7 @@ describe('Layout', () => {
   })
 
   it('shows user avatar and name', () => {
-    render(
+    renderWithQuery(
       <MemoryRouter>
         <Layout />
       </MemoryRouter>
@@ -89,7 +90,7 @@ describe('Layout', () => {
   })
 
   it('renders navigation sections', () => {
-    render(
+    renderWithQuery(
       <MemoryRouter>
         <Layout />
       </MemoryRouter>
@@ -101,7 +102,7 @@ describe('Layout', () => {
   })
 
   it('renders language and currency controls', () => {
-    render(
+    renderWithQuery(
       <MemoryRouter>
         <Layout />
       </MemoryRouter>

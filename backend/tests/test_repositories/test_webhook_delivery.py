@@ -5,6 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.webhook_delivery import WebhookDelivery
 from backend.repositories.webhook_delivery import list_webhook_deliveries
 
+
 class TestWebhookDeliveryRepository:
     async def _create_delivery(
         self, db: AsyncSession, user_id: int, event: str = "analysis_complete", success: bool = True, **overrides

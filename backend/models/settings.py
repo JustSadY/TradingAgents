@@ -20,7 +20,7 @@ class AppSettings(Base):
     _watchlist: Mapped[str] = mapped_column("watchlist", Text, default="[]")
     output_language: Mapped[str] = mapped_column(String(50), default="English")
     llm_provider: Mapped[str] = mapped_column(String(50), default="openai")
-    llm_model: Mapped[str] = mapped_column(String(100), default="gpt-4o-mini")
+    llm_model: Mapped[str] = mapped_column(String(100), default="gpt-5.6-luna")
     fallback_llm_chain: Mapped[list[dict[str, str]]] = mapped_column(JSON, default=list, nullable=False)
     investor_persona: Mapped[str] = mapped_column(String(50), default="conservative")
     analyst_concurrency_limit: Mapped[int] = mapped_column(Integer, default=1)

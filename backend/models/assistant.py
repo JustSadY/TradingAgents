@@ -5,6 +5,7 @@ from sqlalchemy.orm import Mapped, mapped_column
 
 from backend.core.database import Base
 
+
 class AssistantMessage(Base):
     __tablename__ = "assistant_messages"
     __table_args__ = (Index("ix_assistant_messages_user_created", "user_id", "created_at"),)

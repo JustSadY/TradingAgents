@@ -1,5 +1,26 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
+import {
+  useAnalysisListAnalysis,
+  useAnalysisListPortfolioAnalyses,
+  useAnalysisDeleteAnalysis,
+  useAnalysisClearHistory,
+  useAnalysisRunAnalysis,
+  useAnalysisRunPortfolioRun,
+  useAnalysisCancelAnalysis,
+  useAnalysisCostEstimate,
+  useAnalysisTimeTravelResume,
+  analysisGetAnalysis,
+  getAnalysisGetAnalysisQueryKey,
+  analysisGetPortfolioAnalysis,
+  getAnalysisGetPortfolioAnalysisQueryKey,
+  analysisGetLatestAnalysis,
+} from '../api/generated/analysis/analysis'
+import { useShareCreateShare } from '../api/generated/share/share'
+// probeActiveTask below deliberately keeps a direct axios call: it is a
+// WebSocket-reconnect policy probe with its own 2s timeout that must classify
+// 401/403/unavailable itself, not server state worth caching.
 import axios from 'axios'
 import { getAccessToken } from '../contexts/AuthContext'
 import { useMeta } from '../hooks/useMeta'
@@ -16,7 +37,7 @@ import {
   Download, FileDown, AlertTriangle, Scale, Share2, Copy,
   MessageSquare, Bot, Terminal, BookOpen, Trash2
 } from 'lucide-react'
-import type { AnalysisListItem, AnalysisResultRead, MultiTickerListItem, MultiTickerResultRead } from '../api/types'
+import type { AnalysisListItem, AnalysisResultRead, MultiTickerListItem, MultiTickerResultRead } from '../api/generated/model'
 import { SignalBadge } from '../components/analysis/SignalBadge'
 import { ReportCard } from '../components/analysis/ReportCard'
 import { MarkdownReport } from '../components/report/MarkdownReport'
@@ -805,8 +826,8 @@ function RunTab() {
   const assetTypes = meta?.asset_types ?? [{ value: 'stock', label: 'Stock' }, { value: 'crypto', label: 'Crypto' }]
   const [currentStep, setCurrentStep] = useState<{ label: string; stage: string } | null>(null)
 
-  const [costEstimate, setCostEstimate] = useState<{ estimated_cost_usd: number; estimated_tokens: number; estimated_duration_min: number; analyst_count: number } | null>(null)
-  const [existingId, setExistingId] = useState<number | null>(null)
+  const runAnalysis = useAnalysisRunAnalysis()
+  const cancelAnalysis = useAnalysisCancelAnalysis()
   const [showRerunModal, setShowRerunModal] = useState(false)
   const [startError, setStartError] = useState<AnalysisStartError | null>(null)
 
@@ -838,7 +859,7 @@ function RunTab() {
 
   useEffect(() => {
     if (analysisId && runStatus === 'done' && !detail) {
-      axios.get(`/api/analysis/${analysisId}`).then(r => setDetail(r.data)).catch(e => console.error('Failed to fetch analysis detail', e))
+      analysisGetAnalysis(analysisId).then(d => setDetail(d as never)).catch(e => console.error('Failed to fetch analysis detail', e))
     }
   }, [analysisId, runStatus, detail])
 
@@ -846,11 +867,11 @@ function RunTab() {
   useEffect(() => {
     if (runStartedRef.current || runStatus !== 'idle' || analysisId) return
     if (runStatus === 'idle' && !analysisId) {
-      axios.get('/api/analysis/latest').then(r => {
+      analysisGetLatestAnalysis().then(latest => {
         // A user action, active-task sync, or persisted-task resume may have
         // started while this bootstrap request was in flight.
         if (runStartedRef.current) return
-        const a = r.data
+        const a = latest as unknown as AnalysisResultRead | null
         // A malformed/empty payload (e.g. transient backend issue) must not
         // stomp `ticker` with undefined — every other effect assumes it's a
         // string and calls .trim()/.toUpperCase() on it unconditionally.
@@ -1101,7 +1122,7 @@ function RunTab() {
         )
         if (ev.analysis_id) {
           setAnalysisId(ev.analysis_id)
-          axios.get(`/api/analysis/${ev.analysis_id}`).then(r => setDetail(r.data)).catch(e => console.error('Failed to fetch analysis detail on complete', e))
+          analysisGetAnalysis(ev.analysis_id).then(d => setDetail(d as never)).catch(e => console.error('Failed to fetch analysis detail on complete', e))
         }
       } else if (ev.type === 'error') {
         finished = true
@@ -1231,27 +1252,20 @@ function RunTab() {
     }
   }, [])
 
-  useEffect(() => {
-    if (!ticker.trim() || running) return
-    const tid = setTimeout(async () => {
-      try {
-        const { data } = await axios.get('/api/analysis/cost-estimate')
-        setCostEstimate(data)
-      } catch { setCostEstimate(null) }
-    }, 600)
-    return () => clearTimeout(tid)
-  }, [ticker, date, running])
+  // Both lookups take no per-keystroke parameters, so the query key is stable
+  // and the cache serves repeat renders -- the old 600ms/400ms debounces existed
+  // only to stop a request firing on every character.
+  const costEstimateQuery = useAnalysisCostEstimate({ query: { enabled: Boolean(ticker.trim()) && !running } })
+  const costEstimate = costEstimateQuery.error ? null : (costEstimateQuery.data ?? null)
 
+  const recentQuery = useAnalysisListAnalysis({ limit: 5 }, { query: { enabled: Boolean(ticker.trim()) } })
+  const existingId = (() => {
+    if (!ticker.trim() || !Array.isArray(recentQuery.data)) return null
+    const match = (recentQuery.data as unknown as AnalysisListItem[])
+      .find(x => x.ticker === ticker.toUpperCase() && x.trade_date === date)
+    return match?.id ?? null
+  })()
   useEffect(() => {
-    if (!ticker.trim()) { setExistingId(null); return }
-    const tid = setTimeout(async () => {
-      try {
-        const { data } = await axios.get('/api/analysis/history', { params: { limit: 5 } })
-        const match = data.find((x: AnalysisListItem) => x.ticker === ticker.toUpperCase() && x.trade_date === date)
-        setExistingId(match?.id ?? null)
-      } catch { setExistingId(null) }
-    }, 400)
-    return () => clearTimeout(tid)
   }, [ticker, date])
 
   const handleStop = async () => {
@@ -1272,7 +1286,7 @@ function RunTab() {
       // resources in the background.
       setStopping(true)
       try {
-        const { data } = await axios.post(`/api/analysis/${tid}/cancel`)
+        const data = await cancelAnalysis.mutateAsync({ taskId: tid })
         if (isRecord(data) && data.cancelled === false) {
           throw new Error('Cancellation was not accepted')
         }
@@ -1340,9 +1354,9 @@ function RunTab() {
     seenLogRef.current = new Set()
 
     try {
-      const { data } = await axios.post('/api/analysis/run', {
-        ticker: ticker.toUpperCase(), trade_date: date, asset_type: assetType,
-      })
+      const data = await runAnalysis.mutateAsync({
+        data: { ticker: ticker.toUpperCase(), trade_date: date, asset_type: assetType },
+      }) as { task_id?: unknown }
       const taskId = data.task_id
       if (typeof taskId !== 'string' || !taskId) throw new Error('Analysis start response did not include a task ID')
 
@@ -1351,7 +1365,7 @@ function RunTab() {
       // queued job cannot keep running invisibly in the background.
       if (requestId !== runRequestRef.current || stoppedByUserRef.current) {
         clearTaskMarkerFor(taskId)
-        try { await axios.post(`/api/analysis/${taskId}/cancel`) } catch { /* best-effort cancel */ }
+        try { await cancelAnalysis.mutateAsync({ taskId }) } catch { /* best-effort cancel */ }
         return
       }
       sessionStorage.setItem(TASK_KEY, JSON.stringify({ ticker: ticker.toUpperCase(), taskId, startedAt: new Date().toISOString() }))
@@ -1870,6 +1884,8 @@ function RunTab() {
 
 function MultiTab() {
   const { t } = useTranslation()
+  const runPortfolio = useAnalysisRunPortfolioRun()
+  const cancelPortfolio = useAnalysisCancelAnalysis()
   const [tickers, setTickers] = useState<string[]>([])
   const [input, setInput] = useState('')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
@@ -2034,7 +2050,7 @@ function MultiTab() {
     taskIdRef.current = null
     setRunning(true); setStopping(false); setDone(false); setCancelled(false); setError(null); setStartError(null); setProgress('')
     try {
-      const { data } = await axios.post('/api/analysis/run-portfolio', { tickers, trade_date: date, asset_type: assetType })
+      const data = await runPortfolio.mutateAsync({ data: { tickers, trade_date: date, asset_type: assetType } }) as unknown as Record<string, unknown>
       const taskId = data.task_id
       if (typeof taskId !== 'string' || !taskId) throw new Error('Portfolio analysis start response did not include a task ID')
 
@@ -2042,7 +2058,7 @@ function MultiTab() {
       // late task id arrives, cancel it instead of attaching an invisible
       // background job to a UI the user believes is idle.
       if (requestId !== runRequestRef.current || stoppedByUserRef.current) {
-        try { await axios.post(`/api/analysis/${taskId}/cancel`) } catch { /* cancellation is retried by durable server intent when accepted */ }
+        try { await cancelPortfolio.mutateAsync({ taskId }) } catch { /* cancellation is retried by durable server intent when accepted */ }
         return
       }
       taskIdRef.current = taskId
@@ -2072,7 +2088,7 @@ function MultiTab() {
 
     setStopping(true)
     try {
-      const { data } = await axios.post(`/api/analysis/${taskId}/cancel`)
+      const data = await cancelPortfolio.mutateAsync({ taskId })
       if (isRecord(data) && data.cancelled === false) {
         throw new Error('Cancellation was not accepted')
       }
@@ -2207,13 +2223,12 @@ function MultiTab() {
 
 function PortfolioHistorySection() {
   const { t } = useTranslation()
-  const [items, setItems] = useState<MultiTickerListItem[]>([])
   const [detail, setDetail] = useState<MultiTickerResultRead | null>(null)
-  const [loading, setLoading] = useState(true)
+  const queryClient = useQueryClient()
 
-  useEffect(() => {
-    axios.get('/api/analysis/portfolio-history').then(r => setItems(r.data)).catch(e => { console.error('Failed to load portfolio history', e); setItems([]) }).finally(() => setLoading(false))
-  }, [])
+  const historyQuery = useAnalysisListPortfolioAnalyses()
+  const items = (historyQuery.data ?? []) as unknown as MultiTickerListItem[]
+  const loading = historyQuery.isPending
 
   if (loading) return <div className="text-slate-500 text-xs px-2">{t('analysis.portfolio_history.loading')}</div>
 
@@ -2223,7 +2238,13 @@ function PortfolioHistorySection() {
       {items.length === 0 ? <p className="text-slate-600 text-xs">{t('analysis.portfolio_history.empty')}</p> : (
         <div className="space-y-2">
           {items.map(item => (
-            <div key={item.id} onClick={() => axios.get(`/api/analysis/portfolio/${item.id}`).then(r => setDetail(r.data)).catch(e => console.error('Failed to load portfolio detail', e))}
+            <div key={item.id} onClick={() => queryClient
+              .fetchQuery({
+                queryKey: getAnalysisGetPortfolioAnalysisQueryKey(item.id),
+                queryFn: () => analysisGetPortfolioAnalysis(item.id),
+              })
+              .then(d => setDetail(d as unknown as MultiTickerResultRead))
+              .catch(e => console.error('Failed to load portfolio detail', e))}
               className="flex items-center justify-between p-3 rounded-xl bg-slate-900/20 hover:bg-slate-900/60 cursor-pointer transition-colors border border-white/[0.03] hover:border-white/[0.08]">
               <div className="flex items-center gap-2">
                 <span className="text-white font-mono text-xs font-bold">{item.tickers.join(', ')}</span>
@@ -2263,8 +2284,7 @@ function HistoryTab({
   onRollbackStart: (taskId: string, ticker: string) => void
 }) {
   const { t, language } = useTranslation()
-  const [items, setItems] = useState<AnalysisListItem[]>([])
-  const [loading, setLoading] = useState(true)
+  const createShare = useShareCreateShare()
   const [detail, setDetail] = useState<AnalysisResultRead | null>(null)
   const [detailLoading, setDetailLoading] = useState(false)
   const [activeDetailTab, setActiveDetailTab] = useState<'reports' | 'debate' | 'chat' | 'timetravel'>('reports')
@@ -2279,7 +2299,7 @@ function HistoryTab({
     setSharing(true)
     setShareLink(null)
     try {
-      const { data } = await axios.post<{ token: string; expires_at: string }>(`/api/analysis/${id}/share`)
+      const data = await createShare.mutateAsync({ analysisId: id }) as unknown as { token: string; expires_at: string }
       const link = buildPublicShareUrl(data.token)
       setShareLink(link)
       // Clipboard access is unavailable on plain HTTP origins (including the
@@ -2304,9 +2324,12 @@ function HistoryTab({
   const meta = useMeta()
   const sectionLabels = meta?.section_labels ?? {}
 
-  useEffect(() => {
-    axios.get('/api/analysis/history?limit=50').then(r => setItems(r.data)).catch(e => { console.error('Failed to load analysis history', e); setItems([]) }).finally(() => setLoading(false))
-  }, [])
+  const deleteAnalysis = useAnalysisDeleteAnalysis()
+  const clearHistory = useAnalysisClearHistory()
+  const historyQuery = useAnalysisListAnalysis({ limit: 50 })
+  const items = (historyQuery.data ?? []) as unknown as AnalysisListItem[]
+  const loading = historyQuery.isPending
+  const historyQueryClient = useQueryClient()
 
   const openDetail = useCallback(async (id: number) => {
     setDetailLoading(true)
@@ -2314,8 +2337,13 @@ function HistoryTab({
     // Never leave the previous record's token visible while a new detail is
     // loading; doing so made it easy to copy the wrong report's link.
     setShareLink(null)
-    try { const { data } = await axios.get(`/api/analysis/${id}`); setDetail(data) }
-    finally { setDetailLoading(false) }
+    try {
+      const data = await historyQueryClient.fetchQuery({
+        queryKey: getAnalysisGetAnalysisQueryKey(id),
+        queryFn: () => analysisGetAnalysis(id),
+      })
+      setDetail(data as never)
+    } finally { setDetailLoading(false) }
   }, [])
 
   const confirmDeleteSingle = async () => {
@@ -2323,8 +2351,8 @@ function HistoryTab({
     const id = itemToDelete
     setDeletingId(id)
     try {
-      await axios.delete(`/api/analysis/${id}`)
-      setItems(prev => prev.filter(item => item.id !== id))
+      await deleteAnalysis.mutateAsync({ analysisId: id })
+      await historyQuery.refetch()
       notify('success', t('analysis.history.deleted_single'), t('analysis.title'))
       if (detail?.id === id) setDetail(null)
     } catch (err: any) {
@@ -2338,8 +2366,8 @@ function HistoryTab({
   const confirmClearAll = async () => {
     setClearingAll(true)
     try {
-      await axios.delete('/api/analysis/history/clear')
-      setItems([])
+      await clearHistory.mutateAsync()
+      await historyQuery.refetch()
       setDetail(null)
       notify('success', t('analysis.history.deleted_all'), t('analysis.title'))
     } catch (err: any) {
@@ -2731,6 +2759,7 @@ function TimeTravelWidget({
   onRollbackStart: (taskId: string) => void
 }) {
   const { t, language } = useTranslation()
+  const timeTravel = useAnalysisTimeTravelResume()
   const [checkpoints, setCheckpoints] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [selectedCp, setSelectedCp] = useState<any>(null)
@@ -2776,9 +2805,12 @@ function TimeTravelWidget({
     if (!selectedCp) return
     setRollbackLoading(true)
     try {
-      const { data } = await axios.post(`/api/analysis/${analysisId}/time-travel`, {
-        checkpoint_id: selectedCp.checkpoint_id,
-        update_state: updateFields,
+      const data = await timeTravel.mutateAsync({
+        analysisId,
+        data: {
+          checkpoint_id: selectedCp.checkpoint_id,
+          update_state: updateFields,
+        },
       })
       notify('success', language === 'tr' ? 'Zaman yolculuğu başlatıldı!' : 'Time travel initiated!')
       onRollbackStart(data.task_id)

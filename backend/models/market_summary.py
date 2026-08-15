@@ -4,6 +4,7 @@ from sqlalchemy import Column, DateTime, ForeignKey, Index, Integer, String, Tex
 
 from backend.core.database import Base
 
+
 class MarketDailySummary(Base):
     __tablename__ = "market_daily_summaries"
     __table_args__ = (Index("ix_market_daily_summaries_user_date", "user_id", "date"),)

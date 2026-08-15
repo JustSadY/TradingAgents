@@ -42,29 +42,30 @@ class PricingResolution:
 
 MODEL_PRICING: dict[str, dict[str, ModelPricing]] = {
     "openai": {
-        "gpt-4o-mini": ModelPricing(0.15, 0.60),
-        "gpt-4o": ModelPricing(5.0, 15.0),
-        "gpt-4-turbo": ModelPricing(10.0, 30.0),
-        "gpt-3.5-turbo": ModelPricing(0.50, 1.50),
-        "o1-mini": ModelPricing(3.0, 12.0),
-        "o1": ModelPricing(15.0, 60.0),
-        "o3-mini": ModelPricing(1.10, 4.40),
-        "o4-mini": ModelPricing(1.10, 4.40),
+        "gpt-5.6-sol": ModelPricing(5.0, 30.0),
+        "gpt-5.6-terra": ModelPricing(2.0, 12.0),
+        "gpt-5.6-luna": ModelPricing(0.20, 1.20),
     },
     "anthropic": {
-        "claude-3-5-sonnet": ModelPricing(3.0, 15.0),
-        "claude-3-5-haiku": ModelPricing(0.80, 4.0),
-        "claude-3-opus": ModelPricing(15.0, 75.0),
-        "claude-sonnet-4": ModelPricing(3.0, 15.0),
-        "claude-haiku-4": ModelPricing(0.80, 4.0),
-        "claude-opus-4": ModelPricing(15.0, 75.0),
+        # Longest-prefix matching means the 4-5 entries must stay more specific
+        # than any bare "claude-haiku-4"/"claude-opus-4" key.
+        "claude-fable-5": ModelPricing(10.0, 50.0),
+        "claude-opus-5": ModelPricing(5.0, 25.0),
+        "claude-sonnet-5": ModelPricing(2.0, 10.0),
+        "claude-haiku-4-5": ModelPricing(1.0, 5.0),
+        "claude-opus-4-8": ModelPricing(5.0, 25.0),
+        "claude-opus-4-7": ModelPricing(5.0, 25.0),
+        "claude-opus-4-6": ModelPricing(5.0, 25.0),
+        "claude-sonnet-4-6": ModelPricing(3.0, 15.0),
+        "claude-sonnet-4-5": ModelPricing(3.0, 15.0),
     },
     "google": {
-        "gemini-1.5-pro": ModelPricing(3.50, 10.50),
-        "gemini-1.5-flash": ModelPricing(0.075, 0.30),
-        "gemini-2.0-flash": ModelPricing(0.075, 0.30),
-        "gemini-2.5-pro": ModelPricing(7.0, 21.0),
-        "gemini-2.5-flash": ModelPricing(0.15, 0.60),
+        # Flash rates are promotional through 2026-12-31 and double from
+        # 2027-01-01; Pro rates are the <=200k-token prompt tier.
+        "gemini-3.7-flash": ModelPricing(0.75, 3.75),
+        "gemini-3.6-flash": ModelPricing(0.75, 3.75),
+        "gemini-3.5-flash-lite": ModelPricing(0.30, 2.50),
+        "gemini-3.1-pro": ModelPricing(2.0, 12.0),
     },
     "nvidia": {
         "llama-3.1-70b": ModelPricing(0.35, 0.35),

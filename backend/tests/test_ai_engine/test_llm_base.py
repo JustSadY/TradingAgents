@@ -5,6 +5,7 @@ from backend.trading_agents.llm_clients.base_client import (
     normalize_content,
 )
 
+
 class _FakeResponse:
     def __init__(self, content):
         self.content = content
@@ -48,11 +49,13 @@ def test_is_rate_limited_ignores_generic_errors():
     exc = Exception("internal server error")
     assert is_rate_limited(exc) is False
 
-def test_classify_error_quota_exhausted():
-    assert classify_error(Exception("resourceexhausted")) == "quota_exhausted"
-
-def test_classify_error_rate_limited():
-    assert classify_error(Exception("retry after 5 seconds")) == "rate_limited"
+# One taxonomy now serves both the LLM clients and the node runtime; quota
+# exhaustion and rate limiting collapse into "quota", and an unrecognised error
+# is "bug" rather than "unknown". These strings reach Prometheus and the
+# analysis WebSocket, so they are part of the observable contract.
+def test_classify_error_quota_covers_exhaustion_and_rate_limits():
+    assert classify_error(Exception("resourceexhausted")) == "quota"
+    assert classify_error(Exception("retry after 5 seconds")) == "quota"
 
 def test_classify_error_auth():
     assert classify_error(Exception("401 unauthorized")) == "auth"
@@ -60,5 +63,5 @@ def test_classify_error_auth():
 def test_classify_error_timeout():
     assert classify_error(Exception("timeout")) == "timeout"
 
-def test_classify_error_unknown():
-    assert classify_error(Exception("random gibberish")) == "unknown"
+def test_classify_error_unrecognised_is_a_bug():
+    assert classify_error(Exception("random gibberish")) == "bug"

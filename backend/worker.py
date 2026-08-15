@@ -18,17 +18,20 @@ from backend.core.config import get_settings
 _logger = logging.getLogger(__name__)
 
 
-async def _mark_analysis_terminal(task_id: str, status: str) -> None:
+async def _mark_analysis_terminal(task_id: str, status: str, user_id: int | None) -> None:
     """Persist worker preparation failures for the pre-created queue row."""
     from datetime import UTC, datetime
 
     from sqlalchemy import update
 
     from backend.core.database import AsyncSessionLocal
+    from backend.core.rls_context import set_user_background_context
     from backend.models.analysis import AnalysisResult
 
     try:
         async with AsyncSessionLocal() as db:
+            if user_id is not None:
+                await set_user_background_context(db, user_id)
             await db.execute(
                 update(AnalysisResult)
                 .where(AnalysisResult.task_id == task_id)
@@ -56,6 +59,9 @@ async def run_analysis_job(
     try:
         async with AsyncSessionLocal() as db:
             user = await db.get(User, user_id) if user_id is not None else None
+            if user_id is not None:
+                from backend.core.rls_context import set_user_background_context
+                await set_user_background_context(db, user_id)
             if user_id is not None and user is None:
                 _logger.warning("Dropping analysis task=%s: owner user_id=%s no longer exists", task_id, user_id)
                 from backend.core import task_store
@@ -67,7 +73,7 @@ async def run_analysis_job(
                 await task_store.clear_meta(task_id, user_id)
                 await task_store.clear_owner(task_id)
                 await task_store.clear_cancel_request(task_id)
-                await _mark_analysis_terminal(task_id, "failed")
+                await _mark_analysis_terminal(task_id, "failed", user_id)
                 return
             settings = await get_or_create_settings(db, user)
             await db.commit()
@@ -82,7 +88,7 @@ async def run_analysis_job(
             emitter = AnalysisEmitter(task_id)
             await emitter.emit_error("Analysis cancelled.")
             await emitter.close()
-            await _mark_analysis_terminal(task_id, "cancelled")
+            await _mark_analysis_terminal(task_id, "cancelled", user_id)
         finally:
             await task_store.clear_meta(task_id, user_id)
             await task_store.clear_owner(task_id)
@@ -96,7 +102,7 @@ async def run_analysis_job(
         emitter = AnalysisEmitter(task_id)
         try:
             await emitter.emit_error("Analysis failed before execution. Please try again.")
-            await _mark_analysis_terminal(task_id, "failed")
+            await _mark_analysis_terminal(task_id, "failed", user_id)
         finally:
             await emitter.close()
             await task_store.clear_meta(task_id, user_id)
@@ -114,6 +120,9 @@ async def run_portfolio_job(
     try:
         async with AsyncSessionLocal() as db:
             user = await db.get(User, user_id) if user_id is not None else None
+            if user_id is not None:
+                from backend.core.rls_context import set_user_background_context
+                await set_user_background_context(db, user_id)
             if user_id is not None and user is None:
                 _logger.warning("Dropping portfolio task=%s: owner user_id=%s no longer exists", task_id, user_id)
                 from backend.core import task_store

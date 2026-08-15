@@ -49,6 +49,12 @@ The current analyst catalog contains 12 specialized analyst plugins. Analysts, r
 
 Agent output is still not equivalent to an executable order. Application-side cash, exposure, concentration, risk, broker, and trading-mode controls can reduce or reject the final proposal.
 
+Portfolio rebalancing sits outside this graph and follows the same rule more
+strictly: `portfolio_rebalance_planner` computes every action, quantity, issue
+and health score in exact decimal arithmetic, and the model only writes the
+summary and per-trade rationale. Do not move a number back into the prompt —
+these suggestions feed an order form.
+
 ---
 
 ## Backend layering
@@ -99,6 +105,17 @@ On startup, the app creates missing tables and can apply supported additive/idem
 
 Do not treat startup additive migration as a replacement for destructive migrations. Renames, drops, incompatible type changes, and data transforms need an explicit migration plan.
 
+### LangGraph checkpoints
+
+Analysis checkpoints are stored in the application database when `DATABASE_URL`
+points at PostgreSQL, so a run can resume on any worker or pod and one backup
+policy covers both. A non-PostgreSQL `DATABASE_URL` (the test suite, or a SQLite
+deployment) falls back to per-analysis SQLite files under the data cache dir.
+
+LangGraph owns the checkpoint schema; its `setup()` is idempotent and runs once
+per process, so those tables are deliberately not in Alembic. Every application
+table still belongs to Alembic.
+
 ---
 
 ## Multi-agent package
@@ -141,6 +158,33 @@ Typical steps:
 Do not hardcode duplicate settings controls in React when `/api/meta`/tool metadata can drive them.
 
 ---
+
+## Retries and error classification
+
+`classify_error` in `llm_clients/base_client.py` is the **single** error
+taxonomy: `auth`, `quota`, `timeout`, `provider_degraded`, `transient`, `bug`.
+Those strings are emitted as Prometheus labels (`NODE_ERRORS_BY_TYPE`) and on
+the analysis WebSocket, so changing one is an observable change. `resilience`
+re-exports it; do not add a second classifier.
+
+Three things can repeat a failed LLM call. Know which one you are changing:
+
+| Layer | Where | Default |
+| --- | --- | --- |
+| Node retry | `retry_call` / `guard_node` | `node_retry_attempts`, 2 attempts |
+| Provider SDK retry | LangChain client `max_retries` | **0** — `SDK_RETRIES`, set on every client |
+| Provider failover | `FallbackLLM` | length of the configured chain |
+
+`retry_call` is the single retry authority. LangChain clients default to ~2
+internal retries of their own; leaving that unset multiplied with the node
+attempts and the fallback chain, so the engine now pins it to 0. An explicit
+`max_retries` in agent settings still wins. There is deliberately **no**
+analysis-level retry: `_maybe_retry_analysis` returns `False` on purpose.
+
+Node circuit-breaker state lives in `agents/runtime/circuit_breaker.py`. It is
+shared through Redis when `REDIS_URL` is set, so one worker's observation of a
+failing provider protects the others, and falls back to process memory
+otherwise. A Redis outage degrades to local counting rather than failing nodes.
 
 ## LLM providers
 
@@ -219,18 +263,29 @@ Do not put JWTs into WebSocket query strings. Preserve the existing subprotocol-
 ### Backend
 
 ```bash
-python -m venv .venv
-
-# Windows PowerShell
-.venv\Scripts\activate
-
-# Linux/macOS
-source .venv/bin/activate
-
-pip install -r backend/requirements.txt
-cp .env.example .env
-uvicorn backend.main:app --reload --port 8000
+cd backend
+uv sync --frozen
+cp ../.env.example ../.env
+uv run uvicorn backend.main:app --reload --port 8000
 ```
+
+### Dependencies
+
+`backend/pyproject.toml` is the single hand-edited dependency manifest, locked by
+`backend/uv.lock`. There is no second dependency source: Docker, `deploy/install.sh`
+and `deploy/update.sh` all install with `uv sync --frozen`, so nothing can drift
+out of the lock.
+
+To change a dependency:
+
+```bash
+cd backend
+# edit pyproject.toml, then:
+uv lock
+```
+
+Commit the updated lock alongside the manifest. `uv lock --check` fails if the
+two disagree, and every install path runs it before syncing.
 
 Configure infrastructure values such as `DATABASE_URL`, `SECRET_KEY`, and `ENCRYPTION_KEY` in `.env` as needed. Configure LLM/provider keys after login through the Web UI, not in `.env`.
 
@@ -283,9 +338,9 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-The current Compose topology contains PostgreSQL, Redis, backend, arq worker, frontend/nginx, Prometheus, Grafana, postgres-exporter, and redis-exporter.
+The current Compose topology contains PostgreSQL, Redis, backend, arq worker, frontend/nginx, Prometheus, postgres-exporter, and redis-exporter.
 
-`DB_PASSWORD` and `GRAFANA_ADMIN_PASSWORD` must be set for the current Compose stack. Do not expose loopback-bound monitoring ports publicly without an authenticated reverse proxy or VPN.
+`DB_PASSWORD` must be set for the current Compose stack. Do not expose loopback-bound monitoring ports publicly without an authenticated reverse proxy or VPN.
 
 ---
 
