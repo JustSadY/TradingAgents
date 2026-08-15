@@ -5,7 +5,8 @@
  * AI-powered trading dashboard with simulation and live trading support
  * OpenAPI spec version: 1.0.0
  */
-import type { AgentSettingFieldMetaOptionsItem } from './agentSettingFieldMetaOptionsItem';
+import type { AgentSettingFieldMetaType } from './agentSettingFieldMetaType';
+import type { SettingOptionMeta } from './settingOptionMeta';
 
 export interface AgentSettingFieldMeta {
   default?: unknown;
@@ -14,9 +15,9 @@ export interface AgentSettingFieldMeta {
   label_key: string;
   max?: number | null;
   min?: number | null;
-  options?: AgentSettingFieldMetaOptionsItem[];
+  options?: SettingOptionMeta[];
   placeholder_key?: string | null;
   required?: boolean;
   step?: number | null;
-  type: string;
+  type: AgentSettingFieldMetaType;
 }

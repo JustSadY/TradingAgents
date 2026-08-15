@@ -5,7 +5,9 @@
  * AI-powered trading dashboard with simulation and live trading support
  * OpenAPI spec version: 1.0.0
  */
-import type { ToolSettingFieldMetaOptionsItem } from './toolSettingFieldMetaOptionsItem';
+import type { SettingOptionMeta } from './settingOptionMeta';
+import type { ToolSettingFieldMetaScope } from './toolSettingFieldMetaScope';
+import type { ToolSettingFieldMetaType } from './toolSettingFieldMetaType';
 
 export interface ToolSettingFieldMeta {
   advanced?: boolean;
@@ -15,10 +17,10 @@ export interface ToolSettingFieldMeta {
   label_key: string;
   max?: number | null;
   min?: number | null;
-  options?: ToolSettingFieldMetaOptionsItem[];
+  options?: SettingOptionMeta[];
   required?: boolean;
-  scope: string;
+  scope: ToolSettingFieldMetaScope;
   secret?: boolean;
   step?: number | null;
-  type: string;
+  type: ToolSettingFieldMetaType;
 }

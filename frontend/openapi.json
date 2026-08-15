@@ -345,8 +345,7 @@
           },
           "options": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SettingOptionMeta"
             },
             "title": "Options",
             "type": "array"
@@ -379,6 +378,12 @@
             "title": "Step"
           },
           "type": {
+            "enum": [
+              "string",
+              "number",
+              "select",
+              "textarea"
+            ],
             "title": "Type",
             "type": "string"
           }
@@ -4431,6 +4436,25 @@
         "title": "SentimentHistoryResponse",
         "type": "object"
       },
+      "SettingOptionMeta": {
+        "description": "One choice in a settings dropdown.\n\nThe engine emits exactly these two keys; declaring them means the generated\nfrontend client gets a real type instead of a free-form object, which is\nwhat previously forced the settings panels to cast.",
+        "properties": {
+          "label_key": {
+            "title": "Label Key",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value",
+            "type": "string"
+          }
+        },
+        "required": [
+          "value",
+          "label_key"
+        ],
+        "title": "SettingOptionMeta",
+        "type": "object"
+      },
       "SettingPermissionsResponse": {
         "properties": {
           "allowed_settings": {
@@ -6604,8 +6628,7 @@
           },
           "options": {
             "items": {
-              "additionalProperties": true,
-              "type": "object"
+              "$ref": "#/components/schemas/SettingOptionMeta"
             },
             "title": "Options",
             "type": "array"
@@ -6616,6 +6639,11 @@
             "type": "boolean"
           },
           "scope": {
+            "enum": [
+              "server",
+              "user",
+              "both"
+            ],
             "title": "Scope",
             "type": "string"
           },
@@ -6636,6 +6664,16 @@
             "title": "Step"
           },
           "type": {
+            "enum": [
+              "boolean",
+              "number",
+              "string",
+              "textarea",
+              "select",
+              "multi_select",
+              "string_list",
+              "secret"
+            ],
             "title": "Type",
             "type": "string"
           }

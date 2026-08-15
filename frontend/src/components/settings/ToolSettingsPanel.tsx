@@ -9,8 +9,9 @@ import {
 } from '../../api/generated/settings/settings'
 import { useTranslation } from '../../contexts/LanguageContext'
 import { useMeta } from '../../hooks/useMeta'
+import type { ToolSettingFieldMeta } from '../../api/generated/model'
 import { notify } from '../../utils/notify'
-import AppSchemaForm, { legacyFieldsToSchema, type LegacySchemaField } from '../ui/AppSchemaForm'
+import AppSchemaForm, { legacyFieldsToSchema } from '../ui/AppSchemaForm'
 import { AppAlert, AppButton, AppSwitch } from '../ui/AppPrimitives'
 
 interface ToolSettingState {
@@ -22,18 +23,10 @@ interface ToolSettings {
   tools: Record<string, ToolSettingState>
 }
 
-interface ToolSchemaField extends LegacySchemaField {
-  scope?: 'server' | 'user' | 'both'
-}
-
-interface ToolMeta {
-  key: string
-  category: string
-  default_enabled: boolean
-  label_key: string
-  description_key: string
-  settings_schema?: ToolSchemaField[]
-}
+// Shapes come from the generated client. They used to be narrower hand-written
+// mirrors with a cast, because `/api/meta` described its option items as
+// free-form objects and its `type`/`scope` as bare strings.
+type ToolSchemaField = ToolSettingFieldMeta
 
 interface ToolSettingsPanelProps {
   userId?: number
@@ -92,7 +85,7 @@ const ToolSettingsPanel = forwardRef<ToolSettingsPanelHandle, ToolSettingsPanelP
 
   useImperativeHandle(ref, () => ({ save }), [save])
 
-  const tools = (meta?.tools ?? []) as ToolMeta[]
+  const tools = meta?.tools ?? []
   const categories = useMemo(() => Array.from(new Set(tools.map(tool => tool.category))), [tools])
 
   const scopedFields = useCallback((fields: ToolSchemaField[]) => fields.filter(field => {

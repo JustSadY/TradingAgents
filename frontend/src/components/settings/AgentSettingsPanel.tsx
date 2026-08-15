@@ -11,18 +11,12 @@ import {
 import { useTranslation } from '../../contexts/LanguageContext'
 import { useMeta, triggerMetaRefetch } from '../../hooks/useMeta'
 import { notify } from '../../utils/notify'
-import AppSchemaForm, { legacyFieldsToSchema, type LegacySchemaField } from '../ui/AppSchemaForm'
+import type { AgentMeta } from '../../api/generated/model'
+import AppSchemaForm, { legacyFieldsToSchema } from '../ui/AppSchemaForm'
 import { AppAlert, AppButton, AppSwitch } from '../ui/AppPrimitives'
 
-interface AgentMeta {
-  key: string
-  label: string
-  description: string
-  category: string
-  default_enabled: boolean
-  parent_key: string | null
-  settings_schema: LegacySchemaField[]
-}
+// Shape comes from the generated client; it used to be a narrower hand-written
+// mirror with a cast, for the same reason as the tool panel.
 
 interface AgentSettingState {
   enabled: boolean
@@ -209,7 +203,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
 
   useImperativeHandle(ref, () => ({ save }))
 
-  const agents = (meta?.agents ?? []) as AgentMeta[]
+  const agents = meta?.agents ?? []
   const childrenMap = useMemo(() => buildChildrenMap(agents), [agents])
   const mainAgents = useMemo(() => agents
     .filter(agent => MAIN_AGENT_KEYS.has(agent.key))

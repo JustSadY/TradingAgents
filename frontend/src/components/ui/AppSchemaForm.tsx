@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { Box, FormHelperText, IconButton, Typography } from '@mui/material'
+import { Box, Checkbox, FormControlLabel, FormGroup, FormHelperText, IconButton, Typography } from '@mui/material'
 import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from 'lucide-react'
 import Form from '@rjsf/core'
 import validator from '@rjsf/validator-ajv8'
@@ -12,6 +12,7 @@ import type {
   UiSchema,
   WidgetProps,
 } from '@rjsf/utils'
+import type { AgentSettingFieldMetaType, ToolSettingFieldMetaType } from '../../api/generated/model'
 import { AppButton, AppSelect, AppSwitch, AppTextField, SecretField } from './AppPrimitives'
 
 export interface AppSchemaFormProps {
@@ -152,6 +153,55 @@ function SelectWidget(props: WidgetProps) {
   )
 }
 
+/**
+ * Multi-select rendering.
+ *
+ * `AppSelect` holds a single value, so a `multi_select` routed to `SelectWidget`
+ * would silently collapse to one choice. Checkboxes show the whole option set
+ * at once, which suits the short option lists these settings declare.
+ */
+function CheckboxesWidget(props: WidgetProps) {
+  const enumOptions = props.options.enumOptions ?? []
+  const selected: unknown[] = Array.isArray(props.value) ? props.value : []
+  const help = helperText(props.rawErrors, schemaDescription(props))
+  const disabled = props.disabled || props.readonly
+
+  return (
+    <Box>
+      {props.label ? (
+        <Typography variant="caption" fontWeight={700} component="div">
+          {props.label}{props.required ? ' *' : ''}
+        </Typography>
+      ) : null}
+      <FormGroup row>
+        {enumOptions.map(option => (
+          <FormControlLabel
+            key={String(option.value)}
+            label={option.label}
+            control={
+              <Checkbox
+                size="small"
+                checked={selected.includes(option.value)}
+                disabled={disabled}
+                onChange={event => props.onChange(
+                  event.target.checked
+                    // Rebuilt from the option list rather than appended, so the
+                    // saved value keeps the order the schema declares.
+                    ? enumOptions
+                      .filter(entry => entry.value === option.value || selected.includes(entry.value))
+                      .map(entry => entry.value)
+                    : selected.filter(value => value !== option.value),
+                )}
+              />
+            }
+          />
+        ))}
+      </FormGroup>
+      {help ? <FormHelperText error={Boolean(props.rawErrors?.length)}>{help}</FormHelperText> : null}
+    </Box>
+  )
+}
+
 function AppFieldTemplate(props: FieldTemplateProps) {
   if (props.hidden) return <div style={{ display: 'none' }}>{props.children}</div>
   return <Box sx={{ minWidth: 0 }}>{props.children}</Box>
@@ -283,6 +333,7 @@ const widgets = {
   UpDownWidget: NumberWidget,
   RangeWidget: NumberWidget,
   CheckboxWidget,
+  CheckboxesWidget,
   SelectWidget,
 }
 
@@ -337,18 +388,35 @@ export interface LegacySchemaOption {
   label?: string
 }
 
+/**
+ * Field types the settings panels can be handed.
+ *
+ * The first half is the API's own vocabulary, taken from the generated client
+ * so it cannot drift from what `/api/meta` may send; `multi_select` reached the
+ * frontend unrendered for exactly that reason, hidden behind a cast. The rest
+ * are aliases this builder has always accepted from hand-written schemas.
+ */
+export type LegacySchemaFieldType =
+  | ToolSettingFieldMetaType
+  | AgentSettingFieldMetaType
+  | 'password'
+  | 'integer'
+  | 'enum'
+  | 'array'
+
 export interface LegacySchemaField {
   key: string
-  type: 'string' | 'secret' | 'password' | 'number' | 'integer' | 'boolean' | 'select' | 'enum' | 'textarea' | 'string_list' | 'array'
+  type: LegacySchemaFieldType
   label_key?: string
   label?: string
-  description_key?: string
+  description_key?: string | null
   description?: string
-  default?: RJSFSchema['default']
+  default?: unknown
   required?: boolean
-  min?: number
-  max?: number
-  step?: number
+  // The API models these as nullable, so `undefined` is not the only "unset".
+  min?: number | null
+  max?: number | null
+  step?: number | null
   options?: LegacySchemaOption[]
   advanced?: boolean
   section?: string
@@ -364,13 +432,15 @@ export function legacyFieldsToSchema(fields: LegacySchemaField[], translate: (ke
   for (const field of ordered) {
     const label = field.label_key ? translate(field.label_key) : field.label ?? field.key
     const description = field.description_key ? translate(field.description_key) : field.description
+    const optionLabel = (option: LegacySchemaOption) =>
+      option.label_key ? translate(option.label_key) : option.label ?? String(option.value)
     const base: RJSFSchema = {
       title: label,
       description,
-      default: field.default,
-      ...(field.min !== undefined ? { minimum: field.min } : {}),
-      ...(field.max !== undefined ? { maximum: field.max } : {}),
-      ...(field.step !== undefined ? { multipleOf: field.step } : {}),
+      default: field.default as RJSFSchema['default'],
+      ...(field.min != null ? { minimum: field.min } : {}),
+      ...(field.max != null ? { maximum: field.max } : {}),
+      ...(field.step != null ? { multipleOf: field.step } : {}),
       'x-advanced': field.advanced ?? false,
       'x-section': field.section ?? 'General',
       'x-order': field.order ?? 0,
@@ -379,7 +449,21 @@ export function legacyFieldsToSchema(fields: LegacySchemaField[], translate: (ke
     if (field.type === 'boolean') base.type = 'boolean'
     else if (field.type === 'number') base.type = 'number'
     else if (field.type === 'integer') base.type = 'integer'
-    else if (field.type === 'string_list' || field.type === 'array') {
+    else if (field.type === 'multi_select') {
+      // Same grouping the backend uses in `schema_contracts._field_json_schema`:
+      // an array of the option values. `uniqueItems` is what makes RJSF offer
+      // the whole option set at once instead of an add-a-row list — the same
+      // value cannot be picked twice anyway.
+      base.type = 'array'
+      base.uniqueItems = true
+      base.items = {
+        type: 'string',
+        ...(field.options?.length
+          ? { oneOf: field.options.map(option => ({ const: option.value, title: optionLabel(option) })) }
+          : {}),
+      }
+      ;(uiSchema[field.key] ??= {})['ui:widget'] = 'checkboxes'
+    } else if (field.type === 'string_list' || field.type === 'array') {
       base.type = 'array'
       base.items = { type: 'string' }
     } else {
@@ -389,7 +473,7 @@ export function legacyFieldsToSchema(fields: LegacySchemaField[], translate: (ke
     if (field.type === 'select' || field.type === 'enum') {
       base.enum = field.options?.map(option => option.value)
       if (field.options?.length) {
-        ;(uiSchema[field.key] ??= {})['ui:enumNames'] = field.options.map(option => option.label_key ? translate(option.label_key) : option.label ?? String(option.value))
+        ;(uiSchema[field.key] ??= {})['ui:enumNames'] = field.options.map(optionLabel)
       }
     }
     if (field.type === 'textarea') (uiSchema[field.key] ??= {})['ui:widget'] = 'textarea'
