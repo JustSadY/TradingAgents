@@ -11,12 +11,17 @@ on:
       - backend/trading_agents/agents/data/review_tools.py
       - backend/tests/test_ai_engine/test_single_execution_authority.py
       - frontend/src/i18n/analysis.ts
+      - backend/api/auth.py
+      - backend/api/users.py
+      - backend/main.py
+      - backend/core/password_hashing.py
+      - backend/core/security.py
 
 permissions:
   contents: read
 
 jobs:
-  validate-authority-cleanup:
+  validate-cleanup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -31,8 +36,12 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Run authority regression tests
-        run: uv run --project backend pytest backend/tests/test_ai_engine/test_single_execution_authority.py
+      - name: Run cleanup regression tests
+        run: |
+          uv run --project backend pytest \
+            backend/tests/test_ai_engine/test_single_execution_authority.py \
+            backend/tests/test_api/test_auth.py \
+            backend/tests/test_services/test_security_service.py
 
       - name: Run backend lint
         run: |
@@ -40,7 +49,12 @@ jobs:
             backend/trading_agents/agents/main/risk.py \
             backend/services/analysis/portfolio_orchestrator.py \
             backend/trading_agents/agents/data/review_tools.py \
-            backend/tests/test_ai_engine/test_single_execution_authority.py
+            backend/tests/test_ai_engine/test_single_execution_authority.py \
+            backend/api/auth.py \
+            backend/api/users.py \
+            backend/main.py \
+            backend/core/password_hashing.py \
+            backend/core/security.py
 
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
