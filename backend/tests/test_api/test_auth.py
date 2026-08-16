@@ -6,7 +6,8 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import get_settings
-from backend.core.security import create_refresh_token, hash_password, new_token_id, token_id_hash
+from backend.core.password_hashing import hash_password
+from backend.core.security import create_refresh_token, new_token_id, token_id_hash
 from backend.models.refresh_session import RefreshSession
 from backend.models.user import User
 
