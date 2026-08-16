@@ -18,10 +18,13 @@ on:
       - backend/postgres_tests/**
       - backend/api/trading.py
       - backend/api/auth.py
+      - backend/api/alerts.py
       - backend/api/users.py
       - backend/services/mock_trading_service.py
       - backend/services/auth_session_service.py
+      - backend/services/alert_management_service.py
       - backend/repositories/refresh_sessions.py
+      - backend/repositories/alerts.py
       - backend/core/database.py
       - backend/core/password_hashing.py
       - backend/core/security.py
@@ -286,6 +289,27 @@ jobs:
           print("TRADING_ROUTER_ANALYSIS_SQL=0")
           PY
 
+      - name: Reject alert mutation business logic in router
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          route = Path("backend/api/alerts.py").read_text()
+          forbidden = (
+              "target = float(",
+              "setattr(alert",
+              "await db.delete(",
+              "alert.alert_type ==",
+          )
+          hits = [token for token in forbidden if token in route]
+          if hits:
+              raise SystemExit(f"alerts router regained mutation business logic: {hits}")
+          if "update_user_alert" not in route or "delete_user_alert" not in route:
+              raise SystemExit("alerts router is not delegating mutations to the service layer")
+          print("ALERT_ROUTER_MUTATION_LOGIC=0")
+          PY
+
       - name: Run cleanup regression tests
         run: |
           uv run --project backend pytest \
@@ -297,7 +321,8 @@ jobs:
             backend/tests/test_repositories/test_users.py \
             backend/tests/test_services/test_security_service.py \
             backend/tests/test_services/test_config_builder_secrets.py \
-            backend/tests/test_services/test_legacy_settings_contract.py
+            backend/tests/test_services/test_legacy_settings_contract.py \
+            backend/tests/test_services/test_alert_management_service.py
 
       - name: Run backend lint
         run: |
@@ -310,9 +335,12 @@ jobs:
             backend/services/analysis/config_builder.py \
             backend/api/trading.py \
             backend/api/auth.py \
+            backend/api/alerts.py \
             backend/services/mock_trading_service.py \
             backend/services/auth_session_service.py \
+            backend/services/alert_management_service.py \
             backend/repositories/refresh_sessions.py \
+            backend/repositories/alerts.py \
             backend/core/database.py \
             backend/schemas/auth.py \
             backend/tests/test_ai_engine/test_single_execution_authority.py \
@@ -326,6 +354,7 @@ jobs:
             backend/tests/test_services/test_security_service.py \
             backend/tests/test_services/test_config_builder_secrets.py \
             backend/tests/test_services/test_legacy_settings_contract.py \
+            backend/tests/test_services/test_alert_management_service.py \
             backend/postgres_tests/test_rls_integration.py \
             backend/api/users.py \
             backend/main.py \
