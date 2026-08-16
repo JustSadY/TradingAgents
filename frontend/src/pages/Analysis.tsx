@@ -1,5 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { useSearchParams } from 'react-router-dom'
+import { useMachine } from '@xstate/react'
 
 import { useAnalysisListAnalysis, useAnalysisRunAnalysis, useAnalysisCancelAnalysis, useAnalysisCostEstimate, analysisGetAnalysis, analysisGetLatestAnalysis } from '../api/generated/analysis/analysis'
 
@@ -42,6 +43,7 @@ import { isRecord } from '../utils/isRecord'
 import { readableSectionLabel, reportKeyForStreamingAgent, visibleReportEntries } from '../analysis/streamingReports'
 import { orderResultLogLine, readOrderResult, sameOrderResult } from '../analysis/orderResult'
 import { STORAGE_KEY, TASK_KEY, clearTaskMarkerFor, loadRunState } from '../analysis/runStorage'
+import { isRunActive, persistedStatus, runMachine, snapshotForPersisted } from '../analysis/runMachine'
 import { readPortfolioDecision } from '../analysis/portfolioDecision'
 import type { AnalysisEventType } from '../analysis/analysisEvents'
 import { analysisStartError } from '../analysis/startError'
@@ -82,9 +84,13 @@ function RunTab() {
   const [ticker, setTicker] = useState(saved.ticker)
   const [date, setDate] = useState(saved.date)
   const [assetType, setAssetType] = useState(saved.assetType)
-  const [running, setRunning] = useState(saved.runStatus === 'running')
-  const [stopping, setStopping] = useState(false)
-  const [runStatus, setRunStatus] = useState<'idle' | 'running' | 'done' | 'error'>(saved.runStatus)
+  // One run has one state. `running`, `stopping` and `runStatus` are three
+  // views of it, derived rather than stored, so they cannot disagree.
+  const [initialRunSnapshot] = useState(() => snapshotForPersisted(saved.runStatus))
+  const [runState, sendRun] = useMachine(runMachine, { snapshot: initialRunSnapshot })
+  const running = isRunActive(runState.value)
+  const stopping = runState.matches('stopping')
+  const runStatus = persistedStatus(runState.value)
   const [signal, setSignal] = useState<string | null>(saved.signal)
   const [reports, setReports] = useState<Record<string, string>>(saved.reports)
   const [log, setLog] = useState<string[]>(saved.log)
@@ -198,7 +204,7 @@ function RunTab() {
         setDate(a.trade_date)
         setSignal(a.signal)
         setAnalysisId(a.id)
-        setRunStatus('done')
+        sendRun({ type: 'COMPLETE' })
         setReports({
           ...Object.fromEntries(visibleReportEntries(a)),
           investment_plan: a.investment_plan || '',
@@ -210,15 +216,15 @@ function RunTab() {
     }
   }, [])
 
-  const setRunning_ = (v: boolean) => {
-    setRunning(v)
-    if (!v) {
-      setStopping(false)
-      sessionStorage.removeItem(TASK_KEY)
-      taskIdRef.current = null
-      resumingTaskIdRef.current = null
-    }
-  }
+  // What a finished run leaves behind outside React: the machine owns the
+  // state, this owns the task marker and the refs keyed to that task. Every
+  // path into a terminal state has to call it, or a reload resurrects a run
+  // that is already over.
+  const clearRunTask = useCallback(() => {
+    sessionStorage.removeItem(TASK_KEY)
+    taskIdRef.current = null
+    resumingTaskIdRef.current = null
+  }, [])
 
   const attachWs = useCallback((taskId: string, reconnectAttempt = 0) => {
     // Stop may race a queued reconnect timer or a persisted-task probe.  Do
@@ -265,8 +271,8 @@ function RunTab() {
       }
       clearWsKeepalive()
       if (wsRef.current === ws) wsRef.current = null
-      setRunStatus('error')
-      setRunning_(false)
+      sendRun({ type: 'FAIL' })
+      clearRunTask()
       setCurrentStep(null)
       setMentalModel(null)
       appendLog(message)
@@ -432,8 +438,8 @@ function RunTab() {
         finished = true
         terminalTaskIdRef.current = taskId
         clearWsKeepalive()
-        setRunStatus('done')
-        setRunning_(false)
+        sendRun({ type: 'COMPLETE' })
+        clearRunTask()
         setCurrentStep(null)
         setMentalModel(null)
         setStats(prev => prev ? { ...prev, llmCalls: ev.llm_calls || prev.llmCalls, estimatedCost: ev.estimated_cost_usd } : null)
@@ -452,14 +458,14 @@ function RunTab() {
         terminalTaskIdRef.current = taskId
         clearWsKeepalive()
         if (ev.message === "Analysis cancelled.") {
-          setRunStatus('idle')
-          setRunning_(false)
+          sendRun({ type: 'STOPPED' })
+          clearRunTask()
           setCurrentStep(null)
           setMentalModel(null)
           appendLog(t('analysis.ws.stopped'))
         } else {
-          setRunStatus('error')
-          setRunning_(false)
+          sendRun({ type: 'FAIL' })
+          clearRunTask()
           setCurrentStep(null)
           appendLog(`Error: ${ev.message}`)
           notify('error', ev.message ?? t('analysis.ws.analysis_failed'), t('analysis.ws.analysis_error_title'))
@@ -488,7 +494,7 @@ function RunTab() {
     }
     // ticker is intentionally read via tickerRef (not a dep) so the socket
     // isn't torn down and recreated on every ticker keystroke.
-  }, [t, clearWsKeepalive])
+  }, [t, clearWsKeepalive, sendRun, clearRunTask])
 
   useEffect(() => {
     attachWsRef.current = attachWs
@@ -506,8 +512,7 @@ function RunTab() {
     setTicker(task.ticker)
     setDate(task.trade_date)
     setAssetType(task.asset_type)
-    setRunning(true)
-    setRunStatus('running')
+    sendRun({ type: 'START' })
     setLog([])
     seenLogRef.current = new Set()
     setReports({})
@@ -517,7 +522,7 @@ function RunTab() {
     setDetail(null)
     sessionStorage.setItem(TASK_KEY, JSON.stringify({ ticker: task.ticker, taskId: task.task_id, startedAt: new Date(task.started_at * 1000).toISOString() }))
     attachWs(task.task_id, 1)
-  }, [activeTasks, running, attachWs])
+  }, [activeTasks, running, attachWs, sendRun])
 
   useEffect(() => {
     // `useActiveTasks` owns the only active-task request for this mount.  A
@@ -539,8 +544,7 @@ function RunTab() {
         resumingTaskIdRef.current = taskId
         runStartedRef.current = true
         preRefreshLogRef.current = [...saved.log]
-        setRunning(true)
-        setRunStatus('running')
+        sendRun({ type: 'START' })
         if (runTicker) setTicker(runTicker)
         attachWs(taskId, 1)
       }
@@ -555,15 +559,14 @@ function RunTab() {
       } else {
         clearTaskMarkerFor(taskId)
         resumingTaskIdRef.current = null
-        setRunning(false)
-        setRunStatus('idle')
+        sendRun({ type: 'RESET' })
       }
     } catch {
       sessionStorage.removeItem(TASK_KEY)
       resumingTaskIdRef.current = null
     }
     return () => { cancelled = true }
-  }, [activeTasks, activeTasksLoading, activeTasksUnavailable, attachWs, saved.log])
+  }, [activeTasks, activeTasksLoading, activeTasksUnavailable, attachWs, saved.log, sendRun])
 
   useEffect(() => {
     return () => {
@@ -607,7 +610,7 @@ function RunTab() {
       // former best-effort implementation immediately hid the running task
       // after a failed request, while the worker continued consuming LLM/API
       // resources in the background.
-      setStopping(true)
+      sendRun({ type: 'STOP' })
       try {
         const data = await cancelAnalysis.mutateAsync({ taskId: tid })
         if (isRecord(data) && data.cancelled === false) {
@@ -618,17 +621,17 @@ function RunTab() {
         // in flight. Preserve that real terminal state instead of replacing
         // it with a misleading Stop failure.
         if (taskIdRef.current !== tid) {
-          setStopping(false)
+          sendRun({ type: 'STOP_REFUSED' })
           return
         }
         const message = t('analysis.ws.stop_failed')
         setLog(l => [...l, message])
-        setStopping(false)
+        sendRun({ type: 'STOP_REFUSED' })
         notify('error', message, t('analysis.ws.analysis_error_title'))
         return
       }
       if (taskIdRef.current !== tid) {
-        setStopping(false)
+        sendRun({ type: 'STOP_REFUSED' })
         return
       }
       runRequestRef.current += 1
@@ -645,8 +648,8 @@ function RunTab() {
       closeAnalysisWebSocket(wsRef.current, 'Analysis stopped by user')
       wsRef.current = null
     }
-    setRunStatus('idle')
-    setRunning_(false)
+    sendRun({ type: 'STOPPED' })
+    clearRunTask()
     seenLogRef.current = new Set()
   }
 
@@ -660,8 +663,7 @@ function RunTab() {
       clearTimeout(reconnectTimeoutRef.current)
       reconnectTimeoutRef.current = null
     }
-    setRunning(true)
-    setRunStatus('running')
+    sendRun({ type: 'START' })
     setSignal(null)
     setReports({})
     setLog([])
@@ -698,8 +700,8 @@ function RunTab() {
       // not replace the stopped state with an error message.
       if (requestId !== runRequestRef.current || stoppedByUserRef.current) return
       const error = analysisStartError(err, t('analysis.ws.failed_to_start'))
-      setRunStatus('error')
-      setRunning_(false)
+      sendRun({ type: 'FAIL' })
+      clearRunTask()
       setStartError(error)
       setLog(l => [...l, `Error: ${error.message}`])
     }
@@ -712,7 +714,7 @@ function RunTab() {
   }
 
   const handleClear = () => {
-    setRunStatus('idle'); setSignal(null); setReports({}); setLog([]); setActiveSection(null); setCurrentStep(null)
+    sendRun({ type: 'RESET' }); setSignal(null); setReports({}); setLog([]); setActiveSection(null); setCurrentStep(null)
     setAnalysisId(null); setDetail(null); setLiveDebate([]); setOrderResult(null); setStats(null); setStartError(null)
   }
 
@@ -720,8 +722,7 @@ function RunTab() {
     stoppedByUserRef.current = false
     terminalTaskIdRef.current = null
     runStartedRef.current = true
-    setRunning(true)
-    setRunStatus('running')
+    sendRun({ type: 'START' })
     setSignal(null)
     setReports({})
     setLog([])
