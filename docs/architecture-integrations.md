@@ -38,8 +38,9 @@ implementation and package-detection fallback are removed.
 
 EMA, RSI, MACD, ADX, ATR and rolling volume-weighted price calculations are
 provided by `pandas-ta-classic`. The application still owns product-specific
-contracts such as formula sandboxing, Ichimoku output shaping, Fibonacci
-display levels and custom chart-pattern algorithms.
+formula sandboxing and custom chart-pattern algorithms; unused standalone
+Ichimoku/Fibonacci display helpers were removed rather than kept as a second
+indicator surface.
 
 The `research` dependency group also contains TA-Lib so package parity checks can
 be run against a second implementation without putting TA-Lib on the production
