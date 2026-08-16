@@ -56,6 +56,9 @@ install_redaction(*logging.getLogger().handlers)
 async def lifespan(app: FastAPI):
     _logger.info("Starting TradingAgents Web API...")
 
+    from backend.trading_agents.agents.runtime.logging_config import setup_unified_logging
+
+    setup_unified_logging()
     import backend.trading_agents.agents.tools.bootstrap  # noqa: F401
     from backend.services.update_service import reset_stuck_update
 
