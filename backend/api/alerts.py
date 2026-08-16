@@ -12,6 +12,7 @@ from backend.schemas.common import DeleteResponse
 router = APIRouter(prefix="/api/alerts", tags=["alerts"])
 _logger = logging.getLogger(__name__)
 
+
 @router.get("", response_model=list[AlertRead])
 async def list_alerts_run(
     db: AsyncSession = Depends(get_db),
@@ -20,6 +21,7 @@ async def list_alerts_run(
     from backend.repositories.alerts import list_alerts as _repo_list
 
     return await _repo_list(db, user=current_user)
+
 
 @router.post("", response_model=AlertRead, responses={409: {"description": "Alert limit reached"}})
 async def create_alert_run(
@@ -44,6 +46,7 @@ async def create_alert_run(
     assert alert is not None
     return alert
 
+
 @router.patch(
     "/{alert_id}",
     response_model=AlertRead,
@@ -55,31 +58,25 @@ async def update_alert(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_page("alerts")),
 ):
-    from backend.repositories.alerts import get_alert_by_id as _repo_get
+    from backend.services.alert_creation_service import AlertGuardrailViolation
+    from backend.services.alert_management_service import AlertUpdateValidationError, update_user_alert
 
-    alert = await _repo_get(db, alert_id, user=current_user)
-    if not alert:
+    try:
+        alert = await update_user_alert(
+            db,
+            user=current_user,
+            alert_id=alert_id,
+            changes=body.model_dump(exclude_none=True),
+        )
+    except AlertGuardrailViolation as exc:
+        raise HTTPException(status_code=409, detail=exc.detail) from exc
+    except AlertUpdateValidationError as exc:
+        raise HTTPException(status_code=422, detail=exc.detail) from exc
+
+    if alert is None:
         raise HTTPException(status_code=404, detail="Alert not found")
-    changes = body.model_dump(exclude_none=True)
-    if "target_price" in changes:
-        target = float(changes["target_price"])
-        if alert.alert_type == "rsi" and not 0 <= target <= 100:
-            raise HTTPException(status_code=422, detail="RSI threshold must be between 0 and 100")
-        if alert.alert_type == "price" and target <= 0:
-            raise HTTPException(status_code=422, detail="Price alerts require a positive target")
-        if alert.alert_type == "macd_cross":
-            changes["target_price"] = 0.0
-    if changes.get("enabled") is True:
-        from backend.services.alert_creation_service import AlertGuardrailViolation, rearm_alert_with_guardrails
-
-        try:
-            await rearm_alert_with_guardrails(db, alert)
-        except AlertGuardrailViolation as exc:
-            raise HTTPException(status_code=409, detail=exc.detail) from exc
-        changes.pop("enabled")
-    for field, value in changes.items():
-        setattr(alert, field, value)
     return alert
+
 
 @router.delete("/{alert_id}", response_model=DeleteResponse, responses={404: {"description": "Alert not found"}})
 async def delete_alert(
@@ -87,10 +84,9 @@ async def delete_alert(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_page("alerts")),
 ):
-    from backend.repositories.alerts import get_alert_by_id as _repo_get
+    from backend.services.alert_management_service import delete_user_alert
 
-    alert = await _repo_get(db, alert_id, user=current_user)
-    if not alert:
+    deleted = await delete_user_alert(db, user=current_user, alert_id=alert_id)
+    if not deleted:
         raise HTTPException(status_code=404, detail="Alert not found")
-    await db.delete(alert)
     return {"deleted": True}
