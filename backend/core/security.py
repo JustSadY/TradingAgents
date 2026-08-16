@@ -5,17 +5,9 @@ from datetime import UTC, datetime, timedelta
 import jwt
 
 from .config import get_settings
-from .password_hashing import (
-    hash_password,
-    is_supported_password_hash,
-    verify_and_update_password,
-    verify_password,
-)
 
 settings = get_settings()
 
-# Re-exported so the existing ``from backend.core.security import ...`` call
-# sites keep working; the implementations live in ``core.password_hashing``.
 __all__ = [
     "create_access_token",
     "create_refresh_token",
@@ -23,12 +15,8 @@ __all__ = [
     "decode_token_payload",
     "decrypt_secret",
     "encrypt_secret",
-    "hash_password",
-    "is_supported_password_hash",
     "new_token_id",
     "token_id_hash",
-    "verify_and_update_password",
-    "verify_password",
 ]
 
 def encrypt_secret(value: str) -> str:
