@@ -191,4 +191,6 @@ text = text.replace(
 text = text.replace("readPortfolioDecision(undefined, undefined, undefined)", "readPortfolioDecision(undefined, undefined)")
 write(path, text)
 
+# Backend regression fixtures have already been migrated to the canonical
+# portfolio_decision_json source; this transform is now guarded end-to-end.
 print("canonical portfolio decision transform complete")
