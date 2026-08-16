@@ -31,6 +31,8 @@ on:
       - frontend/src/App.tsx
       - frontend/src/analysis/streamingReports.ts
       - frontend/src/analysis/__tests__/streamingReports.test.ts
+      - frontend/src/contexts/AuthContext.tsx
+      - frontend/src/contexts/__tests__/AuthContext.test.tsx
       - frontend/src/i18n/analysis.ts
       - frontend/src/api/generated/model/tokenResponse.ts
 
@@ -220,6 +222,29 @@ jobs:
           print("AUTH_ROUTER_REFRESH_SESSION_SQL=0")
           PY
 
+      - name: Reject legacy localStorage authentication
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          auth = Path("frontend/src/contexts/AuthContext.tsx").read_text()
+          forbidden = (
+              "const legacy = localStorage.getItem(TOKEN_KEY)",
+              "sessionStorage.setItem(TOKEN_KEY, legacy)",
+              "LEGACY_REFRESH_KEY",
+              "One-time migration from older releases",
+          )
+          hits = [token for token in forbidden if token in auth]
+          if hits:
+              raise SystemExit(f"legacy localStorage authentication path remains: {hits}")
+          if "return sessionStorage.getItem(TOKEN_KEY)" not in auth:
+              raise SystemExit("getAccessToken is not sessionStorage-only")
+          if "localStorage.removeItem('ta_refresh')" not in auth:
+              raise SystemExit("stale localStorage refresh credentials are not purged")
+          print("LOCALSTORAGE_AUTH_COMPATIBILITY=0")
+          PY
+
       - name: Reject stale decision/checkpoint guidance
         shell: bash
         run: |
@@ -320,8 +345,11 @@ jobs:
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
 
-      - name: Run streaming report tests
-        run: npm --prefix frontend test -- src/analysis/__tests__/streamingReports.test.ts
+      - name: Run frontend cleanup tests
+        run: |
+          npm --prefix frontend test -- \
+            src/analysis/__tests__/streamingReports.test.ts \
+            src/contexts/__tests__/AuthContext.test.tsx
 
       - name: Build frontend
         run: npm --prefix frontend run build
