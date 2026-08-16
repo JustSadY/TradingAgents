@@ -125,7 +125,7 @@ const analysis = {
     'analysis.ticker_error.use': 'Use {ticker}',
 
 
-    'analysis.multi.description': 'At least 2, at most 10 stocks. Each stock receives its own final Portfolio Manager decision; the combined view is read-only and does not change orders or allocations.',
+    'analysis.multi.description': 'At least 2, at most 10 stocks. Each stock produces its own canonical final decision; the combined view is read-only and does not change orders or allocations.',
     'analysis.multi.label_symbols': 'Symbols',
     'analysis.multi.btn_start': 'Start Portfolio Analysis',
     'analysis.multi.running': 'Running...',
@@ -186,7 +186,7 @@ const analysis = {
     'analysis.section.trader_investment_plan': 'Legacy Trader Proposal (historical only)',
     'analysis.section.trader_proposal_json': 'Legacy Trade Proposal Details',
     'analysis.section.risk_metrics': 'Risk Metrics',
-    'analysis.section.final_trade_decision': 'Final Decision (Portfolio Manager)',
+    'analysis.section.final_trade_decision': 'Canonical Final Decision',
     'analysis.section.bull_history': 'Bull Arguments',
     'analysis.section.bear_history': 'Bear Arguments',
     'analysis.section.investment_debate_history': 'Debate',
@@ -367,7 +367,7 @@ const analysis = {
     'analysis.ticker_error.use': '{ticker} kullan',
 
 
-    'analysis.multi.description': 'En az 2, en fazla 10 hisse. Her hisse kendi nihai Portföy Yöneticisi kararını alır; birleşik görünüm salt okunurdur ve emir veya dağılım değiştirmez.',
+    'analysis.multi.description': 'En az 2, en fazla 10 hisse. Her hisse kendi kanonik nihai kararını üretir; birleşik görünüm salt okunurdur ve emir veya dağılım değiştirmez.',
     'analysis.multi.label_symbols': 'Semboller',
     'analysis.multi.btn_start': 'Portföy Analizi Başlat',
     'analysis.multi.running': 'Çalışıyor...',
@@ -428,7 +428,7 @@ const analysis = {
     'analysis.section.trader_investment_plan': 'Eski Trader Önerisi (yalnız geçmiş kayıt)',
     'analysis.section.trader_proposal_json': 'Eski İşlem Önerisi Ayrıntıları',
     'analysis.section.risk_metrics': 'Risk Metrikleri',
-    'analysis.section.final_trade_decision': 'Nihai Karar (Portföy Yöneticisi)',
+    'analysis.section.final_trade_decision': 'Kanonik Nihai Karar',
     'analysis.section.bull_history': 'Boğa Argümanları',
     'analysis.section.bear_history': 'Ayı Argümanları',
     'analysis.section.investment_debate_history': 'Tartışma',
