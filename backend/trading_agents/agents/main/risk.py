@@ -1,12 +1,10 @@
-"""
-Main Agent: Risk Debate.
+"""Main Agent: Risk Debate.
 
-Previously ran three separate LLM calls (one per stance). Merged into a single
-call that produces all three perspectives at once, reducing quota consumption
-from 3→1 per analysis round.
+One node makes one LLM call and returns aggressive, conservative, and neutral
+risk perspectives as non-executable evidence for downstream decision stages.
 
 Kill-switch behaviour:
-  • risk_debate disabled    → emit a neutral debate state and skip every sub.
+  • risk_debate disabled    → emit a neutral debate state and skip the panel.
 """
 
 from __future__ import annotations
