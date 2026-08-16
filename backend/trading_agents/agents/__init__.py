@@ -22,9 +22,6 @@ from .sub.managers.research_manager import create_research_manager
 from .sub.managers.synthesis_manager import create_synthesis_manager
 from .sub.researchers.bear_researcher import create_bear_researcher
 from .sub.researchers.bull_researcher import create_bull_researcher
-from .sub.risk_mgmt.aggressive_debator import create_aggressive_debator
-from .sub.risk_mgmt.conservative_debator import create_conservative_debator
-from .sub.risk_mgmt.neutral_debator import create_neutral_debator
 from .utils.agent_utils import create_msg_delete
 
 __all__ = [
@@ -38,11 +35,8 @@ __all__ = [
     "create_synthesis_manager",
     "create_auditor_node",
     "create_fundamentals_analyst",
-    "create_neutral_debator",
     "create_news_analyst",
-    "create_aggressive_debator",
     "create_portfolio_manager",
-    "create_conservative_debator",
     "create_sentiment_analyst",
     "create_market_analyst",
     "create_macro_analyst",
