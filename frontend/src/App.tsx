@@ -96,7 +96,6 @@ function AppRoutes() {
         <Route path="trading" element={<RequirePage page="trading"><MockTrading /></RequirePage>} />
         <Route path="portfolio" element={<RequirePage page="portfolio"><Portfolio /></RequirePage>} />
         <Route path="settings" element={<RequirePage page="settings"><Settings /></RequirePage>} />
-        <Route path="preferences" element={<RequirePage page="settings"><Settings /></RequirePage>} />
         <Route path="performance" element={<RequirePage page="performance"><Performance /></RequirePage>} />
         <Route path="backtest" element={<RequirePage page="backtest"><Backtest /></RequirePage>} />
         <Route path="alerts" element={<RequirePage page="alerts"><Alerts /></RequirePage>} />
