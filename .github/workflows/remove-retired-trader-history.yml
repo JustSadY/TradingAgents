@@ -10,6 +10,9 @@ on:
       - backend/api/share.py
       - backend/tests/test_api/test_share.py
       - backend/tests/test_temporal_safety.py
+      - frontend/src/pages/__tests__/SharedReport.test.tsx
+      - frontend/src/utils/__tests__/exportReport.test.ts
+      - frontend/src/utils/__tests__/exportLabels.fixture.ts
 
 permissions:
   contents: write
