@@ -107,14 +107,16 @@ async def _check_section_permissions(db: AsyncSession, user: User, body: Setting
             )
 
 
-async def _validate_webhook_url_if_present(body: SettingsUpdate) -> None:
-    """Reject webhook URLs that resolve to a private/internal address."""
-    url = body.model_dump(exclude_unset=True).get("webhook_url")
-    if url:
-        try:
-            await resolve_webhook_target(url)
-        except ValueError as exc:
-            raise HTTPException(status_code=400, detail=str(exc)) from exc
+async def _apply_settings_update_or_400(
+    db: AsyncSession,
+    settings,
+    body: SettingsUpdate,
+):
+    """Map service validation failures to the settings API's HTTP contract."""
+    try:
+        return await apply_settings_update(db, settings, body)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.put("", response_model=SettingsRead, responses={403: {"description": "Permission denied"}})
@@ -126,8 +128,7 @@ async def update_settings(
     settings = await get_or_create_settings(db, current_user)
     if not current_user.is_admin:
         await _check_section_permissions(db, current_user, body)
-    await _validate_webhook_url_if_present(body)
-    settings = await apply_settings_update(db, settings, body)
+    settings = await _apply_settings_update_or_400(db, settings, body)
     return settings_to_read(settings)
 
 
@@ -213,8 +214,7 @@ async def update_user_settings_by_id(
 ):
     target_user = await _require_target_user(db, user_id)
     settings = await get_or_create_settings(db, target_user)
-    await _validate_webhook_url_if_present(body)
-    settings = await apply_settings_update(db, settings, body)
+    settings = await _apply_settings_update_or_400(db, settings, body)
     return settings_to_read(settings)
 
 
