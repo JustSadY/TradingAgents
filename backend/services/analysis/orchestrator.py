@@ -626,11 +626,7 @@ async def run_individual_analysis(
         if not isinstance(structured_data, dict):
             structured_data = {}
 
-        # Keep the legacy annotation copy for older report consumers, but the
-        # physical AnalysisResult JSON columns below are the canonical contract.
         portfolio_decision = _json_mapping(final_state.get("portfolio_decision_json"))
-        if portfolio_decision:
-            structured_data["portfolio_decision"] = portfolio_decision
 
         _VALID_SIGNALS = {"Buy", "Overweight", "Hold", "Underweight", "Sell"}
         raw_signal = result.signal
