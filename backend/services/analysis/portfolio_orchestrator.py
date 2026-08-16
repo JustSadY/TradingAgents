@@ -17,9 +17,10 @@ _logger = logging.getLogger(__name__)
 def _portfolio_overview_labels(output_language: str | None) -> dict[str, str]:
     """Fixed copy for the non-executing multi-ticker overview.
 
-    Individual Portfolio Manager reports own every executable rating and size.
-    This summary is intentionally deterministic so it cannot become another
-    LLM authority or silently revise any of those decisions.
+    Each single-ticker run owns one persisted canonical final decision after
+    its configured Decision Stability policy has been applied. This summary is
+    intentionally deterministic so it cannot become another LLM authority or
+    silently revise any of those decisions.
     """
     language = str(output_language or "English").strip().casefold()
     if language in {"turkish", "türkçe"}:
@@ -27,14 +28,14 @@ def _portfolio_overview_labels(output_language: str | None) -> dict[str, str]:
             "title": "# Portföy Analizi Özeti",
             "notice": (
                 "> Bu özet yeni bir alım/satım emri, miktar veya portföy dağılımı oluşturmaz. "
-                "Her hissenin tek yetkili kararı kendi Nihai Portföy Yöneticisi raporundadır."
+                "Her hissenin tek işlem girdisi kendi kanonik nihai kararıdır."
             ),
             "context": "## Mevcut Portföy Bağlamı (yalnız referans)",
-            "decision": "Nihai Portföy Yöneticisi Kararı",
-            "missing": "Bu hisse için doğrulanmış nihai Portföy Yöneticisi kararı yok.",
+            "decision": "Kanonik Nihai Karar",
+            "missing": "Bu hisse için doğrulanmış kanonik nihai karar yok.",
             "rule": "## İşlem Kuralı",
             "rule_text": (
-                "Otomatik işlem yalnızca hisseye ait yapılandırılmış Nihai Portföy Yöneticisi kararıyla "
+                "Otomatik işlem yalnızca hisseye ait yapılandırılmış kanonik nihai kararla "
                 "değerlendirilir; bu çoklu-hisse özeti emir veremez veya miktar değiştiremez."
             ),
         }
@@ -42,14 +43,14 @@ def _portfolio_overview_labels(output_language: str | None) -> dict[str, str]:
         "title": "# Portfolio Analysis Overview",
         "notice": (
             "> This overview does not create or amend a buy/sell order, quantity, or portfolio allocation. "
-            "Each ticker's own final Portfolio Manager report remains the sole authority."
+            "Each ticker's own canonical final decision remains the sole execution input."
         ),
         "context": "## Current Portfolio Context (reference only)",
-        "decision": "Final Portfolio Manager Decision",
-        "missing": "No validated final Portfolio Manager decision is available for this ticker.",
+        "decision": "Canonical Final Decision",
+        "missing": "No validated canonical final decision is available for this ticker.",
         "rule": "## Execution Rule",
         "rule_text": (
-            "Automatic execution considers only the structured final Portfolio Manager decision for that ticker; "
+            "Automatic execution considers only the structured canonical final decision for that ticker; "
             "this multi-ticker overview cannot place an order or change a quantity."
         ),
     }
@@ -63,8 +64,8 @@ def build_portfolio_overview(
     """Render a read-only summary of already-final single-ticker decisions.
 
     No LLM is invoked here. This deliberately preserves the useful multi-ticker
-    report without adding a second model that could contradict an individual
-    Portfolio Manager's direction, stop, or amount.
+    report without adding a second model that could contradict a ticker's
+    canonical direction, stop, or amount.
     """
     labels = _portfolio_overview_labels(output_language)
     parts = [labels["title"], labels["notice"]]
