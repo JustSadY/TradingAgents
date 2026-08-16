@@ -109,10 +109,10 @@ async def rotate_refresh_session(db: AsyncSession, raw_token: str) -> tuple[User
         await _persist_revocation(db, session, now)
         raise RefreshSessionError("Refresh token has been revoked")
 
-    new_token_id = new_token_id()
+    rotated_token_id = new_token_id()
     session.previous_jti_hash = session.current_jti_hash
     session.previous_valid_until = now + timedelta(seconds=_REFRESH_GRACE_SECONDS)
-    session.current_jti_hash = token_id_hash(new_token_id)
+    session.current_jti_hash = token_id_hash(rotated_token_id)
     session.updated_at = now
     await db.flush()
 
@@ -120,7 +120,7 @@ async def rotate_refresh_session(db: AsyncSession, raw_token: str) -> tuple[User
         user.username,
         token_version=user.token_version,
         session_id=session_id,
-        token_id=new_token_id,
+        token_id=rotated_token_id,
     )
     return user, refresh_token
 
