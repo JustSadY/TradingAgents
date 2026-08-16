@@ -134,6 +134,15 @@ jobs:
           print("TRADER_STREAMING_ALIAS=0")
           PY
 
+      - name: Reject retired AgentSettings aliases
+        shell: bash
+        run: |
+          if git grep -n 'custom_system_instruction' -- backend frontend; then
+            echo 'retired custom_system_instruction alias still exists' >&2
+            exit 1
+          fi
+          echo 'CUSTOM_SYSTEM_INSTRUCTION_ALIAS=0'
+
       - name: Run cleanup regression tests
         run: |
           uv run --project backend pytest \
@@ -143,7 +152,8 @@ jobs:
             backend/tests/test_repositories/test_tenant_scoping_sweep.py \
             backend/tests/test_repositories/test_users.py \
             backend/tests/test_services/test_security_service.py \
-            backend/tests/test_services/test_config_builder_secrets.py
+            backend/tests/test_services/test_config_builder_secrets.py \
+            backend/tests/test_services/test_legacy_settings_contract.py
 
       - name: Run backend lint
         run: |
@@ -163,6 +173,7 @@ jobs:
             backend/tests/test_repositories/test_users.py \
             backend/tests/test_services/test_security_service.py \
             backend/tests/test_services/test_config_builder_secrets.py \
+            backend/tests/test_services/test_legacy_settings_contract.py \
             backend/postgres_tests/test_rls_integration.py \
             backend/api/auth.py \
             backend/api/users.py \
