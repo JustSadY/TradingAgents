@@ -6,6 +6,8 @@ on:
       - agent/legacy-cleanup-pass4
     paths:
       - .github/workflows/legacy-cleanup-validate.yml
+      - backend/trading_agents/__init__.py
+      - backend/trading_agents/agents/runtime/logging_config.py
       - backend/trading_agents/agents/main/risk.py
       - backend/services/analysis/portfolio_orchestrator.py
       - backend/trading_agents/agents/data/review_tools.py
@@ -17,6 +19,7 @@ on:
       - backend/api/auth.py
       - backend/api/users.py
       - backend/main.py
+      - backend/worker.py
       - backend/core/password_hashing.py
       - backend/core/security.py
 
@@ -72,6 +75,36 @@ jobs:
           print("LEGACY_PASSWORD_FACADE_IMPORTS=0")
           PY
 
+      - name: Reject import-time engine logging side effects
+        shell: bash
+        run: |
+          uv run --project backend python - <<'PY'
+          import logging
+          import sys
+          from pathlib import Path
+
+          root = logging.getLogger()
+          handlers_before = tuple(root.handlers)
+          excepthook_before = sys.excepthook
+          import backend.trading_agents  # noqa: F401
+
+          if tuple(root.handlers) != handlers_before:
+              raise SystemExit("import backend.trading_agents changed root logging handlers")
+          if sys.excepthook is not excepthook_before:
+              raise SystemExit("import backend.trading_agents changed sys.excepthook")
+
+          web = Path("backend/main.py").read_text()
+          worker = Path("backend/worker.py").read_text()
+          package_init = Path("backend/trading_agents/__init__.py").read_text()
+          if "setup_unified_logging()" not in web:
+              raise SystemExit("web lifespan does not explicitly initialize engine logging")
+          if "setup_unified_logging()" not in worker:
+              raise SystemExit("worker startup does not explicitly initialize engine logging")
+          if "setup_unified_logging" in package_init:
+              raise SystemExit("engine package import still initializes logging")
+          print("IMPORT_TIME_ENGINE_LOGGING=0")
+          PY
+
       - name: Run cleanup regression tests
         run: |
           uv run --project backend pytest \
@@ -86,6 +119,8 @@ jobs:
       - name: Run backend lint
         run: |
           uv run --project backend ruff check \
+            backend/trading_agents/__init__.py \
+            backend/trading_agents/agents/runtime/logging_config.py \
             backend/trading_agents/agents/main/risk.py \
             backend/services/analysis/portfolio_orchestrator.py \
             backend/trading_agents/agents/data/review_tools.py \
@@ -103,6 +138,7 @@ jobs:
             backend/api/auth.py \
             backend/api/users.py \
             backend/main.py \
+            backend/worker.py \
             backend/core/password_hashing.py \
             backend/core/security.py \
             backend/alembic/versions/20260816_0021-bc23d4e5f6a7_encrypt_legacy_tool_secrets.py
