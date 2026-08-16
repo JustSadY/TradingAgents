@@ -1,0 +1,103 @@
+name: Remove retired Trader history
+
+on:
+  push:
+    branches:
+      - agent/legacy-cleanup-pass4
+    paths:
+      - .github/scripts/remove_retired_trader_history.py
+      - .github/workflows/remove-retired-trader-history.yml
+
+permissions:
+  contents: write
+
+jobs:
+  migrate-retired-trader:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/legacy-cleanup-pass4
+          fetch-depth: 0
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Apply deterministic source migration
+        run: python .github/scripts/remove_retired_trader_history.py
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Regenerate OpenAPI client
+        run: npm --prefix frontend run generate:api
+
+      - name: Reject retired Trader production references
+        shell: bash
+        run: |
+          if git grep -n -E 'trader_plan|trader_proposal_json|trader_investment_plan' -- \
+            backend frontend \
+            ':!backend/alembic/versions/**' \
+            ':!backend/tests/**' \
+            ':!frontend/src/**/__tests__/**'; then
+            echo 'retired Trader production references remain' >&2
+            exit 1
+          fi
+          echo 'RETIRED_TRADER_PRODUCTION_REFERENCES=0'
+
+      - name: Run backend migration regressions
+        run: |
+          uv run --project backend pytest \
+            backend/tests/test_api/test_share.py \
+            backend/tests/test_ai_engine/test_single_execution_authority.py \
+            backend/tests/test_temporal_safety.py
+
+      - name: Run backend lint
+        run: |
+          uv run --project backend ruff check \
+            backend/models/analysis.py \
+            backend/schemas/analysis.py \
+            backend/schemas/share.py \
+            backend/core/catalog.py \
+            backend/trading_agents/agents/data/review_tools.py \
+            backend/services/analysis/orchestrator.py \
+            backend/alembic/versions/20260816_0023-de45f6a7b8c9_remove_retired_trader_history.py
+
+      - name: Verify Alembic has one head
+        shell: bash
+        run: |
+          cd backend
+          heads="$(uv run alembic heads | tee /dev/stderr | wc -l)"
+          test "$heads" -eq 1
+
+      - name: Run frontend report regressions
+        run: |
+          npm --prefix frontend test -- \
+            src/analysis/__tests__/portfolioDecision.test.ts \
+            src/pages/__tests__/SharedReport.test.tsx \
+            src/utils/__tests__/exportReport.test.ts
+
+      - name: Build frontend
+        run: npm --prefix frontend run build
+
+      - name: Commit validated migration
+        shell: bash
+        run: |
+          git status --short
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add backend frontend
+          git diff --cached --check
+          if git diff --cached --quiet; then
+            echo 'No migration changes to commit'
+            exit 1
+          fi
+          git commit -m 'Remove retired Trader history contract'
+          git push origin HEAD:agent/legacy-cleanup-pass4
