@@ -1140,15 +1140,6 @@
             "title": "Trade Date",
             "type": "string"
           },
-          "trader_plan": {
-            "title": "Trader Plan",
-            "type": "string"
-          },
-          "trader_proposal_json": {
-            "default": "{}",
-            "title": "Trader Proposal Json",
-            "type": "string"
-          },
           "triggered_by": {
             "title": "Triggered By",
             "type": "string"
@@ -1175,7 +1166,6 @@
           "earnings_report",
           "review_report",
           "investment_plan",
-          "trader_plan",
           "final_decision",
           "llm_calls",
           "tool_calls",
@@ -6721,28 +6711,6 @@
             ],
             "title": "Trade Date"
           },
-          "trader_plan": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Trader Plan"
-          },
-          "trader_proposal_json": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Trader Proposal Json"
-          },
           "valuation_report": {
             "anyOf": [
               {
@@ -7137,17 +7105,6 @@
           "access_token": {
             "title": "Access Token",
             "type": "string"
-          },
-          "refresh_token": {
-            "anyOf": [
-              {
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Refresh Token"
           },
           "token_type": {
             "default": "bearer",

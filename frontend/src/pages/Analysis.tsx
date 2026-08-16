@@ -208,7 +208,6 @@ function RunTab() {
         setReports({
           ...Object.fromEntries(visibleReportEntries(a)),
           investment_plan: a.investment_plan || '',
-          trader_plan: a.trader_plan || '',
           final_decision: a.final_decision || '',
         })
         setDetail(a)
@@ -798,26 +797,21 @@ function RunTab() {
         const isCompleted = !!detail || runStatus === 'done';
         const activeSignal = detail ? detail.signal : signal;
         const activeRiskMetrics = detail ? detail.risk_metrics : riskMetrics;
-        const activeLegacyTraderProposal = detail ? detail.trader_proposal_json : reports.trader_proposal_json;
         const activeChartAnnotations = detail?.chart_annotations ?? reports.chart_annotations;
         const activeAcceptedPortfolioDecision = detail?.portfolio_decision_json ?? reports.portfolio_decision_json;
         const streamedPortfolioDecision = reports.pm_proposal_json || reports.portfolio_decision;
         const activePortfolioDecision = readPortfolioDecision(
           activeAcceptedPortfolioDecision,
           activeChartAnnotations,
-          activeLegacyTraderProposal,
           streamedPortfolioDecision,
         );
-        const hasPortfolioManagerDecision = activePortfolioDecision?.source === 'portfolio_manager';
         const activeId = detail ? detail.id : analysisId;
 
         const activePlans = detail ? {
           investment_plan: detail.investment_plan,
-          trader_plan: hasPortfolioManagerDecision ? '' : detail.trader_plan,
           final_decision: detail.final_decision,
         } : {
           investment_plan: reports.investment_plan || '',
-          trader_plan: hasPortfolioManagerDecision ? '' : reports.trader_plan || reports.trader_investment_plan || '',
           final_decision: reports.final_decision || '',
         };
 
@@ -1009,7 +1003,6 @@ function RunTab() {
                           <PortfolioDecisionCard
                             acceptedPortfolioDecision={activeAcceptedPortfolioDecision}
                             chartAnnotations={activeChartAnnotations}
-                            legacyTraderJson={activeLegacyTraderProposal}
                             streamedPortfolioDecision={streamedPortfolioDecision}
                           />
                         </div>
@@ -1057,15 +1050,6 @@ function RunTab() {
                           <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{sectionLabels.investment_plan || 'Research Evidence Summary'}</h5>
                           <MarkdownReport
                             content={activePlans.investment_plan}
-                            className="!text-xs !leading-relaxed !text-slate-300"
-                          />
-                        </div>
-                      )}
-                      {activePlans.trader_plan && (
-                        <div className="glass-panel p-4 rounded-xl space-y-2 bg-slate-900/30">
-                          <h5 className="text-[10px] font-bold text-slate-400 uppercase tracking-wider">{sectionLabels.trader_plan || 'Legacy Trader Proposal'}</h5>
-                          <MarkdownReport
-                            content={activePlans.trader_plan}
                             className="!text-xs !leading-relaxed !text-slate-300"
                           />
                         </div>

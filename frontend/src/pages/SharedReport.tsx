@@ -3,7 +3,7 @@ import { useParams } from 'react-router-dom'
 import { useShareGetSharedReport } from '../api/generated/share/share'
 import {
   TrendingUp, TrendingDown, Minus, Clock, AlertCircle, Loader2,
-  FileText, BookOpen, Scale, Zap,
+  FileText, BookOpen, Scale,
 } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
 import type { SharedReportResponse } from '../api/generated/model'
@@ -30,9 +30,7 @@ const SECTION_ICONS: Record<string, SectionDef['icon']> = {
   portfolio_decision: Scale,
   final_decision: Scale,
   investment_plan: BookOpen,
-  trader_plan: Zap,
   judge_decision: Scale,
-  trader_proposal_json: Zap,
   market_report: TrendingUp,
   fundamentals_report: BookOpen,
   news_report: FileText,
@@ -97,13 +95,6 @@ function SignalBadge({ signal }: { signal: string | null }) {
 
 function hasSharedSectionContent(def: SectionDef, report: SharedReportResponse): boolean {
   const hasCanonicalPortfolioDecision = isNonEmptyRecord(report.portfolio_decision)
-  // New reports have one final authority: the Portfolio Manager.  Keep the
-  // old Trader output reachable only for historical reports that do not have
-  // that canonical decision, so public links cannot show competing trade
-  // sizes or directions.
-  if (hasCanonicalPortfolioDecision && (def.key === 'trader_plan' || def.key === 'trader_proposal_json')) {
-    return false
-  }
   if (def.kind === 'portfolioDecision') return hasCanonicalPortfolioDecision
   if (def.kind === 'debates') {
     return Boolean(
@@ -186,8 +177,8 @@ function PortfolioDecisionContent({ decision }: { decision: SharedReportResponse
     <div data-testid="shared-portfolio-decision" className="space-y-4 rounded-2xl border border-violet-400/20 bg-violet-500/[0.05] p-5">
       <div className="flex flex-wrap items-start justify-between gap-3 border-b border-violet-300/10 pb-4">
         <div className="space-y-1">
-          <h3 className="text-sm font-bold text-white">{label('analysis.pm.title', 'Portfolio Manager Recommendation')}</h3>
-          <p className="text-[11px] text-violet-200/75">{label('analysis.pm.single_authority', 'Single AI authority for sizing and trade parameters')}</p>
+          <h3 className="text-sm font-bold text-white">{label('analysis.section.final_trade_decision', 'Canonical Portfolio Decision')}</h3>
+          <p className="text-[11px] text-violet-200/75">{label('analysis.strategy.subtitle', 'Accepted decision after the Portfolio Manager proposal and Decision Stability policy.')}</p>
         </div>
         <div className="flex items-center gap-2">
           {rating && <SignalBadge signal={rating} />}

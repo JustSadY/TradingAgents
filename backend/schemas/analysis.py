@@ -84,14 +84,12 @@ class AnalysisResultRead(BaseModel):
     strategy_after_version: int | None = None
     analysis_mode: str = "live"
     learning_eligible: bool = True
-    trader_plan: str
     final_decision: str
     bull_history: Any = None
     bear_history: Any = None
     investment_debate_history: Any = None
     risk_debate_history: Any = None
     judge_decision: str = ""
-    trader_proposal_json: str = "{}"
     chart_annotations: Any = None
     risk_metrics: Any = None
     quality: Any = None

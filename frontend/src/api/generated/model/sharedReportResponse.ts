@@ -46,7 +46,5 @@ export interface SharedReportResponse {
   synthesis_report?: string | null;
   ticker: string;
   trade_date?: string | null;
-  trader_plan?: string | null;
-  trader_proposal_json?: string | null;
   valuation_report?: string | null;
 }

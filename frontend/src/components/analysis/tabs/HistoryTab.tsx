@@ -1,7 +1,6 @@
 import { QualityBadge, type RunQuality } from '../QualityBadge'
 import { PortfolioDecisionCard } from '../PortfolioDecisionCard'
 import { TimeTravelWidget } from '../TimeTravelWidget'
-import { readPortfolioDecision } from '../../../analysis/portfolioDecision'
 import { readableSectionLabel, visibleReportEntries } from '../../../analysis/streamingReports'
 import { analysisGetAnalysis, getAnalysisGetAnalysisQueryKey, useAnalysisClearHistory, useAnalysisDeleteAnalysis, useAnalysisListAnalysis } from '../../../api/generated/analysis/analysis'
 import type { AnalysisListItem, AnalysisResultRead } from '../../../api/generated/model'
@@ -129,10 +128,6 @@ export function HistoryTab({
     if (initialDetailId) openDetail(initialDetailId)
   }, [initialDetailId, openDetail])
 
-  const historyPortfolioDecision = detail
-    ? readPortfolioDecision(detail.portfolio_decision_json, detail.chart_annotations, detail.trader_proposal_json)
-    : null
-  const historyHasPortfolioManagerDecision = historyPortfolioDecision?.source === 'portfolio_manager'
   const historyReportEntries = detail
     ? visibleReportEntries(detail as unknown as Record<string, unknown>)
     : []
@@ -368,7 +363,6 @@ export function HistoryTab({
                       <PortfolioDecisionCard
                         acceptedPortfolioDecision={detail.portfolio_decision_json}
                         chartAnnotations={detail.chart_annotations}
-                        legacyTraderJson={detail.trader_proposal_json}
                       />
                       <StrategyTransitionCard
                         analysisPlan={detail.analysis_plan_json}
@@ -386,7 +380,6 @@ export function HistoryTab({
                       {([
                         ...historyReportEntries,
                         ['investment_plan', detail.investment_plan],
-                        ...(historyHasPortfolioManagerDecision ? [] : [['trader_plan', detail.trader_plan] as [string, string]]),
                         ['final_decision', detail.final_decision],
                       ] as [string, string][]).filter(entry => !!entry[1]).map(([k, v]) => (
                         <ReportCard key={k} label={readableSectionLabel(sectionLabels, k)} content={v} />

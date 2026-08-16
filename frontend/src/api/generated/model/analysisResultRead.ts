@@ -70,8 +70,6 @@ export interface AnalysisResultRead {
   tokens_out: number;
   tool_calls: number;
   trade_date: string;
-  trader_plan: string;
-  trader_proposal_json?: string;
   triggered_by: string;
   valuation_report?: string;
 }

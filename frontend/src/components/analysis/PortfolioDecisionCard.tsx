@@ -5,16 +5,14 @@ import { SignalBadge } from './SignalBadge'
 export function PortfolioDecisionCard({
   acceptedPortfolioDecision,
   chartAnnotations,
-  legacyTraderJson,
   streamedPortfolioDecision,
 }: {
   acceptedPortfolioDecision?: unknown
   chartAnnotations?: unknown
-  legacyTraderJson?: string | null
   streamedPortfolioDecision?: unknown
 }) {
   const { t } = useTranslation()
-  const decision = readPortfolioDecision(acceptedPortfolioDecision, chartAnnotations, legacyTraderJson, streamedPortfolioDecision)
+  const decision = readPortfolioDecision(acceptedPortfolioDecision, chartAnnotations, streamedPortfolioDecision)
   if (!decision) return null
 
   const confidence = decision.confidenceScore === undefined
@@ -34,9 +32,9 @@ export function PortfolioDecisionCard({
     <div data-testid="portfolio-decision-card" className="rounded-2xl border border-violet-500/20 bg-violet-500/[0.06] p-4 space-y-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="space-y-0.5">
-          <h4 className="text-[10px] font-bold text-violet-300 uppercase tracking-widest">{t('analysis.pm.title')}</h4>
+          <h4 className="text-[10px] font-bold text-violet-300 uppercase tracking-widest">{t('analysis.section.final_trade_decision')}</h4>
           <p className="text-[10px] text-slate-400">
-            {decision.source === 'portfolio_manager' ? t('analysis.pm.single_authority') : t('analysis.pm.legacy_fallback')}
+            {t('analysis.strategy.subtitle')}
           </p>
         </div>
         <div className="flex items-center gap-2">

@@ -30,14 +30,12 @@ class SharedReportResponse(BaseModel):
     audit_report: str | None = None
     agent_qa_report: str | None = None
     investment_plan: str | None = None
-    trader_plan: str | None = None
     final_decision: str | None = None
     bull_history: Any = None
     bear_history: Any = None
     investment_debate_history: Any = None
     risk_debate_history: Any = None
     judge_decision: str | None = None
-    trader_proposal_json: str | None = None
     portfolio_decision: dict[str, Any] | None = None
     chart_annotations: Any = None
     risk_metrics: Any = None

@@ -71,8 +71,6 @@ SECTION_LABELS: dict[str, str] = {
     "investment_plan": "Research Evidence Summary",
     "strategy_reconciliation_report": "Strategy Reconciliation",
     "pm_proposal_report": "Portfolio Manager Proposal",
-    "trader_investment_plan": "Legacy Trader Proposal (historical only)",
-    "trader_plan": "Legacy Trader Proposal (historical only)",
     "final_trade_decision": "Accepted Final Decision",
     "final_decision": "Accepted Final Decision",
     "bull_history": "Bull Arguments",
@@ -196,7 +194,6 @@ SECTIONS: list[dict] = [
     {"key": "audit_report", "label": "Audit", "category": "research", "order": 17, "icon": "ShieldAlert"},
     {"key": "agent_qa_report", "label": "Cross-Examination", "category": "research", "order": 18, "icon": "Bot"},
     {"key": "investment_plan", "label": "Research Evidence Summary", "category": "research", "order": 19, "icon": "Target"},
-    {"key": "trader_plan", "label": "Legacy Trader Proposal", "category": "trade", "order": 20, "icon": "History"},
     {"key": "bull_history", "label": "Bull Arguments", "category": "debate", "order": 21, "icon": "TrendingUp"},
     {"key": "bear_history", "label": "Bear Arguments", "category": "debate", "order": 22, "icon": "TrendingDown"},
     {

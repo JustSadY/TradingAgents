@@ -9,7 +9,6 @@ const exportSections = {
   en: {
     'export.section.final_decision': 'Final Decision (Portfolio Manager)',
     'export.section.investment_plan': 'Research Evidence Summary',
-    'export.section.trader_plan': 'Legacy Trader Proposal (historical only)',
     'export.section.market_report': 'Market Analysis',
     'export.section.fundamentals_report': 'Fundamentals',
     'export.section.news_report': 'News Analysis',
@@ -37,7 +36,6 @@ const exportSections = {
   tr: {
     'export.section.final_decision': 'Nihai Karar (Portfolio Manager)',
     'export.section.investment_plan': 'Araştırma Kanıt Özeti',
-    'export.section.trader_plan': 'Eski Trader Önerisi (yalnız geçmiş kayıt)',
     'export.section.market_report': 'Piyasa Analizi',
     'export.section.fundamentals_report': 'Temel Analiz',
     'export.section.news_report': 'Haber Analizi',

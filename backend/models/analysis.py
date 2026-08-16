@@ -67,7 +67,6 @@ class AnalysisResult(Base):
     # strategy learning.
     analysis_mode: Mapped[str] = mapped_column(String(20), default="live", index=True)
     learning_eligible: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
-    trader_plan: Mapped[str] = mapped_column(Text, default="")
     final_decision: Mapped[str] = mapped_column(Text, default="")
     reflection: Mapped[str] = mapped_column(Text, default="")
     bull_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
@@ -75,7 +74,6 @@ class AnalysisResult(Base):
     investment_debate_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
     risk_debate_history: Mapped[list | dict | None] = mapped_column(JSON, nullable=True)
     judge_decision: Mapped[str] = mapped_column(Text, default="")
-    trader_proposal_json: Mapped[str] = mapped_column(Text, default="{}")
     chart_annotations: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     risk_metrics: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     quality: Mapped[dict | None] = mapped_column(JSON, nullable=True)
