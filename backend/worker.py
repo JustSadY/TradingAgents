@@ -170,6 +170,9 @@ async def run_portfolio_job(
 async def startup(ctx):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
 
+    from backend.trading_agents.agents.runtime.logging_config import setup_unified_logging
+
+    setup_unified_logging()
     import backend.trading_agents.agents.tools.bootstrap  # noqa: F401
     from backend.core.task_store import control_listener
     from backend.services.analysis_service import cancel_local_task
