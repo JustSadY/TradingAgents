@@ -148,7 +148,6 @@ export * from './profileUpdate';
 export * from './qualityConfidenceCounts';
 export * from './rebalanceResponse';
 export * from './rebalanceSuggestion';
-export * from './refreshRequest';
 export * from './resetRequest';
 export * from './resetResponse';
 export * from './riskBreach';
