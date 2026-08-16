@@ -46,14 +46,12 @@ const fullSharedReport = {
   audit_report: 'Audit report body',
   agent_qa_report: 'Q&A report body',
   investment_plan: 'Investment plan body',
-  trader_plan: 'Trader plan body',
   final_decision: 'Final decision body',
   bull_history: ['Bull Analyst: Trend is constructive'],
   bear_history: [{ sender: 'Bear Analyst', content: 'Valuation is demanding' }],
   investment_debate_history: ['Bull Analyst: Consensus argument'],
   risk_debate_history: ['Aggressive Analyst: Risk argument'],
   judge_decision: 'Judge decision body',
-  trader_proposal_json: JSON.stringify({ action: 'BUY', quantity: 2 }),
   chart_annotations: null,
   risk_metrics: { max_drawdown: 0.12 },
   quality: null,
@@ -77,11 +75,11 @@ describe('SharedReport', () => {
 
     // Wait for rendered content rather than the request itself: the fetch fires
     // one tick before the data is committed to the DOM.
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Final Decision (Portfolio Manager)' })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Canonical Final Decision' })).toBeInTheDocument())
     expect(axios.get).toHaveBeenCalledWith('/api/share/public-token', expect.anything())
 
     for (const label of [
-      'Final Decision (Portfolio Manager)',
+      'Canonical Final Decision',
       'Market Analysis',
       'Fundamental Analysis',
       'Short Interest',
@@ -101,7 +99,7 @@ describe('SharedReport', () => {
     expect(screen.getByTestId('shared-debates')).toHaveTextContent('Risk argument')
   })
 
-  it('shows the canonical Portfolio Manager decision and hides competing legacy Trader proposals', async () => {
+  it('shows the canonical Portfolio Manager decision without retired Trader sections', async () => {
     vi.mocked(axios.get).mockResolvedValue({
       data: {
         ...fullSharedReport,
@@ -122,8 +120,7 @@ describe('SharedReport', () => {
     renderWithQuery(<SharedReport />)
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Portfolio Manager Recommendation' })).toBeInTheDocument())
-    expect(screen.queryByRole('button', { name: 'Legacy Trader Proposal' })).not.toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: 'Legacy Trade Proposal Details' })).not.toBeInTheDocument()
+    expect(REPORT_SECTIONS.some(section => section.key.includes('trader'))).toBe(false)
 
     expect(screen.getByTestId('shared-portfolio-decision')).toHaveTextContent('Enter only with a defined stop.')
     expect(screen.getByTestId('shared-portfolio-decision')).toHaveTextContent('$2,500.00')
@@ -141,17 +138,14 @@ describe('formatSharedReportValue', () => {
 
 describe('shared report section registry', () => {
   it('renders exactly the sections marked shareable, in registry order', () => {
-    // The share page used to hold its own copy of this list. Pinning the derived
-    // list keeps a registry edit from silently adding or dropping a section from
-    // a public link.
     const shareable = REPORT_SECTIONS.filter(section => section.shareable).map(s => s.key)
 
     expect(shareable.slice(0, 6)).toEqual([
       'portfolio_decision', 'final_decision', 'investment_plan',
-      'trader_plan', 'judge_decision', 'trader_proposal_json',
+      'judge_decision', 'market_report', 'fundamentals_report',
     ])
     expect(shareable.at(-1)).toBe('risk_metrics')
-    expect(shareable).toHaveLength(28)
+    expect(shareable).toHaveLength(26)
   })
 
   it('gives every shareable section a label key and a category', () => {
