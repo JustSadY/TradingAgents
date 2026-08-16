@@ -13,12 +13,15 @@ on:
       - backend/services/analysis/portfolio_orchestrator.py
       - backend/trading_agents/agents/data/review_tools.py
       - backend/services/analysis/config_builder.py
+      - backend/services/notification_service.py
+      - backend/services/settings_service.py
       - backend/alembic/versions/**
       - backend/tests/**
       - backend/postgres_tests/**
       - backend/api/trading.py
       - backend/api/auth.py
       - backend/api/alerts.py
+      - backend/api/settings.py
       - backend/api/users.py
       - backend/services/mock_trading_service.py
       - backend/services/auth_session_service.py
@@ -29,6 +32,7 @@ on:
       - backend/core/password_hashing.py
       - backend/core/security.py
       - backend/schemas/auth.py
+      - backend/schemas/settings.py
       - backend/main.py
       - backend/worker.py
       - frontend/src/App.tsx
@@ -310,6 +314,30 @@ jobs:
           print("ALERT_ROUTER_MUTATION_LOGIC=0")
           PY
 
+      - name: Reject webhook validation compatibility facade
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          service_path = Path("backend/services/notification_service.py")
+          tree = ast.parse(service_path.read_text())
+          functions = {node.name for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+          if "validate_webhook_url" in functions:
+              raise SystemExit("notification_service.validate_webhook_url compatibility facade was reintroduced")
+          if "resolve_webhook_target" not in functions:
+              raise SystemExit("canonical resolve_webhook_target API is missing")
+
+          for path in (Path("backend/api/settings.py"), Path("backend/services/settings_service.py")):
+              text = path.read_text()
+              if "notification_service import validate_webhook_url" in text:
+                  raise SystemExit(f"legacy webhook validation import remains in {path}")
+              if "resolve_webhook_target" not in text:
+                  raise SystemExit(f"canonical webhook resolver is not used in {path}")
+          print("WEBHOOK_VALIDATION_FACADE=0")
+          PY
+
       - name: Run cleanup regression tests
         run: |
           uv run --project backend pytest \
@@ -333,9 +361,12 @@ jobs:
             backend/services/analysis/portfolio_orchestrator.py \
             backend/trading_agents/agents/data/review_tools.py \
             backend/services/analysis/config_builder.py \
+            backend/services/notification_service.py \
+            backend/services/settings_service.py \
             backend/api/trading.py \
             backend/api/auth.py \
             backend/api/alerts.py \
+            backend/api/settings.py \
             backend/services/mock_trading_service.py \
             backend/services/auth_session_service.py \
             backend/services/alert_management_service.py \
@@ -343,6 +374,7 @@ jobs:
             backend/repositories/alerts.py \
             backend/core/database.py \
             backend/schemas/auth.py \
+            backend/schemas/settings.py \
             backend/tests/test_ai_engine/test_single_execution_authority.py \
             backend/tests/conftest.py \
             backend/tests/helpers/factories.py \
