@@ -83,8 +83,6 @@ OLD_VENV_TARGET=""
 SERVICE_STOPPED=0
 WORKER_STOPPED=0
 SWITCHED=0
-DB_MIGRATED=0
-OLD_DB_REVISION=""
 
 cleanup() {
     asuser git -C "$PROJECT_ROOT" worktree remove --force "$WORKTREE" >/dev/null 2>&1 || true
@@ -109,9 +107,6 @@ rollback() {
                 ln -s "$OLD_VENV_TARGET" "$VENV"
             fi
         fi
-    fi
-    if [ "$DB_MIGRATED" -eq 1 ] && [ -n "$OLD_DB_REVISION" ]; then
-        asuser env "MIGRATION_DATABASE_URL=$MIGRATION_DATABASE_URL" bash -c "cd '$WORKTREE' && '$NEW_VENV/bin/alembic' -c backend/alembic.ini downgrade '$OLD_DB_REVISION'" >>"$LOG" 2>&1 || true
     fi
     if [ "$WORKER_STOPPED" -eq 1 ]; then
         systemctl start "$WORKER_SERVICE_NAME" >>"$LOG" 2>&1 || true
@@ -155,14 +150,12 @@ if systemctl list-unit-files "$WORKER_SERVICE_NAME.service" --no-legend 2>/dev/n
 fi
 systemctl stop "$SERVICE_NAME" >>"$LOG" 2>&1 || rollback "Could not stop service: $SERVICE_NAME"
 SERVICE_STOPPED=1
-OLD_DB_REVISION="$(asuser bash -c "cd '$PROJECT_ROOT' && '$VENV/bin/alembic' -c backend/alembic.ini current 2>/dev/null | head -1 | awk '{print \$1}'" || true)"
 
 # PostgreSQL DDL migrations are transactional. Migrations in this repository
 # must remain backward-compatible with the previous release (expand/contract).
 if ! asuser env "MIGRATION_DATABASE_URL=$MIGRATION_DATABASE_URL" bash -c "cd '$WORKTREE' && '$NEW_VENV/bin/alembic' -c backend/alembic.ini upgrade head" >>"$LOG" 2>&1; then
     rollback "Database migration failed"
 fi
-DB_MIGRATED=1
 
 if ! asuser git -C "$PROJECT_ROOT" reset --hard "$TO" >>"$LOG" 2>&1; then
     rollback "Could not switch live checkout to target revision"
@@ -193,7 +186,6 @@ if ! systemctl is-active --quiet "$SERVICE_NAME"; then
 fi
 SERVICE_STOPPED=0
 WORKER_STOPPED=0
-DB_MIGRATED=0
 
 write_status done
 log "=== Staged update completed (${FROM:0:12} -> ${TO:0:12}) ==="
