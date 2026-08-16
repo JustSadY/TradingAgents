@@ -28,7 +28,7 @@ function decisionNumber(value: unknown): number | undefined {
   return isFiniteNumeric(value) ? value : undefined
 }
 
-/** Descend through decision wrappers until the accepted decision is reached. */
+/** Descend through canonical decision wrappers until the accepted decision is reached. */
 export function unwrapCanonicalPortfolioDecision(value: unknown): Record<string, unknown> | null {
   const record = objectFromJson(value)
   if (!record) return null
@@ -43,13 +43,9 @@ function hasAnyValue(preview: PortfolioDecisionPreview): boolean {
 
 export function readPortfolioDecision(
   acceptedPortfolioDecision?: unknown,
-  chartAnnotations?: unknown,
   streamedPortfolioDecision?: unknown,
 ): PortfolioDecisionPreview | null {
-  const annotations = objectFromJson(chartAnnotations)
-  const decision = unwrapCanonicalPortfolioDecision(
-    acceptedPortfolioDecision ?? annotations?.portfolio_decision ?? annotations?.portfolio_decision_json ?? streamedPortfolioDecision,
-  )
+  const decision = unwrapCanonicalPortfolioDecision(acceptedPortfolioDecision ?? streamedPortfolioDecision)
   if (!decision) return null
 
   const rating = typeof decision.rating === 'string' && decision.rating.trim() ? decision.rating.trim() : undefined
