@@ -4,15 +4,13 @@ import { SignalBadge } from './SignalBadge'
 
 export function PortfolioDecisionCard({
   acceptedPortfolioDecision,
-  chartAnnotations,
   streamedPortfolioDecision,
 }: {
   acceptedPortfolioDecision?: unknown
-  chartAnnotations?: unknown
   streamedPortfolioDecision?: unknown
 }) {
   const { t } = useTranslation()
-  const decision = readPortfolioDecision(acceptedPortfolioDecision, chartAnnotations, streamedPortfolioDecision)
+  const decision = readPortfolioDecision(acceptedPortfolioDecision, streamedPortfolioDecision)
   if (!decision) return null
 
   const confidence = decision.confidenceScore === undefined
