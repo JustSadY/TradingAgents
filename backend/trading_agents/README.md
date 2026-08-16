@@ -220,6 +220,24 @@ change. Provider-specific reasoning controls (OpenAI reasoning effort, Gemini
 thinking level, Claude effort) are mapped dynamically from the run
 configuration.
 
+### Token pricing
+
+Cost estimates and token analytics resolve rates through
+[core/model_pricing.py](../core/model_pricing.py), which reads LiteLLM's price
+table out of the pinned `litellm` package rather than keeping a hand-written
+one. `PRICE_OVERRIDES` holds only what that table lacks or routes to another
+vendor, and a test fails when an override stops being necessary, so the list
+shrinks as LiteLLM catches up.
+
+The table is read as a file; `import litellm` is deliberately avoided, because
+it costs roughly three seconds and by default fetches a newer map over the
+network at import time. Rates therefore move when the pinned `litellm` version
+moves, and `uv.lock` records that.
+
+Callers get a `PricingResolution`, not a bare number — a `catalog` rate is not
+the same claim as the conservative `provider_fallback` estimate a model too new
+for the pinned table receives.
+
 ---
 
 ## 🚀 Advanced Institutional Features

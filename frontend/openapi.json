@@ -7201,6 +7201,7 @@
           },
           "pricing_source": {
             "enum": [
+              "catalog",
               "exact",
               "model_id",
               "provider_fallback",
