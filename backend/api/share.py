@@ -13,6 +13,7 @@ from backend.services import share_service
 
 router = APIRouter(tags=["share"])
 
+
 @router.post(
     "/api/analysis/{analysis_id}/share",
     response_model=ShareCreateResponse,
@@ -36,6 +37,7 @@ async def create_share(
 
     return {"token": share.token, "expires_at": share.expires_at.isoformat()}
 
+
 @router.post(
     "/api/analysis/{analysis_id}/share/rotate",
     response_model=ShareCreateResponse,
@@ -54,6 +56,7 @@ async def rotate_share(
     )
     return {"token": share.token, "expires_at": share.expires_at.isoformat()}
 
+
 @router.delete("/api/analysis/{analysis_id}/share", status_code=204)
 async def revoke_share(
     analysis_id: int,
@@ -64,6 +67,7 @@ async def revoke_share(
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis not found")
     await share_service.revoke_shared_report(db, analysis_id, current_user.id, datetime.now(UTC))
+
 
 @router.get(
     "/api/share/{token}",
@@ -88,8 +92,6 @@ async def get_shared_report(token: str, db: AsyncSession = Depends(get_db)):
     analysis = await share_service.get_analysis_for_share(db, share.analysis_id)
     if not analysis:
         raise HTTPException(status_code=404, detail="Analysis data not found")
-
-    annotations = analysis.chart_annotations if isinstance(analysis.chart_annotations, dict) else {}
 
     return {
         "ticker": analysis.ticker,
@@ -120,7 +122,7 @@ async def get_shared_report(token: str, db: AsyncSession = Depends(get_db)):
         "investment_debate_history": analysis.investment_debate_history,
         "risk_debate_history": analysis.risk_debate_history,
         "judge_decision": analysis.judge_decision or "",
-        "portfolio_decision": annotations.get("portfolio_decision"),
+        "portfolio_decision": analysis.portfolio_decision_json,
         "chart_annotations": analysis.chart_annotations,
         "risk_metrics": analysis.risk_metrics,
         "quality": analysis.quality,
