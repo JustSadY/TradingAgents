@@ -33,6 +33,7 @@ import backend.bootstrap  # noqa: E402,F401
 import backend.models  # noqa: E402,F401
 from backend.core.database import AsyncSessionLocal  # noqa: E402
 from backend.core.database import engine as runtime_engine
+from backend.core.password_hashing import hash_password  # noqa: E402
 from backend.core.rls_context import (  # noqa: E402
     BackgroundCapability,
     set_public_share_context,
@@ -41,7 +42,6 @@ from backend.core.rls_context import (  # noqa: E402
     set_request_tenant_context,
     trusted_background_session,
 )
-from backend.core.security import hash_password  # noqa: E402
 from backend.main import app  # noqa: E402
 from backend.models.alert import PriceAlert  # noqa: E402
 from backend.models.analysis import AnalysisResult  # noqa: E402
