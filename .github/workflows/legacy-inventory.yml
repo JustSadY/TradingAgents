@@ -79,6 +79,7 @@ jobs:
           python - <<'PY'
           import ast
           import re
+          from collections import Counter
           from pathlib import Path
 
           roots = [Path('backend'), Path('frontend/src')]
@@ -90,7 +91,7 @@ jobs:
                           texts[path] = path.read_text()
                       except UnicodeDecodeError:
                           pass
-          corpus = '\n'.join(texts.values())
+          identifiers = Counter(re.findall(r'\b[A-Za-z_][A-Za-z0-9_]*\b', '\n'.join(texts.values())))
 
           print('=== PYTHON TOP-LEVEL SYMBOLS WITH <= 2 TEXT REFERENCES ===')
           for path, text in sorted(texts.items(), key=lambda item: str(item[0])):
@@ -102,7 +103,7 @@ jobs:
                   continue
               for node in tree.body:
                   if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef, ast.ClassDef)) and not node.name.startswith('_'):
-                      count = len(re.findall(rf'\b{re.escape(node.name)}\b', corpus))
+                      count = identifiers[node.name]
                       if count <= 2:
                           print(f'{path}:{node.lineno}: {node.name} refs={count}')
           PY
