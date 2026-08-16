@@ -38,6 +38,11 @@ _logger = logging.getLogger(__name__)
 _DEFAULT_COMMISSION_RATE = Decimal("0.001")
 _DUST = Decimal("1e-6")
 
+
+class AnalysisOwnershipError(ValueError):
+    """Raised when an order references an analysis outside the caller's scope."""
+
+
 def _opening_commission(holding: Holding) -> Decimal:
     """Return the unallocated opening commission carried by ``holding``.
 
@@ -323,8 +328,12 @@ async def execute_order(
     allow_short: bool = False,
 ) -> dict:
     from backend.core.l10n import get_message
+    from backend.repositories.analysis import get_analysis_by_id
     from backend.repositories.portfolio import get_holding
     from backend.services.settings_service import get_user_language
+
+    if analysis_id is not None and await get_analysis_by_id(db, analysis_id, user=user) is None:
+        raise AnalysisOwnershipError("Analysis not found")
 
     lang = await get_user_language(db, user)
 

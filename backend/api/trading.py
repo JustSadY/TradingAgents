@@ -2,7 +2,6 @@ from typing import Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field, field_validator, model_validator
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_db, require_page
@@ -92,19 +91,8 @@ async def create_order(
     _=Depends(require_page("trading")),
 ):
 
-    if req.analysis_id is not None:
-        from backend.models.analysis import AnalysisResult
-
-        ownership = await db.execute(
-            select(AnalysisResult.id).where(
-                AnalysisResult.id == req.analysis_id,
-                AnalysisResult.user_id == _.id,
-            )
-        )
-        if ownership.scalar_one_or_none() is None:
-            raise HTTPException(status_code=404, detail="Analysis not found")
-
-    result = await svc.execute_order(
+    try:
+        result = await svc.execute_order(
         db,
         ticker=req.ticker,
         action=req.action,
@@ -112,8 +100,10 @@ async def create_order(
         analysis_id=req.analysis_id,
         user=_,
         leverage=req.leverage,
-        allow_short=req.allow_short,
-    )
+            allow_short=req.allow_short,
+        )
+    except svc.AnalysisOwnershipError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
     return result
 
 @router.get("/performance", response_model=PerformanceResponse)

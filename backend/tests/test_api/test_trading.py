@@ -58,6 +58,14 @@ class TestTradingAPI:
         )
         assert resp.status_code == 422
 
+    async def test_create_order_rejects_unknown_analysis_before_execution(self, auth_client: AsyncClient):
+        resp = await auth_client.post(
+            "/api/trading/order",
+            json={"ticker": "AAPL", "action": "BUY", "quantity": 1, "analysis_id": 999999},
+        )
+        assert resp.status_code == 404
+        assert resp.json()["detail"] == "Analysis not found"
+
     async def test_get_performance_no_auth(self, async_client: AsyncClient):
         resp = await async_client.get("/api/trading/performance")
         assert resp.status_code == 401
