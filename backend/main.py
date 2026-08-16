@@ -67,7 +67,6 @@ async def lifespan(app: FastAPI):
 
     await create_all_tables()
     await _seed_admin_user()
-    await _seed_setting_permissions()
 
     try:
         from backend.core.rls_context import BackgroundCapability, trusted_background_session
@@ -182,30 +181,6 @@ async def _seed_admin_user():
             existing.role = "owner"
             await db.commit()
             _logger.info("Owner role set for existing user: %s", settings.ADMIN_USERNAME)
-
-
-async def _seed_setting_permissions():
-    from sqlalchemy import select
-
-    from backend.core.constants import SETTING_KEYS
-    from backend.core.rls_context import BackgroundCapability, trusted_background_session
-    from backend.models.page_permission import UserSettingPermission
-    from backend.models.user import User
-
-    async with trusted_background_session(BackgroundCapability.STARTUP_SEED) as db:
-        res = await db.execute(select(User))
-        users = res.scalars().all()
-        for u in users:
-            for s_key in SETTING_KEYS:
-                exists_res = await db.execute(
-                    select(UserSettingPermission)
-                    .where(UserSettingPermission.user_id == u.id)
-                    .where(UserSettingPermission.setting_key == s_key)
-                )
-                existing = exists_res.scalar_one_or_none()
-                if not existing:
-                    db.add(UserSettingPermission(user_id=u.id, setting_key=s_key, allowed=True))
-        await db.commit()
 
 
 async def _load_cron_settings(cron):
