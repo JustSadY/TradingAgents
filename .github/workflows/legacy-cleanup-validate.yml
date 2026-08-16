@@ -15,6 +15,7 @@ on:
       - backend/alembic/versions/**
       - backend/tests/**
       - backend/postgres_tests/**
+      - frontend/src/App.tsx
       - frontend/src/i18n/analysis.ts
       - backend/api/auth.py
       - backend/api/users.py
@@ -103,6 +104,20 @@ jobs:
           if "setup_unified_logging" in package_init:
               raise SystemExit("engine package import still initializes logging")
           print("IMPORT_TIME_ENGINE_LOGGING=0")
+          PY
+
+      - name: Reject obsolete preferences route alias
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          app = Path("frontend/src/App.tsx").read_text()
+          if 'path="preferences"' in app or 'path="/preferences"' in app:
+              raise SystemExit("obsolete /preferences route alias still exists")
+          if 'path="settings"' not in app:
+              raise SystemExit("canonical /settings route is missing")
+          print("PREFERENCES_ROUTE_ALIAS=0")
           PY
 
       - name: Run cleanup regression tests
