@@ -125,7 +125,7 @@ function RunTab() {
   // The backend may already have created the task, so the late response still
   // needs a best-effort cancel request, but it must never revive this UI.
   const runRequestRef = useRef(0)
-  // `/api/analysis/latest` is only bootstrap data.  Once this mount has taken
+  // `/api/analysis/latest` is only bootstrap data. Once this mount has taken
   // ownership of an active/new run, a delayed bootstrap response is stale.
   const runStartedRef = useRef(saved.runStatus === 'running')
   // Always-current ticker for use inside the WS handler, so attachWs doesn't
@@ -171,7 +171,6 @@ function RunTab() {
     if (runStatus === 'running' && now - lastPersistRef.current < 2000) return
     lastPersistRef.current = now
     try {
-      // Don't persist reports while running — they're large and will be re-streamed via WS on reconnect
       const payload = runStatus === 'running'
         ? { ticker, date, assetType, runStatus, signal, reports: {}, log: [], liveDebate: [], orderResult, activeSection, analysisId }
         : { ticker, date, assetType, runStatus, signal, reports, log, liveDebate, orderResult, activeSection, analysisId }
@@ -187,18 +186,12 @@ function RunTab() {
     }
   }, [analysisId, runStatus, detail])
 
-  // Cross-device: mount'ta idle durumdaysak en son tamamlanmış analizi yükle
   useEffect(() => {
     if (runStartedRef.current || runStatus !== 'idle' || analysisId) return
     if (runStatus === 'idle' && !analysisId) {
       analysisGetLatestAnalysis().then(latest => {
-        // A user action, active-task sync, or persisted-task resume may have
-        // started while this bootstrap request was in flight.
         if (runStartedRef.current) return
         const a = latest as unknown as AnalysisResultRead | null
-        // A malformed/empty payload (e.g. transient backend issue) must not
-        // stomp `ticker` with undefined — every other effect assumes it's a
-        // string and calls .trim()/.toUpperCase() on it unconditionally.
         if (!a || !a.ticker) return
         setTicker(a.ticker)
         setDate(a.trade_date)
@@ -215,10 +208,6 @@ function RunTab() {
     }
   }, [])
 
-  // What a finished run leaves behind outside React: the machine owns the
-  // state, this owns the task marker and the refs keyed to that task. Every
-  // path into a terminal state has to call it, or a reload resurrects a run
-  // that is already over.
   const clearRunTask = useCallback(() => {
     sessionStorage.removeItem(TASK_KEY)
     taskIdRef.current = null
@@ -226,8 +215,6 @@ function RunTab() {
   }, [])
 
   const attachWs = useCallback((taskId: string, reconnectAttempt = 0) => {
-    // Stop may race a queued reconnect timer or a persisted-task probe.  Do
-    // not create a new socket after the user has explicitly stopped the run.
     if (stoppedByUserRef.current) return
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current)
@@ -259,9 +246,6 @@ function RunTab() {
     }
 
     const markConnectionAsTerminalFailure = (message = t('analysis.ws.conn_closed')) => {
-      // The task may have finished while its terminal event was being
-      // persisted.  Do not let a close/reconnect loop leave the page in a
-      // false "Running" state after the server has removed that task.
       finished = true
       terminalTaskIdRef.current = taskId
       if (reconnectTimeoutRef.current) {
@@ -279,8 +263,6 @@ function RunTab() {
     }
 
     const scheduleRetry = (closeCode: number, taskProbeUnavailable: boolean) => {
-      // Only the socket that is still current may schedule a reconnect.  This
-      // prevents an old timer from replacing the socket for a newer task.
       if (stoppedByUserRef.current || finished || taskIdRef.current !== taskId || wsRef.current !== ws) return
       const nextAttempt = reconnectAttempt + 1
       if (nextAttempt <= WS_MAX_RECONNECT_RETRIES) {
@@ -308,19 +290,9 @@ function RunTab() {
       ) return
       terminalProbePending = true
 
-      // A normal worker shutdown closes the socket after publishing a
-      // terminal event.  If that publish itself fails, blindly reconnecting
-      // only creates noisy attempts and leaves the UI running.  Probe the
-      // active-task registry first. A transient/unusable probe keeps the
-      // bounded retry path, while a definitive auth/permission failure does
-      // not retry the same doomed WebSocket handshake.
       void (async () => {
         let taskState = await probeActiveTask(taskId)
         if (taskState === 'inactive') {
-          // A failed inline run can briefly disappear from the local registry
-          // while its one allowed retry is being queued. Confirm the absence
-          // once before declaring the run terminal, without emitting a noisy
-          // reconnect entry in the meantime.
           await new Promise<void>(resolve => setTimeout(resolve, TERMINAL_TASK_CONFIRMATION_DELAY_MS))
           taskState = await probeActiveTask(taskId)
         }
@@ -368,9 +340,6 @@ function RunTab() {
       let ev: WsEvent
       try { ev = JSON.parse(e.data) } catch { return }
       if (ev.type === 'status') {
-        // Status events carry a human-readable message separately from their
-        // technical producer and lifecycle fields. Do not render an agent key
-        // as a user-facing fallback.
         const statusText = ev.message ?? ev.status
         if (statusText) appendLog(statusText)
       } else if (ev.type === 'progress') {
@@ -383,8 +352,6 @@ function RunTab() {
           const prevContent = r[reportKey] || ''
           return { ...r, [reportKey]: prevContent + ev.token }
         })
-        // Keep the first (or user-selected/persisted) report in view instead
-        // of jumping the UI to every agent as tokens arrive.
         setActiveSection(prev => prev ?? reportKey)
       } else if (ev.type === 'stats') {
         setStats(prev => {
@@ -405,8 +372,6 @@ function RunTab() {
           ? { sender: ev.sender, content: ev.content }
           : parseDebateMessage(ev.message)
         const next = { ...parsed, type: ev.debate_type || 'investment' }
-        // Buffered WebSocket replay after a reconnect can repeat the last
-        // event. Keep one complete turn instead of showing cloned bubbles.
         setLiveDebate(prev => {
           const last = prev.at(-1)
           return last && last.sender === next.sender && last.content === next.content && last.type === next.type
@@ -422,9 +387,6 @@ function RunTab() {
       } else if (ev.type === 'circuit_open') {
         appendLog(`🔒 Circuit open for ${ev.node} (${ev.elapsed_seconds}s)`)
       } else if (ev.type === 'stall_warning') {
-        // The run is still alive but has produced nothing for longer than the
-        // user's configured stall timeout. Say so, rather than leaving the
-        // heartbeat progress events to read as ordinary work.
         appendLog(`⏳ ${t('analysis.stalled', { seconds: ev.seconds_since_last_event, threshold: ev.threshold })}`)
       } else if (ev.type === 'decision') {
         setSignal(ev.signal || null)
@@ -474,8 +436,6 @@ function RunTab() {
     ws.onclose = (event) => {
       if (!finished) {
         if (wsRef.current === ws) clearWsKeepalive()
-        // These are application close codes sent after an accepted handshake.
-        // They cannot be fixed by reconnecting with the same credentials.
         if (event.code === 4001) {
           markConnectionAsTerminalFailure(t('analysis.ws.auth_required'))
           return
@@ -491,19 +451,15 @@ function RunTab() {
         scheduleReconnect(event.code)
       }
     }
-    // ticker is intentionally read via tickerRef (not a dep) so the socket
-    // isn't torn down and recreated on every ticker keystroke.
   }, [t, clearWsKeepalive, sendRun, clearRunTask])
 
   useEffect(() => {
     attachWsRef.current = attachWs
   }, [attachWs])
 
-  // Effect to sync with active tasks from the server (Cross-device fix)
   useEffect(() => {
     if (stoppedByUserRef.current || activeTasks.length === 0 || running) return
 
-    // If there's an active task on the server but we are 'idle' here, sync it.
     const task = activeTasks[0]
     if (task.status === 'failed' || task.status === 'error' || terminalTaskIdRef.current === task.task_id) return
     if (taskIdRef.current === task.task_id) return
@@ -524,10 +480,6 @@ function RunTab() {
   }, [activeTasks, running, attachWs, sendRun])
 
   useEffect(() => {
-    // `useActiveTasks` owns the only active-task request for this mount.  A
-    // second probe here used to race it and, in the old implementation, was
-    // retriggered after every streamed render.  Wait for that shared result
-    // before deciding whether the persisted task can be resumed.
     if (activeTasksLoading) return
 
     const raw = sessionStorage.getItem(TASK_KEY)
@@ -551,9 +503,6 @@ function RunTab() {
       if (activeTasks.some(task => task.task_id === taskId)) {
         resume()
       } else if (activeTasksUnavailable) {
-        // Preserve the former offline behavior: an unavailable API should not
-        // make an in-progress analysis disappear from the UI.  The bounded WS
-        // reconnect logic will surface a real connection failure.
         resume()
       } else {
         clearTaskMarkerFor(taskId)
@@ -577,9 +526,6 @@ function RunTab() {
     }
   }, [])
 
-  // Both lookups take no per-keystroke parameters, so the query key is stable
-  // and the cache serves repeat renders -- the old 600ms/400ms debounces existed
-  // only to stop a request firing on every character.
   const costEstimateQuery = useAnalysisCostEstimate({ query: { enabled: Boolean(ticker.trim()) && !running } })
   const costEstimate = costEstimateQuery.error ? null : (costEstimateQuery.data ?? null)
 
@@ -598,17 +544,10 @@ function RunTab() {
     const tid = taskIdRef.current
     setLog(l => [...l, 'Cancelling...'])
 
-    // There is no server task id yet only while /run is still in flight. In
-    // that narrow case, invalidate the pending request now; doRun will cancel
-    // the task as soon as the late response gives us its id.
     if (!tid) {
       runRequestRef.current += 1
       stoppedByUserRef.current = true
     } else {
-      // Do not pretend that Stop worked before the server accepted it. The
-      // former best-effort implementation immediately hid the running task
-      // after a failed request, while the worker continued consuming LLM/API
-      // resources in the background.
       sendRun({ type: 'STOP' })
       try {
         const data = await cancelAnalysis.mutateAsync({ taskId: tid })
@@ -616,9 +555,6 @@ function RunTab() {
           throw new Error('Cancellation was not accepted')
         }
       } catch {
-        // A terminal socket event may have won the race while the request was
-        // in flight. Preserve that real terminal state instead of replacing
-        // it with a misleading Stop failure.
         if (taskIdRef.current !== tid) {
           sendRun({ type: 'STOP_REFUSED' })
           return
@@ -684,9 +620,6 @@ function RunTab() {
       const taskId = data.task_id
       if (typeof taskId !== 'string' || !taskId) throw new Error('Analysis start response did not include a task ID')
 
-      // The user may have clicked Stop while the start request was pending.
-      // Do not persist/attach the returned task; cancel it server-side so a
-      // queued job cannot keep running invisibly in the background.
       if (requestId !== runRequestRef.current || stoppedByUserRef.current) {
         clearTaskMarkerFor(taskId)
         try { await cancelAnalysis.mutateAsync({ taskId }) } catch { /* best-effort cancel */ }
@@ -695,8 +628,6 @@ function RunTab() {
       sessionStorage.setItem(TASK_KEY, JSON.stringify({ ticker: ticker.toUpperCase(), taskId, startedAt: new Date().toISOString() }))
       attachWs(taskId, 0)
     } catch (err: any) {
-      // A rejected start request after Stop is expected to leave the UI idle,
-      // not replace the stopped state with an error message.
       if (requestId !== runRequestRef.current || stoppedByUserRef.current) return
       const error = analysisStartError(err, t('analysis.ws.failed_to_start'))
       sendRun({ type: 'FAIL' })
@@ -797,12 +728,10 @@ function RunTab() {
         const isCompleted = !!detail || runStatus === 'done';
         const activeSignal = detail ? detail.signal : signal;
         const activeRiskMetrics = detail ? detail.risk_metrics : riskMetrics;
-        const activeChartAnnotations = detail?.chart_annotations ?? reports.chart_annotations;
         const activeAcceptedPortfolioDecision = detail?.portfolio_decision_json ?? reports.portfolio_decision_json;
         const streamedPortfolioDecision = reports.pm_proposal_json || reports.portfolio_decision;
         const activePortfolioDecision = readPortfolioDecision(
           activeAcceptedPortfolioDecision,
-          activeChartAnnotations,
           streamedPortfolioDecision,
         );
         const activeId = detail ? detail.id : analysisId;
@@ -829,9 +758,7 @@ function RunTab() {
 
         return (
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-            {/* Left Column: Sidebar Dashboard & Terminal Log */}
             <div className="lg:col-span-1 space-y-5 flex flex-col h-full">
-              {/* Engine Status & Mental Model */}
               <div className="glass-panel p-4 rounded-2xl space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">{t('analysis.engine_status')}</span>
@@ -846,7 +773,7 @@ function RunTab() {
                       {t('analysis.order.analysis_complete_status')}
                     </span>
                   ) : runStatus === 'error' ? (
-                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-rose-500/20">
+                    <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/10 text-rose-400 border border-white/[0.04]">
                       <span className="h-1.5 w-1.5 rounded-full bg-rose-500" />
                       Failed
                     </span>
@@ -879,7 +806,6 @@ function RunTab() {
                 <AutomatedOrderResultCard result={orderResult} />
               )}
 
-              {/* Statistics Dashboard */}
               {(stats || detail) && (
                 <div className="glass-panel p-4 rounded-2xl grid grid-cols-3 gap-2">
                   <div className="text-center p-2 rounded-xl bg-slate-900/40 border border-white/[0.03]">
@@ -889,8 +815,8 @@ function RunTab() {
                   <div className="text-center p-2 rounded-xl bg-slate-900/40 border border-white/[0.03]">
                     <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">{t('analysis.tokens')}</span>
                     <span className="text-sm font-bold text-white font-mono">
-                      {detail 
-                        ? ((detail.tokens_in + detail.tokens_out).toLocaleString()) 
+                      {detail
+                        ? ((detail.tokens_in + detail.tokens_out).toLocaleString())
                         : (((stats?.tokensIn || 0) + (stats?.tokensOut || 0)).toLocaleString())
                       }
                     </span>
@@ -909,7 +835,6 @@ function RunTab() {
                 </div>
               )}
 
-              {/* System terminal log */}
               <div className="glass-panel rounded-2xl overflow-hidden flex flex-col h-[28vh] sm:h-[35vh]">
                 <div className="flex items-center gap-1.5 px-4 py-2.5 bg-slate-900/40 border-b border-white/[0.04]">
                   <Terminal size={12} className="text-slate-400" />
@@ -939,9 +864,7 @@ function RunTab() {
               </div>
             </div>
 
-            {/* Right Column: Unified Main Panel Arena */}
             <div className="lg:col-span-2 glass-panel rounded-2xl overflow-hidden flex flex-col h-[65vh] sm:h-[70vh]">
-              {/* Arena tabs */}
               <div className="flex gap-0.5 p-1 bg-slate-950/60 border-b border-white/[0.04] overflow-x-auto custom-scrollbar shrink-0">
                 <button
                   onClick={() => setActiveTab('consensus')}
@@ -985,11 +908,9 @@ function RunTab() {
                 </button>
               </div>
 
-              {/* Arena Content Area */}
               <div className="flex-1 p-4 overflow-y-auto min-h-0 custom-scrollbar bg-slate-900/10">
                 {activeTab === 'consensus' && (
                   <div className="space-y-4 animate-in fade-in duration-300">
-                    {/* Signal & Sizing Section */}
                     <div className="flex flex-wrap gap-4 items-center justify-between p-4 bg-slate-900/50 border border-white/[0.04] rounded-2xl">
                       <div className="space-y-1">
                         <span className="text-[9px] text-slate-500 uppercase font-bold tracking-widest block">{t('analysis.consensus_recommendation')}</span>
@@ -1002,14 +923,12 @@ function RunTab() {
                         <div className="flex-1 max-w-md min-w-[200px]">
                           <PortfolioDecisionCard
                             acceptedPortfolioDecision={activeAcceptedPortfolioDecision}
-                            chartAnnotations={activeChartAnnotations}
                             streamedPortfolioDecision={streamedPortfolioDecision}
                           />
                         </div>
                       )}
                     </div>
 
-                    {/* Risk metrics if present */}
                     {activeRiskMetrics && <RiskMetricsCard metrics={activeRiskMetrics} />}
 
                     <StrategyTransitionCard
@@ -1026,11 +945,10 @@ function RunTab() {
                       strategyAfterVersion={detail?.strategy_after_version ?? null}
                     />
 
-                    {/* PM Final Decision */}
                     {activePlans.final_decision ? (
                       <div className="glass-panel p-5 rounded-2xl space-y-3 bg-slate-950/20 border border-white/[0.05]">
                         <h4 className="text-[10px] font-bold text-violet-300 uppercase tracking-widest flex items-center gap-1.5">
-                          <Scale size={13} /> {sectionLabels.final_decision || 'Nihai Karar (Portfolio Manager)'}
+                          <Scale size={13} /> {sectionLabels.final_decision || 'Nihai Karar'}
                         </h4>
                         <MarkdownReport
                           content={activePlans.final_decision}
@@ -1039,11 +957,10 @@ function RunTab() {
                       </div>
                     ) : (
                       <div className="text-center py-12 text-slate-500 text-xs">
-                        {running ? 'Portfolio Manager decision is pending...' : 'No decision generated yet.'}
+                        {running ? 'Final decision is pending...' : 'No decision generated yet.'}
                       </div>
                     )}
 
-                    {/* Stacked Plan Cards */}
                     <div className="grid grid-cols-1 gap-4">
                       {activePlans.investment_plan && (
                         <div className="glass-panel p-4 rounded-xl space-y-2 bg-slate-900/30">
@@ -1122,7 +1039,7 @@ function RunTab() {
                                 <DebateBubble message={bubble} />
                               </div>
                             ))}
-                            
+
                             {running && currentStep && (
                               (liveDebateTab === 'inv' && currentStep.stage === 'research') ||
                               (liveDebateTab === 'risk' && currentStep.stage === 'risk')
@@ -1199,8 +1116,8 @@ export default function Analysis() {
   const [tab, setTab] = useState<Tab>(deepLinkId ? 'history' : 'run')
 
   const tabs = [
-    { id: 'run' as Tab,     label: t('analysis.tab.single'), icon: <Zap size={13} /> },
-    { id: 'multi' as Tab,   label: t('analysis.tab.multi'),  icon: <BarChart2 size={13} /> },
+    { id: 'run' as Tab, label: t('analysis.tab.single'), icon: <Zap size={13} /> },
+    { id: 'multi' as Tab, label: t('analysis.tab.multi'), icon: <BarChart2 size={13} /> },
     { id: 'history' as Tab, label: t('analysis.tab.history'), icon: <History size={13} /> },
   ]
 
@@ -1213,7 +1130,6 @@ export default function Analysis() {
         </div>
       </div>
 
-      {/* Tabs */}
       <div className="flex gap-1 p-1 bg-slate-900/50 border border-white/[0.04] rounded-2xl w-fit">
         {tabs.map(tb => (
           <button key={tb.id} onClick={() => setTab(tb.id)}
@@ -1226,8 +1142,8 @@ export default function Analysis() {
         ))}
       </div>
 
-      {tab === 'run'     && <RunTab />}
-      {tab === 'multi'   && <MultiTab />}
+      {tab === 'run' && <RunTab />}
+      {tab === 'multi' && <MultiTab />}
       {tab === 'history' && (
         <HistoryTab
           initialDetailId={deepLinkId ? Number(deepLinkId) : undefined}
