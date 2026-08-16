@@ -15,7 +15,6 @@ import sqlalchemy as sa
 from cryptography.fernet import InvalidToken
 
 from alembic import op
-from backend.core.config import get_settings
 
 revision: str = "bc23d4e5f6a7"
 down_revision: str | None = "9b01c2d3e4f5"
@@ -36,9 +35,19 @@ def _looks_like_fernet_token(value: str) -> bool:
     return value.startswith("gAAAA")
 
 
+def _stored_secret_values(rows: list[dict]) -> list[str]:
+    values: list[str] = []
+    for row in rows:
+        settings = dict(row["settings_json"] or {})
+        for key in _SECRET_FIELDS[row["tool_key"]]:
+            value = settings.get(key)
+            if isinstance(value, str) and value:
+                values.append(value)
+    return values
+
+
 def upgrade() -> None:
     bind = op.get_bind()
-    fernet = get_settings().get_fernet()
     table = sa.table(
         "agent_tool_settings",
         sa.column("id", sa.Integer()),
@@ -46,11 +55,28 @@ def upgrade() -> None:
         sa.column("settings_json", sa.JSON()),
     )
 
-    rows = bind.execute(
-        sa.select(table.c.id, table.c.tool_key, table.c.settings_json).where(
-            table.c.tool_key.in_(tuple(_SECRET_FIELDS))
+    rows = list(
+        bind.execute(
+            sa.select(table.c.id, table.c.tool_key, table.c.settings_json).where(
+                table.c.tool_key.in_(tuple(_SECRET_FIELDS))
+            )
+        ).mappings()
+    )
+    if not _stored_secret_values(rows):
+        return
+
+    # Import lazily: Alembic loads revision modules while resolving ``heads``
+    # before env.py has installed the repository root on sys.path. During a
+    # real upgrade env.py has already established the application import path.
+    from backend.core.config import get_settings
+
+    app_settings = get_settings()
+    if not app_settings.ENCRYPTION_KEY:
+        raise RuntimeError(
+            "Stored tool credentials require a durable ENCRYPTION_KEY before migration. "
+            "Set ENCRYPTION_KEY to the key used by this installation and rerun the migration."
         )
-    ).mappings()
+    fernet = app_settings.get_fernet()
 
     for row in rows:
         settings = dict(row["settings_json"] or {})
