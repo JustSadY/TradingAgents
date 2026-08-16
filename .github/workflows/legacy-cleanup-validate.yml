@@ -15,6 +15,8 @@ on:
       - backend/alembic/versions/**
       - backend/tests/**
       - backend/postgres_tests/**
+      - backend/api/trading.py
+      - backend/services/mock_trading_service.py
       - frontend/src/App.tsx
       - frontend/src/analysis/streamingReports.ts
       - frontend/src/analysis/__tests__/streamingReports.test.ts
@@ -137,11 +139,27 @@ jobs:
       - name: Reject retired AgentSettings aliases
         shell: bash
         run: |
-          if git grep -n 'custom_system_instruction' -- backend frontend; then
-            echo 'retired custom_system_instruction alias still exists' >&2
+          if git grep -n 'custom_system_instruction' -- \
+            backend frontend \
+            ':!backend/tests/test_services/test_legacy_settings_contract.py'; then
+            echo 'retired custom_system_instruction alias still exists in production code' >&2
             exit 1
           fi
           echo 'CUSTOM_SYSTEM_INSTRUCTION_ALIAS=0'
+
+      - name: Reject direct analysis SQL in trading router
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          route = Path("backend/api/trading.py").read_text()
+          forbidden = ("AnalysisResult", "select(AnalysisResult", "from sqlalchemy import select")
+          hits = [token for token in forbidden if token in route]
+          if hits:
+              raise SystemExit(f"trading router regained direct analysis SQL: {hits}")
+          print("TRADING_ROUTER_ANALYSIS_SQL=0")
+          PY
 
       - name: Run cleanup regression tests
         run: |
@@ -149,6 +167,7 @@ jobs:
             backend/tests/test_ai_engine/test_single_execution_authority.py \
             backend/tests/test_api/test_auth.py \
             backend/tests/test_api/test_portfolio.py \
+            backend/tests/test_api/test_trading.py \
             backend/tests/test_repositories/test_tenant_scoping_sweep.py \
             backend/tests/test_repositories/test_users.py \
             backend/tests/test_services/test_security_service.py \
@@ -164,11 +183,14 @@ jobs:
             backend/services/analysis/portfolio_orchestrator.py \
             backend/trading_agents/agents/data/review_tools.py \
             backend/services/analysis/config_builder.py \
+            backend/api/trading.py \
+            backend/services/mock_trading_service.py \
             backend/tests/test_ai_engine/test_single_execution_authority.py \
             backend/tests/conftest.py \
             backend/tests/helpers/factories.py \
             backend/tests/test_api/test_auth.py \
             backend/tests/test_api/test_portfolio.py \
+            backend/tests/test_api/test_trading.py \
             backend/tests/test_repositories/test_tenant_scoping_sweep.py \
             backend/tests/test_repositories/test_users.py \
             backend/tests/test_services/test_security_service.py \
