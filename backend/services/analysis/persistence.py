@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import logging
 from typing import TYPE_CHECKING
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,7 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 if TYPE_CHECKING:
     from backend.models.analysis import AnalysisResult
 
-_logger = logging.getLogger(__name__)
 
 async def create_skeleton_result(
     db: AsyncSession,
@@ -37,20 +35,18 @@ async def create_skeleton_result(
         learning_eligible=learning_eligible,
     )
 
+
 async def update_result_fields(db: AsyncSession, row_id: int, **fields) -> None:
     """Incrementally update an analysis result record."""
     from backend.repositories.analysis import update_analysis_result
 
     await update_analysis_result(db, row_id, **fields)
 
-async def finalize_result(db: AsyncSession, row_id: int, **final_data) -> None:
-    """Mark the analysis as completed and save final reports/stats."""
-    final_data["status"] = "completed"
-    await update_result_fields(db, row_id, **final_data)
 
 async def mark_as_failed(db: AsyncSession, row_id: int) -> None:
     """Mark the analysis as failed."""
     await update_result_fields(db, row_id, status="failed")
+
 
 async def mark_as_cancelled(db: AsyncSession, row_id: int) -> None:
     """Mark the analysis as cancelled."""
