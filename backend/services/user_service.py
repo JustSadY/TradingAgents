@@ -8,11 +8,14 @@ from backend.models.user import User
 
 _logger = logging.getLogger(__name__)
 
+
 def encrypt_api_keys(keys: dict[str, str], fernet: Fernet) -> str:
     return fernet.encrypt(json.dumps(keys).encode()).decode()
 
+
 def decrypt_api_keys(enc: str, fernet: Fernet) -> dict[str, str]:
     return json.loads(fernet.decrypt(enc.encode()).decode())
+
 
 def get_user_api_key(user: User, provider: str, fernet: Fernet) -> str | None:
     from backend.trading_agents.llm_clients.registry import provider_requires_api_key
@@ -30,6 +33,7 @@ def get_user_api_key(user: User, provider: str, fernet: Fernet) -> str | None:
         )
         return None
 
+
 def resolve_user_api_key(user: User, provider: str) -> str | None:
     """Decrypt the user's stored key for ``provider`` using the app Fernet.
 
@@ -45,6 +49,7 @@ def resolve_user_api_key(user: User, provider: str) -> str | None:
     except Exception as exc:
         _logger.debug("Failed to resolve user API key for provider %s: %s", provider, exc)
         return None
+
 
 def set_user_api_key(user: User, provider: str, api_key: str, fernet: Fernet) -> None:
     from backend.trading_agents.llm_clients.registry import provider_requires_api_key
@@ -67,6 +72,7 @@ def set_user_api_key(user: User, provider: str, api_key: str, fernet: Fernet) ->
     existing[provider.lower()] = api_key
     user.api_keys_enc = encrypt_api_keys(existing, fernet)
 
+
 def delete_user_api_key(user: User, provider: str, fernet: Fernet) -> bool:
     if not user.api_keys_enc:
         return False
@@ -80,6 +86,7 @@ def delete_user_api_key(user: User, provider: str, fernet: Fernet) -> bool:
     del existing[provider.lower()]
     user.api_keys_enc = encrypt_api_keys(existing, fernet) if existing else None
     return True
+
 
 def list_user_api_key_providers(user: User, fernet: Fernet) -> list[str]:
     if not user.api_keys_enc:
@@ -97,22 +104,14 @@ def list_user_api_key_providers(user: User, fernet: Fernet) -> list[str]:
         )
         return []
 
-async def delete_user_and_emit(db: AsyncSession, user: User) -> None:
-    """Delete a tenant without leaving active tasks, alerts or portfolios behind.
 
-    Existing installations may still have historical ``SET NULL`` foreign keys,
-    so deletion is explicit rather than relying only on schema-level cascades.
-    """
-    from sqlalchemy import delete, select
+async def delete_user_and_emit(db: AsyncSession, user: User) -> None:
+    """Delete a tenant and clean up any active task-store state."""
+    from sqlalchemy import select
 
     from backend.core import task_store
     from backend.core.events import emit
-    from backend.models.alert import PriceAlert
-    from backend.models.alert_outbox import AlertOutbox
     from backend.models.analysis import AnalysisResult
-    from backend.models.portfolio import Portfolio
-    from backend.models.portfolio_analysis import MultiTickerAnalysis
-    from backend.models.webhook_delivery import WebhookDelivery
 
     active = await db.execute(
         select(AnalysisResult.task_id).where(
@@ -126,13 +125,6 @@ async def delete_user_and_emit(db: AsyncSession, user: User) -> None:
         await task_store.request_cancel(task_id)
         await task_store.publish_cancel(task_id)
 
-    # Delete child/outbox rows first for databases created with older FK rules.
-    await db.execute(delete(AlertOutbox).where(AlertOutbox.user_id == user.id))
-    await db.execute(delete(PriceAlert).where(PriceAlert.user_id == user.id))
-    await db.execute(delete(WebhookDelivery).where(WebhookDelivery.user_id == user.id))
-    await db.execute(delete(MultiTickerAnalysis).where(MultiTickerAnalysis.user_id == user.id))
-    await db.execute(delete(Portfolio).where(Portfolio.user_id == user.id))
-    await db.execute(delete(AnalysisResult).where(AnalysisResult.user_id == user.id))
     await db.delete(user)
     await db.commit()
 
