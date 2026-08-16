@@ -136,8 +136,7 @@ async def _seed_admin_user():
     from sqlalchemy import select
 
     from backend.core.database import AsyncSessionLocal
-    from backend.core.password_hashing import is_supported_password_hash
-    from backend.core.security import hash_password
+    from backend.core.password_hashing import hash_password, is_supported_password_hash
     from backend.models.user import User
 
     if not settings.ADMIN_USERNAME:
