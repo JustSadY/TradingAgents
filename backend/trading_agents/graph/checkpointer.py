@@ -17,6 +17,7 @@ _logger = logging.getLogger(__name__)
 # runs once per DSN per process. Application tables remain Alembic-owned.
 _pg_ready: set[str] = set()
 _pg_ready_lock = threading.Lock()
+_RETIRED_CHECKPOINT_NODES = frozenset({"trader", "trader_agent"})
 
 
 def checkpoint_scope(user_id: int | None, analysis_id: int | str) -> str:
@@ -113,13 +114,24 @@ def _advanced_node(seen: dict, previous_seen: dict) -> str:
     return "START"
 
 
+def is_retired_checkpoint_node(node_name: str) -> bool:
+    """Return whether a checkpoint belongs to a graph node removed from runtime."""
+    normalized = str(node_name or "").strip().lower().replace("-", "_").replace(" ", "_")
+    return normalized in _RETIRED_CHECKPOINT_NODES
+
+
 async def list_checkpoints_for_thread(
     data_dir: str | Path,
     ticker: str,
     date: str,
     scope: str,
 ) -> list[dict]:
-    """Retrieve all checkpoints for a thread from PostgreSQL, ordered by step."""
+    """Retrieve resumable checkpoints for a thread from PostgreSQL, ordered by step.
+
+    Checkpoints produced by retired graph nodes are historical implementation
+    artifacts, not valid resume targets for the current graph, so they are not
+    exposed through the Time Travel API.
+    """
     from backend.core.catalog import node_progress
 
     tid = thread_id(ticker, date, scope)
@@ -145,6 +157,8 @@ async def list_checkpoints_for_thread(
     for step, checkpoint_id, seen, ts in raw:
         node_name = _advanced_node(seen, previous_seen)
         previous_seen = seen
+        if is_retired_checkpoint_node(node_name):
+            continue
         prog = node_progress(node_name)
         checkpoints.append(
             {
