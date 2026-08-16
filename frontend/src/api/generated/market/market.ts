@@ -25,15 +25,15 @@ import type {
 } from '@tanstack/react-query';
 
 import type {
+  CustomIndicatorResponse,
   FormulaAssistRequest,
   FormulaAssistResponse,
   HTTPValidationError,
-  MarketCustomIndicator200,
   MarketCustomIndicatorParams,
   MarketGetFxRates200,
-  MarketOhlcv200,
   MarketOhlcvParams,
   MarketSentimentHistoryParams,
+  OhlcvResponse,
   SentimentHistoryResponse
 } from '../model';
 
@@ -68,7 +68,7 @@ export const marketCustomIndicator = (
 ) => {
 
 
-      return customInstance<MarketCustomIndicator200>(
+      return customInstance<CustomIndicatorResponse>(
       {url: `/api/market/custom-indicator`, method: 'GET',
         params, signal
     },
@@ -324,7 +324,7 @@ export const marketOhlcv = (
 ) => {
 
 
-      return customInstance<MarketOhlcv200>(
+      return customInstance<OhlcvResponse>(
       {url: `/api/market/ohlcv`, method: 'GET',
         params, signal
     },

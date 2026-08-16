@@ -30,6 +30,7 @@ const ACTION_BADGES: Record<string, string> = {
 
 // ── Trade Journal Modal ────────────────────────────────────────────────────────
 function JournalModal({ order, onClose }: { order: OrderRead; onClose: () => void }) {
+  const { t } = useTranslation()
   const [note, setNote] = useState('')
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const queryClient = useQueryClient()
@@ -87,7 +88,7 @@ function JournalModal({ order, onClose }: { order: OrderRead; onClose: () => voi
         <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.06]">
           <div className="flex items-center gap-2.5">
             <NotebookPen size={15} className="text-violet-400" />
-            <span className="text-sm font-bold text-white">Trade Journal</span>
+            <span className="text-sm font-bold text-white">{t('orders.journal_title')}</span>
             <span className="text-[10px] font-mono font-bold text-slate-400 bg-white/[0.04] px-2 py-0.5 rounded-md border border-white/[0.05]">
               #{order.id} · {order.ticker}
             </span>
@@ -113,7 +114,7 @@ function JournalModal({ order, onClose }: { order: OrderRead; onClose: () => voi
 
           {/* Note area */}
           <div className="space-y-2">
-            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Your Notes</label>
+            <label className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('orders.your_notes')}</label>
             {loading ? (
               <div className="h-24 rounded-xl bg-white/[0.02] border border-white/[0.04] animate-pulse" />
             ) : (
@@ -121,7 +122,7 @@ function JournalModal({ order, onClose }: { order: OrderRead; onClose: () => voi
                 ref={textareaRef}
                 value={note}
                 onChange={e => setNote(e.target.value)}
-                placeholder="What happened? Why did you enter this trade? What did you learn?"
+                placeholder={t('orders.notes_placeholder')}
                 rows={4}
                 className="w-full bg-white/[0.02] border border-white/[0.06] focus:border-violet-500/40 rounded-xl px-3.5 py-2.5 text-xs text-slate-200 placeholder-slate-600 outline-none resize-none transition-colors"
               />
@@ -155,14 +156,14 @@ function JournalModal({ order, onClose }: { order: OrderRead; onClose: () => voi
               )}
             </div>
             {order.action !== 'SELL' && (
-              <p className="text-[11px] text-slate-500 italic">AI debrief is available for closed (SELL) positions only.</p>
+              <p className="text-[11px] text-slate-500 italic">{t('orders.debrief_sell_only')}</p>
             )}
             {entry?.ai_debrief ? (
               <div className="p-3.5 rounded-xl bg-violet-500/5 border border-violet-500/10 text-[11px] text-slate-300 leading-relaxed whitespace-pre-wrap">
                 {entry.ai_debrief}
               </div>
             ) : !debriefing && order.action === 'SELL' && (
-              <p className="text-[11px] text-slate-600 italic">No debrief yet — click Generate to get AI coaching feedback on this trade.</p>
+              <p className="text-[11px] text-slate-600 italic">{t('orders.debrief_empty')}</p>
             )}
           </div>
         </div>
@@ -274,7 +275,7 @@ export default function Orders() {
         <button
           onClick={() => setJournalOrder(row)}
           className="p-1.5 rounded-lg text-slate-600 hover:text-violet-400 hover:bg-violet-500/10 transition cursor-pointer"
-          title="Open Trade Journal"
+          title={t('orders.open_journal')}
           aria-label={`Open ${row.ticker} trade journal`}
         >
           <NotebookPen size={13} />
@@ -294,14 +295,14 @@ export default function Orders() {
             <Briefcase className="text-violet-400" size={20} />
             {t('orders.title')}
           </h2>
-          <p className="text-xs text-slate-500 mt-1">Review ledger transactions executed by either simulated models or live accounts</p>
+          <p className="text-xs text-slate-500 mt-1">{t('orders.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2 self-end sm:self-auto">
           <button
             onClick={() => exportOrdersCSV(orders)}
             disabled={orders.length === 0}
             className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-40"
-            title="Export CSV"
+            title={t('orders.export_csv')}
           >
             <Download size={13} /> CSV
           </button>
@@ -309,7 +310,7 @@ export default function Orders() {
             onClick={loadOrders}
             disabled={loading}
             className="flex items-center justify-center p-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white transition-all cursor-pointer"
-            title="Refresh"
+            title={t('orders.refresh')}
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>

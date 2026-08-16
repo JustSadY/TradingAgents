@@ -30,23 +30,8 @@ vi.mock('../../hooks/useNewsFeed', () => ({
 // Dashboard now uses the generated client, which goes through the global
 // axios mock installed in src/test/setup.ts.
 
-vi.mock('../../contexts/LanguageContext', () => ({
-  useTranslation: () => ({
-    t: (key: string) => {
-      const map: Record<string, string> = {
-        'dashboard.title': 'Dashboard',
-        'dashboard.asset_allocation': 'Asset Allocation',
-        'dashboard.scorecard_title': 'Performance Scorecard',
-        'dashboard.scorecard_predictions': 'predictions',
-        'dashboard.scorecard_accuracy': 'Accuracy',
-        'dashboard.scorecard_empty': 'No Data Yet',
-        'dashboard.scorecard_empty_sub': 'Run analyses to see accuracy breakdown',
-      }
-      return map[key] || key
-    },
-    language: 'en',
-    setLanguage: vi.fn(),
-  }),
+vi.mock('../../contexts/LanguageContext', async () => ({
+  useTranslation: (await import('../../test/i18nMock')).useTranslationMock,
 }))
 
 vi.mock('recharts', () => ({

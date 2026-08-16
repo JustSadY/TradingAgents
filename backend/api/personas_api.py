@@ -1,7 +1,5 @@
 """CRUD endpoints for investor personas (built-in + user-created)."""
 
-from typing import Any
-
 from fastapi import APIRouter, Depends, HTTPException, Query
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -10,6 +8,7 @@ from backend.api.deps import enforce_setting_section_permission, get_current_use
 from backend.core.database import get_db
 from backend.models.user import User
 from backend.repositories.users import get_user_by_id
+from backend.schemas.persona import PersonaRead
 from backend.services import persona_service
 from backend.trading_agents.personas import list_personas
 
@@ -17,20 +16,12 @@ router = APIRouter(prefix="/api/personas", tags=["personas"])
 
 _BUILTIN_KEYS: set[str] = set()
 
-def _builtin_list() -> list[dict[str, Any]]:
+def _builtin_list() -> list[PersonaRead]:
     global _BUILTIN_KEYS
     result = []
     for p in list_personas():
         _BUILTIN_KEYS.add(p.key)
-        result.append(
-            {
-                "key": p.key,
-                "label": p.label,
-                "description": p.description,
-                "instructions": p.instructions,
-                "is_builtin": True,
-            }
-        )
+        result.append(PersonaRead.from_row(p, is_builtin=True))
     return result
 
 async def _resolve_target_user(user_id: int | None, current_user: User, db: AsyncSession) -> User:
@@ -52,30 +43,20 @@ class PersonaUpdate(BaseModel):
     description: str = Field(default="", max_length=500)
     instructions: str = Field(default="")
 
-@router.get("", response_model=list[dict[str, Any]])
+@router.get("", response_model=list[PersonaRead])
 async def list_all_personas(
     user_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[dict[str, Any]]:
+) -> list[PersonaRead]:
     builtins = _builtin_list()
     target_user = await _resolve_target_user(user_id, current_user, db)
     rows = await persona_service.get_user_personas(db, target_user.id)
-    custom = [
-        {
-            "key": r.key,
-            "label": r.label,
-            "description": r.description,
-            "instructions": r.instructions,
-            "is_builtin": False,
-        }
-        for r in rows
-    ]
-    return builtins + custom
+    return builtins + [PersonaRead.from_row(row, is_builtin=False) for row in rows]
 
 @router.post(
     "",
-    response_model=dict[str, Any],
+    response_model=PersonaRead,
     status_code=201,
     responses={400: {"description": "Key conflict or duplicate key"}},
 )
@@ -84,7 +65,7 @@ async def create_persona(
     user_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict[str, Any]:
+) -> PersonaRead:
     await enforce_setting_section_permission(db, current_user, "personas")
     _builtin_list()
     target_user = await _resolve_target_user(user_id, current_user, db)
@@ -100,17 +81,11 @@ async def create_persona(
         body.description,
         body.instructions,
     )
-    return {
-        "key": persona.key,
-        "label": persona.label,
-        "description": persona.description,
-        "instructions": persona.instructions,
-        "is_builtin": False,
-    }
+    return PersonaRead.from_row(persona, is_builtin=False)
 
 @router.put(
     "/{key}",
-    response_model=dict[str, Any],
+    response_model=PersonaRead,
     responses={400: {"description": "Cannot edit built-in persona"}, 404: {"description": "Persona not found"}},
 )
 async def update_persona(
@@ -119,7 +94,7 @@ async def update_persona(
     user_id: int | None = Query(default=None),
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> dict[str, Any]:
+) -> PersonaRead:
     await enforce_setting_section_permission(db, current_user, "personas")
     _builtin_list()
     target_user = await _resolve_target_user(user_id, current_user, db)
@@ -135,13 +110,7 @@ async def update_persona(
         body.description,
         body.instructions,
     )
-    return {
-        "key": persona.key,
-        "label": persona.label,
-        "description": persona.description,
-        "instructions": persona.instructions,
-        "is_builtin": False,
-    }
+    return PersonaRead.from_row(persona, is_builtin=False)
 
 @router.delete(
     "/{key}",

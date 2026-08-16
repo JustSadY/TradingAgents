@@ -100,4 +100,42 @@ describe('AppSchemaForm', () => {
     expect(uiSchema.token?.['ui:widget']).toBe('password')
     expect(schema.required).toContain('retries')
   })
+
+  it('renders a multi_select field as a pickable option set', async () => {
+    // `multi_select` is a valid tool setting type on the backend — it validates
+    // it as list[str] and checks every value against the options — but the
+    // panels used to cast their generated types into a narrower local mirror,
+    // so a tool declaring one would have rendered as a plain text box.
+    const { schema, uiSchema } = legacyFieldsToSchema([
+      {
+        key: 'sources',
+        type: 'multi_select',
+        label: 'Sources',
+        options: [
+          { value: 'rss', label: 'RSS' },
+          { value: 'api', label: 'API' },
+        ],
+      },
+    ], key => key)
+
+    const property = (schema.properties as Record<string, Record<string, unknown>>).sources
+    expect(property.type).toBe('array')
+    expect(property.uniqueItems).toBe(true)
+    expect((property.items as Record<string, unknown>).oneOf).toEqual([
+      { const: 'rss', title: 'RSS' },
+      { const: 'api', title: 'API' },
+    ])
+
+    const onChange = vi.fn()
+    withTheme(
+      <AppSchemaForm schema={schema} uiSchema={uiSchema} formData={{ sources: ['rss'] }} onChange={onChange} />,
+    )
+
+    expect(screen.getByRole('checkbox', { name: 'RSS' })).toBeChecked()
+    const api = screen.getByRole('checkbox', { name: 'API' })
+    expect(api).not.toBeChecked()
+
+    await userEvent.click(api)
+    await waitFor(() => expect(onChange).toHaveBeenLastCalledWith({ sources: ['rss', 'api'] }))
+  })
 })

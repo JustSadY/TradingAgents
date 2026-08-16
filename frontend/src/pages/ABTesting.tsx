@@ -57,7 +57,7 @@ export default function ABTesting() {
           </div>
           <div>
             <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('nav.ab_testing')}</h2>
-            <p className="text-xs text-slate-500 mt-1">Audit execution runtime speeds, total tokens costs, and realized signal alpha across models presets</p>
+            <p className="text-xs text-slate-500 mt-1">{t('ab_testing.subtitle')}</p>
           </div>
         </div>
       </div>
@@ -74,28 +74,28 @@ export default function ABTesting() {
                 <div className="flex items-center gap-2">
                   <div className="p-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/25 shrink-0"><Zap size={12} /></div>
                   <div>
-                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">Runs</p>
+                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">{t('ab_testing.runs')}</p>
                     <p className="text-xs font-bold text-white font-mono leading-none">{m.total_runs}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="p-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 shrink-0"><DollarSign size={12} /></div>
                   <div>
-                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">Avg Cost</p>
+                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">{t('ab_testing.avg_cost')}</p>
                     <p className="text-xs font-bold text-white font-mono leading-none">${m.avg_cost_usd.toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 4 })}</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="p-1 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 shrink-0"><Clock size={12} /></div>
                   <div>
-                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">Avg Speed</p>
+                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">{t('ab_testing.avg_speed')}</p>
                     <p className="text-xs font-bold text-white font-mono leading-none">{(m.avg_duration ?? 0).toFixed(1)}s</p>
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
                   <div className="p-1 rounded bg-violet-500/10 text-violet-400 border border-violet-500/25 shrink-0"><Award size={12} /></div>
                   <div>
-                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">Win Rate</p>
+                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">{t('ab_testing.win_rate')}</p>
                     <p className="text-xs font-bold text-white font-mono leading-none">{m.win_rate !== null ? `${m.win_rate}%` : '—'}</p>
                   </div>
                 </div>
@@ -106,13 +106,13 @@ export default function ABTesting() {
             <div className="border-t border-white/[0.04] mt-4 pt-3.5 space-y-3">
               <div className="flex items-center gap-1.5 text-amber-400">
                 <TrendingUp size={13} />
-                <h4 className="text-[10px] font-bold uppercase tracking-wider">Realized Quality (Last 50)</h4>
+                <h4 className="text-[10px] font-bold uppercase tracking-wider">{t('ab_testing.realized_quality')}</h4>
               </div>
               <div className="grid grid-cols-2 gap-y-3 gap-x-2">
                 <div className="flex items-center gap-2">
                   <div className="p-1 rounded bg-amber-500/10 text-amber-400 border border-amber-500/25 shrink-0"><Award size={12} /></div>
                   <div>
-                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">Win Rate</p>
+                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">{t('ab_testing.win_rate')}</p>
                     <p className="text-xs font-bold text-white font-mono leading-none">
                       {m.win_rate_last_50 !== undefined && m.win_rate_last_50 !== null ? `${m.win_rate_last_50}%` : '—'}
                     </p>
@@ -121,7 +121,7 @@ export default function ABTesting() {
                 <div className="flex items-center gap-2">
                   <div className="p-1 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/25 shrink-0"><DollarSign size={12} /></div>
                   <div>
-                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">Avg Return</p>
+                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">{t('ab_testing.avg_return')}</p>
                     <p className="text-xs font-bold text-white font-mono leading-none">
                       {m.avg_raw_return_last_50 !== undefined ? `${m.avg_raw_return_last_50 > 0 ? '+' : ''}${m.avg_raw_return_last_50}%` : '—'}
                     </p>
@@ -130,7 +130,7 @@ export default function ABTesting() {
                 <div className="flex items-center gap-2 col-span-2">
                   <div className="p-1 rounded bg-indigo-500/10 text-indigo-400 border border-indigo-500/25 shrink-0"><BarChart2 size={12} /></div>
                   <div>
-                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">Avg Alpha (vs SPY/Benchmark)</p>
+                    <p className="text-[9px] uppercase text-slate-500 font-bold tracking-wider leading-none mb-1">{t('ab_testing.avg_alpha')}</p>
                     <p className={`text-xs font-bold font-mono leading-none ${m.avg_alpha_last_50 !== undefined && m.avg_alpha_last_50 > 0 ? 'text-emerald-400' : m.avg_alpha_last_50 !== undefined && m.avg_alpha_last_50 < 0 ? 'text-rose-400' : 'text-white'}`}>
                       {m.avg_alpha_last_50 !== undefined ? `${m.avg_alpha_last_50 > 0 ? '+' : ''}${m.avg_alpha_last_50}%` : '—'}
                     </p>
@@ -146,7 +146,7 @@ export default function ABTesting() {
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Cost Comparison */}
         <div className="glass-panel rounded-2xl p-5 space-y-4">
-          <h4 className="text-xs font-bold text-violet-400 uppercase tracking-widest">Cost Comparison ($)</h4>
+          <h4 className="text-xs font-bold text-violet-400 uppercase tracking-widest">{t('ab_testing.cost_comparison')}</h4>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data}>
@@ -163,7 +163,7 @@ export default function ABTesting() {
 
         {/* Speed Comparison */}
         <div className="glass-panel rounded-2xl p-5 space-y-4">
-          <h4 className="text-xs font-bold text-violet-400 uppercase tracking-widest">Speed Comparison (Seconds)</h4>
+          <h4 className="text-xs font-bold text-violet-400 uppercase tracking-widest">{t('ab_testing.speed_comparison')}</h4>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data}>
@@ -180,7 +180,7 @@ export default function ABTesting() {
 
         {/* Realized Alpha Comparison */}
         <div className="glass-panel rounded-2xl p-5 space-y-4">
-          <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest">Realized Alpha Comparison (Last 50 Runs %)</h4>
+          <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest">{t('ab_testing.alpha_comparison')}</h4>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data}>
@@ -197,7 +197,7 @@ export default function ABTesting() {
 
         {/* Realized Win Rate Comparison */}
         <div className="glass-panel rounded-2xl p-5 space-y-4">
-          <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest">Realized Win Rate (Last 50 Runs %)</h4>
+          <h4 className="text-xs font-bold text-amber-400 uppercase tracking-widest">{t('ab_testing.win_rate_comparison')}</h4>
           <div className="h-64">
             <ResponsiveContainer width="100%" height="100%">
               <BarChart data={data}>

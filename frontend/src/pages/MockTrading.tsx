@@ -7,12 +7,10 @@ import {
 import { useTranslation } from '../contexts/LanguageContext'
 import type { OrderResponse } from '../api/generated/model'
 import type { BackendSchemasTradingPerformanceResponse } from '../api/generated/model'
+import { errorDetail } from '../utils/errorDetail'
+import { isRecord } from '../utils/isRecord'
 
 type PortfolioData = BackendSchemasTradingPerformanceResponse
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === 'object' && value !== null && !Array.isArray(value)
-}
 
 function isFiniteNumber(value: unknown): value is number {
   return typeof value === 'number' && Number.isFinite(value)
@@ -133,7 +131,7 @@ export default function MockTrading() {
           void perfQuery.refetch()
         },
         onError: (err) => {
-          const detail = (err as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+          const detail = errorDetail(err)
           setOrderResult({ ok: false, msg: detail || t('mocktrading.order_error_default') })
         },
       },

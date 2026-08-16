@@ -33,6 +33,7 @@ const alerts = {
     'alerts.btn_activate': 'Activate',
     'alerts.error_invalid': 'Enter a valid symbol and price.',
     'alerts.error_create': 'Could not create alert.',
+    'alerts.subtitle': 'Set price threshold targets to dispatch webhook triggers or auto-run graphs',
   },
   tr: {
     'alerts.title': 'Fiyat Alarmları',
@@ -68,6 +69,7 @@ const alerts = {
     'alerts.btn_activate': 'Aktifleştir',
     'alerts.error_invalid': 'Geçerli bir sembol ve fiyat girin.',
     'alerts.error_create': 'Alarm oluşturulamadı.',
+    'alerts.subtitle': 'Webhook tetikleyicileri göndermek veya grafikleri otomatik çalıştırmak için fiyat eşikleri belirleyin',
   },
 }
 

@@ -2,8 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { ReportCard } from '../ReportCard'
 
-vi.mock('../../../contexts/LanguageContext', () => ({
-  useTranslation: () => ({ t: (k: string) => k }),
+vi.mock('../../../contexts/LanguageContext', async () => ({
+  useTranslation: (await import('../../../test/i18nMock')).useTranslationMock,
 }))
 
 describe('ReportCard', () => {
@@ -24,7 +24,7 @@ describe('ReportCard', () => {
 
   it('shows toggle text for expand/collapse', () => {
     render(<ReportCard label="Report" content="Some detailed content here." />)
-    expect(screen.getByText('analysis.report_card.show')).toBeInTheDocument()
+    expect(screen.getByText('Show')).toBeInTheDocument()
   })
 
   it('renders image when IMAGE_DATA is present', () => {

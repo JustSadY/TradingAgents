@@ -22,6 +22,10 @@ The React source files live inside [src/](src):
 frontend/
 ├── public/                 # Static assets (favicons, fonts, fallback icons)
 ├── src/
+│   ├── analysis/           # Analysis-run logic kept out of the page: WebSocket
+│   │   │                   # framing, streamed-report assembly, sessionStorage
+│   │   │                   # persistence, and the run state machine
+│   │   └── runMachine.ts   # XState machine owning idle/running/stopping/done/failed
 │   ├── assets/             # Images, theme illustrations, and local SVGs
 │   ├── components/         # Reusable structural layout elements
 │   │   ├── Layout.tsx      # Sidebar navigation, header, language toggle, and auth wrapper

@@ -50,52 +50,8 @@ vi.mock('../../hooks/useActiveTasks', () => ({
   }),
 }))
 
-vi.mock('../../contexts/LanguageContext', () => ({
-  useTranslation: () => ({
-    t: (key: string) => {
-      const map: Record<string, string> = {
-        'analysis.title': 'Analysis',
-        'analysis.tab.single': 'Run',
-        'analysis.tab.multi': 'Multi',
-        'analysis.tab.history': 'History',
-        'analysis.running': 'Running...',
-        'analysis.ws.failed_to_start': 'Failed to start analysis',
-        'analysis.order.title': 'Automated Order Result',
-        'analysis.order.analysis_complete_status': 'Analysis complete',
-        'analysis.order.analysis_complete': 'Analysis complete. This does not confirm that a trade was placed.',
-        'analysis.order.pending': 'Order result pending',
-        'analysis.order.pending_description': 'No execution outcome has been received. Check Orders before assuming an order was placed.',
-        'analysis.order.log_prefix': 'Order result',
-        'analysis.order.outcome.filled': 'Order filled',
-        'analysis.order.outcome.skipped': 'Order skipped',
-        'analysis.order.outcome.rejected': 'Order rejected',
-        'analysis.order.outcome.error': 'Order execution failed',
-        'analysis.order.action': 'Action',
-        'analysis.order.action.buy': 'Buy',
-        'analysis.order.action.sell': 'Sell',
-        'analysis.order.symbol': 'Symbol',
-        'analysis.order.quantity': 'Quantity',
-        'analysis.order.price': 'Price',
-        'analysis.pm.title': 'Portfolio Manager Recommendation',
-        'analysis.pm.single_authority': 'Single AI authority for sizing and trade parameters',
-        'analysis.pm.legacy_fallback': 'Legacy Trader proposal retained for this historical analysis',
-        'analysis.pm.entry': 'Entry',
-        'analysis.pm.stop': 'Stop Loss',
-        'analysis.pm.target': 'Take Profit',
-        'analysis.pm.allocation': 'Allocation',
-        'analysis.pm.capital': 'Suggested Capital',
-        'analysis.pm.leverage': 'Leverage',
-        'analysis.btn.rerun': 'Re-run',
-        'analysis.btn.cancel': 'Cancel',
-        'analysis.rerun.title': 'Re-run Analysis',
-        'analysis.tab.reports': 'Reports',
-        'analysis.tab.debate': 'Debate',
-      }
-      return map[key] || key
-    },
-    language: 'en',
-    setLanguage: vi.fn(),
-  }),
+vi.mock('../../contexts/LanguageContext', async () => ({
+  useTranslation: (await import('../../test/i18nMock')).useTranslationMock,
 }))
 
 vi.mock('lucide-react', () => ({
@@ -175,9 +131,9 @@ describe('Analysis', () => {
   it('renders analysis tabs', async () => {
     renderWithQuery(<Analysis />)
     await waitFor(() => {
-      expect(screen.getByText('Run')).toBeInTheDocument()
+      expect(screen.getByText('Single Stock')).toBeInTheDocument()
     })
-    expect(screen.getByText('Multi')).toBeInTheDocument()
+    expect(screen.getByText('Multi Stock')).toBeInTheDocument()
     expect(screen.getByText('History')).toBeInTheDocument()
   })
 
@@ -197,7 +153,7 @@ describe('Analysis', () => {
 
     renderWithQuery(<Analysis />)
 
-    await waitFor(() => expect(screen.getByText('Run')).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByText('Single Stock')).toBeInTheDocument())
     expect(sessionStorage.getItem('ta_task_running')).toBeNull()
   })
 
@@ -241,6 +197,52 @@ describe('Analysis', () => {
 
     expect(screen.getAllByText('Preparing engine')).not.toHaveLength(0)
     expect(screen.queryByText('portfolio_manager')).not.toBeInTheDocument()
+  })
+
+  it('tells the user an analysis has stalled rather than logging a heartbeat', async () => {
+    // The backend emits `stall_warning` once a run goes silent for longer than
+    // the user's configured `stall_timeout_seconds`, then keeps sending
+    // heartbeat progress events. Without a branch for the warning the page
+    // logged "Progress: heartbeat" and the setting looked like it did nothing.
+    class MockWebSocket {
+      static instances: MockWebSocket[] = []
+      onmessage: ((event: MessageEvent) => void) | null = null
+
+      constructor() {
+        MockWebSocket.instances.push(this)
+      }
+
+      close() {}
+
+      emit(event: Record<string, unknown>) {
+        this.onmessage?.({ data: JSON.stringify(event) } as MessageEvent)
+      }
+    }
+    vi.stubGlobal('WebSocket', MockWebSocket)
+
+    const axios = await import('axios')
+    vi.mocked(axios.default.post).mockImplementation((url: string) => {
+      if (url === '/api/analysis/run') return Promise.resolve({ data: { task_id: 'stall-task' } })
+      return Promise.resolve({ data: {} })
+    })
+
+    renderWithQuery(<Analysis />)
+    const user = userEvent.setup()
+    await user.type(screen.getByRole('textbox', { name: 'Ticker' }), 'AAPL')
+    await user.click(screen.getByRole('button', { name: 'Start analysis' }))
+    await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
+
+    await act(async () => {
+      MockWebSocket.instances[0].emit({
+        type: 'stall_warning',
+        seconds_since_last_event: 145.2,
+        threshold: 120,
+      })
+    })
+
+    // The log renders in more than one panel; any occurrence proves the branch ran.
+    expect(screen.getAllByText(/No activity for 145\.2s/)).not.toHaveLength(0)
+    expect(screen.getAllByText(/threshold 120s/)).not.toHaveLength(0)
   })
 
   it('shows the separate filled order outcome after analysis completion', async () => {
@@ -421,12 +423,12 @@ describe('Analysis', () => {
     const user = userEvent.setup()
     localStorage.setItem('ta_access', 'test-token')
     renderWithQuery(<Analysis />)
-    await user.click(screen.getByText('Multi').closest('button')!)
+    await user.click(screen.getByText('Multi Stock').closest('button')!)
 
     const input = screen.getByPlaceholderText('AAPL, Enter')
     await user.type(input, 'AAPL{enter}')
     await user.type(input, 'MSFT{enter}')
-    await user.click(screen.getByText('analysis.multi.btn_start').closest('button')!)
+    await user.click(screen.getByText('Start Portfolio Analysis').closest('button')!)
 
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
     expect(MockWebSocket.instances[0].url).toBe(`ws://${window.location.host}/ws/analysis/portfolio-task`)
@@ -723,17 +725,17 @@ describe('Analysis', () => {
     renderWithQuery(<Analysis />)
 
     const user = userEvent.setup()
-    await user.click(screen.getByText('Multi').closest('button')!)
+    await user.click(screen.getByText('Multi Stock').closest('button')!)
     const input = screen.getByPlaceholderText('AAPL, Enter')
     await user.type(input, 'AAPL{enter}')
     await user.type(input, 'MSFT{enter}')
-    await user.click(screen.getByText('analysis.multi.btn_start').closest('button')!)
+    await user.click(screen.getByText('Start Portfolio Analysis').closest('button')!)
     await waitFor(() => expect(MockWebSocket.instances).toHaveLength(1))
 
-    await user.click(screen.getByRole('button', { name: /analysis\.btn\.stop/ }))
+    await user.click(screen.getByRole('button', { name: /Stop/ }))
 
     await waitFor(() => expect(axios.default.post).toHaveBeenCalledWith('/api/analysis/portfolio-stop-task/cancel', expect.anything()))
-    expect(screen.getByText('analysis.ws.stopped')).toBeInTheDocument()
+    expect(screen.getByText('Analysis stopped.')).toBeInTheDocument()
     expect(MockWebSocket.instances).toHaveLength(1)
   })
 
@@ -1016,7 +1018,7 @@ describe('Analysis', () => {
     await waitFor(() => {
       expect(screen.getByTestId('run-state')).toHaveTextContent('idle')
       expect(screen.getByTestId('run-status')).toHaveTextContent('error')
-      expect(screen.getByText('analysis.ws.auth_required')).toBeInTheDocument()
+      expect(screen.getByText(/session expired or WebSocket authentication was rejected/)).toBeInTheDocument()
     })
     expect(MockWebSocket.instances).toHaveLength(1)
   })
@@ -1059,7 +1061,7 @@ describe('Analysis', () => {
     await waitFor(() => {
       expect(screen.getByTestId('run-state')).toHaveTextContent('idle')
       expect(screen.getByTestId('run-status')).toHaveTextContent('error')
-      expect(screen.getByText('analysis.ws.auth_required')).toBeInTheDocument()
+      expect(screen.getByText(/session expired or WebSocket authentication was rejected/)).toBeInTheDocument()
     })
     expect(MockWebSocket.instances).toHaveLength(1)
   })

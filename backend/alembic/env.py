@@ -57,6 +57,9 @@ config.set_main_option("sqlalchemy.url", migration_url.replace("%", "%%"))
 
 target_metadata = Base.metadata
 
+# The same policy the drift test applies; see core/migration_policy.py.
+from backend.core.migration_policy import include_object  # noqa: E402
+
 
 def run_migrations_offline() -> None:
     """Emit SQL to stdout without a DB connection (alembic upgrade --sql)."""
@@ -66,13 +69,19 @@ def run_migrations_offline() -> None:
         literal_binds=True,
         dialect_opts={"paramstyle": "named"},
         compare_type=True,
+        include_object=include_object,
     )
     with context.begin_transaction():
         context.run_migrations()
 
 
 def _do_run_migrations(connection: Connection) -> None:
-    context.configure(connection=connection, target_metadata=target_metadata, compare_type=True)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        compare_type=True,
+        include_object=include_object,
+    )
     with context.begin_transaction():
         context.run_migrations()
 

@@ -259,6 +259,24 @@ const translations = {
 
 
     'settings.save_error_default': 'Save failed.',
+    'settings.sub_agents': 'Sub-Agents',
+    'settings.agents_empty': 'No agent configurations found in meta database.',
+    'settings.agents_load_failed': 'Could not load agent settings.',
+    'settings.hierarchy_label': 'Hierarchy:',
+    'settings.hierarchy_hint': 'Portfolio Manager (root) → Market Intelligence / Research Manager / Risk Debate. Disabling a parent disables its sub-tree.',
+    'settings.tools_load_failed': 'Failed to load tool settings.',
+    'settings.tools_empty': 'No tool configurations found in meta database.',
+    'settings.collapse_agent': 'Collapse agent',
+    'settings.expand_agent': 'Expand agent',
+    'settings.hide_llm_settings': 'Hide LLM settings',
+    'settings.configure_llm_settings': 'Configure LLM settings',
+    'settings.agents_saved': 'Agent settings saved successfully.',
+    'settings.agents_save_failed': 'Failed to save agent settings.',
+    'settings.tools_saved': 'Tool settings saved successfully.',
+    'settings.tools_save_failed': 'Failed to save tool settings.',
+    'settings.server_tool_overrides': 'Global Server Tool Overrides',
+    'settings.personal_tool_config': 'Personal Agent Tool Configuration',
+    'settings.save_tools': 'Save Tools',
   },
   tr: {
 
@@ -521,6 +539,24 @@ const translations = {
 
 
     'settings.save_error_default': 'Kaydetme başarısız.',
+    'settings.sub_agents': 'Alt Ajanlar',
+    'settings.agents_empty': 'Meta veritabanında ajan yapılandırması bulunamadı.',
+    'settings.agents_load_failed': 'Ajan ayarları yüklenemedi.',
+    'settings.hierarchy_label': 'Hiyerarşi:',
+    'settings.hierarchy_hint': 'Portföy Yöneticisi (kök) → Piyasa İstihbaratı / Araştırma Yöneticisi / Risk Tartışması. Bir üst ajanı kapatmak alt ağacını da kapatır.',
+    'settings.tools_load_failed': 'Araç ayarları yüklenemedi.',
+    'settings.tools_empty': 'Meta veritabanında araç yapılandırması bulunamadı.',
+    'settings.collapse_agent': 'Ajanı daralt',
+    'settings.expand_agent': 'Ajanı genişlet',
+    'settings.hide_llm_settings': 'LLM ayarlarını gizle',
+    'settings.configure_llm_settings': 'LLM ayarlarını yapılandır',
+    'settings.agents_saved': 'Ajan ayarları kaydedildi.',
+    'settings.agents_save_failed': 'Ajan ayarları kaydedilemedi.',
+    'settings.tools_saved': 'Araç ayarları kaydedildi.',
+    'settings.tools_save_failed': 'Araç ayarları kaydedilemedi.',
+    'settings.server_tool_overrides': 'Sunucu Geneli Araç Geçersiz Kılmaları',
+    'settings.personal_tool_config': 'Kişisel Ajan Araç Yapılandırması',
+    'settings.save_tools': 'Araçları Kaydet',
   },
 }
 

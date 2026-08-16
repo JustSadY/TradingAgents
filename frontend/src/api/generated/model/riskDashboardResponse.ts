@@ -11,11 +11,11 @@ import type { RiskBreach } from './riskBreach';
 import type { SectorWeight } from './sectorWeight';
 
 export interface RiskDashboardResponse {
-  beta?: number | null;
-  breaches?: RiskBreach[];
-  correlation?: CorrelationPair[];
-  holdings_risk?: HoldingRisk[];
-  message?: string | null;
-  sector_weights?: SectorWeight[];
-  volatility?: number | null;
+  beta: number | null;
+  breaches: RiskBreach[];
+  correlation: CorrelationPair[];
+  holdings_risk: HoldingRisk[];
+  message: string | null;
+  sector_weights: SectorWeight[];
+  volatility: number | null;
 }

@@ -1,4 +1,5 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react'
+import i18n from '../i18n'
 import { AlertTriangle, RefreshCw } from 'lucide-react'
 
 interface Props {
@@ -32,16 +33,16 @@ export class ErrorBoundary extends Component<Props, State> {
             <AlertTriangle size={32} />
           </div>
           <div className="space-y-2">
-            <h3 className="text-white font-display font-bold">Component Crash</h3>
+            <h3 className="text-white font-display font-bold">{i18n.t('crash.component_title')}</h3>
             <p className="text-xs text-slate-500 max-w-xs leading-relaxed">
-              Something went wrong while rendering this part of the application ({this.props.name}).
+              {i18n.t('crash.component_body', { name: this.props.name })}
             </p>
           </div>
           <button 
             onClick={() => window.location.reload()}
             className="flex items-center gap-2 px-6 py-2.5 rounded-xl bg-white/5 hover:bg-white/10 text-white text-xs font-bold transition-all border border-white/[0.04]"
           >
-            <RefreshCw size={14} /> Reload Page
+            <RefreshCw size={14} /> {i18n.t('crash.reload_page')}
           </button>
         </div>
       )

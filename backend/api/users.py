@@ -1,4 +1,4 @@
-from typing import Annotated, Any
+from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
@@ -12,6 +12,7 @@ from backend.repositories.permissions import list_allowed_page_keys, list_allowe
 from backend.repositories.users import email_exists, get_user_by_id, username_exists
 from backend.schemas.common import MessageResponse
 from backend.schemas.user import (
+    AgentAccessMap,
     AgentAccessUpdateResponse,
     ApiKeyProvidersResponse,
     ApiKeySet,
@@ -19,7 +20,11 @@ from backend.schemas.user import (
     PagePermissionsUpdate,
     ProfileUpdate,
     SettingPermissionsResponse,
+    ToolAccessMap,
+    ToolAccessPermsUpdate,
     ToolAccessUpdateResponse,
+    ToolFieldAccessMap,
+    ToolFieldAccessPermsUpdate,
     ToolFieldAccessUpdateResponse,
     UserAdminUpdate,
     UserCreate,
@@ -370,7 +375,7 @@ async def set_user_setting_permissions(
     await db.flush()
     return {"detail": "Setting permissions updated"}
 
-@router.get("/{user_id}/agent-access", response_model=dict[str, Any])
+@router.get("/{user_id}/agent-access", response_model=AgentAccessMap)
 async def get_agent_access(
     user_id: int,
     _: Annotated[User, Depends(require_admin)],
@@ -399,7 +404,7 @@ async def set_agent_access(
     updated = await update_user_agent_access(db, user_id, body.agents)
     return {"detail": "Agent access updated", "agents": updated}
 
-@router.get("/{user_id}/tool-access", response_model=dict[str, Any])
+@router.get("/{user_id}/tool-access", response_model=ToolAccessMap)
 async def get_tool_access(
     user_id: int,
     _: Annotated[User, Depends(require_admin)],
@@ -412,7 +417,7 @@ async def get_tool_access(
     return await get_user_tool_access(db, user_id)
 
 class ToolAccessUpdate(BaseModel):
-    tools: dict[str, dict]
+    tools: dict[str, ToolAccessPermsUpdate]
 
 @router.put("/{user_id}/tool-access", response_model=ToolAccessUpdateResponse)
 async def set_tool_access(
@@ -425,10 +430,12 @@ async def set_tool_access(
         raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     from backend.services.tool_access_service import update_user_tool_access
 
-    updated = await update_user_tool_access(db, user_id, body.tools)
+    updated = await update_user_tool_access(
+        db, user_id, {key: perms.model_dump(exclude_unset=True) for key, perms in body.tools.items()}
+    )
     return {"detail": "Tool access updated", "tools": updated}
 
-@router.get("/{user_id}/tool-field-access", response_model=dict[str, Any])
+@router.get("/{user_id}/tool-field-access", response_model=ToolFieldAccessMap)
 async def get_tool_field_access(
     user_id: int,
     _: Annotated[User, Depends(require_admin)],
@@ -441,7 +448,7 @@ async def get_tool_field_access(
     return await get_user_tool_field_access(db, user_id)
 
 class ToolFieldAccessUpdate(BaseModel):
-    fields: dict[str, dict[str, dict]]
+    fields: dict[str, dict[str, ToolFieldAccessPermsUpdate]]
 
 @router.put("/{user_id}/tool-field-access", response_model=ToolFieldAccessUpdateResponse)
 async def set_tool_field_access(
@@ -454,5 +461,12 @@ async def set_tool_field_access(
         raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     from backend.services.tool_access_service import update_user_tool_field_access
 
-    updated = await update_user_tool_field_access(db, user_id, body.fields)
+    updated = await update_user_tool_field_access(
+        db,
+        user_id,
+        {
+            tool_key: {field_key: perms.model_dump(exclude_unset=True) for field_key, perms in fields.items()}
+            for tool_key, fields in body.fields.items()
+        },
+    )
     return {"detail": "Tool field access updated", "fields": updated}

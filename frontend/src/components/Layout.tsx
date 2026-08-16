@@ -82,7 +82,7 @@ export default function Layout() {
   const activeTask = activeTasks[0] || null
 
   const cronQuery = useCronCronStatus({ query: { refetchInterval: 30_000 } })
-  const cronStatus = (cronQuery.data ?? { next_run_time: null }) as { next_run_time: string | null }
+  const cronStatus = cronQuery.data
 
   const handleLogout = () => { logout(); navigate('/login') }
 
@@ -137,7 +137,7 @@ export default function Layout() {
             </div>
             <div>
               <p className="text-white font-display font-bold text-sm tracking-tight leading-none">TradingAgents</p>
-              <p className="text-slate-500 text-[10px] font-medium mt-1 uppercase tracking-wider">AI Portfolio manager</p>
+              <p className="text-slate-500 text-[10px] font-medium mt-1 uppercase tracking-wider">{t('nav.tagline')}</p>
             </div>
           </div>
           <button
@@ -225,7 +225,7 @@ export default function Layout() {
         )}
 
         {/* Next Scheduled Scan */}
-        {cronStatus.next_run_time && (
+        {cronStatus?.next_run_time && (
           <div className="mx-3 mb-2 px-3 py-2 rounded-xl bg-white/[0.02] border border-white/[0.04]">
             <div className="flex items-center gap-1.5 text-[9px] text-slate-500 font-medium">
               <Clock size={11} className="text-violet-400" />
@@ -258,7 +258,7 @@ export default function Layout() {
             </div>
           </div>
           <div className="flex items-center justify-between px-3 text-[10px] text-slate-500 font-medium">
-            <span>Currency</span>
+            <span>{t('nav.currency')}</span>
             <select
               value={currency}
               onChange={e => setCurrency(e.target.value as Currency)}

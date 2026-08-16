@@ -26,6 +26,7 @@ import {
   getUsersListUserApiKeysQueryKey,
 } from '../api/generated/users/users'
 import { useSystemSettingsGetSystemSettings, useSystemSettingsUpdateSystemSettings } from '../api/generated/system-settings/system-settings'
+import type { UsersGetToolAccess200, UsersGetToolFieldAccess200 } from '../api/generated/model'
 import { useAnalyticsGetSystemMetrics, useAnalyticsGetSystemHealth } from '../api/generated/analytics/analytics'
 import { Save, Trash2, Plus, UserCog, ShieldCheck, Globe, CheckCircle2, Key, Sliders, BarChart3, RefreshCw, Zap, AlertTriangle, Clock, Wifi } from 'lucide-react'
 import { useTranslation } from '../contexts/LanguageContext'
@@ -73,29 +74,6 @@ function Section({ title, children }: { title: string; children: React.ReactNode
 
 type Tab = 'users' | 'permissions' | 'system' | 'api-keys' | 'user-settings' | 'metrics'
 
-interface SystemMetrics {
-  total_runs: number
-  error_rate_pct: number
-  analysis_runs: Record<string, number>
-  analysis_duration: { count: number; sum_seconds: number; avg_seconds: number }
-  node_errors: Record<string, number>
-  node_fallbacks: Record<string, number>
-  node_retries: number
-  websocket_connections: number
-}
-
-interface SystemHealth {
-  signal_parse_fallbacks: number
-  auto_order_skipped: Record<string, number>
-  quality: {
-    period_days: number
-    total_runs: number
-    unknown: number
-    confidence_counts: { high: number; medium: number; low: number }
-    avg_score: number | null
-  }
-}
-
 export default function Admin() {
   const { t } = useTranslation()
   const { isOwner } = useAuth()
@@ -107,8 +85,8 @@ export default function Admin() {
   const [permissions, setPermissions] = useState<Record<string, boolean>>({})
   const [settingPermissions, setSettingPermissions] = useState<Record<string, boolean>>({})
   const [agentAccess, setAgentAccess] = useState<Record<string, boolean>>({})
-  const [toolAccess, setToolAccess] = useState<Record<string, Record<string, boolean>>>({})
-  const [toolFieldAccess, setToolFieldAccess] = useState<Record<string, Record<string, { can_view: boolean, can_edit: boolean }>>>({})
+  const [toolAccess, setToolAccess] = useState<UsersGetToolAccess200>({})
+  const [toolFieldAccess, setToolFieldAccess] = useState<UsersGetToolFieldAccess200>({})
   const [permSaved, setPermSaved] = useState(false)
   const [newUser, setNewUser] = useState({ username: '', password: '', email: '', display_name: '', role: 'user' })
   const [creating, setCreating] = useState(false)
@@ -151,8 +129,8 @@ export default function Admin() {
   const [metricsEnabled, setMetricsEnabled] = useState(false)
   const metricsQuery = useAnalyticsGetSystemMetrics({ query: { enabled: metricsEnabled } })
   const healthQuery = useAnalyticsGetSystemHealth({ query: { enabled: metricsEnabled } })
-  const sysMetrics = (metricsQuery.data ?? null) as unknown as SystemMetrics | null
-  const sysHealth = (healthQuery.data ?? null) as unknown as SystemHealth | null
+  const sysMetrics = metricsQuery.data ?? null
+  const sysHealth = healthQuery.data ?? null
   const metricsLoading = metricsEnabled && (metricsQuery.isFetching || healthQuery.isFetching)
   // Each panel degrades independently, matching the previous allSettled().
   const loadMetrics = useCallback(() => {
@@ -191,11 +169,11 @@ export default function Admin() {
           queryFn: () => usersGetToolFieldAccess(userId),
         }),
       ])
-      setPermissions((pRes as unknown as { permissions: Record<string, boolean> }).permissions)
-      setSettingPermissions((sRes as unknown as { permissions: Record<string, boolean> }).permissions)
-      setAgentAccess(agentRes as never)
-      setToolAccess(toolRes as never)
-      setToolFieldAccess(toolFieldRes as never)
+      setPermissions(pRes.permissions)
+      setSettingPermissions(sRes.permissions)
+      setAgentAccess(agentRes)
+      setToolAccess(toolRes)
+      setToolFieldAccess(toolFieldRes)
       setSelectedUserId(userId)
     } catch {
       setErrorMsg('Failed to load user permissions')
@@ -207,7 +185,7 @@ export default function Admin() {
       queryKey: getUsersListUserApiKeysQueryKey(userId),
       queryFn: () => usersListUserApiKeys(userId),
     })
-    return ((res as { providers?: string[] })?.providers ?? []) as string[]
+    return res.providers ?? []
   }
 
   const loadUserApiKeys = async (userId: number) => {
@@ -320,11 +298,11 @@ export default function Admin() {
 
 
   const TABS: { key: Tab; label: string; icon: React.ReactNode }[] = [
-    { key: 'users',       label: t('admin.tab_users') || 'User Management',       icon: <UserCog size={14} /> },
-    { key: 'permissions', label: t('admin.tab_permissions') || 'Access Control',  icon: <ShieldCheck size={14} /> },
-    { key: 'user-settings', label: t('admin.tab_user_settings') || 'User Preferences', icon: <Sliders size={14} /> },
-    { key: 'system',      label: t('admin.tab_system') || 'Global Settings',       icon: <Globe size={14} /> },
-    { key: 'api-keys',    label: t('admin.tab_apikeys') || 'User API Keys',        icon: <Key size={14} /> },
+    { key: 'users',       label: t('admin.tab_users'),       icon: <UserCog size={14} /> },
+    { key: 'permissions', label: t('admin.tab_permissions'),  icon: <ShieldCheck size={14} /> },
+    { key: 'user-settings', label: t('admin.tab_user_settings'), icon: <Sliders size={14} /> },
+    { key: 'system',      label: t('admin.tab_system'),       icon: <Globe size={14} /> },
+    { key: 'api-keys',    label: t('admin.tab_apikeys'),        icon: <Key size={14} /> },
     { key: 'metrics',     label: 'System Metrics',                                  icon: <BarChart3 size={14} /> },
   ]
 
@@ -553,20 +531,20 @@ export default function Admin() {
 
                   <div className="border-t border-white/[0.04] mt-5 pt-4 space-y-3">
                     <h4 className="text-[10px] font-bold text-amber-400 uppercase tracking-wider">
-                      {t('admin.section_settings_permissions') || 'Settings Edit Permissions'}
+                      {t('admin.section_settings_permissions')}
                     </h4>
-                    <p className="text-[10px] text-slate-500 font-semibold mb-1">Select which settings tabs this user is permitted to edit:</p>
+                    <p className="text-[10px] text-slate-500 font-semibold mb-1">{t('admin.settings_permissions_hint')}</p>
                     <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
                       {(meta?.setting_keys ?? [
-                        { value: 'general',  label: t('settings.general') || 'Preferences' },
-                        { value: 'llm',      label: t('settings.row_llm_provider') || 'LLM Provider' },
+                        { value: 'general',  label: t('settings.general') },
+                        { value: 'llm',      label: t('settings.row_llm_provider') },
                         { value: 'agents',   label: 'AI Configuration' },
-                        { value: 'tools',    label: t('settings.section_tools') || 'Agent Tools' },
-                        { value: 'risk',     label: t('settings.section_risk') || 'Risk & Safety' },
-                        { value: 'alerts',   label: t('settings.section_alert_guardrails') || 'Alert Guardrails' },
-                        { value: 'webhooks', label: t('settings.section_notifications') || 'Personal Webhooks' },
-                        { value: 'cron',     label: t('settings.cron_settings') || 'Cron Scheduler' },
-                        { value: 'presets',  label: t('settings.section_presets') || 'Configuration Templates' },
+                        { value: 'tools',    label: t('settings.section_tools') },
+                        { value: 'risk',     label: t('settings.section_risk') },
+                        { value: 'alerts',   label: t('settings.section_alert_guardrails') },
+                        { value: 'webhooks', label: t('settings.section_notifications') },
+                        { value: 'cron',     label: t('settings.cron_settings') },
+                        { value: 'presets',  label: t('settings.section_presets') },
                         { value: 'memory',   label: 'Memory' },
                         { value: 'personas', label: 'Personas' },
                       ]).map(s => (
@@ -588,7 +566,7 @@ export default function Admin() {
 
             {selectedUserId && (
               <>
-                <Section title={t('admin.section_agent_access') || 'Hierarchical Agent Permissions'}>
+                <Section title={t('admin.section_agent_access')}>
                   <p className="text-[10px] text-slate-500 font-semibold mb-3">
                     Grant or revoke access to specific branches of the AI hierarchy. Disabling a parent agent automatically restricts all its sub-agents.
                   </p>
@@ -629,7 +607,7 @@ export default function Admin() {
                   </div>
                 </Section>
 
-                <Section title={t('admin.section_tool_field_access') || 'Fine-grained Tool Field Access'}>
+                <Section title={t('admin.section_tool_field_access')}>
                   <div className="space-y-6">
                     {meta?.tools?.filter(t => t.settings_schema?.length > 0).map(tool => (
                       <div key={tool.key} className="bg-slate-900/40 border border-white/[0.04] rounded-2xl p-4 overflow-hidden">
@@ -641,9 +619,9 @@ export default function Admin() {
                           <table className="w-full text-[10px] text-slate-400">
                             <thead>
                               <tr className="text-left text-slate-500 uppercase tracking-widest border-b border-white/[0.02]">
-                                <th className="py-2 px-1 font-bold">Field</th>
-                                <th className="py-2 px-1 text-center font-bold">View</th>
-                                <th className="py-2 px-1 text-center font-bold">Edit</th>
+                                <th className="py-2 px-1 font-bold">{t('admin.col_field')}</th>
+                                <th className="py-2 px-1 text-center font-bold">{t('admin.col_view')}</th>
+                                <th className="py-2 px-1 text-center font-bold">{t('admin.col_edit')}</th>
                               </tr>
                             </thead>
                             <tbody className="divide-y divide-white/[0.01]">
@@ -701,9 +679,9 @@ export default function Admin() {
           <div className="space-y-6">
             <ToolSettingsPanel serverScope={true} />
             
-            <Section title={t('settings.section_advanced') || 'Engine Core Settings'}>
+            <Section title={t('settings.section_advanced')}>
               <div className="flex items-center justify-between mb-4">
-                <p className="text-xs text-slate-400">Global server-wide engine configuration affecting all users</p>
+                <p className="text-xs text-slate-400">{t('admin.engine_settings_hint')}</p>
                 <button
                   onClick={saveSystemSettings}
                   className="flex items-center gap-1.5 bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold px-4 py-2 rounded-xl transition cursor-pointer"
@@ -716,7 +694,7 @@ export default function Admin() {
               {systemSettings && (
                 <div className="space-y-4">
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 border-b border-white/[0.01] pb-3">
-                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Trading Mode</span>
+                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">{t('admin.trading_mode')}</span>
                     <div className="flex-1 sm:max-w-xs w-full">
                       <select
                         className={Input}
@@ -729,7 +707,7 @@ export default function Admin() {
                   </div>
 
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 border-b border-white/[0.01] pb-3">
-                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Active Broker</span>
+                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">{t('admin.active_broker')}</span>
                     <div className="flex-1 sm:max-w-xs w-full">
                       <select
                         className={Input}
@@ -742,7 +720,7 @@ export default function Admin() {
                   </div>
 
                   <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 sm:gap-4 border-b border-white/[0.01] pb-3">
-                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">Active Data Vendor</span>
+                    <span className="text-xs text-slate-400 font-semibold uppercase tracking-wider shrink-0">{t('admin.active_data_vendor')}</span>
                     <div className="flex-1 sm:max-w-xs w-full">
                       <select
                         className={Input}
@@ -784,7 +762,7 @@ export default function Admin() {
         )}
 
         {tab === 'api-keys' && (
-          <Section title={t('admin.tab_apikeys') || 'User API Keys'}>
+          <Section title={t('admin.tab_apikeys')}>
             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center">
               <select
                 className={`${Input} sm:max-w-xs`}
@@ -836,7 +814,7 @@ export default function Admin() {
         )}
 
         {tab === 'user-settings' && (
-          <Section title={t('admin.tab_user_settings') || 'User Preferences'}>
+          <Section title={t('admin.tab_user_settings')}>
             <div className="flex flex-col sm:flex-row gap-3 items-start sm:items-center pb-2">
               <select
                 className={`${Input} sm:max-w-xs`}
@@ -864,9 +842,9 @@ export default function Admin() {
 
         {tab === 'metrics' && (
           <ErrorBoundary name="AdminMetrics">
-          <Section title="System Metrics">
+          <Section title={t('admin.system_metrics')}>
             <div className="flex items-center justify-between">
-              <p className="text-[10px] text-slate-500">Live Prometheus counters — metrics reset on server restart</p>
+              <p className="text-[10px] text-slate-500">{t('admin.metrics_hint')}</p>
               <button
                 onClick={loadMetrics}
                 disabled={metricsLoading}
@@ -879,14 +857,14 @@ export default function Admin() {
             {!sysMetrics && !metricsLoading && (
               <div className="text-center py-10 opacity-50">
                 <BarChart3 size={28} className="mx-auto text-slate-600 mb-2" />
-                <p className="text-[10px] text-slate-500 font-semibold">Click Refresh to load current metrics</p>
+                <p className="text-[10px] text-slate-500 font-semibold">{t('admin.metrics_prompt')}</p>
               </div>
             )}
 
             {metricsLoading && (
               <div className="text-center py-10 opacity-50">
                 <RefreshCw size={20} className="mx-auto animate-spin text-amber-400 mb-2" />
-                <p className="text-[10px] text-slate-500">Loading…</p>
+                <p className="text-[10px] text-slate-500">{t('admin.loading')}</p>
               </div>
             )}
 
@@ -913,7 +891,7 @@ export default function Admin() {
                 {/* Analysis runs by status */}
                 {Object.keys(sysMetrics.analysis_runs).length > 0 && (
                   <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Analysis Runs by Status</p>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">{t('admin.runs_by_status')}</p>
                     <div className="h-36">
                       <ResponsiveContainer width="100%" height="100%">
                         <BarChart data={Object.entries(sysMetrics.analysis_runs).map(([k, v]) => ({ status: k, count: v }))} barCategoryGap="40%">
@@ -934,14 +912,14 @@ export default function Admin() {
                 {/* Node-level errors */}
                 {Object.keys(sysMetrics.node_errors).length > 0 && (
                   <div>
-                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">Node Errors & Fallbacks</p>
+                    <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest mb-3">{t('admin.node_errors_fallbacks')}</p>
                     <div className="overflow-x-auto">
                       <table className="w-full text-xs text-slate-300 min-w-[380px]">
                         <thead>
                           <tr className="text-slate-500 text-[10px] uppercase tracking-wider bg-white/[0.01]">
-                            <th className="px-4 py-2.5 text-left font-bold">Node</th>
-                            <th className="px-4 py-2.5 text-right font-bold">Errors</th>
-                            <th className="px-4 py-2.5 text-right font-bold">Fallbacks</th>
+                            <th className="px-4 py-2.5 text-left font-bold">{t('admin.col_node')}</th>
+                            <th className="px-4 py-2.5 text-right font-bold">{t('admin.col_errors')}</th>
+                            <th className="px-4 py-2.5 text-right font-bold">{t('admin.col_fallbacks')}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/[0.02]">
@@ -969,18 +947,18 @@ export default function Admin() {
 
                 {sysHealth && (
                   <div className="border-t border-white/[0.04] pt-4 space-y-3">
-                    <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">Guardrail Health</h4>
+                    <h4 className="text-[9px] font-bold text-slate-500 uppercase tracking-widest">{t('admin.guardrail_health')}</h4>
                     <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                       <div className="glass-panel rounded-xl p-3">
-                        <p className="text-[9px] text-slate-500 uppercase font-bold">Signal Parse Fallbacks</p>
+                        <p className="text-[9px] text-slate-500 uppercase font-bold">{t('admin.signal_parse_fallbacks')}</p>
                         <p className={`text-lg font-mono font-bold ${sysHealth.signal_parse_fallbacks > 0 ? 'text-amber-400' : 'text-emerald-400'}`}>{sysHealth.signal_parse_fallbacks}</p>
                       </div>
                       <div className="glass-panel rounded-xl p-3">
-                        <p className="text-[9px] text-slate-500 uppercase font-bold">Quality-Gate Skips</p>
+                        <p className="text-[9px] text-slate-500 uppercase font-bold">{t('admin.quality_gate_skips')}</p>
                         <p className="text-lg font-mono font-bold text-slate-200">{sysHealth.auto_order_skipped.quality_gate ?? 0}</p>
                       </div>
                       <div className="glass-panel rounded-xl p-3">
-                        <p className="text-[9px] text-slate-500 uppercase font-bold">Drawdown-Breaker Skips</p>
+                        <p className="text-[9px] text-slate-500 uppercase font-bold">{t('admin.drawdown_breaker_skips')}</p>
                         <p className="text-lg font-mono font-bold text-slate-200">{sysHealth.auto_order_skipped.drawdown_breaker ?? 0}</p>
                       </div>
                       <div className="glass-panel rounded-xl p-3">
@@ -1015,6 +993,7 @@ function AdminApiKeyRow({ providerKey, label, hasKey, onSave, onDelete }: {
   onSave: (provider: string, key: string) => Promise<void>
   onDelete: (provider: string) => Promise<void>
 }) {
+  const { t } = useTranslation()
   const [editing, setEditing] = useState(false)
   const [value, setValue] = useState('')
   const [show, setShow] = useState(false)
@@ -1053,7 +1032,7 @@ function AdminApiKeyRow({ providerKey, label, hasKey, onSave, onDelete }: {
             <button
               onClick={handleDelete}
               className="text-slate-500 hover:text-rose-400 transition-colors p-1 hover:bg-white/5 rounded cursor-pointer animate-in fade-in"
-              title="Delete Key"
+              title={t('admin.delete_key')}
             >
               <Trash2 size={13} />
             </button>
@@ -1072,7 +1051,7 @@ function AdminApiKeyRow({ providerKey, label, hasKey, onSave, onDelete }: {
             <input
               className="w-full glass-input rounded-xl px-3 py-1.5 text-xs outline-none font-mono"
               type={show ? 'text' : 'password'}
-              placeholder="Enter API key"
+              placeholder={t('admin.enter_api_key')}
               value={value}
               onChange={e => setValue(e.target.value)}
               onKeyDown={e => e.key === 'Enter' && handleSave()}

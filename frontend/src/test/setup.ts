@@ -93,7 +93,12 @@ Object.defineProperty(globalThis, 'crypto', {
   configurable: true,
 })
 
-vi.mock('axios', () => {
+vi.mock('axios', async importOriginal => {
+  // Spread the real module first: only the request-issuing surface is stubbed.
+  // `AxiosError`, `AxiosHeaders` and `isAxiosError` are ordinary helpers that
+  // code under test uses to inspect failures, and replacing them with nothing
+  // makes an error-handling path look dead when it is not.
+  const actual = await importOriginal<typeof import('axios')>()
   // The Orval-generated client calls the *callable* form, `axios(config)`,
   // through src/api/mutator.ts, while hand-written call sites still use
   // axios.get/post/... Support both: the callable dispatches to the same method
@@ -124,6 +129,12 @@ vi.mock('axios', () => {
     },
   )
 
-  return { default: mockAxios, ...methods, interceptors: mockAxios.interceptors, defaults: mockAxios.defaults }
+  return {
+    ...actual,
+    default: mockAxios,
+    ...methods,
+    interceptors: mockAxios.interceptors,
+    defaults: mockAxios.defaults,
+  }
 })
 

@@ -1,5 +1,3 @@
-from typing import Any
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -8,7 +6,12 @@ from backend.api.deps import require_page
 from backend.core.database import get_db
 from backend.core.limiter import limiter
 from backend.models.user import User
-from backend.schemas.market import FormulaAssistResponse, SentimentHistoryResponse
+from backend.schemas.market import (
+    CustomIndicatorResponse,
+    FormulaAssistResponse,
+    OhlcvResponse,
+    SentimentHistoryResponse,
+)
 from backend.services.market_service import (
     MarketDataError,
     get_custom_indicator_series,
@@ -23,7 +26,7 @@ _TICKER_DESCRIPTION = "Ticker symbol, e.g. AAPL"
 class FormulaAssistRequest(BaseModel):
     prompt: str = Field(..., min_length=1, max_length=500, description="Plain-language indicator description")
 
-@router.get("/ohlcv", response_model=dict[str, Any])
+@router.get("/ohlcv", response_model=OhlcvResponse)
 async def ohlcv(
     ticker: str = Query(..., description=_TICKER_DESCRIPTION),
     start_date: str = Query(None, pattern=r"^\d{4}-\d{2}-\d{2}$", description="YYYY-MM-DD"),
@@ -36,7 +39,7 @@ async def ohlcv(
     except MarketDataError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
 
-@router.get("/custom-indicator", response_model=dict[str, Any])
+@router.get("/custom-indicator", response_model=CustomIndicatorResponse)
 @limiter.limit("20/minute")
 async def custom_indicator(
     request: Request,

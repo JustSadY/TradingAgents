@@ -105,6 +105,24 @@ Alembic is the sole schema authority. Outside production the app upgrades the da
 
 Every schema change needs a revision — additive ones included. SQLite is a development/test convenience only: it builds from ORM metadata via `create_all` and has no migration path, so delete the file to pick up model changes.
 
+That split is also the trap: the test suite runs on SQLite built from the
+models, production runs on PostgreSQL built from the migrations, and a model
+change with no revision behind it passes every test while never reaching a
+deployment. Adding `index=True` or `ondelete="CASCADE"` counts — both have
+silently failed to reach production this way before.
+
+Check a schema change against a real database before trusting it:
+
+```bash
+MIGRATION_DRIFT_DATABASE_URL=postgresql+asyncpg://postgres@localhost/ta_drift \
+    uv run pytest tests/test_core/test_migration_drift.py
+```
+
+It migrates a throwaway database from scratch and asserts the result matches
+`Base.metadata`, so anything the models declare and the migrations do not
+becomes a failure rather than a production surprise. Tables Alembic owns
+without an ORM model are listed in `core/migration_policy.py`.
+
 ### LangGraph checkpoints
 
 Analysis checkpoints are stored in the application database when `DATABASE_URL`
@@ -264,6 +282,19 @@ Analysis progress is streamed through:
 ```
 
 Do not put JWTs into WebSocket query strings. Preserve the existing subprotocol-based authentication design and `tradingagents.v1` application protocol.
+
+### Analysis event vocabulary
+
+The socket carries no OpenAPI path, so its event types are declared once in
+`backend/schemas/analysis_events.py` and published through `/api/meta`. That is
+how they reach the generated TypeScript client, and it is what lets
+`frontend/src/analysis/__tests__/analysisEvents.test.ts` assert the browser
+handles every one.
+
+A new event type therefore needs three things, and the tests fail without any
+of them: the literal added to `AnalysisEventType`, a branch in `Analysis.tsx`,
+and its key listed in `HANDLED_ANALYSIS_EVENTS`. Emitting a type that is not in
+the union fails `tests/test_services/test_analysis_event_contract.py`.
 
 ---
 

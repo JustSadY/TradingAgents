@@ -7,14 +7,8 @@ import ToolSettingsPanel from '../ToolSettingsPanel'
 // Use mutable mock that can be changed per test via mockReturnValue
 const mockUseMeta = vi.fn()
 
-vi.mock('../../../contexts/LanguageContext', () => ({
-  useTranslation: () => ({ t: (k: string) => {
-    const map: Record<string, string> = {
-      'tools.category.market': 'MARKET',
-      'tools.category.analysis': 'ANALYSIS',
-    }
-    return map[k] || k
-  }}),
+vi.mock('../../../contexts/LanguageContext', async () => ({
+  useTranslation: (await import('../../../test/i18nMock')).useTranslationMock,
 }))
 
 vi.mock('../../../hooks/useMeta', () => ({
@@ -64,7 +58,7 @@ describe('ToolSettingsPanel', () => {
   it('shows loading state initially', () => {
     vi.spyOn(axios, 'get').mockImplementation(() => new Promise(() => {}))
     renderWithQuery(<ToolSettingsPanel />)
-    expect(screen.getByText('common.loading')).toBeInTheDocument()
+    expect(screen.getByText('Loading...')).toBeInTheDocument()
   })
 
   it('renders tool settings after loading', async () => {
@@ -74,11 +68,13 @@ describe('ToolSettingsPanel', () => {
     expect(screen.getByText('Technical Indicators')).toBeInTheDocument()
   })
 
-  it('renders category headers', async () => {
+  it('renders category headers from the tool catalogue labels', async () => {
     vi.spyOn(axios, 'get').mockResolvedValue({ data: defaultSettings })
     renderWithQuery(<ToolSettingsPanel />)
-    expect(await screen.findByText('MARKET')).toBeInTheDocument()
-    expect(screen.getByText('ANALYSIS')).toBeInTheDocument()
+    // The previous mock invented its own labels, so this asserted on strings
+    // that appeared nowhere in the app. These are the real ones.
+    expect(await screen.findByText('Market & Technicals')).toBeInTheDocument()
+    expect(screen.getByText('tools.category.analysis')).toBeInTheDocument()
   })
 
   it('shows empty state when no tools in meta', async () => {

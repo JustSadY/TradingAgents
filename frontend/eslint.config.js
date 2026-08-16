@@ -19,6 +19,9 @@ export default defineConfig([
       globals: globals.browser,
     },
     rules: {
+      // Omitting keys by destructuring the rest is how you drop a field from an
+      // object; the named halves are the omission, not dead variables.
+      '@typescript-eslint/no-unused-vars': ['error', { ignoreRestSiblings: true }],
       // Existing debt tracked as warnings; new real errors still fail CI.
       '@typescript-eslint/no-explicit-any': 'warn',
       'react-hooks/set-state-in-effect': 'warn',

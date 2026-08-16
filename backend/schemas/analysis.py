@@ -5,6 +5,8 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from backend.schemas.common import ApiResponse
+
 logger = logging.getLogger(__name__)
 
 _CANONICAL_SIGNALS = frozenset({"Buy", "Overweight", "Hold", "Underweight", "Sell"})
@@ -129,7 +131,7 @@ class AnalysisResultRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
-class AnalysisListItem(BaseModel):
+class AnalysisListItem(ApiResponse):
     id: int
     ticker: str
     trade_date: str
@@ -142,6 +144,12 @@ class AnalysisListItem(BaseModel):
     llm_provider: str | None = None
     llm_model: str | None = None
     preset_name: str | None = None
+
+    # Realized outcome, backfilled after the holding period. Null until then —
+    # the performance page renders only the rows that have one.
+    raw_return: float | None = None
+    alpha_return: float | None = None
+    holding_days: int | None = None
 
     @field_validator("signal", mode="before")
     @classmethod

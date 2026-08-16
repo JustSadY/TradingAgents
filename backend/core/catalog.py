@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from backend.core.config import is_live_trading_enabled
 from backend.core.constants import PAGE_KEYS, SETTING_KEYS, WEBHOOK_EVENTS
+from backend.schemas.analysis_events import ANALYSIS_EVENT_TYPES
 from backend.trading_agents.agent_catalog import label_for
 from backend.trading_agents.agent_catalog import list_analysts as _engine_analysts
 from backend.trading_agents.llm_clients.registry import llm_registry
@@ -299,6 +300,9 @@ async def build_meta(db=None, user=None) -> dict:
         "webhook_events": WEBHOOK_EVENTS,
         "memory_stores": MEMORY_STORES,
         "embedders": EMBEDDERS,
+        # Published so the generated client carries the WebSocket vocabulary
+        # and the browser can be checked against it; see schemas/analysis_events.
+        "analysis_event_types": list(ANALYSIS_EVENT_TYPES),
     }
 
 _STATIC_NODE_LABELS: dict[str, tuple[str, str]] = {

@@ -1,10 +1,11 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
-from backend.schemas.tool_settings import ToolMeta, ToolSettingFieldMeta
+from backend.schemas.analysis_events import AnalysisEventType
+from backend.schemas.tool_settings import SettingOptionMeta, ToolMeta, ToolSettingFieldMeta
 
 
 class Choice(BaseModel):
@@ -27,9 +28,12 @@ class SignalMeta(BaseModel):
     tone: str
 
 
+AgentSettingTypeName = Literal["string", "number", "select", "textarea"]
+
+
 class AgentSettingFieldMeta(BaseModel):
     key: str
-    type: str
+    type: AgentSettingTypeName
     label_key: str
     description_key: str | None = None
     placeholder_key: str | None = None
@@ -38,7 +42,7 @@ class AgentSettingFieldMeta(BaseModel):
     min: float | None = None
     max: float | None = None
     step: float | None = None
-    options: list[dict[str, Any]] = Field(default_factory=list)
+    options: list[SettingOptionMeta] = Field(default_factory=list)
 
 
 class AgentMeta(BaseModel):
@@ -82,6 +86,7 @@ class MetaResponse(BaseModel):
     webhook_events: list[str]
     memory_stores: list[Choice]
     embedders: list[Choice]
+    analysis_event_types: list[AnalysisEventType]
 
 
 __all__ = [

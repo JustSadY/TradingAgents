@@ -9,6 +9,7 @@ import { notify } from '../utils/notify'
 import { exportPortfolioCSV } from '../utils/csvExport'
 import { ErrorBoundary } from '../components/ErrorBoundary'
 import type { HoldingRead, PortfolioRead, RiskDashboardResponse, RebalanceResponse } from '../api/generated/model'
+import { errorDetail } from '../utils/errorDetail'
 
 const LONG_HOLD_DAYS = 30
 
@@ -76,9 +77,9 @@ export default function Portfolio() {
   const rebalancing = rebalanceMutation.isPending
   const runRebalance = useCallback(() => {
     rebalanceMutation.mutate(undefined, {
-      onSuccess: (data) => setRebalanceResult(data as unknown as RebalanceResponse),
+      onSuccess: setRebalanceResult,
       onError: (err) => {
-        const detail = (err as unknown as { response?: { data?: { detail?: string } } })?.response?.data?.detail
+        const detail = errorDetail(err)
         notify('error', detail || 'Rebalance failed', 'AI Rebalance')
       },
     })
@@ -112,7 +113,7 @@ export default function Portfolio() {
     return (
       <div className="flex flex-col items-center justify-center min-h-[400px] text-slate-400 gap-3">
         <Loader2 className="animate-spin text-violet-500" size={32} />
-        <p className="text-xs font-semibold uppercase tracking-wider">{t('portfolio.loading') || 'Loading portfolio...'}</p>
+        <p className="text-xs font-semibold uppercase tracking-wider">{t('portfolio.loading')}</p>
       </div>
     )
   }
@@ -124,14 +125,14 @@ export default function Portfolio() {
           <AlertCircle size={24} />
         </div>
         <div>
-          <p className="text-sm font-bold text-white uppercase tracking-wider mb-1">{t('portfolio.error') || 'Error Loading Portfolio'}</p>
-          <p className="text-xs text-slate-500 leading-relaxed">Ensure backend service is running and retry the connection request</p>
+          <p className="text-sm font-bold text-white uppercase tracking-wider mb-1">{t('portfolio.error')}</p>
+          <p className="text-xs text-slate-500 leading-relaxed">{t('portfolio.error_hint')}</p>
         </div>
         <button
           onClick={() => fetchPortfolioData()}
           className="bg-violet-600 hover:bg-violet-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl transition duration-200 cursor-pointer shadow-lg shadow-violet-600/25"
         >
-          {t('common.retry') || 'Retry Connection'}
+          {t('common.retry')}
         </button>
       </div>
     )
@@ -146,7 +147,7 @@ export default function Portfolio() {
             <PieChart className="text-violet-400" size={20} />
             {t('portfolio.title')}
           </h2>
-          <p className="text-xs text-slate-500 mt-1">Review active assets allocations, average cost basis, and real-time ledger returns</p>
+          <p className="text-xs text-slate-500 mt-1">{t('portfolio.subtitle')}</p>
         </div>
         <div className="flex items-center gap-2">
           <button
@@ -156,7 +157,7 @@ export default function Portfolio() {
             )}
             disabled={holdings.length === 0}
             className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white text-xs font-bold transition-all cursor-pointer disabled:opacity-40"
-            title="Export CSV"
+            title={t('portfolio.export_csv')}
           >
             <Download size={13} /> CSV
           </button>
@@ -182,7 +183,7 @@ export default function Portfolio() {
             onClick={() => fetchPortfolioData()}
             disabled={loading}
             className="flex items-center justify-center p-2 rounded-xl bg-white/[0.02] hover:bg-white/[0.06] border border-white/[0.04] text-slate-400 hover:text-white transition-all cursor-pointer"
-            title="Refresh"
+            title={t('portfolio.refresh')}
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -196,7 +197,7 @@ export default function Portfolio() {
           <div className="px-5 py-3.5 border-b border-white/[0.04] flex items-center justify-between bg-violet-500/5">
             <div className="flex items-center gap-2.5">
               <Sparkles size={15} className="text-violet-400" />
-              <span className="text-sm font-bold text-white">AI Portfolio Analysis</span>
+              <span className="text-sm font-bold text-white">{t('portfolio.ai_analysis')}</span>
               <HealthBadge score={rebalanceResult.score} />
             </div>
             <button
@@ -214,7 +215,7 @@ export default function Portfolio() {
             {/* Issues */}
             {rebalanceResult.issues.length > 0 && (
               <div className="space-y-2">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Issues Detected</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('portfolio.issues_detected')}</p>
                 <div className="space-y-1.5">
                   {rebalanceResult.issues.map((issue, i) => (
                     <div key={i} className="flex items-start gap-2 text-xs text-amber-300">
@@ -229,7 +230,7 @@ export default function Portfolio() {
             {/* Suggestions */}
             {rebalanceResult.suggestions.length > 0 ? (
               <div className="space-y-2">
-                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Suggested Actions</p>
+                <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('portfolio.suggested_actions')}</p>
                 <div className="space-y-2">
                   {rebalanceResult.suggestions.map((s, i) => (
                     <div key={i} className="flex items-start gap-3 p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.04] hover:border-white/[0.07] transition">
@@ -291,7 +292,7 @@ export default function Portfolio() {
           >
             <div className="flex items-center gap-2.5">
               <Activity size={15} className="text-slate-400" />
-              <span className="text-sm font-bold text-white">Risk Dashboard</span>
+              <span className="text-sm font-bold text-white">{t('portfolio.risk_dashboard')}</span>
               {riskData.beta != null && (
                 <span className="text-[10px] font-bold px-2 py-0.5 rounded-full border bg-slate-500/10 text-slate-400 border-slate-500/20">
                   β {riskData.beta.toFixed(2)} · σ {riskData.volatility != null ? `${(riskData.volatility * 100).toFixed(1)}%` : '—'}
@@ -337,7 +338,7 @@ export default function Portfolio() {
                   {/* Sector concentration */}
                   {riskData.sector_weights.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">Sector Concentration</p>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('portfolio.sector_concentration')}</p>
                       <div className="space-y-2">
                         {riskData.sector_weights.map(s => (
                           <div key={s.sector} className="space-y-1">
@@ -365,11 +366,11 @@ export default function Portfolio() {
                       <table className="w-full text-xs min-w-[440px]">
                         <thead>
                           <tr className="text-[9px] uppercase tracking-wider text-slate-500 bg-white/[0.01]">
-                            <th className="px-4 py-2.5 text-left font-bold">Ticker</th>
-                            <th className="px-4 py-2.5 text-left font-bold">Sector</th>
-                            <th className="px-4 py-2.5 text-right font-bold">Weight</th>
-                            <th className="px-4 py-2.5 text-right font-bold">Beta</th>
-                            <th className="px-4 py-2.5 text-right font-bold">Vol (ann.)</th>
+                            <th className="px-4 py-2.5 text-left font-bold">{t('portfolio.col_ticker')}</th>
+                            <th className="px-4 py-2.5 text-left font-bold">{t('portfolio.col_sector')}</th>
+                            <th className="px-4 py-2.5 text-right font-bold">{t('portfolio.col_weight')}</th>
+                            <th className="px-4 py-2.5 text-right font-bold">{t('portfolio.col_beta')}</th>
+                            <th className="px-4 py-2.5 text-right font-bold">{t('portfolio.col_volatility')}</th>
                           </tr>
                         </thead>
                         <tbody className="divide-y divide-white/[0.02]">
@@ -398,7 +399,7 @@ export default function Portfolio() {
                   {/* Top correlations */}
                   {riskData.correlation.length > 0 && (
                     <div className="space-y-2">
-                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">High Correlations</p>
+                      <p className="text-[10px] font-bold text-slate-500 uppercase tracking-widest">{t('portfolio.high_correlations')}</p>
                       <div className="flex flex-wrap gap-2">
                         {riskData.correlation
                           .filter(c => c.ticker_a < c.ticker_b && Math.abs(c.correlation) >= 0.6)
@@ -410,7 +411,7 @@ export default function Portfolio() {
                             </span>
                           ))}
                         {riskData.correlation.filter(c => c.ticker_a < c.ticker_b && Math.abs(c.correlation) >= 0.6).length === 0 && (
-                          <p className="text-[11px] text-slate-500 italic">No high correlations detected — good diversification.</p>
+                          <p className="text-[11px] text-slate-500 italic">{t('portfolio.no_high_correlations')}</p>
                         )}
                       </div>
                     </div>
@@ -453,7 +454,7 @@ export default function Portfolio() {
               </div>
               
               <div className="space-y-1">
-                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Net Asset Value (NAV)</span>
+                <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">{t('portfolio.nav')}</span>
                 <div className="flex items-center gap-1.5">
                   <DollarSign size={20} className={positive ? 'text-emerald-400' : 'text-rose-400'} />
                   <span className="text-2xl font-display font-extrabold text-white leading-none">
@@ -506,7 +507,7 @@ export default function Portfolio() {
           <div className="p-12 text-center">
             <Briefcase size={32} className="mx-auto text-slate-600 mb-3 opacity-30" />
             <p className="text-slate-400 text-xs font-semibold">{t('portfolio.no_positions')}</p>
-            <p className="text-[10px] text-slate-500 mt-1">Acquire assets via mock simulation trading or trigger autonomous strategies</p>
+            <p className="text-[10px] text-slate-500 mt-1">{t('portfolio.empty_hint')}</p>
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -536,7 +537,7 @@ export default function Portfolio() {
                         <span className="flex items-center gap-1.5">
                           {h.ticker}
                           {longHeld && (
-                            <span title={t('portfolio.long_held_hint').replace('{days}', String(days))} className="text-[9px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded-full normal-case">
+                            <span title={t('portfolio.long_held_hint', { days })} className="text-[9px] font-bold text-amber-300 bg-amber-500/15 border border-amber-500/30 px-1.5 py-0.5 rounded-full normal-case">
                               {days}d
                             </span>
                           )}
@@ -574,15 +575,10 @@ export default function Portfolio() {
   )
 }
 
-interface CorrData {
-  tickers: string[]
-  matrix: number[][]
-  avg_correlation: number | null
-  warning: string | null
-}
-
-function corrColor(v: number, isDiag: boolean): string {
-  if (isDiag) return 'bg-slate-800/60 text-slate-500'
+function corrColor(v: number | null, isDiag: boolean): string {
+  // Null where two tickers share no overlapping price history, so the pair has
+  // no correlation to colour rather than a correlation of zero.
+  if (isDiag || v === null) return 'bg-slate-800/60 text-slate-500'
   if (v < 0) return 'bg-sky-500/20 text-sky-300'
   if (v < 0.3) return 'bg-emerald-500/20 text-emerald-300'
   if (v < 0.7) return 'bg-amber-500/20 text-amber-300'
@@ -590,18 +586,19 @@ function corrColor(v: number, isDiag: boolean): string {
 }
 
 function CorrelationHeatmap() {
+  const { t } = useTranslation()
   const [period, setPeriod] = useState('90d')
 
   const query = useTradingGetCorrelation({ period })
-  const data = (query.data ?? null) as unknown as CorrData | null
+  const data = query.data ?? null
   const loading = query.isPending
 
   const diversificationLabel = (avg: number | null) => {
     if (avg === null) return ''
-    if (avg < 0.3) return '✓ Excellent diversification'
-    if (avg < 0.5) return '✓ Good diversification'
-    if (avg < 0.7) return '⚠ Moderate — consider diversifying'
-    return '⚠ High correlation — low diversification'
+    if (avg < 0.3) return `✓ ${t('portfolio.diversification_excellent')}`
+    if (avg < 0.5) return `✓ ${t('portfolio.diversification_good')}`
+    if (avg < 0.7) return `⚠ ${t('portfolio.diversification_moderate')}`
+    return `⚠ ${t('portfolio.diversification_low')}`
   }
 
   return (
@@ -609,7 +606,7 @@ function CorrelationHeatmap() {
       <div className="px-5 py-3.5 border-b border-white/[0.04] flex items-center justify-between">
         <div className="flex items-center gap-2">
           <Grid3x3 size={14} className="text-violet-400" />
-          <span className="text-sm font-bold text-white">Correlation Heatmap</span>
+          <span className="text-sm font-bold text-white">{t('portfolio.correlation_heatmap')}</span>
           <span className="text-[10px] text-slate-500 ml-1">— pairwise return correlations</span>
         </div>
         <select
@@ -639,7 +636,7 @@ function CorrelationHeatmap() {
           <div className="space-y-4">
             {data.avg_correlation !== null && (
               <div className="flex items-center gap-3">
-                <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">Avg correlation</div>
+                <div className="text-[10px] text-slate-500 uppercase font-bold tracking-widest">{t('portfolio.avg_correlation')}</div>
                 <div className={`font-mono font-bold text-sm ${data.avg_correlation >= 0.7 ? 'text-rose-400' : data.avg_correlation >= 0.5 ? 'text-amber-400' : 'text-emerald-400'}`}>
                   {data.avg_correlation.toFixed(3)}
                 </div>
@@ -667,7 +664,7 @@ function CorrelationHeatmap() {
                         const v = data.matrix[i][j]
                         return (
                           <td key={j} className={`text-center rounded px-1 py-1.5 ${corrColor(v, i === j)}`}>
-                            {i === j ? '—' : v.toFixed(2)}
+                            {i === j || v === null ? '—' : v.toFixed(2)}
                           </td>
                         )
                       })}

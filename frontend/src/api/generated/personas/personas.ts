@@ -27,13 +27,11 @@ import type {
 import type {
   HTTPValidationError,
   PersonaCreate,
+  PersonaRead,
   PersonaUpdate,
-  PersonasCreatePersona201,
   PersonasCreatePersonaParams,
   PersonasDeletePersonaParams,
-  PersonasListAllPersonas200Item,
   PersonasListAllPersonasParams,
-  PersonasUpdatePersona200,
   PersonasUpdatePersonaParams
 } from '../model';
 
@@ -68,7 +66,7 @@ export const personasListAllPersonas = (
 ) => {
 
 
-      return customInstance<PersonasListAllPersonas200Item[]>(
+      return customInstance<PersonaRead[]>(
       {url: `/api/personas`, method: 'GET',
         params, signal
     },
@@ -162,7 +160,7 @@ export const personasCreatePersona = (
 ) => {
 
 
-      return customInstance<PersonasCreatePersona201>(
+      return customInstance<PersonaRead>(
       {url: `/api/personas`, method: 'POST',
       headers: {'Content-Type': 'application/json', },
       data: personaCreate,
@@ -293,7 +291,7 @@ export const personasUpdatePersona = (
 ) => {
 
 
-      return customInstance<PersonasUpdatePersona200>(
+      return customInstance<PersonaRead>(
       {url: `/api/personas/${key}`, method: 'PUT',
       headers: {'Content-Type': 'application/json', },
       data: personaUpdate,

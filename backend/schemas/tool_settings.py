@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -25,10 +25,32 @@ class ToolSettingsUpdate(BaseModel):
     tools: dict[str, ToolSettingUpdateValue]
 
 
+class SettingOptionMeta(BaseModel):
+    """One choice in a settings dropdown.
+
+    The engine emits exactly these two keys; declaring them means the generated
+    frontend client gets a real type instead of a free-form object, which is
+    what previously forced the settings panels to cast.
+    """
+
+    value: str
+    label_key: str
+
+
+# Mirrors the engine's own Literals in
+# `trading_agents/agents/tools/base.py`. Declaring them here rather than as
+# bare `str` is what lets the generated frontend client keep the narrow unions
+# its form builder switches on, instead of casting them back.
+ToolSettingTypeName = Literal[
+    "boolean", "number", "string", "textarea", "select", "multi_select", "string_list", "secret"
+]
+SettingScope = Literal["server", "user", "both"]
+
+
 class ToolSettingFieldMeta(BaseModel):
     key: str
-    type: str
-    scope: str
+    type: ToolSettingTypeName
+    scope: SettingScope
     label_key: str
     description_key: str | None = None
     default: Any = None
@@ -36,7 +58,7 @@ class ToolSettingFieldMeta(BaseModel):
     min: float | None = None
     max: float | None = None
     step: float | None = None
-    options: list[dict] = Field(default_factory=list)
+    options: list[SettingOptionMeta] = Field(default_factory=list)
     secret: bool = False
     advanced: bool = False
 

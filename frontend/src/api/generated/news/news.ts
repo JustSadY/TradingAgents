@@ -22,7 +22,7 @@ import type {
 
 import type {
   HTTPValidationError,
-  NewsNewsFeed200Item,
+  NewsItem,
   NewsNewsFeedParams
 } from '../model';
 
@@ -57,7 +57,7 @@ export const newsNewsFeed = (
 ) => {
 
 
-      return customInstance<NewsNewsFeed200Item[]>(
+      return customInstance<NewsItem[]>(
       {url: `/api/news/feed`, method: 'GET',
         params, signal
     },

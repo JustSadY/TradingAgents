@@ -79,14 +79,55 @@ class UserPermissionsResponse(BaseModel):
     user_id: int
     permissions: dict[str, bool]
 
+class ToolAccessPerms(BaseModel):
+    """What a user may do with one tool."""
+
+    can_view: bool
+    can_use: bool
+    can_edit: bool
+    can_enable: bool
+
+class ToolFieldAccessPerms(BaseModel):
+    """What a user may do with one setting field of one tool."""
+
+    can_view: bool
+    can_edit: bool
+
+class ToolAccessPermsUpdate(BaseModel):
+    """A partial permission change; omitted keys keep their stored value.
+
+    ``extra="forbid"`` keeps the guarantee the service used to enforce by hand,
+    that an unrecognised permission name is rejected rather than ignored.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    can_view: bool | None = None
+    can_use: bool | None = None
+    can_edit: bool | None = None
+    can_enable: bool | None = None
+
+class ToolFieldAccessPermsUpdate(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    can_view: bool | None = None
+    can_edit: bool | None = None
+
+# Access maps are keyed by agent key, tool key, and tool key -> field key. The
+# keys are dynamic, but the values are not, so these describe the payload as
+# precisely as it can be described — the routes used to return a bare dict.
+AgentAccessMap = dict[str, bool]
+ToolAccessMap = dict[str, ToolAccessPerms]
+ToolFieldAccessMap = dict[str, dict[str, ToolFieldAccessPerms]]
+
 class AgentAccessUpdateResponse(BaseModel):
     detail: str
-    agents: dict
+    agents: AgentAccessMap
 
 class ToolAccessUpdateResponse(BaseModel):
     detail: str
-    tools: dict
+    tools: ToolAccessMap
 
 class ToolFieldAccessUpdateResponse(BaseModel):
     detail: str
-    fields: dict
+    fields: ToolFieldAccessMap

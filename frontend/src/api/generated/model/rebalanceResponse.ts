@@ -8,8 +8,8 @@
 import type { RebalanceSuggestion } from './rebalanceSuggestion';
 
 export interface RebalanceResponse {
-  issues?: string[];
+  issues: string[];
   score: number;
-  suggestions?: RebalanceSuggestion[];
+  suggestions: RebalanceSuggestion[];
   summary: string;
 }

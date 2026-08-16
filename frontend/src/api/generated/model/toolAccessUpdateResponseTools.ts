@@ -5,5 +5,6 @@
  * AI-powered trading dashboard with simulation and live trading support
  * OpenAPI spec version: 1.0.0
  */
+import type { ToolAccessPerms } from './toolAccessPerms';
 
-export type ToolAccessUpdateResponseTools = { [key: string]: unknown };
+export type ToolAccessUpdateResponseTools = {[key: string]: ToolAccessPerms};

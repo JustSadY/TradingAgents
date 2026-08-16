@@ -38,7 +38,10 @@ class PortfolioRead(BaseModel):
 
 class CorrelationResponse(BaseModel):
     tickers: list[str]
-    matrix: list[list]
+    #: Square correlation matrix, row-aligned with ``tickers``. Pandas yields
+    #: NaN wherever two series share no overlapping dates, and that serialises
+    #: to null rather than a number.
+    matrix: list[list[float | None]]
     avg_correlation: float | None
     warning: str | None
 

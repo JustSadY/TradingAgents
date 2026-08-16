@@ -13,7 +13,7 @@ export const NewsFeed: React.FC<NewsFeedProps> = ({ news, t }) => {
     <div className="lg:col-span-1 glass-panel rounded-2xl p-5 border-white/[0.04] bg-slate-900/20">
       <h3 className="text-xs font-bold text-white uppercase tracking-widest mb-4 flex items-center justify-between">
         {t('dashboard.watchlist_news')}
-        <span className="text-[9px] text-slate-500 font-normal normal-case">Live feed</span>
+        <span className="text-[9px] text-slate-500 font-normal normal-case">{t('dashboard.news_live')}</span>
       </h3>
       <div className="space-y-4">
         {news.map((item, i) => (
@@ -32,7 +32,7 @@ export const NewsFeed: React.FC<NewsFeedProps> = ({ news, t }) => {
           </a>
         ))}
         {news.length === 0 && (
-          <p className="text-[11px] text-slate-600 italic py-4">No news for your watchlist tickers</p>
+          <p className="text-[11px] text-slate-600 italic py-4">{t('dashboard.news_empty')}</p>
         )}
       </div>
     </div>

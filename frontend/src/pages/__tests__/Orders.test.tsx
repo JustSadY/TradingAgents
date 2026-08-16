@@ -50,25 +50,8 @@ vi.mock('../../api/generated/trading/trading', () => ({
   useTradingGenerateTradeDebrief: () => ({ mutate: mocks.debrief, isPending: false }),
 }))
 
-vi.mock('../../contexts/LanguageContext', () => ({
-  useTranslation: () => ({
-    t: (key: string) => {
-      const map: Record<string, string> = {
-        'orders.title': 'Orders',
-        'orders.loading': 'Loading orders...',
-        'orders.empty': 'No orders yet',
-        'orders.col_symbol': 'Symbol',
-        'orders.col_direction': 'Direction',
-        'orders.col_quantity': 'Qty',
-        'orders.col_price': 'Price',
-        'orders.col_total': 'Total',
-        'orders.col_status': 'Status',
-        'orders.col_signal': 'Signal',
-        'orders.col_date': 'Date',
-      }
-      return map[key] || key
-    },
-  }),
+vi.mock('../../contexts/LanguageContext', async () => ({
+  useTranslation: (await import('../../test/i18nMock')).useTranslationMock,
 }))
 
 vi.mock('../../utils/notify', () => ({ notify: vi.fn() }))
@@ -120,7 +103,7 @@ describe('Orders', () => {
   it('renders the shared empty state', () => {
     mocks.ordersQuery.data = []
     renderPage()
-    expect(screen.getByText('No orders yet')).toBeInTheDocument()
+    expect(screen.getByText('No orders yet.')).toBeInTheDocument()
   })
 
   it('opens the trade journal from a row action', async () => {
