@@ -39,6 +39,38 @@ jobs:
       - name: Apply deterministic source migration
         run: python .github/scripts/remove_retired_trader_history.py
 
+      - name: Clean transformed TypeScript leftovers
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          history_path = Path('frontend/src/components/analysis/tabs/HistoryTab.tsx')
+          history = history_path.read_text()
+          history = history.replace("import { readPortfolioDecision } from '../../../analysis/portfolioDecision'\n", '')
+          history = history.replace(
+              "  const historyPortfolioDecision = detail\n"
+              "    ? readPortfolioDecision(detail.portfolio_decision_json, detail.chart_annotations)\n"
+              "    : null\n",
+              '',
+          )
+          if 'historyPortfolioDecision' in history or "import { readPortfolioDecision }" in history:
+              raise SystemExit('HistoryTab still contains obsolete direct portfolio decision reader')
+          history_path.write_text(history)
+
+          analysis_path = Path('frontend/src/pages/Analysis.tsx')
+          analysis = analysis_path.read_text()
+          analysis = analysis.replace('                            legacyTraderJson={activeLegacyTraderProposal}\n', '')
+          if 'activeLegacyTraderProposal' in analysis or 'legacyTraderJson=' in analysis:
+              raise SystemExit('Analysis page still contains retired Trader decision prop')
+          analysis_path.write_text(analysis)
+
+          shared_path = Path('frontend/src/pages/SharedReport.tsx')
+          shared = shared_path.read_text()
+          shared = shared.replace('  FileText, BookOpen, Scale, Zap,\n', '  FileText, BookOpen, Scale,\n')
+          shared_path.write_text(shared)
+          PY
+
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
 
