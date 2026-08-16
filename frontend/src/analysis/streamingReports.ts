@@ -111,7 +111,6 @@ export const STREAMING_REPORT_KEYS: Record<string, string> = {
   agent_qa: 'agent_qa_report',
   portfolio_manager: 'final_decision',
   research_manager: 'investment_plan',
-  trader: 'trader_plan',
 }
 
 /**
