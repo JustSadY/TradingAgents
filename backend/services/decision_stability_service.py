@@ -254,45 +254,6 @@ def evaluate_decision_stability(
     )
 
 
-class DecisionStabilityController:
-    """Small reusable wrapper around :func:`evaluate_decision_stability`."""
-
-    def __init__(self, thresholds: StabilityThresholds | Mapping[str, Any] | None = None) -> None:
-        self.thresholds = _coerce_thresholds(thresholds)
-
-    def evaluate(
-        self,
-        proposal: Mapping[str, Any] | None = None,
-        previous_accepted_decision: Mapping[str, Any] | None = None,
-        candidate_strategy_action: str | Mapping[str, Any] | None = None,
-        run_quality: Any = None,
-        calibrated_confidence: Any = None,
-        evidence_groups: Mapping[str, Any] | Sequence[Any] | None = None,
-        triggered_invalidations: Any = None,
-        hard_risk: Any = None,
-        *,
-        pm_proposal: Mapping[str, Any] | None = None,
-        strategy_action: str | Mapping[str, Any] | None = None,
-        quality: Any = None,
-        invalidations: Any = None,
-        hard_risk_exit: Any = None,
-    ) -> dict[str, Any]:
-        return evaluate_decision_stability(
-            proposal,
-            previous_accepted_decision,
-            candidate_strategy_action,
-            run_quality,
-            calibrated_confidence,
-            evidence_groups,
-            triggered_invalidations,
-            hard_risk,
-            pm_proposal=pm_proposal,
-            strategy_action=strategy_action,
-            quality=quality,
-            invalidations=invalidations,
-            hard_risk_exit=hard_risk_exit,
-            thresholds=self.thresholds,
-        )
 
 
 def _coerce_thresholds(value: StabilityThresholds | Mapping[str, Any] | None) -> StabilityThresholds:
@@ -770,7 +731,6 @@ def _with_shadow_fields(result: dict[str, Any]) -> dict[str, Any]:
 
 
 __all__ = [
-    "DecisionStabilityController",
     "RATING_SCORES",
     "StabilityThresholds",
     "evaluate_decision_stability",
