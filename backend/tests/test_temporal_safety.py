@@ -52,7 +52,7 @@ def test_retired_checkpoint_node_detection_is_case_and_separator_safe():
 
 
 @pytest.mark.asyncio
-async def test_checkpoint_listing_hides_retired_trader_nodes(monkeypatch):
+async def test_checkpoint_listing_rejects_entire_retired_trader_topology(monkeypatch):
     checkpoints = [
         SimpleNamespace(
             metadata={"step": 0},
@@ -68,7 +68,15 @@ async def test_checkpoint_listing_hides_retired_trader_nodes(monkeypatch):
                 },
                 "ts": "2026-08-01T00:01:00Z",
             },
-            config={"configurable": {"checkpoint_id": "portfolio-manager"}},
+            config={"configurable": {"checkpoint_id": "legacy-after-trader"}},
+        ),
+        SimpleNamespace(
+            metadata={"step": 2},
+            checkpoint={
+                "versions_seen": {"Portfolio Manager": {"state": 2}},
+                "ts": "2026-08-01T00:02:00Z",
+            },
+            config={"configurable": {"checkpoint_id": "current-portfolio-manager"}},
         ),
     ]
 
@@ -85,7 +93,7 @@ async def test_checkpoint_listing_hides_retired_trader_nodes(monkeypatch):
 
     visible = await checkpointer.list_checkpoints_for_thread("unused", "AAPL", "2026-08-01", "scope")
 
-    assert [item["checkpoint_id"] for item in visible] == ["portfolio-manager"]
+    assert [item["checkpoint_id"] for item in visible] == ["current-portfolio-manager"]
     assert all(item["node"] != "Trader" for item in visible)
 
 
