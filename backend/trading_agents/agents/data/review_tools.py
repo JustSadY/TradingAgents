@@ -8,15 +8,17 @@ from langchain_core.tools import tool
 _logger = logging.getLogger(__name__)
 
 def _past_decision_for_review(analysis) -> tuple[str, str]:
-    """Choose the prior run's single final decision for a performance review.
+    """Choose the prior run's canonical final decision for a performance review.
 
     Old rows can retain a ``trader_plan`` for display, but a new review must
-    learn from the Portfolio Manager's actual final decision rather than
-    reintroducing a retired second AI as a source of truth.
+    learn from the persisted canonical final decision rather than reintroducing
+    a retired second AI as a source of truth. Depending on the stability mode,
+    that canonical decision may be the Portfolio Manager proposal or a
+    controller-enforced decision.
     """
     final_decision = str(getattr(analysis, "final_decision", "") or "").strip()
     if final_decision:
-        return final_decision, "PAST FINAL PORTFOLIO MANAGER DECISION"
+        return final_decision, "PAST CANONICAL FINAL DECISION"
 
     legacy_plan = str(getattr(analysis, "trader_plan", "") or "").strip()
     if legacy_plan:
