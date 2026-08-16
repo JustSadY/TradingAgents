@@ -44,6 +44,7 @@ jobs:
           test_path = Path('backend/tests/test_services/test_decision_stability_service.py')
           tests = test_path.read_text()
           tests = tests.replace('    DecisionStabilityController,\n', '')
+          tests = tests.replace('    StabilityThresholds,\n', '')
           wrapper_test = '\ndef test_controller_wrapper_uses_custom_thresholds() -> None:'
           wrapper_start = tests.index(wrapper_test)
           tests = tests[:wrapper_start].rstrip() + '\n'
