@@ -1,4 +1,5 @@
 name: LEG019 cleanup
+# rerun after obsolete cleanup tooling removal
 
 on:
   push:
