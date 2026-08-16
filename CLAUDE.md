@@ -1,17 +1,17 @@
 # CLAUDE.md
 
-This file provides concise implementation guidance for AI coding agents working in the TradingAgents repository. Treat the current source code and the maintained architecture docs as authoritative; do not resurrect roadmap-only behavior from historical audit or patch-note files.
+This file provides implementation guidance for AI coding agents working in the TradingAgents repository. Treat current source code and maintained architecture documentation as authoritative. Historical audits, patch notes, and upgrade snapshots are evidence about prior states, not current architecture contracts.
 
 ## Start here
 
 - [`docs/introduction.md`](docs/introduction.md) — documentation index and current system model.
-- [`docs/architecture/overview.md`](docs/architecture/overview.md) — current runtime architecture.
+- [`docs/architecture/overview.md`](docs/architecture/overview.md) — runtime architecture.
 - [`backend/README.md`](backend/README.md) — backend layering and API conventions.
 - [`backend/trading_agents/README.md`](backend/trading_agents/README.md) — multi-agent engine, tools, and LLM clients.
 - [`docs/configuration.md`](docs/configuration.md) — environment/runtime configuration.
 - [`docs/installation.md`](docs/installation.md) — Linux, Docker, and local setup.
 
-Historical files such as `docs/AUDIT_2026-08-04.md`, `docs/PATCH_NOTES_2026-08-04.md`, and `docs/VALIDATION_2026-08-04.md` are snapshots, not the current architecture contract.
+Historical files such as `docs/AUDIT_2026-08-04.md`, `docs/PATCH_NOTES_2026-08-04.md`, and `docs/VALIDATION_2026-08-04.md` are snapshots only. Do not resurrect behavior from them unless the current code and migration history require it.
 
 ---
 
@@ -29,31 +29,39 @@ TradingAgents consists of:
 
 ### Decision flow
 
+The current top-level analysis graph is strategy-aware and linear:
+
 ```text
 START
   ↓
-Market Intelligence / enabled analyst plugins
+Strategy Context Loader
   ↓
-Cross-examination + research synthesis / Bull-Bear debate
+Analysis Planner
   ↓
-Risk Debate (aggressive / conservative / neutral evidence)
+Market Intelligence
   ↓
-Portfolio Manager (sole final structured investment decision)
+Agent Q&A
   ↓
-Validation + deterministic application-side execution controls
+Research Manager
+  ↓
+Risk Debate
+  ↓
+Strategy Reconciler
+  ↓
+Portfolio Manager
+  ↓
+Decision Stability Controller
   ↓
 END
 ```
 
-The current analyst catalog contains 12 specialized analyst plugins. Analysts, researchers, and risk agents produce evidence. The **Portfolio Manager is the only agent with final decision authority**. Risk agents do not independently own final Buy/Sell/Hold direction, allocation, quantity, leverage, stop, or target.
+Analysts, researchers, and risk agents produce evidence, debate, and guardrails. The **Portfolio Manager is the sole AI proposal authority**: it converts the evidence into one structured raw trade proposal. That proposal is not automatically executable.
 
-Agent output is still not equivalent to an executable order. Application-side cash, exposure, concentration, risk, broker, and trading-mode controls can reduce or reject the final proposal.
+The deterministic **Decision Stability Controller is the final graph stage**. When enforcement applies it decides which proposal becomes canonical, may reject a change, downgrade to Hold, or permit only a risk-reduction action. Application-side cash, exposure, concentration, broker, trading-mode, and other deterministic execution controls still apply after the graph.
 
-Portfolio rebalancing sits outside this graph and follows the same rule more
-strictly: `portfolio_rebalance_planner` computes every action, quantity, issue
-and health score in exact decimal arithmetic, and the model only writes the
-summary and per-trade rationale. Do not move a number back into the prompt —
-these suggestions feed an order form.
+Do not describe the Portfolio Manager as the unconditional final execution authority, and do not reintroduce the retired Trader agent as a live decision source.
+
+Portfolio rebalancing sits outside this graph. `portfolio_rebalance_planner` computes actions, quantities, issues, and health scores in exact decimal arithmetic; the model writes summaries/rationales rather than authoritative numeric execution values.
 
 ---
 
@@ -69,24 +77,23 @@ api → services → repositories → models
 
 Routers should remain thin:
 
-- validate requests
-- apply authentication/authorization dependencies
-- call services
-- return response schemas
+- validate request shape;
+- apply authentication/authorization dependencies;
+- call services;
+- map service errors to HTTP responses;
+- return response schemas.
 
-Do not place substantial business logic, external network calls, or ad-hoc database orchestration directly in route handlers.
-
-Declare static FastAPI paths before overlapping parameterized paths to avoid route shadowing.
+Do not place substantial business logic, external network calls, token/session orchestration, or ad-hoc SQL directly in route handlers. Declare static FastAPI paths before overlapping parameterized paths to avoid route shadowing.
 
 ### `backend/services/`
 
-Services own business logic, orchestration, vendor IO, calculations, analysis execution, notifications, trading workflows, updates, and scheduling.
+Services own business logic, orchestration, vendor IO, calculations, auth/session workflows, analysis execution, notifications, trading workflows, updates, and scheduling.
 
-Do not block the event loop with heavy synchronous work. Use the existing async APIs or appropriate `asyncio.to_thread`/worker boundaries where needed.
+Services may depend on repositories, models, schemas, core utilities, and the trading engine. Services must not import `backend.api`.
 
 ### `backend/repositories/`
 
-Repositories/shared query helpers own repeated persistence logic. Preserve per-user scoping for user-owned resources; do not introduce IDOR regressions.
+Repositories/shared query helpers own reusable persistence logic. Preserve per-user scoping for user-owned resources and row-locking semantics where required. Do not move business decisions into repositories.
 
 ### `backend/models/` and `backend/schemas/`
 
@@ -99,46 +106,38 @@ For financial amounts, preserve the repository's exact-decimal conventions rathe
 
 ## Database and migrations
 
-PostgreSQL is the supported primary database.
+PostgreSQL is the supported primary database and Alembic is the schema authority.
 
-Alembic is the sole schema authority. Outside production the app upgrades the database to the Alembic head on startup; in production it refuses to serve a database that is not already at head, so the migration step must run before web/worker processes start.
+Outside production, startup upgrades PostgreSQL to Alembic head. In production the app refuses to serve a database that is not already at head, so deployment must run migrations first.
 
-Every schema change needs a revision — additive ones included. SQLite is a development/test convenience only: it builds from ORM metadata via `create_all` and has no migration path, so delete the file to pick up model changes.
+Every schema change needs a revision — additive ones included. SQLite is a development/test convenience: it builds from ORM metadata with `create_all` and has no migration path, so delete an old SQLite file to pick up model changes.
 
-That split is also the trap: the test suite runs on SQLite built from the
-models, production runs on PostgreSQL built from the migrations, and a model
-change with no revision behind it passes every test while never reaching a
-deployment. Adding `index=True` or `ondelete="CASCADE"` counts — both have
-silently failed to reach production this way before.
+The test-suite/production split is important: tests commonly build SQLite from ORM metadata while production PostgreSQL is created by migrations. A model change with no revision can therefore pass ordinary tests and still be absent in production. `index=True`, foreign-key cascade changes, and constraint changes count as schema changes.
 
-Check a schema change against a real database before trusting it:
+Check schema work against migration drift tooling before trusting it:
 
 ```bash
 MIGRATION_DRIFT_DATABASE_URL=postgresql+asyncpg://postgres@localhost/ta_drift \
     uv run pytest tests/test_core/test_migration_drift.py
 ```
 
-It migrates a throwaway database from scratch and asserts the result matches
-`Base.metadata`, so anything the models declare and the migrations do not
-becomes a failure rather than a production surprise. Tables Alembic owns
-without an ORM model are listed in `core/migration_policy.py`.
+### Legacy unversioned PostgreSQL schemas
+
+Development startup still contains an explicit migration bridge for a **complete unversioned historical application schema**: it validates the known baseline table set, stamps baseline revision `89f1a049b357`, then upgrades to head. This is compatibility code for old installations, not a pattern for new migrations. Do not extend it casually.
 
 ### LangGraph checkpoints
 
-Analysis checkpoints are stored in the application database when `DATABASE_URL`
-points at PostgreSQL, so a run can resume on any worker or pod and one backup
-policy covers both. A non-PostgreSQL `DATABASE_URL` (the test suite, or a SQLite
-deployment) falls back to per-analysis SQLite files under the data cache dir.
+LangGraph checkpoints require PostgreSQL. `backend/trading_agents/graph/checkpointer.py` uses `PostgresSaver` / `AsyncPostgresSaver`; the old SQLite checkpoint fallback and file-import path are gone.
 
-LangGraph owns the checkpoint schema; its `setup()` is idempotent and runs once
-per process, so those tables are deliberately not in Alembic. Every application
-table still belongs to Alembic.
+LangGraph owns its checkpoint tables. Saver `setup()` is idempotent/version-aware and runs once per DSN per process, so those tables are intentionally outside Alembic. Every application-owned table remains Alembic-managed.
+
+Time Travel exposes only checkpoints compatible with the current graph topology. Historical checkpoints containing retired Trader nodes are not resumable.
 
 ---
 
 ## Multi-agent package
 
-The agent engine lives under:
+The engine lives under:
 
 ```text
 backend/trading_agents/
@@ -156,95 +155,76 @@ backend/trading_agents/
 └── llm_clients/
 ```
 
-### Agent hierarchy
+Use `backend.trading_agents.*` imports. The old top-level `tradingagents` compatibility package/alias is not the runtime contract.
 
-Use the existing agent catalog/hierarchy as the source of truth for parent-child relationships, enable/disable behavior, and LLM fallback resolution. Do not duplicate agent catalogs in UI or service code when metadata can be consumed from the existing source.
+### Agent hierarchy and metadata
+
+Use the existing agent catalog/hierarchy as the source of truth for parent-child relationships, enable/disable behavior, labels, defaults, and LLM fallback resolution. Do not duplicate agent catalogs in frontend or services when `/api/meta` can publish the metadata.
 
 ### Tool system
 
-New agent tools belong under `backend/trading_agents/agents/tools/` and should use the existing registry and settings-schema infrastructure.
+New agent tools belong under `backend/trading_agents/agents/tools/` and should use the existing registry/settings-schema infrastructure.
 
 Typical steps:
 
 1. Implement the tool class/adapter.
-2. Define stable key, category, allowed analysts, defaults, and settings schema.
+2. Define a stable key, category, allowed analysts, defaults, and settings schema.
 3. Return LangChain-compatible tool functions.
 4. Register/import it through the bootstrap path.
 5. Add frontend i18n labels for user-visible metadata.
 6. Respect system and user-level tool access rules.
 
-Do not hardcode duplicate settings controls in React when `/api/meta`/tool metadata can drive them.
+Data-vendor/service credentials belong in the tool-settings system when the tool owns them. Secret fields are persisted as Fernet ciphertext; runtime plaintext fallback for migrated tool secrets has been removed.
+
+---
+
+## Authentication and credentials
+
+Access tokens are short-lived JWTs. Browser refresh credentials live in an HttpOnly cookie at the `/auth` path. Browser responses return access tokens only; do not add a refresh token back to `TokenResponse`.
+
+`RefreshRequest.refresh_token` remains intentionally supported for non-browser CLI/API clients that cannot use the HttpOnly cookie. Do not confuse this request compatibility with the removed response-body refresh-token field.
+
+Password hashing lives in `backend/core/password_hashing.py`. New passwords use Argon2 through `pwdlib`; bcrypt remains registered only to verify historical hashes and upgrade them to Argon2 after a successful login. Do not import password helpers through `backend.core.security`.
+
+LLM/provider API keys are configured through the Web UI and stored encrypted in PostgreSQL. Do not reintroduce plaintext database fallbacks.
 
 ---
 
 ## Retries and error classification
 
-`classify_error` in `llm_clients/base_client.py` is the **single** error
-taxonomy: `auth`, `quota`, `timeout`, `provider_degraded`, `transient`, `bug`.
-Those strings are emitted as Prometheus labels (`NODE_ERRORS_BY_TYPE`) and on
-the analysis WebSocket, so changing one is an observable change. `resilience`
-re-exports it; do not add a second classifier.
+`classify_error` in `llm_clients/base_client.py` is the single error taxonomy: `auth`, `quota`, `timeout`, `provider_degraded`, `transient`, `bug`. These strings are observable through metrics/events.
 
-Three things can repeat a failed LLM call. Know which one you are changing:
+Three mechanisms can repeat a failed LLM call:
 
 | Layer | Where | Default |
 | --- | --- | --- |
 | Node retry | `retry_call` / `guard_node` | `node_retry_attempts`, 2 attempts |
-| Provider SDK retry | LangChain client `max_retries` | **0** — `SDK_RETRIES`, set on every client |
-| Provider failover | `FallbackLLM` | length of the configured chain |
+| Provider SDK retry | LangChain client `max_retries` | 0 by default |
+| Provider failover | `FallbackLLM` | configured chain length |
 
-`retry_call` is the single retry authority. LangChain clients default to ~2
-internal retries of their own; leaving that unset multiplied with the node
-attempts and the fallback chain, so the engine now pins it to 0. An explicit
-`max_retries` in agent settings still wins. There is deliberately **no**
-analysis-level retry: `_maybe_retry_analysis` returns `False` on purpose.
+`retry_call` is the application retry authority. Keep provider SDK retries disabled by default so node retry × SDK retry × failover does not multiply attempts unexpectedly. There is deliberately no analysis-level retry loop.
 
-`retry_call` drives `tenacity.AsyncRetrying`; the loop, backoff and re-raise
-come from the library, while what counts as retryable stays in
-`_is_retryable`. Backoff uses **full jitter** — uniform in
-`[0, node_retry_base_delay * 2 ** attempt]`. Analysts run concurrently, so a
-provider rate limit fails many calls at once; an unjittered schedule would
-send them all back at identical offsets as one burst. `_is_retryable` also
-refuses anything that is not an `Exception`, so a cancelled analysis stops on
-the first raise instead of being retried.
+Node circuit-breaker state is shared through Redis when `REDIS_URL` is configured and falls back to process memory if Redis is unavailable.
 
-Node circuit-breaker state lives in `agents/runtime/circuit_breaker.py`. It is
-shared through Redis when `REDIS_URL` is set, so one worker's observation of a
-failing provider protects the others, and falls back to process memory
-otherwise. A Redis outage degrades to local counting rather than failing nodes.
+---
 
 ## LLM providers
 
-The provider/model source of truth is:
+Provider/model source of truth:
 
 ```text
 backend/trading_agents/llm_clients/registry.py
 ```
 
-The UI consumes the catalog through:
+The frontend consumes the model catalog through:
 
 ```text
 GET /api/settings/llm-catalog
 ```
 
-Supported providers are registered centrally. Provider-specific reasoning controls should be mapped through the LLM client layer rather than scattered through agent prompts or frontend code.
+Do not scatter provider/model lists across frontend components.
 
-### API keys
-
-LLM and normal data-provider keys are **not developer `.env` values**. They are configured through the Web UI and stored encrypted in PostgreSQL.
-
-The root `.env` is primarily for infrastructure configuration such as:
-
-- `SECRET_KEY`
-- `DATABASE_URL`
-- `ADMIN_USERNAME`
-- `ADMIN_PASSWORD_HASH`
-- `ENCRYPTION_KEY`
-- `CORS_ORIGINS`
-- optional Redis/worker settings
-- observability/proxy/server-managed integration settings
-
-Use `.env.example` and `docs/configuration.md` as the current reference.
+Model cost lookup is owned by `backend/core/model_pricing.py`, which uses LiteLLM's pinned catalog plus explicit overrides/fallback behavior. Do not restore a second hand-maintained pricing table in a service.
 
 ---
 
@@ -256,7 +236,7 @@ Use `.env.example` and `docs/configuration.md` as the current reference.
 ANALYSIS_QUEUE_MODE=inline
 ```
 
-Analyses run inside the FastAPI process.
+Analyses run in the FastAPI process.
 
 ### Worker mode
 
@@ -281,20 +261,17 @@ Analysis progress is streamed through:
 /ws/analysis/{task_id}
 ```
 
-Do not put JWTs into WebSocket query strings. Preserve the existing subprotocol-based authentication design and `tradingagents.v1` application protocol.
+Do not put JWTs into WebSocket query strings. Preserve the subprotocol-based authentication design and periodic authorization revalidation.
 
 ### Analysis event vocabulary
 
-The socket carries no OpenAPI path, so its event types are declared once in
-`backend/schemas/analysis_events.py` and published through `/api/meta`. That is
-how they reach the generated TypeScript client, and it is what lets
-`frontend/src/analysis/__tests__/analysisEvents.test.ts` assert the browser
-handles every one.
+Socket event types are declared once in `backend/schemas/analysis_events.py` and published through `/api/meta`. The generated TypeScript client and frontend analysis-event tests use that vocabulary.
 
-A new event type therefore needs three things, and the tests fail without any
-of them: the literal added to `AnalysisEventType`, a branch in `Analysis.tsx`,
-and its key listed in `HANDLED_ANALYSIS_EVENTS`. Emitting a type that is not in
-the union fails `tests/test_services/test_analysis_event_contract.py`.
+A new event type needs:
+
+1. the backend event literal;
+2. a frontend handler branch;
+3. inclusion in `HANDLED_ANALYSIS_EVENTS`.
 
 ---
 
@@ -309,25 +286,17 @@ cp ../.env.example ../.env
 uv run uvicorn backend.main:app --reload --port 8000
 ```
 
-### Dependencies
-
-`backend/pyproject.toml` is the single hand-edited dependency manifest, locked by
-`backend/uv.lock`. There is no second dependency source: Docker, `deploy/install.sh`
-and `deploy/update.sh` all install with `uv sync --frozen`, so nothing can drift
-out of the lock.
+`backend/pyproject.toml` is the hand-edited dependency manifest and `backend/uv.lock` is the lock. Docker and deploy scripts install with `uv sync --frozen`; do not create a second dependency source.
 
 To change a dependency:
 
 ```bash
 cd backend
-# edit pyproject.toml, then:
+# edit pyproject.toml
 uv lock
 ```
 
-Commit the updated lock alongside the manifest. `uv lock --check` fails if the
-two disagree, and every install path runs it before syncing.
-
-Configure infrastructure values such as `DATABASE_URL`, `SECRET_KEY`, and `ENCRYPTION_KEY` in `.env` as needed. Configure LLM/provider keys after login through the Web UI, not in `.env`.
+Commit the lock update with the manifest.
 
 ### Frontend
 
@@ -337,7 +306,7 @@ npm install
 npm run dev
 ```
 
-The Vite development server runs at `http://localhost:5173` and proxies `/api`, `/auth`, and `/ws` to FastAPI on port `8000`.
+The Vite dev server proxies `/api`, `/auth`, and `/ws` to FastAPI.
 
 ### Quality checks
 
@@ -349,7 +318,7 @@ npm run lint
 npm run build
 ```
 
-Backend Ruff configuration is in `backend/pyproject.toml`:
+Backend:
 
 ```bash
 cd backend
@@ -357,7 +326,7 @@ ruff check .
 ruff format --check
 ```
 
-Run focused tests for the subsystem you modify in addition to lint/build checks.
+Run focused subsystem tests in addition to lint/build. Schema changes also need Alembic validation; API-contract changes should regenerate the frontend client rather than leaving generated models stale.
 
 ---
 
@@ -369,7 +338,7 @@ Run focused tests for the subsystem you modify in addition to lint/build checks.
 sudo bash deploy/install.sh
 ```
 
-Production frontend assets are built into `frontend/dist` and served by FastAPI in the Linux/systemd topology. The dashboard updater uses the repository's managed update flow; see `deploy/README.md`.
+Production frontend assets are built into `frontend/dist` and served by FastAPI in the Linux/systemd topology. The dashboard updater is a live subsystem; do not delete isolated updater/version/deploy compatibility pieces without redesigning the deployment contract as a whole.
 
 ### Docker Compose
 
@@ -378,14 +347,12 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-The current Compose topology contains PostgreSQL, Redis, backend, arq worker, frontend/nginx, Prometheus, postgres-exporter, and redis-exporter.
-
-`DB_PASSWORD` must be set for the current Compose stack. Do not expose loopback-bound monitoring ports publicly without an authenticated reverse proxy or VPN.
+The Compose topology includes PostgreSQL, Redis, backend, arq worker, frontend/nginx, Prometheus, postgres-exporter, and redis-exporter.
 
 ---
 
 ## Documentation discipline
 
-When a code change alters architecture, configuration, setup commands, endpoint ownership, provider registration, worker behavior, or agent authority, update the relevant maintained `.md` file in the same change.
+When code changes architecture, configuration, setup commands, endpoint ownership, provider registration, worker behavior, agent authority, persistence compatibility, or migration requirements, update the maintained documentation in the same change.
 
-Do not document planned features as implemented. If an idea such as a new analyst, scanner, vendor integration, or automated execution subsystem does not have corresponding production code, keep it in a clearly labeled roadmap/issue rather than the architecture overview.
+Do not document planned features as implemented. Do not preserve obsolete behavior merely because it appears in an old audit or patch note. When compatibility is still required for persisted data or external clients, document the migration/removal condition explicitly.
