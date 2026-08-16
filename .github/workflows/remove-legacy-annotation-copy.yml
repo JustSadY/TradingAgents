@@ -1,0 +1,77 @@
+name: Remove legacy annotation copy
+
+on:
+  push:
+    branches:
+      - agent/legacy-cleanup-pass4
+    paths:
+      - .github/workflows/remove-legacy-annotation-copy.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/legacy-cleanup-pass4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Stop writing duplicate legacy annotation
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          path = Path("backend/services/analysis/orchestrator.py")
+          text = path.read_text()
+          old = '''        # Keep the legacy annotation copy for older report consumers, but the\n        # physical AnalysisResult JSON columns below are the canonical contract.\n        portfolio_decision = _json_mapping(final_state.get("portfolio_decision_json"))\n        if portfolio_decision:\n            structured_data["portfolio_decision"] = portfolio_decision\n'''
+          new = '        portfolio_decision = _json_mapping(final_state.get("portfolio_decision_json"))\n'
+          if text.count(old) != 1:
+              raise SystemExit("expected exactly one legacy portfolio decision annotation copy")
+          path.write_text(text.replace(old, new))
+          PY
+
+      - name: Verify duplicate producer is gone
+        shell: bash
+        run: |
+          if git grep -n 'structured_data\["portfolio_decision"\]' -- backend/services/analysis/orchestrator.py; then
+            echo 'legacy annotation producer remains' >&2
+            exit 1
+          fi
+
+      - name: Run backend regressions
+        run: |
+          uv run --project backend pytest \
+            backend/tests/test_ai_engine/test_single_execution_authority.py \
+            backend/tests/test_services/test_strategy_persistence_service.py
+
+      - name: Run backend lint
+        run: uv run --project backend ruff check backend/services/analysis/orchestrator.py
+
+      - name: Install frontend dependencies
+        run: npm ci --prefix frontend
+
+      - name: Verify historical frontend fallback still works
+        run: npm --prefix frontend test -- src/analysis/__tests__/portfolioDecision.test.ts
+
+      - name: Commit validated cleanup
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add backend/services/analysis/orchestrator.py
+          git diff --cached --check
+          git commit -m 'Stop writing legacy portfolio decision annotations'
+          git push origin HEAD:agent/legacy-cleanup-pass4
