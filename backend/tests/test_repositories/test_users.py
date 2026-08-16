@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.security import hash_password
+from backend.core.password_hashing import hash_password
 from backend.models.user import User
 from backend.repositories.users import (
     create_user_with_permissions,
