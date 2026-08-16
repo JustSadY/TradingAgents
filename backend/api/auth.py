@@ -10,7 +10,7 @@ from backend.core.limiter import limiter
 from backend.core.password_hashing import hash_password, verify_and_update_password
 from backend.core.security import create_access_token
 from backend.repositories.users import get_user_by_username
-from backend.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
+from backend.schemas.auth import LoginRequest, TokenResponse
 from backend.services.auth_session_service import (
     AuthSessionError,
     issue_refresh_session,
@@ -85,9 +85,8 @@ async def refresh(
     request: Request,
     response: Response,
     db: Annotated[AsyncSession, Depends(get_db)],
-    body: RefreshRequest | None = None,
 ):
-    raw_token = request.cookies.get(_REFRESH_COOKIE_NAME) or (body.refresh_token if body else None)
+    raw_token = request.cookies.get(_REFRESH_COOKIE_NAME)
     if not raw_token:
         _clear_refresh_cookie(response)
         raise HTTPException(status_code=401, detail="Refresh token required")
