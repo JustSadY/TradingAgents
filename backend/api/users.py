@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_db, require_admin, require_page
 from backend.core.config import get_settings as _get_settings
-from backend.core.security import hash_password
+from backend.core.password_hashing import hash_password
 from backend.models.user import User
 from backend.repositories.permissions import list_allowed_page_keys, list_allowed_setting_sections
 from backend.repositories.users import email_exists, get_user_by_id, username_exists
