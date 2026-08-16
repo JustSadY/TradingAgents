@@ -44,8 +44,8 @@ api (routers)  →  services (business logic)  →  repositories (DB access)  �
 | `repositories/users.py` | `get_user_by_username`, `get_user_by_id`. |
 | `core/config.py` | Pydantic `Settings` from `.env` (infra secrets only — see §5). `get_settings()` is `lru_cache`d. |
 | `core/database.py` | Async `engine`, `AsyncSessionLocal`, `get_db()` (commits on success / rolls back on error), `Base`, `create_all_tables()`, and the **`MONEY`** column type. |
-| `core/security.py` | JWT encode/decode, Fernet `encrypt_secret`/`decrypt_secret`, re-exports the hashing helpers. |
-| `core/password_hashing.py` | Argon2 hashing via `pwdlib`, with bcrypt kept registered to verify pre-migration hashes. Import-cycle-free so `core/config.py` can validate `ADMIN_PASSWORD_HASH`. |
+| `core/security.py` | JWT encode/decode, refresh-token identity helpers, Fernet `encrypt_secret`/`decrypt_secret`. |
+| `core/password_hashing.py` | Canonical password-hashing API: Argon2 via `pwdlib`, with bcrypt kept registered to verify pre-migration hashes. Import-cycle-free so `core/config.py` can validate `ADMIN_PASSWORD_HASH`. |
 | `core/websocket.py` | `ws_manager` for real-time progress feeds. |
 | `core/redis_bus.py`, `event_bus.py`, `task_store.py` | **Opt-in Redis scaling layer** (enabled via `REDIS_URL`): shared Redis client, analysis-event pub/sub fan-out, cross-process task registry/ownership + cancel control channel. No-ops when Redis is unset. |
 | `core/body_limit.py`, `core/limiter.py` | Request body size limit middleware (413) + slowapi rate limiter. |
@@ -67,7 +67,7 @@ api (routers)  →  services (business logic)  →  repositories (DB access)  �
 | `trading_orchestrator` | `place_signal_order` — maps a signal to a sized paper order against the portfolio's available cash. Shared by the analysis flow and cron. |
 | `market_service` | OHLCV + indicators, custom-formula series, sentiment history. Validates tickers; runs blocking yfinance/pandas in `asyncio.to_thread`. Raises `MarketDataError(status_code)`. |
 | `news_service` | TTL-cached news feed (off the event loop). |
-| `analysis_stats_service` | Cost estimate, A/B comparison, signal performance. Houses the single `MODEL_COST_PER_1K` table. |
+| `analysis_stats_service` | Cost estimate, A/B comparison, signal performance. Model pricing is resolved through `core/model_pricing.py` from LiteLLM's pinned catalogue plus explicit overrides/fallbacks. |
 | `report_chat_service` | Report-grounded Q&A: ownership check, context build, LLM call, persistence. |
 | `mock_trading_service` | Paper-trading ledger engine (portfolio/holdings/orders, live valuation). |
 | `cron_service` | APScheduler: per-user watchlist scans + alert checks + perf backfill. `get_cron_service()` / `init_cron_service()`. |
