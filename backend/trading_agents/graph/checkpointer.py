@@ -115,9 +115,14 @@ def _advanced_node(seen: dict, previous_seen: dict) -> str:
 
 
 def is_retired_checkpoint_node(node_name: str) -> bool:
-    """Return whether a checkpoint belongs to a graph node removed from runtime."""
+    """Return whether a checkpoint node was removed from the current graph."""
     normalized = str(node_name or "").strip().lower().replace("-", "_").replace(" ", "_")
     return normalized in _RETIRED_CHECKPOINT_NODES
+
+
+def checkpoint_contains_retired_nodes(versions_seen: dict | None) -> bool:
+    """Return whether checkpoint history was produced by a retired graph topology."""
+    return any(is_retired_checkpoint_node(node) for node in (versions_seen or {}))
 
 
 async def list_checkpoints_for_thread(
@@ -128,8 +133,9 @@ async def list_checkpoints_for_thread(
 ) -> list[dict]:
     """Retrieve resumable checkpoints for a thread from PostgreSQL, ordered by step.
 
-    Checkpoints produced by retired graph nodes are historical implementation
-    artifacts, not valid resume targets for the current graph, so they are not
+    A checkpoint whose execution history includes a retired graph node belongs
+    to an obsolete topology. It may still be inspected as historical database
+    data, but it is not a valid resume target for the current graph and is not
     exposed through the Time Travel API.
     """
     from backend.core.catalog import node_progress
@@ -157,7 +163,7 @@ async def list_checkpoints_for_thread(
     for step, checkpoint_id, seen, ts in raw:
         node_name = _advanced_node(seen, previous_seen)
         previous_seen = seen
-        if is_retired_checkpoint_node(node_name):
+        if checkpoint_contains_retired_nodes(seen):
             continue
         prog = node_progress(node_name)
         checkpoints.append(
