@@ -17,7 +17,7 @@ from backend.schemas.common import OkResponse
 from backend.schemas.settings import LLMProviderCatalogEntry, MemoryStatusResponse, SettingsRead, SettingsUpdate
 from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate
 from backend.schemas.webhook import WebhookDeliveryRead
-from backend.services.notification_service import test_webhook_url, validate_webhook_url
+from backend.services.notification_service import resolve_webhook_target, test_webhook_url
 from backend.services.settings_service import (
     apply_settings_update,
     get_or_create_settings,
@@ -27,6 +27,7 @@ from backend.services.settings_service import (
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 _USER_NOT_FOUND = "User not found"
+
 
 @router.get("/memory", response_model=MemoryStatusResponse)
 async def get_memory_status(
@@ -59,12 +60,14 @@ async def get_memory_status(
         "agent_qa_enabled": settings.agent_qa_enabled,
     }
 
+
 @router.get("/llm-catalog", response_model=dict[str, LLMProviderCatalogEntry])
 async def get_llm_catalog(_: User = Depends(get_current_user)):
     """Per-provider model dropdown options, sourced from llm_clients/registry.py."""
     from backend.core.catalog import LLM_CATALOG
 
     return LLM_CATALOG
+
 
 @router.get("", response_model=SettingsRead)
 async def get_settings(
@@ -73,6 +76,7 @@ async def get_settings(
 ):
     settings = await get_or_create_settings(db, current_user)
     return settings_to_read(settings)
+
 
 async def _check_section_permissions(db: AsyncSession, user: User, body: SettingsUpdate) -> None:
     """Non-admins may only edit settings sections explicitly granted to them, and
@@ -102,21 +106,16 @@ async def _check_section_permissions(db: AsyncSession, user: User, body: Setting
                 detail=f"You do not have permission to modify settings in section: {section}",
             )
 
-async def _validate_webhook_url_if_present(body: SettingsUpdate) -> None:
-    """Reject webhook URLs that resolve to a private/internal address.
 
-    The Pydantic field validator only checks the URL is well-formed http(s);
-    it can't do the DNS resolution needed to catch SSRF targets (localhost,
-    169.254.169.254, RFC1918 ranges, ...). This is the actual save path, so it
-    must run the same check that /api/settings/test-webhook already does —
-    otherwise that endpoint's guard is easily bypassed by saving directly.
-    """
+async def _validate_webhook_url_if_present(body: SettingsUpdate) -> None:
+    """Reject webhook URLs that resolve to a private/internal address."""
     url = body.model_dump(exclude_unset=True).get("webhook_url")
     if url:
         try:
-            await validate_webhook_url(url)
+            await resolve_webhook_target(url)
         except ValueError as exc:
             raise HTTPException(status_code=400, detail=str(exc)) from exc
+
 
 @router.put("", response_model=SettingsRead, responses={403: {"description": "Permission denied"}})
 async def update_settings(
@@ -131,8 +130,10 @@ async def update_settings(
     settings = await apply_settings_update(db, settings, body)
     return settings_to_read(settings)
 
+
 class WebhookTestRequest(BaseModel):
     url: str
+
 
 @router.post(
     "/test-webhook",
@@ -146,7 +147,7 @@ async def test_webhook(
 ):
     await enforce_setting_section_permission(db, current_user, "webhooks")
     try:
-        await validate_webhook_url(body.url)
+        await resolve_webhook_target(body.url)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
@@ -154,6 +155,7 @@ async def test_webhook(
     if not ok:
         raise HTTPException(status_code=400, detail="Webhook delivery failed")
     return {"ok": True}
+
 
 @router.get("/webhook-deliveries", response_model=list[WebhookDeliveryRead])
 async def get_webhook_deliveries(
@@ -183,11 +185,13 @@ async def get_webhook_deliveries(
         for r in rows
     ]
 
+
 async def _require_target_user(db: AsyncSession, user_id: int) -> User:
     target_user = await get_user_by_id(db, user_id)
     if not target_user:
         raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
     return target_user
+
 
 @router.get("/users/{user_id}", response_model=SettingsRead, responses={404: {"description": _USER_NOT_FOUND}})
 async def get_user_settings_by_id(
@@ -198,6 +202,7 @@ async def get_user_settings_by_id(
     target_user = await _require_target_user(db, user_id)
     settings = await get_or_create_settings(db, target_user)
     return settings_to_read(settings)
+
 
 @router.put("/users/{user_id}", response_model=SettingsRead, responses={404: {"description": _USER_NOT_FOUND}})
 async def update_user_settings_by_id(
@@ -212,6 +217,7 @@ async def update_user_settings_by_id(
     settings = await apply_settings_update(db, settings, body)
     return settings_to_read(settings)
 
+
 @router.get(
     "/users/{user_id}/tools", response_model=ToolSettingsRead, responses={404: {"description": _USER_NOT_FOUND}}
 )
@@ -224,6 +230,7 @@ async def get_other_user_tools(
     from backend.services.tool_settings_service import get_user_tool_settings
 
     return await get_user_tool_settings(db, target_user)
+
 
 @router.put(
     "/users/{user_id}/tools", response_model=ToolSettingsRead, responses={404: {"description": _USER_NOT_FOUND}}
@@ -239,6 +246,7 @@ async def update_other_user_tools(
 
     return await apply_tool_settings_update(db, target_user, body)
 
+
 @router.get("/tools", response_model=ToolSettingsRead)
 async def get_user_tools(
     db: AsyncSession = Depends(get_db),
@@ -247,6 +255,7 @@ async def get_user_tools(
     from backend.services.tool_settings_service import get_user_tool_settings
 
     return await get_user_tool_settings(db, current_user)
+
 
 @router.put("/tools", response_model=ToolSettingsRead)
 async def update_user_tools(
@@ -259,6 +268,7 @@ async def update_user_tools(
 
     return await apply_tool_settings_update(db, current_user, body)
 
+
 @router.get("/agents", response_model=AgentSettingsRead)
 async def get_user_agents(
     db: AsyncSession = Depends(get_db),
@@ -267,6 +277,7 @@ async def get_user_agents(
     from backend.services.agent_settings_service import get_user_agent_settings
 
     return await get_user_agent_settings(db, current_user)
+
 
 @router.put("/agents", response_model=AgentSettingsRead)
 async def update_user_agents(
@@ -278,6 +289,7 @@ async def update_user_agents(
     from backend.services.agent_settings_service import apply_agent_settings_update
 
     return await apply_agent_settings_update(db, current_user, body)
+
 
 @router.get(
     "/users/{user_id}/agents", response_model=AgentSettingsRead, responses={404: {"description": _USER_NOT_FOUND}}
@@ -291,6 +303,7 @@ async def get_other_user_agents(
     from backend.services.agent_settings_service import get_user_agent_settings
 
     return await get_user_agent_settings(db, target_user)
+
 
 @router.put(
     "/users/{user_id}/agents", response_model=AgentSettingsRead, responses={404: {"description": _USER_NOT_FOUND}}
@@ -306,6 +319,7 @@ async def update_other_user_agents(
 
     return await apply_agent_settings_update(db, target_user, body)
 
+
 @router.get("/agents/server", response_model=AgentSettingsRead)
 async def get_server_agents(
     db: AsyncSession = Depends(get_db),
@@ -314,6 +328,7 @@ async def get_server_agents(
     from backend.services.agent_settings_service import get_server_agent_settings
 
     return await get_server_agent_settings(db)
+
 
 @router.put("/agents/server", response_model=AgentSettingsRead)
 async def update_server_agents(
