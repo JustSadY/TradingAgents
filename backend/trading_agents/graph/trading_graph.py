@@ -99,10 +99,7 @@ class TradingAgentsGraph:
             )
 
         self.tool_nodes = self._create_tool_nodes()
-        self.conditional_logic = ConditionalLogic(
-            max_debate_rounds=self.config["max_debate_rounds"],
-            max_risk_discuss_rounds=self.config["max_risk_discuss_rounds"],
-        )
+        self.conditional_logic = ConditionalLogic()
         self.graph_setup = GraphSetup(
             self.thinking_llm,
             self.tool_nodes,

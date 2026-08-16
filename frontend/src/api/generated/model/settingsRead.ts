@@ -50,7 +50,6 @@ export interface SettingsRead {
   max_recur_limit: number;
   max_report_chars_in_prompts: number;
   max_risk_per_trade_pct: number;
-  max_risk_rounds: number;
   max_tool_output_chars: number;
   memory_embedder: string;
   memory_ollama_embed_model: string;

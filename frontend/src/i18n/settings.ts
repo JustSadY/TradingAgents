@@ -114,7 +114,6 @@ const translations = {
     'settings.model_language_warning': 'This model does not have verified support for the selected output language. Responses may mix languages; verified languages:',
     'settings.row_output_language': 'Output Language',
     'settings.row_debate_rounds': 'Debate Rounds',
-    'settings.row_risk_rounds': 'Risk Rounds',
     'settings.row_parallel_analysts': 'Parallel Analysts',
 
 
@@ -393,7 +392,6 @@ const translations = {
     'settings.model_language_warning': 'Bu model seçili çıktı dili için doğrulanmış desteğe sahip değil. Yanıtlar karışık dilde gelebilir; doğrulanmış diller:',
     'settings.row_output_language': 'Çıktı Dili',
     'settings.row_debate_rounds': 'Tartışma Turları',
-    'settings.row_risk_rounds': 'Risk Turları',
     'settings.row_parallel_analysts': 'Paralel Analist Sayısı',
 
 

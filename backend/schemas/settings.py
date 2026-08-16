@@ -82,7 +82,6 @@ class SettingsBase(BaseModel):
     max_recur_limit: int = 1000
     benchmark_ticker: str | None = None
     max_debate_rounds: int = 1
-    max_risk_rounds: int = 1
     max_position_size_pct: float = 10.0
     max_risk_per_trade_pct: float = 2.0
     auto_execute_signals: bool = False
@@ -198,7 +197,6 @@ class SettingsUpdate(BaseModel):
     max_recur_limit: int | None = Field(default=None, ge=100, le=5000)
     benchmark_ticker: str | None = None
     max_debate_rounds: int | None = Field(default=None, ge=1, le=10)
-    max_risk_rounds: int | None = Field(default=None, ge=1, le=10)
     max_position_size_pct: float | None = Field(default=None, ge=1, le=100)
     max_risk_per_trade_pct: float | None = Field(default=None, ge=0.1, le=50)
     auto_execute_signals: bool | None = None

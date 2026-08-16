@@ -5275,11 +5275,6 @@
             "title": "Max Risk Per Trade Pct",
             "type": "number"
           },
-          "max_risk_rounds": {
-            "default": 1,
-            "title": "Max Risk Rounds",
-            "type": "integer"
-          },
           "max_tool_output_chars": {
             "default": 12000,
             "title": "Max Tool Output Chars",
@@ -5470,7 +5465,6 @@
           "max_recur_limit",
           "benchmark_ticker",
           "max_debate_rounds",
-          "max_risk_rounds",
           "max_position_size_pct",
           "max_risk_per_trade_pct",
           "auto_execute_signals",
@@ -6024,19 +6018,6 @@
               }
             ],
             "title": "Max Risk Per Trade Pct"
-          },
-          "max_risk_rounds": {
-            "anyOf": [
-              {
-                "maximum": 10.0,
-                "minimum": 1.0,
-                "type": "integer"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Max Risk Rounds"
           },
           "max_tool_output_chars": {
             "anyOf": [

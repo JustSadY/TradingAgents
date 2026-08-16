@@ -81,7 +81,6 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         "llm_model": settings.llm_model,
         "fallback_llm_chain": _fallback_llm_chain(settings),
         "max_debate_rounds": settings.max_debate_rounds,
-        "max_risk_discuss_rounds": settings.max_risk_rounds,
         "output_language": settings.output_language or DEFAULT_CONFIG["output_language"],
         "investor_persona": settings.investor_persona or DEFAULT_CONFIG["investor_persona"],
         "analyst_concurrency_limit": settings.analyst_concurrency_limit or DEFAULT_CONFIG["analyst_concurrency_limit"],
