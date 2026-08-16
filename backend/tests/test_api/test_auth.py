@@ -207,6 +207,44 @@ class TestAuthAPI:
         assert resp.status_code == 401
         assert resp.json()["detail"] == "Refresh token has been revoked"
 
+    async def test_refresh_replay_revocation_survives_401_rollback(
+        self, async_client: AsyncClient, db: AsyncSession
+    ):
+        user = User(
+            username="replaytest",
+            hashed_password=hash_password("pass"),
+            email="replay@example.com",
+            role="user",
+            is_active=True,
+        )
+        db.add(user)
+        await db.flush()
+
+        sid = new_token_id()
+        current_jti = new_token_id()
+        replayed_jti = new_token_id()
+        session = RefreshSession(
+            id=sid,
+            user_id=user.id,
+            current_jti_hash=token_id_hash(current_jti),
+            expires_at=datetime.now(UTC) + timedelta(days=1),
+        )
+        db.add(session)
+        await db.flush()
+        replayed = create_refresh_token(
+            user.username,
+            token_version=user.token_version,
+            session_id=sid,
+            token_id=replayed_jti,
+        )
+
+        resp = await async_client.post("/auth/refresh", json={"refresh_token": replayed})
+
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == "Refresh session expired or reused"
+        await db.refresh(session)
+        assert session.revoked_at is not None
+
     async def test_logout_clears_refresh_cookie(self, auth_client: AsyncClient, db: AsyncSession, test_user: User):
         resp = await auth_client.post("/auth/logout")
         assert resp.status_code == 204
