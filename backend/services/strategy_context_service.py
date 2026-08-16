@@ -66,14 +66,8 @@ def _json_mapping(value: object) -> dict[str, Any]:
 def _decision_from_analysis(row: object | None) -> dict[str, Any] | None:
     if row is None:
         return None
-    for raw in (
-        getattr(row, "portfolio_decision_json", None),
-        _json_mapping(getattr(row, "chart_annotations", None)).get("portfolio_decision"),
-    ):
-        decision = _json_mapping(raw)
-        if decision:
-            return decision
-    return None
+    decision = _json_mapping(getattr(row, "portfolio_decision_json", None))
+    return decision or None
 
 
 def _blind_planning_context(snapshot: dict[str, Any] | None) -> dict[str, Any]:
@@ -122,11 +116,11 @@ async def _derive_recorded_cutoff(
     """Use the earliest same-run-day analysis timestamp as a safe replay bound.
 
     Checkpoint callers may not yet pass an exact checkpoint timestamp through
-    every legacy call path. The selected/original AnalysisResult necessarily
-    already exists before a time-travel resume and keeps its original
-    ``created_at`` even while its status is reset to running. Using the earliest
-    matching timestamp is conservative: it may hide later same-day knowledge,
-    but can never expose knowledge created after the replay began.
+    every call path. The selected/original AnalysisResult necessarily already
+    exists before a time-travel resume and keeps its original ``created_at``
+    even while its status is reset to running. Using the earliest matching
+    timestamp is conservative: it may hide later same-day knowledge, but can
+    never expose knowledge created after the replay began.
     """
     from backend.models.analysis import AnalysisResult
 
@@ -213,9 +207,9 @@ async def load_strategy_context(
     ``trade_date`` is business time. ``knowledge_cutoff`` is recorded/system
     time and is intentionally separate. For ordinary date-based historical
     research the recorded cutoff is at most that business day's end. For
-    checkpoint time-travel an explicit timestamp is preferred; when legacy
-    callers omit it, the earliest matching AnalysisResult ``created_at`` is
-    used as a conservative same-day boundary.
+    checkpoint time-travel an explicit timestamp is preferred; when callers
+    omit it, the earliest matching AnalysisResult ``created_at`` is used as a
+    conservative same-day boundary.
     """
     ticker = ticker.upper()
     asset_type = asset_type.lower()
