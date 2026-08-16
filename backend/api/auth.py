@@ -9,15 +9,14 @@ from backend.api.deps import get_user_from_access_token
 from backend.core.config import get_settings
 from backend.core.database import get_db
 from backend.core.limiter import limiter
+from backend.core.password_hashing import hash_password, verify_and_update_password
 from backend.core.rls_context import set_refresh_access_context
 from backend.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token_payload,
-    hash_password,
     new_token_id,
     token_id_hash,
-    verify_and_update_password,
 )
 from backend.models.refresh_session import RefreshSession
 from backend.models.user import User
