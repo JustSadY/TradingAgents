@@ -58,6 +58,13 @@ dev = [
     "pytest-cov>=6.0.0",
     "pytest-mock>=3.14.0",
 ]
+supertokens-poc = [
+    # Evaluation only — nothing in backend/ imports this outside backend/poc/.
+    # It pulls ~20 packages the app does not otherwise have, including twilio,
+    # pyotp, phonenumbers and a second HTTP stack (aiohttp alongside httpx),
+    # which is why it is not in the main dependency list.
+    "supertokens-python>=0.30.0,<1.0",
+]
 research = [
     "openbb>=4.7.2,<5.0",
     "TA-Lib>=0.7.1,<1.0",
