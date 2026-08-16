@@ -5,7 +5,7 @@ from decimal import Decimal
 from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.security import hash_password
+from backend.core.password_hashing import hash_password
 from backend.models.order import Order
 from backend.models.portfolio import Holding, Portfolio
 from backend.models.user import User
