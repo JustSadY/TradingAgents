@@ -24,7 +24,7 @@ from backend.repositories.users import get_user_by_id
 _REFRESH_GRACE_SECONDS = 15
 
 
-class RefreshSessionError(ValueError):
+class AuthSessionError(ValueError):
     """Expected refresh-session rejection with a stable public detail string."""
 
     def __init__(self, detail: str) -> None:
@@ -44,9 +44,9 @@ def _decode_refresh(raw_token: str) -> tuple[dict[str, Any], str, str]:
         session_id = str(payload["sid"])
         token_id = str(payload["jti"])
     except (ValueError, KeyError, TypeError):
-        raise RefreshSessionError("Invalid refresh token") from None
+        raise AuthSessionError("Invalid refresh token") from None
     if not session_id or not token_id:
-        raise RefreshSessionError("Invalid refresh token")
+        raise AuthSessionError("Invalid refresh token")
     return payload, session_id, token_id
 
 
@@ -102,12 +102,12 @@ async def rotate_refresh_session(db: AsyncSession, raw_token: str) -> tuple[User
     ):
         if session and session.revoked_at is None:
             await _persist_revocation(db, session, now)
-        raise RefreshSessionError("Refresh session expired or reused")
+        raise AuthSessionError("Refresh session expired or reused")
 
     user = await get_user_by_id(db, session.user_id)
     if not user or not user.is_active or payload.get("ver", 0) != user.token_version:
         await _persist_revocation(db, session, now)
-        raise RefreshSessionError("Refresh token has been revoked")
+        raise AuthSessionError("Refresh token has been revoked")
 
     rotated_token_id = new_token_id()
     session.previous_jti_hash = session.current_jti_hash
@@ -128,7 +128,7 @@ async def rotate_refresh_session(db: AsyncSession, raw_token: str) -> tuple[User
 async def revoke_refresh_token(db: AsyncSession, raw_token: str) -> bool:
     try:
         _, session_id, _ = _decode_refresh(raw_token)
-    except RefreshSessionError:
+    except AuthSessionError:
         return False
 
     await set_refresh_access_context(db, session_id=session_id)
