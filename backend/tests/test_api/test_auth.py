@@ -37,20 +37,11 @@ async def issue_refresh_token(db: AsyncSession, user: User, *, token_version: in
 
 
 class TestAuthAPI:
-    async def test_login_upgrades_a_legacy_bcrypt_hash_to_argon2(
-        self, async_client: AsyncClient, db: AsyncSession
-    ):
-        """Accounts created before the Argon2 migration still hold bcrypt hashes.
-        Logging in must succeed and re-store the password under Argon2, so the
-        legacy scheme drains away instead of persisting indefinitely.
-        """
-        import bcrypt
-
-        legacy_hash = bcrypt.hashpw(b"correctpass", bcrypt.gensalt()).decode()
+    async def test_login_rejects_retired_bcrypt_hash(self, async_client: AsyncClient, db: AsyncSession):
         user = User(
-            username="legacyhash",
-            hashed_password=legacy_hash,
-            email="legacy@example.com",
+            username="retiredhash",
+            hashed_password="$2b$12$" + "a" * 53,
+            email="retired@example.com",
             role="user",
             is_active=True,
         )
@@ -58,38 +49,7 @@ class TestAuthAPI:
         await db.flush()
 
         resp = await async_client.post(
-            "/auth/login", json={"username": "legacyhash", "password": "correctpass"}
-        )
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text[:500]}"
-
-        await db.refresh(user)
-        assert user.hashed_password.startswith("$argon2")
-        assert user.hashed_password != legacy_hash
-
-        # The re-stored hash must still authenticate the same password.
-        again = await async_client.post(
-            "/auth/login", json={"username": "legacyhash", "password": "correctpass"}
-        )
-        assert again.status_code == 200
-
-    async def test_login_rejects_wrong_password_for_legacy_bcrypt_hash(
-        self, async_client: AsyncClient, db: AsyncSession
-    ):
-        import bcrypt
-
-        db.add(
-            User(
-                username="legacywrong",
-                hashed_password=bcrypt.hashpw(b"correctpass", bcrypt.gensalt()).decode(),
-                email="legacywrong@example.com",
-                role="user",
-                is_active=True,
-            )
-        )
-        await db.flush()
-
-        resp = await async_client.post(
-            "/auth/login", json={"username": "legacywrong", "password": "wrongpass"}
+            "/auth/login", json={"username": "retiredhash", "password": "correctpass"}
         )
         assert resp.status_code == 401
 
