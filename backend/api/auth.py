@@ -12,7 +12,7 @@ from backend.core.security import create_access_token
 from backend.repositories.users import get_user_by_username
 from backend.schemas.auth import LoginRequest, RefreshRequest, TokenResponse
 from backend.services.auth_session_service import (
-    RefreshSessionError,
+    AuthSessionError,
     issue_refresh_session,
     revoke_refresh_token,
     revoke_user_refresh_sessions,
@@ -94,7 +94,7 @@ async def refresh(
 
     try:
         user, rotated_refresh_token = await rotate_refresh_session(db, raw_token)
-    except RefreshSessionError as exc:
+    except AuthSessionError as exc:
         _clear_refresh_cookie(response)
         raise HTTPException(status_code=401, detail=exc.detail) from None
 
