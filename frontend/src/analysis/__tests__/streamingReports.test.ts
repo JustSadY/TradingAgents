@@ -15,7 +15,6 @@ describe('reportKeyForStreamingAgent', () => {
     ['social', 'sentiment_report'],
     ['portfolio_manager', 'final_decision'],
     ['research_manager', 'investment_plan'],
-    ['trader', 'trader_plan'],
   ])('maps %s to %s', (agent, expected) => {
     expect(reportKeyForStreamingAgent(agent)).toBe(expected)
   })
@@ -28,6 +27,10 @@ describe('reportKeyForStreamingAgent', () => {
     '_market_analyst_',
   ])('normalises the spelling %s', agent => {
     expect(reportKeyForStreamingAgent(agent)).toBe('market_report')
+  })
+
+  it('does not preserve retired agent aliases', () => {
+    expect(reportKeyForStreamingAgent('trader')).toBeNull()
   })
 
   it('routes an unknown agent to its own field when it names one', () => {
