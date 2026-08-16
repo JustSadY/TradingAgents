@@ -118,7 +118,7 @@ class TestAuthAPI:
 
         refresh = await issue_refresh_token(db, user)
         async_client.cookies.set("ta_refresh", refresh, path="/auth")
-        resp = await async_client.post("/auth/refresh", json={})
+        resp = await async_client.post("/auth/refresh")
         assert resp.status_code == 200
         assert "access_token" in resp.json()
         assert "refresh_token" not in resp.json()
@@ -126,27 +126,13 @@ class TestAuthAPI:
         await db.refresh(user)
         assert user.token_version == 0  # normal refresh must not invalidate other browser tabs
 
-    async def test_refresh_body_token_remains_compatible(self, async_client: AsyncClient, db: AsyncSession):
-        user = User(
-            username="apiclient",
-            hashed_password=hash_password("pass"),
-            email="api@example.com",
-            role="user",
-            is_active=True,
-        )
-        db.add(user)
-        await db.flush()
-        refresh = await issue_refresh_token(db, user)
-        resp = await async_client.post("/auth/refresh", json={"refresh_token": refresh})
-        assert resp.status_code == 200
-        assert "access_token" in resp.json()
-
     async def test_refresh_token_invalid(self, async_client: AsyncClient):
-        resp = await async_client.post("/auth/refresh", json={"refresh_token": "invalid-token"})
+        async_client.cookies.set("ta_refresh", "invalid-token", path="/auth")
+        resp = await async_client.post("/auth/refresh")
         assert resp.status_code == 401
 
     async def test_refresh_token_missing(self, async_client: AsyncClient):
-        resp = await async_client.post("/auth/refresh", json={})
+        resp = await async_client.post("/auth/refresh")
         assert resp.status_code == 401
 
     async def test_refresh_token_revoked(self, async_client: AsyncClient, db: AsyncSession):
@@ -163,7 +149,8 @@ class TestAuthAPI:
         # Session is valid; only the stale token_version (0 vs the user's 5)
         # may cause the rejection.
         refresh = await issue_refresh_token(db, user, token_version=0)
-        resp = await async_client.post("/auth/refresh", json={"refresh_token": refresh})
+        async_client.cookies.set("ta_refresh", refresh, path="/auth")
+        resp = await async_client.post("/auth/refresh")
         assert resp.status_code == 401
         assert resp.json()["detail"] == "Refresh token has been revoked"
 
@@ -197,8 +184,9 @@ class TestAuthAPI:
             session_id=sid,
             token_id=replayed_jti,
         )
+        async_client.cookies.set("ta_refresh", replayed, path="/auth")
 
-        resp = await async_client.post("/auth/refresh", json={"refresh_token": replayed})
+        resp = await async_client.post("/auth/refresh")
 
         assert resp.status_code == 401
         assert resp.json()["detail"] == "Refresh session expired or reused"
