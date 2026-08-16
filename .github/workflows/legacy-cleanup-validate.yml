@@ -36,6 +36,40 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
+      - name: Inventory legacy password facade imports
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          password_names = {
+              "hash_password",
+              "is_supported_password_hash",
+              "verify_and_update_password",
+              "verify_password",
+          }
+          hits = []
+          for path in sorted(Path("backend").rglob("*.py")):
+              if path.as_posix() == "backend/core/security.py":
+                  continue
+              try:
+                  tree = ast.parse(path.read_text())
+              except (SyntaxError, UnicodeDecodeError):
+                  continue
+              for node in ast.walk(tree):
+                  if isinstance(node, ast.ImportFrom) and node.module == "backend.core.security":
+                      names = sorted({alias.name for alias in node.names} & password_names)
+                      if names:
+                          hits.append((path.as_posix(), node.lineno, names))
+          if not hits:
+              print("LEGACY_PASSWORD_FACADE_IMPORTS=0")
+          else:
+              print(f"LEGACY_PASSWORD_FACADE_IMPORTS={len(hits)}")
+              for path, line, names in hits:
+                  print(f"LEGACY_PASSWORD_FACADE {path}:{line} {','.join(names)}")
+          PY
+
       - name: Run cleanup regression tests
         run: |
           uv run --project backend pytest \
