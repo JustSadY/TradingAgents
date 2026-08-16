@@ -22,6 +22,7 @@ from backend.schemas.settings import SettingsRead, SettingsUpdate
 
 _logger = logging.getLogger(__name__)
 
+
 def parse_preset_settings_json(settings_json: str) -> SettingsUpdate:
     """Parse a stored preset as a strict, validated ``SettingsUpdate``.
 
@@ -47,9 +48,11 @@ def parse_preset_settings_json(settings_json: str) -> SettingsUpdate:
     except ValidationError as exc:
         raise ValueError(f"Preset settings are invalid: {exc}") from exc
 
+
 def serialize_preset_settings(update: SettingsUpdate) -> str:
     """Store only the validated fields of a preset in a canonical form."""
     return json.dumps(update.model_dump(exclude_unset=True), separators=(",", ":"), sort_keys=True)
+
 
 async def get_or_create_settings(
     db: AsyncSession,
@@ -78,9 +81,11 @@ async def get_or_create_settings(
         register_sensitive_literal(settings.webhook_url)
     return settings
 
+
 def settings_to_read(settings: AppSettings) -> SettingsRead:
     """Map an ``AppSettings`` row to its read DTO (single source of truth)."""
     return SettingsRead.model_validate(settings)
+
 
 async def apply_settings_update(
     db: AsyncSession,
@@ -93,9 +98,9 @@ async def apply_settings_update(
     fields = body.model_dump(exclude_unset=True)
     webhook_url = fields.get("webhook_url")
     if webhook_url:
-        from backend.services.notification_service import validate_webhook_url
+        from backend.services.notification_service import resolve_webhook_target
 
-        await validate_webhook_url(webhook_url)
+        await resolve_webhook_target(webhook_url)
     for field, value in fields.items():
         if getattr(settings, field, None) != value:
             has_changes = True
@@ -121,6 +126,7 @@ async def apply_settings_update(
 
     return settings
 
+
 async def get_user_language(db: AsyncSession, user=None) -> str:
     """Return the preferred output language for a user (fallback to English)."""
     if user is None:
@@ -131,6 +137,7 @@ async def get_user_language(db: AsyncSession, user=None) -> str:
     except Exception as exc:
         _logger.warning("Could not load language preference for user %s: %s", getattr(user, "id", "?"), exc)
         return "English"
+
 
 async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
     """Apply a preset's settings JSON onto *user*'s AppSettings row.
@@ -143,9 +150,9 @@ async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
 
     webhook_url = fields.get("webhook_url")
     if webhook_url:
-        from backend.services.notification_service import validate_webhook_url
+        from backend.services.notification_service import resolve_webhook_target
 
-        await validate_webhook_url(webhook_url)
+        await resolve_webhook_target(webhook_url)
 
     settings = await get_or_create_settings(db, user)
     for key, value in fields.items():
@@ -169,6 +176,7 @@ async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
         _logger.warning("Preset settings update event emission failed", exc_info=True)
     return preset.name
 
+
 async def add_ticker_to_watchlist(db: AsyncSession, user, ticker: str) -> list[str]:
     """Add a normalized ticker while enforcing the global watchlist limit."""
     normalized = ticker.strip().upper()
@@ -182,12 +190,14 @@ async def add_ticker_to_watchlist(db: AsyncSession, user, ticker: str) -> list[s
     await db.flush()
     return settings.watchlist
 
+
 async def remove_ticker_from_watchlist(db: AsyncSession, user, ticker: str) -> list[str]:
     """Remove ``ticker`` from ``user``'s watchlist."""
     settings = await get_or_create_settings(db, user)
     settings.watchlist = [t for t in settings.watchlist if t != ticker]
     await db.flush()
     return settings.watchlist
+
 
 async def get_webhook_deliveries(db: AsyncSession, user_id: int, limit: int = 20):
     from backend.repositories.webhook_delivery import list_webhook_deliveries
