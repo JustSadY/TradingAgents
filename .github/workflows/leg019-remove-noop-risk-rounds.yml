@@ -1,11 +1,11 @@
 name: LEG019 cleanup
-# rerun after obsolete cleanup tooling removal
 
 on:
   push:
     branches: [agent/legacy-cleanup-pass4]
     paths:
       - .github/workflows/leg019-remove-noop-risk-rounds.yml
+      - .github/scripts/leg019_cleanup.py
 
 permissions:
   contents: write
