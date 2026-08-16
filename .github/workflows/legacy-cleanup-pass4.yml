@@ -88,8 +88,7 @@ jobs:
           start_marker = "              <RiskRowItem label={t('settings.row_risk_rounds')} unit=\"tur\">\n"
           start = text.index(start_marker)
           end = text.index('              </RiskRowItem>\n', start) + len('              </RiskRowItem>\n')
-          text = text[:start] + text[end:]
-          risk_tab.write_text(text)
+          risk_tab.write_text(text[:start] + text[end:])
 
           i18n = Path('frontend/src/i18n/settings.ts')
           lines = i18n.read_text().splitlines(keepends=True)
@@ -104,27 +103,19 @@ jobs:
           migration.write_text('''"""remove the retired no-op risk round setting\n\nRevision ID: ac12d3e4f5a6\nRevises: 9b01c2d3e4f5\nCreate Date: 2026-08-16 13:00:00.000000+00:00\n\nThe former max_risk_rounds setting was persisted and exposed to users but the\ncurrent Risk Debate node performs one merged LLM call and never consumes it.\nDrop the misleading contract and its unused database column.\n"""\n\nfrom collections.abc import Sequence\n\nimport sqlalchemy as sa\nfrom alembic import op\n\nrevision: str = "ac12d3e4f5a6"\ndown_revision: str | None = "9b01c2d3e4f5"\nbranch_labels: str | Sequence[str] | None = None\ndepends_on: str | Sequence[str] | None = None\n\n\ndef upgrade() -> None:\n    op.drop_column("app_settings", "max_risk_rounds")\n\n\ndef downgrade() -> None:\n    op.add_column(\n        "app_settings",\n        sa.Column("max_risk_rounds", sa.Integer(), server_default=sa.text("1"), nullable=False),\n    )\n''')
           PY
 
-      - name: Verify retired setting is absent from live code
-        shell: bash
-        run: |
-          if git grep -n -E 'max_risk_rounds|max_risk_discuss_rounds|row_risk_rounds' -- \
-            ':!backend/alembic/versions/*'; then
-            echo 'Retired risk-round setting still appears in live code' >&2
-            exit 1
-          fi
-
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
 
       - name: Regenerate OpenAPI client
         run: npm --prefix frontend run generate:api
 
-      - name: Re-verify generated API has no retired setting
+      - name: Verify retired setting is absent from live code and generated API
         shell: bash
         run: |
           if git grep -n -E 'max_risk_rounds|max_risk_discuss_rounds|row_risk_rounds' -- \
-            ':!backend/alembic/versions/*'; then
-            echo 'Generated artifacts reintroduced retired risk-round setting' >&2
+            ':!backend/alembic/versions/*' \
+            ':!.github/workflows/legacy-cleanup-pass4.yml'; then
+            echo 'Retired risk-round setting still appears in live code' >&2
             exit 1
           fi
 
