@@ -17,18 +17,16 @@ from backend.trading_agents.llm_clients.registry import provider_requires_api_ke
 _logger = logging.getLogger(__name__)
 
 def _decrypt_tool_secret(value: str | None) -> str | None:
-    """Decrypt a tool-settings secret field for actual use.
+    """Decrypt a persisted tool secret.
 
-    Falls back to the raw value on failure so credentials saved before this
-    field started being encrypted (plaintext, not a valid Fernet token) keep
-    working until the user next re-saves them.
+    Revision ``bc23d4e5f6a7`` encrypts the two historical plaintext tool-secret
+    fields before this runtime is used. Decryption failures therefore indicate
+    corrupt data or the wrong encryption key and must not fall back to the raw
+    stored value.
     """
     if not value:
         return value
-    try:
-        return decrypt_secret(value)
-    except Exception:
-        return value
+    return decrypt_secret(value)
 
 def _fallback_llm_chain(settings: AppSettings) -> list[dict[str, str]]:
     """Read the canonical ordered LLM failover settings defensively.
