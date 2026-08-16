@@ -6,6 +6,7 @@ on:
       - agent/legacy-cleanup-pass4
     paths:
       - .github/workflows/legacy-cleanup-validate.yml
+      - CLAUDE.md
       - backend/trading_agents/__init__.py
       - backend/trading_agents/agents/runtime/logging_config.py
       - backend/trading_agents/agents/main/risk.py
@@ -16,17 +17,22 @@ on:
       - backend/tests/**
       - backend/postgres_tests/**
       - backend/api/trading.py
+      - backend/api/auth.py
+      - backend/api/users.py
       - backend/services/mock_trading_service.py
+      - backend/services/auth_session_service.py
+      - backend/repositories/refresh_sessions.py
+      - backend/core/database.py
+      - backend/core/password_hashing.py
+      - backend/core/security.py
+      - backend/schemas/auth.py
+      - backend/main.py
+      - backend/worker.py
       - frontend/src/App.tsx
       - frontend/src/analysis/streamingReports.ts
       - frontend/src/analysis/__tests__/streamingReports.test.ts
       - frontend/src/i18n/analysis.ts
-      - backend/api/auth.py
-      - backend/api/users.py
-      - backend/main.py
-      - backend/worker.py
-      - backend/core/password_hashing.py
-      - backend/core/security.py
+      - frontend/src/api/generated/model/tokenResponse.ts
 
 permissions:
   contents: read
@@ -147,6 +153,100 @@ jobs:
           fi
           echo 'CUSTOM_SYSTEM_INSTRUCTION_ALIAS=0'
 
+      - name: Reject dead tenant context compatibility wrapper
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          path = Path("backend/core/database.py")
+          tree = ast.parse(path.read_text())
+          names = {node.name for node in ast.walk(tree) if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef))}
+          if "set_tenant_context" in names:
+              raise SystemExit("dead set_tenant_context compatibility wrapper was reintroduced")
+          print("SET_TENANT_CONTEXT_WRAPPER=0")
+          PY
+
+      - name: Reject deprecated refresh token response field
+        shell: bash
+        run: |
+          python - <<'PY'
+          import ast
+          from pathlib import Path
+
+          schema = ast.parse(Path("backend/schemas/auth.py").read_text())
+          token_fields = set()
+          refresh_request_fields = set()
+          for node in schema.body:
+              if isinstance(node, ast.ClassDef) and node.name in {"TokenResponse", "RefreshRequest"}:
+                  fields = {
+                      item.target.id
+                      for item in node.body
+                      if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name)
+                  }
+                  if node.name == "TokenResponse":
+                      token_fields = fields
+                  else:
+                      refresh_request_fields = fields
+          if "refresh_token" in token_fields:
+              raise SystemExit("deprecated TokenResponse.refresh_token field was reintroduced")
+          if "refresh_token" not in refresh_request_fields:
+              raise SystemExit("CLI/API RefreshRequest.refresh_token compatibility was removed unintentionally")
+
+          generated = Path("frontend/src/api/generated/model/tokenResponse.ts").read_text()
+          if "refresh_token" in generated:
+              raise SystemExit("generated TokenResponse still exposes refresh_token")
+          print("REFRESH_TOKEN_RESPONSE_FIELD=0")
+          PY
+
+      - name: Reject direct refresh-session SQL in auth router
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          route = Path("backend/api/auth.py").read_text()
+          forbidden = (
+              "RefreshSession",
+              "from sqlalchemy import delete",
+              "from sqlalchemy import select",
+              "set_refresh_access_context",
+              ".with_for_update()",
+          )
+          hits = [token for token in forbidden if token in route]
+          if hits:
+              raise SystemExit(f"auth router regained refresh-session persistence orchestration: {hits}")
+          print("AUTH_ROUTER_REFRESH_SESSION_SQL=0")
+          PY
+
+      - name: Reject stale decision/checkpoint guidance
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          doc = Path("CLAUDE.md").read_text()
+          stale = (
+              "Portfolio Manager (sole final structured investment decision)",
+              "Portfolio Manager is the only agent with final decision authority",
+              "falls back to per-analysis SQLite files",
+          )
+          hits = [text for text in stale if text in doc]
+          if hits:
+              raise SystemExit(f"CLAUDE.md contains stale architecture claims: {hits}")
+          required = (
+              "Strategy Context Loader",
+              "Decision Stability Controller",
+              "Portfolio Manager is the sole AI proposal authority",
+              "LangGraph checkpoints require PostgreSQL",
+          )
+          missing = [text for text in required if text not in doc]
+          if missing:
+              raise SystemExit(f"CLAUDE.md is missing current architecture guidance: {missing}")
+          print("STALE_CLAUDE_ARCHITECTURE=0")
+          PY
+
       - name: Reject direct analysis SQL in trading router
         shell: bash
         run: |
@@ -184,7 +284,12 @@ jobs:
             backend/trading_agents/agents/data/review_tools.py \
             backend/services/analysis/config_builder.py \
             backend/api/trading.py \
+            backend/api/auth.py \
             backend/services/mock_trading_service.py \
+            backend/services/auth_session_service.py \
+            backend/repositories/refresh_sessions.py \
+            backend/core/database.py \
+            backend/schemas/auth.py \
             backend/tests/test_ai_engine/test_single_execution_authority.py \
             backend/tests/conftest.py \
             backend/tests/helpers/factories.py \
@@ -197,7 +302,6 @@ jobs:
             backend/tests/test_services/test_config_builder_secrets.py \
             backend/tests/test_services/test_legacy_settings_contract.py \
             backend/postgres_tests/test_rls_integration.py \
-            backend/api/auth.py \
             backend/api/users.py \
             backend/main.py \
             backend/worker.py \
