@@ -10,8 +10,9 @@ on:
       - backend/trading_agents/__init__.py
       - backend/trading_agents/agents/runtime/logging_config.py
       - backend/trading_agents/agents/main/risk.py
-      - backend/services/analysis/portfolio_orchestrator.py
       - backend/trading_agents/agents/data/review_tools.py
+      - backend/services/analysis/portfolio_orchestrator.py
+      - backend/services/analysis/orchestrator.py
       - backend/services/analysis/config_builder.py
       - backend/services/notification_service.py
       - backend/services/settings_service.py
@@ -21,6 +22,7 @@ on:
       - backend/api/trading.py
       - backend/api/auth.py
       - backend/api/alerts.py
+      - backend/api/share.py
       - backend/api/settings.py
       - backend/api/users.py
       - backend/services/mock_trading_service.py
@@ -29,18 +31,33 @@ on:
       - backend/repositories/refresh_sessions.py
       - backend/repositories/alerts.py
       - backend/core/database.py
+      - backend/core/catalog.py
       - backend/core/password_hashing.py
       - backend/core/security.py
+      - backend/models/analysis.py
+      - backend/schemas/analysis.py
+      - backend/schemas/share.py
       - backend/schemas/auth.py
       - backend/schemas/settings.py
       - backend/main.py
       - backend/worker.py
       - frontend/src/App.tsx
       - frontend/src/analysis/streamingReports.ts
+      - frontend/src/analysis/portfolioDecision.ts
       - frontend/src/analysis/__tests__/streamingReports.test.ts
+      - frontend/src/analysis/__tests__/portfolioDecision.test.ts
+      - frontend/src/components/analysis/PortfolioDecisionCard.tsx
+      - frontend/src/components/analysis/tabs/HistoryTab.tsx
+      - frontend/src/pages/Analysis.tsx
+      - frontend/src/pages/SharedReport.tsx
+      - frontend/src/pages/__tests__/SharedReport.test.tsx
+      - frontend/src/report/reportSections.ts
+      - frontend/src/utils/__tests__/exportReport.test.ts
+      - frontend/src/utils/__tests__/exportLabels.fixture.ts
       - frontend/src/contexts/AuthContext.tsx
       - frontend/src/contexts/__tests__/AuthContext.test.tsx
       - frontend/src/i18n/analysis.ts
+      - frontend/src/i18n/export_sections.ts
       - frontend/src/api/generated/model/tokenResponse.ts
 
 permissions:
@@ -150,6 +167,19 @@ jobs:
               raise SystemExit("retired Trader streaming alias still exists")
           print("TRADER_STREAMING_ALIAS=0")
           PY
+
+      - name: Reject retired Trader production contract
+        shell: bash
+        run: |
+          if git grep -n -E 'trader_plan|trader_proposal_json|trader_investment_plan' -- \
+            backend frontend \
+            ':!backend/alembic/versions/**' \
+            ':!backend/tests/**' \
+            ':!frontend/src/**/__tests__/**'; then
+            echo 'retired Trader production contract was reintroduced' >&2
+            exit 1
+          fi
+          echo 'RETIRED_TRADER_PRODUCTION_REFERENCES=0'
 
       - name: Reject retired AgentSettings aliases
         shell: bash
@@ -345,6 +375,8 @@ jobs:
             backend/tests/test_api/test_auth.py \
             backend/tests/test_api/test_portfolio.py \
             backend/tests/test_api/test_trading.py \
+            backend/tests/test_api/test_share.py \
+            backend/tests/test_temporal_safety.py \
             backend/tests/test_repositories/test_tenant_scoping_sweep.py \
             backend/tests/test_repositories/test_users.py \
             backend/tests/test_services/test_security_service.py \
@@ -358,14 +390,16 @@ jobs:
             backend/trading_agents/__init__.py \
             backend/trading_agents/agents/runtime/logging_config.py \
             backend/trading_agents/agents/main/risk.py \
-            backend/services/analysis/portfolio_orchestrator.py \
             backend/trading_agents/agents/data/review_tools.py \
+            backend/services/analysis/portfolio_orchestrator.py \
+            backend/services/analysis/orchestrator.py \
             backend/services/analysis/config_builder.py \
             backend/services/notification_service.py \
             backend/services/settings_service.py \
             backend/api/trading.py \
             backend/api/auth.py \
             backend/api/alerts.py \
+            backend/api/share.py \
             backend/api/settings.py \
             backend/services/mock_trading_service.py \
             backend/services/auth_session_service.py \
@@ -373,6 +407,10 @@ jobs:
             backend/repositories/refresh_sessions.py \
             backend/repositories/alerts.py \
             backend/core/database.py \
+            backend/core/catalog.py \
+            backend/models/analysis.py \
+            backend/schemas/analysis.py \
+            backend/schemas/share.py \
             backend/schemas/auth.py \
             backend/schemas/settings.py \
             backend/tests/test_ai_engine/test_single_execution_authority.py \
@@ -381,6 +419,8 @@ jobs:
             backend/tests/test_api/test_auth.py \
             backend/tests/test_api/test_portfolio.py \
             backend/tests/test_api/test_trading.py \
+            backend/tests/test_api/test_share.py \
+            backend/tests/test_temporal_safety.py \
             backend/tests/test_repositories/test_tenant_scoping_sweep.py \
             backend/tests/test_repositories/test_users.py \
             backend/tests/test_services/test_security_service.py \
@@ -394,7 +434,8 @@ jobs:
             backend/core/password_hashing.py \
             backend/core/security.py \
             backend/alembic/versions/20260816_0021-bc23d4e5f6a7_encrypt_legacy_tool_secrets.py \
-            backend/alembic/versions/20260816_0022-cd34e5f6a7b8_remove_noop_risk_rounds.py
+            backend/alembic/versions/20260816_0022-cd34e5f6a7b8_remove_noop_risk_rounds.py \
+            backend/alembic/versions/20260816_0023-de45f6a7b8c9_remove_retired_trader_history.py
 
       - name: Verify Alembic has one head
         shell: bash
@@ -410,7 +451,10 @@ jobs:
         run: |
           npm --prefix frontend test -- \
             src/analysis/__tests__/streamingReports.test.ts \
-            src/contexts/__tests__/AuthContext.test.tsx
+            src/analysis/__tests__/portfolioDecision.test.ts \
+            src/contexts/__tests__/AuthContext.test.tsx \
+            src/pages/__tests__/SharedReport.test.tsx \
+            src/utils/__tests__/exportReport.test.ts
 
       - name: Build frontend
         run: npm --prefix frontend run build
