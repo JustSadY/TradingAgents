@@ -16,6 +16,8 @@ on:
       - backend/tests/**
       - backend/postgres_tests/**
       - frontend/src/App.tsx
+      - frontend/src/analysis/streamingReports.ts
+      - frontend/src/analysis/__tests__/streamingReports.test.ts
       - frontend/src/i18n/analysis.ts
       - backend/api/auth.py
       - backend/api/users.py
@@ -120,6 +122,18 @@ jobs:
           print("PREFERENCES_ROUTE_ALIAS=0")
           PY
 
+      - name: Reject retired Trader streaming aliases
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          streaming = Path("frontend/src/analysis/streamingReports.ts").read_text()
+          if "trader: 'trader_plan'" in streaming or 'trader: "trader_plan"' in streaming:
+              raise SystemExit("retired Trader streaming alias still exists")
+          print("TRADER_STREAMING_ALIAS=0")
+          PY
+
       - name: Run cleanup regression tests
         run: |
           uv run --project backend pytest \
@@ -156,7 +170,8 @@ jobs:
             backend/worker.py \
             backend/core/password_hashing.py \
             backend/core/security.py \
-            backend/alembic/versions/20260816_0021-bc23d4e5f6a7_encrypt_legacy_tool_secrets.py
+            backend/alembic/versions/20260816_0021-bc23d4e5f6a7_encrypt_legacy_tool_secrets.py \
+            backend/alembic/versions/20260816_0022-cd34e5f6a7b8_remove_noop_risk_rounds.py
 
       - name: Verify Alembic has one head
         shell: bash
@@ -167,6 +182,9 @@ jobs:
 
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
+
+      - name: Run streaming report tests
+        run: npm --prefix frontend test -- src/analysis/__tests__/streamingReports.test.ts
 
       - name: Build frontend
         run: npm --prefix frontend run build
