@@ -3114,6 +3114,32 @@
             "title": "Agents",
             "type": "array"
           },
+          "analysis_event_types": {
+            "items": {
+              "enum": [
+                "status",
+                "progress",
+                "complete",
+                "error",
+                "report",
+                "token",
+                "mental_model",
+                "debate_bubble",
+                "decision",
+                "risk_metrics",
+                "stats",
+                "order_result",
+                "retry",
+                "fallback",
+                "node_error",
+                "circuit_open",
+                "stall_warning"
+              ],
+              "type": "string"
+            },
+            "title": "Analysis Event Types",
+            "type": "array"
+          },
           "analysts": {
             "items": {
               "$ref": "#/components/schemas/AnalystMeta"
@@ -3287,7 +3313,8 @@
           "sections",
           "webhook_events",
           "memory_stores",
-          "embedders"
+          "embedders",
+          "analysis_event_types"
         ],
         "title": "MetaResponse",
         "type": "object"

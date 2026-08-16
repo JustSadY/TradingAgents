@@ -4,6 +4,7 @@ from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
+from backend.schemas.analysis_events import AnalysisEventType
 from backend.schemas.tool_settings import SettingOptionMeta, ToolMeta, ToolSettingFieldMeta
 
 
@@ -85,6 +86,7 @@ class MetaResponse(BaseModel):
     webhook_events: list[str]
     memory_stores: list[Choice]
     embedders: list[Choice]
+    analysis_event_types: list[AnalysisEventType]
 
 
 __all__ = [

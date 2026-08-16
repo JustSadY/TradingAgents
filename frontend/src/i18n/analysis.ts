@@ -239,6 +239,7 @@ const analysis = {
     'analysis.debate_records': 'Debate Records',
     'analysis.multi_subtitle': 'Deploy multi-agent consensus networks for specialized asset research',
     'analysis.generating_chart': 'Generating chart visualization...',
+    'analysis.stalled': 'No activity for {{seconds}}s — the analysis may be stuck (threshold {{threshold}}s).',
   },
   tr: {
 
@@ -480,6 +481,7 @@ const analysis = {
     'analysis.debate_records': 'Tartışma Kayıtları',
     'analysis.multi_subtitle': 'Özelleşmiş varlık araştırması için çok ajanlı konsensüs ağlarını devreye alın',
     'analysis.generating_chart': 'Grafik görselleştirmesi oluşturuluyor...',
+    'analysis.stalled': '{{seconds}} saniyedir hareket yok — analiz takılmış olabilir (eşik {{threshold}}s).',
   },
 }
 

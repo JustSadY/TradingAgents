@@ -265,6 +265,19 @@ Analysis progress is streamed through:
 
 Do not put JWTs into WebSocket query strings. Preserve the existing subprotocol-based authentication design and `tradingagents.v1` application protocol.
 
+### Analysis event vocabulary
+
+The socket carries no OpenAPI path, so its event types are declared once in
+`backend/schemas/analysis_events.py` and published through `/api/meta`. That is
+how they reach the generated TypeScript client, and it is what lets
+`frontend/src/analysis/__tests__/analysisEvents.test.ts` assert the browser
+handles every one.
+
+A new event type therefore needs three things, and the tests fail without any
+of them: the literal added to `AnalysisEventType`, a branch in `Analysis.tsx`,
+and its key listed in `HANDLED_ANALYSIS_EVENTS`. Emitting a type that is not in
+the union fails `tests/test_services/test_analysis_event_contract.py`.
+
 ---
 
 ## Development setup

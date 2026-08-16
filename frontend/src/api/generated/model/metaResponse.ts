@@ -8,6 +8,7 @@
 import type { AgentMeta } from './agentMeta';
 import type { AnalystMeta } from './analystMeta';
 import type { Choice } from './choice';
+import type { MetaResponseAnalysisEventTypesItem } from './metaResponseAnalysisEventTypesItem';
 import type { MetaResponseEffortOptions } from './metaResponseEffortOptions';
 import type { MetaResponseProviderLabels } from './metaResponseProviderLabels';
 import type { MetaResponseSectionLabels } from './metaResponseSectionLabels';
@@ -17,6 +18,7 @@ import type { ToolMeta } from './toolMeta';
 
 export interface MetaResponse {
   agents: AgentMeta[];
+  analysis_event_types: MetaResponseAnalysisEventTypesItem[];
   analysts: AnalystMeta[];
   asset_types: Choice[];
   brokers: Choice[];

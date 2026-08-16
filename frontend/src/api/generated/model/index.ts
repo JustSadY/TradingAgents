@@ -99,6 +99,7 @@ export * from './marketSentimentHistoryParams';
 export * from './memoryStatusResponse';
 export * from './messageResponse';
 export * from './metaResponse';
+export * from './metaResponseAnalysisEventTypesItem';
 export * from './metaResponseEffortOptions';
 export * from './metaResponseProviderLabels';
 export * from './metaResponseSectionLabels';

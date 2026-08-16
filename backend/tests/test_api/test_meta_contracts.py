@@ -10,6 +10,7 @@ def test_meta_response_schema_covers_every_catalog_field():
         "data_vendors", "trading_modes", "brokers", "provider_labels", "investor_personas",
         "effort_options", "order_statuses", "order_actions", "chart_periods", "page_keys",
         "setting_keys", "sections", "webhook_events", "memory_stores", "embedders",
+        "analysis_event_types",
     }
 
 

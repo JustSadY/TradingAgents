@@ -80,10 +80,22 @@ import {
   type SavedRun,
 } from '../analysis/runStorage'
 import { readPortfolioDecision } from '../analysis/portfolioDecision'
+import type { AnalysisEventType } from '../analysis/analysisEvents'
 import { analysisStartError } from '../analysis/startError'
 
+/**
+ * One frame off `/ws/analysis/{task_id}`.
+ *
+ * `type` comes from the backend's own vocabulary rather than being `string`,
+ * so a typo in a branch below is a compile error and a newly declared event is
+ * caught by `analysisEvents.test.ts`. The payload fields stay optional: this
+ * is a union of seventeen shapes flattened into one object, and narrowing each
+ * branch properly would be a larger change than the drift it prevents.
+ */
 interface WsEvent {
-  type: string; section?: string; content?: string; signal?: string
+  type: AnalysisEventType
+  seconds_since_last_event?: number; threshold?: number
+  section?: string; content?: string; signal?: string
   final_decision?: string; message?: string; duration_seconds?: number
   llm_calls?: number; status?: string; agent?: string; analysis_id?: number
   label?: string; stage?: string; node?: string
@@ -592,6 +604,11 @@ function RunTab() {
         appendLog(`❌ Error in ${ev.node} (${ev.error_type})`)
       } else if (ev.type === 'circuit_open') {
         appendLog(`🔒 Circuit open for ${ev.node} (${ev.elapsed_seconds}s)`)
+      } else if (ev.type === 'stall_warning') {
+        // The run is still alive but has produced nothing for longer than the
+        // user's configured stall timeout. Say so, rather than leaving the
+        // heartbeat progress events to read as ordinary work.
+        appendLog(`⏳ ${t('analysis.stalled', { seconds: ev.seconds_since_last_event, threshold: ev.threshold })}`)
       } else if (ev.type === 'decision') {
         setSignal(ev.signal || null)
       } else if (ev.type === 'order_result') {
