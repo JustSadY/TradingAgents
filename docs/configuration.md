@@ -23,7 +23,7 @@ SECRET_KEY=change-me-to-a-random-32-character-string
 
 # Administrator Settings
 ADMIN_USERNAME=admin
-# Optional Argon2 or bcrypt hash. If empty, defaults to hash of "changeme" or a randomly printed installer password
+# Optional Argon2 hash. Production requires a valid operator-controlled hash.
 ADMIN_PASSWORD_HASH=
 
 # DB Credential Encryption Key (Required)
@@ -133,7 +133,7 @@ All of the runtime options below are no longer read from `.env` or system enviro
 
 *   **LLM Provider & Model:** E.g., `openai`, `gpt-5.6-luna`.
 *   **Output Language:** Output language for markdown reports (English, Turkish, etc.).
-*   **Debate & Risk Rounds:** Number of discussion rounds for Bull/Bear researchers and Risk agents.
+*   **Research Debate Rounds:** Number of Bull/Bear research discussion rounds.
 *   **Analyst Concurrency Limit:** Concurrency control for parallel analyst nodes.
 *   **Historical Analysis Scope:** Toggle and limit for loading historical reports into active context.
 *   **Specific Analyst Models Mapping:** Mapping specific analyst plugins to different LLM models.
