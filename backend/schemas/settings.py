@@ -31,7 +31,7 @@ def _validate_webhook_url_shape(v: str | None) -> str | None:
     This only validates it's a well-formed http(s) URL — it can't do the DNS
     resolution needed to catch SSRF targets (localhost, 169.254.169.254,
     RFC1918 ranges). That check runs separately at the actual save path via
-    ``notification_service.validate_webhook_url``.
+    ``notification_service.resolve_webhook_target``.
     """
     if v is None or v == "":
         return v
