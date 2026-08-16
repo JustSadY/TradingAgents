@@ -9,7 +9,8 @@ on:
       - backend/trading_agents/agents/main/risk.py
       - backend/services/analysis/portfolio_orchestrator.py
       - backend/trading_agents/agents/data/review_tools.py
-      - backend/tests/test_ai_engine/test_single_execution_authority.py
+      - backend/tests/**
+      - backend/postgres_tests/**
       - frontend/src/i18n/analysis.ts
       - backend/api/auth.py
       - backend/api/users.py
@@ -36,7 +37,7 @@ jobs:
           cache: npm
           cache-dependency-path: frontend/package-lock.json
 
-      - name: Inventory legacy password facade imports
+      - name: Reject legacy password facade imports
         shell: bash
         run: |
           python - <<'PY'
@@ -62,12 +63,11 @@ jobs:
                       names = sorted({alias.name for alias in node.names} & password_names)
                       if names:
                           hits.append((path.as_posix(), node.lineno, names))
-          if not hits:
-              print("LEGACY_PASSWORD_FACADE_IMPORTS=0")
-          else:
-              print(f"LEGACY_PASSWORD_FACADE_IMPORTS={len(hits)}")
+          if hits:
               for path, line, names in hits:
                   print(f"LEGACY_PASSWORD_FACADE {path}:{line} {','.join(names)}")
+              raise SystemExit(f"legacy password facade imports remain: {len(hits)}")
+          print("LEGACY_PASSWORD_FACADE_IMPORTS=0")
           PY
 
       - name: Run cleanup regression tests
@@ -75,6 +75,9 @@ jobs:
           uv run --project backend pytest \
             backend/tests/test_ai_engine/test_single_execution_authority.py \
             backend/tests/test_api/test_auth.py \
+            backend/tests/test_api/test_portfolio.py \
+            backend/tests/test_repositories/test_tenant_scoping_sweep.py \
+            backend/tests/test_repositories/test_users.py \
             backend/tests/test_services/test_security_service.py
 
       - name: Run backend lint
@@ -84,6 +87,14 @@ jobs:
             backend/services/analysis/portfolio_orchestrator.py \
             backend/trading_agents/agents/data/review_tools.py \
             backend/tests/test_ai_engine/test_single_execution_authority.py \
+            backend/tests/conftest.py \
+            backend/tests/helpers/factories.py \
+            backend/tests/test_api/test_auth.py \
+            backend/tests/test_api/test_portfolio.py \
+            backend/tests/test_repositories/test_tenant_scoping_sweep.py \
+            backend/tests/test_repositories/test_users.py \
+            backend/tests/test_services/test_security_service.py \
+            backend/postgres_tests/test_rls_integration.py \
             backend/api/auth.py \
             backend/api/users.py \
             backend/main.py \
