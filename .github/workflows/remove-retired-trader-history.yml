@@ -7,6 +7,7 @@ on:
     paths:
       - .github/scripts/remove_retired_trader_history.py
       - .github/workflows/remove-retired-trader-history.yml
+      - backend/api/share.py
 
 permissions:
   contents: write
@@ -65,6 +66,7 @@ jobs:
             backend/models/analysis.py \
             backend/schemas/analysis.py \
             backend/schemas/share.py \
+            backend/api/share.py \
             backend/core/catalog.py \
             backend/trading_agents/agents/data/review_tools.py \
             backend/services/analysis/orchestrator.py \
