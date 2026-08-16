@@ -1,0 +1,99 @@
+name: Clean trading router DB leak
+
+on:
+  push:
+    branches:
+      - agent/legacy-cleanup-pass4
+    paths:
+      - .github/workflows/cleanup-trading-router-db-leak.yml
+
+permissions:
+  contents: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: agent/legacy-cleanup-pass4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Move ownership check into service
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          route_path = Path('backend/api/trading.py')
+          route = route_path.read_text()
+          route = route.replace('from sqlalchemy import select\n', '')
+          old = '''\n    if req.analysis_id is not None:\n        from backend.models.analysis import AnalysisResult\n\n        ownership = await db.execute(\n            select(AnalysisResult.id).where(\n                AnalysisResult.id == req.analysis_id,\n                AnalysisResult.user_id == _.id,\n            )\n        )\n        if ownership.scalar_one_or_none() is None:\n            raise HTTPException(status_code=404, detail="Analysis not found")\n\n    result = await svc.execute_order(\n'''
+          new = '''\n    try:\n        result = await svc.execute_order(\n'''
+          if route.count(old) != 1:
+              raise SystemExit('trading.py direct ownership block not found exactly once')
+          route = route.replace(old, new)
+          old_tail = '''        allow_short=req.allow_short,\n    )\n    return result\n'''
+          new_tail = '''            allow_short=req.allow_short,\n        )\n    except svc.AnalysisOwnershipError as exc:\n        raise HTTPException(status_code=404, detail=str(exc)) from exc\n    return result\n'''
+          if route.count(old_tail) != 1:
+              raise SystemExit('trading.py execute_order tail not found exactly once')
+          route = route.replace(old_tail, new_tail)
+          route_path.write_text(route)
+
+          service_path = Path('backend/services/mock_trading_service.py')
+          service = service_path.read_text()
+          marker = '_DUST = Decimal("1e-6")\n'
+          addition = '''_DUST = Decimal("1e-6")\n\n\nclass AnalysisOwnershipError(ValueError):\n    """Raised when an order references an analysis outside the caller's scope."""\n\n'''
+          if service.count(marker) != 1:
+              raise SystemExit('mock_trading_service constants marker not found exactly once')
+          service = service.replace(marker, addition)
+          marker = '''    from backend.repositories.portfolio import get_holding\n    from backend.services.settings_service import get_user_language\n\n    lang = await get_user_language(db, user)\n'''
+          replacement = '''    from backend.repositories.analysis import get_analysis_by_id\n    from backend.repositories.portfolio import get_holding\n    from backend.services.settings_service import get_user_language\n\n    if analysis_id is not None and await get_analysis_by_id(db, analysis_id, user=user) is None:\n        raise AnalysisOwnershipError("Analysis not found")\n\n    lang = await get_user_language(db, user)\n'''
+          if service.count(marker) != 1:
+              raise SystemExit('execute_order import marker not found exactly once')
+          service = service.replace(marker, replacement)
+          service_path.write_text(service)
+
+          test_path = Path('backend/tests/test_api/test_trading.py')
+          tests = test_path.read_text()
+          marker = '''    async def test_create_order_negative_quantity(self, auth_client: AsyncClient):\n        resp = await auth_client.post(\n            "/api/trading/order",\n            json={"ticker": "AAPL", "action": "BUY", "quantity": -5},\n        )\n        assert resp.status_code == 422\n\n'''
+          addition = marker + '''    async def test_create_order_rejects_unknown_analysis_before_execution(self, auth_client: AsyncClient):\n        resp = await auth_client.post(\n            "/api/trading/order",\n            json={"ticker": "AAPL", "action": "BUY", "quantity": 1, "analysis_id": 999999},\n        )\n        assert resp.status_code == 404\n        assert resp.json()["detail"] == "Analysis not found"\n\n'''
+          if tests.count(marker) != 1:
+              raise SystemExit('trading API test insertion marker not found exactly once')
+          test_path.write_text(tests.replace(marker, addition))
+          PY
+
+      - name: Verify router no longer owns analysis SQL
+        shell: bash
+        run: |
+          if git grep -n -E 'AnalysisResult|select\(' -- backend/api/trading.py; then
+            echo 'direct analysis query remains in trading router' >&2
+            exit 1
+          fi
+
+      - name: Run trading tests
+        run: |
+          uv run --project backend pytest \
+            backend/tests/test_api/test_trading.py \
+            backend/tests/test_services/test_trading_orchestrator_execution.py \
+            backend/tests/test_services/test_live_trading_safety.py
+
+      - name: Run lint
+        run: |
+          uv run --project backend ruff check \
+            backend/api/trading.py \
+            backend/services/mock_trading_service.py \
+            backend/tests/test_api/test_trading.py
+
+      - name: Commit validated cleanup
+        shell: bash
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add backend/api/trading.py backend/services/mock_trading_service.py backend/tests/test_api/test_trading.py
+          git diff --cached --check
+          git commit -m 'Move analysis ownership check out of trading router'
+          git push origin HEAD:agent/legacy-cleanup-pass4
