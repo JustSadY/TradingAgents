@@ -28,24 +28,13 @@ describe('readPortfolioDecision', () => {
   it('prefers the accepted canonical decision that new runs persist', () => {
     const decision = readPortfolioDecision(
       { rating: 'Buy', entry_price: 100 },
-      { portfolio_decision: { rating: 'Sell', entry_price: 1 } },
       { rating: 'Hold' },
     )
     expect(decision).toMatchObject({ rating: 'Buy', entryPrice: 100 })
   })
 
-  it('falls back to the historical chart annotation for pre-migration canonical rows', () => {
-    const decision = readPortfolioDecision(undefined, { portfolio_decision: { rating: 'Sell', stop_loss: 90 } })
-    expect(decision).toMatchObject({ rating: 'Sell', stopLoss: 90 })
-  })
-
-  it('accepts the portfolio_decision_json spelling of the annotation', () => {
-    const decision = readPortfolioDecision(undefined, { portfolio_decision_json: { rating: 'Buy' } })
-    expect(decision?.rating).toBe('Buy')
-  })
-
   it('uses the streamed decision while a run is still in progress', () => {
-    const decision = readPortfolioDecision(undefined, undefined, { rating: 'Overweight', take_profit: 150 })
+    const decision = readPortfolioDecision(undefined, { rating: 'Overweight', take_profit: 150 })
     expect(decision).toMatchObject({ rating: 'Overweight', takeProfit: 150 })
   })
 
@@ -55,7 +44,7 @@ describe('readPortfolioDecision', () => {
   })
 
   it('returns nothing when no canonical source carries a decision', () => {
-    expect(readPortfolioDecision(undefined, undefined, undefined)).toBeNull()
+    expect(readPortfolioDecision(undefined, undefined)).toBeNull()
   })
 
   it('rejects a decision whose numbers are all unusable', () => {
