@@ -35,6 +35,9 @@ def main() -> None:
         "        self.max_debate_rounds = max_debate_rounds\n"
         "        self.max_risk_discuss_rounds = max_risk_discuss_rounds",
     )
+    conditional_logic = Path("backend/trading_agents/graph/conditional_logic.py")
+    conditional_logic.write_text(conditional_logic.read_text().rstrip() + "\n")
+
     replace_exact(
         "backend/trading_agents/graph/trading_graph.py",
         '        self.conditional_logic = ConditionalLogic(\n'
