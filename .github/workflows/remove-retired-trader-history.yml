@@ -8,6 +8,8 @@ on:
       - .github/scripts/remove_retired_trader_history.py
       - .github/workflows/remove-retired-trader-history.yml
       - backend/api/share.py
+      - backend/tests/test_api/test_share.py
+      - backend/tests/test_temporal_safety.py
 
 permissions:
   contents: write
@@ -70,6 +72,8 @@ jobs:
             backend/core/catalog.py \
             backend/trading_agents/agents/data/review_tools.py \
             backend/services/analysis/orchestrator.py \
+            backend/tests/test_api/test_share.py \
+            backend/tests/test_temporal_safety.py \
             backend/alembic/versions/20260816_0023-de45f6a7b8c9_remove_retired_trader_history.py
 
       - name: Verify Alembic has one head
