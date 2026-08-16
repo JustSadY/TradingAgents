@@ -362,7 +362,6 @@ export function HistoryTab({
                       {detail.risk_metrics ? <RiskMetricsCard metrics={detail.risk_metrics as any} /> : null}
                       <PortfolioDecisionCard
                         acceptedPortfolioDecision={detail.portfolio_decision_json}
-                        chartAnnotations={detail.chart_annotations}
                       />
                       <StrategyTransitionCard
                         analysisPlan={detail.analysis_plan_json}
