@@ -9,6 +9,8 @@ on:
       - backend/trading_agents/agents/main/risk.py
       - backend/services/analysis/portfolio_orchestrator.py
       - backend/trading_agents/agents/data/review_tools.py
+      - backend/services/analysis/config_builder.py
+      - backend/alembic/versions/**
       - backend/tests/**
       - backend/postgres_tests/**
       - frontend/src/i18n/analysis.ts
@@ -78,7 +80,8 @@ jobs:
             backend/tests/test_api/test_portfolio.py \
             backend/tests/test_repositories/test_tenant_scoping_sweep.py \
             backend/tests/test_repositories/test_users.py \
-            backend/tests/test_services/test_security_service.py
+            backend/tests/test_services/test_security_service.py \
+            backend/tests/test_services/test_config_builder_secrets.py
 
       - name: Run backend lint
         run: |
@@ -86,6 +89,7 @@ jobs:
             backend/trading_agents/agents/main/risk.py \
             backend/services/analysis/portfolio_orchestrator.py \
             backend/trading_agents/agents/data/review_tools.py \
+            backend/services/analysis/config_builder.py \
             backend/tests/test_ai_engine/test_single_execution_authority.py \
             backend/tests/conftest.py \
             backend/tests/helpers/factories.py \
@@ -94,12 +98,21 @@ jobs:
             backend/tests/test_repositories/test_tenant_scoping_sweep.py \
             backend/tests/test_repositories/test_users.py \
             backend/tests/test_services/test_security_service.py \
+            backend/tests/test_services/test_config_builder_secrets.py \
             backend/postgres_tests/test_rls_integration.py \
             backend/api/auth.py \
             backend/api/users.py \
             backend/main.py \
             backend/core/password_hashing.py \
-            backend/core/security.py
+            backend/core/security.py \
+            backend/alembic/versions/20260816_0021-bc23d4e5f6a7_encrypt_legacy_tool_secrets.py
+
+      - name: Verify Alembic has one head
+        shell: bash
+        run: |
+          cd backend
+          heads="$(uv run alembic heads | tee /dev/stderr | wc -l)"
+          test "$heads" -eq 1
 
       - name: Install frontend dependencies
         run: npm ci --prefix frontend
