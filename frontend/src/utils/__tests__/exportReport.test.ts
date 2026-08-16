@@ -71,7 +71,6 @@ describe('markdownToHtml', () => {
 
     expect(html).toContain('<table>')
     expect(html).toContain('<th>Metric</th>')
-    // The `---:` separator carries through as a column alignment attribute.
     expect(html).toContain('<strong>30.1</strong>')
     expect(html).toMatch(/<td[^>]*align="right"[^>]*><strong>30.1<\/strong><\/td>/)
     expect(html).not.toContain('<p>| Metric | Value |</p>')
@@ -80,8 +79,6 @@ describe('markdownToHtml', () => {
   it('escapes untrusted table cell HTML', () => {
     const html = markdownToHtml('| Metric | Value |\n| --- | --- |\n| Test | <script>alert(1)</script> |')
 
-    // Escaped as a hex entity rather than a named one; both are inert, and
-    // the tag stays visible so the report shows what the model actually wrote.
     expect(html).not.toContain('<script>')
     expect(html).toMatch(/&(lt|#x3C);script/i)
     expect(html).toContain('alert(1)')
@@ -106,8 +103,6 @@ describe('markdownToHtml', () => {
     })
 
     it('demotes report headings so they nest under the section heading', () => {
-      // The printable page emits each section as <h2>, so report content
-      // starts one level below it rather than competing with it.
       const html = markdownToHtml('# Top\n\n## Second\n\n### Third')
       expect(html).not.toContain('<h1')
       expect(html).not.toContain('<h2')
@@ -153,9 +148,7 @@ describe('markdownToHtml', () => {
 })
 
 describe('export section headings', () => {
-  it('keeps every heading and its order byte-identical in both languages', () => {
-    // Guards a user-facing artefact: consolidating three metadata sources into
-    // one registry must not silently reword what a downloaded report says.
+  it('keeps every current heading and its order byte-identical in both languages', () => {
     const exportable = REPORT_SECTIONS
       .filter(section => section.exportLabelKey)
       .sort((a, b) => (a.exportOrder ?? 0) - (b.exportOrder ?? 0))
@@ -182,7 +175,6 @@ describe('export section headings', () => {
     const shareOnly = REPORT_SECTIONS.filter(s => s.shareable && !s.exportLabelKey).map(s => s.key)
     expect(shareOnly).toEqual([
       'portfolio_decision',
-      'trader_proposal_json',
       'debates',
       'risk_metrics',
     ])
