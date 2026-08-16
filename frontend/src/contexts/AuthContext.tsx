@@ -105,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccessToken(null)
 
       // Restore a server-side session using the HttpOnly refresh cookie.
-      const res = await axios.post('/auth/refresh', {})
+      const res = await axios.post('/auth/refresh')
       const token = res.data?.access_token
       if (epoch !== _authEpoch) return
       if (typeof token !== 'string' || !applyAccessToken(token)) {
@@ -134,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Invalidate every in-flight init/refresh and TanStack request before the
     // next auth scope can mount queries using the same generated query keys.
     _authEpoch += 1
-    _queue.forEach(({ reject }) => reject(new Error('Session ended')))
+    _queue.forEach(({ reject }) => reject(new Error('Session ended'))
     _queue = []
     clearLocalAuthState()
     // The server call is intentionally best-effort after local invalidation.
@@ -212,7 +212,7 @@ axios.interceptors.response.use(
     _refreshing = true
     const refreshEpoch = _authEpoch
     try {
-      const res = await axios.post('/auth/refresh', {})
+      const res = await axios.post('/auth/refresh')
       const newToken = res.data?.access_token
       if (refreshEpoch !== _authEpoch) throw new Error('Session changed during refresh')
       if (typeof newToken !== 'string') throw new Error('No access token returned')
