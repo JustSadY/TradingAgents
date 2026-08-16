@@ -52,6 +52,7 @@ from backend.core.log_redaction import install_redaction
 
 install_redaction(*logging.getLogger().handlers)
 
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     _logger.info("Starting TradingAgents Web API...")
@@ -67,7 +68,6 @@ async def lifespan(app: FastAPI):
     await create_all_tables()
     await _seed_admin_user()
     await _seed_setting_permissions()
-    await _migrate_analysis_subpage_permissions()
 
     try:
         from backend.core.rls_context import BackgroundCapability, trusted_background_session
@@ -135,6 +135,7 @@ async def lifespan(app: FastAPI):
     _logger.info("Application stopped.")
     db_log_handler.stop()
 
+
 async def _seed_admin_user():
     from sqlalchemy import select
 
@@ -151,10 +152,9 @@ async def _seed_admin_user():
             raw_hash = settings.ADMIN_PASSWORD_HASH
             if raw_hash and not is_supported_password_hash(raw_hash):
                 if settings.ENVIRONMENT.strip().lower() == "production":
-                    raise RuntimeError("ADMIN_PASSWORD_HASH is not a valid Argon2 or bcrypt hash")
+                    raise RuntimeError("ADMIN_PASSWORD_HASH is not a valid Argon2 hash")
                 _logger.warning(
-                    "ADMIN_PASSWORD_HASH in .env is not a valid Argon2 or bcrypt hash; "
-                    "using development fallback."
+                    "ADMIN_PASSWORD_HASH in .env is not a valid Argon2 hash; using development fallback."
                 )
                 raw_hash = None
             if raw_hash:
@@ -183,6 +183,7 @@ async def _seed_admin_user():
             await db.commit()
             _logger.info("Owner role set for existing user: %s", settings.ADMIN_USERNAME)
 
+
 async def _seed_setting_permissions():
     from sqlalchemy import select
 
@@ -206,44 +207,6 @@ async def _seed_setting_permissions():
                     db.add(UserSettingPermission(user_id=u.id, setting_key=s_key, allowed=True))
         await db.commit()
 
-async def _migrate_analysis_subpage_permissions():
-    """One-time backfill for the "screener"/"sector-rotation"/"earnings" page
-    keys added after they used to piggyback on the "analysis" permission.
-
-    Without this, every existing non-admin user who could already reach these
-    pages via "analysis" access would silently lose them the moment this
-    version deploys, until an admin re-granted each one individually. Grant a
-    page only when the user already has "analysis" allowed and has no
-    explicit row yet for the new key — never override an admin's own choice.
-    """
-    from sqlalchemy import select
-
-    from backend.core.rls_context import BackgroundCapability, trusted_background_session
-    from backend.models.page_permission import UserPagePermission
-    from backend.models.user import User
-
-    new_keys = ("screener", "sector-rotation", "earnings")
-    async with trusted_background_session(BackgroundCapability.STARTUP_SEED) as db:
-        res = await db.execute(select(User))
-        users = res.scalars().all()
-        for u in users:
-            analysis_res = await db.execute(
-                select(UserPagePermission)
-                .where(UserPagePermission.user_id == u.id)
-                .where(UserPagePermission.page_key == "analysis")
-            )
-            analysis_perm = analysis_res.scalar_one_or_none()
-            if not analysis_perm or not analysis_perm.allowed:
-                continue
-            for key in new_keys:
-                exists_res = await db.execute(
-                    select(UserPagePermission)
-                    .where(UserPagePermission.user_id == u.id)
-                    .where(UserPagePermission.page_key == key)
-                )
-                if not exists_res.scalar_one_or_none():
-                    db.add(UserPagePermission(user_id=u.id, page_key=key, allowed=True))
-        await db.commit()
 
 async def _load_cron_settings(cron):
     try:
@@ -258,6 +221,7 @@ async def _load_cron_settings(cron):
                 await cron.apply_user_settings(app_settings)
     except Exception as e:
         _logger.warning("Could not load cron settings: %s", e)
+
 
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
@@ -337,6 +301,7 @@ app.include_router(personas_api_router)
 _WS_KEEPALIVE_MESSAGE = "__tradingagents_keepalive__"
 _WS_AUTH_REVALIDATION_SECONDS = 30.0
 
+
 async def _reject_websocket(
     websocket: WebSocket,
     *,
@@ -353,6 +318,7 @@ async def _reject_websocket(
     """
     await websocket.accept(subprotocol=subprotocol)
     await websocket.close(code=code, reason=reason)
+
 
 async def _analysis_websocket_access_is_current(access_token: str, expected_user_id: int) -> bool:
     """Re-check a connected analysis socket's token and page entitlement.
@@ -374,6 +340,7 @@ async def _analysis_websocket_access_is_current(access_token: str, expected_user
         if user.id != expected_user_id:
             return False
         return await has_page_access(db, user, "analysis")
+
 
 @app.websocket("/ws/analysis/{task_id}")
 async def websocket_analysis(
@@ -507,9 +474,11 @@ async def websocket_analysis(
         except Exception:
             _logger.debug("Could not close failed WebSocket task=%s", task_id, exc_info=True)
 
+
 @app.get("/health")
 async def health():
     return {"status": "ok"}
+
 
 _static_dir = os.path.join(os.path.dirname(__file__), "..", "frontend", "dist")
 if os.path.isdir(_static_dir):
