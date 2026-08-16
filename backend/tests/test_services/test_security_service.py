@@ -3,15 +3,17 @@ from __future__ import annotations
 import bcrypt
 import pytest
 
+from backend.core.password_hashing import (
+    hash_password,
+    is_supported_password_hash,
+    verify_and_update_password,
+    verify_password,
+)
 from backend.core.security import (
     create_access_token,
     create_refresh_token,
     decode_token,
     decode_token_payload,
-    hash_password,
-    is_supported_password_hash,
-    verify_and_update_password,
-    verify_password,
 )
 
 
