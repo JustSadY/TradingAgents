@@ -317,8 +317,6 @@ _TIME_TRAVEL_ALLOWED_FIELDS = frozenset({
     "calibrated_confidence",
     "final_trade_decision",
     "final_signal",
-    "trader_investment_plan",
-    "trader_proposal_json",
 })
 _TIME_TRAVEL_PROTECTED_FIELDS = frozenset({
     "company_of_interest", "ticker", "trade_date", "asset_type", "user_id",
