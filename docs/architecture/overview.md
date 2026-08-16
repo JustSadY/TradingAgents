@@ -1,6 +1,6 @@
 # System Architecture
 
-TradingAgents is split into a React frontend, a FastAPI application shell, a LangGraph-based multi-agent decision engine, PostgreSQL persistence, and optional Redis/arq worker infrastructure. This document describes the current implementation rather than proposed or roadmap-only features.
+TradingAgents is split into a React frontend, a FastAPI application shell, a LangGraph-based multi-agent decision engine, PostgreSQL persistence, and optional Redis/arq worker infrastructure. This document describes the current implementation rather than proposed or retired features.
 
 ---
 
@@ -24,7 +24,7 @@ graph TD
     StrategyContext --> Planner[Neutral analysis planner]
     Planner --> Analysts[12 analyst plugins]
     Analysts --> Research[Cross-examination / Bull-Bear research]
-    Research --> Risk[Risk evidence and guardrails]
+    Research --> Risk[Single risk-panel node]
     Risk --> Reconciler[Strategy Reconciler]
     Reconciler --> PM[Portfolio Manager raw proposal]
     PM --> Stability[Decision Stability Controller]
@@ -81,13 +81,13 @@ Core modules include:
 
 - application configuration
 - async database engine/session setup
-- security, JWT, password hashing, and Fernet encryption
+- security, JWT, Argon2 password hashing, and Fernet encryption
 - request limits and proxy handling
 - logging/redaction
 - WebSocket connection management
 - Redis event transport
 - cross-process task registry/cancellation
-- startup schema migration helpers
+- Alembic schema-head verification/upgrade integration
 
 The default single-process path works without Redis. Redis becomes important when work is split across processes.
 
@@ -104,7 +104,7 @@ The implementation separates specialized evidence production from final executio
 1. **Strategy Context + Analysis Planner** — loads the exact active/as-of strategy and creates a neutral investigation agenda without exposing its old direction to fresh analysts.
 2. **Market Intelligence / analyst execution** — runs the enabled analyst plugins.
 3. **Cross-examination and research synthesis** — resolves conflicts and runs Bull/Bear thesis work and auditing/management steps, including structured synthesis evidence.
-4. **Risk evaluation** — aggressive, conservative, and neutral risk agents produce risk evidence and guardrails.
+4. **Risk evaluation** — one Risk Debate node makes one LLM call and returns aggressive, conservative, and neutral perspectives as non-executable risk evidence.
 5. **Strategy Reconciler** — compares new evidence with the active thesis and proposes `KEEP`, `STRENGTHEN`, `WEAKEN`, `INVALIDATE`, or `REBUILD`.
 6. **Portfolio Manager** — emits the sole AI raw structured proposal.
 7. **Decision Stability Controller** — records (shadow) or accepts (enforce) the canonical decision using hysteresis, invalidations, independent evidence, quality, and calibrated confidence.
@@ -112,7 +112,7 @@ The implementation separates specialized evidence production from final executio
 
 The current analyst catalog contains 12 specialized analyst plugins: Market/Technical, Social Sentiment, News, Fundamentals, Macroeconomics, Options Chain, Quantitative Factor, Earnings Call, Performance Review, Catalyst, Insider Activity, and Institutional Ownership.
 
-Risk agents do **not** independently own final Buy/Sell/Hold direction or executable quantity/allocation. The Portfolio Manager is the sole AI proposal authority; the deterministic controller owns the canonical accepted-decision boundary.
+Risk perspectives do **not** independently own final Buy/Sell/Hold direction or executable quantity/allocation. The Portfolio Manager is the sole AI proposal authority; the deterministic controller owns the canonical accepted-decision boundary.
 
 ### Package layout
 
@@ -127,8 +127,7 @@ backend/trading_agents/
 │   ├── sub/
 │   │   ├── analysts/
 │   │   ├── researchers/
-│   │   ├── managers/
-│   │   └── risk_mgmt/
+│   │   └── managers/
 │   ├── runtime/
 │   └── tools/
 ├── graph/
@@ -230,7 +229,7 @@ In single-process mode the event bus can forward events directly to the WebSocke
 
 PostgreSQL stores application users, settings, encrypted provider credentials, analyses, portfolio/trading state, logs, alerts, and other feature data.
 
-Alembic is the sole schema authority for PostgreSQL. Outside production the backend upgrades the database to the Alembic head on startup; in production it verifies the database is already at head and refuses to serve otherwise. A pre-Alembic installation is stamped at the checked-in baseline and then upgraded through every later revision.
+Alembic is the sole schema authority for PostgreSQL. Outside production the backend upgrades an already Alembic-managed database to head on startup; in production it verifies the database is already at head and refuses to serve otherwise. There is no pre-Alembic schema auto-stamp bridge: an unversioned database must be migrated explicitly by an operator before the application is started.
 
 Destructive schema changes such as drops, renames, and incompatible type changes require an explicit migration strategy.
 
@@ -271,6 +270,4 @@ The backend and monitoring ports are bound to loopback by default where appropri
 
 ## 11. What Is Not Part of This Architecture Contract
 
-Older versions of this document mixed implemented functionality with proposed ideas such as dedicated `SqueezeAnalyst` classes, patent/R&D scanners, supply-chain maps, and whale-sweep subsystems. Those items must not be treated as implemented architecture unless corresponding production code exists in the repository.
-
-Roadmap ideas should be documented separately from this file. This document is intended to remain a description of code that exists in the current branch.
+Roadmap or retired components must not be described here as implemented architecture unless corresponding production code exists in the current branch. This document is intended to remain a description of code that is live now.
