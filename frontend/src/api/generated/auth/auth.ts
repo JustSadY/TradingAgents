@@ -18,7 +18,6 @@ import type {
 import type {
   HTTPValidationError,
   LoginRequest,
-  RefreshRequest,
   TokenResponse
 } from '../model';
 
@@ -159,15 +158,13 @@ export const useAuthLogout = <TError = unknown,
  * @summary Refresh
  */
 export const authRefresh = (
-    refreshRequestNull?: RefreshRequest | null,
+
  options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
 ) => {
 
 
       return customInstance<TokenResponse>(
-      {url: `/auth/refresh`, method: 'POST',
-      headers: {'Content-Type': 'application/json', },
-      data: refreshRequestNull, signal
+      {url: `/auth/refresh`, method: 'POST', signal
     },
       options);
     }
@@ -175,9 +172,9 @@ export const authRefresh = (
 
 
 
-export const getAuthRefreshMutationOptions = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authRefresh>>, TError,{data?: RefreshRequest | null}, TContext>, request?: SecondParameter<typeof customInstance>}
-): UseMutationOptions<Awaited<ReturnType<typeof authRefresh>>, TError,{data?: RefreshRequest | null}, TContext> => {
+export const getAuthRefreshMutationOptions = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authRefresh>>, TError,void, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof authRefresh>>, TError,void, TContext> => {
 
 const mutationKey = ['authRefresh'];
 const {mutation: mutationOptions, request: requestOptions} = options ?
@@ -189,10 +186,10 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
 
 
 
-      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authRefresh>>, {data?: RefreshRequest | null}> = (props) => {
-          const {data} = props ?? {};
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authRefresh>>, void> = () => {
 
-          return  authRefresh(data,requestOptions)
+
+          return  authRefresh(requestOptions)
         }
 
 
@@ -203,18 +200,18 @@ const {mutation: mutationOptions, request: requestOptions} = options ?
   return  { mutationFn, ...mutationOptions }}
 
     export type AuthRefreshMutationResult = NonNullable<Awaited<ReturnType<typeof authRefresh>>>
-    export type AuthRefreshMutationBody = RefreshRequest | null | undefined
-    export type AuthRefreshMutationError = HTTPValidationError
+
+    export type AuthRefreshMutationError = unknown
 
     /**
  * @summary Refresh
  */
-export const useAuthRefresh = <TError = HTTPValidationError,
-    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authRefresh>>, TError,{data?: RefreshRequest | null}, TContext>, request?: SecondParameter<typeof customInstance>}
+export const useAuthRefresh = <TError = unknown,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authRefresh>>, TError,void, TContext>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient): UseMutationResult<
         Awaited<ReturnType<typeof authRefresh>>,
         TError,
-        {data?: RefreshRequest | null},
+        void,
         TContext
       > => {
       return useMutation(getAuthRefreshMutationOptions(options), queryClient);
