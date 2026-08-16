@@ -76,16 +76,6 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
             raise
 
 
-async def set_tenant_context(db: AsyncSession, *, user_id: int, is_admin: bool = False) -> None:
-    """Compatibility wrapper for authenticated request context."""
-    from backend.core.rls_context import set_request_admin_context, set_request_tenant_context
-
-    if is_admin:
-        await set_request_admin_context(db, user_id)
-    else:
-        await set_request_tenant_context(db, user_id)
-
-
 async def _has_alembic_version(conn) -> bool:
     if conn.dialect.name == "sqlite":
         row = (
@@ -140,7 +130,6 @@ async def _has_complete_unversioned_app_schema(conn) -> bool:
         )
     )
     return _is_complete_unversioned_app_schema(set(rows.scalars()))
-
 
 
 def _expected_alembic_heads() -> set[str]:
