@@ -26,9 +26,9 @@ def encrypt_secret(value: str) -> str:
 def decrypt_secret(value: str) -> str:
     """Decrypt a value produced by :func:`encrypt_secret`.
 
-    Raises ``cryptography.fernet.InvalidToken`` for anything that isn't valid
-    ciphertext under the current key — callers that might see pre-migration
-    plaintext values should catch that and fall back to the raw value.
+    Raises ``cryptography.fernet.InvalidToken`` when the value is not valid
+    ciphertext under the current key. Runtime plaintext fallback is not part of
+    the current secret-storage contract.
     """
     return settings.get_fernet().decrypt(value.encode()).decode()
 
