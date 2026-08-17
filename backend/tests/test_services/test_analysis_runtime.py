@@ -33,7 +33,7 @@ async def test_local_runtime_round_trips_typed_task_state():
     assert await runtime.is_cancelled(meta.task_id) is False
 
 
-def test_runtime_does_not_reintroduce_task_store_compatibility_surface():
+def test_runtime_does_not_reintroduce_task_store_or_retry_compatibility_surface():
     legacy_names = {
         "set_meta",
         "get_meta",
@@ -46,12 +46,15 @@ def test_runtime_does_not_reintroduce_task_store_compatibility_surface():
     }
 
     assert legacy_names.isdisjoint(vars(AnalysisRuntime))
+    assert "retry_count" not in AnalysisTaskMeta.model_fields
 
 
-def test_analysis_service_no_longer_imports_or_aliases_task_store():
+def test_analysis_service_no_longer_imports_or_aliases_legacy_task_state():
     source = Path(analysis_service.__file__).read_text()
 
     assert "from backend.core import task_store" not in source
     assert "backend.core.task_store" not in source
     assert "task_store = runtime" not in source
+    assert "_maybe_retry_analysis" not in source
+    assert "retry_scheduled" not in source
     assert "get_analysis_runtime" in source
