@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from pathlib import Path
 from unittest.mock import patch
 
 import pytest
@@ -294,3 +295,36 @@ class TestUserService:
     ) -> None:
         with pytest.raises(UnknownPermissionKeysError, match="Unknown setting permission keys"):
             await set_managed_setting_permissions(db, test_user.id, {"teleport": True})
+
+
+def test_users_router_keeps_persistence_and_request_models_out() -> None:
+    backend_root = Path(__file__).resolve().parents[2]
+    source = (backend_root / "api" / "users.py").read_text()
+
+    assert "backend.repositories" not in source
+    assert "backend.core.config" not in source
+    assert "_get_settings" not in source
+    assert "await db.flush()" not in source
+    assert "from pydantic import BaseModel" not in source
+    assert "list_stored_api_key_providers(" in source
+    assert "save_stored_api_key(" in source
+    assert "remove_stored_api_key(" in source
+
+
+def test_user_cleanup_service_has_no_direct_sql_or_delete() -> None:
+    backend_root = Path(__file__).resolve().parents[2]
+    source = (backend_root / "services" / "user_service.py").read_text()
+
+    assert "from sqlalchemy import select" not in source
+    assert "select(AnalysisResult" not in source
+    assert "await db.delete(user)" not in source
+    assert "backend.repositories.user_cleanup" in source
+
+
+def test_tool_access_service_uses_repository_for_sql() -> None:
+    backend_root = Path(__file__).resolve().parents[2]
+    source = (backend_root / "services" / "tool_access_service.py").read_text()
+
+    assert "from sqlalchemy import select" not in source
+    assert "backend.models.tool_settings" not in source
+    assert "backend.repositories.tool_access" in source
