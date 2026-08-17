@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 
@@ -173,18 +172,22 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
     return cfg
 
 def history_json_from(value):
+    """Return a JSON-column-safe debate-side history value.
+
+    Current graph nodes keep prompt history as a transcript string, while the
+    persistence contract stores structured sender/content records. Existing
+    structured rows are preserved as-is; new transcript strings are normalized
+    before they reach the JSON column.
+    """
     if not value:
         return None
     if isinstance(value, (list, dict)):
         return value
     if isinstance(value, str):
-        val_s = value.strip()
-        if (val_s.startswith("[") and val_s.endswith("]")) or (val_s.startswith("{") and val_s.endswith("}")):
-            try:
-                return json.loads(val_s)
-            except Exception as e:
-                _logger.debug("Failed parsing history JSON string: %s", e)
-    return value
+        from backend.trading_agents.agents.runtime.debate_history import debate_messages
+
+        return debate_messages(value) or None
+    return None
 
 async def prepare_graph_config(db: AsyncSession, user_id: int | None, config: dict) -> list[str]:
     """Resolve the user's permitted analysts and inject runtime tool/agent
