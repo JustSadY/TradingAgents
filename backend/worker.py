@@ -13,6 +13,7 @@ import asyncio
 import logging
 
 import backend.bootstrap  # noqa: F401  (engine env defaults; import before trading_agents)
+from backend.analysis_runtime import distributed as analysis_distributed
 from backend.core.config import get_settings
 
 _logger = logging.getLogger(__name__)
@@ -188,10 +189,9 @@ async def startup(ctx):
 
     setup_unified_logging()
     import backend.trading_agents.agents.tools.bootstrap  # noqa: F401
-    from backend.core.task_store import control_listener
     from backend.services.analysis_service import cancel_local_task
 
-    ctx["control_listener"] = asyncio.create_task(control_listener(cancel_local_task))
+    ctx["control_listener"] = asyncio.create_task(analysis_distributed.listen_for_controls(cancel_local_task))
     _logger.info("Analysis worker ready (queue mode).")
 
 
@@ -199,9 +199,7 @@ async def shutdown(ctx):
     listener = ctx.get("control_listener")
     if listener:
         listener.cancel()
-    from backend.core.redis_bus import close_redis
-
-    await close_redis()
+    await analysis_distributed.close()
 
 
 def _redis_settings():
