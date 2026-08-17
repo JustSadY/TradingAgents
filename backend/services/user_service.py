@@ -29,6 +29,10 @@ class CannotDeleteSelfError(ValueError):
     pass
 
 
+class UnknownPermissionKeysError(ValueError):
+    pass
+
+
 def encrypt_api_keys(keys: dict[str, str], fernet: Fernet) -> str:
     return fernet.encrypt(json.dumps(keys).encode()).decode()
 
@@ -125,6 +129,86 @@ def list_user_api_key_providers(user: User, fernet: Fernet) -> list[str]:
         return []
 
 
+async def get_user_or_raise(db: AsyncSession, user_id: int) -> User:
+    from backend.repositories.users import get_user_by_id
+
+    user = await get_user_by_id(db, user_id)
+    if user is None:
+        raise UserNotFoundError("User not found")
+    return user
+
+
+async def list_managed_users(db: AsyncSession) -> list[User]:
+    from backend.repositories.users import list_users
+
+    return await list_users(db)
+
+
+async def get_effective_page_permissions(db: AsyncSession, user: User) -> list[str]:
+    from backend.core.constants import PAGE_KEYS
+    from backend.repositories.permissions import list_allowed_page_keys
+
+    if user.is_admin:
+        return [*PAGE_KEYS, "admin"]
+    allowed = sorted(await list_allowed_page_keys(db, user.id))
+    if "settings" not in allowed:
+        allowed.append("settings")
+    return allowed
+
+
+async def get_effective_setting_permissions(db: AsyncSession, user: User) -> list[str]:
+    from backend.core.constants import SETTING_KEYS
+    from backend.repositories.permissions import list_allowed_setting_sections
+
+    if user.is_admin:
+        return list(SETTING_KEYS)
+    return sorted(await list_allowed_setting_sections(db, user.id))
+
+
+async def get_managed_page_permissions(db: AsyncSession, user_id: int) -> dict[str, bool]:
+    from backend.models.page_permission import ALL_PAGE_KEYS
+    from backend.repositories.permissions import get_user_page_permissions_map
+
+    await get_user_or_raise(db, user_id)
+    permissions = await get_user_page_permissions_map(db, user_id)
+    return {key: permissions.get(key, False) for key in ALL_PAGE_KEYS}
+
+
+async def set_managed_page_permissions(db: AsyncSession, user_id: int, permissions: dict[str, bool]) -> None:
+    from backend.models.page_permission import ALL_PAGE_KEYS
+    from backend.repositories.permissions import set_user_page_permission
+
+    await get_user_or_raise(db, user_id)
+    unknown = sorted(set(permissions) - set(ALL_PAGE_KEYS))
+    if unknown:
+        raise UnknownPermissionKeysError(f"Unknown page permission keys: {', '.join(unknown)}")
+    for page_key, allowed in permissions.items():
+        await set_user_page_permission(db, user_id, page_key, allowed)
+    await db.flush()
+
+
+async def get_managed_setting_permissions(db: AsyncSession, user_id: int) -> dict[str, bool]:
+    from backend.core.constants import SETTING_KEYS
+    from backend.repositories.permissions import get_user_setting_permissions_map
+
+    await get_user_or_raise(db, user_id)
+    permissions = await get_user_setting_permissions_map(db, user_id)
+    return {key: permissions.get(key, False) for key in SETTING_KEYS}
+
+
+async def set_managed_setting_permissions(db: AsyncSession, user_id: int, permissions: dict[str, bool]) -> None:
+    from backend.core.constants import SETTING_KEYS
+    from backend.repositories.permissions import set_user_setting_permission
+
+    await get_user_or_raise(db, user_id)
+    unknown = sorted(set(permissions) - set(SETTING_KEYS))
+    if unknown:
+        raise UnknownPermissionKeysError(f"Unknown setting permission keys: {', '.join(unknown)}")
+    for setting_key, allowed in permissions.items():
+        await set_user_setting_permission(db, user_id, setting_key, allowed)
+    await db.flush()
+
+
 async def update_profile(
     db: AsyncSession,
     user: User,
@@ -198,11 +282,9 @@ async def update_managed_user(
     display_name: str | None,
 ) -> User:
     """Apply administrator user-mutation policy and persist the update."""
-    from backend.repositories.users import email_exists, get_user_by_id, update_user_admin
+    from backend.repositories.users import email_exists, update_user_admin
 
-    user = await get_user_by_id(db, user_id)
-    if user is None:
-        raise UserNotFoundError("User not found")
+    user = await get_user_or_raise(db, user_id)
 
     if user.role == "owner":
         if role is not None and role != "owner":
@@ -231,14 +313,10 @@ async def update_managed_user(
 
 async def delete_managed_user(db: AsyncSession, actor: User, user_id: int) -> None:
     """Delete a user after enforcing self-delete and owner-account policy."""
-    from backend.repositories.users import get_user_by_id
-
     if user_id == actor.id:
         raise CannotDeleteSelfError("Cannot delete yourself")
 
-    user = await get_user_by_id(db, user_id)
-    if user is None:
-        raise UserNotFoundError("User not found")
+    user = await get_user_or_raise(db, user_id)
     if user.role == "owner":
         raise UserPolicyError("The Server Owner account cannot be deleted.")
 
