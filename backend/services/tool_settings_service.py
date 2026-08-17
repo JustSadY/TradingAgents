@@ -165,6 +165,7 @@ async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
 
 
 async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSettingsUpdate) -> ToolSettingsRead:
+    from backend.repositories.tool_settings import ensure_tool_setting
     from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
 
     user_rows_list = await _repo_get_user(db, user.id)
@@ -181,13 +182,15 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
 
         _validate_tool_availability(tool, tool_key, agent_ctx)
 
-        row = user_rows.get(tool_key)
-        if not row:
-            row = AgentToolSetting(
-                scope="user", user_id=user.id, tool_key=tool_key, enabled=tool.default_enabled, settings={}
-            )
-            db.add(row)
-
+        row = ensure_tool_setting(
+            db,
+            row=user_rows.get(tool_key),
+            scope="user",
+            user_id=user.id,
+            tool_key=tool_key,
+            default_enabled=tool.default_enabled,
+        )
+        user_rows[tool_key] = row
         _apply_tool_setting_row_update(row, update, tool)
 
     await db.flush()
@@ -230,6 +233,7 @@ def _apply_tool_setting_row_update(row: AgentToolSetting, update: Any, tool: Bas
 
 
 async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettingsUpdate) -> ToolSettingsRead:
+    from backend.repositories.tool_settings import ensure_tool_setting
     from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
 
     server_rows_list = await _repo_get_server(db)
@@ -240,13 +244,15 @@ async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettings
         if not tool:
             raise ValueError(f"Unknown tool key '{tool_key}'.")
 
-        row = server_rows.get(tool_key)
-        if not row:
-            row = AgentToolSetting(
-                scope="server", user_id=None, tool_key=tool_key, enabled=tool.default_enabled, settings={}
-            )
-            db.add(row)
-
+        row = ensure_tool_setting(
+            db,
+            row=server_rows.get(tool_key),
+            scope="server",
+            user_id=None,
+            tool_key=tool_key,
+            default_enabled=tool.default_enabled,
+        )
+        server_rows[tool_key] = row
         _apply_tool_setting_row_update(row, update, tool)
 
     await db.flush()
