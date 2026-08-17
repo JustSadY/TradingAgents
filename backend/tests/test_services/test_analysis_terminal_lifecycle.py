@@ -106,11 +106,10 @@ async def test_cancel_marker_emits_terminal_error_before_deferred_socket_close(m
     assert timeline == ["rollback", "error", "clear", "close"]
 
 
-async def test_terminal_orchestrator_error_is_not_retried(monkeypatch):
-    """Never launch a retry after the inner run may have told the UI it failed."""
-    task_id = "terminal-error-no-retry"
+async def test_terminal_orchestrator_error_finalizes_without_duplicate_product_error(monkeypatch):
+    """An inner terminal event must be cleaned up without emitting another error."""
+    task_id = "terminal-error-finalize-once"
     _Emitter.events.clear()
-    retry_calls = 0
     cleared = 0
 
     class _Session:
@@ -129,11 +128,6 @@ async def test_terminal_orchestrator_error_is_not_retried(monkeypatch):
         error._analysis_terminal_event_emitted = True
         raise error
 
-    async def retry(*_args, **_kwargs) -> bool:
-        nonlocal retry_calls
-        retry_calls += 1
-        return True
-
     async def terminalize(*_args, **_kwargs) -> bool:
         nonlocal cleared
         cleared += 1
@@ -143,19 +137,17 @@ async def test_terminal_orchestrator_error_is_not_retried(monkeypatch):
     monkeypatch.setattr(analysis_service, "AsyncSessionLocal", lambda: _Session())
     monkeypatch.setattr(analysis_service, "run_analysis", terminal_error)
     monkeypatch.setattr(analysis_service.runtime, "is_cancelled", not_cancelled)
-    monkeypatch.setattr(analysis_service, "_maybe_retry_analysis", retry)
     monkeypatch.setattr(analysis_service, "terminalize_task", terminalize)
 
     await analysis_service.run_analysis_task("NVDA", "2026-07-28", "stock", None, task_id)
 
-    assert retry_calls == 0
     assert cleared == 1
     assert _Emitter.events == ["close"]
 
 
-async def test_unscheduled_retry_clears_tracking_and_sends_terminal_error(monkeypatch):
-    """A retry-budget/enqueue failure cannot leave a ghost active task behind."""
-    task_id = "retry-terminal-cleanup"
+async def test_pre_graph_failure_clears_tracking_and_sends_terminal_error(monkeypatch):
+    """A pre-graph failure cannot leave a ghost active task behind."""
+    task_id = "terminal-failure-cleanup"
     _Emitter.events.clear()
     cleared = 0
 
@@ -173,9 +165,6 @@ async def test_unscheduled_retry_clears_tracking_and_sends_terminal_error(monkey
         assert kwargs["defer_terminal_cleanup"] is True
         raise RuntimeError("task registry unavailable")
 
-    async def retry_exhausted(*_args, **_kwargs) -> bool:
-        return False
-
     async def terminalize(*_args, **_kwargs) -> bool:
         nonlocal cleared
         cleared += 1
@@ -185,7 +174,6 @@ async def test_unscheduled_retry_clears_tracking_and_sends_terminal_error(monkey
     monkeypatch.setattr(analysis_service, "AsyncSessionLocal", lambda: _Session())
     monkeypatch.setattr(analysis_service, "run_analysis", pre_graph_failure)
     monkeypatch.setattr(analysis_service.runtime, "is_cancelled", not_cancelled)
-    monkeypatch.setattr(analysis_service, "_maybe_retry_analysis", retry_exhausted)
     monkeypatch.setattr(analysis_service, "terminalize_task", terminalize)
 
     await analysis_service.run_analysis_task("NVDA", "2026-07-28", "stock", None, task_id)
