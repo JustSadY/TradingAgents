@@ -1,0 +1,1 @@
+"""Startup-only application operations."""
