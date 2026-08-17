@@ -16,6 +16,7 @@ on:
       - backend/services/analysis/config_builder.py
       - backend/services/notification_service.py
       - backend/services/settings_service.py
+      - backend/services/user_service.py
       - backend/alembic/versions/**
       - backend/tests/**
       - backend/postgres_tests/**
@@ -207,7 +208,7 @@ jobs:
           print("SET_TENANT_CONTEXT_WRAPPER=0")
           PY
 
-      - name: Reject deprecated refresh token response field
+      - name: Reject deprecated refresh-token body and response contracts
         shell: bash
         run: |
           python - <<'PY'
@@ -216,27 +217,30 @@ jobs:
 
           schema = ast.parse(Path("backend/schemas/auth.py").read_text())
           token_fields = set()
-          refresh_request_fields = set()
+          refresh_request_present = False
           for node in schema.body:
-              if isinstance(node, ast.ClassDef) and node.name in {"TokenResponse", "RefreshRequest"}:
-                  fields = {
+              if not isinstance(node, ast.ClassDef):
+                  continue
+              if node.name == "TokenResponse":
+                  token_fields = {
                       item.target.id
                       for item in node.body
                       if isinstance(item, ast.AnnAssign) and isinstance(item.target, ast.Name)
                   }
-                  if node.name == "TokenResponse":
-                      token_fields = fields
-                  else:
-                      refresh_request_fields = fields
+              elif node.name == "RefreshRequest":
+                  refresh_request_present = True
+
           if "refresh_token" in token_fields:
               raise SystemExit("deprecated TokenResponse.refresh_token field was reintroduced")
-          if "refresh_token" not in refresh_request_fields:
-              raise SystemExit("CLI/API RefreshRequest.refresh_token compatibility was removed unintentionally")
+          if refresh_request_present:
+              raise SystemExit("retired request-body RefreshRequest compatibility was reintroduced")
 
           generated = Path("frontend/src/api/generated/model/tokenResponse.ts").read_text()
           if "refresh_token" in generated:
               raise SystemExit("generated TokenResponse still exposes refresh_token")
-          print("REFRESH_TOKEN_RESPONSE_FIELD=0")
+          if Path("frontend/src/api/generated/model/refreshRequest.ts").exists():
+              raise SystemExit("generated RefreshRequest compatibility model was reintroduced")
+          print("REFRESH_TOKEN_BODY_AND_RESPONSE_COMPATIBILITY=0")
           PY
 
       - name: Reject direct refresh-session SQL in auth router
@@ -293,6 +297,8 @@ jobs:
               "Portfolio Manager (sole final structured investment decision)",
               "Portfolio Manager is the only agent with final decision authority",
               "falls back to per-analysis SQLite files",
+              "Legacy unversioned PostgreSQL schemas",
+              "RefreshRequest.refresh_token remains intentionally supported",
           )
           hits = [text for text in stale if text in doc]
           if hits:
@@ -302,6 +308,7 @@ jobs:
               "Decision Stability Controller",
               "Portfolio Manager is the sole AI proposal authority",
               "LangGraph checkpoints require PostgreSQL",
+              "current `/auth/refresh` contract is cookie-only",
           )
           missing = [text for text in required if text not in doc]
           if missing:
@@ -321,6 +328,31 @@ jobs:
           if hits:
               raise SystemExit(f"trading router regained direct analysis SQL: {hits}")
           print("TRADING_ROUTER_ANALYSIS_SQL=0")
+          PY
+
+      - name: Reject user account policy in router
+        shell: bash
+        run: |
+          python - <<'PY'
+          from pathlib import Path
+
+          route = Path("backend/api/users.py").read_text()
+          forbidden = (
+              "hash_password(",
+              "username_exists(",
+              "email_exists(",
+              "current_user.token_version =",
+              'body.role == "owner"',
+              'admin.role != "owner"',
+          )
+          hits = [token for token in forbidden if token in route]
+          if hits:
+              raise SystemExit(f"users router regained account mutation policy: {hits}")
+          required = ("update_profile(", "create_managed_user(", "update_managed_user(", "delete_managed_user(")
+          missing = [token for token in required if token not in route]
+          if missing:
+              raise SystemExit(f"users router is not delegating account mutations to user_service: {missing}")
+          print("USER_ROUTER_ACCOUNT_POLICY=0")
           PY
 
       - name: Reject alert mutation business logic in router
@@ -376,11 +408,13 @@ jobs:
             backend/tests/test_api/test_portfolio.py \
             backend/tests/test_api/test_trading.py \
             backend/tests/test_api/test_share.py \
+            backend/tests/test_api/test_users.py \
             backend/tests/test_temporal_safety.py \
             backend/tests/test_repositories/test_tenant_scoping_sweep.py \
             backend/tests/test_repositories/test_users.py \
             backend/tests/test_services/test_security_service.py \
             backend/tests/test_services/test_config_builder_secrets.py \
+            backend/tests/test_services/test_user_service.py \
             backend/tests/test_services/test_legacy_settings_contract.py \
             backend/tests/test_services/test_alert_management_service.py
 
@@ -396,6 +430,7 @@ jobs:
             backend/services/analysis/config_builder.py \
             backend/services/notification_service.py \
             backend/services/settings_service.py \
+            backend/services/user_service.py \
             backend/api/trading.py \
             backend/api/auth.py \
             backend/api/alerts.py \
@@ -420,11 +455,13 @@ jobs:
             backend/tests/test_api/test_portfolio.py \
             backend/tests/test_api/test_trading.py \
             backend/tests/test_api/test_share.py \
+            backend/tests/test_api/test_users.py \
             backend/tests/test_temporal_safety.py \
             backend/tests/test_repositories/test_tenant_scoping_sweep.py \
             backend/tests/test_repositories/test_users.py \
             backend/tests/test_services/test_security_service.py \
             backend/tests/test_services/test_config_builder_secrets.py \
+            backend/tests/test_services/test_user_service.py \
             backend/tests/test_services/test_legacy_settings_contract.py \
             backend/tests/test_services/test_alert_management_service.py \
             backend/postgres_tests/test_rls_integration.py \
