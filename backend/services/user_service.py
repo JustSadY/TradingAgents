@@ -344,26 +344,16 @@ async def delete_managed_user(db: AsyncSession, actor: User, user_id: int) -> No
 
 async def delete_user_and_emit(db: AsyncSession, user: User) -> None:
     """Delete a tenant and clean up any active task-store state."""
-    from sqlalchemy import select
-
     from backend.core import task_store
     from backend.core.events import emit
-    from backend.models.analysis import AnalysisResult
+    from backend.repositories.user_cleanup import delete_user_record, list_active_analysis_task_ids
 
-    active = await db.execute(
-        select(AnalysisResult.task_id).where(
-            AnalysisResult.user_id == user.id,
-            AnalysisResult.status.in_(("queued", "running")),
-            AnalysisResult.task_id.is_not(None),
-        )
-    )
-    task_ids = [task_id for task_id in active.scalars().all() if task_id]
+    task_ids = await list_active_analysis_task_ids(db, user.id)
     for task_id in task_ids:
         await task_store.request_cancel(task_id)
         await task_store.publish_cancel(task_id)
 
-    await db.delete(user)
-    await db.commit()
+    await delete_user_record(db, user)
 
     for task_id in task_ids:
         await task_store.clear_meta(task_id, user.id)
