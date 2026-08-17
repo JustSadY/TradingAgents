@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 
 import httpx
@@ -90,6 +91,19 @@ async def test_request_error_retries_without_resolving_dns_again(monkeypatch):
     assert await notification_service.send_webhook(url, "trade_executed", {}, retries=2) is True
 
     assert client.calls == 2
+    assert resolutions == [url]
+
+
+@pytest.mark.asyncio
+async def test_cancellation_is_not_retried(monkeypatch):
+    client = _Client([asyncio.CancelledError()])
+    resolutions = await _install_delivery_doubles(monkeypatch, client)
+    url = "https://hooks.example/deliver"
+
+    with pytest.raises(asyncio.CancelledError):
+        await notification_service.send_webhook(url, "trade_executed", {}, retries=3)
+
+    assert client.calls == 1
     assert resolutions == [url]
 
 
