@@ -28,7 +28,9 @@ class AnalysisRuntime:
         await self.backend.request_cancel(task_id)
 
     async def is_cancelled(self, task_id: str) -> bool:
-        return await self.backend.is_cancelled(task_id)
+        # Route through the compatibility method while the existing regression
+        # suite still monkeypatches ``is_cancel_requested`` on the facade.
+        return await self.is_cancel_requested(task_id)
 
     async def complete(self, task_id: str, user_id: int | None = None) -> None:
         await self.backend.complete(task_id, user_id)
@@ -65,7 +67,7 @@ class AnalysisRuntime:
         await self.backend.clear_metadata(task_id, user_id)
 
     async def is_cancel_requested(self, task_id: str) -> bool:
-        return await self.is_cancelled(task_id)
+        return await self.backend.is_cancelled(task_id)
 
     async def clear_cancel_request(self, task_id: str) -> None:
         await self.backend.clear_cancel(task_id)
