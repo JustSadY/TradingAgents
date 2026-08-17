@@ -9,6 +9,26 @@ from backend.models.user import User
 _logger = logging.getLogger(__name__)
 
 
+class UserNotFoundError(LookupError):
+    pass
+
+
+class UsernameTakenError(ValueError):
+    pass
+
+
+class EmailTakenError(ValueError):
+    pass
+
+
+class UserPolicyError(PermissionError):
+    pass
+
+
+class CannotDeleteSelfError(ValueError):
+    pass
+
+
 def encrypt_api_keys(keys: dict[str, str], fernet: Fernet) -> str:
     return fernet.encrypt(json.dumps(keys).encode()).decode()
 
@@ -103,6 +123,126 @@ def list_user_api_key_providers(user: User, fernet: Fernet) -> list[str]:
             e,
         )
         return []
+
+
+async def update_profile(
+    db: AsyncSession,
+    user: User,
+    *,
+    email: str | None,
+    display_name: str | None,
+    password: str | None,
+) -> User:
+    """Apply self-service profile policy and persist the profile update."""
+    from backend.core.password_hashing import hash_password
+    from backend.repositories.users import email_exists, update_user_profile
+
+    if email is not None and await email_exists(db, email, exclude_user_id=user.id):
+        raise EmailTakenError("Email already in use")
+
+    hashed_password = None
+    if password:
+        hashed_password = hash_password(password)
+        user.token_version = (getattr(user, "token_version", 0) or 0) + 1
+
+    return await update_user_profile(
+        db,
+        user,
+        email=email,
+        display_name=display_name,
+        hashed_password=hashed_password,
+    )
+
+
+async def create_managed_user(
+    db: AsyncSession,
+    actor: User,
+    *,
+    username: str,
+    password: str,
+    email: str | None,
+    display_name: str | None,
+    role: str,
+) -> User:
+    """Create a user after enforcing uniqueness and owner/admin role policy."""
+    from backend.core.password_hashing import hash_password
+    from backend.repositories.users import create_user_with_permissions, email_exists, username_exists
+
+    if await username_exists(db, username):
+        raise UsernameTakenError("Username already taken")
+    if email and await email_exists(db, email):
+        raise EmailTakenError("Email already in use")
+    if role == "owner":
+        raise UserPolicyError("Assigning the Server Owner role is prohibited.")
+    if role != "user" and actor.role != "owner":
+        raise UserPolicyError("Only the Server Owner can create administrator accounts.")
+
+    return await create_user_with_permissions(
+        db,
+        username=username,
+        hashed_password=hash_password(password),
+        email=email,
+        display_name=display_name,
+        role=role,
+    )
+
+
+async def update_managed_user(
+    db: AsyncSession,
+    actor: User,
+    user_id: int,
+    *,
+    role: str | None,
+    is_active: bool | None,
+    email: str | None,
+    display_name: str | None,
+) -> User:
+    """Apply administrator user-mutation policy and persist the update."""
+    from backend.repositories.users import email_exists, get_user_by_id, update_user_admin
+
+    user = await get_user_by_id(db, user_id)
+    if user is None:
+        raise UserNotFoundError("User not found")
+
+    if user.role == "owner":
+        if role is not None and role != "owner":
+            raise UserPolicyError("The Server Owner role is immutable.")
+        if is_active is not None and is_active != user.is_active:
+            raise UserPolicyError("The Server Owner account cannot be deactivated.")
+
+    if role is not None:
+        if role == "owner" and user.role != "owner":
+            raise UserPolicyError("Assigning Server Owner is prohibited.")
+        if actor.role != "owner":
+            raise UserPolicyError("Only Server Owner can promote/demote admins.")
+
+    if email is not None and await email_exists(db, email, exclude_user_id=user.id):
+        raise EmailTakenError("Email already in use")
+
+    return await update_user_admin(
+        db,
+        user,
+        role=role,
+        is_active=is_active,
+        email=email,
+        display_name=display_name,
+    )
+
+
+async def delete_managed_user(db: AsyncSession, actor: User, user_id: int) -> None:
+    """Delete a user after enforcing self-delete and owner-account policy."""
+    from backend.repositories.users import get_user_by_id
+
+    if user_id == actor.id:
+        raise CannotDeleteSelfError("Cannot delete yourself")
+
+    user = await get_user_by_id(db, user_id)
+    if user is None:
+        raise UserNotFoundError("User not found")
+    if user.role == "owner":
+        raise UserPolicyError("The Server Owner account cannot be deleted.")
+
+    await delete_user_and_emit(db, user)
 
 
 async def delete_user_and_emit(db: AsyncSession, user: User) -> None:
