@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from .local_backend import LocalBackend
 from .models import AnalysisEventEnvelope, AnalysisTaskMeta, AnalysisTaskStatus, TerminalResult
 from .redis_backend import RedisBackend
 from .runtime import AnalysisRuntime
@@ -16,6 +17,8 @@ __all__ = [
     "AnalysisRuntime",
     "AnalysisTaskMeta",
     "AnalysisTaskStatus",
+    "LocalBackend",
+    "RedisBackend",
     "TerminalResult",
     "get_analysis_runtime",
 ]
