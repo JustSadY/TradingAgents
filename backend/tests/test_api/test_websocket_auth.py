@@ -13,12 +13,15 @@ def test_websocket_auth_reads_private_subprotocol_token():
 
     assert token == "header-token"
 
+
 def test_websocket_auth_requires_a_private_subprotocol_token():
     assert get_websocket_access_token(None) is None
     assert get_websocket_access_token("chat.v1") is None
 
+
 def test_websocket_auth_rejects_empty_private_protocol_token():
     assert get_websocket_access_token(WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX) is None
+
 
 def test_websocket_selects_only_fixed_application_subprotocol():
     offered = f"{WEBSOCKET_APPLICATION_SUBPROTOCOL}, {WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX}header-token"
@@ -26,10 +29,11 @@ def test_websocket_selects_only_fixed_application_subprotocol():
     assert get_websocket_application_subprotocol(offered) == WEBSOCKET_APPLICATION_SUBPROTOCOL
     assert get_websocket_application_subprotocol(f"{WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX}header-token") is None
 
+
 @pytest.mark.asyncio
 async def test_websocket_rejects_a_handshake_without_the_application_protocol():
     """The authenticated socket contract always includes the application protocol."""
-    from backend.main import websocket_analysis
+    from backend.realtime.analysis_websocket import websocket_analysis
 
     class Socket:
         headers = {"sec-websocket-protocol": f"{WEBSOCKET_TOKEN_SUBPROTOCOL_PREFIX}header-token"}
@@ -51,9 +55,10 @@ async def test_websocket_rejects_a_handshake_without_the_application_protocol():
         ("close", 1002, "Unsupported WebSocket protocol"),
     ]
 
+
 @pytest.mark.asyncio
 async def test_websocket_rejects_an_application_protocol_without_a_private_jwt():
-    from backend.main import websocket_analysis
+    from backend.realtime.analysis_websocket import websocket_analysis
 
     class Socket:
         headers = {"sec-websocket-protocol": WEBSOCKET_APPLICATION_SUBPROTOCOL}
@@ -75,10 +80,11 @@ async def test_websocket_rejects_an_application_protocol_without_a_private_jwt()
         ("close", 4001, "Unauthorized"),
     ]
 
+
 @pytest.mark.asyncio
 async def test_websocket_rejection_sends_a_diagnostic_close_frame():
     """Clients need a WebSocket close code, not an opaque HTTP rejection."""
-    from backend.main import _reject_websocket
+    from backend.realtime.analysis_websocket import _reject_websocket
 
     class Socket:
         def __init__(self) -> None:
@@ -103,13 +109,14 @@ async def test_websocket_rejection_sends_a_diagnostic_close_frame():
         ("close", 4001, "Unauthorized"),
     ]
 
+
 @pytest.mark.asyncio
 async def test_connected_websocket_revalidation_checks_current_token_and_page_access(monkeypatch):
     from types import SimpleNamespace
 
     import backend.api.deps as deps
     import backend.core.database as database
-    from backend.main import _analysis_websocket_access_is_current
+    from backend.realtime.analysis_websocket import _analysis_websocket_access_is_current
 
     class Session:
         async def __aenter__(self):
@@ -133,6 +140,7 @@ async def test_connected_websocket_revalidation_checks_current_token_and_page_ac
     assert await _analysis_websocket_access_is_current("header-token", 7) is True
     assert await _analysis_websocket_access_is_current("header-token", 8) is False
 
+
 @pytest.mark.asyncio
 async def test_connected_websocket_closes_when_periodic_revalidation_is_revoked(monkeypatch):
     import asyncio
@@ -140,7 +148,7 @@ async def test_connected_websocket_closes_when_periodic_revalidation_is_revoked(
 
     import backend.api.deps as deps
     import backend.core.database as database
-    import backend.main as main
+    import backend.realtime.analysis_websocket as analysis_websocket
     import backend.services.analysis_service as analysis_service
 
     class Session:
@@ -177,7 +185,7 @@ async def test_connected_websocket_closes_when_periodic_revalidation_is_revoked(
         user_calls += 1
         if user_calls == 1:
             return SimpleNamespace(id=7, is_admin=False)
-        raise main.HTTPException(status_code=401)
+        raise analysis_websocket.HTTPException(status_code=401)
 
     async def page_access(db, user, page):
         return True
@@ -195,12 +203,12 @@ async def test_connected_websocket_closes_when_periodic_revalidation_is_revoked(
     monkeypatch.setattr(deps, "get_user_from_access_token", get_user)
     monkeypatch.setattr(deps, "has_page_access", page_access)
     monkeypatch.setattr(analysis_service, "is_task_owner", owns_task)
-    monkeypatch.setattr(main.ws_manager, "connect", connect)
-    monkeypatch.setattr(main.ws_manager, "disconnect", disconnect)
-    monkeypatch.setattr(main, "_WS_AUTH_REVALIDATION_SECONDS", 0.001)
+    monkeypatch.setattr(analysis_websocket.ws_manager, "connect", connect)
+    monkeypatch.setattr(analysis_websocket.ws_manager, "disconnect", disconnect)
+    monkeypatch.setattr(analysis_websocket, "_WS_AUTH_REVALIDATION_SECONDS", 0.001)
 
     socket = Socket()
-    await main.websocket_analysis(socket, "task-id")
+    await analysis_websocket.websocket_analysis(socket, "task-id")
 
     assert socket.calls == [
         ("accept", WEBSOCKET_APPLICATION_SUBPROTOCOL),
