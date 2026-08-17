@@ -11,7 +11,6 @@ from backend.core.password_hashing import (
 from backend.core.security import (
     create_access_token,
     create_refresh_token,
-    decode_token,
     decode_token_payload,
 )
 
@@ -107,23 +106,18 @@ class TestSecurityService:
         assert payload["sid"] == "sess-abc"
         assert payload["jti"] == "jti-xyz"
 
-    def test_decode_token(self):
-        token = create_access_token("testuser")
-        result = decode_token(token, "access")
-        assert result == "testuser"
-
-    def test_decode_token_wrong_type(self):
+    def test_decode_token_payload_wrong_type(self):
         token = create_access_token("testuser")
         with pytest.raises(ValueError, match="Wrong token type"):
-            decode_token(token, "refresh")
+            decode_token_payload(token, "refresh")
 
-    def test_decode_token_invalid(self):
+    def test_decode_token_payload_invalid(self):
         with pytest.raises(ValueError, match="Invalid token"):
-            decode_token("invalid-token", "access")
+            decode_token_payload("invalid-token", "access")
 
-    def test_decode_token_empty(self):
+    def test_decode_token_payload_empty(self):
         with pytest.raises(ValueError, match="Invalid token"):
-            decode_token("", "access")
+            decode_token_payload("", "access")
 
     def test_access_refresh_token_roundtrip(self):
         access = create_access_token("testuser", role="user", token_version=1)
