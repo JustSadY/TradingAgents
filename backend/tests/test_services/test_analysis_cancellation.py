@@ -14,6 +14,7 @@ from backend.services import analysis_service
 async def _noop(*_args, **_kwargs) -> None:
     return None
 
+
 class _Emitter:
     instances: list[_Emitter] = []
 
@@ -29,6 +30,7 @@ class _Emitter:
     async def close(self) -> None:
         self.closed = True
 
+
 async def test_cancel_marker_survives_without_redis(monkeypatch):
     """Inline BackgroundTasks need a local durable intent marker as well."""
     task_id = "local-marker-regression"
@@ -39,6 +41,7 @@ async def test_cancel_marker_survives_without_redis(monkeypatch):
         assert await task_store.is_cancel_requested(task_id) is True
     finally:
         await task_store.clear_cancel_request(task_id)
+
 
 async def test_cancel_local_task_keeps_tracking_until_runner_acknowledges():
     """A queued/start race must not erase the record before the task stops."""
@@ -62,6 +65,7 @@ async def test_cancel_local_task_keeps_tracking_until_runner_acknowledges():
         analysis_service._TASK_REGISTRY.pop(task_id, None)
         analysis_service._TASK_OWNERS.pop(task_id, None)
 
+
 async def test_cancel_analysis_persists_intent_before_publish(monkeypatch):
     task_id = "queued-cancel-regression"
     calls: list[tuple[str, str]] = []
@@ -72,18 +76,19 @@ async def test_cancel_analysis_persists_intent_before_publish(monkeypatch):
     async def publish_cancel(value: str) -> None:
         calls.append(("publish", value))
 
-    monkeypatch.setattr(analysis_service.task_store, "request_cancel", request_cancel)
-    monkeypatch.setattr(analysis_service.task_store, "publish_cancel", publish_cancel)
+    monkeypatch.setattr(analysis_service.runtime, "request_cancel", request_cancel)
+    monkeypatch.setattr(analysis_service.runtime, "publish_cancel", publish_cancel)
 
     assert await analysis_service.cancel_analysis(task_id) is True
     assert calls == [("request", task_id), ("publish", task_id)]
+
 
 async def test_queued_analysis_never_enters_graph_after_cancel_marker(monkeypatch):
     """A worker/background task beginning after Stop must terminate pre-graph."""
     _Emitter.instances.clear()
     graph_started = False
 
-    async def is_cancel_requested(_task_id: str) -> bool:
+    async def is_cancelled(_task_id: str) -> bool:
         return True
 
     async def unexpected_graph(*_args, **_kwargs):
@@ -91,8 +96,8 @@ async def test_queued_analysis_never_enters_graph_after_cancel_marker(monkeypatc
         graph_started = True
 
     monkeypatch.setattr(analysis_service, "AnalysisEmitter", _Emitter)
-    monkeypatch.setattr(analysis_service.task_store, "is_cancel_requested", is_cancel_requested)
-    monkeypatch.setattr(analysis_service.task_store, "clear_owner", _noop)
+    monkeypatch.setattr(analysis_service.runtime, "is_cancelled", is_cancelled)
+    monkeypatch.setattr(analysis_service.runtime, "complete", _noop)
     monkeypatch.setattr(analysis_service, "run_individual_analysis", unexpected_graph)
 
     with pytest.raises(asyncio.CancelledError):
@@ -101,6 +106,7 @@ async def test_queued_analysis_never_enters_graph_after_cancel_marker(monkeypatc
     assert graph_started is False
     assert _Emitter.instances[0].errors == ["Analysis cancelled."]
     assert _Emitter.instances[0].closed is True
+
 
 async def test_cancelled_incremental_update_rolls_back_before_terminal_write(monkeypatch):
     """Cancellation cleanup must not dereference an ORM row after a bad flush."""
@@ -163,6 +169,7 @@ async def test_cancelled_incremental_update_rolls_back_before_terminal_write(mon
     assert db.events == ["rollback", "mark_cancelled"]
     assert emitter.errors == ["Analysis cancelled."]
 
+
 async def test_cancelled_status_cleanup_does_not_mask_cancellation(monkeypatch):
     """A DB cleanup fault must propagate the original cancellation, not a failure."""
     from backend.services.analysis import orchestrator
@@ -199,6 +206,7 @@ async def test_cancelled_status_cleanup_does_not_mask_cancellation(monkeypatch):
     with pytest.raises(asyncio.CancelledError):
         await orchestrator.run_individual_analysis("NVDA", "2026-07-28", "stock", None, _Db(), _RunEmitter())
 
+
 async def test_portfolio_parent_is_registered_and_cancelled_with_children(monkeypatch):
     """Portfolio jobs need the same parent registry lifecycle as single runs."""
     task_id = "portfolio-cancel-regression"
@@ -222,9 +230,13 @@ async def test_portfolio_parent_is_registered_and_cancelled_with_children(monkey
     async def not_cancelled(_task_id: str) -> bool:
         return False
 
-    for name in ("get_meta", "set_meta", "set_owner", "clear_meta", "clear_owner", "clear_cancel_request"):
-        monkeypatch.setattr(analysis_service.task_store, name, _noop)
-    monkeypatch.setattr(analysis_service.task_store, "is_cancel_requested", not_cancelled)
+    async def no_metadata(_task_id: str):
+        return None
+
+    monkeypatch.setattr(analysis_service.runtime, "metadata", no_metadata)
+    monkeypatch.setattr(analysis_service.runtime, "register", _noop)
+    monkeypatch.setattr(analysis_service.runtime, "is_cancelled", not_cancelled)
+    monkeypatch.setattr(analysis_service.runtime, "complete", _noop)
     monkeypatch.setattr(analysis_service, "AsyncSessionLocal", lambda: _Session())
     monkeypatch.setattr(analysis_service, "run_portfolio_analysis", run_portfolio)
     monkeypatch.setattr(analysis_service, "_emit_cancelled_task", _noop)
@@ -246,6 +258,7 @@ async def test_portfolio_parent_is_registered_and_cancelled_with_children(monkey
         analysis_service._RUNNING_TASKS.pop(task_id, None)
         analysis_service._TASK_REGISTRY.pop(task_id, None)
         analysis_service._TASK_OWNERS.pop(task_id, None)
+
 
 async def test_worker_treats_cancelled_analysis_as_terminal(monkeypatch):
     """The run is marked terminal and cleaned up, then CancelledError re-raises.
