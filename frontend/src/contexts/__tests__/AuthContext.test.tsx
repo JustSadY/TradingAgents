@@ -66,6 +66,41 @@ describe('AuthContext', () => {
     expect(localStorage.getItem('ta_access')).toBeNull()
   })
 
+  it('keeps a session established while a slower bootstrap attempt is still failing', async () => {
+    // A browser's first visit has no refresh cookie, so every bootstrap attempt
+    // fails. StrictMode runs the effect twice: the first rejection reveals the
+    // login form, and the second used to land *after* the user had signed in
+    // and wipe the new session, sending them back to the login screen.
+    let rejectSlowBootstrap: (reason: Error) => void = () => {}
+    const slowBootstrap = new Promise((_resolve, reject) => { rejectSlowBootstrap = reject })
+
+    vi.mocked(axios.post).mockImplementation((url: string) => {
+      if (url === '/auth/refresh') return slowBootstrap as Promise<never>
+      if (url === '/auth/login') return Promise.resolve({ data: { access_token: jwt('alice') } }) as never
+      return Promise.reject(new Error(`unexpected POST ${url}`)) as never
+    })
+
+    renderWithAuth(<TestConsumer />)
+    await userEvent.click(screen.getByTestId('login'))
+    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('alice'))
+
+    rejectSlowBootstrap(new Error('no refresh cookie'))
+    await Promise.resolve()
+
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+    expect(screen.getByTestId('user')).toHaveTextContent('alice')
+    expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('true')
+    expect(getAccessToken()).toBeTruthy()
+  })
+
+  it('still signs out when the bootstrap failure belongs to the current attempt', async () => {
+    renderWithAuth(<TestConsumer />)
+
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+    expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('false')
+    expect(getAccessToken()).toBeNull()
+  })
+
   it('does not authenticate from legacy localStorage tokens and purges them', async () => {
     localStorage.setItem('ta_access', jwt('legacy'))
     localStorage.setItem('ta_refresh', 'legacy-refresh-token')

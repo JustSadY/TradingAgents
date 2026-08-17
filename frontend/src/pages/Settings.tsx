@@ -588,7 +588,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
           {activeTab === 'agents' && (
             <ErrorBoundary name="SettingsAgents">
-              <AgentSettingsPanel ref={agentPanelRef} userId={userId} />
+              <AgentSettingsPanel ref={agentPanelRef} userId={userId} hideSaveButton={true} />
             </ErrorBoundary>
           )}
 

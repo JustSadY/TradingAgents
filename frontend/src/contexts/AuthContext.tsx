@@ -43,6 +43,19 @@ function activateUserScope(username: string) {
 }
 
 let _onForceLogout: (() => void) | null = null
+
+/**
+ * Generation counter for the current authentication attempt.
+ *
+ * Bumped whenever auth state is *established* or torn down, so slow work
+ * started under an earlier generation cannot write over a newer one. It used
+ * to be bumped only by `logout()`, which left this race on a browser's first
+ * visit: `initAuth` runs twice under StrictMode, both refresh calls fail
+ * because there is no cookie yet, the first rejection reveals the login form,
+ * the user signs in — and then the second rejection cleared the session that
+ * login had just established, bouncing them back to the login screen. Signing
+ * in a second time worked only because by then both calls had settled.
+ */
 let _authEpoch = 0
 
 interface JwtPayload {
@@ -94,6 +107,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const applyAccessToken = useCallback((token: string): boolean => {
     const payload = decodeToken(token)
     if (!payload?.sub || payload.exp * 1000 <= Date.now()) return false
+    // A session now exists. Anything still in flight from before this point
+    // belongs to an older generation and must not clear it.
+    _authEpoch += 1
     setAccessToken(token)
     activateUserScope(payload.sub)
     setUser(payload.sub)
@@ -123,6 +139,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearLocalAuthState()
       }
     } catch {
+      // A failed restore says nothing about a session established after this
+      // attempt started, so it must not tear one down.
+      if (epoch !== _authEpoch) return
       clearLocalAuthState()
       // Only an installation with no accounts at all can be set up, so this is
       // asked once, after a failed session restore, rather than on every load.
@@ -130,7 +149,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const status = await axios.get('/auth/setup-status')
         if (epoch === _authEpoch) setSetupRequired(status.data?.setup_required === true)
       } catch {
-        setSetupRequired(false)
+        if (epoch === _authEpoch) setSetupRequired(false)
       }
     } finally {
       setLoading(false)

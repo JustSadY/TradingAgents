@@ -251,6 +251,10 @@ const translations = {
     'settings.server_tool_overrides': 'Global Server Tool Overrides',
     'settings.personal_tool_config': 'Personal Agent Tool Configuration',
     'settings.save_tools': 'Save Tools',
+    'settings.save_agents': 'Save Agent Settings',
+    'settings.server_agent_overrides': 'Global Server Agent Overrides',
+    'settings.personal_agent_config': 'Personal AI Agent Configuration',
+    'settings.agent_config_hint': 'Configure provider, model and temperature per agent. Sub-agents inherit from their parent when not overridden.',
   },
   tr: {
 
@@ -505,6 +509,10 @@ const translations = {
     'settings.server_tool_overrides': 'Sunucu Geneli Araç Geçersiz Kılmaları',
     'settings.personal_tool_config': 'Kişisel Ajan Araç Yapılandırması',
     'settings.save_tools': 'Araçları Kaydet',
+    'settings.save_agents': 'Ajan Ayarlarını Kaydet',
+    'settings.server_agent_overrides': 'Sunucu Geneli Ajan Geçersiz Kılmaları',
+    'settings.personal_agent_config': 'Kişisel Yapay Zekâ Ajan Yapılandırması',
+    'settings.agent_config_hint': 'Her ajan için sağlayıcı, model ve sıcaklık ayarlayın. Alt ajanlar, geçersiz kılınmadıkça üst ajandan devralır.',
   },
 }
 
