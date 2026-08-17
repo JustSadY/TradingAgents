@@ -51,6 +51,11 @@ async def test_shared_report_exposes_only_canonical_report_fields(monkeypatch) -
                 "stop_loss": 95,
             }
         },
+        portfolio_decision_json={
+            "rating": "Buy",
+            "position_size_pct": 5,
+            "stop_loss": 95,
+        },
         risk_metrics=None,
         quality=None,
         degraded=False,

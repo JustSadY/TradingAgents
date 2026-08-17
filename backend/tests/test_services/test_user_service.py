@@ -13,9 +13,9 @@ from backend.models.user import User
 from backend.services.user_service import (
     CannotDeleteSelfError,
     UnknownPermissionKeysError,
+    UsernameTakenError,
     UserNotFoundError,
     UserPolicyError,
-    UsernameTakenError,
     create_managed_user,
     decrypt_api_keys,
     delete_managed_user,

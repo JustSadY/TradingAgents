@@ -4543,25 +4543,6 @@
         "title": "RebalanceSuggestion",
         "type": "object"
       },
-      "RefreshRequest": {
-        "properties": {
-          "refresh_token": {
-            "anyOf": [
-              {
-                "maxLength": 4096,
-                "minLength": 1,
-                "type": "string"
-              },
-              {
-                "type": "null"
-              }
-            ],
-            "title": "Refresh Token"
-          }
-        },
-        "title": "RefreshRequest",
-        "type": "object"
-      },
       "ResetRequest": {
         "properties": {
           "initial_capital": {
@@ -14352,23 +14333,6 @@
     "/auth/refresh": {
       "post": {
         "operationId": "auth_refresh",
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "anyOf": [
-                  {
-                    "$ref": "#/components/schemas/RefreshRequest"
-                  },
-                  {
-                    "type": "null"
-                  }
-                ],
-                "title": "Body"
-              }
-            }
-          }
-        },
         "responses": {
           "200": {
             "content": {
@@ -14379,16 +14343,6 @@
               }
             },
             "description": "Successful Response"
-          },
-          "422": {
-            "content": {
-              "application/json": {
-                "schema": {
-                  "$ref": "#/components/schemas/HTTPValidationError"
-                }
-              }
-            },
-            "description": "Validation Error"
           }
         },
         "summary": "Refresh",

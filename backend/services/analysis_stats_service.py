@@ -119,7 +119,7 @@ def _calc_base(runs: list[object]) -> dict:
         for r in runs
         if getattr(r, "raw_return", None) is not None and getattr(r, "signal", None) in (_BUY_SIGNALS | _SELL_SIGNALS)
     ]
-    wins = sum(1 for r in graded if _is_correct(getattr(r, "signal", None), getattr(r, "raw_return")))
+    wins = sum(1 for r in graded if _is_correct(getattr(r, "signal", None), r.raw_return))
 
     return {
         "total": total,
@@ -137,9 +137,9 @@ def _calc_realized(runs: list[object]) -> dict:
         for r in runs
         if getattr(r, "raw_return", None) is not None and getattr(r, "signal", None) in (_BUY_SIGNALS | _SELL_SIGNALS)
     ]
-    wins = sum(1 for r in graded if _is_correct(getattr(r, "signal", None), getattr(r, "raw_return")))
-    alphas = [getattr(r, "alpha_return") for r in runs if getattr(r, "alpha_return", None) is not None]
-    raws = [getattr(r, "raw_return") for r in runs if getattr(r, "raw_return", None) is not None]
+    wins = sum(1 for r in graded if _is_correct(getattr(r, "signal", None), r.raw_return))
+    alphas = [r.alpha_return for r in runs if getattr(r, "alpha_return", None) is not None]
+    raws = [r.raw_return for r in runs if getattr(r, "raw_return", None) is not None]
 
     return {
         "win_rate_last_50": round(wins / len(graded) * 100, 1) if graded else None,

@@ -154,9 +154,9 @@ async def get_latest_analysis(
     row = await _repo_latest(db, user=current_user)
     if row is None:
         raise HTTPException(status_code=404, detail="No completed analyses found")
-    from backend.services.token_analytics_service import estimate_cost
+    from backend.core.model_pricing import estimate_token_cost
 
-    row.estimated_cost_usd = estimate_cost(
+    row.estimated_cost_usd = estimate_token_cost(
         row.llm_provider, row.llm_model, int(row.tokens_in or 0), int(row.tokens_out or 0)
     )
     return row
@@ -417,9 +417,9 @@ async def get_analysis(
     row = await _repo_get(db, analysis_id, user=current_user)
     if row is None:
         raise HTTPException(status_code=404, detail=_ANALYSIS_NOT_FOUND)
-    from backend.services.token_analytics_service import estimate_cost
+    from backend.core.model_pricing import estimate_token_cost
 
-    row.estimated_cost_usd = estimate_cost(
+    row.estimated_cost_usd = estimate_token_cost(
         row.llm_provider, row.llm_model, int(row.tokens_in or 0), int(row.tokens_out or 0)
     )
     return row

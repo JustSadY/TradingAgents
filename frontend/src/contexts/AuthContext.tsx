@@ -134,7 +134,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     // Invalidate every in-flight init/refresh and TanStack request before the
     // next auth scope can mount queries using the same generated query keys.
     _authEpoch += 1
-    _queue.forEach(({ reject }) => reject(new Error('Session ended'))
+    _queue.forEach(({ reject }) => reject(new Error('Session ended')))
     _queue = []
     clearLocalAuthState()
     // The server call is intentionally best-effort after local invalidation.

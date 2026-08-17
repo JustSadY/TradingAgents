@@ -11,9 +11,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.catalog import node_progress
 from backend.core.metrics import ANALYSIS_DURATION, ANALYSIS_RUNS
+from backend.core.model_pricing import estimate_token_cost
 from backend.repositories.system_settings import get_system_settings
 from backend.services.stats_handler import StatsCallbackHandler
-from backend.services.token_analytics_service import estimate_cost
 from backend.trading_agents.agents.runtime.debate_history import debate_messages
 from backend.trading_agents.agents.schemas import PropagateResult
 from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
@@ -359,6 +359,7 @@ async def run_individual_analysis(
                 )
 
         from backend.trading_agents.agents.runtime.resilience import get_report_card, init_report_card
+
         from .activity import AnalysisActivityTracker
         from .streaming_handler import TokenStreamingCallbackHandler
 
@@ -487,7 +488,8 @@ async def run_individual_analysis(
         stats = stats_handler.get_stats()
         risk_metrics = {}
         try:
-            from datetime import datetime as _dt, timedelta
+            from datetime import datetime as _dt
+            from datetime import timedelta
 
             from backend.core.utils import resolve_benchmark
             from backend.services.analysis.risk_metrics_service import get_risk_metrics
@@ -658,7 +660,7 @@ async def run_individual_analysis(
         await await_analysis_background_tasks(emitter.task_id)
         await emitter.emit_decision(signal, final_decision)
 
-        cost = estimate_cost(
+        cost = estimate_token_cost(
             ta.llm_provider,
             ta.llm_model,
             int(stats.get("tokens_in", 0)),

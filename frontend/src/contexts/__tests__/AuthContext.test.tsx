@@ -77,7 +77,7 @@ describe('AuthContext', () => {
     expect(localStorage.getItem('ta_access')).toBeNull()
     expect(localStorage.getItem('ta_refresh')).toBeNull()
     expect(sessionStorage.getItem('ta_access')).toBeNull()
-    expect(vi.mocked(axios.post)).toHaveBeenCalledWith('/auth/refresh', {})
+    expect(vi.mocked(axios.post)).toHaveBeenCalledWith('/auth/refresh')
   })
 
   it('ignores an expired token and clears it', async () => {
