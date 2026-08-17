@@ -6,7 +6,9 @@ import pytest
 from pydantic import ValidationError
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.models.analysis import AnalysisResult
 from backend.models.user import User
+from backend.repositories.strategy_context import get_last_accepted_analysis
 from backend.schemas.settings import SettingsUpdate
 from backend.services.agent_settings_service import validate_agent_settings
 from backend.services.settings_service import SettingsPermissionError, enforce_settings_update_permissions
@@ -41,6 +43,33 @@ async def test_advanced_settings_policy_lives_in_service(
 ) -> None:
     with pytest.raises(SettingsPermissionError, match="administrators"):
         await enforce_settings_update_permissions(db, test_user, SettingsUpdate(max_recur_limit=100))
+
+
+async def test_strategy_fast_path_rejects_foreign_last_analysis_id(
+    db: AsyncSession,
+    test_user: User,
+) -> None:
+    row = AnalysisResult(
+        user_id=test_user.id,
+        ticker="NVDA",
+        trade_date="2026-08-17",
+        asset_type="stock",
+        status="completed",
+        learning_eligible=True,
+        portfolio_decision_json={"rating": "Buy", "confidence_score": 0.8},
+    )
+    db.add(row)
+    await db.flush()
+
+    result = await get_last_accepted_analysis(
+        db,
+        user_id=None,
+        ticker="NVDA",
+        asset_type="stock",
+        last_analysis_id=row.id,
+    )
+
+    assert result is None
 
 
 def test_settings_router_has_no_direct_repository_or_config_access() -> None:
