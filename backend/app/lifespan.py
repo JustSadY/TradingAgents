@@ -4,6 +4,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
+from backend.analysis_runtime import distributed as analysis_distributed
 from backend.core.config import get_settings
 from backend.core.database import create_all_tables
 from backend.core.log_handler import db_log_handler
@@ -47,16 +48,12 @@ async def lifespan(app: FastAPI):
     await recover_lost_alerts()
 
     redis_tasks: list[asyncio.Task] = []
-    from backend.core.redis_bus import redis_enabled
-
     settings = get_settings()
-    if redis_enabled():
-        from backend.core.event_bus import event_forwarder
-        from backend.core.task_store import control_listener
+    if analysis_distributed.enabled():
         from backend.services.analysis_service import cancel_local_task
 
-        redis_tasks.append(asyncio.create_task(event_forwarder()))
-        redis_tasks.append(asyncio.create_task(control_listener(cancel_local_task)))
+        redis_tasks.append(asyncio.create_task(analysis_distributed.forward_events()))
+        redis_tasks.append(asyncio.create_task(analysis_distributed.listen_for_controls(cancel_local_task)))
         _logger.info("Redis event bus active (queue mode: %s).", settings.ANALYSIS_QUEUE_MODE)
 
     cron = init_cron_service()
@@ -80,11 +77,10 @@ async def lifespan(app: FastAPI):
         except TimeoutError:
             _logger.warning("Timeout waiting for background tasks to complete during shutdown.")
 
-    from backend.core.redis_bus import close_redis
     from backend.services.analysis_queue import close_arq_pool
 
     await close_arq_pool()
-    await close_redis()
+    await analysis_distributed.close()
 
     _logger.info("Application stopped.")
     db_log_handler.stop()
