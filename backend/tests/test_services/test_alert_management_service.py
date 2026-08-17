@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from pathlib import Path
 
 import pytest
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -76,3 +77,12 @@ async def test_delete_user_alert_refuses_another_tenants_row(db: AsyncSession, t
 
     assert deleted is False
     assert await db.get(PriceAlert, theirs.id) is not None
+
+
+def test_alert_management_service_does_not_persist_fields_directly() -> None:
+    backend_root = Path(__file__).resolve().parents[2]
+    source = (backend_root / "services" / "alert_management_service.py").read_text()
+
+    assert "setattr(alert" not in source
+    assert "await db.flush()" not in source
+    assert "apply_alert_changes" in source
