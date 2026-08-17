@@ -53,6 +53,11 @@ write_status() {
 fail() { log "ERROR: $1"; write_status failed "$1"; exit 1; }
 run_user() { log "+ $*"; asuser "$@" >>"$LOG" 2>&1 || fail "Command failed: $*"; }
 
+[ -L "$VENV" ] || fail "Virtual environment layout is obsolete; rerun deploy/install.sh once to create the versioned .venv symlink"
+OLD_VENV_TARGET="$(readlink -f "$VENV")"
+[ -n "$OLD_VENV_TARGET" ] && [ -x "$OLD_VENV_TARGET/bin/python" ] \
+    || fail "Current .venv symlink target is missing or invalid; rerun deploy/install.sh"
+
 FROM="$(asuser git -C "$PROJECT_ROOT" rev-parse HEAD 2>/dev/null || echo '?')"
 TO="$FROM"
 write_status running
@@ -79,7 +84,6 @@ VENV_ROOT="$(dirname "$VENV")/.tradingagents-venvs"
 NEW_VENV="$VENV_ROOT/${TO:0:16}"
 DIST_ARCHIVE="$STAGE_ROOT/frontend-dist.tar"
 OLD_DIST_ARCHIVE="$STAGE_ROOT/old-frontend-dist.tar"
-OLD_VENV_TARGET=""
 SERVICE_STOPPED=0
 WORKER_STOPPED=0
 SWITCHED=0
@@ -101,11 +105,9 @@ rollback() {
             tar -xf "$OLD_DIST_ARCHIVE" -C "$PROJECT_ROOT/frontend/dist" 2>>"$LOG" || true
             chown -R "$RUN_USER":"$RUN_USER" "$PROJECT_ROOT/frontend/dist" 2>/dev/null || true
         fi
-        if [ -n "$OLD_VENV_TARGET" ]; then
-            rm -rf "$VENV"
-            if [ -L "$OLD_VENV_TARGET" ] || [ -d "$OLD_VENV_TARGET" ]; then
-                ln -s "$OLD_VENV_TARGET" "$VENV"
-            fi
+        rm -f "$VENV"
+        if [ -d "$OLD_VENV_TARGET" ]; then
+            ln -s "$OLD_VENV_TARGET" "$VENV"
         fi
     fi
     if [ "$WORKER_STOPPED" -eq 1 ]; then
@@ -133,14 +135,10 @@ if [ -d "$WORKTREE/frontend" ]; then
     tar -cf "$DIST_ARCHIVE" -C "$WORKTREE/frontend/dist" .
 fi
 
-# Keep a reversible copy of browser assets and the existing venv target.
+# Keep a reversible copy of browser assets. The existing .venv symlink target
+# was validated before preflight and is retained for rollback.
 if [ -d "$PROJECT_ROOT/frontend/dist" ]; then
     tar -cf "$OLD_DIST_ARCHIVE" -C "$PROJECT_ROOT/frontend/dist" .
-fi
-if [ -L "$VENV" ]; then
-    OLD_VENV_TARGET="$(readlink -f "$VENV")"
-elif [ -d "$VENV" ]; then
-    OLD_VENV_TARGET="$VENV_ROOT/legacy-${FROM:0:16}"
 fi
 
 log "Preflight passed; stopping web/worker services for migration and release switch"
@@ -167,10 +165,6 @@ if [ -f "$DIST_ARCHIVE" ]; then
     chown -R "$RUN_USER":"$RUN_USER" "$PROJECT_ROOT/frontend/dist" 2>/dev/null || true
 fi
 
-if [ -d "$VENV" ] && [ ! -L "$VENV" ]; then
-    rm -rf "$OLD_VENV_TARGET"
-    mv "$VENV" "$OLD_VENV_TARGET"
-fi
 rm -f "$VENV"
 ln -s "$NEW_VENV" "$VENV"
 SWITCHED=1
