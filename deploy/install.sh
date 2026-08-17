@@ -5,8 +5,8 @@
 #   sudo bash deploy/install.sh
 #
 # Actions performed (all idempotent — safe to re-run):
-#   1. System dependencies: Python 3.10+, Node 20, PostgreSQL, git, curl
-#   2. Python virtual environment + backend/pyproject.toml + backend/uv.lock
+#   1. System dependencies: Python 3.11–3.13, Node 20, PostgreSQL, git, curl
+#   2. Versioned Python virtual environment + backend/pyproject.toml + backend/uv.lock
 #   3. Frontend build (npm) -> frontend/dist (served by backend)
 #   4. PostgreSQL database + user setup
 #   5. .env generation (secure random SECRET_KEY / ENCRYPTION_KEY / DB password /
@@ -35,6 +35,7 @@ BUILD_FRONTEND="${BUILD_FRONTEND:-1}"
 
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 VENV="$PROJECT_ROOT/.venv"
+VENV_ROOT="$PROJECT_ROOT/.tradingagents-venvs"
 ENV_FILE="$PROJECT_ROOT/.env"
 UNIT_FILE="/etc/systemd/system/${SERVICE_NAME}.service"
 
@@ -127,15 +128,31 @@ if [ "$BUILD_FRONTEND" = 1 ]; then
     ok "Node $(node -v) / npm $(npm -v)"
 fi
 
-# ── 3. Python venv + dependencies ──────────────────────────────────────────────
-info "Preparing Python virtual environment: $VENV"
-[ -d "$VENV" ] || "$PYTHON" -m venv "$VENV"
-"$VENV/bin/pip" install --upgrade pip wheel uv >/dev/null
+# ── 3. Versioned Python venv + dependencies ───────────────────────────────────
+CURRENT_REV="$(git -C "$PROJECT_ROOT" rev-parse HEAD 2>/dev/null)" || die "Project root is not a Git checkout."
+VENV_TARGET="$VENV_ROOT/${CURRENT_REV:0:16}"
+info "Preparing versioned Python virtual environment: $VENV_TARGET"
+mkdir -p "$VENV_ROOT"
+
+# Old installers created a plain .venv directory. It contains only derived
+# dependencies, so normalize it by rebuilding rather than preserving a second
+# compatibility layout. New installs and reruns always leave .venv as a symlink.
+if [ -e "$VENV" ] && [ ! -L "$VENV" ]; then
+    warn "Replacing obsolete plain .venv layout with the versioned release layout."
+    rm -rf "$VENV"
+fi
+if [ ! -x "$VENV_TARGET/bin/python" ]; then
+    "$PYTHON" -m venv "$VENV_TARGET"
+fi
+rm -f "$VENV"
+ln -s "$VENV_TARGET" "$VENV"
+
+"$VENV_TARGET/bin/pip" install --upgrade pip wheel uv >/dev/null
 info "Syncing backend dependencies from pyproject.toml + uv.lock..."
 (
     cd "$PROJECT_ROOT/backend"
-    UV_PROJECT_ENVIRONMENT="$VENV" "$VENV/bin/uv" lock --check
-    UV_PROJECT_ENVIRONMENT="$VENV" "$VENV/bin/uv" sync --frozen --no-dev
+    UV_PROJECT_ENVIRONMENT="$VENV_TARGET" "$VENV_TARGET/bin/uv" lock --check
+    UV_PROJECT_ENVIRONMENT="$VENV_TARGET" "$VENV_TARGET/bin/uv" sync --frozen --no-dev
 )
 ok "Frozen Python dependencies installed."
 
@@ -281,7 +298,9 @@ Path(sys.argv[1]).write_text("MIGRATION_DATABASE_URL=" + shlex.quote(os.environ[
 PY
     chmod 600 "$MIGRATION_ENV_FILE"
 else
-    DB_USER="$DB_USER" DB_PASS="$DB_PASS" DB_NAME="$DB_NAME"         MIGRATION_ENV_FILE="$MIGRATION_ENV_FILE"         bash "$PROJECT_ROOT/deploy/provision-postgres-roles.sh"
+    DB_USER="$DB_USER" DB_PASS="$DB_PASS" DB_NAME="$DB_NAME" \
+        MIGRATION_ENV_FILE="$MIGRATION_ENV_FILE" \
+        bash "$PROJECT_ROOT/deploy/provision-postgres-roles.sh"
 fi
 
 set -a
@@ -408,14 +427,14 @@ if [ "$HEALTHY" = 1 ]; then
     echo "  ⚠  Add LLM API key:  nano $ENV_FILE   then: systemctl restart $SERVICE_NAME"
     echo
     echo "  🔄 Updates: An 'Update' button appears in the UI header when a new commit is pushed"
-    echo "             (automatic git pull + build + restart). Manual: sudo bash deploy/update.sh"
+    echo "             (staged build + migration + release switch). Manual: sudo bash deploy/update.sh"
     echo
     echo "  Management Commands:"
     echo "    journalctl -u $SERVICE_NAME -f              # live logs"
     echo "    systemctl restart|stop $SERVICE_NAME"
-    echo "    bash deploy/backup.sh                      # manual backup"
+    echo "    bash deploy/backup.sh                       # manual backup"
     echo "    bash deploy/setup-backup-cron.sh            # automatic backup (systemd timer)"
-    echo "    bash deploy/uninstall.sh                    # uninstall"
+    echo "    bash deploy/uninstall.sh                     # uninstall"
 else
     err "Service health check failed. Inspect logs:"
     err "    journalctl -u $SERVICE_NAME -n 50 --no-pager"
