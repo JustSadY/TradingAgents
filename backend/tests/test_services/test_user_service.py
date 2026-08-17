@@ -4,15 +4,25 @@ from unittest.mock import patch
 
 import pytest
 from cryptography.fernet import Fernet, InvalidToken
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.password_hashing import verify_password
 from backend.models.user import User
 from backend.services.user_service import (
+    CannotDeleteSelfError,
+    UserNotFoundError,
+    UserPolicyError,
+    UsernameTakenError,
+    create_managed_user,
     decrypt_api_keys,
+    delete_managed_user,
     delete_user_api_key,
     encrypt_api_keys,
     get_user_api_key,
     list_user_api_key_providers,
     set_user_api_key,
+    update_managed_user,
+    update_profile,
 )
 
 
@@ -140,3 +150,80 @@ class TestUserService:
 
             key = resolve_user_api_key(user, "openai")
             assert key == "sk-resolve"
+
+    async def test_update_profile_password_invalidates_old_tokens(
+        self,
+        db: AsyncSession,
+        test_user: User,
+    ) -> None:
+        before_version = test_user.token_version
+
+        updated = await update_profile(
+            db,
+            test_user,
+            email=None,
+            display_name=None,
+            password="new-secure-password",
+        )
+
+        assert updated.token_version == before_version + 1
+        assert verify_password("new-secure-password", updated.hashed_password)
+
+    async def test_create_managed_user_rejects_duplicate_username(
+        self,
+        db: AsyncSession,
+        admin_user: User,
+        test_user: User,
+    ) -> None:
+        with pytest.raises(UsernameTakenError, match="Username already taken"):
+            await create_managed_user(
+                db,
+                admin_user,
+                username=test_user.username,
+                password="password123",
+                email=None,
+                display_name=None,
+                role="user",
+            )
+
+    async def test_non_owner_admin_cannot_create_an_admin(
+        self,
+        db: AsyncSession,
+        admin_user: User,
+    ) -> None:
+        assert admin_user.role == "admin"
+
+        with pytest.raises(UserPolicyError, match="Server Owner"):
+            await create_managed_user(
+                db,
+                admin_user,
+                username="blocked-admin",
+                password="password123",
+                email=None,
+                display_name=None,
+                role="admin",
+            )
+
+    async def test_update_managed_user_rejects_missing_user(
+        self,
+        db: AsyncSession,
+        admin_user: User,
+    ) -> None:
+        with pytest.raises(UserNotFoundError, match="User not found"):
+            await update_managed_user(
+                db,
+                admin_user,
+                999999,
+                role=None,
+                is_active=None,
+                email=None,
+                display_name=None,
+            )
+
+    async def test_delete_managed_user_rejects_self_delete(
+        self,
+        db: AsyncSession,
+        admin_user: User,
+    ) -> None:
+        with pytest.raises(CannotDeleteSelfError, match="Cannot delete yourself"):
+            await delete_managed_user(db, admin_user, admin_user.id)
