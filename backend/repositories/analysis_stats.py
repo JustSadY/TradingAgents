@@ -43,3 +43,24 @@ async def list_learning_eligible_analyses(
         query = query.where(AnalysisResult.asset_type == asset_type)
     result = await db.execute(query)
     return list(result.scalars().all())
+
+
+async def list_learning_eligible_ticker_analyses(
+    db: AsyncSession,
+    *,
+    user_id: int | None,
+    ticker: str,
+) -> list[AnalysisResult]:
+    """Return outcome-known, learning-eligible history for one ticker/tenant."""
+    query = (
+        select(AnalysisResult)
+        .where(AnalysisResult.ticker == ticker.upper())
+        .where(AnalysisResult.raw_return.is_not(None))
+        .where(AnalysisResult.learning_eligible.is_(True))
+    )
+    if user_id is None:
+        query = query.where(AnalysisResult.user_id.is_(None))
+    else:
+        query = query.where(AnalysisResult.user_id == user_id)
+    result = await db.execute(query)
+    return list(result.scalars().all())
