@@ -17,12 +17,18 @@ import math
 from decimal import Decimal
 from types import SimpleNamespace
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import is_live_trading_enabled
 from backend.core.constants import SIGNAL_TO_ACTION
 from backend.core.money import safe_decimal
+from backend.repositories.trading_execution import (
+    apply_broker_account_balances as _repo_apply_broker_account_balances,
+)
+from backend.repositories.trading_execution import (
+    get_or_create_broker_audit_portfolio as _repo_get_or_create_broker_audit_portfolio,
+)
+from backend.repositories.trading_execution import persist_broker_order as _repo_persist_broker_order
 from backend.services.execution.base import OrderRequest, OrderResult
 from backend.services.execution.factory import get_trader
 from backend.services.mock_trading_service import get_or_create_sim_portfolio
@@ -332,34 +338,16 @@ async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, 
 
 
 async def _get_or_create_broker_audit_portfolio(db: AsyncSession, *, user, mode: str, account: dict):
-    """Maintain a local audit container while the broker remains source of truth."""
-    from backend.models.portfolio import Portfolio
-
-    audit_mode = "live" if mode == "live" else "alpaca_paper"
-    row = await db.execute(
-        select(Portfolio).where(Portfolio.user_id == user.id, Portfolio.mode == audit_mode).with_for_update()
-    )
-    portfolio = row.scalar_one_or_none()
+    """Map authoritative broker balances into the local audit container."""
     equity = safe_decimal(account.get("equity") or account.get("portfolio_value") or 0)
     cash = safe_decimal(account.get("cash") or 0)
-    if portfolio is None:
-        portfolio = Portfolio(
-            user_id=user.id,
-            mode=audit_mode,
-            broker="alpaca",
-            initial_capital=equity if equity > 0 else cash,
-            current_balance=equity,
-            cash_available=cash,
-            margin_used=Decimal("0"),
-            status="active",
-        )
-        db.add(portfolio)
-        await db.flush()
-    else:
-        portfolio.current_balance = equity
-        portfolio.cash_available = cash
-        portfolio.status = "active"
-    return portfolio
+    return await _repo_get_or_create_broker_audit_portfolio(
+        db,
+        user_id=user.id,
+        mode=mode,
+        equity=equity,
+        cash=cash,
+    )
 
 
 def _broker_risk_snapshot(account: dict, positions: dict[str, dict]) -> dict:
@@ -392,36 +380,28 @@ async def _persist_broker_order(
     side: str,
 ) -> None:
     """Persist every broker submission/result for reconciliation and audit."""
-    from backend.models.order import Order
-
     filled_qty = safe_decimal(result.filled_quantity or 0)
     filled_price = safe_decimal(result.filled_price) if result.filled_price is not None else None
     total_value = filled_qty * filled_price if filled_price is not None else None
-    db.add(
-        Order(
-            portfolio_id=portfolio.id,
-            broker="alpaca",
-            ticker=request.ticker,
-            action=request.action,
-            side=side,
-            leverage=safe_decimal(request.leverage),
-            quantity_requested=request.quantity,
-            quantity_filled=filled_qty,
-            status=result.status,
-            price_per_share=filled_price,
-            total_value=total_value,
-            commission=safe_decimal(result.commission),
-            entry_commission=Decimal("0"),
-            realized_pnl=Decimal("0"),
-            financing_cost=Decimal("0"),
-            external_order_id=result.order_id or None,
-            analysis_id=request.analysis_id,
-            ai_signal=request.ai_signal[:50],
-            ai_reasoning=request.ai_reasoning[:4_000],
-            executed_at=result.executed_at if filled_qty > 0 else None,
-        )
+    await _repo_persist_broker_order(
+        db,
+        portfolio_id=portfolio.id,
+        ticker=request.ticker,
+        action=request.action,
+        side=side,
+        leverage=safe_decimal(request.leverage),
+        quantity_requested=request.quantity,
+        quantity_filled=filled_qty,
+        status=result.status,
+        price_per_share=filled_price,
+        total_value=total_value,
+        commission=safe_decimal(result.commission),
+        external_order_id=result.order_id or None,
+        analysis_id=request.analysis_id,
+        ai_signal=request.ai_signal,
+        ai_reasoning=request.ai_reasoning,
+        executed_at=result.executed_at if filled_qty > 0 else None,
     )
-    await db.flush()
 
 
 async def place_signal_order(
@@ -874,8 +854,11 @@ async def place_signal_order(
         if callable(get_snapshot):
             refreshed = await get_snapshot()
             if refreshed:
-                portfolio.cash_available = safe_decimal(refreshed.get("cash") or portfolio.cash_available)
-                portfolio.current_balance = safe_decimal(refreshed.get("equity") or portfolio.current_balance)
+                _repo_apply_broker_account_balances(
+                    portfolio,
+                    cash=safe_decimal(refreshed.get("cash") or portfolio.cash_available),
+                    equity=safe_decimal(refreshed.get("equity") or portfolio.current_balance),
+                )
     _logger.info("Order placed: %s %s %s -> %s", action, quantity, ticker, result.status)
     if result.filled_quantity and result.filled_price:
         try:
