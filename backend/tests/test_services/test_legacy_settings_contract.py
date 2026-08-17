@@ -108,3 +108,12 @@ def test_memory_service_reads_relational_configuration_via_repositories() -> Non
     assert "backend.models.user" not in source
     assert "backend.repositories.settings" in source
     assert "backend.repositories.users" in source
+
+
+def test_agent_settings_service_does_not_create_or_add_orm_rows() -> None:
+    backend_root = Path(__file__).resolve().parents[2]
+    source = (backend_root / "services" / "agent_settings_service.py").read_text()
+
+    assert "AgentSetting(" not in source
+    assert "db.add(" not in source
+    assert "persist_agent_setting" in source
