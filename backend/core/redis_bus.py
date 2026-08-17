@@ -27,8 +27,10 @@ CONTROL_CHANNEL = "analysis:control"
 
 _client = None
 
+
 def redis_enabled() -> bool:
     return bool(get_settings().REDIS_URL)
+
 
 def get_redis():
     """Return the shared async Redis client (or ``None`` when disabled)."""
@@ -42,10 +44,6 @@ def get_redis():
         _logger.info("Redis connected: %s", get_settings().REDIS_URL.split("@")[-1])
     return _client
 
-def set_redis_for_testing(client) -> None:
-    """Inject a fake client in tests (bypasses REDIS_URL)."""
-    global _client
-    _client = client
 
 async def subscribe_loop(
     channel: str,
@@ -81,12 +79,14 @@ async def subscribe_loop(
             _logger.warning("%s disconnected (%s); retrying in 2s", name, exc)
             await asyncio.sleep(2)
 
+
 async def close_pool_or_client(connection, logger, label: str) -> None:
     if connection is not None:
         try:
             await connection.aclose()
         except Exception as exc:
             logger.debug("%s close failed: %s", label, exc)
+
 
 async def close_redis() -> None:
     global _client

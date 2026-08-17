@@ -28,6 +28,7 @@ def validate_agent_settings(agent: AgentInfo, incoming: dict[str, Any]) -> dict[
 
     return normalized
 
+
 async def get_agent_settings_by_scope(db: AsyncSession, scope: str, user_id: int | None = None) -> AgentSettingsRead:
     from backend.repositories.agent_settings import get_agent_settings_by_scope as _repo_get
 
@@ -49,16 +50,20 @@ async def get_agent_settings_by_scope(db: AsyncSession, scope: str, user_id: int
 
     return AgentSettingsRead(agents=agents_map)
 
+
 async def get_user_agent_settings(db: AsyncSession, user: User) -> AgentSettingsRead:
     return await get_agent_settings_by_scope(db, "user", user.id)
 
+
 async def get_server_agent_settings(db: AsyncSession) -> AgentSettingsRead:
     return await get_agent_settings_by_scope(db, "server")
+
 
 async def apply_agent_settings_update_by_scope(
     db: AsyncSession, scope: str, body: AgentSettingsUpdate, user_id: int | None = None
 ) -> AgentSettingsRead:
     from backend.repositories.agent_settings import get_agent_settings_by_scope as _repo_get
+    from backend.repositories.agent_settings import persist_agent_setting
 
     rows_list = await _repo_get(db, scope, user_id)
     rows = {row.agent_key: row for row in rows_list}
@@ -72,22 +77,13 @@ async def apply_agent_settings_update_by_scope(
             update = update.model_copy(update={"enabled": None})
 
         row = rows.get(agent_key)
-        if not row:
-            row = AgentSetting(
-                scope=scope,
-                user_id=user_id if scope == "user" else None,
-                agent_key=agent_key,
-                enabled=agent.default_enabled,
-                settings={},
-            )
-            db.add(row)
-
+        enabled = row.enabled if row is not None else agent.default_enabled
         if update.reset_enabled:
-            row.enabled = agent.default_enabled
+            enabled = agent.default_enabled
         elif update.enabled is not None:
-            row.enabled = update.enabled
+            enabled = update.enabled
 
-        current_settings = row.settings.copy()
+        current_settings = row.settings.copy() if row is not None else {}
         if update.reset_settings:
             default_settings = {field.key: field.default for field in agent.settings_schema}
             for k in update.reset_settings:
@@ -97,16 +93,27 @@ async def apply_agent_settings_update_by_scope(
             validated = validate_agent_settings(agent, update.settings)
             current_settings.update(validated)
 
-        row.settings = current_settings
+        rows[agent_key] = persist_agent_setting(
+            db,
+            row=row,
+            scope=scope,
+            user_id=user_id,
+            agent_key=agent_key,
+            enabled=enabled,
+            settings=current_settings,
+        )
 
     await db.flush()
     return await get_agent_settings_by_scope(db, scope, user_id)
 
+
 async def apply_agent_settings_update(db: AsyncSession, user: User, body: AgentSettingsUpdate) -> AgentSettingsRead:
     return await apply_agent_settings_update_by_scope(db, "user", body, user.id)
 
+
 async def apply_server_agent_settings_update(db: AsyncSession, body: AgentSettingsUpdate) -> AgentSettingsRead:
     return await apply_agent_settings_update_by_scope(db, "server", body)
+
 
 def build_agent_runtime_state(
     agent: AgentInfo, server_row: AgentSetting | None, user_row: AgentSetting | None
@@ -135,6 +142,7 @@ def build_agent_runtime_state(
         "enabled": effective_enabled,
         "settings": user_settings if user_row else server_settings,
     }
+
 
 async def build_agent_runtime_context(db: AsyncSession, user_id: int | None) -> dict[str, Any]:
     from backend.repositories.agent_settings import get_server_agent_settings as _repo_get_server

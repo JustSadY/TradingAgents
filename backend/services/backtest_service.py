@@ -5,9 +5,8 @@ import math
 from decimal import Decimal, InvalidOperation
 
 import pandas as pd
-from sqlalchemy import select
 
-from backend.models.analysis import AnalysisResult
+from backend.repositories.backtest import list_consensus_analyses
 from backend.services.indicator_service import calculate_macd, calculate_rsi
 from backend.trading_agents.dataflows.stockstats_utils import load_ohlcv
 
@@ -323,19 +322,14 @@ async def _load_consensus_analyses(
     if not user:
         return analyses_map, stats
     query_start = (pd.Timestamp(start_date) - pd.Timedelta(days=7)).strftime("%Y-%m-%d")
-    stmt = (
-        select(AnalysisResult)
-        .where(
-            AnalysisResult.ticker == ticker.upper(),
-            AnalysisResult.trade_date >= query_start,
-            AnalysisResult.trade_date <= end_date,
-            AnalysisResult.user_id == user.id,
-            AnalysisResult.status == "completed",
-        )
-        .order_by(AnalysisResult.trade_date.asc(), AnalysisResult.created_at.asc())
+    rows = await list_consensus_analyses(
+        db,
+        user_id=user.id,
+        ticker=ticker,
+        start_date=query_start,
+        end_date=end_date,
     )
-    res = await db.execute(stmt)
-    for row in res.scalars().all():
+    for row in rows:
         stats["considered"] += 1
         try:
             created_at = getattr(row, "created_at", None)

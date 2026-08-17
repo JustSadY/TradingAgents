@@ -109,17 +109,6 @@ export function RiskTab({ s, t, update }: RiskTabProps) {
                 />
               </RiskRowItem>
 
-              <RiskRowItem label={t('settings.row_risk_rounds')} unit="tur">
-                <input
-                  type="number"
-                  min="1"
-                  max="10"
-                  className={CompactInputStyle}
-                  value={s.max_risk_rounds}
-                  onChange={e => update('max_risk_rounds', Number.parseInt(e.target.value))}
-                />
-              </RiskRowItem>
-
               <RiskRowItem label={t('settings.row_price_tolerance')} unit="%">
                 <input
                   type="number"

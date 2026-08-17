@@ -18,7 +18,6 @@ import json
 from datetime import UTC, datetime, time
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.repositories.asset_strategy import (
@@ -27,6 +26,7 @@ from backend.repositories.asset_strategy import (
     get_strategy_version_as_of,
     strategy_state_snapshot,
 )
+from backend.repositories.strategy_context import get_last_accepted_analysis
 
 
 def _as_utc_day_end(trade_date: str | datetime) -> datetime:
@@ -66,14 +66,8 @@ def _json_mapping(value: object) -> dict[str, Any]:
 def _decision_from_analysis(row: object | None) -> dict[str, Any] | None:
     if row is None:
         return None
-    for raw in (
-        getattr(row, "portfolio_decision_json", None),
-        _json_mapping(getattr(row, "chart_annotations", None)).get("portfolio_decision"),
-    ):
-        decision = _json_mapping(raw)
-        if decision:
-            return decision
-    return None
+    decision = _json_mapping(getattr(row, "portfolio_decision_json", None))
+    return decision or None
 
 
 def _blind_planning_context(snapshot: dict[str, Any] | None) -> dict[str, Any]:
@@ -110,49 +104,6 @@ def _blind_planning_context(snapshot: dict[str, Any] | None) -> dict[str, Any]:
     }
 
 
-async def _derive_recorded_cutoff(
-    db: AsyncSession,
-    *,
-    user_id: int | None,
-    ticker: str,
-    asset_type: str,
-    trade_date: str | datetime,
-    business_as_of: datetime,
-) -> datetime:
-    """Use the earliest same-run-day analysis timestamp as a safe replay bound.
-
-    Checkpoint callers may not yet pass an exact checkpoint timestamp through
-    every legacy call path. The selected/original AnalysisResult necessarily
-    already exists before a time-travel resume and keeps its original
-    ``created_at`` even while its status is reset to running. Using the earliest
-    matching timestamp is conservative: it may hide later same-day knowledge,
-    but can never expose knowledge created after the replay began.
-    """
-    from backend.models.analysis import AnalysisResult
-
-    business_date = _as_utc_day_end(trade_date).date().isoformat()
-    stmt = (
-        select(AnalysisResult.created_at)
-        .where(
-            AnalysisResult.ticker == ticker.upper(),
-            AnalysisResult.asset_type == asset_type.lower(),
-            AnalysisResult.trade_date == business_date,
-            AnalysisResult.created_at.isnot(None),
-        )
-        .order_by(AnalysisResult.created_at.asc())
-        .limit(1)
-    )
-    if user_id is None:
-        stmt = stmt.where(AnalysisResult.user_id.is_(None))
-    else:
-        stmt = stmt.where(AnalysisResult.user_id == user_id)
-    candidate = (await db.execute(stmt)).scalar_one_or_none()
-    if candidate is None:
-        return business_as_of
-    candidate_utc = _as_utc_instant(candidate, business_as_of)
-    return min(candidate_utc, business_as_of)
-
-
 async def _last_accepted_decision(
     db: AsyncSession,
     *,
@@ -164,36 +115,16 @@ async def _last_accepted_decision(
     recorded_as_of: datetime | None,
 ) -> dict[str, Any] | None:
     """Load the last accepted canonical decision in the same tenant scope."""
-    from backend.models.analysis import AnalysisResult
-
-    row = None
     last_analysis_id = (strategy_snapshot or {}).get("last_analysis_id")
-    if business_as_of is None and recorded_as_of is None and isinstance(last_analysis_id, int):
-        candidate = await db.get(AnalysisResult, last_analysis_id)
-        if candidate is not None and candidate.status == "completed":
-            row = candidate
-
-    if row is None:
-        stmt = (
-            select(AnalysisResult)
-            .where(
-                AnalysisResult.ticker == ticker.upper(),
-                AnalysisResult.asset_type == asset_type.lower(),
-                AnalysisResult.status == "completed",
-                AnalysisResult.learning_eligible.is_(True),
-            )
-            .order_by(AnalysisResult.trade_date.desc(), AnalysisResult.created_at.desc())
-            .limit(1)
-        )
-        if user_id is None:
-            stmt = stmt.where(AnalysisResult.user_id.is_(None))
-        else:
-            stmt = stmt.where(AnalysisResult.user_id == user_id)
-        if business_as_of is not None:
-            stmt = stmt.where(AnalysisResult.trade_date <= business_as_of.date().isoformat())
-        if recorded_as_of is not None:
-            stmt = stmt.where(AnalysisResult.created_at <= recorded_as_of)
-        row = (await db.execute(stmt)).scalar_one_or_none()
+    row = await get_last_accepted_analysis(
+        db,
+        user_id=user_id,
+        ticker=ticker,
+        asset_type=asset_type,
+        last_analysis_id=last_analysis_id if isinstance(last_analysis_id, int) else None,
+        business_as_of=business_as_of,
+        recorded_as_of=recorded_as_of,
+    )
     return _decision_from_analysis(row)
 
 
@@ -211,26 +142,14 @@ async def load_strategy_context(
     """Load an exact strategy snapshot and an analyst-safe neutral context.
 
     ``trade_date`` is business time. ``knowledge_cutoff`` is recorded/system
-    time and is intentionally separate. For ordinary date-based historical
-    research the recorded cutoff is at most that business day's end. For
-    checkpoint time-travel an explicit timestamp is preferred; when legacy
-    callers omit it, the earliest matching AnalysisResult ``created_at`` is
-    used as a conservative same-day boundary.
+    time. Ordinary historical analysis defaults to the end of the requested
+    business day. Time Travel supplies the selected checkpoint timestamp
+    explicitly so later same-day knowledge cannot leak into the replay.
     """
     ticker = ticker.upper()
     asset_type = asset_type.lower()
     business_as_of = _as_utc_day_end(trade_date)
-    if historical_mode and knowledge_cutoff is None:
-        recorded_as_of = await _derive_recorded_cutoff(
-            db,
-            user_id=user_id,
-            ticker=ticker,
-            asset_type=asset_type,
-            trade_date=trade_date,
-            business_as_of=business_as_of,
-        )
-    else:
-        recorded_as_of = min(_as_utc_instant(knowledge_cutoff, business_as_of), business_as_of)
+    recorded_as_of = min(_as_utc_instant(knowledge_cutoff, business_as_of), business_as_of)
 
     snapshot: dict[str, Any] | None = None
     source = "none"

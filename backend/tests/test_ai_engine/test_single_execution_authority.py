@@ -1,4 +1,4 @@
-"""Regressions for the Portfolio Manager as the single execution authority."""
+"""Regressions for the Portfolio Manager as sole AI proposal authority and canonical execution decisions."""
 
 from __future__ import annotations
 
@@ -85,12 +85,14 @@ def test_multi_ticker_overview_is_deterministic_and_non_executing():
     )
 
     assert "This overview does not create or amend a buy/sell order" in overview
+    assert "Canonical Final Decision" in overview
+    assert "sole execution input" in overview
     assert "## AAPL" in overview
     assert "## NVDA" in overview
     assert "**Rating**: Buy" in overview
     assert "this multi-ticker overview cannot place an order or change a quantity" in overview
 
-def test_performance_review_prefers_the_prior_final_pm_decision_over_legacy_trader_text():
+def test_performance_review_prefers_prior_canonical_decision_over_legacy_trader_text():
     from backend.trading_agents.agents.data.review_tools import _past_decision_for_review
 
     decision, label = _past_decision_for_review(
@@ -101,7 +103,7 @@ def test_performance_review_prefers_the_prior_final_pm_decision_over_legacy_trad
     )
 
     assert decision == "**Rating**: Hold"
-    assert label == "PAST FINAL PORTFOLIO MANAGER DECISION"
+    assert label == "PAST CANONICAL FINAL DECISION"
 
 def test_portfolio_manager_evidence_tracks_registry_reports_and_supplemental_artifacts(monkeypatch):
     from backend.trading_agents.agents import analyst_registry

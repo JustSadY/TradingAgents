@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 from backend.services.decision_stability_service import (
-    DecisionStabilityController,
-    StabilityThresholds,
     evaluate_decision_stability,
 )
 
@@ -278,18 +276,3 @@ def test_invalid_rating_is_safe_rejection_instead_of_an_exception() -> None:
     assert result["accepted_decision"]["rating"] == "Hold"
     assert result["execution_action"] == "no_order"
     assert result["reason_codes"] == ["invalid_proposal_rating"]
-
-
-def test_controller_wrapper_uses_custom_thresholds() -> None:
-    controller = DecisionStabilityController(
-        StabilityThresholds(initial_confidence=0.80, initial_quality=0.40),
-    )
-
-    result = controller.evaluate(
-        pm_proposal=_proposal("Buy"),
-        quality=_quality(50),
-        calibrated_confidence=0.79,
-    )
-
-    assert result["status"] == "rejected"
-    assert result["required_confidence"] == 0.80

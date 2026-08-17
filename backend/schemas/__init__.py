@@ -19,7 +19,7 @@ from .analysis import (
     PerformanceResponse as AnalysisPerformanceResponse,
 )
 from .assistant import AssistantChatResponse, AssistantHistoryItem
-from .auth import LoginRequest, RefreshRequest, TokenResponse
+from .auth import LoginRequest, TokenResponse
 from .common import (
     DeleteResponse,
     EarningsCalendarResponse,
@@ -75,7 +75,6 @@ from .webhook import WebhookDeliveryRead
 __all__ = [
     "LoginRequest",
     "TokenResponse",
-    "RefreshRequest",
     "SettingsRead",
     "SettingsUpdate",
     "AnalysisRunRequest",

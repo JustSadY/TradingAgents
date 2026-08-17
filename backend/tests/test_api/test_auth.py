@@ -6,7 +6,8 @@ from httpx import AsyncClient
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import get_settings
-from backend.core.security import create_refresh_token, hash_password, new_token_id, token_id_hash
+from backend.core.password_hashing import hash_password
+from backend.core.security import create_refresh_token, new_token_id, token_id_hash
 from backend.models.refresh_session import RefreshSession
 from backend.models.user import User
 
@@ -36,20 +37,11 @@ async def issue_refresh_token(db: AsyncSession, user: User, *, token_version: in
 
 
 class TestAuthAPI:
-    async def test_login_upgrades_a_legacy_bcrypt_hash_to_argon2(
-        self, async_client: AsyncClient, db: AsyncSession
-    ):
-        """Accounts created before the Argon2 migration still hold bcrypt hashes.
-        Logging in must succeed and re-store the password under Argon2, so the
-        legacy scheme drains away instead of persisting indefinitely.
-        """
-        import bcrypt
-
-        legacy_hash = bcrypt.hashpw(b"correctpass", bcrypt.gensalt()).decode()
+    async def test_login_rejects_retired_bcrypt_hash(self, async_client: AsyncClient, db: AsyncSession):
         user = User(
-            username="legacyhash",
-            hashed_password=legacy_hash,
-            email="legacy@example.com",
+            username="retiredhash",
+            hashed_password="$2b$12$" + "a" * 53,
+            email="retired@example.com",
             role="user",
             is_active=True,
         )
@@ -57,38 +49,7 @@ class TestAuthAPI:
         await db.flush()
 
         resp = await async_client.post(
-            "/auth/login", json={"username": "legacyhash", "password": "correctpass"}
-        )
-        assert resp.status_code == 200, f"Expected 200, got {resp.status_code}: {resp.text[:500]}"
-
-        await db.refresh(user)
-        assert user.hashed_password.startswith("$argon2")
-        assert user.hashed_password != legacy_hash
-
-        # The re-stored hash must still authenticate the same password.
-        again = await async_client.post(
-            "/auth/login", json={"username": "legacyhash", "password": "correctpass"}
-        )
-        assert again.status_code == 200
-
-    async def test_login_rejects_wrong_password_for_legacy_bcrypt_hash(
-        self, async_client: AsyncClient, db: AsyncSession
-    ):
-        import bcrypt
-
-        db.add(
-            User(
-                username="legacywrong",
-                hashed_password=bcrypt.hashpw(b"correctpass", bcrypt.gensalt()).decode(),
-                email="legacywrong@example.com",
-                role="user",
-                is_active=True,
-            )
-        )
-        await db.flush()
-
-        resp = await async_client.post(
-            "/auth/login", json={"username": "legacywrong", "password": "wrongpass"}
+            "/auth/login", json={"username": "retiredhash", "password": "correctpass"}
         )
         assert resp.status_code == 401
 
@@ -157,7 +118,7 @@ class TestAuthAPI:
 
         refresh = await issue_refresh_token(db, user)
         async_client.cookies.set("ta_refresh", refresh, path="/auth")
-        resp = await async_client.post("/auth/refresh", json={})
+        resp = await async_client.post("/auth/refresh")
         assert resp.status_code == 200
         assert "access_token" in resp.json()
         assert "refresh_token" not in resp.json()
@@ -165,27 +126,13 @@ class TestAuthAPI:
         await db.refresh(user)
         assert user.token_version == 0  # normal refresh must not invalidate other browser tabs
 
-    async def test_refresh_body_token_remains_compatible(self, async_client: AsyncClient, db: AsyncSession):
-        user = User(
-            username="apiclient",
-            hashed_password=hash_password("pass"),
-            email="api@example.com",
-            role="user",
-            is_active=True,
-        )
-        db.add(user)
-        await db.flush()
-        refresh = await issue_refresh_token(db, user)
-        resp = await async_client.post("/auth/refresh", json={"refresh_token": refresh})
-        assert resp.status_code == 200
-        assert "access_token" in resp.json()
-
     async def test_refresh_token_invalid(self, async_client: AsyncClient):
-        resp = await async_client.post("/auth/refresh", json={"refresh_token": "invalid-token"})
+        async_client.cookies.set("ta_refresh", "invalid-token", path="/auth")
+        resp = await async_client.post("/auth/refresh")
         assert resp.status_code == 401
 
     async def test_refresh_token_missing(self, async_client: AsyncClient):
-        resp = await async_client.post("/auth/refresh", json={})
+        resp = await async_client.post("/auth/refresh")
         assert resp.status_code == 401
 
     async def test_refresh_token_revoked(self, async_client: AsyncClient, db: AsyncSession):
@@ -202,9 +149,49 @@ class TestAuthAPI:
         # Session is valid; only the stale token_version (0 vs the user's 5)
         # may cause the rejection.
         refresh = await issue_refresh_token(db, user, token_version=0)
-        resp = await async_client.post("/auth/refresh", json={"refresh_token": refresh})
+        async_client.cookies.set("ta_refresh", refresh, path="/auth")
+        resp = await async_client.post("/auth/refresh")
         assert resp.status_code == 401
         assert resp.json()["detail"] == "Refresh token has been revoked"
+
+    async def test_refresh_replay_revocation_survives_401_rollback(
+        self, async_client: AsyncClient, db: AsyncSession
+    ):
+        user = User(
+            username="replaytest",
+            hashed_password=hash_password("pass"),
+            email="replay@example.com",
+            role="user",
+            is_active=True,
+        )
+        db.add(user)
+        await db.flush()
+
+        sid = new_token_id()
+        current_jti = new_token_id()
+        replayed_jti = new_token_id()
+        session = RefreshSession(
+            id=sid,
+            user_id=user.id,
+            current_jti_hash=token_id_hash(current_jti),
+            expires_at=datetime.now(UTC) + timedelta(days=1),
+        )
+        db.add(session)
+        await db.flush()
+        replayed = create_refresh_token(
+            user.username,
+            token_version=user.token_version,
+            session_id=sid,
+            token_id=replayed_jti,
+        )
+        async_client.cookies.set("ta_refresh", replayed, path="/auth")
+
+        resp = await async_client.post("/auth/refresh")
+
+        assert resp.status_code == 401
+        assert resp.json()["detail"] == "Refresh session expired or reused"
+        await db.refresh(session)
+        assert session.revoked_at is not None
 
     async def test_logout_clears_refresh_cookie(self, auth_client: AsyncClient, db: AsyncSession, test_user: User):
         resp = await auth_client.post("/auth/logout")

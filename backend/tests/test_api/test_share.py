@@ -29,10 +29,8 @@ async def test_shared_report_exposes_only_canonical_report_fields(monkeypatch) -
         "audit_report",
         "agent_qa_report",
         "investment_plan",
-        "trader_plan",
         "final_decision",
         "judge_decision",
-        "trader_proposal_json",
         "llm_provider",
         "llm_model",
     )
@@ -52,6 +50,11 @@ async def test_shared_report_exposes_only_canonical_report_fields(monkeypatch) -
                 "position_size_pct": 5,
                 "stop_loss": 95,
             }
+        },
+        portfolio_decision_json={
+            "rating": "Buy",
+            "position_size_pct": 5,
+            "stop_loss": 95,
         },
         risk_metrics=None,
         quality=None,
@@ -90,5 +93,7 @@ async def test_shared_report_exposes_only_canonical_report_fields(monkeypatch) -
         "position_size_pct": 5,
         "stop_loss": 95,
     }
+    assert "trader_plan" not in payload
+    assert "trader_proposal_json" not in payload
     assert "fundamental_report" not in payload
     assert "research_report" not in payload

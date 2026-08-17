@@ -4,15 +4,16 @@ import asyncio
 import json
 import logging
 import time
+from datetime import datetime
 
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.catalog import node_progress
 from backend.core.metrics import ANALYSIS_DURATION, ANALYSIS_RUNS
+from backend.core.model_pricing import estimate_token_cost
 from backend.repositories.system_settings import get_system_settings
 from backend.services.stats_handler import StatsCallbackHandler
-from backend.services.token_analytics_service import estimate_cost
 from backend.trading_agents.agents.runtime.debate_history import debate_messages
 from backend.trading_agents.agents.schemas import PropagateResult
 from backend.trading_agents.graph.trading_graph import TradingAgentsGraph
@@ -143,6 +144,7 @@ async def run_individual_analysis(
     checkpoint_namespace: str | None = None,
     result_owner_user_id: int | None | object = _OWNER_UNSET,
     existing_result_id: int | None = None,
+    knowledge_cutoff: datetime | None = None,
 ):
     """Orchestrates a single analysis run with incremental persistence and real-time updates."""
 
@@ -162,9 +164,6 @@ async def run_individual_analysis(
     learning_eligible = bool(getattr(settings, "strategy_learning_enabled", True)) and analysis_mode == "live"
 
     if existing_result_id is not None:
-        # Time-travel resumes the selected analysis in place.  Creating a new
-        # skeleton here used to leave the original row permanently ``running``
-        # while a second hidden row completed under the new task id.
         from backend.models.analysis import AnalysisResult
         from backend.repositories.analysis import update_analysis_result
 
@@ -174,9 +173,6 @@ async def run_individual_analysis(
         if str(row.ticker) != str(ticker) or str(row.trade_date) != str(trade_date):
             raise ValueError("Analysis identity changed before resume")
         reset_outputs = {
-            # A resumed checkpoint may skip nodes whose old database values
-            # would otherwise survive a replay.  Clear every derived artifact;
-            # the checkpoint state and rerun will repopulate the causal subset.
             "market_report": "",
             "sentiment_report": "",
             "news_report": "",
@@ -210,7 +206,6 @@ async def run_individual_analysis(
             "strategy_id": None,
             "strategy_before_version": None,
             "strategy_after_version": None,
-            "trader_plan": "",
             "final_decision": "",
             "reflection": "",
             "bull_history": None,
@@ -218,7 +213,6 @@ async def run_individual_analysis(
             "investment_debate_history": None,
             "risk_debate_history": None,
             "judge_decision": "",
-            "trader_proposal_json": "{}",
             "chart_annotations": None,
             "risk_metrics": None,
             "quality": None,
@@ -259,9 +253,7 @@ async def run_individual_analysis(
 
     try:
         await _emit_system_status(emitter, "Initializing")
-
         sys_settings = await get_system_settings(db)
-
         await _emit_system_status(emitter, "Preparing engine...")
 
         config = build_analysis_config(settings, user=user, sys_settings=sys_settings)
@@ -269,8 +261,6 @@ async def run_individual_analysis(
         config["historical_mode"] = temporal_replay_mode
         config["analysis_mode"] = analysis_mode
         config["learning_eligible"] = learning_eligible
-        # Point-in-time runs fail closed.  Operators may explicitly opt in for
-        # research-only comparisons, but historical/backtest paths never do.
         config["allow_live_data_in_historical"] = False
 
         from backend.trading_agents.graph.checkpointer import checkpoint_scope
@@ -278,7 +268,6 @@ async def run_individual_analysis(
         config["checkpoint_scope"] = checkpoint_namespace or checkpoint_scope(row.user_id, row_id)
 
         persona_key = config.get("investor_persona")
-
         if persona_key and user_id:
             from backend.trading_agents.personas import get_persona as _get_builtin_persona
 
@@ -290,7 +279,6 @@ async def run_individual_analysis(
                 _custom = (
                     await db.execute(_sel(_UP).where(_UP.user_id == user_id, _UP.key == persona_key))
                 ).scalar_one_or_none()
-
                 if _custom and _custom.instructions:
                     config["investor_persona_instructions"] = _custom.instructions
 
@@ -300,10 +288,6 @@ async def run_individual_analysis(
         from backend.services.signal_backtest_service import get_signal_replay_context
         from backend.services.strategy_context_service import load_strategy_context
 
-        # Load the exact point-in-time strategy before building live analyst
-        # performance context.  Its structured regime assumption is safe to
-        # use as a pre-analysis weighting hint; analysts still receive only
-        # the sanitised neutral plan, never this directional snapshot.
         config["strategy_context"] = await load_strategy_context(
             db,
             user_id=persisted_user_id,
@@ -312,19 +296,17 @@ async def run_individual_analysis(
             trade_date=trade_date,
             historical_mode=analysis_mode != "live",
             learning_eligible=learning_eligible,
+            knowledge_cutoff=knowledge_cutoff,
         )
 
         if analysis_mode != "live":
-            # Learned weights, outcome replay, today's market pulse, and active
-            # scenarios are all knowledge created after the requested date.
-            # Excluding them is safer than pretending they are point-in-time.
             attribution_md = ""
             market_pulse_md = ""
             scenarios_md = ""
             signal_replay_md = ""
             config["historical_context"] = (
                 "=== POINT-IN-TIME MODE ===\n"
-                f"Knowledge cutoff: {trade_date}. Live portfolio state, current market pulse, "
+                f"Knowledge cutoff: {config['strategy_context']['knowledge_cutoff']}. Live portfolio state, current market pulse, "
                 "future outcome attribution, replay statistics, and current scenarios were excluded.\n\n"
             )
         else:
@@ -369,7 +351,6 @@ async def run_individual_analysis(
                 min_samples=int(getattr(settings, "analyst_prefilter_min_samples", 5) or 5),
                 max_win_rate=float(getattr(settings, "analyst_prefilter_max_win_rate", 40.0) or 40.0),
             )
-
             if dropped:
                 await _emit_system_status(
                     emitter,
@@ -385,9 +366,7 @@ async def run_individual_analysis(
         init_report_card()
         stats_handler = StatsCallbackHandler()
         activity_tracker = AnalysisActivityTracker()
-
         streaming_handler = TokenStreamingCallbackHandler(emitter, activity_tracker=activity_tracker)
-
         ta = TradingAgentsGraph(
             selected_analysts=permitted_analysts,
             config=config,
@@ -414,62 +393,40 @@ async def run_individual_analysis(
         )
 
         prev_state = {}
-
-        # Keep report streaming tied to the live registry.  The fixed
-        # AnalysisResult schema is still the persistence contract, so a custom
-        # analyst without a declared column is surfaced to operators instead
-        # of being silently passed to ``update_analysis_result`` and dropped by
-        # its ``hasattr`` guard.
         stream_report_keys = set(report_stream_fields())
         analysis_result_columns = analysis_result_report_columns()
         persisted_analyst_keys = set(persisted_registered_report_fields())
-
         prev_inv_count = 0
-
         prev_risk_count = 0
-
         last_node = None
 
         async def _stream_observer(mode: str, chunk: dict) -> None:
-
             nonlocal prev_inv_count, prev_risk_count, last_node
             activity_tracker.touch()
-
             if mode == "updates":
                 for node_name in chunk or {}:
                     if node_name != last_node:
                         prog = node_progress(node_name)
-
                         if prog:
                             await emitter.emit(prog)
-
                             last_node = node_name
-
                 return
 
             for d_type, key in [("investment", "investment_debate_state"), ("risk", "risk_debate_state")]:
                 d_state = chunk.get(key) or {}
-
                 if d_state:
                     curr_count = d_state.get("count", 0)
-
                     is_new = False
                     prior_count = prev_inv_count if d_type == "investment" else prev_risk_count
-
                     if d_type == "investment" and curr_count > prior_count:
                         prev_inv_count = curr_count
-
                         is_new = True
-
                     elif d_type == "risk" and curr_count > prior_count:
                         prev_risk_count = curr_count
-
                         is_new = True
-
                     if is_new:
                         history = d_state.get("history", "")
                         messages = debate_messages(history)
-
                         newly_added = max(1, curr_count - prior_count)
                         for message in messages[-newly_added:]:
                             await emitter.emit_debate_bubble(
@@ -478,7 +435,6 @@ async def run_individual_analysis(
                                 sender=message["sender"],
                                 content=message["content"],
                             )
-
                         if d_type == "investment":
                             await update_result_fields(
                                 db,
@@ -488,42 +444,24 @@ async def run_individual_analysis(
                                 bear_history=history_json_from(d_state.get("bear_history", "")),
                                 judge_decision=str(d_state.get("judge_decision", "") or ""),
                             )
-
                         else:
-                            await update_result_fields(
-                                db,
-                                row_id,
-                                risk_debate_history=messages or None,
-                            )
+                            await update_result_fields(db, row_id, risk_debate_history=messages or None)
 
             for key, value in chunk.items():
                 if key not in stream_report_keys:
                     continue
-
-                # Text columns must never receive provider content blocks,
-                # Pydantic objects, or whitespace-only responses.  The latter
-                # is an intermediate tool-call turn and must not be announced
-                # as a completed report.
                 content = report_text(value)
                 if not content or content == prev_state.get(key):
                     continue
-
                 column_key = persistence_column_for_report(key)
                 if column_key in analysis_result_columns:
-                    # Use the captured scalar id.  A prior incremental commit
-                    # can expire ``row`` in an async SQLAlchemy session.
                     await update_result_fields(db, row_id, **{column_key: content})
                 elif key != "portfolio_decision_json":
-                    # This should only be possible for a plugin whose schema
-                    # migration/API contract has not been added yet.  It still
-                    # streams for the live run, but cannot pretend to have
-                    # been persisted.
                     _logger.warning(
                         "Streaming non-persisted analyst report key=%s task=%s",
                         key,
                         emitter.task_id,
                     )
-
                 await emitter.emit_report(key, content)
                 prev_state[key] = content
 
@@ -547,38 +485,26 @@ async def run_individual_analysis(
                 pass
 
         duration = time.time() - start_time
-
         stats = stats_handler.get_stats()
-
         risk_metrics = {}
-
         try:
-            from datetime import datetime, timedelta
+            from datetime import datetime as _dt
+            from datetime import timedelta
 
             from backend.core.utils import resolve_benchmark
             from backend.services.analysis.risk_metrics_service import get_risk_metrics
             from backend.services.market_data_service import get_historical_data
 
             benchmark_ticker = resolve_benchmark(ticker, config)
-
-            risk_start = (datetime.strptime(trade_date, "%Y-%m-%d") - timedelta(days=365)).strftime("%Y-%m-%d")
-
+            risk_start = (_dt.strptime(trade_date, "%Y-%m-%d") - timedelta(days=365)).strftime("%Y-%m-%d")
             hist_df = await get_historical_data(ticker, risk_start, trade_date)
-
             bench_df = await get_historical_data(benchmark_ticker, risk_start, trade_date)
-
             if not hist_df.empty:
                 benchmark_prices = bench_df["Close"] if not bench_df.empty else None
-
                 risk_metrics = get_risk_metrics(hist_df["Close"], benchmark_prices=benchmark_prices)
-
         except Exception as risk_exc:
             _logger.warning("Could not calculate risk metrics for %s: %s", ticker, risk_exc)
 
-        # A successful node can still end with a provider-specific empty
-        # content shape.  Convert that into an explicit degraded report before
-        # quality scoring and final persistence; do not let an empty final
-        # state erase a report that was already incrementally saved.
         final_analyst_reports = normalise_selected_analyst_reports(
             final_state,
             permitted_analysts,
@@ -586,11 +512,6 @@ async def run_individual_analysis(
         )
         for report_key, content in final_analyst_reports.items():
             final_state[report_key] = content
-
-        # These report-like coordinator artifacts do not all pass through the
-        # common analyst factory.  Normalise them before ``PropagateResult``
-        # validates its text fields so a content-block response cannot turn a
-        # completed run into a persistence failure.
         for report_key in (
             "agent_qa_report",
             "synthesis_report",
@@ -608,29 +529,20 @@ async def run_individual_analysis(
             )
 
         result = PropagateResult.from_state(final_state, signal)
-
         try:
             from .run_quality import assess_run_quality
 
             quality = assess_run_quality(final_state, permitted_analysts, result.final_decision)
-        except Exception as quality_exc:  # noqa: BLE001 — never fail a run over a quality score
+        except Exception as quality_exc:
             _logger.warning("Run-quality assessment failed for %s: %s", ticker, quality_exc)
             quality = None
 
         inv_debate = final_state.get("investment_debate_state", {}) or {}
-
         risk_debate = final_state.get("risk_debate_state", {}) or {}
-
         structured_data = final_state.get("chart_annotations") or {}
-
         if not isinstance(structured_data, dict):
             structured_data = {}
-
-        # Keep the legacy annotation copy for older report consumers, but the
-        # physical AnalysisResult JSON columns below are the canonical contract.
         portfolio_decision = _json_mapping(final_state.get("portfolio_decision_json"))
-        if portfolio_decision:
-            structured_data["portfolio_decision"] = portfolio_decision
 
         _VALID_SIGNALS = {"Buy", "Overweight", "Hold", "Underweight", "Sell"}
         raw_signal = result.signal
@@ -644,11 +556,7 @@ async def run_individual_analysis(
                 result.ticker,
             )
             raw_signal = "Hold"
-        # Only non-empty report values are included in the terminal update.
-        # Earlier stream updates are durable and must not be overwritten by an
-        # empty/malformed value missing from a resumed graph's final state.
         final_report_values = terminal_report_column_values(final_state, final_analyst_reports)
-
         final_payload = {
             "signal": raw_signal,
             **final_report_values,
@@ -699,17 +607,12 @@ async def run_individual_analysis(
             final_payload=final_payload,
             strategy_context=config.get("strategy_context"),
             candidate_raw=final_state.get("strategy_candidate_json"),
-            # Do not dereference an ORM instance after the many incremental
-            # commits above: async sessions may have expired it.  The result
-            # owner was captured before graph execution and is authoritative.
             user_id=persisted_user_id,
             ticker=ticker,
             asset_type=asset_type,
             trade_date=trade_date,
             learning_eligible=learning_eligible,
         )
-        # A CAS conflict is deliberately fail-closed: never let a proposal
-        # calculated from strategy v5 auto-trade after another worker wrote v6.
         signal = str(getattr(row, "signal", raw_signal) or raw_signal)
         final_decision = str(getattr(row, "final_decision", result.final_decision) or result.final_decision)
         if persistence_result.decision_override is not None:
@@ -731,7 +634,7 @@ async def run_individual_analysis(
             from backend.repositories.analysis import get_previous_signal
 
             prev_signal = await get_previous_signal(db, user_id=user_id, ticker=ticker, exclude_id=row_id)
-        except Exception as prev_signal_exc:  # noqa: BLE001 — never fail a run over signal-flip lookup
+        except Exception as prev_signal_exc:
             _logger.debug("Previous-signal lookup failed for %s: %s", ticker, prev_signal_exc)
             prev_signal = None
 
@@ -750,29 +653,22 @@ async def run_individual_analysis(
             ),
             task_id=emitter.task_id,
         )
-
         track_background_task(
             send_analysis_webhook(ticker, trade_date, signal, final_decision, settings), task_id=emitter.task_id
         )
-
         track_background_task(send_signal_flip_webhook(ticker, prev_signal, signal, settings), task_id=emitter.task_id)
-
         await await_analysis_background_tasks(emitter.task_id)
-
         await emitter.emit_decision(signal, final_decision)
 
-        cost = estimate_cost(
+        cost = estimate_token_cost(
             ta.llm_provider,
             ta.llm_model,
             int(stats.get("tokens_in", 0)),
             int(stats.get("tokens_out", 0)),
         )
         await emitter.emit_complete(row_id, signal, duration, stats.get("llm_calls", 0), estimated_cost_usd=cost)
-
         ANALYSIS_RUNS.labels(status="completed").inc()
-
         ANALYSIS_DURATION.observe(duration)
-
         _logger.info(
             "Analysis complete task=%s ticker=%s signal=%s user=%s duration=%.2fs",
             emitter.task_id,
@@ -781,46 +677,31 @@ async def run_individual_analysis(
             username,
             duration,
         )
-
         return emitter.task_id, row
 
     except asyncio.CancelledError:
         _logger.info("Analysis cancelled task=%s user=%s", emitter.task_id, username)
-
         ANALYSIS_RUNS.labels(status="cancelled").inc()
-
         await _persist_terminal_status(db, row_id, status="cancelled")
-
         try:
             await emitter.emit_error("Analysis cancelled.")
         except Exception:
             _logger.warning("Could not emit cancellation event task=%s", emitter.task_id, exc_info=True)
-
         raise
 
     except Exception as exc:
         _logger.exception("Analysis failed task=%s user=%s", emitter.task_id, username)
-
         ANALYSIS_RUNS.labels(status="failed").inc()
-
         await _persist_terminal_status(db, row_id, status="failed")
-
         exc_str = str(exc)
-
         err_msg = exc_str
-
         if "404" in exc_str or "not_found" in exc_str.lower() or "not found" in exc_str.lower():
             err_msg = f"Model not found or invalid provider configuration (404 Error: {exc_str})"
-
         elif "401" in exc_str or "unauthorized" in exc_str.lower() or "invalid api key" in exc_str.lower():
             err_msg = f"Authentication failed or invalid API key (401 Error: {exc_str})"
-
         elif "400" in exc_str or "bad_request" in exc_str.lower() or "bad request" in exc_str.lower():
             err_msg = f"Invalid request parameters or model settings (400 Error: {exc_str})"
-
         elif "429" in exc_str or "rate_limit" in exc_str.lower() or "rate limit" in exc_str.lower():
             err_msg = f"Rate limit exceeded (429 Error: {exc_str})"
-
         await emitter.emit_error(err_msg)
-
         raise

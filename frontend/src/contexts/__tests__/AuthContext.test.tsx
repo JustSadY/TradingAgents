@@ -66,12 +66,18 @@ describe('AuthContext', () => {
     expect(localStorage.getItem('ta_access')).toBeNull()
   })
 
-  it('migrates a valid legacy localStorage access token into sessionStorage', async () => {
+  it('does not authenticate from legacy localStorage tokens and purges them', async () => {
     localStorage.setItem('ta_access', jwt('legacy'))
+    localStorage.setItem('ta_refresh', 'legacy-refresh-token')
+
     renderWithAuth(<TestConsumer />)
-    await waitFor(() => expect(screen.getByTestId('user')).toHaveTextContent('legacy'))
+
+    await waitFor(() => expect(screen.getByTestId('loading')).toHaveTextContent('false'))
+    expect(screen.getByTestId('isAuthenticated')).toHaveTextContent('false')
     expect(localStorage.getItem('ta_access')).toBeNull()
-    expect(sessionStorage.getItem('ta_access')).toBeTruthy()
+    expect(localStorage.getItem('ta_refresh')).toBeNull()
+    expect(sessionStorage.getItem('ta_access')).toBeNull()
+    expect(vi.mocked(axios.post)).toHaveBeenCalledWith('/auth/refresh')
   })
 
   it('ignores an expired token and clears it', async () => {
@@ -139,9 +145,10 @@ describe('AuthContext', () => {
     expect(vi.mocked(axios.post)).toHaveBeenCalledWith('/auth/logout')
   })
 
-  it('getAccessToken reads session storage', () => {
-    sessionStorage.setItem('ta_access', 'my_token')
-    expect(getAccessToken()).toBe('my_token')
+  it('getAccessToken reads session storage only', () => {
+    localStorage.setItem('ta_access', 'legacy_token')
+    sessionStorage.setItem('ta_access', 'session_token')
+    expect(getAccessToken()).toBe('session_token')
   })
 
   it('throws when useAuth is used outside provider', () => {

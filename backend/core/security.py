@@ -5,17 +5,9 @@ from datetime import UTC, datetime, timedelta
 import jwt
 
 from .config import get_settings
-from .password_hashing import (
-    hash_password,
-    is_supported_password_hash,
-    verify_and_update_password,
-    verify_password,
-)
 
 settings = get_settings()
 
-# Re-exported so the existing ``from backend.core.security import ...`` call
-# sites keep working; the implementations live in ``core.password_hashing``.
 __all__ = [
     "create_access_token",
     "create_refresh_token",
@@ -23,12 +15,8 @@ __all__ = [
     "decode_token_payload",
     "decrypt_secret",
     "encrypt_secret",
-    "hash_password",
-    "is_supported_password_hash",
     "new_token_id",
     "token_id_hash",
-    "verify_and_update_password",
-    "verify_password",
 ]
 
 def encrypt_secret(value: str) -> str:
@@ -38,9 +26,9 @@ def encrypt_secret(value: str) -> str:
 def decrypt_secret(value: str) -> str:
     """Decrypt a value produced by :func:`encrypt_secret`.
 
-    Raises ``cryptography.fernet.InvalidToken`` for anything that isn't valid
-    ciphertext under the current key — callers that might see pre-migration
-    plaintext values should catch that and fall back to the raw value.
+    Raises ``cryptography.fernet.InvalidToken`` when the value is not valid
+    ciphertext under the current key. Runtime plaintext fallback is not part of
+    the current secret-storage contract.
     """
     return settings.get_fernet().decrypt(value.encode()).decode()
 

@@ -13,7 +13,7 @@ Upon completion, navigate your browser to `http://SERVER_IP:8000` and log in usi
 ## What does it do?
 
 1.  **System Packages:** Installs Python 3.11–3.13, Node.js 20 (for Vite builds), PostgreSQL, git, and curl.
-2.  **Python Virtual Environment (`.venv`):** Configures a virtual environment and installs dependencies from `backend/pyproject.toml + backend/uv.lock`.
+2.  **Versioned Python Virtual Environment:** Installs the current revision under `.tradingagents-venvs/<revision>` and exposes it through the stable `.venv` symlink used by systemd and the updater. Dependencies come from `backend/pyproject.toml + backend/uv.lock`.
     *(No need for the pip `tradingagents` package — it imports the local copy at `backend/trading_agents` directly).*
 3.  **Frontend Compilation:** Compiles the React UI using `npm run build` and outputs to `frontend/dist`. The static files are served directly by the FastAPI backend (no separate web server required).
 4.  **PostgreSQL Instance:** Automatically provisions a local database and a user with a secure random password.
@@ -70,7 +70,7 @@ The installer configures a self-updating mechanism accessible from the web UI se
 *   The backend regularly checks the remote Git repository (`origin/main`).
 *   If new commits are detected, a notification banner is displayed on the UI for logged-in users.
 *   Clicking **Update** starts a detached one-shot systemd service `tradingagents-update.service`.
-*   This updater builds and validates an isolated worktree, stops the optional worker and web services together, applies migrations, atomically switches the release, and rolls code/schema back on restart failure.
+*   This updater builds and validates an isolated worktree, stops the optional worker and web services together, applies forward migrations, atomically switches the release, and can restore the previous code/frontend/virtualenv if restart fails. **Database schema downgrades are never automated**, so migrations must follow an expand/contract deployment contract.
 *   Once updated, the browser client automatically refreshes.
 
 > **Requirements:** The project directory must be owned by the `RUN_USER` (set up automatically by the installer), and the Git repository must be public or configure saved access credentials for `RUN_USER`.

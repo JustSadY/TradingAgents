@@ -4,21 +4,26 @@ from typing import Any
 
 from pydantic import Field as PydanticField
 from pydantic import create_model
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.security import encrypt_secret
-from backend.models.tool_settings import AgentToolSetting, UserAgentAccess, UserToolAccess, UserToolFieldAccess
+from backend.models.tool_settings import AgentToolSetting
 from backend.models.user import User
 from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate, ToolSettingValue
-from backend.services.tool_access_service import get_user_tool_access, get_user_tool_field_access
+from backend.services.tool_access_service import (
+    get_user_access_overrides,
+    get_user_tool_access,
+    get_user_tool_field_access,
+)
 from backend.trading_agents.agents.tools.base import BaseAgentTool
 from backend.trading_agents.agents.tools.registry import registry
 
 SECRET_UNCHANGED_SENTINEL = "__SECRET_UNCHANGED__"
 
+
 def _secret_field_keys(tool: BaseAgentTool) -> set[str]:
     return {f.key for f in tool.settings_schema if f.type == "secret"}
+
 
 def _mask_secrets(tool: BaseAgentTool, settings: dict[str, Any]) -> dict[str, Any]:
     """Replace configured secret values with a sentinel before they leave the
@@ -33,6 +38,7 @@ def _mask_secrets(tool: BaseAgentTool, settings: dict[str, Any]) -> dict[str, An
             masked[key] = SECRET_UNCHANGED_SENTINEL
     return masked
 
+
 def _get_pydantic_type(field_type: str) -> Any:
     mapping = {
         "boolean": bool,
@@ -45,6 +51,7 @@ def _get_pydantic_type(field_type: str) -> Any:
         "multi_select": list[str],
     }
     return mapping.get(field_type, Any)
+
 
 def validate_tool_settings(tool: BaseAgentTool, incoming: dict[str, Any]) -> dict[str, Any]:
     """Validate incoming settings against the tool's schema using dynamic Pydantic models."""
@@ -82,6 +89,7 @@ def validate_tool_settings(tool: BaseAgentTool, incoming: dict[str, Any]) -> dic
     except Exception as e:
         raise ValueError(str(e)) from e
 
+
 async def _check_tool_availability(db: AsyncSession, user_id: int, tool: BaseAgentTool) -> bool:
     """Helper to check if a tool is available based on the agent hierarchy."""
     if not tool.allowed_analysts:
@@ -94,6 +102,7 @@ async def _check_tool_availability(db: AsyncSession, user_id: int, tool: BaseAge
     hierarchy = AgentHierarchy(agent_ctx)
 
     return any(hierarchy.is_enabled(a) for a in tool.allowed_analysts)
+
 
 async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRead:
     from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
@@ -131,6 +140,7 @@ async def get_user_tool_settings(db: AsyncSession, user: User) -> ToolSettingsRe
 
     return ToolSettingsRead(tools=tools_map)
 
+
 async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
     from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
 
@@ -153,7 +163,9 @@ async def get_server_tool_settings(db: AsyncSession) -> ToolSettingsRead:
 
     return ToolSettingsRead(tools=tools_map)
 
+
 async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSettingsUpdate) -> ToolSettingsRead:
+    from backend.repositories.tool_settings import ensure_tool_setting
     from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
 
     user_rows_list = await _repo_get_user(db, user.id)
@@ -170,17 +182,20 @@ async def apply_tool_settings_update(db: AsyncSession, user: User, body: ToolSet
 
         _validate_tool_availability(tool, tool_key, agent_ctx)
 
-        row = user_rows.get(tool_key)
-        if not row:
-            row = AgentToolSetting(
-                scope="user", user_id=user.id, tool_key=tool_key, enabled=tool.default_enabled, settings={}
-            )
-            db.add(row)
-
+        row = ensure_tool_setting(
+            db,
+            row=user_rows.get(tool_key),
+            scope="user",
+            user_id=user.id,
+            tool_key=tool_key,
+            default_enabled=tool.default_enabled,
+        )
+        user_rows[tool_key] = row
         _apply_tool_setting_row_update(row, update, tool)
 
     await db.flush()
     return await get_user_tool_settings(db, user)
+
 
 def _validate_tool_availability(tool: BaseAgentTool, tool_key: str, agent_ctx: dict):
     """Raise ValueError if tool is not available due to disabled agents."""
@@ -188,6 +203,7 @@ def _validate_tool_availability(tool: BaseAgentTool, tool_key: str, agent_ctx: d
         is_any_agent_enabled = any(agent_ctx.get(a, {}).get("enabled", True) for a in tool.allowed_analysts)
         if not is_any_agent_enabled:
             raise ValueError(f"Tool '{tool_key}' is not available because none of its associated agents are enabled.")
+
 
 def _apply_tool_setting_row_update(row: AgentToolSetting, update: Any, tool: BaseAgentTool):
     """Apply enablement and settings updates to an AgentToolSetting row."""
@@ -215,7 +231,9 @@ def _apply_tool_setting_row_update(row: AgentToolSetting, update: Any, tool: Bas
 
     row.settings = current_settings
 
+
 async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettingsUpdate) -> ToolSettingsRead:
+    from backend.repositories.tool_settings import ensure_tool_setting
     from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
 
     server_rows_list = await _repo_get_server(db)
@@ -226,17 +244,20 @@ async def apply_server_tool_settings_update(db: AsyncSession, body: ToolSettings
         if not tool:
             raise ValueError(f"Unknown tool key '{tool_key}'.")
 
-        row = server_rows.get(tool_key)
-        if not row:
-            row = AgentToolSetting(
-                scope="server", user_id=None, tool_key=tool_key, enabled=tool.default_enabled, settings={}
-            )
-            db.add(row)
-
+        row = ensure_tool_setting(
+            db,
+            row=server_rows.get(tool_key),
+            scope="server",
+            user_id=None,
+            tool_key=tool_key,
+            default_enabled=tool.default_enabled,
+        )
+        server_rows[tool_key] = row
         _apply_tool_setting_row_update(row, update, tool)
 
     await db.flush()
     return await get_server_tool_settings(db)
+
 
 def build_tool_runtime_state(
     tool: BaseAgentTool, server_row: AgentToolSetting | None, user_row: AgentToolSetting | None
@@ -268,6 +289,7 @@ def build_tool_runtime_state(
         },
     }
 
+
 async def build_global_runtime_context(db: AsyncSession, user_id: int | None) -> dict[str, Any]:
     from backend.repositories.tool_settings import get_server_tool_settings as _repo_get_server
     from backend.repositories.tool_settings import get_user_tool_settings as _repo_get_user
@@ -287,37 +309,12 @@ async def build_global_runtime_context(db: AsyncSession, user_id: int | None) ->
         server_settings_map[tool.key] = state["server"]
         user_settings_map[tool.key] = state["user"]
 
-    agent_access = {}
-    tool_access = {}
-    field_access = {}
-
+    access = {"agent_access": {}, "tool_access": {}, "field_access": {}}
     if user_id is not None:
-        res = await db.execute(select(UserAgentAccess).where(UserAgentAccess.user_id == user_id))
-        for row in res.scalars().all():
-            agent_access[row.agent_key] = row.can_run
-
-        res = await db.execute(select(UserToolAccess).where(UserToolAccess.user_id == user_id))
-        for row in res.scalars().all():
-            tool_access[row.tool_key] = {
-                "can_view": row.can_view,
-                "can_use": row.can_use,
-                "can_edit": row.can_edit,
-                "can_enable": row.can_enable,
-            }
-
-        res = await db.execute(select(UserToolFieldAccess).where(UserToolFieldAccess.user_id == user_id))
-        for row in res.scalars().all():
-            field_access.setdefault(row.tool_key, {})[row.field_key] = {
-                "can_view": row.can_view,
-                "can_edit": row.can_edit,
-            }
+        access = await get_user_access_overrides(db, user_id)
 
     return {
         "server_settings": server_settings_map,
         "user_settings": user_settings_map,
-        "access": {
-            "agent_access": agent_access,
-            "tool_access": tool_access,
-            "field_access": field_access,
-        },
+        "access": access,
     }

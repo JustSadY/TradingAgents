@@ -1,18 +1,14 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_db, require_admin, require_page
-from backend.core.config import get_settings as _get_settings
-from backend.core.security import hash_password
 from backend.models.user import User
-from backend.repositories.permissions import list_allowed_page_keys, list_allowed_setting_sections
-from backend.repositories.users import email_exists, get_user_by_id, username_exists
 from backend.schemas.common import MessageResponse
 from backend.schemas.user import (
     AgentAccessMap,
+    AgentAccessUpdate,
     AgentAccessUpdateResponse,
     ApiKeyProvidersResponse,
     ApiKeySet,
@@ -20,11 +16,12 @@ from backend.schemas.user import (
     PagePermissionsUpdate,
     ProfileUpdate,
     SettingPermissionsResponse,
+    SettingPermissionsUpdate,
     ToolAccessMap,
-    ToolAccessPermsUpdate,
+    ToolAccessUpdate,
     ToolAccessUpdateResponse,
     ToolFieldAccessMap,
-    ToolFieldAccessPermsUpdate,
+    ToolFieldAccessUpdate,
     ToolFieldAccessUpdateResponse,
     UserAdminUpdate,
     UserCreate,
@@ -32,19 +29,45 @@ from backend.schemas.user import (
     UserRead,
 )
 from backend.services.user_service import (
-    delete_user_and_emit,
-    delete_user_api_key,
-    list_user_api_key_providers,
-    set_user_api_key,
+    CannotDeleteSelfError,
+    EmailTakenError,
+    UnknownPermissionKeysError,
+    UsernameTakenError,
+    UserNotFoundError,
+    UserPolicyError,
+    create_managed_user,
+    delete_managed_user,
+    get_effective_page_permissions,
+    get_effective_setting_permissions,
+    get_managed_page_permissions,
+    get_managed_setting_permissions,
+    get_user_or_raise,
+    list_managed_users,
+    list_stored_api_key_providers,
+    remove_stored_api_key,
+    save_stored_api_key,
+    set_managed_page_permissions,
+    set_managed_setting_permissions,
+    update_managed_user,
+    update_profile,
 )
 
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 _USER_NOT_FOUND = "User not found"
 
+
+async def _get_user_or_404(db: AsyncSession, user_id: int) -> User:
+    try:
+        return await get_user_or_raise(db, user_id)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+
+
 @router.get("/me", response_model=UserRead)
 async def get_me(current_user: Annotated[User, Depends(get_current_user)]):
     return current_user
+
 
 @router.put("/me", response_model=UserRead, responses={400: {"description": "Email already in use"}})
 async def update_me(
@@ -52,28 +75,22 @@ async def update_me(
     current_user: Annotated[User, Depends(require_page("profile"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if body.email is not None:
-        if await email_exists(db, body.email, exclude_user_id=current_user.id):
-            raise HTTPException(status_code=400, detail="Email already in use")
+    try:
+        return await update_profile(
+            db,
+            current_user,
+            email=body.email,
+            display_name=body.display_name,
+            password=body.password,
+        )
+    except EmailTakenError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
 
-    from backend.repositories.users import update_user_profile
-
-    if body.password:
-        current_user.token_version = (getattr(current_user, "token_version", 0) or 0) + 1
-
-    return await update_user_profile(
-        db,
-        current_user,
-        email=body.email,
-        display_name=body.display_name,
-        hashed_password=hash_password(body.password) if body.password else None,
-    )
 
 @router.get("/me/api-keys", response_model=ApiKeyProvidersResponse)
 async def list_my_api_keys(current_user: Annotated[User, Depends(get_current_user)]):
-    fernet = _get_settings().get_fernet()
-    providers = list_user_api_key_providers(current_user, fernet)
-    return {"providers": providers}
+    return {"providers": list_stored_api_key_providers(current_user)}
+
 
 @router.put("/me/api-keys", response_model=MessageResponse)
 async def set_my_api_key(
@@ -81,10 +98,9 @@ async def set_my_api_key(
     current_user: Annotated[User, Depends(require_page("profile"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    fernet = _get_settings().get_fernet()
-    set_user_api_key(current_user, body.provider, body.api_key, fernet)
-    await db.flush()
+    await save_stored_api_key(db, current_user, body.provider, body.api_key)
     return {"detail": f"API key for '{body.provider}' saved"}
+
 
 @router.delete(
     "/me/api-keys/{provider}",
@@ -96,46 +112,35 @@ async def delete_my_api_key(
     current_user: Annotated[User, Depends(require_page("profile"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    fernet = _get_settings().get_fernet()
-    deleted = delete_user_api_key(current_user, provider, fernet)
+    deleted = await remove_stored_api_key(db, current_user, provider)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"No key found for provider '{provider}'")
     return {"detail": f"API key for '{provider}' deleted"}
+
 
 @router.get("/me/permissions", response_model=PagePermissionsRead)
 async def get_my_permissions(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    from backend.core.constants import PAGE_KEYS
+    return PagePermissionsRead(allowed_pages=await get_effective_page_permissions(db, current_user))
 
-    if current_user.is_admin:
-        return PagePermissionsRead(allowed_pages=PAGE_KEYS + ["admin"])
-    allowed = sorted(await list_allowed_page_keys(db, current_user.id))
-    if "settings" not in allowed:
-        allowed.append("settings")
-    return PagePermissionsRead(allowed_pages=allowed)
 
 @router.get("/me/setting-permissions", response_model=SettingPermissionsResponse)
 async def get_my_setting_permissions(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    from backend.core.constants import SETTING_KEYS
+    return {"allowed_settings": await get_effective_setting_permissions(db, current_user)}
 
-    if current_user.is_admin:
-        return {"allowed_settings": SETTING_KEYS}
-    allowed = sorted(await list_allowed_setting_sections(db, current_user.id))
-    return {"allowed_settings": allowed}
 
 @router.get("", response_model=list[UserRead])
 async def list_users_run(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    from backend.repositories.users import list_users as _repo_list
+    return await list_managed_users(db)
 
-    return await _repo_list(db)
 
 @router.post(
     "",
@@ -145,34 +150,24 @@ async def list_users_run(
 )
 async def create_user(
     body: UserCreate,
-    _: Annotated[User, Depends(require_admin)],
+    admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if await username_exists(db, body.username):
-        raise HTTPException(status_code=400, detail="Username already taken")
-    if body.email and await email_exists(db, body.email):
-        raise HTTPException(status_code=400, detail="Email already in use")
-    if body.role == "owner":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Assigning the Server Owner role is prohibited.",
+    try:
+        return await create_managed_user(
+            db,
+            admin,
+            username=body.username,
+            password=body.password,
+            email=body.email,
+            display_name=body.display_name,
+            role=body.role,
         )
-    if body.role != "user" and _.role != "owner":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Only the Server Owner can create administrator accounts.",
-        )
+    except (UsernameTakenError, EmailTakenError) as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except UserPolicyError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
 
-    from backend.repositories.users import create_user_with_permissions
-
-    return await create_user_with_permissions(
-        db,
-        username=body.username,
-        hashed_password=hash_password(body.password),
-        email=body.email,
-        display_name=body.display_name,
-        role=body.role,
-    )
 
 @router.put(
     "/{user_id}",
@@ -185,30 +180,23 @@ async def update_user(
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    try:
+        return await update_managed_user(
+            db,
+            admin,
+            user_id,
+            role=body.role,
+            is_active=body.is_active,
+            email=body.email,
+            display_name=body.display_name,
+        )
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except UserPolicyError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
+    except EmailTakenError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
 
-    if user.role == "owner":
-        if body.role is not None and body.role != "owner":
-            raise HTTPException(status_code=403, detail="The Server Owner role is immutable.")
-        if body.is_active is not None and body.is_active != user.is_active:
-            raise HTTPException(status_code=403, detail="The Server Owner account cannot be deactivated.")
-
-    if body.role is not None:
-        if body.role == "owner" and user.role != "owner":
-            raise HTTPException(status_code=403, detail="Assigning Server Owner is prohibited.")
-        if admin.role != "owner":
-            raise HTTPException(status_code=403, detail="Only Server Owner can promote/demote admins.")
-
-    if body.email is not None and await email_exists(db, body.email, exclude_user_id=user.id):
-        raise HTTPException(status_code=409, detail="Email already in use")
-
-    from backend.repositories.users import update_user_admin
-
-    return await update_user_admin(
-        db, user, role=body.role, is_active=body.is_active, email=body.email, display_name=body.display_name
-    )
 
 @router.delete(
     "/{user_id}",
@@ -224,18 +212,15 @@ async def delete_user(
     admin: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if user_id == admin.id:
-        raise HTTPException(status_code=400, detail="Cannot delete yourself")
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
-    if user.role == "owner":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="The Server Owner account cannot be deleted.",
-        )
+    try:
+        await delete_managed_user(db, admin, user_id)
+    except CannotDeleteSelfError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from None
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except UserPolicyError as exc:
+        raise HTTPException(status_code=403, detail=str(exc)) from None
 
-    await delete_user_and_emit(db, user)
 
 @router.get("/{user_id}/permissions", response_model=UserPermissionsResponse)
 async def get_user_permissions(
@@ -243,15 +228,12 @@ async def get_user_permissions(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
-    from backend.models.page_permission import ALL_PAGE_KEYS
-    from backend.repositories.permissions import get_user_page_permissions_map
+    try:
+        permissions = await get_managed_page_permissions(db, user_id)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return {"user_id": user_id, "permissions": permissions}
 
-    perms = await get_user_page_permissions_map(db, user_id)
-    full = {k: perms.get(k, False) for k in ALL_PAGE_KEYS}
-    return {"user_id": user_id, "permissions": full}
 
 @router.put("/{user_id}/permissions", response_model=MessageResponse, responses={404: {"description": _USER_NOT_FOUND}})
 async def set_user_permissions(
@@ -260,21 +242,14 @@ async def set_user_permissions(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
-
-    from backend.models.page_permission import ALL_PAGE_KEYS
-    from backend.repositories.permissions import set_user_page_permission
-
-    unknown = sorted(set(body.permissions) - set(ALL_PAGE_KEYS))
-    if unknown:
-        raise HTTPException(status_code=422, detail=f"Unknown page permission keys: {', '.join(unknown)}")
-    for page_key, allowed in body.permissions.items():
-        await set_user_page_permission(db, user_id, page_key, allowed)
-
-    await db.flush()
+    try:
+        await set_managed_page_permissions(db, user_id, body.permissions)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except UnknownPermissionKeysError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     return {"detail": "Permissions updated"}
+
 
 @router.get(
     "/{user_id}/api-keys", response_model=ApiKeyProvidersResponse, responses={404: {"description": _USER_NOT_FOUND}}
@@ -284,12 +259,9 @@ async def list_user_api_keys(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
-    fernet = _get_settings().get_fernet()
-    providers = list_user_api_key_providers(user, fernet)
-    return {"providers": providers}
+    user = await _get_user_or_404(db, user_id)
+    return {"providers": list_stored_api_key_providers(user)}
+
 
 @router.put("/{user_id}/api-keys", response_model=MessageResponse, responses={404: {"description": _USER_NOT_FOUND}})
 async def set_user_api_key_endpoint(
@@ -298,13 +270,10 @@ async def set_user_api_key_endpoint(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
-    fernet = _get_settings().get_fernet()
-    set_user_api_key(user, body.provider, body.api_key, fernet)
-    await db.flush()
+    user = await _get_user_or_404(db, user_id)
+    await save_stored_api_key(db, user, body.provider, body.api_key)
     return {"detail": f"API key for '{body.provider}' saved for user {user.username}"}
+
 
 @router.delete(
     "/{user_id}/api-keys/{provider}",
@@ -317,15 +286,12 @@ async def delete_user_api_key_endpoint(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
-    fernet = _get_settings().get_fernet()
-    deleted = delete_user_api_key(user, provider, fernet)
+    user = await _get_user_or_404(db, user_id)
+    deleted = await remove_stored_api_key(db, user, provider)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"No key found for provider '{provider}'")
-    await db.flush()
     return {"detail": f"API key for '{provider}' deleted for user {user.username}"}
+
 
 @router.get(
     "/{user_id}/setting-permissions",
@@ -337,18 +303,12 @@ async def get_user_setting_permissions(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
-    from backend.core.constants import SETTING_KEYS
-    from backend.repositories.permissions import get_user_setting_permissions_map
+    try:
+        permissions = await get_managed_setting_permissions(db, user_id)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return {"user_id": user_id, "permissions": permissions}
 
-    perms = await get_user_setting_permissions_map(db, user_id)
-    full = {k: perms.get(k, False) for k in SETTING_KEYS}
-    return {"user_id": user_id, "permissions": full}
-
-class SettingPermissionsUpdate(BaseModel):
-    permissions: dict[str, bool]
 
 @router.put(
     "/{user_id}/setting-permissions", response_model=MessageResponse, responses={404: {"description": _USER_NOT_FOUND}}
@@ -359,21 +319,14 @@ async def set_user_setting_permissions(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
-
-    from backend.core.constants import SETTING_KEYS
-    from backend.repositories.permissions import set_user_setting_permission
-
-    unknown = sorted(set(body.permissions) - set(SETTING_KEYS))
-    if unknown:
-        raise HTTPException(status_code=422, detail=f"Unknown setting permission keys: {', '.join(unknown)}")
-    for setting_key, allowed in body.permissions.items():
-        await set_user_setting_permission(db, user_id, setting_key, allowed)
-
-    await db.flush()
+    try:
+        await set_managed_setting_permissions(db, user_id, body.permissions)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except UnknownPermissionKeysError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     return {"detail": "Setting permissions updated"}
+
 
 @router.get("/{user_id}/agent-access", response_model=AgentAccessMap)
 async def get_agent_access(
@@ -381,14 +334,11 @@ async def get_agent_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if not await get_user_by_id(db, user_id):
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    await _get_user_or_404(db, user_id)
     from backend.services.tool_access_service import get_user_agent_access
 
     return await get_user_agent_access(db, user_id)
 
-class AgentAccessUpdate(BaseModel):
-    agents: dict[str, bool]
 
 @router.put("/{user_id}/agent-access", response_model=AgentAccessUpdateResponse)
 async def set_agent_access(
@@ -397,12 +347,12 @@ async def set_agent_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if not await get_user_by_id(db, user_id):
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    await _get_user_or_404(db, user_id)
     from backend.services.tool_access_service import update_user_agent_access
 
     updated = await update_user_agent_access(db, user_id, body.agents)
     return {"detail": "Agent access updated", "agents": updated}
+
 
 @router.get("/{user_id}/tool-access", response_model=ToolAccessMap)
 async def get_tool_access(
@@ -410,14 +360,11 @@ async def get_tool_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if not await get_user_by_id(db, user_id):
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    await _get_user_or_404(db, user_id)
     from backend.services.tool_access_service import get_user_tool_access
 
     return await get_user_tool_access(db, user_id)
 
-class ToolAccessUpdate(BaseModel):
-    tools: dict[str, ToolAccessPermsUpdate]
 
 @router.put("/{user_id}/tool-access", response_model=ToolAccessUpdateResponse)
 async def set_tool_access(
@@ -426,8 +373,7 @@ async def set_tool_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if not await get_user_by_id(db, user_id):
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    await _get_user_or_404(db, user_id)
     from backend.services.tool_access_service import update_user_tool_access
 
     updated = await update_user_tool_access(
@@ -435,20 +381,18 @@ async def set_tool_access(
     )
     return {"detail": "Tool access updated", "tools": updated}
 
+
 @router.get("/{user_id}/tool-field-access", response_model=ToolFieldAccessMap)
 async def get_tool_field_access(
     user_id: int,
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if not await get_user_by_id(db, user_id):
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    await _get_user_or_404(db, user_id)
     from backend.services.tool_access_service import get_user_tool_field_access
 
     return await get_user_tool_field_access(db, user_id)
 
-class ToolFieldAccessUpdate(BaseModel):
-    fields: dict[str, dict[str, ToolFieldAccessPermsUpdate]]
 
 @router.put("/{user_id}/tool-field-access", response_model=ToolFieldAccessUpdateResponse)
 async def set_tool_field_access(
@@ -457,8 +401,7 @@ async def set_tool_field_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if not await get_user_by_id(db, user_id):
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    await _get_user_or_404(db, user_id)
     from backend.services.tool_access_service import update_user_tool_field_access
 
     updated = await update_user_tool_field_access(

@@ -8,14 +8,6 @@ try:
 except ImportError:
     pass
 try:
-    from backend.trading_agents.agents.runtime.logging_config import setup_unified_logging
-
-    setup_unified_logging()
-except Exception as exc:
-    import sys
-
-    sys.stderr.write(f"Warning: Failed to set up unified logging: {exc}\n")
-try:
     import langchain_core  # noqa: F401  # availability probe; the import itself is the check
 except ImportError:
     pass

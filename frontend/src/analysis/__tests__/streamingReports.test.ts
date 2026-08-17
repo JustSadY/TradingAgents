@@ -11,28 +11,41 @@ import {
 describe('reportKeyForStreamingAgent', () => {
   it.each([
     ['market', 'market_report'],
-    ['market_analyst', 'market_report'],
     ['social', 'sentiment_report'],
     ['portfolio_manager', 'final_decision'],
     ['research_manager', 'investment_plan'],
-    ['trader', 'trader_plan'],
-  ])('maps %s to %s', (agent, expected) => {
+  ])('maps current agent key %s to %s', (agent, expected) => {
     expect(reportKeyForStreamingAgent(agent)).toBe(expected)
   })
 
   it.each([
-    'Market Analyst',
-    'market-analyst',
-    'marketAnalyst',
-    '  market__analyst  ',
-    '_market_analyst_',
-  ])('normalises the spelling %s', agent => {
+    'Market',
+    'market',
+    '  market  ',
+    '_market_',
+  ])('normalises harmless transport spelling %s', agent => {
     expect(reportKeyForStreamingAgent(agent)).toBe('market_report')
   })
 
+  it.each([
+    'trader',
+    'market_analyst',
+    'sentiment',
+    'sentiment_analyst',
+    'news_analyst',
+    'fundamentals_analyst',
+    'insider_activity',
+    'institutional_ownership',
+    'analyst_ratings',
+    'catalyst_calendar',
+    'performance_review',
+  ])('does not preserve retired semantic alias %s', agent => {
+    expect(reportKeyForStreamingAgent(agent)).toBeNull()
+  })
+
   it('routes an unknown agent to its own field when it names one', () => {
-    // The analyst registry can add agents without a frontend release, so an
-    // unrecognised `*_report` name is still a report rather than dropped.
+    // Registry extensions may explicitly use a `*_report` key, which remains
+    // safe to surface without reviving historical semantic aliases.
     expect(reportKeyForStreamingAgent('sector_rotation_report')).toBe('sector_rotation_report')
   })
 

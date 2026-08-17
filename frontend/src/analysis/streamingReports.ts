@@ -1,13 +1,13 @@
 import { isRecord } from '../utils/isRecord'
 
 /**
- * Which report field a streamed agent writes into, and which fields the
+ * Which current agent key a streamed token writes into, and which fields the
  * Reports tab shows.
  *
- * The backend's analyst registry can add report fields without a frontend
- * release, so both directions are open-ended rather than a fixed list: an
- * unrecognised `*_report` field still gets displayed, and an unrecognised
- * agent name still routes to its own field.
+ * The backend owns agent identifiers. Token callbacks attach the current
+ * `AgentInfo.key` as metadata, so this map intentionally contains only the
+ * canonical keys that can produce report content now. Historical callback
+ * aliases must not accumulate here.
  */
 
 export type LiveDebateMessage = { sender: string; content: string; type: string }
@@ -68,56 +68,34 @@ export function readableSectionLabel(sectionLabels: Record<string, string>, key:
     .join(' ')
 }
 
-/** Map streaming callback names to their persisted report fields. */
+/** Map current streaming agent keys to their report fields. */
 export const STREAMING_REPORT_KEYS: Record<string, string> = {
   market: 'market_report',
-  market_analyst: 'market_report',
   social: 'sentiment_report',
-  sentiment: 'sentiment_report',
-  sentiment_analyst: 'sentiment_report',
   news: 'news_report',
-  news_analyst: 'news_report',
   fundamentals: 'fundamentals_report',
-  fundamentals_analyst: 'fundamentals_report',
   macro: 'macro_report',
-  macro_analyst: 'macro_report',
   options: 'options_report',
-  options_analyst: 'options_report',
   quant: 'quant_report',
-  quant_analyst: 'quant_report',
   earnings: 'earnings_report',
-  earnings_analyst: 'earnings_report',
   insider: 'insider_report',
-  insider_activity: 'insider_report',
-  insider_activity_analyst: 'insider_report',
   ownership: 'ownership_report',
-  institutional_ownership: 'ownership_report',
-  institutional_ownership_analyst: 'ownership_report',
   ratings: 'ratings_report',
-  analyst_ratings: 'ratings_report',
-  analyst_ratings_analyst: 'ratings_report',
   short_interest: 'short_interest_report',
-  short_interest_analyst: 'short_interest_report',
   valuation: 'valuation_report',
-  valuation_analyst: 'valuation_report',
   catalyst: 'catalyst_report',
-  catalyst_calendar: 'catalyst_report',
-  catalyst_calendar_analyst: 'catalyst_report',
   review: 'review_report',
-  performance_review: 'review_report',
-  performance_review_analyst: 'review_report',
   synthesis_manager: 'synthesis_report',
   auditor: 'audit_report',
   agent_qa: 'agent_qa_report',
   portfolio_manager: 'final_decision',
   research_manager: 'investment_plan',
-  trader: 'trader_plan',
 }
 
 /**
- * Resolve an agent name to its report field, tolerating the spelling
- * variations a worker may emit (camelCase, hyphens, spaces, `_analyst`
- * suffixes). `thinking` and `system` are status chatter, not reports.
+ * Resolve an agent key to its report field. Normalisation is retained only for
+ * harmless transport spelling differences; retired semantic aliases are not.
+ * `thinking` and `system` are status chatter, not reports.
  */
 export function reportKeyForStreamingAgent(agent: string): string | null {
   const normalized = agent

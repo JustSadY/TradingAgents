@@ -33,7 +33,6 @@ SECTION_FIELDS = {
         "max_position_size_pct",
         "auto_execute_signals",
         "max_debate_rounds",
-        "max_risk_rounds",
         "analyst_concurrency_limit",
         "strict_stop_loss_mode",
         "correlation_risk_enabled",

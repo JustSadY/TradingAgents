@@ -48,7 +48,6 @@ export interface SettingsUpdate {
   max_recur_limit?: number | null;
   max_report_chars_in_prompts?: number | null;
   max_risk_per_trade_pct?: number | null;
-  max_risk_rounds?: number | null;
   max_tool_output_chars?: number | null;
   memory_embedder?: string | null;
   memory_ollama_embed_model?: string | null;

@@ -17,28 +17,33 @@ import math
 from decimal import Decimal
 from types import SimpleNamespace
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.config import is_live_trading_enabled
 from backend.core.constants import SIGNAL_TO_ACTION
 from backend.core.money import safe_decimal
+from backend.repositories.trading_execution import (
+    apply_broker_account_balances as _repo_apply_broker_account_balances,
+)
+from backend.repositories.trading_execution import (
+    get_or_create_broker_audit_portfolio as _repo_get_or_create_broker_audit_portfolio,
+)
+from backend.repositories.trading_execution import persist_broker_order as _repo_persist_broker_order
 from backend.services.execution.base import OrderRequest, OrderResult
 from backend.services.execution.factory import get_trader
 from backend.services.mock_trading_service import get_or_create_sim_portfolio
 
 _logger = logging.getLogger(__name__)
 
+
 def is_actionable(signal: str | None) -> bool:
     return signal in SIGNAL_TO_ACTION
 
-def auto_execute_signals_enabled(settings) -> bool:
-    """Return whether the user deliberately opted into AI signal execution.
 
-    Missing attributes are treated as disabled so deployments remain safe while
-    an older settings row/schema is being migrated.
-    """
-    return bool(getattr(settings, "auto_execute_signals", False))
+def auto_execute_signals_enabled(settings) -> bool:
+    """Return whether the user deliberately opted into AI signal execution."""
+    return bool(settings.auto_execute_signals)
+
 
 def _record_skip(reason: str) -> None:
     """Best-effort Prometheus counter bump for a guardrail-skipped auto-order."""
@@ -49,6 +54,7 @@ def _record_skip(reason: str) -> None:
     except Exception:  # noqa: BLE001 — metrics are optional, never block trading
         _logger.debug("Metrics skip counter unavailable (non-fatal)")
 
+
 def _skipped_order(
     *,
     reason_code: str,
@@ -57,11 +63,10 @@ def _skipped_order(
 ) -> OrderResult | None:
     """Record a guardrail skip and optionally return it to an event caller.
 
-    Existing scheduler callers historically use ``None`` to mean "nothing was
-    sent".  The analysis WebSocket needs more context, so it opts into a
-    serialisable ``SKIPPED`` result without changing that legacy contract.
+    Scheduler callers use ``None`` to mean "nothing was sent". The analysis
+    WebSocket needs more context, so it opts into a serialisable ``SKIPPED``
+    result.
     """
-
     _record_skip(reason_code)
     if not include_skip_result:
         return None
@@ -74,6 +79,7 @@ def _skipped_order(
         reason_code=reason_code,
     )
 
+
 def _safe_float(raw) -> float | None:
     """``float()`` that folds ``None`` and non-numeric values into ``None``."""
     if raw is None:
@@ -84,18 +90,6 @@ def _safe_float(raw) -> float | None:
         return None
     return value if math.isfinite(value) else None
 
-def _annotations(row) -> dict:
-    """Return parsed structured annotations, including legacy JSON strings."""
-    ann = getattr(row, "chart_annotations", None)
-    if isinstance(ann, dict):
-        return ann
-    if isinstance(ann, str):
-        try:
-            parsed = json.loads(ann)
-        except (TypeError, ValueError):
-            return {}
-        return parsed if isinstance(parsed, dict) else {}
-    return {}
 
 def _as_mapping(raw) -> dict:
     """Decode a mapping or JSON object without allowing malformed AI data through."""
@@ -109,27 +103,14 @@ def _as_mapping(raw) -> dict:
         return parsed if isinstance(parsed, dict) else {}
     return {}
 
-def _portfolio_decision(row) -> dict:
-    """Return the controller-accepted structured decision when available.
 
-    ``AnalysisResult.portfolio_decision_json`` is the physical canonical field
-    and is intentionally checked before the legacy chart-annotation fallback.
-    Raw ``pm_proposal_json`` and historical Trader fields are never execution
-    fallbacks.
-    """
-    annotations = _annotations(row)
-    for raw in (
-        getattr(row, "portfolio_decision_json", None),
-        annotations.get("portfolio_decision"),
-        annotations.get("portfolio_decision_json"),
-    ):
-        decision = _as_mapping(raw)
-        if decision:
-            return decision
-    return {}
+def _portfolio_decision(row) -> dict:
+    """Return the controller-accepted canonical structured decision."""
+    return _as_mapping(getattr(row, "portfolio_decision_json", None))
+
 
 def _decision_value(row, *keys: str):
-    """Read one value exclusively from the final Portfolio Manager output."""
+    """Read one value exclusively from the canonical accepted decision."""
     decision = _portfolio_decision(row)
     for key in keys:
         value = decision.get(key)
@@ -137,18 +118,20 @@ def _decision_value(row, *keys: str):
             return value
     return None
 
+
 def _extract_leverage(row) -> float:
-    """Read the PM's structured leverage recommendation, clamped to [1, 10]."""
+    """Read the accepted structured leverage recommendation, clamped to [1, 10]."""
     value = _safe_float(_decision_value(row, "recommended_leverage"))
     if value is not None and value >= 1.0:
         return min(value, 10.0)
     return 1.0
 
+
 def _pm_target_notional(row, *, portfolio_equity: float) -> float | None:
     """Return canonical PM *total* target allocation in portfolio currency.
 
     ``position_size_pct`` is deliberately based on total equity, not free
-    cash.  This is what makes an Overweight a delta toward a target and an
+    cash. This is what makes an Overweight a delta toward a target and an
     Underweight a partial reduction instead of an accidental full exit.
     """
     decision = _portfolio_decision(row)
@@ -157,10 +140,12 @@ def _pm_target_notional(row, *, portfolio_equity: float) -> float | None:
         return None
     return max(0.0, min(allocation_pct, 100.0)) / 100.0 * portfolio_equity
 
+
 def _pm_suggested_order_notional(row) -> float | None:
-    """Read the PM's approximate order notional, never a legacy Trader value."""
+    """Read the PM's approximate order notional from the canonical decision."""
     value = _safe_float(_portfolio_decision(row).get("suggested_capital"))
     return max(0.0, value) if value is not None else None
+
 
 async def _allocation_snapshot(db, *, portfolio) -> dict | None:
     """Read a side-effect-free current-equity snapshot for target allocation."""
@@ -177,6 +162,7 @@ async def _allocation_snapshot(db, *, portfolio) -> dict | None:
     if equity is None or equity <= 0:
         return None
     return snapshot
+
 
 def _position_quantity(
     risk_per_trade_pct: float,
@@ -214,11 +200,12 @@ def _position_quantity(
     max_qty = max_alloc_usd / price_d
     return float(min(quantity, max_qty))
 
+
 def _classify_order_intent(action: str, existing_side: str | None, allow_short: bool) -> str | None:
     """Classify an auto-order without confusing a close for new exposure.
 
     Returns ``None`` when a SELL would open a new short while short selling is
-    disabled.  Existing positions can always be closed after the setting is
+    disabled. Existing positions can always be closed after the setting is
     disabled, which is essential for risk reduction.
     """
     side = (existing_side or "").lower()
@@ -229,6 +216,7 @@ def _classify_order_intent(action: str, existing_side: str | None, allow_short: 
             return "close_long"
         return "open_short" if allow_short else None
     return None
+
 
 def _directional_exit_levels(
     side: str,
@@ -249,11 +237,13 @@ def _directional_exit_levels(
         take_profit if take_profit is not None and take_profit > entry_price else None,
     )
 
+
 def _default_exit_levels(side: str, entry_price: float) -> tuple[float, float]:
     """Conservative fallback exits used when strict stop-loss mode is off."""
     if side == "short":
         return entry_price * 1.05, entry_price * 0.90
     return entry_price * 0.95, entry_price * 1.10
+
 
 async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, settings, snapshot: dict | None = None) -> float:
     """Shrink ``quantity`` so the resulting position respects the portfolio's
@@ -346,35 +336,18 @@ async def _apply_portfolio_risk_caps(db, *, portfolio, ticker, price, quantity, 
         )
     return assessment.allowed_notional / price if price > 0 else 0.0
 
-async def _get_or_create_broker_audit_portfolio(db: AsyncSession, *, user, mode: str, account: dict):
-    """Maintain a local audit container while the broker remains source of truth."""
-    from backend.models.portfolio import Portfolio
 
-    audit_mode = "live" if mode == "live" else "alpaca_paper"
-    row = await db.execute(
-        select(Portfolio).where(Portfolio.user_id == user.id, Portfolio.mode == audit_mode).with_for_update()
-    )
-    portfolio = row.scalar_one_or_none()
+async def _get_or_create_broker_audit_portfolio(db: AsyncSession, *, user, mode: str, account: dict):
+    """Map authoritative broker balances into the local audit container."""
     equity = safe_decimal(account.get("equity") or account.get("portfolio_value") or 0)
     cash = safe_decimal(account.get("cash") or 0)
-    if portfolio is None:
-        portfolio = Portfolio(
-            user_id=user.id,
-            mode=audit_mode,
-            broker="alpaca",
-            initial_capital=equity if equity > 0 else cash,
-            current_balance=equity,
-            cash_available=cash,
-            margin_used=Decimal("0"),
-            status="active",
-        )
-        db.add(portfolio)
-        await db.flush()
-    else:
-        portfolio.current_balance = equity
-        portfolio.cash_available = cash
-        portfolio.status = "active"
-    return portfolio
+    return await _repo_get_or_create_broker_audit_portfolio(
+        db,
+        user_id=user.id,
+        mode=mode,
+        equity=equity,
+        cash=cash,
+    )
 
 
 def _broker_risk_snapshot(account: dict, positions: dict[str, dict]) -> dict:
@@ -407,36 +380,28 @@ async def _persist_broker_order(
     side: str,
 ) -> None:
     """Persist every broker submission/result for reconciliation and audit."""
-    from backend.models.order import Order
-
     filled_qty = safe_decimal(result.filled_quantity or 0)
     filled_price = safe_decimal(result.filled_price) if result.filled_price is not None else None
     total_value = filled_qty * filled_price if filled_price is not None else None
-    db.add(
-        Order(
-            portfolio_id=portfolio.id,
-            broker="alpaca",
-            ticker=request.ticker,
-            action=request.action,
-            side=side,
-            leverage=safe_decimal(request.leverage),
-            quantity_requested=request.quantity,
-            quantity_filled=filled_qty,
-            status=result.status,
-            price_per_share=filled_price,
-            total_value=total_value,
-            commission=safe_decimal(result.commission),
-            entry_commission=Decimal("0"),
-            realized_pnl=Decimal("0"),
-            financing_cost=Decimal("0"),
-            external_order_id=result.order_id or None,
-            analysis_id=request.analysis_id,
-            ai_signal=request.ai_signal[:50],
-            ai_reasoning=request.ai_reasoning[:4_000],
-            executed_at=result.executed_at if filled_qty > 0 else None,
-        )
+    await _repo_persist_broker_order(
+        db,
+        portfolio_id=portfolio.id,
+        ticker=request.ticker,
+        action=request.action,
+        side=side,
+        leverage=safe_decimal(request.leverage),
+        quantity_requested=request.quantity,
+        quantity_filled=filled_qty,
+        status=result.status,
+        price_per_share=filled_price,
+        total_value=total_value,
+        commission=safe_decimal(result.commission),
+        external_order_id=result.order_id or None,
+        analysis_id=request.analysis_id,
+        ai_signal=request.ai_signal,
+        ai_reasoning=request.ai_reasoning,
+        executed_at=result.executed_at if filled_qty > 0 else None,
     )
-    await db.flush()
 
 
 async def place_signal_order(
@@ -448,7 +413,7 @@ async def place_signal_order(
     user=None,
     include_skip_result: bool = False,
 ) -> OrderResult | None:
-    """Size and place an order from one canonical Portfolio Manager decision.
+    """Size and place an order from one canonical accepted decision.
 
     Returns the ``OrderResult`` (so callers can persist their own order record),
     or ``None`` when the signal is not actionable or no price is available.
@@ -475,7 +440,7 @@ async def place_signal_order(
     if not pm_decision:
         return _skipped_order(
             reason_code="portfolio_decision_missing",
-            message="This analysis has no canonical Portfolio Manager decision; no order was sent.",
+            message="This analysis has no canonical accepted decision; no order was sent.",
             include_skip_result=include_skip_result,
         )
 
@@ -492,20 +457,19 @@ async def place_signal_order(
         if signal == "Hold":
             return _skipped_order(
                 reason_code="non_actionable_signal",
-                message="The final Portfolio Manager rating is Hold; no order was sent.",
+                message="The final accepted rating is Hold; no order was sent.",
                 include_skip_result=include_skip_result,
             )
         return _skipped_order(
             reason_code="invalid_portfolio_decision",
-            message="The canonical Portfolio Manager rating is not actionable; no order was sent.",
+            message="The canonical accepted rating is not actionable; no order was sent.",
             include_skip_result=include_skip_result,
         )
 
     persisted_signal = str(getattr(row, "signal", "") or "").strip()
     if persisted_signal and persisted_signal != signal:
         _logger.warning(
-            "Analysis signal differs from the canonical Portfolio Manager rating for %s (%s != %s); "
-            "using the Portfolio Manager rating.",
+            "Analysis signal differs from the canonical accepted rating for %s (%s != %s); using the accepted rating.",
             ticker,
             persisted_signal,
             signal,
@@ -734,7 +698,7 @@ async def place_signal_order(
         if "position_size_pct" not in pm_decision:
             return _skipped_order(
                 reason_code="target_allocation_missing",
-                message="A new position needs a final Portfolio Manager target allocation.",
+                message="A new position needs a final target allocation.",
                 include_skip_result=include_skip_result,
             )
         allocation_snapshot = broker_snapshot or await _allocation_snapshot(db, portfolio=portfolio)
@@ -749,7 +713,7 @@ async def place_signal_order(
         if target_notional is None:
             return _skipped_order(
                 reason_code="target_allocation_missing",
-                message="The final Portfolio Manager target allocation is missing or invalid.",
+                message="The final target allocation is missing or invalid.",
                 include_skip_result=include_skip_result,
             )
         existing_notional = (
@@ -761,7 +725,7 @@ async def place_signal_order(
         if target_addition <= 0:
             return _skipped_order(
                 reason_code="target_allocation_met",
-                message="The current position already meets or exceeds the Portfolio Manager target allocation.",
+                message="The current position already meets or exceeds the final target allocation.",
                 include_skip_result=include_skip_result,
             )
         pm_target_quantity = target_addition / price
@@ -777,8 +741,7 @@ async def place_signal_order(
             max_position_size_pct=max_position_size_pct,
         )
         pm_suggested_capital = _pm_suggested_order_notional(row)
-        if pm_target_quantity is not None:
-            quantity = min(quantity, pm_target_quantity)
+        quantity = min(quantity, pm_target_quantity)
         if pm_suggested_capital is not None:
             quantity = min(quantity, pm_suggested_capital / price)
         if quantity <= 0:
@@ -840,7 +803,7 @@ async def place_signal_order(
             if target_notional is None:
                 return _skipped_order(
                     reason_code="target_allocation_missing",
-                    message="The final Portfolio Manager target allocation is missing or invalid.",
+                    message="The final target allocation is missing or invalid.",
                     include_skip_result=include_skip_result,
                 )
             current_notional = price * quantity
@@ -848,7 +811,7 @@ async def place_signal_order(
             if reduction_notional <= 0:
                 return _skipped_order(
                     reason_code="target_allocation_met",
-                    message="The current position is already at or below the Portfolio Manager target allocation.",
+                    message="The current position is already at or below the final target allocation.",
                     include_skip_result=include_skip_result,
                 )
             pm_suggested_capital = _pm_suggested_order_notional(row)
@@ -859,7 +822,7 @@ async def place_signal_order(
                 abs_tol=max(1.0, price * 0.01),
             ):
                 _logger.warning(
-                    "Portfolio Manager sizing is inconsistent for %s: target reduction %.2f vs suggested %.2f; "
+                    "Decision sizing is inconsistent for %s: target reduction %.2f vs suggested %.2f; "
                     "using the target allocation delta",
                     ticker,
                     reduction_notional,
@@ -891,8 +854,11 @@ async def place_signal_order(
         if callable(get_snapshot):
             refreshed = await get_snapshot()
             if refreshed:
-                portfolio.cash_available = safe_decimal(refreshed.get("cash") or portfolio.cash_available)
-                portfolio.current_balance = safe_decimal(refreshed.get("equity") or portfolio.current_balance)
+                _repo_apply_broker_account_balances(
+                    portfolio,
+                    cash=safe_decimal(refreshed.get("cash") or portfolio.cash_available),
+                    equity=safe_decimal(refreshed.get("equity") or portfolio.current_balance),
+                )
     _logger.info("Order placed: %s %s %s -> %s", action, quantity, ticker, result.status)
     if result.filled_quantity and result.filled_price:
         try:

@@ -1,8 +1,8 @@
 # TradingAgents Documentation Index
 
-TradingAgents is a multi-agent investment analysis and execution platform built around FastAPI, React, PostgreSQL, and LangGraph. Specialized analysts collect evidence, research agents challenge competing theses, risk agents surface guardrails, the Portfolio Manager produces a raw structured proposal, and the deterministic Decision Stability Controller records or accepts the canonical decision. The surrounding application provides portfolio simulation, optional broker execution, scheduling, alerts, reporting, administration, and real-time progress streaming.
+TradingAgents is a multi-agent investment analysis and execution platform built around FastAPI, React, PostgreSQL, and LangGraph. Specialized analysts collect evidence, research agents challenge competing theses, a single risk-panel node surfaces guardrails from aggressive/conservative/neutral perspectives, the Portfolio Manager produces a raw structured proposal, and the deterministic Decision Stability Controller records or accepts the canonical decision. The surrounding application provides portfolio simulation, optional broker execution, scheduling, alerts, reporting, administration, and real-time progress streaming.
 
-This documentation describes the current repository behavior. Historical audit, patch-note, and validation files under `docs/` are point-in-time records and should not be treated as the current architecture specification.
+This documentation describes the current repository behavior. Retired architecture and point-in-time migration/audit snapshots are not part of the current documentation contract.
 
 ## Documentation map
 
@@ -36,13 +36,13 @@ The system can cross-examine analyst outputs, synthesize disagreements, and run 
 
 ### 3. Risk guardrails
 
-Aggressive, Conservative, and Neutral risk agents evaluate the research result from different risk perspectives. They surface downside conditions, invalidation criteria, liquidity/exposure concerns, and other guardrails.
+The Risk Debate node asks one model call for aggressive, conservative, and neutral perspectives on the research result. The panel surfaces downside conditions, invalidation criteria, liquidity/exposure concerns, and other guardrails.
 
-Risk agents are **not order authorities**. They do not independently issue the final Buy/Sell/Hold direction, quantity, allocation, leverage, stop, or target. Their output is evidence consumed by the final decision stage.
+Risk perspectives are **not order authorities**. They do not independently issue the final Buy/Sell/Hold direction, quantity, allocation, leverage, stop, or target. Their output is evidence consumed by the final proposal stage.
 
 ### 4. Portfolio Manager proposal and accepted decision
 
-The Portfolio Manager is the sole AI agent that proposes a structured rating and portfolio intent. It evaluates active analyst reports, the research debate, and risk-agent evidence, but its output is a raw proposal rather than an executable order.
+The Portfolio Manager is the sole AI agent that proposes a structured rating and portfolio intent. It evaluates active analyst reports, the research debate, and risk-panel evidence, but its output is a raw proposal rather than an executable order.
 
 The Decision Stability Controller compares that proposal with the previous *accepted* decision, structured evidence, invalidations, run quality, and calibrated confidence. In `shadow` mode it records its counterfactual only; in `enforce` mode it becomes the canonical accepted decision. Any resulting order still passes deterministic application-side controls. Cash availability, concentration limits, exposure constraints, stop/risk rules, broker mode, and execution settings can reduce or reject the accepted decision.
 

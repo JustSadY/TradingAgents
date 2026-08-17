@@ -2,7 +2,7 @@
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core.security import hash_password
+from backend.core.password_hashing import hash_password
 from backend.models.analysis import AnalysisResult
 from backend.models.user import User
 

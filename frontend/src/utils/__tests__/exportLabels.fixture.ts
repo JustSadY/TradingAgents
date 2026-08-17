@@ -1,16 +1,12 @@
 /**
- * Frozen snapshot of the export section headings as they were before the
- * registry consolidation, in both languages.
- *
- * Exported documents are a user-facing artefact; a refactor must not silently
- * reword their headings. Any intentional change to this table should be a
- * deliberate edit here, not a side effect.
+ * Frozen snapshot of the intentional export section headings, in both
+ * languages. Retired intermediate-agent sections are not part of the current
+ * report contract.
  */
 
 export const EXPECTED_EXPORT_ORDER = [
   'final_decision',
   'investment_plan',
-  'trader_plan',
   'market_report',
   'fundamentals_report',
   'news_report',
@@ -40,7 +36,6 @@ export const EXPECTED_EXPORT_LABELS: Record<'en' | 'tr', Record<string, string>>
   en: {
     final_decision: 'Final Decision (Portfolio Manager)',
     investment_plan: 'Research Evidence Summary',
-    trader_plan: 'Legacy Trader Proposal (historical only)',
     market_report: 'Market Analysis',
     fundamentals_report: 'Fundamentals',
     news_report: 'News Analysis',
@@ -68,7 +63,6 @@ export const EXPECTED_EXPORT_LABELS: Record<'en' | 'tr', Record<string, string>>
   tr: {
     final_decision: 'Nihai Karar (Portfolio Manager)',
     investment_plan: 'Araştırma Kanıt Özeti',
-    trader_plan: 'Eski Trader Önerisi (yalnız geçmiş kayıt)',
     market_report: 'Piyasa Analizi',
     fundamentals_report: 'Temel Analiz',
     news_report: 'Haber Analizi',

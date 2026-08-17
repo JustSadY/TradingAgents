@@ -77,51 +77,6 @@ def calculate_adx(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return _series(result[column], df.index, str(column))
 
 
-def calculate_ichimoku(df: pd.DataFrame) -> dict[str, pd.Series]:
-    """Compute product-shaped Ichimoku components.
-
-    The API owns these shifted output contracts; standard EMA/RSI/MACD/ADX/ATR
-    and rolling volume-weighted calculations are package-owned.
-    """
-    high_9 = df["High"].rolling(window=9).max()
-    low_9 = df["Low"].rolling(window=9).min()
-    tenkan_sen = (high_9 + low_9) / 2
-
-    high_26 = df["High"].rolling(window=26).max()
-    low_26 = df["Low"].rolling(window=26).min()
-    kijun_sen = (high_26 + low_26) / 2
-
-    senkou_span_a = ((tenkan_sen + kijun_sen) / 2).shift(26)
-    high_52 = df["High"].rolling(window=52).max()
-    low_52 = df["Low"].rolling(window=52).min()
-    senkou_span_b = ((high_52 + low_52) / 2).shift(26)
-    chikou_span = df["Close"].shift(-26)
-
-    return {
-        "tenkan_sen": tenkan_sen,
-        "kijun_sen": kijun_sen,
-        "senkou_span_a": senkou_span_a,
-        "senkou_span_b": senkou_span_b,
-        "chikou_span": chikou_span,
-    }
-
-
-def calculate_fibonacci_levels(df: pd.DataFrame, period: int = 100) -> dict[str, float]:
-    """Calculate Fibonacci display levels based on a recent high/low."""
-    high = df["High"].tail(period).max()
-    low = df["Low"].tail(period).min()
-    diff = high - low
-    return {
-        "level_0": high,
-        "level_236": high - 0.236 * diff,
-        "level_382": high - 0.382 * diff,
-        "level_500": high - 0.5 * diff,
-        "level_618": high - 0.618 * diff,
-        "level_786": high - 0.786 * diff,
-        "level_100": low,
-    }
-
-
 def calculate_atr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     """Compute ATR with pandas-ta-classic."""
     result = _ta().atr(

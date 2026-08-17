@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import json
 import logging
 import os
 
@@ -17,18 +16,16 @@ from backend.trading_agents.llm_clients.registry import provider_requires_api_ke
 _logger = logging.getLogger(__name__)
 
 def _decrypt_tool_secret(value: str | None) -> str | None:
-    """Decrypt a tool-settings secret field for actual use.
+    """Decrypt a persisted tool secret.
 
-    Falls back to the raw value on failure so credentials saved before this
-    field started being encrypted (plaintext, not a valid Fernet token) keep
-    working until the user next re-saves them.
+    Revision ``bc23d4e5f6a7`` encrypts the two historical plaintext tool-secret
+    fields before this runtime is used. Decryption failures therefore indicate
+    corrupt data or the wrong encryption key and must not fall back to the raw
+    stored value.
     """
     if not value:
         return value
-    try:
-        return decrypt_secret(value)
-    except Exception:
-        return value
+    return decrypt_secret(value)
 
 def _fallback_llm_chain(settings: AppSettings) -> list[dict[str, str]]:
     """Read the canonical ordered LLM failover settings defensively.
@@ -83,7 +80,6 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
         "llm_model": settings.llm_model,
         "fallback_llm_chain": _fallback_llm_chain(settings),
         "max_debate_rounds": settings.max_debate_rounds,
-        "max_risk_discuss_rounds": settings.max_risk_rounds,
         "output_language": settings.output_language or DEFAULT_CONFIG["output_language"],
         "investor_persona": settings.investor_persona or DEFAULT_CONFIG["investor_persona"],
         "analyst_concurrency_limit": settings.analyst_concurrency_limit or DEFAULT_CONFIG["analyst_concurrency_limit"],
@@ -176,18 +172,22 @@ def build_analysis_config(settings: AppSettings, user=None, sys_settings=None) -
     return cfg
 
 def history_json_from(value):
+    """Return a JSON-column-safe debate-side history value.
+
+    Current graph nodes keep prompt history as a transcript string, while the
+    persistence contract stores structured sender/content records. Existing
+    structured rows are preserved as-is; new transcript strings are normalized
+    before they reach the JSON column.
+    """
     if not value:
         return None
     if isinstance(value, (list, dict)):
         return value
     if isinstance(value, str):
-        val_s = value.strip()
-        if (val_s.startswith("[") and val_s.endswith("]")) or (val_s.startswith("{") and val_s.endswith("}")):
-            try:
-                return json.loads(val_s)
-            except Exception as e:
-                _logger.debug("Failed parsing history JSON string: %s", e)
-    return value
+        from backend.trading_agents.agents.runtime.debate_history import debate_messages
+
+        return debate_messages(value) or None
+    return None
 
 async def prepare_graph_config(db: AsyncSession, user_id: int | None, config: dict) -> list[str]:
     """Resolve the user's permitted analysts and inject runtime tool/agent

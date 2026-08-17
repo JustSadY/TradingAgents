@@ -46,7 +46,8 @@ import backend.models.trade_note  # noqa: F401, E402
 import backend.models.user  # noqa: F401, E402
 import backend.models.webhook_delivery  # noqa: F401, E402
 from backend.core.database import Base, get_db  # noqa: E402
-from backend.core.security import create_access_token, hash_password  # noqa: E402
+from backend.core.password_hashing import hash_password  # noqa: E402
+from backend.core.security import create_access_token  # noqa: E402
 from backend.main import app  # noqa: E402
 from backend.models.user import User  # noqa: E402
 

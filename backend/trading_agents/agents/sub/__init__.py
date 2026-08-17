@@ -1,15 +1,13 @@
 """
 Tier-2 Sub-Agents.
 
-Reasoning units invoked *inside* a Tier-1 Main Agent node (see ``agents/main/``).
+Reasoning units invoked inside Tier-1 Main Agent nodes (see ``agents/main/``).
 Grouped by role:
 
-  analysts/     — market, social, news, fundamentals, macro, options, quant,
-                  earnings, review (tool-using data analysts)
-  researchers/  — bull, bear (investment debate)
-  risk_mgmt/    — aggressive, conservative, neutral (risk debate)
-  managers/     — synthesis, auditor, research manager, portfolio manager
+  analysts/     — 12 market/data evidence analyst plugins
+  researchers/  — bull and bear thesis researchers
+  managers/     — synthesis, auditor, research, and portfolio-manager helpers
 
-These modules keep using absolute imports, so they are orchestrated by the main
-agents without any per-file wiring here.
+Risk evaluation is owned by the single Tier-1 ``main/risk.py`` panel node; there
+is no separate risk-management sub-agent package.
 """

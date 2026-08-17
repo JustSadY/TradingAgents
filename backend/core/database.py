@@ -26,41 +26,6 @@ _logger = logging.getLogger(__name__)
 
 MONEY = Numeric(20, 8, asdecimal=True)
 
-_BASELINE_APP_TABLES = frozenset(
-    {
-        "agent_settings",
-        "agent_tool_settings",
-        "alert_outbox",
-        "analysis_chats",
-        "analysis_results",
-        "analyst_report_cache",
-        "app_settings",
-        "assistant_messages",
-        "config_presets",
-        "holdings",
-        "market_daily_summaries",
-        "multi_ticker_analyses",
-        "news_analysis_cache",
-        "news_cache",
-        "orders",
-        "portfolios",
-        "price_alerts",
-        "refresh_sessions",
-        "shared_reports",
-        "system_logs",
-        "system_settings",
-        "trade_notes",
-        "user_agent_access",
-        "user_page_permissions",
-        "user_personas",
-        "user_setting_permissions",
-        "user_tool_access",
-        "user_tool_field_access",
-        "users",
-        "webhook_deliveries",
-    }
-)
-
 
 class Base(DeclarativeBase):
     pass
@@ -74,16 +39,6 @@ async def get_db() -> AsyncGenerator[AsyncSession, None]:
         except Exception:
             await session.rollback()
             raise
-
-
-async def set_tenant_context(db: AsyncSession, *, user_id: int, is_admin: bool = False) -> None:
-    """Compatibility wrapper for authenticated request context."""
-    from backend.core.rls_context import set_request_admin_context, set_request_tenant_context
-
-    if is_admin:
-        await set_request_admin_context(db, user_id)
-    else:
-        await set_request_tenant_context(db, user_id)
 
 
 async def _has_alembic_version(conn) -> bool:
@@ -111,36 +66,6 @@ async def _run_alembic(command_name: str, revision: str) -> None:
 
     fn = getattr(command, command_name)
     await asyncio.to_thread(fn, _alembic_config(), revision)
-
-
-def _is_complete_unversioned_app_schema(table_names: set[str]) -> bool:
-    """Return whether *table_names* can safely be stamped at the baseline."""
-    existing = table_names.intersection(_BASELINE_APP_TABLES)
-    if not existing:
-        return False
-
-    missing = _BASELINE_APP_TABLES.difference(existing)
-    if missing:
-        raise RuntimeError(
-            "Refusing to stamp a partial unversioned Paperclip schema. "
-            f"Found application tables: {', '.join(sorted(existing))}; "
-            f"missing baseline tables: {', '.join(sorted(missing))}. "
-            "Restore or complete the old schema, verify a backup, then stamp "
-            "the Alembic baseline explicitly."
-        )
-    return True
-
-
-async def _has_complete_unversioned_app_schema(conn) -> bool:
-    """Inspect the active PostgreSQL schema before an automatic baseline stamp."""
-    rows = await conn.execute(
-        text(
-            "SELECT table_name FROM information_schema.tables "
-            "WHERE table_schema = current_schema() AND table_type = 'BASE TABLE'"
-        )
-    )
-    return _is_complete_unversioned_app_schema(set(rows.scalars()))
-
 
 
 def _expected_alembic_heads() -> set[str]:
@@ -188,14 +113,6 @@ async def create_all_tables():
 
         await verify_runtime_rls_role(engine)
         return
-
-    async with engine.begin() as conn:
-        has_version = await _has_alembic_version(conn)
-        legacy_schema = not has_version and await _has_complete_unversioned_app_schema(conn)
-
-    if legacy_schema:
-        _logger.warning("Detected unversioned legacy schema; stamping Alembic baseline before upgrade.")
-        await _run_alembic("stamp", "89f1a049b357")
 
     try:
         await _run_alembic("upgrade", "head")

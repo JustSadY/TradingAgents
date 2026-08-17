@@ -154,9 +154,9 @@ async def get_latest_analysis(
     row = await _repo_latest(db, user=current_user)
     if row is None:
         raise HTTPException(status_code=404, detail="No completed analyses found")
-    from backend.services.token_analytics_service import estimate_cost
+    from backend.core.model_pricing import estimate_token_cost
 
-    row.estimated_cost_usd = estimate_cost(
+    row.estimated_cost_usd = estimate_token_cost(
         row.llm_provider, row.llm_model, int(row.tokens_in or 0), int(row.tokens_out or 0)
     )
     return row
@@ -417,9 +417,9 @@ async def get_analysis(
     row = await _repo_get(db, analysis_id, user=current_user)
     if row is None:
         raise HTTPException(status_code=404, detail=_ANALYSIS_NOT_FOUND)
-    from backend.services.token_analytics_service import estimate_cost
+    from backend.core.model_pricing import estimate_token_cost
 
-    row.estimated_cost_usd = estimate_cost(
+    row.estimated_cost_usd = estimate_token_cost(
         row.llm_provider, row.llm_model, int(row.tokens_in or 0), int(row.tokens_out or 0)
     )
     return row
@@ -491,11 +491,18 @@ async def time_travel_resume(
     current_user: User = Depends(require_page("analysis")),
 ):
     from backend.repositories.analysis import get_analysis_by_id
-    from backend.services.analysis_service import rollback_and_resume_analysis
+    from backend.services.analysis_service import list_analysis_checkpoints, rollback_and_resume_analysis
 
     analysis = await get_analysis_by_id(db, analysis_id, user=current_user)
     if not analysis:
         raise HTTPException(status_code=404, detail=_ANALYSIS_NOT_FOUND)
+
+    resumable = await list_analysis_checkpoints(analysis_id, db, current_user)
+    if not resumable or body.checkpoint_id not in {item["checkpoint_id"] for item in resumable}:
+        raise HTTPException(
+            status_code=400,
+            detail="Checkpoint is not resumable by the current analysis graph",
+        )
 
     task_id = str(uuid.uuid4())
     try:

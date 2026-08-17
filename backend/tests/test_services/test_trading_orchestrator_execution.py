@@ -6,7 +6,7 @@ from types import SimpleNamespace
 import pytest
 
 from backend.services.execution.base import OrderResult
-from backend.services.trading_orchestrator import _apply_portfolio_risk_caps, place_signal_order
+from backend.services.trading_orchestrator import _apply_portfolio_risk_caps, _portfolio_decision, place_signal_order
 
 
 class _FakeTrader:
@@ -24,6 +24,15 @@ class _FakeTrader:
             filled_price=Decimal("100"),
             filled_quantity=request.quantity,
         )
+
+
+def test_chart_annotation_only_decision_is_not_an_execution_source():
+    row = SimpleNamespace(
+        portfolio_decision_json=None,
+        chart_annotations={"portfolio_decision": {"rating": "Buy", "position_size_pct": 25.0}},
+    )
+
+    assert _portfolio_decision(row) == {}
 
 
 async def test_historical_or_time_travel_result_can_never_place_an_order():
@@ -89,7 +98,7 @@ async def test_signal_exit_closes_the_entire_held_position_not_a_new_risk_sized_
         ticker="AAPL",
         row=SimpleNamespace(
             signal=signal,
-            chart_annotations={"portfolio_decision": {"rating": signal}},
+            portfolio_decision_json={"rating": signal},
             final_decision="",
         ),
         settings=SimpleNamespace(
@@ -318,7 +327,7 @@ async def test_drawdown_snapshot_error_blocks_a_new_position(monkeypatch):
         ticker="AAPL",
         row=SimpleNamespace(
             signal="Buy",
-            chart_annotations={"portfolio_decision": {"rating": "Buy", "position_size_pct": 5}},
+            portfolio_decision_json={"rating": "Buy", "position_size_pct": 5},
             final_decision="",
         ),
         settings=_opening_settings(drawdown_breaker_enabled=True, max_portfolio_drawdown_pct=20.0),
@@ -362,7 +371,7 @@ async def test_drawdown_snapshot_error_does_not_block_a_safe_exit(monkeypatch):
         ticker="AAPL",
         row=SimpleNamespace(
             signal="Sell",
-            chart_annotations={"portfolio_decision": {"rating": "Sell"}},
+            portfolio_decision_json={"rating": "Sell"},
             final_decision="",
         ),
         settings=_opening_settings(drawdown_breaker_enabled=True, max_portfolio_drawdown_pct=20.0),
@@ -400,7 +409,7 @@ async def test_zero_cash_never_falls_back_to_initial_capital_for_position_sizing
         ticker="AAPL",
         row=SimpleNamespace(
             signal="Buy",
-            chart_annotations={"portfolio_decision": {"rating": "Buy", "position_size_pct": 5}},
+            portfolio_decision_json={"rating": "Buy", "position_size_pct": 5},
             final_decision="",
         ),
         settings=_opening_settings(),

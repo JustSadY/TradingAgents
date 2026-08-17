@@ -15,6 +15,8 @@ from __future__ import annotations
 from collections import defaultdict
 from typing import Any
 
+from backend.repositories.analysis_stats import list_learning_eligible_analyses
+
 _RISK_CLASSES = {
     "Buy": "long",
     "Overweight": "long",
@@ -34,14 +36,7 @@ def rating_risk_class(rating: object) -> str:
 
 def _decision_mapping(row: object) -> dict[str, Any]:
     raw = getattr(row, "portfolio_decision_json", None)
-    if isinstance(raw, dict):
-        return raw
-    annotations = getattr(row, "chart_annotations", None)
-    if isinstance(annotations, dict):
-        nested = annotations.get("portfolio_decision") or annotations.get("portfolio_decision_json")
-        if isinstance(nested, dict):
-            return nested
-    return {}
+    return raw if isinstance(raw, dict) else {}
 
 
 def _finite_probability(value: object) -> float | None:
@@ -193,20 +188,5 @@ def calibrate_confidence(raw_confidence: object, rating: object, context: dict[s
 
 async def load_calibration_context(db, *, user_id: int | None, asset_type: str | None = None) -> dict[str, Any]:
     """Load only live, resolved, learning-eligible observations for a run."""
-    from sqlalchemy import select
-
-    from backend.models.analysis import AnalysisResult
-
-    query = (
-        select(AnalysisResult)
-        .where(AnalysisResult.alpha_return.is_not(None))
-        .where(AnalysisResult.learning_eligible.is_(True))
-    )
-    if user_id is None:
-        query = query.where(AnalysisResult.user_id.is_(None))
-    else:
-        query = query.where(AnalysisResult.user_id == user_id)
-    if asset_type:
-        query = query.where(AnalysisResult.asset_type == asset_type)
-    rows = list((await db.execute(query)).scalars().all())
+    rows = await list_learning_eligible_analyses(db, user_id=user_id, asset_type=asset_type)
     return build_calibration_context(rows)

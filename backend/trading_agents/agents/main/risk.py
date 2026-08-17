@@ -1,12 +1,10 @@
-"""
-Main Agent: Risk Debate.
+"""Main Agent: Risk Debate.
 
-Previously ran three separate LLM calls (one per stance). Merged into a single
-call that produces all three perspectives at once, reducing quota consumption
-from 3→1 per analysis round.
+One node makes one LLM call and returns aggressive, conservative, and neutral
+risk perspectives as non-executable evidence for downstream decision stages.
 
 Kill-switch behaviour:
-  • risk_debate disabled    → emit a neutral debate state and skip every sub.
+  • risk_debate disabled    → emit a neutral debate state and skip the panel.
 """
 
 from __future__ import annotations
@@ -68,7 +66,9 @@ and concrete downside scenarios. The neutral perspective weighs both sides and
 states practical guardrails. Be specific and reference the research evidence
 and market data directly. Do not issue Buy, Overweight, Hold, Underweight, or
 Sell; do not prescribe a quantity, allocation, entry, stop, target, or leverage.
-The Portfolio Manager is the sole final decision and execution authority.{custom_instruction_block}"""
+The Portfolio Manager is the sole AI proposal authority. Its proposal remains
+non-executable until the deterministic Decision Stability Controller applies
+the configured stability and hard-risk policy.{custom_instruction_block}"""
 
 def _parse_perspectives(text: str) -> dict[str, str]:
     """Extract risk panel sections from strict and common provider variants.

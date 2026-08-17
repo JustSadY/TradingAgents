@@ -6,14 +6,6 @@ from backend.core.model_pricing import estimate_token_cost, resolve_model_pricin
 from backend.repositories import token_analytics as repo
 
 
-def estimate_cost(provider: str | None, model: str | None, tokens_in: int, tokens_out: int) -> float:
-    """Estimate from the canonical pricing catalogue.
-
-    Keep this small wrapper for existing callers while the actual model price
-    resolution lives in ``backend.core.model_pricing``.
-    """
-    return estimate_token_cost(provider, model, tokens_in, tokens_out)
-
 async def get_token_analytics(db: AsyncSession, user_id: int) -> dict[str, Any]:
     rows = await repo.get_token_usage_rows(db, user_id)
     breakdown: list[dict[str, Any]] = []
@@ -22,7 +14,7 @@ async def get_token_analytics(db: AsyncSession, user_id: int) -> dict[str, Any]:
         ti = int(row.tokens_in or 0)
         to = int(row.tokens_out or 0)
         pricing = resolve_model_pricing(row.llm_provider, row.llm_model)
-        cost = estimate_cost(row.llm_provider, row.llm_model, ti, to)
+        cost = estimate_token_cost(row.llm_provider, row.llm_model, ti, to)
         breakdown.append(
             {
                 "provider": row.llm_provider or "unknown",

@@ -4,7 +4,6 @@ import { clearAuthenticatedCache } from '../api/authCache'
 import { formatErrorDetail, notify } from '../utils/notify'
 
 const TOKEN_KEY = 'ta_access'
-const LEGACY_REFRESH_KEY = 'ta_refresh'
 const USER_SCOPE_KEY = 'ta_user_scope'
 const USER_SCOPED_STORAGE_KEYS = ['ta_last_run', 'ta_task_running']
 
@@ -15,22 +14,14 @@ axios.defaults.withCredentials = true
  * are HttpOnly cookies and are never exposed to JavaScript.
  */
 export function getAccessToken() {
-  const current = sessionStorage.getItem(TOKEN_KEY)
-  if (current) return current
-
-  // One-time migration from older releases that persisted access tokens.
-  const legacy = localStorage.getItem(TOKEN_KEY)
-  if (legacy) {
-    localStorage.removeItem(TOKEN_KEY)
-    sessionStorage.setItem(TOKEN_KEY, legacy)
-    return legacy
-  }
-  return null
+  return sessionStorage.getItem(TOKEN_KEY)
 }
 
 function setAccessToken(token: string | null) {
+  // Auth secrets are never valid localStorage state. Purge stale values left by
+  // older releases instead of authenticating from them.
   localStorage.removeItem(TOKEN_KEY)
-  localStorage.removeItem(LEGACY_REFRESH_KEY)
+  localStorage.removeItem('ta_refresh')
   if (token) sessionStorage.setItem(TOKEN_KEY, token)
   else sessionStorage.removeItem(TOKEN_KEY)
 }
@@ -38,7 +29,7 @@ function setAccessToken(token: string | null) {
 function clearUserScopedBrowserState() {
   USER_SCOPED_STORAGE_KEYS.forEach(key => {
     sessionStorage.removeItem(key)
-    localStorage.removeItem(key) // purge data written by older releases
+    localStorage.removeItem(key)
   })
   localStorage.removeItem(USER_SCOPE_KEY)
   clearAuthenticatedCache()
@@ -114,7 +105,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setAccessToken(null)
 
       // Restore a server-side session using the HttpOnly refresh cookie.
-      const res = await axios.post('/auth/refresh', {})
+      const res = await axios.post('/auth/refresh')
       const token = res.data?.access_token
       if (epoch !== _authEpoch) return
       if (typeof token !== 'string' || !applyAccessToken(token)) {
@@ -221,7 +212,7 @@ axios.interceptors.response.use(
     _refreshing = true
     const refreshEpoch = _authEpoch
     try {
-      const res = await axios.post('/auth/refresh', {})
+      const res = await axios.post('/auth/refresh')
       const newToken = res.data?.access_token
       if (refreshEpoch !== _authEpoch) throw new Error('Session changed during refresh')
       if (typeof newToken !== 'string') throw new Error('No access token returned')

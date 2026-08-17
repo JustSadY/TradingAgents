@@ -13,8 +13,6 @@ import logging
 from datetime import UTC, datetime
 
 from pydantic import ValidationError
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.settings import AppSettings
@@ -22,11 +20,39 @@ from backend.schemas.settings import SettingsRead, SettingsUpdate
 
 _logger = logging.getLogger(__name__)
 
+
+class SettingsPermissionError(PermissionError):
+    pass
+
+
+async def enforce_settings_update_permissions(db: AsyncSession, user, body: SettingsUpdate) -> None:
+    """Validate which settings sections a non-admin user may mutate."""
+    from backend.models.page_permission import SECTION_FIELDS
+    from backend.repositories.permissions import list_allowed_setting_sections
+
+    allowed_sections = await list_allowed_setting_sections(db, user.id)
+    attempted = body.model_dump(exclude_unset=True)
+
+    if "max_recur_limit" in attempted:
+        raise SettingsPermissionError("Advanced engine settings can only be modified by administrators.")
+
+    mapped_fields = {field for fields in SECTION_FIELDS.values() for field in fields}
+    unmapped = set(attempted) - mapped_fields
+    if unmapped:
+        raise SettingsPermissionError(
+            f"No permission section is configured for settings: {', '.join(sorted(unmapped))}"
+        )
+
+    for section, fields in SECTION_FIELDS.items():
+        if any(field in attempted for field in fields) and section not in allowed_sections:
+            raise SettingsPermissionError(f"You do not have permission to modify settings in section: {section}")
+
+
 def parse_preset_settings_json(settings_json: str) -> SettingsUpdate:
     """Parse a stored preset as a strict, validated ``SettingsUpdate``.
 
     ``SettingsUpdate`` deliberately accepts partial updates, but Pydantic's
-    default extra-field behaviour is permissive.  Check field names first so
+    default extra-field behaviour is permissive. Check field names first so
     an ORM attribute such as ``user_id`` cannot reappear as a mass-assignment
     path through a legacy or manually-created preset.
     """
@@ -47,40 +73,32 @@ def parse_preset_settings_json(settings_json: str) -> SettingsUpdate:
     except ValidationError as exc:
         raise ValueError(f"Preset settings are invalid: {exc}") from exc
 
+
 def serialize_preset_settings(update: SettingsUpdate) -> str:
     """Store only the validated fields of a preset in a canonical form."""
     return json.dumps(update.model_dump(exclude_unset=True), separators=(",", ":"), sort_keys=True)
+
 
 async def get_or_create_settings(
     db: AsyncSession,
     user=None,
 ) -> AppSettings:
     """Return the settings row for ``user`` (or the global row), creating it lazily."""
-    user_id = getattr(user, "id", None) if user is not None else None
-
     from backend.core.log_redaction import register_sensitive_literal
+    from backend.repositories.settings import get_or_create_app_settings
 
-    where_clause = AppSettings.user_id == user_id if user_id is not None else AppSettings.user_id.is_(None)
-    result = await db.execute(select(AppSettings).where(where_clause).limit(1))
-    settings = result.scalar_one_or_none()
-    if settings is None:
-        try:
-            async with db.begin_nested():
-                created = AppSettings(user_id=user_id)
-                db.add(created)
-                await db.flush()
-            settings = created
-        except IntegrityError:
-            result = await db.execute(select(AppSettings).where(where_clause).limit(1))
-            settings = result.scalar_one()
+    user_id = getattr(user, "id", None) if user is not None else None
+    settings = await get_or_create_app_settings(db, user_id)
 
     if settings.webhook_url:
         register_sensitive_literal(settings.webhook_url)
     return settings
 
+
 def settings_to_read(settings: AppSettings) -> SettingsRead:
     """Map an ``AppSettings`` row to its read DTO (single source of truth)."""
     return SettingsRead.model_validate(settings)
+
 
 async def apply_settings_update(
     db: AsyncSession,
@@ -93,9 +111,9 @@ async def apply_settings_update(
     fields = body.model_dump(exclude_unset=True)
     webhook_url = fields.get("webhook_url")
     if webhook_url:
-        from backend.services.notification_service import validate_webhook_url
+        from backend.services.notification_service import resolve_webhook_target
 
-        await validate_webhook_url(webhook_url)
+        await resolve_webhook_target(webhook_url)
     for field, value in fields.items():
         if getattr(settings, field, None) != value:
             has_changes = True
@@ -121,6 +139,7 @@ async def apply_settings_update(
 
     return settings
 
+
 async def get_user_language(db: AsyncSession, user=None) -> str:
     """Return the preferred output language for a user (fallback to English)."""
     if user is None:
@@ -131,6 +150,7 @@ async def get_user_language(db: AsyncSession, user=None) -> str:
     except Exception as exc:
         _logger.warning("Could not load language preference for user %s: %s", getattr(user, "id", "?"), exc)
         return "English"
+
 
 async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
     """Apply a preset's settings JSON onto *user*'s AppSettings row.
@@ -143,9 +163,9 @@ async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
 
     webhook_url = fields.get("webhook_url")
     if webhook_url:
-        from backend.services.notification_service import validate_webhook_url
+        from backend.services.notification_service import resolve_webhook_target
 
-        await validate_webhook_url(webhook_url)
+        await resolve_webhook_target(webhook_url)
 
     settings = await get_or_create_settings(db, user)
     for key, value in fields.items():
@@ -169,6 +189,7 @@ async def apply_preset_to_settings(db: AsyncSession, user, preset) -> str:
         _logger.warning("Preset settings update event emission failed", exc_info=True)
     return preset.name
 
+
 async def add_ticker_to_watchlist(db: AsyncSession, user, ticker: str) -> list[str]:
     """Add a normalized ticker while enforcing the global watchlist limit."""
     normalized = ticker.strip().upper()
@@ -182,12 +203,14 @@ async def add_ticker_to_watchlist(db: AsyncSession, user, ticker: str) -> list[s
     await db.flush()
     return settings.watchlist
 
+
 async def remove_ticker_from_watchlist(db: AsyncSession, user, ticker: str) -> list[str]:
     """Remove ``ticker`` from ``user``'s watchlist."""
     settings = await get_or_create_settings(db, user)
     settings.watchlist = [t for t in settings.watchlist if t != ticker]
     await db.flush()
     return settings.watchlist
+
 
 async def get_webhook_deliveries(db: AsyncSession, user_id: int, limit: int = 20):
     from backend.repositories.webhook_delivery import list_webhook_deliveries

@@ -22,6 +22,7 @@ _ASYNC_DB_DRIVERS = {
     "sqlite+pysqlite": "sqlite+aiosqlite",
 }
 
+
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=str(_ROOT_ENV), env_file_encoding="utf-8", extra="ignore")
     ENVIRONMENT: str = "development"
@@ -111,7 +112,7 @@ class Settings(BaseSettings):
                 from backend.core.password_hashing import is_supported_password_hash
 
                 if not is_supported_password_hash(self.ADMIN_PASSWORD_HASH):
-                    problems.append("ADMIN_PASSWORD_HASH must be a valid Argon2 or bcrypt hash")
+                    problems.append("ADMIN_PASSWORD_HASH must be a valid Argon2 hash")
             if problems:
                 raise ValueError("Insecure configuration for ENVIRONMENT=production: " + "; ".join(problems))
         return self
@@ -140,9 +141,11 @@ class Settings(BaseSettings):
                 _TEMP_FERNET = Fernet(_TEMP_KEY.encode() if isinstance(_TEMP_KEY, str) else _TEMP_KEY)
             return _TEMP_FERNET
 
+
 @lru_cache
 def get_settings() -> Settings:
     return Settings()
+
 
 def is_live_trading_enabled() -> bool:
     """Whether this server has explicitly opted in to real-money orders."""

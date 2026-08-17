@@ -5,29 +5,19 @@ A **Main Agent** is realised as a LangGraph node: ``Callable[[state], dict]``.
 A **Sub-Agent** is realised as a plain runner invoked inside a main node:
 ``Callable[[state], dict]`` returning a partial state update.
 
-These are intentionally lightweight (protocols + a shared run-context dataclass
-+ a couple of helpers) — the heavy lifting lives in the concrete ``main/``
-modules, which reuse the existing Tier-2 node factories.
+This module keeps the shared run-context dataclass and neutral state helpers;
+the concrete callable shapes are represented directly by ``NodeFn``.
 """
 
 from __future__ import annotations
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any
 
 StateUpdate = dict[str, Any]
 NodeFn = Callable[[dict], StateUpdate]
 
-class MainAgentNode(Protocol):
-    """A Tier-1 main agent: one graph node that orchestrates its sub-agents."""
-
-    def __call__(self, state: dict) -> StateUpdate: ...
-
-class SubAgentRunner(Protocol):
-    """A Tier-2 sub-agent runner invoked inside a main node."""
-
-    def __call__(self, state: dict) -> StateUpdate: ...
 
 @dataclass
 class AgentRunContext:
@@ -56,6 +46,7 @@ class AgentRunContext:
     def is_branch_enabled(self, key: str) -> bool:
         return self.hierarchy.is_branch_enabled(key)
 
+
 def neutral_invest_debate_state(note: str = "") -> dict:
     """A valid-but-empty InvestDebateState (used by kill-switch stubs)."""
     return {
@@ -66,6 +57,7 @@ def neutral_invest_debate_state(note: str = "") -> dict:
         "judge_decision": note,
         "count": 0,
     }
+
 
 def neutral_risk_debate_state(note: str = "") -> dict:
     """A valid-but-empty RiskDebateState (used by kill-switch stubs)."""

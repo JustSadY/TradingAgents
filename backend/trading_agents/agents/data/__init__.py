@@ -1,9 +1,12 @@
 """
-Tier-3 data layer — the concrete data-fetch / computation implementations that
-back the registered tools (yFinance, SEC, news, options, macro, quant,
-backtests, charting, web search).
+Tier-3 data layer — concrete data-fetch and computation implementations that
+back registered tools (yFinance, SEC, news, options, macro, quant, backtests,
+charting, web search).
 
-The ``tools/`` package wraps these in permission-aware ``BaseAgentTool`` objects;
-``utils/agent_utils.py`` re-exports the LangChain tool callables. Sub-agents
-reach them only through the tool registry, never directly.
+The ``tools/`` package wraps permission-sensitive capabilities in
+``BaseAgentTool`` objects and ``utils/agent_utils.py`` re-exports commonly used
+LangChain callables. Analyst implementations may also import Tier-3 helpers
+directly when they are composing their declared tool set or deterministic data
+preparation; permission enforcement remains the responsibility of the runtime
+tool registry and analyst execution path.
 """

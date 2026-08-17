@@ -36,17 +36,13 @@ export function TimeTravelWidget({
     if (cp.node === 'Research Manager' || cp.node === 'ResearchManager') {
       fields['investment_plan'] = ''
     } else if (cp.node === 'Portfolio Manager' || cp.node === 'portfolio_manager') {
-      // The Portfolio Manager owns the sole executable decision in new runs.
-      // Clear its structured output before a replay so a previous action/size
-      // cannot remain visible while the new decision is being generated.
+      // Preserve the PM proposal stored at this checkpoint; it is the input to
+      // the downstream stability controller. Clear only downstream canonical
+      // outputs so a previous controller result cannot leak into the replay.
       fields['portfolio_decision_json'] = '{}'
+      fields['decision_transition_json'] = '{}'
       fields['final_trade_decision'] = ''
       fields['final_signal'] = ''
-    } else if (cp.node === 'Trader') {
-      // Historical checkpoints can still be inspected, but the retired node
-      // cannot create a new execution recommendation in the current graph.
-      fields['trader_investment_plan'] = ''
-      fields['trader_proposal_json'] = '{}'
     } else if (cp.node === 'Agent Q&A' || cp.node === 'agent_qa') {
       fields['agent_qa_report'] = ''
     } else {

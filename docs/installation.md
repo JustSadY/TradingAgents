@@ -79,7 +79,7 @@ At minimum, review and set the infrastructure values required by Compose and pro
 DB_PASSWORD=<strong-postgres-password>
 SECRET_KEY=<random-secret>
 ENCRYPTION_KEY=<fernet-key>
-ADMIN_PASSWORD_HASH=<argon2-or-bcrypt-hash>
+ADMIN_PASSWORD_HASH=<argon2-hash>
 ```
 
 `DB_PASSWORD` is required by the current `docker-compose.yml`. `METRICS_TOKEN` is optional; when empty, the backend `/metrics` endpoint stays disabled.

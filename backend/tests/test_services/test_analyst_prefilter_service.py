@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.analysis import AnalysisResult
@@ -43,3 +45,13 @@ async def test_system_prefilter_excludes_tenant_history(db: AsyncSession, test_u
     assert kept == ["market"]
     assert dropped == []
     assert [row.id for row in captured] == [system_row.id]
+
+
+def test_analyst_prefilter_service_does_not_own_analysis_sql() -> None:
+    backend_root = Path(__file__).resolve().parents[2]
+    source = (backend_root / "services" / "analyst_prefilter_service.py").read_text()
+
+    assert "from sqlalchemy import select" not in source
+    assert "backend.models.analysis" not in source
+    assert "select(AnalysisResult" not in source
+    assert "list_learning_eligible_ticker_analyses" in source

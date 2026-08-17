@@ -1,6 +1,6 @@
 # Multi-Agent Decision Core
 
-TradingAgents uses LangGraph to separate market evidence gathering, adversarial research, risk evaluation, and final portfolio intent. The architecture is deliberately structured so that no analyst or risk persona can independently become an execution authority.
+TradingAgents uses LangGraph to separate market evidence gathering, adversarial research, risk evaluation, and final portfolio intent. The architecture is deliberately structured so that no analyst or risk perspective can independently become an execution authority.
 
 ---
 
@@ -28,22 +28,14 @@ stateDiagram-v2
     }
 
     ResearchManager --> RiskPanel
-
-    state RiskPanel {
-        [*] --> AggressiveRisk
-        [*] --> ConservativeRisk
-        [*] --> NeutralRisk
-        AggressiveRisk --> RiskEvidence
-        ConservativeRisk --> RiskEvidence
-        NeutralRisk --> RiskEvidence
-    }
-
-    RiskEvidence --> StrategyReconciler
+    RiskPanel --> StrategyReconciler
     StrategyReconciler --> PortfolioManager
     PortfolioManager --> StabilityController
     StabilityController --> Validation
     Validation --> [*]
 ```
+
+`RiskPanel` is one graph node. It makes one LLM call and asks that call to return aggressive, conservative, and neutral perspectives in a structured transcript. Those perspectives are evidence inside the node; they are not independent LangGraph nodes.
 
 The exact graph node names and conditional routing live in `backend/trading_agents/graph/`; this document describes the responsibility boundaries rather than duplicating every implementation detail.
 
@@ -90,20 +82,17 @@ The purpose of this layer is to improve evidence quality and expose unsupported 
 
 ## 4. Risk Debate
 
-The risk stage contains aggressive, conservative, and neutral perspectives.
+The risk stage is implemented by one Risk Debate node. One model invocation produces three named perspectives:
 
-Their responsibility is to surface evidence such as:
+- aggressive
+- conservative
+- neutral
 
-- downside and invalidation scenarios
-- upside conditions
-- liquidity or concentration concerns
-- exposure and portfolio constraints
-- unresolved uncertainty
-- risk/reward considerations
+The panel surfaces evidence such as downside/invalidation scenarios, upside conditions, liquidity or concentration concerns, exposure and portfolio constraints, unresolved uncertainty, and risk/reward considerations.
 
-Risk agents are **non-executable evidence producers**. They do not independently emit the final Buy/Sell/Hold action, final quantity, allocation, leverage, stop, target, or broker order.
+These perspectives are **non-executable evidence**. They do not independently emit the final Buy/Sell/Hold action, final quantity, allocation, leverage, stop, target, or broker order.
 
-This boundary is intentional: risk personas influence the final decision but do not compete for execution authority.
+This boundary is intentional: the risk panel influences the final proposal but does not compete for execution authority.
 
 ---
 
@@ -137,7 +126,7 @@ prior assumptions and invalidations, not the previous Buy/Sell rating.
 
 ---
 
-## 6. Decision Stability and execution
+## 6. Decision Stability and Execution
 
 The deterministic Decision Stability Controller follows the Portfolio Manager.
 It compares the raw proposal with the prior **accepted** decision, run quality,
@@ -147,10 +136,7 @@ risk-reducing changes; major cross-zero reversals additionally require explicit
 invalidation and independent confirmation. A rejected reversal becomes Hold /
 no new order rather than replaying the prior directional order.
 
-`shadow` is the default rollout mode: it preserves the PM proposal for current
-execution semantics and stores what enforcement would have done. `enforce`
-makes the controller's accepted decision canonical. A hard risk exit bypasses
-hysteresis and remains reduce-only in every mode.
+`shadow` preserves the PM proposal for execution semantics and stores what enforcement would have done. `enforce` makes the controller's accepted decision canonical. A hard risk exit bypasses hysteresis and remains reduce-only in every mode.
 
 See [`strategy_continuity.md`](strategy_continuity.md) for strategy versioning,
 optimistic locking, replay safety, and the rollout scorecard.
@@ -171,7 +157,7 @@ Depending on the configured execution path, controls can include:
 - broker/trading mode
 - user/server execution settings
 
-These controls can reduce, reject, or prevent the accepted canonical decision. Code that places orders should consume `portfolio_decision_json`, not intermediate analyst/risk text or the raw PM proposal.
+These controls can reduce, reject, or prevent the accepted canonical decision. Code that places orders consumes `portfolio_decision_json`, not intermediate analyst/risk text, chart annotations, or the raw PM proposal.
 
 ---
 
@@ -181,7 +167,7 @@ TradingAgents contains mechanisms for feeding historical outcomes and prior anal
 
 Do not assume that every run has external/vector memory enabled. Memory/provider configuration is user/runtime dependent, and the graph must continue to work when those optional integrations are unavailable.
 
-Historical performance and review information should be treated as evidence for future decisions rather than as a hardcoded substitute for current market data. Historical/time-travel replays load strategy state as-of both its effective and recorded time and do not mutate strategy or learning stores.
+Historical performance and review information is evidence for future decisions rather than a hardcoded substitute for current market data. Historical/time-travel replays load strategy state as-of both its effective and recorded time and do not mutate strategy or learning stores.
 
 ---
 
@@ -258,4 +244,4 @@ When this document conflicts with code, use the following implementation sources
 - `backend/trading_agents/llm_clients/registry.py`
 - the final decision schema consumed by the application execution layer
 
-Planned analysts, vendor integrations, or automated trading ideas should not be added here as implemented features until production code exists.
+Planned or retired agents, vendor integrations, or automated trading ideas should not be listed here as implemented features.
