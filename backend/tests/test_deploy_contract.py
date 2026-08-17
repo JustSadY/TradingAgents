@@ -23,6 +23,14 @@ def test_updater_rejects_plain_legacy_venv_layout() -> None:
     assert 'mv "$VENV" "$OLD_VENV_TARGET"' not in source
 
 
+def test_uninstall_purge_removes_versioned_virtualenv_root() -> None:
+    source = (_repo_root() / "deploy" / "uninstall.sh").read_text()
+
+    assert 'VENV_ROOT="$PROJECT_ROOT/.tradingagents-venvs"' in source
+    assert 'rm -f "$VENV"' in source
+    assert 'rm -rf "$VENV_ROOT"' in source
+
+
 def test_updater_never_claims_database_schema_rollback() -> None:
     updater = (_repo_root() / "deploy" / "update.sh").read_text()
     readme = (_repo_root() / "deploy" / "README.md").read_text()
