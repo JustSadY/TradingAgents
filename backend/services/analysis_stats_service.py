@@ -8,18 +8,14 @@ a single home.
 
 from __future__ import annotations
 
-import logging
-
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.constants import BUY_SIGNALS as _BUY_SIGNALS
 from backend.core.constants import SELL_SIGNALS as _SELL_SIGNALS
 from backend.core.constants import TOKENS_PER_ANALYST as _TOKENS_PER_ANALYST
 from backend.core.model_pricing import estimate_token_cost, estimate_total_token_cost, resolve_model_pricing
-from backend.models.analysis import AnalysisResult
+from backend.repositories.analysis_stats import list_completed_analyses_for_stats
 
-_logger = logging.getLogger(__name__)
 
 def estimate_cost(analysts: str, debate_rounds: int, model: str, provider: str | None = None) -> dict:
     """Return a pre-run cost estimate from the canonical model-price catalogue."""
@@ -37,18 +33,13 @@ def estimate_cost(analysts: str, debate_rounds: int, model: str, provider: str |
         "pricing_is_fallback": pricing.is_fallback,
     }
 
+
 def _is_correct(signal: str | None, raw_return: float) -> bool:
     return (signal in _BUY_SIGNALS and raw_return > 0) or (signal in _SELL_SIGNALS and raw_return < 0)
 
+
 async def get_ab_comparison(db: AsyncSession, user_id: int | None = None) -> list[dict]:
-    try:
-        q = select(AnalysisResult).where(AnalysisResult.status == "completed")
-        if user_id is not None:
-            q = q.where(AnalysisResult.user_id == user_id)
-        rows = (await db.execute(q)).scalars().all()
-    except Exception as exc:
-        _logger.warning("Failed to query AnalysisResult (DB may be unmigrated): %s", exc)
-        rows = []
+    rows = await list_completed_analyses_for_stats(db, user_id=user_id)
 
     groups: dict[str, list] = {}
     for row in rows:
@@ -61,12 +52,13 @@ async def get_ab_comparison(db: AsyncSession, user_id: int | None = None) -> lis
         comparison.append(metrics)
     return comparison
 
-def _resolve_preset_name(row: AnalysisResult) -> str:
+
+def _resolve_preset_name(row: object) -> str:
     """Resolve a display name for the preset/model combo."""
-    preset = row.preset_name
+    preset = getattr(row, "preset_name", None)
     if not preset or preset.lower() in ("unknown", "unknown:unknown", "unknown/unknown"):
-        prov = (row.llm_provider or "Custom").strip()
-        mod = (row.llm_model or "Model").strip()
+        prov = (getattr(row, "llm_provider", None) or "Custom").strip()
+        mod = (getattr(row, "llm_model", None) or "Model").strip()
         if not prov or prov.lower() in ("unknown", "none"):
             prov = "Custom"
         if not mod or mod.lower() in ("unknown", "none"):
@@ -74,13 +66,14 @@ def _resolve_preset_name(row: AnalysisResult) -> str:
         preset = f"{prov}:{mod}"
     return preset
 
-def _calculate_preset_metrics(preset: str, runs: list[AnalysisResult]) -> dict:
+
+def _calculate_preset_metrics(preset: str, runs: list[object]) -> dict:
     """Calculate performance metrics for a group of runs."""
     from datetime import datetime
 
     base_metrics = _calc_base(runs)
 
-    runs_sorted = sorted(runs, key=lambda r: r.created_at or datetime.min, reverse=True)
+    runs_sorted = sorted(runs, key=lambda r: getattr(r, "created_at", None) or datetime.min, reverse=True)
     realized_metrics = _calc_realized(runs_sorted[:50])
 
     return {
@@ -97,7 +90,8 @@ def _calculate_preset_metrics(preset: str, runs: list[AnalysisResult]) -> dict:
         "total_graded_last_50": realized_metrics["total_graded_last_50"],
     }
 
-def _calc_base(runs: list[AnalysisResult]) -> dict:
+
+def _calc_base(runs: list[object]) -> dict:
     total = len(runs)
     if not total:
         return {
@@ -109,19 +103,23 @@ def _calc_base(runs: list[AnalysisResult]) -> dict:
             "total_graded": 0,
         }
 
-    durations = [r.duration_seconds for r in runs if (r.duration_seconds or 0.0) > 0]
-    tokens = [((r.tokens_in or 0) + (r.tokens_out or 0)) for r in runs]
+    durations = [getattr(r, "duration_seconds", None) for r in runs if (getattr(r, "duration_seconds", None) or 0.0) > 0]
+    tokens = [((getattr(r, "tokens_in", None) or 0) + (getattr(r, "tokens_out", None) or 0)) for r in runs]
     costs = [
         estimate_token_cost(
-            r.llm_provider,
-            r.llm_model,
-            int(r.tokens_in or 0),
-            int(r.tokens_out or 0),
+            getattr(r, "llm_provider", None),
+            getattr(r, "llm_model", None),
+            int(getattr(r, "tokens_in", None) or 0),
+            int(getattr(r, "tokens_out", None) or 0),
         )
         for r in runs
     ]
-    graded = [r for r in runs if r.raw_return is not None and r.signal in (_BUY_SIGNALS | _SELL_SIGNALS)]
-    wins = sum(1 for r in graded if _is_correct(r.signal, r.raw_return))
+    graded = [
+        r
+        for r in runs
+        if getattr(r, "raw_return", None) is not None and getattr(r, "signal", None) in (_BUY_SIGNALS | _SELL_SIGNALS)
+    ]
+    wins = sum(1 for r in graded if _is_correct(getattr(r, "signal", None), getattr(r, "raw_return")))
 
     return {
         "total": total,
@@ -132,11 +130,16 @@ def _calc_base(runs: list[AnalysisResult]) -> dict:
         "total_graded": len(graded),
     }
 
-def _calc_realized(runs: list[AnalysisResult]) -> dict:
-    graded = [r for r in runs if r.raw_return is not None and r.signal in (_BUY_SIGNALS | _SELL_SIGNALS)]
-    wins = sum(1 for r in graded if _is_correct(r.signal, r.raw_return))
-    alphas = [r.alpha_return for r in runs if r.alpha_return is not None]
-    raws = [r.raw_return for r in runs if r.raw_return is not None]
+
+def _calc_realized(runs: list[object]) -> dict:
+    graded = [
+        r
+        for r in runs
+        if getattr(r, "raw_return", None) is not None and getattr(r, "signal", None) in (_BUY_SIGNALS | _SELL_SIGNALS)
+    ]
+    wins = sum(1 for r in graded if _is_correct(getattr(r, "signal", None), getattr(r, "raw_return")))
+    alphas = [getattr(r, "alpha_return") for r in runs if getattr(r, "alpha_return", None) is not None]
+    raws = [getattr(r, "raw_return") for r in runs if getattr(r, "raw_return", None) is not None]
 
     return {
         "win_rate_last_50": round(wins / len(graded) * 100, 1) if graded else None,
@@ -145,13 +148,14 @@ def _calc_realized(runs: list[AnalysisResult]) -> dict:
         "total_graded_last_50": len(graded),
     }
 
+
 async def get_signal_performance(db: AsyncSession, ticker: str | None = None, user_id: int | None = None) -> dict:
-    q = select(AnalysisResult).where(AnalysisResult.status == "completed").where(AnalysisResult.raw_return.isnot(None))
-    if user_id is not None:
-        q = q.where(AnalysisResult.user_id == user_id)
-    if ticker:
-        q = q.where(AnalysisResult.ticker == ticker.upper())
-    rows = (await db.execute(q)).scalars().all()
+    rows = await list_completed_analyses_for_stats(
+        db,
+        user_id=user_id,
+        ticker=ticker,
+        require_raw_return=True,
+    )
     if not rows:
         return {"total": 0, "win_rate": None, "avg_raw_return": None, "avg_alpha_return": None, "by_signal": {}}
 
@@ -160,11 +164,11 @@ async def get_signal_performance(db: AsyncSession, ticker: str | None = None, us
     total_alpha = 0.0
     by_signal: dict[str, dict] = {}
     for r in rows:
-        sig = r.signal or "Unknown"
-        raw = r.raw_return or 0.0
+        sig = getattr(r, "signal", None) or "Unknown"
+        raw = getattr(r, "raw_return", None) or 0.0
         total_raw += raw
-        total_alpha += r.alpha_return or 0.0
-        correct = _is_correct(r.signal, raw)
+        total_alpha += getattr(r, "alpha_return", None) or 0.0
+        correct = _is_correct(getattr(r, "signal", None), raw)
         wins += correct
         bucket = by_signal.setdefault(sig, {"count": 0, "wins": 0, "avg_return": 0.0})
         bucket["count"] += 1
