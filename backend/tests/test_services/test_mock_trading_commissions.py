@@ -130,7 +130,7 @@ async def test_partial_close_allocates_accrued_financing_pro_rata():
     assert opening_fee == Decimal("0.5000")
 
 
-def test_mock_trading_does_not_keep_legacy_sqlite_or_portfolio_sql_shims() -> None:
+def test_mock_trading_does_not_keep_legacy_sqlite_or_persistence_shims() -> None:
     backend_root = Path(__file__).resolve().parents[2]
     source = (backend_root / "services" / "mock_trading_service.py").read_text()
 
@@ -142,6 +142,15 @@ def test_mock_trading_does_not_keep_legacy_sqlite_or_portfolio_sql_shims() -> No
     assert "select(Portfolio" not in source
     assert "delete(Order" not in source
     assert "delete(Holding" not in source
+    assert "Order(" not in source
+    assert "Holding(" not in source
+    assert "db.add(" not in source
+    assert "await db.delete(" not in source
+    assert "await db.flush()" not in source
     assert "get_or_create_simulation_portfolio" in source
     assert "lock_portfolio_for_update" in source
     assert "reset_simulation_portfolio" in source
+    assert "stage_order" in source
+    assert "stage_holding" in source
+    assert "delete_holding_row" in source
+    assert "flush_portfolio_changes" in source
