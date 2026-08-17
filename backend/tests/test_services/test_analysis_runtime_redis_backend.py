@@ -34,7 +34,6 @@ async def test_active_tasks_skip_only_invalid_runtime_rows(monkeypatch):
                 "user_id": 3,
                 "status": "running",
                 "started_at": 42.0,
-                "retry_count": 0,
             },
             {
                 "task_id": "invalid-task",
@@ -44,7 +43,6 @@ async def test_active_tasks_skip_only_invalid_runtime_rows(monkeypatch):
                 "user_id": 3,
                 "status": "broken",
                 "started_at": 43.0,
-                "retry_count": 0,
             },
             {
                 "ticker": "NO-ID",
@@ -53,7 +51,6 @@ async def test_active_tasks_skip_only_invalid_runtime_rows(monkeypatch):
                 "user_id": 3,
                 "status": "running",
                 "started_at": 44.0,
-                "retry_count": 0,
             },
         ]
 
