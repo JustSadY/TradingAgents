@@ -1,6 +1,10 @@
 from pydantic import BaseModel
 
 
+class WebhookTestRequest(BaseModel):
+    url: str
+
+
 class WebhookDeliveryRead(BaseModel):
     id: int
     event: str
