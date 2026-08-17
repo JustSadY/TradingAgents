@@ -40,7 +40,7 @@ async def test_advanced_settings_policy_lives_in_service(
     test_user: User,
 ) -> None:
     with pytest.raises(SettingsPermissionError, match="administrators"):
-        await enforce_settings_update_permissions(db, test_user, SettingsUpdate(max_recur_limit=50))
+        await enforce_settings_update_permissions(db, test_user, SettingsUpdate(max_recur_limit=100))
 
 
 def test_settings_router_has_no_direct_repository_or_config_access() -> None:
