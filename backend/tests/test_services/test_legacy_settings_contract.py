@@ -92,7 +92,10 @@ def test_runtime_access_and_strategy_context_do_not_own_analysis_or_access_sql()
     assert "UserAgentAccess" not in tool_settings
     assert "UserToolAccess" not in tool_settings
     assert "UserToolFieldAccess" not in tool_settings
+    assert "AgentToolSetting(" not in tool_settings
+    assert "db.add(" not in tool_settings
     assert "get_user_access_overrides" in tool_settings
+    assert "ensure_tool_setting" in tool_settings
 
     assert "from sqlalchemy import select" not in strategy_context
     assert "backend.models.analysis" not in strategy_context
