@@ -1,3 +1,5 @@
+from typing import Any
+
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -54,6 +56,18 @@ async def insert_alert(
         creation_run_id=creation_run_id,
     )
     db.add(alert)
+    await db.flush()
+    return alert
+
+
+async def apply_alert_changes(
+    db: AsyncSession,
+    alert: PriceAlert,
+    changes: dict[str, Any],
+) -> PriceAlert:
+    """Persist already-validated alert field changes."""
+    for field, value in changes.items():
+        setattr(alert, field, value)
     await db.flush()
     return alert
 
