@@ -122,3 +122,31 @@ async def update_user_tool_field_access(
 
     await db.flush()
     return await get_user_tool_field_access(db, user_id)
+
+
+async def get_user_access_overrides(db: AsyncSession, user_id: int) -> dict[str, dict]:
+    """Return only persisted access overrides for runtime-context assembly."""
+    agent_access = {row.agent_key: row.can_run for row in await list_agent_access_rows(db, user_id)}
+
+    tool_access = {
+        row.tool_key: {
+            "can_view": row.can_view,
+            "can_use": row.can_use,
+            "can_edit": row.can_edit,
+            "can_enable": row.can_enable,
+        }
+        for row in await list_tool_access_rows(db, user_id)
+    }
+
+    field_access: dict[str, dict[str, dict[str, bool]]] = {}
+    for row in await list_tool_field_access_rows(db, user_id):
+        field_access.setdefault(row.tool_key, {})[row.field_key] = {
+            "can_view": row.can_view,
+            "can_edit": row.can_edit,
+        }
+
+    return {
+        "agent_access": agent_access,
+        "tool_access": tool_access,
+        "field_access": field_access,
+    }
