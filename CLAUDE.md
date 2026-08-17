@@ -180,7 +180,7 @@ Access tokens are short-lived JWTs. Browser refresh credentials live in an HttpO
 
 The current `/auth/refresh` contract is cookie-only: refresh credentials are not accepted in the request body. Keep refresh-token rotation and replay protection in the auth-session service rather than reintroducing response-body or local-storage refresh-token compatibility.
 
-Password hashing lives in `backend/core/password_hashing.py`. New passwords use Argon2 through `pwdlib`; bcrypt remains registered only to verify historical hashes and upgrade them to Argon2 after a successful login. Do not import password helpers through `backend.core.security`.
+Password hashing lives in `backend/core/password_hashing.py`. Argon2 through `pwdlib` is the only supported password-hash format; the retired bcrypt verification/rehash compatibility path has been removed. Do not import password helpers through `backend.core.security`.
 
 LLM/provider API keys are configured through the Web UI and stored encrypted in PostgreSQL. Do not reintroduce plaintext database fallbacks.
 
