@@ -29,7 +29,7 @@ MANIFEST
 
 # PyInstaller
 #   Usually these files are written by a python script from a template
-#   before PyInstaller builds the exe, so as to inject date/other infos into it.
+#   before PyInstaller builds an exe, so as to inject date/other infos into it.
 *.manifest
 *.spec
 
@@ -105,7 +105,7 @@ ipython_config.py
 #   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
 #   This is especially recommended for binary packages to ensure reproducibility, and is more
 #   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-into-version-control
+#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file
 # poetry.lock
 # poetry.toml
 
@@ -197,8 +197,10 @@ cython_debug/
 .abstra/
 
 # Visual Studio Code
-#   Visual Studio Code specific template is maintained by microsoft vscode and can be
-#   merged into the global gitignore if desired.
+#   Visual Studio Code specific template is maintained in a separate VisualStudioCode.gitignore 
+#   that can be found at https://github.com/github/gitignore/blob/main/Global/VisualStudioCode.gitignore
+#   and can be added to the global gitignore or merged into this file. However, if you prefer, 
+#   you could uncomment the following to ignore the entire vscode folder
 # .vscode/
 
 # Ruff stuff:
