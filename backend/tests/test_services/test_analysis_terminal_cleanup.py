@@ -15,18 +15,10 @@ async def test_terminalize_task_cleans_local_and_shared_state_once(monkeypatch):
     current = asyncio.current_task()
     assert current is not None
 
-    async def clear_meta(value: str, owner: int | None = None) -> None:
-        calls.append(("meta", (value, owner)))
+    async def complete(value: str, owner: int | None = None) -> None:
+        calls.append(("complete", (value, owner)))
 
-    async def clear_owner(value: str) -> None:
-        calls.append(("owner", value))
-
-    async def clear_cancel(value: str) -> None:
-        calls.append(("cancel", value))
-
-    monkeypatch.setattr(analysis_service.task_store, "clear_meta", clear_meta)
-    monkeypatch.setattr(analysis_service.task_store, "clear_owner", clear_owner)
-    monkeypatch.setattr(analysis_service.task_store, "clear_cancel_request", clear_cancel)
+    monkeypatch.setattr(analysis_service.runtime, "complete", complete)
 
     analysis_service._TERMINAL_COORDINATOR.reset(task_id)
     analysis_service._RUNNING_TASKS[task_id] = current
@@ -44,11 +36,7 @@ async def test_terminalize_task_cleans_local_and_shared_state_once(monkeypatch):
         assert task_id not in analysis_service._TASK_OWNERS
         assert task_id not in analysis_service._HEARTBEAT_TASKS
         assert heartbeat.cancelled()
-        assert calls == [
-            ("meta", (task_id, user_id)),
-            ("owner", task_id),
-            ("cancel", task_id),
-        ]
+        assert calls == [("complete", (task_id, user_id))]
         assert analysis_service.get_terminal_result(task_id) == result
     finally:
         analysis_service._RUNNING_TASKS.pop(task_id, None)
