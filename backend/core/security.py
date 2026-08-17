@@ -11,7 +11,6 @@ settings = get_settings()
 __all__ = [
     "create_access_token",
     "create_refresh_token",
-    "decode_token",
     "decode_token_payload",
     "decrypt_secret",
     "encrypt_secret",
@@ -19,9 +18,11 @@ __all__ = [
     "token_id_hash",
 ]
 
+
 def encrypt_secret(value: str) -> str:
     """Fernet-encrypt an arbitrary secret string (e.g. a tool credential)."""
     return settings.get_fernet().encrypt(value.encode()).decode()
+
 
 def decrypt_secret(value: str) -> str:
     """Decrypt a value produced by :func:`encrypt_secret`.
@@ -32,16 +33,19 @@ def decrypt_secret(value: str) -> str:
     """
     return settings.get_fernet().decrypt(value.encode()).decode()
 
+
 def _make_token(data: dict, expires_delta: timedelta) -> str:
     payload = data.copy()
     payload["exp"] = datetime.now(UTC) + expires_delta
     return jwt.encode(payload, settings.SECRET_KEY, algorithm=settings.ALGORITHM)
+
 
 def create_access_token(username: str, role: str = "user", token_version: int = 0) -> str:
     return _make_token(
         {"sub": username, "role": role, "type": "access", "ver": token_version},
         timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES),
     )
+
 
 def new_token_id() -> str:
     return secrets.token_urlsafe(32)
@@ -65,13 +69,6 @@ def create_refresh_token(
         timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS),
     )
 
-def decode_token(token: str, expected_type: str = "access") -> str:
-    """Validate a token and return its subject (username).
-
-    Kept for callers that only need the username; use ``decode_token_payload``
-    when the token version must also be checked.
-    """
-    return decode_token_payload(token, expected_type)["sub"]
 
 def decode_token_payload(token: str, expected_type: str = "access") -> dict:
     """Validate a token and return its full payload (sub, ver, role, ...).
