@@ -19,16 +19,26 @@ async def get_last_accepted_analysis(
     recorded_as_of: datetime | None = None,
 ) -> AnalysisResult | None:
     """Return the latest completed, learning-eligible analysis in one tenant scope."""
+    normalized_ticker = ticker.upper()
+    normalized_asset_type = asset_type.lower()
+
     if business_as_of is None and recorded_as_of is None and isinstance(last_analysis_id, int):
         candidate = await db.get(AnalysisResult, last_analysis_id)
-        if candidate is not None and candidate.status == "completed":
+        if (
+            candidate is not None
+            and candidate.user_id == user_id
+            and candidate.ticker == normalized_ticker
+            and candidate.asset_type == normalized_asset_type
+            and candidate.status == "completed"
+            and candidate.learning_eligible is True
+        ):
             return candidate
 
     query = (
         select(AnalysisResult)
         .where(
-            AnalysisResult.ticker == ticker.upper(),
-            AnalysisResult.asset_type == asset_type.lower(),
+            AnalysisResult.ticker == normalized_ticker,
+            AnalysisResult.asset_type == normalized_asset_type,
             AnalysisResult.status == "completed",
             AnalysisResult.learning_eligible.is_(True),
         )
