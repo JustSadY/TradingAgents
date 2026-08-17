@@ -121,10 +121,6 @@ MIGRATION_DRIFT_DATABASE_URL=postgresql+asyncpg://postgres@localhost/ta_drift \
     uv run pytest tests/test_core/test_migration_drift.py
 ```
 
-### Legacy unversioned PostgreSQL schemas
-
-Development startup still contains an explicit migration bridge for a **complete unversioned historical application schema**: it validates the known baseline table set, stamps baseline revision `89f1a049b357`, then upgrades to head. This is compatibility code for old installations, not a pattern for new migrations. Do not extend it casually.
-
 ### LangGraph checkpoints
 
 LangGraph checkpoints require PostgreSQL. `backend/trading_agents/graph/checkpointer.py` uses `PostgresSaver` / `AsyncPostgresSaver`; the old SQLite checkpoint fallback and file-import path are gone.
@@ -182,7 +178,7 @@ Data-vendor/service credentials belong in the tool-settings system when the tool
 
 Access tokens are short-lived JWTs. Browser refresh credentials live in an HttpOnly cookie at the `/auth` path. Browser responses return access tokens only; do not add a refresh token back to `TokenResponse`.
 
-`RefreshRequest.refresh_token` remains intentionally supported for non-browser CLI/API clients that cannot use the HttpOnly cookie. Do not confuse this request compatibility with the removed response-body refresh-token field.
+The current `/auth/refresh` contract is cookie-only: refresh credentials are not accepted in the request body. Keep refresh-token rotation and replay protection in the auth-session service rather than reintroducing response-body or local-storage refresh-token compatibility.
 
 Password hashing lives in `backend/core/password_hashing.py`. New passwords use Argon2 through `pwdlib`; bcrypt remains registered only to verify historical hashes and upgrade them to Argon2 after a successful login. Do not import password helpers through `backend.core.security`.
 
