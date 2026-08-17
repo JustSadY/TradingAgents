@@ -48,9 +48,10 @@ def test_runtime_does_not_reintroduce_task_store_compatibility_surface():
     assert legacy_names.isdisjoint(vars(AnalysisRuntime))
 
 
-def test_analysis_service_no_longer_imports_task_store_directly():
+def test_analysis_service_no_longer_imports_or_aliases_task_store():
     source = Path(analysis_service.__file__).read_text()
 
     assert "from backend.core import task_store" not in source
     assert "backend.core.task_store" not in source
+    assert "task_store = runtime" not in source
     assert "get_analysis_runtime" in source
