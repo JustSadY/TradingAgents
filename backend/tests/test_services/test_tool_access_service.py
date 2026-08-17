@@ -38,7 +38,8 @@ async def test_unknown_tool_field_key_is_rejected_before_persistence(
 
 
 def test_tool_access_service_does_not_own_sql_or_orm_models() -> None:
-    source = Path("backend/services/tool_access_service.py").read_text()
+    backend_root = Path(__file__).resolve().parents[2]
+    source = (backend_root / "services" / "tool_access_service.py").read_text()
 
     assert "from sqlalchemy import select" not in source
     assert "backend.models.tool_settings" not in source
