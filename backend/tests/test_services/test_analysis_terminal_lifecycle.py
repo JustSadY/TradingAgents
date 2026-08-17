@@ -20,6 +20,7 @@ class _Emitter:
     async def close(self) -> None:
         self.events.append("close")
 
+
 async def test_deferred_run_keeps_owner_and_socket_until_background_runner_finalizes(monkeypatch):
     """The post-graph commit/order window must remain cancellable."""
     task_id = "deferred-terminal-lifecycle"
@@ -63,6 +64,7 @@ async def test_deferred_run_keeps_owner_and_socket_until_background_runner_final
         analysis_service._TASK_REGISTRY.pop(task_id, None)
         analysis_service._TASK_OWNERS.pop(task_id, None)
 
+
 async def test_cancel_marker_emits_terminal_error_before_deferred_socket_close(monkeypatch):
     """A cancelled DB flush must not close the WS before its error event."""
     task_id = "cancel-terminal-order"
@@ -95,18 +97,20 @@ async def test_cancel_marker_emits_terminal_error_before_deferred_socket_close(m
     async def cancelled(_task_id: str) -> bool:
         return True
 
-    async def clear_terminal(*_args, **_kwargs) -> None:
+    async def terminalize(*_args, **_kwargs) -> bool:
         timeline.append("clear")
+        return True
 
     monkeypatch.setattr(analysis_service, "AnalysisEmitter", _TimelineEmitter)
     monkeypatch.setattr(analysis_service, "AsyncSessionLocal", lambda: _Session())
     monkeypatch.setattr(analysis_service, "run_analysis", failed_run)
     monkeypatch.setattr(analysis_service.task_store, "is_cancel_requested", cancelled)
-    monkeypatch.setattr(analysis_service, "_clear_terminal_task_state", clear_terminal)
+    monkeypatch.setattr(analysis_service, "terminalize_task", terminalize)
 
     await analysis_service.run_analysis_task("NVDA", "2026-07-28", "stock", None, task_id)
 
     assert timeline == ["rollback", "error", "clear", "close"]
+
 
 async def test_terminal_orchestrator_error_is_not_retried(monkeypatch):
     """Never launch a retry after the inner run may have told the UI it failed."""
@@ -136,22 +140,24 @@ async def test_terminal_orchestrator_error_is_not_retried(monkeypatch):
         retry_calls += 1
         return True
 
-    async def clear_terminal(*_args, **_kwargs) -> None:
+    async def terminalize(*_args, **_kwargs) -> bool:
         nonlocal cleared
         cleared += 1
+        return True
 
     monkeypatch.setattr(analysis_service, "AnalysisEmitter", _Emitter)
     monkeypatch.setattr(analysis_service, "AsyncSessionLocal", lambda: _Session())
     monkeypatch.setattr(analysis_service, "run_analysis", terminal_error)
     monkeypatch.setattr(analysis_service.task_store, "is_cancel_requested", not_cancelled)
     monkeypatch.setattr(analysis_service, "_maybe_retry_analysis", retry)
-    monkeypatch.setattr(analysis_service, "_clear_terminal_task_state", clear_terminal)
+    monkeypatch.setattr(analysis_service, "terminalize_task", terminalize)
 
     await analysis_service.run_analysis_task("NVDA", "2026-07-28", "stock", None, task_id)
 
     assert retry_calls == 0
     assert cleared == 1
     assert _Emitter.events == ["close"]
+
 
 async def test_unscheduled_retry_clears_tracking_and_sends_terminal_error(monkeypatch):
     """A retry-budget/enqueue failure cannot leave a ghost active task behind."""
@@ -176,16 +182,17 @@ async def test_unscheduled_retry_clears_tracking_and_sends_terminal_error(monkey
     async def retry_exhausted(*_args, **_kwargs) -> bool:
         return False
 
-    async def clear_terminal(*_args, **_kwargs) -> None:
+    async def terminalize(*_args, **_kwargs) -> bool:
         nonlocal cleared
         cleared += 1
+        return True
 
     monkeypatch.setattr(analysis_service, "AnalysisEmitter", _Emitter)
     monkeypatch.setattr(analysis_service, "AsyncSessionLocal", lambda: _Session())
     monkeypatch.setattr(analysis_service, "run_analysis", pre_graph_failure)
     monkeypatch.setattr(analysis_service.task_store, "is_cancel_requested", not_cancelled)
     monkeypatch.setattr(analysis_service, "_maybe_retry_analysis", retry_exhausted)
-    monkeypatch.setattr(analysis_service, "_clear_terminal_task_state", clear_terminal)
+    monkeypatch.setattr(analysis_service, "terminalize_task", terminalize)
 
     await analysis_service.run_analysis_task("NVDA", "2026-07-28", "stock", None, task_id)
 
