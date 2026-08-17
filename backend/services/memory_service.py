@@ -20,6 +20,7 @@ _logger = logging.getLogger(__name__)
 
 _store_cache: dict[tuple, MemoryStore | None] = {}
 
+
 async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
     """Build the calling user's own memory store from their settings + encrypted
     keys. Returns None (memory off) when the user hasn't configured a store.
@@ -33,23 +34,21 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
     if not user_id:
         return None
     try:
-        from sqlalchemy import select
-
         from backend.core.config import get_settings
         from backend.core.database import AsyncSessionLocal
         from backend.core.rls_context import set_user_background_context
-        from backend.models.settings import AppSettings
-        from backend.models.user import User
+        from backend.repositories.settings import get_app_settings
+        from backend.repositories.users import get_user_by_id
         from backend.services.user_service import get_user_api_key
 
         fernet = get_settings().get_fernet()
         async with AsyncSessionLocal() as db:
-            user = await db.get(User, user_id)
+            user = await get_user_by_id(db, user_id)
             if not user:
                 return None
             await set_user_background_context(db, user_id)
 
-            row = (await db.execute(select(AppSettings).where(AppSettings.user_id == user_id))).scalar_one_or_none()
+            row = await get_app_settings(db, user_id)
             store_kind = getattr(row, "memory_store", None) or "pinecone"
             index = getattr(row, "pinecone_index", None) or "tradingagents-memory"
             cloud = getattr(row, "pinecone_cloud", None) or "aws"
@@ -125,15 +124,19 @@ async def get_user_memory_store(user_id: int | None) -> MemoryStore | None:
         )
     return _store_cache[cache_key]
 
+
 _SYSTEM_OWNER = "system"
 _SITUATION_MAX_CHARS = 4000
+
 
 def _namespace(user_id: int | None) -> str:
     return f"ep_user_{user_id}" if user_id else f"ep_{_SYSTEM_OWNER}"
 
+
 def _episode_id(user_id: int | None, ticker: str, trade_date: str) -> str:
     owner = user_id if user_id else _SYSTEM_OWNER
     return f"{owner}:{ticker}:{trade_date}"
+
 
 async def record_episode(
     *,
@@ -181,6 +184,7 @@ async def record_episode(
     except Exception as exc:  # noqa: BLE001 — memory must never break the pipeline
         _logger.warning("record_episode failed for %s %s: %s", ticker, trade_date, exc)
         return False
+
 
 async def recall_episode_lessons(
     *,
@@ -239,6 +243,7 @@ async def recall_episode_lessons(
             parts.append(_format_hit(h))
 
     return "\n".join(parts)
+
 
 def _format_hit(h) -> str:
     m = h.metadata
