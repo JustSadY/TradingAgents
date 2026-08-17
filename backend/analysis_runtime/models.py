@@ -23,7 +23,6 @@ class AnalysisTaskMeta(BaseModel):
     user_id: int | None
     status: AnalysisTaskStatus
     started_at: float
-    retry_count: int = 0
 
     def store_payload(self) -> dict[str, Any]:
         return self.model_dump(mode="json", exclude={"task_id"})
