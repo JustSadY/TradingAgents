@@ -1,0 +1,40 @@
+name: Backend validation
+
+on:
+  push:
+    branches:
+      - agent/pyright-expansion
+    paths:
+      - backend/**
+      - .github/workflows/backend-validation.yml
+  pull_request:
+    paths:
+      - backend/**
+      - .github/workflows/backend-validation.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Type check
+        run: uv run --project backend pyright
+
+      - name: Lint backend
+        run: uv run --project backend ruff check backend
+
+      - name: Run backend unit tests
+        run: uv run --project backend pytest backend/tests -m "not integration and not llm and not slow"
