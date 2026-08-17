@@ -7,6 +7,13 @@ from backend.core.constants import (
     DEFAULT_HOLDING_DAYS as HOLDING_DAYS,
 )
 from backend.core.utils import resolve_benchmark
+from backend.repositories.performance import (
+    apply_reflection,
+    apply_return_outcome,
+    list_resolved_learning_analyses,
+    list_return_backfill_candidates,
+)
+from backend.repositories.settings import get_app_settings
 from backend.services.market_data_service import calculate_returns
 
 _logger = logging.getLogger(__name__)
@@ -223,9 +230,6 @@ async def get_regime_aware_analyst_attribution_stats(
     remains an allowed fast path, but an old/undated AssetStrategy assumption
     is never treated as the current market regime.
     """
-    from sqlalchemy import select
-
-    from backend.models.analysis import AnalysisResult
     from backend.trading_agents.agents.analyst_registry import get_report_fields
 
     effective_regime: dict[str, Any] | None = current_regime
@@ -238,17 +242,7 @@ async def get_regime_aware_analyst_attribution_stats(
             _logger.warning("Could not load current market regime; using non-regime attribution: %s", exc)
             effective_regime = {}
 
-    query = (
-        select(AnalysisResult)
-        .where(AnalysisResult.raw_return.isnot(None))
-        .where(AnalysisResult.learning_eligible.is_(True))
-        .where(AnalysisResult.status == "completed")
-    )
-    if user_id is None:
-        query = query.where(AnalysisResult.user_id.is_(None))
-    else:
-        query = query.where(AnalysisResult.user_id == user_id)
-    rows = list((await db.execute(query)).scalars().all())
+    rows = await list_resolved_learning_analyses(db, user_id=user_id)
     report_fields = get_report_fields()
     fresh_regime = _normalise_regime(effective_regime, require_fresh=True)
     return {
@@ -266,31 +260,17 @@ async def get_regime_aware_analyst_attribution_stats(
 
 
 async def backfill_returns(db) -> int:
-    from sqlalchemy import select
-
-    from backend.models.analysis import AnalysisResult
-    from backend.models.settings import AppSettings
     from backend.trading_agents.dataflows.config import get_config
 
     cutoff = (datetime.now(UTC) - timedelta(days=HOLDING_DAYS + 2)).strftime("%Y-%m-%d")
-    result = await db.execute(
-        select(AnalysisResult)
-        .where(AnalysisResult.raw_return.is_(None))
-        .where(AnalysisResult.signal.isnot(None))
-        .where(AnalysisResult.learning_eligible.is_(True))
-        .where(AnalysisResult.status == "completed")
-        .where(AnalysisResult.trade_date <= cutoff)
-        .limit(50)
-    )
-    rows = result.scalars().all()
+    rows = await list_return_backfill_candidates(db, cutoff_trade_date=cutoff, limit=50)
     updated = 0
     config = get_config()
 
     for row in rows:
         row_config = dict(config)
         if row.user_id:
-            res_settings = await db.execute(select(AppSettings).where(AppSettings.user_id == row.user_id))
-            settings_obj = res_settings.scalar_one_or_none()
+            settings_obj = await get_app_settings(db, row.user_id)
             if settings_obj:
                 bt = getattr(settings_obj, "benchmark_ticker", None)
                 if bt:
@@ -302,9 +282,12 @@ async def backfill_returns(db) -> int:
             row.ticker, row.trade_date, holding_days=HOLDING_DAYS, benchmark=benchmark
         )
         if raw is not None:
-            row.raw_return = raw
-            row.alpha_return = alpha
-            row.holding_days = days
+            apply_return_outcome(
+                row,
+                raw_return=raw,
+                alpha_return=alpha,
+                holding_days=days,
+            )
 
             try:
                 import asyncio
@@ -326,7 +309,7 @@ async def backfill_returns(db) -> int:
                     alpha_return=alpha,
                     benchmark_name=benchmark,
                 )
-                row.reflection = reflection
+                apply_reflection(row, reflection)
             except Exception as ref_exc:
                 _logger.warning("Could not generate reflection for analysis_id=%s: %s", row.id, ref_exc)
 
@@ -353,23 +336,9 @@ async def backfill_returns(db) -> int:
 
 async def get_analyst_attribution_stats(db, user_id: int | None = None) -> dict:
     """Return attribution statistics for one tenant or the system scope."""
-    from sqlalchemy import select
-
-    from backend.models.analysis import AnalysisResult
     from backend.trading_agents.agents.analyst_registry import get_report_fields
 
-    q = (
-        select(AnalysisResult)
-        .where(AnalysisResult.raw_return.isnot(None))
-        .where(AnalysisResult.learning_eligible.is_(True))
-        .where(AnalysisResult.status == "completed")
-    )
-    if user_id is None:
-        q = q.where(AnalysisResult.user_id.is_(None))
-    else:
-        q = q.where(AnalysisResult.user_id == user_id)
-    result = await db.execute(q)
-    rows = result.scalars().all()
+    rows = await list_resolved_learning_analyses(db, user_id=user_id)
 
     report_fields = get_report_fields()
     analysts = {
@@ -452,8 +421,8 @@ async def get_analyst_performance_context(
             md = "=== REGIME-AWARE ANALYST PERFORMANCE & WEIGHTS ===\n"
             md += (
                 "Effective weights use beta-binomial shrinkage across global, ticker-specific, "
-                "fresh matching-regime, and recent accuracy. A stale/undated strategy regime is "
-                "replaced by a direction-neutral broad-market snapshot when available. Sparse local "
+                "fresh matching-regime, and recent accuracy. A stale/undated AssetStrategy assumption "
+                "is replaced by a direction-neutral broad-market snapshot when available. Sparse local "
                 "samples are pulled toward the global baseline.\n"
             )
             for att in attribution:
