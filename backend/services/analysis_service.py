@@ -28,7 +28,7 @@ from types import SimpleNamespace
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.core import task_store
+from backend.analysis_runtime import AnalysisTaskMeta, get_analysis_runtime
 from backend.core.database import AsyncSessionLocal
 from backend.core.rls_context import set_user_background_context
 from backend.models.settings import AppSettings
@@ -41,6 +41,9 @@ from .analysis.portfolio_orchestrator import run_portfolio_analysis
 from .analysis.task_lifecycle import AnalysisTaskStatus, TerminalCoordinator, TerminalResult
 
 _logger = logging.getLogger(__name__)
+runtime = get_analysis_runtime()
+# Compatibility alias for existing regression tests during the boundary migration.
+task_store = runtime
 
 _RUNNING_TASKS: dict[str, asyncio.Task] = {}
 _TASK_REGISTRY: dict[str, dict] = {}
@@ -55,14 +58,7 @@ def _time_travel_checkpoint_overrides(
     strategy_context: dict,
     historical_context: str,
 ) -> dict:
-    """Return server-owned state that makes a checkpoint replay non-learning.
-
-    A checkpoint is data from a previous graph execution, so its values must
-    never override the current replay's point-in-time strategy/learning
-    boundary. Keeping this small mapping separate makes the safety contract
-    testable without opening a graph or database session.
-    """
-
+    """Return server-owned state that makes a checkpoint replay non-learning."""
     return {
         "strategy_context": strategy_context,
         "analysis_mode": "time_travel",
@@ -73,26 +69,21 @@ def _time_travel_checkpoint_overrides(
 
 async def register_task_owner(task_id: str, user_id: int | None) -> None:
     _TASK_OWNERS[task_id] = user_id
-    await task_store.set_owner(task_id, user_id)
+    await runtime.set_owner(task_id, user_id)
 
 
 async def clear_task_owner(task_id: str) -> None:
     _TASK_OWNERS.pop(task_id, None)
-    await task_store.clear_owner(task_id)
+    await runtime.clear_owner(task_id)
 
 
 async def is_task_owner(task_id: str, user_id: int | None, is_admin: bool = False) -> bool:
-    """Return True if *user* may subscribe to *task_id*'s event stream.
-
-    Admins may observe any task. Otherwise the task must have a known owner that
-    matches the user; unknown task ids are rejected so a stream can only be
-    reached via a task id the server actually issued to that user.
-    """
+    """Return True if *user* may subscribe to *task_id*'s event stream."""
     if is_admin:
         return True
     owner = _TASK_OWNERS.get(task_id)
     if owner is None:
-        owner = await task_store.get_owner(task_id)
+        owner = await runtime.owner(task_id)
     return owner is not None and owner == user_id
 
 
@@ -106,15 +97,10 @@ async def cancel_local_task(task_id: str) -> bool:
 
 
 async def cancel_analysis(task_id: str) -> bool:
-    """Cancel a run wherever it is executing.
-
-    Persist intent before the best-effort local/pub-sub signals. Pub/sub is
-    transient, so a worker that has not started yet must be able to observe
-    the request when it begins.
-    """
-    await task_store.request_cancel(task_id)
+    """Cancel a run wherever it is executing."""
+    await runtime.request_cancel(task_id)
     await cancel_local_task(task_id)
-    await task_store.publish_cancel(task_id)
+    await runtime.publish_cancel(task_id)
     return True
 
 
@@ -123,7 +109,11 @@ async def get_active_tasks_for_user(user_id: int | None) -> list[dict]:
     tasks = [{"task_id": tid, **meta} for tid, meta in _TASK_REGISTRY.items() if meta.get("user_id") == user_id]
     if user_id is not None:
         seen = {t["task_id"] for t in tasks}
-        tasks.extend(t for t in await task_store.list_tasks_for_user(user_id) if t["task_id"] not in seen)
+        tasks.extend(
+            {"task_id": meta.task_id, **meta.store_payload()}
+            for meta in await runtime.active_tasks(user_id)
+            if meta.task_id not in seen
+        )
     return tasks
 
 
@@ -140,17 +130,12 @@ async def register_queued_task(
         "status": "queued",
         "retry_count": 0,
     }
-    # In worker mode the web process is not the task owner. Keeping a local
-    # registry entry there would survive the worker's terminal cleanup and
-    # make completed jobs appear permanently active. Redis is the shared
-    # source of truth until the worker starts and registers locally itself.
     from backend.core.config import get_settings
 
     if get_settings().ANALYSIS_QUEUE_MODE.strip().lower() != "worker":
         _TASK_REGISTRY[task_id] = meta
         _TASK_OWNERS[task_id] = user_id
-    await task_store.set_meta(task_id, meta)
-    await task_store.set_owner(task_id, user_id)
+    await runtime.register(AnalysisTaskMeta.from_store_payload(task_id, meta))
 
 
 async def discard_queued_task(task_id: str, user_id: int | None) -> None:
@@ -163,10 +148,10 @@ async def discard_queued_task(task_id: str, user_id: int | None) -> None:
 
 
 async def _heartbeat_loop(task_id: str, user_id: int | None) -> None:
-    """Renew Redis and database task leases until terminal cleanup."""
+    """Renew shared and database task leases until terminal cleanup."""
     try:
         while True:
-            await task_store.touch_task(task_id, user_id)
+            await runtime.heartbeat(task_id, user_id)
             try:
                 from sqlalchemy import update
 
@@ -202,20 +187,20 @@ async def _track_running_task(
     if current is None:
         return
     _TERMINAL_COORDINATOR.reset(task_id)
-    existing = await task_store.get_meta(task_id) or {}
+    existing = await runtime.metadata(task_id)
     meta = {
         "ticker": ticker,
         "trade_date": trade_date,
         "asset_type": asset_type,
         "user_id": user_id,
-        "started_at": existing.get("started_at", time.time()),
+        "started_at": existing.started_at if existing is not None else time.time(),
         "status": "running",
-        "retry_count": existing.get("retry_count", 0),
+        "retry_count": existing.retry_count if existing is not None else 0,
     }
     _RUNNING_TASKS[task_id] = current
     _TASK_REGISTRY[task_id] = meta
-    await task_store.set_meta(task_id, meta)
-    await register_task_owner(task_id, user_id)
+    _TASK_OWNERS[task_id] = user_id
+    await runtime.register(AnalysisTaskMeta.from_store_payload(task_id, meta))
     old_heartbeat = _HEARTBEAT_TASKS.pop(task_id, None)
     if old_heartbeat:
         old_heartbeat.cancel()
@@ -223,12 +208,7 @@ async def _track_running_task(
 
 
 async def terminalize_task(task_id: str, user_id: int | None, result: TerminalResult) -> bool:
-    """Idempotently remove runtime tracking after a product terminal event.
-
-    Product-facing ``complete``/``error`` events are emitted by the caller
-    before this function. Stream closure stays with the caller and happens
-    after cleanup, keeping event -> runtime terminalization -> close ordering.
-    """
+    """Idempotently remove runtime tracking after a product terminal event."""
 
     async def cleanup() -> None:
         _RUNNING_TASKS.pop(task_id, None)
@@ -237,9 +217,8 @@ async def terminalize_task(task_id: str, user_id: int | None, result: TerminalRe
         if heartbeat:
             heartbeat.cancel()
             await asyncio.gather(heartbeat, return_exceptions=True)
-        await task_store.clear_meta(task_id, user_id)
-        await clear_task_owner(task_id)
-        await task_store.clear_cancel_request(task_id)
+        _TASK_OWNERS.pop(task_id, None)
+        await runtime.complete(task_id, user_id)
 
     won = await _TERMINAL_COORDINATOR.run_once(task_id, result, cleanup)
     if not won:
@@ -255,18 +234,10 @@ async def terminalize_task(task_id: str, user_id: int | None, result: TerminalRe
 
 
 def get_terminal_result(task_id: str) -> TerminalResult | None:
-    """Return the locally observed terminal result, if it is still in bounded history."""
     return _TERMINAL_COORDINATOR.result(task_id)
 
 
 async def _emit_cancelled_task(task_id: str, *, close: bool = True) -> None:
-    """Tell subscribers about a pre-start or portfolio cancellation.
-
-    ``run_analysis_task`` can defer the close while it is unwinding a
-    cancelled database operation. That preserves the important wire order:
-    subscribers receive the terminal ``error`` event before the socket is
-    closed. Other callers retain the one-shot emit-and-close behaviour.
-    """
     emitter = AnalysisEmitter(task_id)
     try:
         await emitter.emit_error("Analysis cancelled.")
@@ -285,12 +256,6 @@ async def _emit_auto_order_result(
     message: str = "",
     reason_code: str | None = None,
 ) -> None:
-    """Emit a post-analysis order outcome without making it a second analysis.
-
-    The report is already complete when this runs. Keep an execution failure
-    separate from the analysis terminal event: otherwise a valid report looks
-    like it either filled an order or failed entirely.
-    """
     action = None
     try:
         from backend.core.constants import SIGNAL_TO_ACTION
@@ -330,13 +295,6 @@ async def _emit_auto_order_result(
 
 
 def _snapshot_auto_order_context(row) -> SimpleNamespace:
-    """Copy order inputs before committing so expired ORM rows are never read.
-
-    SQLAlchemy may expire ``AnalysisResult`` attributes at commit time. The
-    automatic order is deliberately a later transaction, therefore it must
-    work from plain values rather than accidentally lazy-loading through a
-    cancelled or rolled-back session.
-    """
     return SimpleNamespace(
         id=getattr(row, "id", None),
         signal=getattr(row, "signal", None),
@@ -363,14 +321,6 @@ async def run_analysis(
     *,
     defer_terminal_cleanup: bool = False,
 ):
-    """Facade for individual analysis orchestration.
-
-    A background runner has work after the graph returns (the final commit and
-    optional signal order). It passes ``defer_terminal_cleanup=True`` so the
-    task stays cancellable and its WebSocket remains open until that outer
-    runner has emitted/handled the terminal outcome. Direct callers keep the
-    historical self-contained lifecycle by default.
-    """
     import uuid
 
     if task_id is None:
@@ -380,7 +330,7 @@ async def run_analysis(
     emitter = AnalysisEmitter(task_id)
     terminal_result = TerminalResult(AnalysisTaskStatus.FAILED, reason="analysis failed")
     try:
-        if await task_store.is_cancel_requested(task_id):
+        if await runtime.is_cancelled(task_id):
             await emitter.emit_error("Analysis cancelled.")
             terminal_result = TerminalResult(AnalysisTaskStatus.CANCELLED, reason="cancelled before start")
             raise asyncio.CancelledError
@@ -392,7 +342,7 @@ async def run_analysis(
             asset_type=asset_type,
             user_id=user_id,
         )
-        if await task_store.is_cancel_requested(task_id):
+        if await runtime.is_cancelled(task_id):
             await emitter.emit_error("Analysis cancelled.")
             terminal_result = TerminalResult(AnalysisTaskStatus.CANCELLED, reason="cancelled after registration")
             raise asyncio.CancelledError
@@ -422,7 +372,6 @@ async def run_analysis_task(
     user=None,
     triggered_by: str = "manual",
 ) -> None:
-    """Background entrypoint for a queued or inline analysis run."""
     if user:
         from backend.core.log_handler import current_user_id
 
@@ -463,7 +412,7 @@ async def run_analysis_task(
             analysis_completed = True
             emitter = AnalysisEmitter(task_id)
 
-            if await task_store.is_cancel_requested(task_id):
+            if await runtime.is_cancelled(task_id):
                 _logger.info("Skipping signal order for cancelled analysis task=%s", task_id)
                 await _emit_auto_order_result(
                     emitter,
@@ -492,7 +441,7 @@ async def run_analysis_task(
                         user=user,
                         include_skip_result=True,
                     )
-                    if await task_store.is_cancel_requested(task_id):
+                    if await runtime.is_cancelled(task_id):
                         await db.rollback()
                         await _emit_auto_order_result(
                             emitter,
@@ -542,7 +491,7 @@ async def run_analysis_task(
             )
             raise
         except Exception as exc:
-            if await task_store.is_cancel_requested(task_id):
+            if await runtime.is_cancelled(task_id):
                 _logger.info("Background analysis stopped during failure cleanup task=%s", task_id)
                 await db.rollback()
                 await _emit_cancelled_task(task_id, close=False)
@@ -563,7 +512,7 @@ async def run_analysis_task(
             except Exception:
                 _logger.exception("Analysis retry failed for task=%s", task_id)
             if not retry_scheduled:
-                if await task_store.is_cancel_requested(task_id):
+                if await runtime.is_cancelled(task_id):
                     await _emit_cancelled_task(task_id, close=False)
                     terminal_result = TerminalResult(
                         AnalysisTaskStatus.CANCELLED,
@@ -589,11 +538,7 @@ async def _maybe_retry_analysis(
     task_id: str,
     user=None,
 ) -> bool:
-    """Return False to ensure failed tasks are not automatically re-enqueued.
-
-    Failed tasks are cleared immediately from the task registry so that a page
-    refresh or opening from a new tab does not restart or re-attach to a failed run.
-    """
+    """Return False to ensure failed tasks are not automatically re-enqueued."""
     return False
 
 
@@ -605,7 +550,6 @@ async def run_portfolio_task(
     user=None,
     task_id: str | None = None,
 ) -> None:
-    """Background entrypoint for a multi-ticker portfolio analysis run."""
     if user:
         from backend.core.log_handler import current_user_id
 
@@ -615,7 +559,7 @@ async def run_portfolio_task(
     emitter = AnalysisEmitter(task_id) if task_id else None
     try:
         if task_id:
-            if await task_store.is_cancel_requested(task_id):
+            if await runtime.is_cancelled(task_id):
                 terminal_result = TerminalResult(AnalysisTaskStatus.CANCELLED, reason="cancelled before portfolio start")
                 await _emit_cancelled_task(task_id, close=False)
                 return
@@ -626,7 +570,7 @@ async def run_portfolio_task(
                 asset_type=asset_type,
                 user_id=user_id,
             )
-            if await task_store.is_cancel_requested(task_id):
+            if await runtime.is_cancelled(task_id):
                 raise asyncio.CancelledError
 
         async with AsyncSessionLocal() as db:
@@ -669,7 +613,6 @@ async def rollback_and_resume_analysis(
     task_id: str,
     db: AsyncSession,
 ) -> None:
-    """Rollback analysis to a specific checkpoint, update the state, and resume execution in the background."""
     from backend.core.database import AsyncSessionLocal
     from backend.repositories.analysis import get_analysis_by_id
     from backend.repositories.system_settings import get_system_settings
@@ -687,10 +630,6 @@ async def rollback_and_resume_analysis(
     sys_settings = await get_system_settings(db)
     config = build_analysis_config(settings, user=current_user, sys_settings=sys_settings)
     config["trade_date"] = str(analysis.trade_date)
-    # A checkpoint replay is a point-in-time inspection even when its original
-    # trade date is today. Its persisted checkpoint can otherwise carry live
-    # performance context, a prior strategy snapshot, and learning eligibility
-    # into the resumed graph.
     config["historical_mode"] = True
     config["analysis_mode"] = "time_travel"
     config["learning_eligible"] = False
@@ -730,10 +669,6 @@ async def rollback_and_resume_analysis(
     async with get_async_checkpointer(config["data_cache_dir"], analysis.ticker, checkpoint_namespace) as saver:
         graph = ta.workflow.compile(checkpointer=saver)
         update_config = {"configurable": {"thread_id": tid, "checkpoint_id": checkpoint_id}}
-        # These fields are deliberately server-owned. They overwrite any
-        # checkpoint values before execution resumes, so an old live state
-        # cannot write memory/learning or expose a future strategy/attribution
-        # context during a time-travel run.
         safe_update_state = {
             **update_state,
             **_time_travel_checkpoint_overrides(

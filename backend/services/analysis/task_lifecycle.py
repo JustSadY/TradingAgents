@@ -1,8 +1,8 @@
 """Terminal state coordination for analysis tasks.
 
-This module deliberately owns only the transition guard and typed terminal
-result. Runtime storage cleanup stays in ``analysis_service`` until the
-``analysis_runtime`` extraction lands in the next phase.
+Runtime storage is extracted under ``backend.analysis_runtime``. This module
+keeps only the process-local one-shot transition guard used by the service
+until terminal coordination itself moves behind the runtime facade.
 """
 
 from __future__ import annotations
@@ -10,22 +10,10 @@ from __future__ import annotations
 import asyncio
 from collections import OrderedDict
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass
-from enum import StrEnum
 
+from backend.analysis_runtime.models import AnalysisTaskStatus, TerminalResult
 
-class AnalysisTaskStatus(StrEnum):
-    QUEUED = "queued"
-    RUNNING = "running"
-    COMPLETED = "completed"
-    FAILED = "failed"
-    CANCELLED = "cancelled"
-
-
-@dataclass(frozen=True, slots=True)
-class TerminalResult:
-    status: AnalysisTaskStatus
-    reason: str | None = None
+__all__ = ["AnalysisTaskStatus", "TerminalCoordinator", "TerminalResult"]
 
 
 class TerminalCoordinator:
