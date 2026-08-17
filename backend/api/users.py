@@ -5,7 +5,6 @@ from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_db, require_admin, require_page
-from backend.core.config import get_settings as _get_settings
 from backend.models.user import User
 from backend.schemas.common import MessageResponse
 from backend.schemas.user import (
@@ -37,17 +36,17 @@ from backend.services.user_service import (
     UsernameTakenError,
     create_managed_user,
     delete_managed_user,
-    delete_user_api_key,
     get_effective_page_permissions,
     get_effective_setting_permissions,
     get_managed_page_permissions,
     get_managed_setting_permissions,
     get_user_or_raise,
     list_managed_users,
-    list_user_api_key_providers,
+    list_stored_api_key_providers,
+    remove_stored_api_key,
+    save_stored_api_key,
     set_managed_page_permissions,
     set_managed_setting_permissions,
-    set_user_api_key,
     update_managed_user,
     update_profile,
 )
@@ -89,9 +88,7 @@ async def update_me(
 
 @router.get("/me/api-keys", response_model=ApiKeyProvidersResponse)
 async def list_my_api_keys(current_user: Annotated[User, Depends(get_current_user)]):
-    fernet = _get_settings().get_fernet()
-    providers = list_user_api_key_providers(current_user, fernet)
-    return {"providers": providers}
+    return {"providers": list_stored_api_key_providers(current_user)}
 
 
 @router.put("/me/api-keys", response_model=MessageResponse)
@@ -100,9 +97,7 @@ async def set_my_api_key(
     current_user: Annotated[User, Depends(require_page("profile"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    fernet = _get_settings().get_fernet()
-    set_user_api_key(current_user, body.provider, body.api_key, fernet)
-    await db.flush()
+    await save_stored_api_key(db, current_user, body.provider, body.api_key)
     return {"detail": f"API key for '{body.provider}' saved"}
 
 
@@ -116,8 +111,7 @@ async def delete_my_api_key(
     current_user: Annotated[User, Depends(require_page("profile"))],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    fernet = _get_settings().get_fernet()
-    deleted = delete_user_api_key(current_user, provider, fernet)
+    deleted = await remove_stored_api_key(db, current_user, provider)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"No key found for provider '{provider}'")
     return {"detail": f"API key for '{provider}' deleted"}
@@ -265,9 +259,7 @@ async def list_user_api_keys(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     user = await _get_user_or_404(db, user_id)
-    fernet = _get_settings().get_fernet()
-    providers = list_user_api_key_providers(user, fernet)
-    return {"providers": providers}
+    return {"providers": list_stored_api_key_providers(user)}
 
 
 @router.put("/{user_id}/api-keys", response_model=MessageResponse, responses={404: {"description": _USER_NOT_FOUND}})
@@ -278,9 +270,7 @@ async def set_user_api_key_endpoint(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     user = await _get_user_or_404(db, user_id)
-    fernet = _get_settings().get_fernet()
-    set_user_api_key(user, body.provider, body.api_key, fernet)
-    await db.flush()
+    await save_stored_api_key(db, user, body.provider, body.api_key)
     return {"detail": f"API key for '{body.provider}' saved for user {user.username}"}
 
 
@@ -296,11 +286,9 @@ async def delete_user_api_key_endpoint(
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
     user = await _get_user_or_404(db, user_id)
-    fernet = _get_settings().get_fernet()
-    deleted = delete_user_api_key(user, provider, fernet)
+    deleted = await remove_stored_api_key(db, user, provider)
     if not deleted:
         raise HTTPException(status_code=404, detail=f"No key found for provider '{provider}'")
-    await db.flush()
     return {"detail": f"API key for '{provider}' deleted for user {user.username}"}
 
 
