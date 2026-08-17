@@ -1,7 +1,6 @@
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import get_current_user, get_db, require_admin, require_page
@@ -9,6 +8,7 @@ from backend.models.user import User
 from backend.schemas.common import MessageResponse
 from backend.schemas.user import (
     AgentAccessMap,
+    AgentAccessUpdate,
     AgentAccessUpdateResponse,
     ApiKeyProvidersResponse,
     ApiKeySet,
@@ -16,11 +16,12 @@ from backend.schemas.user import (
     PagePermissionsUpdate,
     ProfileUpdate,
     SettingPermissionsResponse,
+    SettingPermissionsUpdate,
     ToolAccessMap,
-    ToolAccessPermsUpdate,
+    ToolAccessUpdate,
     ToolAccessUpdateResponse,
     ToolFieldAccessMap,
-    ToolFieldAccessPermsUpdate,
+    ToolFieldAccessUpdate,
     ToolFieldAccessUpdateResponse,
     UserAdminUpdate,
     UserCreate,
@@ -309,10 +310,6 @@ async def get_user_setting_permissions(
     return {"user_id": user_id, "permissions": permissions}
 
 
-class SettingPermissionsUpdate(BaseModel):
-    permissions: dict[str, bool]
-
-
 @router.put(
     "/{user_id}/setting-permissions", response_model=MessageResponse, responses={404: {"description": _USER_NOT_FOUND}}
 )
@@ -343,10 +340,6 @@ async def get_agent_access(
     return await get_user_agent_access(db, user_id)
 
 
-class AgentAccessUpdate(BaseModel):
-    agents: dict[str, bool]
-
-
 @router.put("/{user_id}/agent-access", response_model=AgentAccessUpdateResponse)
 async def set_agent_access(
     user_id: int,
@@ -371,10 +364,6 @@ async def get_tool_access(
     from backend.services.tool_access_service import get_user_tool_access
 
     return await get_user_tool_access(db, user_id)
-
-
-class ToolAccessUpdate(BaseModel):
-    tools: dict[str, ToolAccessPermsUpdate]
 
 
 @router.put("/{user_id}/tool-access", response_model=ToolAccessUpdateResponse)
@@ -403,10 +392,6 @@ async def get_tool_field_access(
     from backend.services.tool_access_service import get_user_tool_field_access
 
     return await get_user_tool_field_access(db, user_id)
-
-
-class ToolFieldAccessUpdate(BaseModel):
-    fields: dict[str, dict[str, ToolFieldAccessPermsUpdate]]
 
 
 @router.put("/{user_id}/tool-field-access", response_model=ToolFieldAccessUpdateResponse)
