@@ -1,5 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.api.deps import (
@@ -10,23 +9,31 @@ from backend.api.deps import (
 )
 from backend.core.database import get_db
 from backend.models.user import User
-from backend.repositories.permissions import list_allowed_setting_sections
-from backend.repositories.users import get_user_by_id
 from backend.schemas.agent_settings import AgentSettingsRead, AgentSettingsUpdate
 from backend.schemas.common import OkResponse
 from backend.schemas.settings import LLMProviderCatalogEntry, MemoryStatusResponse, SettingsRead, SettingsUpdate
 from backend.schemas.tool_settings import ToolSettingsRead, ToolSettingsUpdate
-from backend.schemas.webhook import WebhookDeliveryRead
+from backend.schemas.webhook import WebhookDeliveryRead, WebhookTestRequest
 from backend.services.notification_service import resolve_webhook_target, test_webhook_url
 from backend.services.settings_service import (
+    SettingsPermissionError,
     apply_settings_update,
+    enforce_settings_update_permissions,
     get_or_create_settings,
     settings_to_read,
 )
+from backend.services.user_service import UserNotFoundError, get_user_or_raise, list_stored_api_key_providers
 
 router = APIRouter(prefix="/api/settings", tags=["settings"])
 
 _USER_NOT_FOUND = "User not found"
+
+
+async def _require_target_user(db: AsyncSession, user_id: int) -> User:
+    try:
+        return await get_user_or_raise(db, user_id)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
 
 
 @router.get("/memory", response_model=MemoryStatusResponse)
@@ -36,17 +43,11 @@ async def get_memory_status(
     current_user: User = Depends(get_current_user),
 ):
     """The calling user's own vector-memory status (everything is per-user)."""
-    from backend.core.config import get_settings as _cfg
-    from backend.services.user_service import list_user_api_key_providers
-
     target_user = current_user
     if user_id is not None and current_user.is_admin:
-        target_user = await get_user_by_id(db, user_id)
-        if not target_user:
-            raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+        target_user = await _require_target_user(db, user_id)
 
-    fernet = _cfg().get_fernet()
-    providers = list_user_api_key_providers(target_user, fernet)
+    providers = list_stored_api_key_providers(target_user)
     settings = await get_or_create_settings(db, target_user)
     store_kind = getattr(settings, "memory_store", None) or "pinecone"
     using_openai = store_kind == "pgvector" or settings.memory_embedder == "openai"
@@ -78,35 +79,6 @@ async def get_settings(
     return settings_to_read(settings)
 
 
-async def _check_section_permissions(db: AsyncSession, user: User, body: SettingsUpdate) -> None:
-    """Non-admins may only edit settings sections explicitly granted to them, and
-    never advanced engine settings."""
-    from backend.models.page_permission import SECTION_FIELDS
-
-    allowed_sections = await list_allowed_setting_sections(db, user.id)
-    attempted = body.model_dump(exclude_unset=True)
-    advanced_fields = {"max_recur_limit"}
-    if any(f in attempted for f in advanced_fields):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Advanced engine settings can only be modified by administrators.",
-        )
-
-    mapped_fields = {field for fields in SECTION_FIELDS.values() for field in fields}
-    unmapped = set(attempted) - mapped_fields
-    if unmapped:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail=f"No permission section is configured for settings: {', '.join(sorted(unmapped))}",
-        )
-    for section, fields in SECTION_FIELDS.items():
-        if any(f in attempted for f in fields) and section not in allowed_sections:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail=f"You do not have permission to modify settings in section: {section}",
-            )
-
-
 async def _apply_settings_update_or_400(
     db: AsyncSession,
     settings,
@@ -127,13 +99,12 @@ async def update_settings(
 ):
     settings = await get_or_create_settings(db, current_user)
     if not current_user.is_admin:
-        await _check_section_permissions(db, current_user, body)
+        try:
+            await enforce_settings_update_permissions(db, current_user, body)
+        except SettingsPermissionError as exc:
+            raise HTTPException(status_code=403, detail=str(exc)) from None
     settings = await _apply_settings_update_or_400(db, settings, body)
     return settings_to_read(settings)
-
-
-class WebhookTestRequest(BaseModel):
-    url: str
 
 
 @router.post(
@@ -166,9 +137,7 @@ async def get_webhook_deliveries(
 ):
     target_user = current_user
     if user_id is not None and current_user.is_admin:
-        target_user = await get_user_by_id(db, user_id)
-        if not target_user:
-            raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+        target_user = await _require_target_user(db, user_id)
 
     from backend.services.settings_service import get_webhook_deliveries as get_webhook_deliveries_svc
 
@@ -185,13 +154,6 @@ async def get_webhook_deliveries(
         )
         for r in rows
     ]
-
-
-async def _require_target_user(db: AsyncSession, user_id: int) -> User:
-    target_user = await get_user_by_id(db, user_id)
-    if not target_user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
-    return target_user
 
 
 @router.get("/users/{user_id}", response_model=SettingsRead, responses={404: {"description": _USER_NOT_FOUND}})
