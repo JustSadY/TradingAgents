@@ -17,6 +17,7 @@ class UserCreate(BaseModel):
             raise ValueError("role must be 'admin', 'user' or 'owner'")
         return v
 
+
 class UserRead(BaseModel):
     id: int
     username: str
@@ -28,10 +29,12 @@ class UserRead(BaseModel):
 
     model_config = ConfigDict(from_attributes=True)
 
+
 class ProfileUpdate(BaseModel):
     email: str | None = None
     display_name: str | None = None
     password: str | None = Field(default=None, min_length=8, max_length=128)
+
 
 class UserAdminUpdate(BaseModel):
     role: str | None = None
@@ -46,6 +49,7 @@ class UserAdminUpdate(BaseModel):
             raise ValueError("role must be 'admin', 'user' or 'owner'")
         return v
 
+
 class ApiKeySet(BaseModel):
     provider: str
     api_key: str
@@ -54,30 +58,40 @@ class ApiKeySet(BaseModel):
     def reject_server_managed_provider_credentials(self) -> "ApiKeySet":
         """Ollama is configured by the server operator, never by a tenant.
 
-        Older versions overloaded this field as a custom Ollama base URL.  It
+        Older versions overloaded this field as a custom Ollama base URL. It
         is a no-key provider whose endpoint is server-managed, so retaining a
-        tenant value of *any* shape only creates inert, misleading state (and
-        a URL would additionally be an SSRF risk).
+        tenant value of any shape only creates inert, misleading state (and a
+        URL would additionally be an SSRF risk).
         """
         if self.provider.strip().lower() == "ollama":
             raise ValueError("Ollama is configured by the server administrator, not via a tenant API key")
         return self
 
+
 class PagePermissionsUpdate(BaseModel):
     permissions: dict[str, bool]
+
+
+class SettingPermissionsUpdate(BaseModel):
+    permissions: dict[str, bool]
+
 
 class PagePermissionsRead(BaseModel):
     allowed_pages: list[str]
 
+
 class ApiKeyProvidersResponse(BaseModel):
     providers: list[str]
+
 
 class SettingPermissionsResponse(BaseModel):
     allowed_settings: list[str]
 
+
 class UserPermissionsResponse(BaseModel):
     user_id: int
     permissions: dict[str, bool]
+
 
 class ToolAccessPerms(BaseModel):
     """What a user may do with one tool."""
@@ -87,11 +101,13 @@ class ToolAccessPerms(BaseModel):
     can_edit: bool
     can_enable: bool
 
+
 class ToolFieldAccessPerms(BaseModel):
     """What a user may do with one setting field of one tool."""
 
     can_view: bool
     can_edit: bool
+
 
 class ToolAccessPermsUpdate(BaseModel):
     """A partial permission change; omitted keys keep their stored value.
@@ -107,11 +123,25 @@ class ToolAccessPermsUpdate(BaseModel):
     can_edit: bool | None = None
     can_enable: bool | None = None
 
+
 class ToolFieldAccessPermsUpdate(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     can_view: bool | None = None
     can_edit: bool | None = None
+
+
+class AgentAccessUpdate(BaseModel):
+    agents: dict[str, bool]
+
+
+class ToolAccessUpdate(BaseModel):
+    tools: dict[str, ToolAccessPermsUpdate]
+
+
+class ToolFieldAccessUpdate(BaseModel):
+    fields: dict[str, dict[str, ToolFieldAccessPermsUpdate]]
+
 
 # Access maps are keyed by agent key, tool key, and tool key -> field key. The
 # keys are dynamic, but the values are not, so these describe the payload as
@@ -120,13 +150,16 @@ AgentAccessMap = dict[str, bool]
 ToolAccessMap = dict[str, ToolAccessPerms]
 ToolFieldAccessMap = dict[str, dict[str, ToolFieldAccessPerms]]
 
+
 class AgentAccessUpdateResponse(BaseModel):
     detail: str
     agents: AgentAccessMap
 
+
 class ToolAccessUpdateResponse(BaseModel):
     detail: str
     tools: ToolAccessMap
+
 
 class ToolFieldAccessUpdateResponse(BaseModel):
     detail: str
