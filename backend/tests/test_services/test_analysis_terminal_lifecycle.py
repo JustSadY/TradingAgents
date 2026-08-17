@@ -25,7 +25,6 @@ async def test_deferred_run_keeps_owner_and_socket_until_background_runner_final
     """The post-graph commit/order window must remain cancellable."""
     task_id = "deferred-terminal-lifecycle"
     _Emitter.events.clear()
-    cleared_owners: list[str] = []
 
     async def not_cancelled(_task_id: str) -> bool:
         return False
@@ -40,14 +39,10 @@ async def test_deferred_run_keeps_owner_and_socket_until_background_runner_final
     async def completed_graph(*_args, **_kwargs):
         return task_id, SimpleNamespace(id=1)
 
-    async def clear_owner(value: str) -> None:
-        cleared_owners.append(value)
-
     monkeypatch.setattr(analysis_service, "AnalysisEmitter", _Emitter)
     monkeypatch.setattr(analysis_service, "_track_running_task", fake_track)
     monkeypatch.setattr(analysis_service, "run_individual_analysis", completed_graph)
-    monkeypatch.setattr(analysis_service.task_store, "is_cancel_requested", not_cancelled)
-    monkeypatch.setattr(analysis_service.task_store, "clear_owner", clear_owner)
+    monkeypatch.setattr(analysis_service.runtime, "is_cancelled", not_cancelled)
 
     try:
         await analysis_service.run_analysis(
@@ -57,7 +52,6 @@ async def test_deferred_run_keeps_owner_and_socket_until_background_runner_final
         assert task_id in analysis_service._RUNNING_TASKS
         assert task_id in analysis_service._TASK_REGISTRY
         assert task_id in analysis_service._TASK_OWNERS
-        assert cleared_owners == []
         assert _Emitter.events == []
     finally:
         analysis_service._RUNNING_TASKS.pop(task_id, None)
@@ -104,7 +98,7 @@ async def test_cancel_marker_emits_terminal_error_before_deferred_socket_close(m
     monkeypatch.setattr(analysis_service, "AnalysisEmitter", _TimelineEmitter)
     monkeypatch.setattr(analysis_service, "AsyncSessionLocal", lambda: _Session())
     monkeypatch.setattr(analysis_service, "run_analysis", failed_run)
-    monkeypatch.setattr(analysis_service.task_store, "is_cancel_requested", cancelled)
+    monkeypatch.setattr(analysis_service.runtime, "is_cancelled", cancelled)
     monkeypatch.setattr(analysis_service, "terminalize_task", terminalize)
 
     await analysis_service.run_analysis_task("NVDA", "2026-07-28", "stock", None, task_id)
@@ -148,7 +142,7 @@ async def test_terminal_orchestrator_error_is_not_retried(monkeypatch):
     monkeypatch.setattr(analysis_service, "AnalysisEmitter", _Emitter)
     monkeypatch.setattr(analysis_service, "AsyncSessionLocal", lambda: _Session())
     monkeypatch.setattr(analysis_service, "run_analysis", terminal_error)
-    monkeypatch.setattr(analysis_service.task_store, "is_cancel_requested", not_cancelled)
+    monkeypatch.setattr(analysis_service.runtime, "is_cancelled", not_cancelled)
     monkeypatch.setattr(analysis_service, "_maybe_retry_analysis", retry)
     monkeypatch.setattr(analysis_service, "terminalize_task", terminalize)
 
@@ -190,7 +184,7 @@ async def test_unscheduled_retry_clears_tracking_and_sends_terminal_error(monkey
     monkeypatch.setattr(analysis_service, "AnalysisEmitter", _Emitter)
     monkeypatch.setattr(analysis_service, "AsyncSessionLocal", lambda: _Session())
     monkeypatch.setattr(analysis_service, "run_analysis", pre_graph_failure)
-    monkeypatch.setattr(analysis_service.task_store, "is_cancel_requested", not_cancelled)
+    monkeypatch.setattr(analysis_service.runtime, "is_cancelled", not_cancelled)
     monkeypatch.setattr(analysis_service, "_maybe_retry_analysis", retry_exhausted)
     monkeypatch.setattr(analysis_service, "terminalize_task", terminalize)
 
