@@ -30,8 +30,6 @@ class Settings(BaseSettings):
     ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 180
     REFRESH_TOKEN_EXPIRE_DAYS: int = 7
-    ADMIN_USERNAME: str = "admin"
-    ADMIN_PASSWORD_HASH: str = ""
     DATABASE_URL: str = "postgresql+asyncpg://tradingagents:tradingagents@localhost:5432/tradingagents"
     DB_POOL_SIZE: int = 5
     DB_MAX_OVERFLOW: int = 5
@@ -42,6 +40,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = ""
     ANALYSIS_QUEUE_MODE: str = "inline"
     OLLAMA_BASE_URL: str = "http://localhost:11434"
+    SYSTEM_LOG_DB_LEVEL: str = "INFO"
     TRUST_PROXY_HEADERS: bool = False
     TRUSTED_PROXY_CIDRS: str = ""
     ENABLE_LIVE_TRADING: bool = False
@@ -80,6 +79,17 @@ class Settings(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def _validate_system_log_db_level(self) -> "Settings":
+        level = self.SYSTEM_LOG_DB_LEVEL.strip().upper()
+        if level not in ("DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"):
+            raise ValueError(
+                "SYSTEM_LOG_DB_LEVEL must be one of DEBUG, INFO, WARNING, ERROR, CRITICAL"
+            )
+        if level != self.SYSTEM_LOG_DB_LEVEL:
+            self.SYSTEM_LOG_DB_LEVEL = level
+        return self
+
+    @model_validator(mode="after")
     def _validate_timezone(self) -> "Settings":
         from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -95,8 +105,9 @@ class Settings(BaseSettings):
 
         In development the defaults stay usable out of the box; with
         ENVIRONMENT=production an operator must provide real secrets, otherwise
-        JWTs are forgeable, no durable owner bootstrap credential exists,
-        and encrypted API keys are silently lost on restart.
+        JWTs are forgeable and encrypted API keys are silently lost on restart.
+        The owner account is not part of this check: it is registered through
+        the first-run setup screen rather than configured here.
         """
         if self.ENVIRONMENT.strip().lower() == "production":
             problems = []
@@ -106,13 +117,6 @@ class Settings(BaseSettings):
                 problems.append("SECRET_KEY must be set to a long random value")
             if not self.ENCRYPTION_KEY:
                 problems.append("ENCRYPTION_KEY must be set (encrypted data is lost on restart otherwise)")
-            if not self.ADMIN_PASSWORD_HASH:
-                problems.append("ADMIN_PASSWORD_HASH must be set to a durable, operator-controlled password hash")
-            else:
-                from backend.core.password_hashing import is_supported_password_hash
-
-                if not is_supported_password_hash(self.ADMIN_PASSWORD_HASH):
-                    problems.append("ADMIN_PASSWORD_HASH must be a valid Argon2 hash")
             if problems:
                 raise ValueError("Insecure configuration for ENVIRONMENT=production: " + "; ".join(problems))
         return self

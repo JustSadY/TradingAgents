@@ -62,13 +62,23 @@ function decodeToken(token: string): JwtPayload | null {
   }
 }
 
+export interface SetupPayload {
+  username: string
+  password: string
+  email?: string | null
+  display_name?: string | null
+}
+
 interface AuthContextType {
   user: string | null
   role: string | null
   isAdmin: boolean
   isOwner: boolean
   isAuthenticated: boolean
+  /** True while the installation has no accounts and needs its first owner. */
+  setupRequired: boolean
   login: (username: string, password: string) => Promise<void>
+  completeSetup: (payload: SetupPayload) => Promise<void>
   logout: () => void
   loading: boolean
 }
@@ -78,6 +88,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<string | null>(null)
   const [role, setRole] = useState<string | null>(null)
+  const [setupRequired, setSetupRequired] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const applyAccessToken = useCallback((token: string): boolean => {
@@ -113,6 +124,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       }
     } catch {
       clearLocalAuthState()
+      // Only an installation with no accounts at all can be set up, so this is
+      // asked once, after a failed session restore, rather than on every load.
+      try {
+        const status = await axios.get('/auth/setup-status')
+        if (epoch === _authEpoch) setSetupRequired(status.data?.setup_required === true)
+      } catch {
+        setSetupRequired(false)
+      }
     } finally {
       setLoading(false)
     }
@@ -128,6 +147,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof token !== 'string' || !applyAccessToken(token)) {
       throw new Error('Sunucu geçerli bir erişim belirteci döndürmedi')
     }
+    setSetupRequired(false)
+  }, [applyAccessToken])
+
+  const completeSetup = useCallback(async (payload: SetupPayload) => {
+    const res = await axios.post('/auth/setup', {
+      username: payload.username,
+      password: payload.password,
+      email: payload.email || null,
+      display_name: payload.display_name || null,
+    })
+    const token = res.data?.access_token
+    if (typeof token !== 'string' || !applyAccessToken(token)) {
+      throw new Error('Sunucu geçerli bir erişim belirteci döndürmedi')
+    }
+    setSetupRequired(false)
   }, [applyAccessToken])
 
   const logout = useCallback(() => {
@@ -154,7 +188,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAdmin: role === 'admin' || role === 'owner',
     isOwner: role === 'owner',
     isAuthenticated: !!user,
+    setupRequired,
     login,
+    completeSetup,
     logout,
     loading,
   }

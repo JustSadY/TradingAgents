@@ -15,8 +15,6 @@ os.environ.setdefault("TRADINGAGENTS_RESULTS_DIR", "/tmp/ta_results")
 os.environ["ENVIRONMENT"] = "test"
 os.environ["SECRET_KEY"] = "test-secret-key-not-for-production"
 os.environ["METRICS_TOKEN"] = "test-metrics-token"
-os.environ["ADMIN_USERNAME"] = "admin"
-os.environ["ADMIN_PASSWORD_HASH"] = ""
 os.environ["REDIS_URL"] = ""
 os.environ["ANALYSIS_QUEUE_MODE"] = "inline"
 

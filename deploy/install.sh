@@ -9,15 +9,16 @@
 #   2. Versioned Python virtual environment + backend/pyproject.toml + backend/uv.lock
 #   3. Frontend build (npm) -> frontend/dist (served by backend)
 #   4. PostgreSQL database + user setup
-#   5. .env generation (secure random SECRET_KEY / ENCRYPTION_KEY / DB password /
-#      admin password) — only if .env does not exist
+#   5. .env generation (secure random SECRET_KEY / ENCRYPTION_KEY / DB password)
+#      — only if .env does not exist. The administrator account is registered
+#      in the browser on first visit, not from .env.
 #   6. systemd service (single process: in-memory WebSocket + APScheduler cron
 #      will break with multiple workers, so uvicorn runs as single process)
 #   7. Enable + start service and perform health check
 #
 # Environment variable overrides (optional):
 #   SERVICE_NAME=tradingagents  SERVICE_USER=<user>  APP_PORT=8000
-#   ADMIN_USERNAME=admin        ADMIN_PASSWORD=<raw password>  NODE_MAJOR=20
+#   NODE_MAJOR=20
 #   SKIP_DB=1 (use external PostgreSQL)   BUILD_FRONTEND=0 (skip UI build)
 #
 set -euo pipefail
@@ -28,7 +29,6 @@ APP_HOST="${APP_HOST:-0.0.0.0}"
 APP_PORT="${APP_PORT:-8000}"
 DB_NAME_DEFAULT="${DB_NAME:-tradingagents}"
 DB_USER_DEFAULT="${DB_USER:-tradingagents}"
-ADMIN_USERNAME="${ADMIN_USERNAME:-admin}"
 NODE_MAJOR="${NODE_MAJOR:-20}"
 SKIP_DB="${SKIP_DB:-0}"
 BUILD_FRONTEND="${BUILD_FRONTEND:-1}"
@@ -170,7 +170,6 @@ else
 fi
 
 # ── 5. .env (generate only if missing) ─────────────────────────────────────────
-GENERATED_ADMIN_PW=""
 if [ ! -f "$ENV_FILE" ]; then
     info "Generating .env (secure random secrets)..."
     SECRET_KEY=$("$PYTHON" -c 'import secrets;print(secrets.token_hex(32))')
@@ -178,17 +177,12 @@ if [ ! -f "$ENV_FILE" ]; then
     DB_USER="$DB_USER_DEFAULT"
     DB_NAME="$DB_NAME_DEFAULT"
     DB_PASS=$("$PYTHON" -c 'import secrets;print(secrets.token_urlsafe(24))')
-    ADMIN_PASSWORD="${ADMIN_PASSWORD:-$("$PYTHON" -c 'import secrets;print(secrets.token_urlsafe(12))')}"
-    GENERATED_ADMIN_PW="$ADMIN_PASSWORD"
-    ADMIN_HASH=$("$VENV/bin/python" -c 'import sys;from pwdlib import PasswordHash;print(PasswordHash.recommended().hash(sys.argv[1]))' "$ADMIN_PASSWORD")
 
     {
         printf "ENVIRONMENT='production'\n"
         printf "RLS_STRICT_MODE='true'\n"
         printf "SECRET_KEY='%s'\n"          "$SECRET_KEY"
         printf "ENCRYPTION_KEY='%s'\n"      "$ENCRYPTION_KEY"
-        printf "ADMIN_USERNAME='%s'\n"      "$ADMIN_USERNAME"
-        printf "ADMIN_PASSWORD_HASH='%s'\n" "$ADMIN_HASH"
         printf "DATABASE_URL='postgresql+asyncpg://%s:%s@localhost:5432/%s'\n" "$DB_USER" "$DB_PASS" "$DB_NAME"
         printf "CORS_ORIGINS='[\"http://localhost:%s\"]'\n" "$APP_PORT"
         printf '\n# LLM Provider API keys — fill at least one, then: systemctl restart %s\n' "$SERVICE_NAME"
@@ -416,13 +410,8 @@ if [ "$HEALTHY" = 1 ]; then
     ok "============================================================"
     echo "  UI       :  http://localhost:${APP_PORT}"
     [ -n "$LAN_IP" ] && echo "             http://${LAN_IP}:${APP_PORT}"
-    echo "  Admin    :  ${ADMIN_USERNAME}"
-    if [ -n "$GENERATED_ADMIN_PW" ]; then
-        echo "  Password :  ${GENERATED_ADMIN_PW}"
-        warn "Save this password — it will not be shown again."
-    else
-        echo "  Password :  (using ADMIN_PASSWORD_HASH from existing .env)"
-    fi
+    echo "  Admin    :  open the UI — the first visit asks you to create the"
+    echo "              administrator account (no password is stored in .env)."
     echo
     echo "  ⚠  Add LLM API key:  nano $ENV_FILE   then: systemctl restart $SERVICE_NAME"
     echo

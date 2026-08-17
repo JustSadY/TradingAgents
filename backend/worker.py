@@ -174,8 +174,13 @@ async def startup(ctx):
 
     setup_unified_logging()
     import backend.trading_agents.agents.tools.bootstrap  # noqa: F401
+    from backend.core.log_handler import db_log_handler
     from backend.core.task_store import control_listener
     from backend.services.analysis_service import cancel_local_task
+
+    # Without this the whole worker process logs nowhere near the database, so
+    # every queue-mode analysis is invisible on the System Logs page.
+    await db_log_handler.start()
 
     ctx["control_listener"] = asyncio.create_task(control_listener(cancel_local_task))
     _logger.info("Analysis worker ready (queue mode).")
@@ -184,8 +189,10 @@ async def shutdown(ctx):
     listener = ctx.get("control_listener")
     if listener:
         listener.cancel()
+    from backend.core.log_handler import db_log_handler
     from backend.core.redis_bus import close_redis
 
+    db_log_handler.stop()
     await close_redis()
 
 def _redis_settings():

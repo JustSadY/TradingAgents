@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import threading
+import weakref
 from collections.abc import AsyncGenerator, Generator
 from contextlib import asynccontextmanager, contextmanager
 from pathlib import Path
@@ -15,8 +17,19 @@ _logger = logging.getLogger(__name__)
 
 # LangGraph owns its checkpoint schema. setup() is idempotent/version-aware and
 # runs once per DSN per process. Application tables remain Alembic-owned.
+#
+# A DSN is only recorded here *after* setup() has returned, and every caller
+# serialises on the same per-DSN lock while that runs. Marking readiness up
+# front (the previous behaviour) let a second caller skip setup and query
+# ``checkpoints`` while the first one was still creating it, which surfaced as
+# ``relation "checkpoints" does not exist``. It also made a failed setup
+# permanent for the life of the process, because the DSN stayed marked ready.
 _pg_ready: set[str] = set()
-_pg_ready_lock = threading.Lock()
+_pg_state_lock = threading.Lock()
+_pg_setup_locks: dict[str, threading.Lock] = {}
+# asyncio.Lock binds to the loop that first awaits it, so the async locks are
+# kept per running loop. The weak keys let a finished loop's locks be collected.
+_pg_async_setup_locks: weakref.WeakKeyDictionary[Any, dict[str, asyncio.Lock]] = weakref.WeakKeyDictionary()
 _RETIRED_CHECKPOINT_NODES = frozenset({"trader", "trader_agent"})
 
 
@@ -46,12 +59,60 @@ def postgres_dsn() -> str:
     return f"postgresql://{rest}"
 
 
-def _ensure_pg_schema(dsn: str) -> bool:
-    with _pg_ready_lock:
-        if dsn in _pg_ready:
-            return False
+def _schema_is_ready(dsn: str) -> bool:
+    with _pg_state_lock:
+        return dsn in _pg_ready
+
+
+def _mark_schema_ready(dsn: str) -> None:
+    with _pg_state_lock:
         _pg_ready.add(dsn)
-        return True
+
+
+def _setup_lock(dsn: str) -> threading.Lock:
+    with _pg_state_lock:
+        return _pg_setup_locks.setdefault(dsn, threading.Lock())
+
+
+def _async_setup_lock(dsn: str) -> asyncio.Lock:
+    loop = asyncio.get_running_loop()
+    with _pg_state_lock:
+        return _pg_async_setup_locks.setdefault(loop, {}).setdefault(dsn, asyncio.Lock())
+
+
+def reset_schema_readiness() -> None:
+    """Forget which DSNs have been set up (used by tests and after a DB reset)."""
+    with _pg_state_lock:
+        _pg_ready.clear()
+        _pg_setup_locks.clear()
+        _pg_async_setup_locks.clear()
+
+
+def _ensure_pg_schema(dsn: str, saver: Any) -> None:
+    """Create LangGraph's checkpoint tables once per DSN, blocking other callers."""
+    if _schema_is_ready(dsn):
+        return
+    with _setup_lock(dsn):
+        if _schema_is_ready(dsn):
+            return
+        saver.setup()
+        _mark_schema_ready(dsn)
+
+
+async def _ensure_pg_schema_async(dsn: str, saver: Any) -> None:
+    """Async twin of :func:`_ensure_pg_schema`.
+
+    A blocking lock cannot be held across ``await`` here: a second coroutine on
+    the same loop would stall the loop waiting for it, and the coroutine that
+    holds it could never resume.
+    """
+    if _schema_is_ready(dsn):
+        return
+    async with _async_setup_lock(dsn):
+        if _schema_is_ready(dsn):
+            return
+        await saver.setup()
+        _mark_schema_ready(dsn)
 
 
 @contextmanager
@@ -59,8 +120,7 @@ def get_checkpointer(data_dir: str | Path, ticker: str, scope: str) -> Generator
     del data_dir, ticker, scope
     dsn = postgres_dsn()
     with PostgresSaver.from_conn_string(dsn) as saver:
-        if _ensure_pg_schema(dsn):
-            saver.setup()
+        _ensure_pg_schema(dsn, saver)
         yield saver
 
 
@@ -73,27 +133,58 @@ async def get_async_checkpointer(
     del data_dir, ticker, scope
     dsn = postgres_dsn()
     async with AsyncPostgresSaver.from_conn_string(dsn) as saver:
-        if _ensure_pg_schema(dsn):
-            await saver.setup()
+        await _ensure_pg_schema_async(dsn, saver)
         yield saver
+
+
+def is_missing_checkpoint_relation(exc: BaseException) -> bool:
+    """Whether ``exc`` is PostgreSQL complaining about an absent checkpoint table.
+
+    The tables can vanish under a process that already recorded the DSN as set
+    up — a dropped/recreated database, a restored dump, a switched schema. The
+    readiness cache is then a lie, so callers reset it and let setup run again
+    instead of failing every checkpoint read for the rest of the process.
+    """
+    for error in (exc, exc.__cause__, exc.__context__):
+        if error is None:
+            continue
+        if getattr(error, "sqlstate", None) == "42P01":  # undefined_table
+            return True
+    return False
 
 
 def checkpoint_step(data_dir: str | Path, ticker: str, date: str, scope: str) -> int | None:
     tid = thread_id(ticker, date, scope)
-    with get_checkpointer(data_dir, ticker, scope) as saver:
-        cp = saver.get_tuple({"configurable": {"thread_id": tid}})
-        if cp is None:
-            return None
-        return cp.metadata.get("step")
+    for attempt in (1, 2):
+        try:
+            with get_checkpointer(data_dir, ticker, scope) as saver:
+                cp = saver.get_tuple({"configurable": {"thread_id": tid}})
+                if cp is None:
+                    return None
+                return cp.metadata.get("step")
+        except Exception as exc:
+            if attempt == 2 or not is_missing_checkpoint_relation(exc):
+                raise
+            _logger.warning("Checkpoint tables are missing; re-running LangGraph setup.")
+            reset_schema_readiness()
+    return None
 
 
 async def async_checkpoint_step(data_dir: str | Path, ticker: str, date: str, scope: str) -> int | None:
     tid = thread_id(ticker, date, scope)
-    async with get_async_checkpointer(data_dir, ticker, scope) as saver:
-        cp = await saver.aget_tuple({"configurable": {"thread_id": tid}})
-        if cp is None:
-            return None
-        return cp.metadata.get("step")
+    for attempt in (1, 2):
+        try:
+            async with get_async_checkpointer(data_dir, ticker, scope) as saver:
+                cp = await saver.aget_tuple({"configurable": {"thread_id": tid}})
+                if cp is None:
+                    return None
+                return cp.metadata.get("step")
+        except Exception as exc:
+            if attempt == 2 or not is_missing_checkpoint_relation(exc):
+                raise
+            _logger.warning("Checkpoint tables are missing; re-running LangGraph setup.")
+            reset_schema_readiness()
+    return None
 
 
 def clear_checkpoint(data_dir: str | Path, ticker: str, date: str, scope: str) -> None:
@@ -144,18 +235,27 @@ async def list_checkpoints_for_thread(
     config = {"configurable": {"thread_id": tid}}
 
     raw: list[tuple[int, str, dict, str]] = []
-    async with get_async_checkpointer(data_dir, ticker, scope) as saver:
-        async for cp in saver.alist(config):
-            metadata = cp.metadata or {}
-            checkpoint = cp.checkpoint or {}
-            raw.append(
-                (
-                    int(metadata.get("step", -1)),
-                    cp.config["configurable"]["checkpoint_id"],
-                    dict(checkpoint.get("versions_seen") or {}),
-                    str(checkpoint.get("ts") or metadata.get("ts") or ""),
-                )
-            )
+    for attempt in (1, 2):
+        raw = []
+        try:
+            async with get_async_checkpointer(data_dir, ticker, scope) as saver:
+                async for cp in saver.alist(config):
+                    metadata = cp.metadata or {}
+                    checkpoint = cp.checkpoint or {}
+                    raw.append(
+                        (
+                            int(metadata.get("step", -1)),
+                            cp.config["configurable"]["checkpoint_id"],
+                            dict(checkpoint.get("versions_seen") or {}),
+                            str(checkpoint.get("ts") or metadata.get("ts") or ""),
+                        )
+                    )
+            break
+        except Exception as exc:
+            if attempt == 2 or not is_missing_checkpoint_relation(exc):
+                raise
+            _logger.warning("Checkpoint tables are missing; re-running LangGraph setup.")
+            reset_schema_readiness()
 
     raw.sort(key=lambda item: item[0])
     checkpoints = []
