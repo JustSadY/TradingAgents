@@ -100,9 +100,46 @@ There is no separate `risk_mgmt` sub-agent package. Aggressive, conservative and
 
 The canonical structured accepted decision persisted by the application is `AnalysisResult.portfolio_decision_json`. Execution/share/history/strategy-continuity code must not reconstruct a decision from chart annotations, retired Trader fields, or raw PM proposal data.
 
+## Exchange-calendar gating
+
+`backend/services/market_calendar_service.py` maps a ticker onto an
+`exchange_calendars` calendar — venue suffix first (`THYAO.IS` → `XIST`),
+otherwise `DEFAULT_EXCHANGE_CALENDAR` — and answers whether that exchange holds
+a session on a date. Crypto resolves to no calendar and is never gated.
+
+Three call sites consume it, all deterministic and outside the LLM path:
+
+| Call site | Behaviour while the exchange is closed |
+| :--- | :--- |
+| `cron_service._run_user_watchlist_scan_once` | Returns before queuing any ticker |
+| `trading_orchestrator.place_signal_order` | Skips with `reason_code="market_closed"` |
+| `mock_trading_service.get_portfolio_with_live_prices` | Holds stop-loss/take-profit/liquidation auto-closes, per holding |
+
+The position-monitor gate is per holding rather than per job so a crypto
+position keeps being monitored while its equity neighbours wait for the next
+session. Vendors keep serving the previous close on a holiday, which passes the
+existing `has_fresh_price` check, so this gate — not price freshness — is what
+prevents a close against a quote that never traded.
+
+Lookups fail open (unknown code, missing package, out-of-range date → "open",
+logged), because a calendar problem must not be able to freeze every tenant's
+automation. An analysis row with no parseable `trade_date` is not gated rather
+than being assumed to mean today. Manual, user-initiated analyses are unaffected.
+
 ## Checkpoints and Time Travel
 
 LangGraph checkpoints are PostgreSQL-backed through `backend/trading_agents/graph/checkpointer.py`. There is no pickle/file import path and no SQLite checkpoint fallback.
+
+LangGraph owns those tables: `setup()` is idempotent and version-aware, and the
+module runs it once per DSN per process before any caller touches a saver.
+Readiness is recorded only *after* `setup()` returns, and concurrent callers
+block on a per-DSN lock (a blocking lock for the sync saver, an `asyncio` lock
+for the async one so the event loop is never held across an await). Recording it
+up front is what produced `relation "checkpoints" does not exist` on a
+concurrent reader, and it also cached a failed setup for the life of the
+process. Checkpoint reads additionally recover once from a genuinely missing
+relation — a dropped or restored database — by clearing readiness and re-running
+setup.
 
 Checkpoint state is graph-internal state. Application report/history fields remain in `AnalysisResult`. Retired graph topologies are not valid resumable current checkpoints.
 

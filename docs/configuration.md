@@ -21,10 +21,8 @@ These settings control API encryption, password hashing, and CORS access:
 # Generate one using: python -c "import secrets; print(secrets.token_hex(32))"
 SECRET_KEY=change-me-to-a-random-32-character-string
 
-# Administrator Settings
-ADMIN_USERNAME=admin
-# Optional Argon2 hash. Production requires a valid operator-controlled hash.
-ADMIN_PASSWORD_HASH=
+# The administrator account is not configured here. While the database has no
+# users the UI serves a one-time setup screen that registers the Server Owner.
 
 # DB Credential Encryption Key (Required)
 # Used to encrypt sensitive API keys stored inside the settings database.
@@ -127,7 +125,57 @@ docker run -d -p 8080:8080 searxng/searxng
 
 ---
 
-## 🎛️ 6. Platform Runtime Settings
+## 📅 6. Exchange Calendar & Scheduling
+
+Scheduled watchlist scans and automated orders are gated on the instrument's
+exchange actually holding a session that day. Holiday data comes from
+`exchange_calendars` via `backend/services/market_calendar_service.py`.
+
+```ini
+# IANA timezone used for user cron schedules
+# (stock trade dates still resolve against America/New_York)
+APP_TIMEZONE=UTC
+
+# exchange_calendars code for tickers with no venue suffix (AAPL, MSFT).
+# Optional; defaults to XNYS.
+DEFAULT_EXCHANGE_CALENDAR=XNYS
+```
+
+How an instrument is resolved:
+
+| Ticker | Calendar | Behaviour on an exchange holiday |
+| :--- | :--- | :--- |
+| `AAPL`, `MSFT` | `DEFAULT_EXCHANGE_CALENDAR` (`XNYS`) | Scan skipped, auto-order skipped, stop-loss/take-profit held |
+| `THYAO.IS`, `VOD.L`, `7203.T` | Venue from the suffix (`XIST`, `XLON`, `XTKS`) | Gated on that exchange's own holidays |
+| `BTC-USD`, or asset type `crypto` | None (24/7) | Never gated |
+
+Lookups fail open: a missing package, unknown calendar code, or out-of-range
+date is treated as "open" and logged, so a calendar problem can never freeze
+every tenant's automation. Manual, user-initiated analyses are not gated.
+
+---
+
+## 📋 7. System Logs
+
+The in-app **System Logs** page reads the `system_logs` table, written by the
+database log handler in every process that does application work — the API and
+the arq worker both start it.
+
+```ini
+# Minimum level persisted to system_logs.
+# DEBUG | INFO (default) | WARNING | ERROR | CRITICAL
+SYSTEM_LOG_DB_LEVEL=INFO
+```
+
+Everything at or above this level is persisted, minus a denylist of chatty
+third-party loggers (`httpx`, `uvicorn.access`, `sqlalchemy.engine` and
+similar), which still reach the database at `WARNING` and above. Records
+dropped because the queue is saturated are reported on stderr rather than
+discarded silently.
+
+---
+
+## 🎛️ 8. Platform Runtime Settings
 
 All of the runtime options below are no longer read from `.env` or system environment variables. They are fully managed through the application's **Web UI** under **Settings** (or **Admin Panel** for defaults) and stored in the database:
 

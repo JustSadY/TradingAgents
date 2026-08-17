@@ -42,8 +42,10 @@ inside `create_all_tables()`.
 
 ## Deployment Notes
 
-- Set `ADMIN_USERNAME` and `ADMIN_PASSWORD_HASH` in `.env` to auto-seed the admin
-  user on first run.
+- The Server Owner is registered through the first-run setup screen, not from
+  `.env`. `GET /auth/setup-status` reports an installation with no users and
+  `POST /auth/setup` creates the single owner; both close permanently once any
+  account exists.
 - Set `ENCRYPTION_KEY` in `.env` to a 32-byte URL-safe base64 Fernet key for
   encrypting per-user API keys. Generate with:
   ```bash

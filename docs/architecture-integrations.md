@@ -50,7 +50,9 @@ runtime path.
 
 LangGraph checkpoints use `PostgresSaver` / `AsyncPostgresSaver`. The per-run
 SQLite checkpoint fallback is removed. A PostgreSQL `DATABASE_URL` is therefore
-required for analysis checkpointing.
+required for analysis checkpointing. Schema setup is single-flight per DSN and
+only marked done once it has actually completed; see
+`docs/architecture/backend.md` for why.
 
 ## Vector memory: Pinecone and pgvector
 

@@ -38,7 +38,7 @@ The installer script is fully **idempotent**: it is safe to run repeatedly (e.g.
 You can pass configuration variables inline:
 
 ```bash
-sudo APP_PORT=80 ADMIN_USERNAME=patron bash deploy/install.sh
+sudo APP_PORT=80 bash deploy/install.sh
 ```
 
 | Variable | Default Value | Description |
@@ -46,8 +46,6 @@ sudo APP_PORT=80 ADMIN_USERNAME=patron bash deploy/install.sh
 | `APP_PORT` | `8000` | Target port. Port `80` is supported since the systemd service has the `CAP_NET_BIND_SERVICE` flag. |
 | `SERVICE_NAME` | `tradingagents` | The name of the registered systemd service. |
 | `SERVICE_USER` | *Invoking user* | System user that runs the daemon. |
-| `ADMIN_USERNAME` | `admin` | Initial admin portal username. |
-| `ADMIN_PASSWORD` | *Random* | Custom administrator password. If left blank, one is generated and printed. |
 | `NODE_MAJOR` | `20` | Major Node.js version to install. |
 | `SKIP_DB` | `0` | If set to `1`, skips database setup (use this if using an external database). |
 | `BUILD_FRONTEND` | `1` | If set to `0`, skips React compilation (API-only setup). |

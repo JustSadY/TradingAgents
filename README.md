@@ -160,7 +160,6 @@ Only **infrastructure secrets** live in `.env` — all LLM/data-provider keys an
 | :--- | :--- | :--- |
 | `SECRET_KEY` | Hexadecimal key used to secure JWT access tokens | `secret-token-key-string` |
 | `DATABASE_URL` | Async PG database URL | `postgresql+asyncpg://user:pass@host:5432/db` |
-| `ADMIN_USERNAME` | First administrator username | `admin` |
 | `ENCRYPTION_KEY` | Fernet key encrypting per-user API keys at rest | *(generate with `Fernet.generate_key()`)* |
 | `CORS_ORIGINS` | JSON array of allowed origins | `["http://localhost:5173"]` |
 | `VITE_PUBLIC_APP_URL` | Optional public frontend base URL baked into Docker share links | `https://trading.example.com` |

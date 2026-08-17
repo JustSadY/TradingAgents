@@ -29,9 +29,16 @@ The `role` claim is decoded by the frontend `useAuth` hook to drive UI visibilit
 | `require_admin` | Raise 403 if `user.role` is not `'admin'` or `'owner'` |
 | `require_page(key)` | Check `user_page_permissions` table; admins/owners bypass |
 
-## Owner Seeding
+## Owner Registration
 
-On startup, `_seed_admin_user()` in `main.py` reads `ADMIN_USERNAME` from `.env` and creates (or upgrades) the initial user to `role='owner'`. Only one owner exists in the system.
+The owner is created on first run through the UI, not seeded from `.env`.
+`GET /auth/setup-status` reports whether the `users` table is empty, and
+`POST /auth/setup` (in `services/first_run_service.py`) creates that first
+account with `role='owner'` and signs it in. The write runs under a
+transaction-scoped advisory lock and re-checks the table, so two concurrent
+setup requests cannot both succeed. Once any account exists the endpoint
+returns 409 permanently — it is a bootstrap route, not public sign-up. Only one
+owner exists in the system.
 
 ## Permission Matrix
 
