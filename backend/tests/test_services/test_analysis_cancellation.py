@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-from unittest.mock import AsyncMock
 
 import pytest
 
@@ -261,12 +260,7 @@ async def test_portfolio_parent_is_registered_and_cancelled_with_children(monkey
 
 
 async def test_worker_treats_cancelled_analysis_as_terminal(monkeypatch):
-    """The run is marked terminal and cleaned up, then CancelledError re-raises.
-
-    Swallowing CancelledError would break asyncio cancellation and arq's
-    shutdown handling, so the worker must record the terminal state and let the
-    exception continue to propagate.
-    """
+    """The worker must terminalize cancellation through its public cleanup boundary."""
     from backend import worker
     from backend.core import database
     from backend.services import settings_service
@@ -287,21 +281,17 @@ async def test_worker_treats_cancelled_analysis_as_terminal(monkeypatch):
     async def cancelled_run(*_args, **_kwargs):
         raise asyncio.CancelledError
 
-    terminal: list[tuple[str, str]] = []
+    terminal: list[tuple[str, int | None, str, str, bool]] = []
 
-    async def mark_terminal(task_id, status, user_id=None):
-        assert user_id is None
-        terminal.append((task_id, status))
+    async def terminalize(task_id, user_id, *, status, message, persist_analysis_row):
+        terminal.append((task_id, user_id, status, message, persist_analysis_row))
 
     monkeypatch.setattr(database, "AsyncSessionLocal", lambda: _Session())
     monkeypatch.setattr(settings_service, "get_or_create_settings", get_settings)
     monkeypatch.setattr(analysis_service, "run_analysis_task", cancelled_run)
-    monkeypatch.setattr(worker, "_mark_analysis_terminal", mark_terminal)
-    for name in ("clear_meta", "clear_owner", "clear_cancel_request"):
-        monkeypatch.setattr(task_store, name, AsyncMock())
+    monkeypatch.setattr(worker, "_terminalize_worker_failure", terminalize)
 
     with pytest.raises(asyncio.CancelledError):
         await worker.run_analysis_job({}, "AAPL", "2026-07-26", "stock", None, "worker-stop")
 
-    assert terminal == [("worker-stop", "cancelled")]
-    task_store.clear_cancel_request.assert_awaited_once()
+    assert terminal == [("worker-stop", None, "cancelled", "Analysis cancelled.", True)]
