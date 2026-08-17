@@ -3,7 +3,7 @@
 # TradingAgents — service uninstaller.
 #
 #   sudo bash deploy/uninstall.sh            # stops + removes service (data preserved)
-#   sudo bash deploy/uninstall.sh --purge    # additionally deletes DB, role, venv and .env
+#   sudo bash deploy/uninstall.sh --purge    # additionally deletes DB, role, venvs and .env
 #
 set -euo pipefail
 
@@ -16,6 +16,7 @@ UPDATE_CONF="/etc/tradingagents/update.env"
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 ENV_FILE="$PROJECT_ROOT/.env"
 VENV="$PROJECT_ROOT/.venv"
+VENV_ROOT="$PROJECT_ROOT/.tradingagents-venvs"
 PURGE=0
 [ "${1:-}" = "--purge" ] && PURGE=1
 
@@ -37,7 +38,7 @@ systemctl daemon-reload
 ok "Service and update components removed: $SERVICE_NAME"
 
 if [ "$PURGE" = 1 ]; then
-    warn "--purge: deleting database, venv, and .env..."
+    warn "--purge: deleting database, versioned venvs, and .env..."
     # Read DB credentials from .env if available
     if [ -f "$ENV_FILE" ] && [ -x "$VENV/bin/python" ]; then
         read DB_USER DB_NAME < <(
@@ -54,9 +55,10 @@ PY
             ok "PostgreSQL database/role removed."
         fi
     fi
-    rm -rf "$VENV"
+    rm -f "$VENV"
+    rm -rf "$VENV_ROOT"
     rm -f "$ENV_FILE"
-    ok "venv and .env removed."
+    ok "Versioned venvs and .env removed."
 else
-    info "Data preserved (DB, .env, venv). To completely remove: --purge"
+    info "Data preserved (DB, .env, versioned venvs). To completely remove: --purge"
 fi
