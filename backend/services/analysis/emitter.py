@@ -4,7 +4,7 @@ import asyncio
 from collections import Counter
 from typing import Any
 
-from backend.core.event_bus import publish_close, publish_event
+from backend.analysis_runtime.event_stream import get_analysis_event_stream
 
 
 class AnalysisEmitter:
@@ -14,6 +14,7 @@ class AnalysisEmitter:
         self.task_id = task_id
         self.loop = loop or asyncio.get_running_loop()
         self.terminal_event_emitted = False
+        self._event_stream = get_analysis_event_stream()
         # Imperative debate loops can publish a turn before their enclosing
         # LangGraph node returns. The normal graph observer later sees that
         # same turn once. Keep a one-use suppression token for that replay so
@@ -22,8 +23,8 @@ class AnalysisEmitter:
         self._debate_replay_suppressions: Counter[tuple[str, str, str]] = Counter()
 
     async def emit(self, event: dict[str, Any]) -> None:
-        """Send an event to the task's WebSocket subscribers (direct or via Redis)."""
-        await publish_event(self.task_id, event)
+        """Send an event through the analysis event transport boundary."""
+        await self._event_stream.publish(self.task_id, event)
 
     def emit_threadsafe(self, event: dict[str, Any]) -> None:
         """Send an event safely from outside the main async loop."""
@@ -214,4 +215,4 @@ class AnalysisEmitter:
         )
 
     async def close(self) -> None:
-        await publish_close(self.task_id)
+        await self._event_stream.close(self.task_id)
