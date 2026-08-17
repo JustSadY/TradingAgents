@@ -18,16 +18,16 @@ from __future__ import annotations
 
 import logging
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.analysis import AnalysisResult
+from backend.repositories.analysis_stats import list_learning_eligible_ticker_analyses
 from backend.trading_agents.agents.runtime.rating import parse_rating
 
 _logger = logging.getLogger(__name__)
 
 _PROTECTED_ANALYSTS = frozenset({"market", "news", "fundamentals", "social"})
 _HOLD_BAND = 0.02
+
 
 def _graded_correct(prediction: str, raw_return: float) -> bool | None:
     """True/False if the call can be graded, None if not actionable."""
@@ -38,6 +38,7 @@ def _graded_correct(prediction: str, raw_return: float) -> bool | None:
     if prediction == "Hold":
         return abs(raw_return) <= _HOLD_BAND
     return None
+
 
 def grade_analyst_winrates(rows, report_fields: dict[str, str]) -> dict[str, dict]:
     """Return ``{analyst_key: {"samples": n, "win_rate": pct}}`` over ``rows``.
@@ -74,6 +75,7 @@ def grade_analyst_winrates(rows, report_fields: dict[str, str]) -> dict[str, dic
         }
     return out
 
+
 def select_underperformers(
     winrates: dict[str, dict],
     *,
@@ -91,6 +93,7 @@ def select_underperformers(
             drop.add(key)
     return drop
 
+
 async def filter_analysts_by_history(
     db: AsyncSession,
     ticker: str,
@@ -105,17 +108,11 @@ async def filter_analysts_by_history(
     from backend.trading_agents.agents.analyst_registry import get_report_fields
 
     try:
-        q = (
-            select(AnalysisResult)
-            .where(AnalysisResult.ticker == ticker.upper())
-            .where(AnalysisResult.raw_return.is_not(None))
-            .where(AnalysisResult.learning_eligible.is_(True))
+        rows = await list_learning_eligible_ticker_analyses(
+            db,
+            user_id=user_id,
+            ticker=ticker,
         )
-        if user_id is None:
-            q = q.where(AnalysisResult.user_id.is_(None))
-        else:
-            q = q.where(AnalysisResult.user_id == user_id)
-        rows = list((await db.execute(q)).scalars().all())
     except Exception as exc:  # noqa: BLE001 — pre-screening must never block a run
         _logger.warning("Analyst pre-screen query failed for %s: %s", ticker, exc)
         return permitted, []
