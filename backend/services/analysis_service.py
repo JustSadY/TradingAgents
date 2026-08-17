@@ -124,7 +124,6 @@ async def register_queued_task(
         "user_id": user_id,
         "started_at": time.time(),
         "status": "queued",
-        "retry_count": 0,
     }
     from backend.core.config import get_settings
 
@@ -191,7 +190,6 @@ async def _track_running_task(
         "user_id": user_id,
         "started_at": existing.started_at if existing is not None else time.time(),
         "status": "running",
-        "retry_count": existing.retry_count if existing is not None else 0,
     }
     _RUNNING_TASKS[task_id] = current
     _TASK_REGISTRY[task_id] = meta
@@ -373,7 +371,6 @@ async def run_analysis_task(
 
         current_user_id.set(user.id)
     user_id = user.id if user else None
-    retry_scheduled = False
     analysis_completed = False
     async with AsyncSessionLocal() as db:
         if user is not None:
@@ -498,44 +495,26 @@ async def run_analysis_task(
                 )
                 return
             if analysis_completed or getattr(exc, "_analysis_terminal_event_emitted", False):
-                _logger.info("Not retrying analysis with an emitted terminal event task=%s", task_id)
+                _logger.info("Analysis already reached a terminal product state task=%s", task_id)
                 status = AnalysisTaskStatus.COMPLETED if analysis_completed else AnalysisTaskStatus.FAILED
                 await terminalize_task(task_id, user_id, TerminalResult(status, reason=type(exc).__name__))
                 return
             _logger.exception("Background analysis failed")
-            try:
-                retry_scheduled = await _maybe_retry_analysis(ticker, trade_date, asset_type, settings, task_id, user)
-            except Exception:
-                _logger.exception("Analysis retry failed for task=%s", task_id)
-            if not retry_scheduled:
-                if await runtime.is_cancelled(task_id):
-                    await _emit_cancelled_task(task_id, close=False)
-                    terminal_result = TerminalResult(
-                        AnalysisTaskStatus.CANCELLED,
-                        reason="cancel marker observed after retry decision",
-                    )
-                else:
-                    await AnalysisEmitter(task_id).emit_error("Analysis failed before completion. Please try again.")
-                    terminal_result = TerminalResult(AnalysisTaskStatus.FAILED, reason=type(exc).__name__)
-                await terminalize_task(task_id, user_id, terminal_result)
+            if await runtime.is_cancelled(task_id):
+                await _emit_cancelled_task(task_id, close=False)
+                terminal_result = TerminalResult(
+                    AnalysisTaskStatus.CANCELLED,
+                    reason="cancel marker observed during failure finalization",
+                )
+            else:
+                await AnalysisEmitter(task_id).emit_error("Analysis failed before completion. Please try again.")
+                terminal_result = TerminalResult(AnalysisTaskStatus.FAILED, reason=type(exc).__name__)
+            await terminalize_task(task_id, user_id, terminal_result)
         finally:
-            if not retry_scheduled:
-                try:
-                    await AnalysisEmitter(task_id).close()
-                except Exception:
-                    _logger.debug("Could not close analysis event stream task=%s", task_id, exc_info=True)
-
-
-async def _maybe_retry_analysis(
-    ticker: str,
-    trade_date: str,
-    asset_type: str,
-    settings: AppSettings,
-    task_id: str,
-    user=None,
-) -> bool:
-    """Return False to ensure failed tasks are not automatically re-enqueued."""
-    return False
+            try:
+                await AnalysisEmitter(task_id).close()
+            except Exception:
+                _logger.debug("Could not close analysis event stream task=%s", task_id, exc_info=True)
 
 
 async def run_portfolio_task(
