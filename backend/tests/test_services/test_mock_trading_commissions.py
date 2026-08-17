@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from decimal import Decimal
+from pathlib import Path
 
 from backend.models.portfolio import Holding, Portfolio
 from backend.services.mock_trading_service import _execute_close_position
@@ -127,3 +128,20 @@ async def test_partial_close_allocates_accrued_financing_pro_rata():
     # 50 gross - 0.50 entry - 0.55 exit - 1.00 financing
     assert realized_pnl == Decimal("47.9500")
     assert opening_fee == Decimal("0.5000")
+
+
+def test_mock_trading_does_not_keep_legacy_sqlite_or_portfolio_sql_shims() -> None:
+    backend_root = Path(__file__).resolve().parents[2]
+    source = (backend_root / "services" / "mock_trading_service.py").read_text()
+
+    assert "older SQLite development database" not in source
+    assert "getattr(holding, \"entry_commission\"" not in source
+    assert "from sqlalchemy import delete" not in source
+    assert "from sqlalchemy import select" not in source
+    assert "IntegrityError" not in source
+    assert "select(Portfolio" not in source
+    assert "delete(Order" not in source
+    assert "delete(Holding" not in source
+    assert "get_or_create_simulation_portfolio" in source
+    assert "lock_portfolio_for_update" in source
+    assert "reset_simulation_portfolio" in source
