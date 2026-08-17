@@ -6,8 +6,13 @@ from typing import Any
 
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from backend.models.order import Order
 from backend.models.portfolio import Holding, Portfolio
+from backend.repositories.portfolio import (
+    delete_holding_row,
+    flush_portfolio_changes,
+    stage_holding,
+    stage_order,
+)
 from backend.services.margin_engine import (
     DEFAULT_MAX_LEVERAGE,
     accrue_interest,
@@ -193,27 +198,26 @@ async def get_portfolio_with_live_prices(
 
             if not read_only:
                 portfolio.margin_used -= margin
-                db.add(
-                    Order(
-                        portfolio_id=portfolio.id,
-                        broker=portfolio.broker,
-                        ticker=h.ticker,
-                        action="BUY" if is_short else "SELL",
-                        side=h.side,
-                        leverage=h.leverage or Decimal("1.0"),
-                        quantity_requested=h.quantity,
-                        quantity_filled=h.quantity,
-                        status=close_status,
-                        price_per_share=price,
-                        total_value=notional_now,
-                        commission=commission,
-                        entry_commission=entry_commission,
-                        realized_pnl=realized,
-                        financing_cost=financing_cost,
-                        executed_at=now,
-                    )
+                stage_order(
+                    db,
+                    portfolio_id=portfolio.id,
+                    broker=portfolio.broker,
+                    ticker=h.ticker,
+                    action="BUY" if is_short else "SELL",
+                    side=h.side,
+                    leverage=h.leverage or Decimal("1.0"),
+                    quantity_requested=h.quantity,
+                    quantity_filled=h.quantity,
+                    status=close_status,
+                    price_per_share=price,
+                    total_value=notional_now,
+                    commission=commission,
+                    entry_commission=entry_commission,
+                    realized_pnl=realized,
+                    financing_cost=financing_cost,
+                    executed_at=now,
                 )
-                await db.delete(h)
+                await delete_holding_row(db, h)
 
             auto_closes.append(
                 {
@@ -273,7 +277,7 @@ async def get_portfolio_with_live_prices(
         portfolio.margin_used = margin_used_total
         portfolio.cash_available = cash_available_val
         portfolio.current_balance = total_value
-        await db.flush()
+        await flush_portfolio_changes(db)
 
     return {
         "id": portfolio.id,
@@ -381,7 +385,8 @@ async def execute_order(
             db, portfolio, holding, price, qty_dec, notional, commission, pos_side, lang, quantity
         )
 
-    order = Order(
+    order = stage_order(
+        db,
         portfolio_id=portfolio.id,
         broker=portfolio.broker,
         ticker=ticker,
@@ -402,8 +407,7 @@ async def execute_order(
         ai_reasoning=str(ai_reasoning or "")[:4_000],
         executed_at=datetime.now(UTC),
     )
-    db.add(order)
-    await db.flush()
+    await flush_portfolio_changes(db)
     return {
         "order_id": order.id,
         "ticker": ticker,
@@ -537,24 +541,23 @@ def _execute_open_position(
         if target_dec > 0:
             holding.take_profit = target_dec
     else:
-        db.add(
-            Holding(
-                portfolio_id=portfolio.id,
-                ticker=ticker,
-                quantity=qty_dec,
-                avg_buy_price=price,
-                current_price=price,
-                unrealized_pnl=Decimal("0.0"),
-                entry_commission=commission,
-                side=pos_side,
-                leverage=lev,
-                margin_used=margin,
-                borrowed_amount=borrowed,
-                interest_updated_at=datetime.now(UTC),
-                liquidation_price=_liquidation_for_position(pos_side, qty_dec, price, borrowed, margin, lev),
-                stop_loss=stop_dec,
-                take_profit=target_dec,
-            )
+        stage_holding(
+            db,
+            portfolio_id=portfolio.id,
+            ticker=ticker,
+            quantity=qty_dec,
+            avg_buy_price=price,
+            current_price=price,
+            unrealized_pnl=Decimal("0.0"),
+            entry_commission=commission,
+            side=pos_side,
+            leverage=lev,
+            margin_used=margin,
+            borrowed_amount=borrowed,
+            interest_updated_at=datetime.now(UTC),
+            liquidation_price=_liquidation_for_position(pos_side, qty_dec, price, borrowed, margin, lev),
+            stop_loss=stop_dec,
+            take_profit=target_dec,
         )
 
 async def _execute_close_position(
@@ -598,7 +601,7 @@ async def _execute_close_position(
     holding.interest_accrued = max(Decimal("0.0"), total_financing - financing_cost)
     holding.margin_used = (holding.margin_used or Decimal("0.0")) - released_margin
     if holding.quantity < _DUST:
-        await db.delete(holding)
+        await delete_holding_row(db, holding)
     else:
         holding.liquidation_price = _liquidation_for_position(
             pos_side,
