@@ -1,0 +1,64 @@
+name: Backend validation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - backend/**
+      - .github/workflows/backend-validation.yml
+  pull_request:
+    paths:
+      - backend/**
+      - .github/workflows/backend-validation.yml
+
+permissions:
+  contents: read
+
+concurrency:
+  group: backend-validation-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend-quality:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: astral-sh/setup-uv@v6
+        with:
+          enable-cache: true
+
+      - name: Type check expanded backend layers
+        run: uv run --project backend pyright
+
+      - name: Lint refactor surfaces
+        run: |
+          uv run --project backend ruff check \
+            backend/analysis_runtime \
+            backend/app \
+            backend/realtime \
+            backend/startup \
+            backend/services/analysis_service.py \
+            backend/services/notification_service.py \
+            backend/main.py \
+            backend/worker.py \
+            backend/tests/test_api/test_websocket_auth.py \
+            backend/tests/test_core/test_app_composition.py \
+            backend/tests/test_services/test_analysis_cancellation.py \
+            backend/tests/test_services/test_analysis_distributed_boundary.py \
+            backend/tests/test_services/test_analysis_event_boundary.py \
+            backend/tests/test_services/test_analysis_event_contract.py \
+            backend/tests/test_services/test_analysis_liveness_and_resilience.py \
+            backend/tests/test_services/test_analysis_runtime.py \
+            backend/tests/test_services/test_analysis_runtime_redis_backend.py \
+            backend/tests/test_services/test_analysis_terminal_cleanup.py \
+            backend/tests/test_services/test_analysis_terminal_coordinator.py \
+            backend/tests/test_services/test_analysis_terminal_lifecycle.py \
+            backend/tests/test_services/test_notification_retry.py \
+            backend/tests/test_services/test_notification_transport.py \
+            backend/tests/test_typecheck_scope.py
+
+      - name: Run backend unit tests
+        run: uv run --project backend pytest backend/tests -m "not integration and not llm and not slow"
