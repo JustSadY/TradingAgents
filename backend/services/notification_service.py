@@ -1,13 +1,31 @@
 import asyncio
 import json
 import logging
+import random
 from dataclasses import dataclass
+from datetime import UTC, datetime
+from email.utils import parsedate_to_datetime
+
+from tenacity import AsyncRetrying, RetryCallState, retry_if_exception_type, stop_after_attempt
 
 from backend.core.constants import WEBHOOK_EVENTS, signal_direction
 
 _logger = logging.getLogger(__name__)
 
 _BACKGROUND_TASKS: set[asyncio.Task] = set()
+_RETRYABLE_WEBHOOK_STATUSES = frozenset({408, 429, 500, 502, 503, 504})
+_MAX_RETRY_AFTER_SECONDS = 60.0
+
+
+class _RetryableWebhookError(Exception):
+    """Internal marker for delivery failures that may succeed on retry."""
+
+
+class _RetryableWebhookResponse(_RetryableWebhookError):
+    def __init__(self, status_code: int, *, retry_after: float | None = None) -> None:
+        super().__init__(f"Webhook returned retryable HTTP {status_code}")
+        self.status_code = status_code
+        self.retry_after = retry_after
 
 
 @dataclass(frozen=True)
@@ -248,6 +266,37 @@ def _webhook_client(target: WebhookTarget):
     )
 
 
+def _retry_after_seconds(response) -> float | None:
+    """Return a bounded Retry-After delay in seconds, if the header is valid."""
+    raw = response.headers.get("Retry-After")
+    if not raw:
+        return None
+
+    try:
+        seconds = float(raw)
+    except (TypeError, ValueError):
+        try:
+            retry_at = parsedate_to_datetime(raw)
+        except (TypeError, ValueError, OverflowError):
+            return None
+        if retry_at.tzinfo is None:
+            retry_at = retry_at.replace(tzinfo=UTC)
+        seconds = (retry_at - datetime.now(UTC)).total_seconds()
+
+    return min(_MAX_RETRY_AFTER_SECONDS, max(0.0, seconds))
+
+
+def _webhook_retry_wait(retry_state: RetryCallState) -> float:
+    """Honor Retry-After, otherwise use full-jitter exponential backoff."""
+    outcome = retry_state.outcome
+    exc = outcome.exception() if outcome is not None else None
+    if isinstance(exc, _RetryableWebhookResponse) and exc.retry_after is not None:
+        return exc.retry_after
+
+    ceiling = float(2 ** max(0, retry_state.attempt_number - 1))
+    return random.uniform(0.0, ceiling)
+
+
 async def test_webhook_url(url: str) -> bool:
     import httpx
 
@@ -287,22 +336,44 @@ async def send_webhook(
     try:
         import httpx
 
+        # Resolve and vet the destination exactly once. Every retry reuses the
+        # same pinned target/transport, so retrying cannot reopen a DNS-rebinding
+        # window after the security check has passed.
         target = await resolve_webhook_target(url)
         payload = _build_payload(url, event, data)
+        attempts = max(1, retries + 1)
         async with _webhook_client(target) as client:
-            for attempt in range(retries + 1):
-                try:
-                    r = await client.post(url, json=payload)
-                    last_status_code = r.status_code
-                    if r.status_code < 300:
-                        result = True
+            retrying = AsyncRetrying(
+                stop=stop_after_attempt(attempts),
+                retry=retry_if_exception_type(_RetryableWebhookError),
+                wait=_webhook_retry_wait,
+                reraise=True,
+            )
+            try:
+                async for attempt in retrying:
+                    with attempt:
+                        try:
+                            response = await client.post(url, json=payload)
+                        except httpx.RequestError as exc:
+                            last_error = str(exc)
+                            raise _RetryableWebhookError(str(exc)) from exc
+
+                        last_status_code = response.status_code
+                        if response.status_code < 300:
+                            result = True
+                            break
+                        if response.status_code in _RETRYABLE_WEBHOOK_STATUSES:
+                            raise _RetryableWebhookResponse(
+                                response.status_code,
+                                retry_after=_retry_after_seconds(response),
+                            )
+                        # Redirects and permanent client/server responses are
+                        # not retried. Redirect following stays disabled so the
+                        # vetted destination cannot be swapped underneath us.
                         break
-                    if attempt < retries:
-                        await asyncio.sleep(2**attempt)
-                except httpx.RequestError as exc:
+            except _RetryableWebhookError as exc:
+                if last_error is None and not isinstance(exc, _RetryableWebhookResponse):
                     last_error = str(exc)
-                    if attempt < retries:
-                        await asyncio.sleep(2**attempt)
     except Exception as exc:
         _logger.warning("Webhook failed: %s", exc)
         last_error = str(exc)
