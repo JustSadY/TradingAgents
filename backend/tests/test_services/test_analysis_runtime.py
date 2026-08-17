@@ -33,21 +33,19 @@ async def test_local_runtime_round_trips_typed_task_state():
     assert await runtime.is_cancelled(meta.task_id) is False
 
 
-async def test_runtime_compatibility_payload_uses_typed_model_validation():
-    runtime = AnalysisRuntime(LocalBackend())
-    payload = {
-        "ticker": "AAPL",
-        "trade_date": "2026-08-17",
-        "asset_type": "stock",
-        "user_id": 3,
-        "status": "running",
-        "started_at": 42.0,
-        "retry_count": 1,
+def test_runtime_does_not_reintroduce_task_store_compatibility_surface():
+    legacy_names = {
+        "set_meta",
+        "get_meta",
+        "touch_task",
+        "clear_meta",
+        "is_cancel_requested",
+        "clear_cancel_request",
+        "list_tasks_for_user",
+        "get_owner",
     }
 
-    await runtime.set_meta("compat-task", payload)
-
-    assert await runtime.get_meta("compat-task") == payload
+    assert legacy_names.isdisjoint(vars(AnalysisRuntime))
 
 
 def test_analysis_service_no_longer_imports_task_store_directly():
