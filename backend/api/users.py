@@ -7,8 +7,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.api.deps import get_current_user, get_db, require_admin, require_page
 from backend.core.config import get_settings as _get_settings
 from backend.models.user import User
-from backend.repositories.permissions import list_allowed_page_keys, list_allowed_setting_sections
-from backend.repositories.users import get_user_by_id
 from backend.schemas.common import MessageResponse
 from backend.schemas.user import (
     AgentAccessMap,
@@ -33,13 +31,22 @@ from backend.schemas.user import (
 from backend.services.user_service import (
     CannotDeleteSelfError,
     EmailTakenError,
+    UnknownPermissionKeysError,
     UserNotFoundError,
     UserPolicyError,
     UsernameTakenError,
     create_managed_user,
     delete_managed_user,
     delete_user_api_key,
+    get_effective_page_permissions,
+    get_effective_setting_permissions,
+    get_managed_page_permissions,
+    get_managed_setting_permissions,
+    get_user_or_raise,
+    list_managed_users,
     list_user_api_key_providers,
+    set_managed_page_permissions,
+    set_managed_setting_permissions,
     set_user_api_key,
     update_managed_user,
     update_profile,
@@ -48,6 +55,13 @@ from backend.services.user_service import (
 router = APIRouter(prefix="/api/users", tags=["users"])
 
 _USER_NOT_FOUND = "User not found"
+
+
+async def _get_user_or_404(db: AsyncSession, user_id: int) -> User:
+    try:
+        return await get_user_or_raise(db, user_id)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
 
 
 @router.get("/me", response_model=UserRead)
@@ -114,14 +128,7 @@ async def get_my_permissions(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    from backend.core.constants import PAGE_KEYS
-
-    if current_user.is_admin:
-        return PagePermissionsRead(allowed_pages=PAGE_KEYS + ["admin"])
-    allowed = sorted(await list_allowed_page_keys(db, current_user.id))
-    if "settings" not in allowed:
-        allowed.append("settings")
-    return PagePermissionsRead(allowed_pages=allowed)
+    return PagePermissionsRead(allowed_pages=await get_effective_page_permissions(db, current_user))
 
 
 @router.get("/me/setting-permissions", response_model=SettingPermissionsResponse)
@@ -129,12 +136,7 @@ async def get_my_setting_permissions(
     current_user: Annotated[User, Depends(get_current_user)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    from backend.core.constants import SETTING_KEYS
-
-    if current_user.is_admin:
-        return {"allowed_settings": SETTING_KEYS}
-    allowed = sorted(await list_allowed_setting_sections(db, current_user.id))
-    return {"allowed_settings": allowed}
+    return {"allowed_settings": await get_effective_setting_permissions(db, current_user)}
 
 
 @router.get("", response_model=list[UserRead])
@@ -142,9 +144,7 @@ async def list_users_run(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    from backend.repositories.users import list_users as _repo_list
-
-    return await _repo_list(db)
+    return await list_managed_users(db)
 
 
 @router.post(
@@ -233,15 +233,11 @@ async def get_user_permissions(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
-    from backend.models.page_permission import ALL_PAGE_KEYS
-    from backend.repositories.permissions import get_user_page_permissions_map
-
-    perms = await get_user_page_permissions_map(db, user_id)
-    full = {k: perms.get(k, False) for k in ALL_PAGE_KEYS}
-    return {"user_id": user_id, "permissions": full}
+    try:
+        permissions = await get_managed_page_permissions(db, user_id)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return {"user_id": user_id, "permissions": permissions}
 
 
 @router.put("/{user_id}/permissions", response_model=MessageResponse, responses={404: {"description": _USER_NOT_FOUND}})
@@ -251,20 +247,12 @@ async def set_user_permissions(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
-
-    from backend.models.page_permission import ALL_PAGE_KEYS
-    from backend.repositories.permissions import set_user_page_permission
-
-    unknown = sorted(set(body.permissions) - set(ALL_PAGE_KEYS))
-    if unknown:
-        raise HTTPException(status_code=422, detail=f"Unknown page permission keys: {', '.join(unknown)}")
-    for page_key, allowed in body.permissions.items():
-        await set_user_page_permission(db, user_id, page_key, allowed)
-
-    await db.flush()
+    try:
+        await set_managed_page_permissions(db, user_id, body.permissions)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except UnknownPermissionKeysError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     return {"detail": "Permissions updated"}
 
 
@@ -276,9 +264,7 @@ async def list_user_api_keys(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    user = await _get_user_or_404(db, user_id)
     fernet = _get_settings().get_fernet()
     providers = list_user_api_key_providers(user, fernet)
     return {"providers": providers}
@@ -291,9 +277,7 @@ async def set_user_api_key_endpoint(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    user = await _get_user_or_404(db, user_id)
     fernet = _get_settings().get_fernet()
     set_user_api_key(user, body.provider, body.api_key, fernet)
     await db.flush()
@@ -311,9 +295,7 @@ async def delete_user_api_key_endpoint(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    user = await _get_user_or_404(db, user_id)
     fernet = _get_settings().get_fernet()
     deleted = delete_user_api_key(user, provider, fernet)
     if not deleted:
@@ -332,15 +314,11 @@ async def get_user_setting_permissions(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
-    from backend.core.constants import SETTING_KEYS
-    from backend.repositories.permissions import get_user_setting_permissions_map
-
-    perms = await get_user_setting_permissions_map(db, user_id)
-    full = {k: perms.get(k, False) for k in SETTING_KEYS}
-    return {"user_id": user_id, "permissions": full}
+    try:
+        permissions = await get_managed_setting_permissions(db, user_id)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    return {"user_id": user_id, "permissions": permissions}
 
 
 class SettingPermissionsUpdate(BaseModel):
@@ -356,20 +334,12 @@ async def set_user_setting_permissions(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    user = await get_user_by_id(db, user_id)
-    if not user:
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
-
-    from backend.core.constants import SETTING_KEYS
-    from backend.repositories.permissions import set_user_setting_permission
-
-    unknown = sorted(set(body.permissions) - set(SETTING_KEYS))
-    if unknown:
-        raise HTTPException(status_code=422, detail=f"Unknown setting permission keys: {', '.join(unknown)}")
-    for setting_key, allowed in body.permissions.items():
-        await set_user_setting_permission(db, user_id, setting_key, allowed)
-
-    await db.flush()
+    try:
+        await set_managed_setting_permissions(db, user_id, body.permissions)
+    except UserNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from None
+    except UnknownPermissionKeysError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from None
     return {"detail": "Setting permissions updated"}
 
 
@@ -379,8 +349,7 @@ async def get_agent_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if not await get_user_by_id(db, user_id):
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    await _get_user_or_404(db, user_id)
     from backend.services.tool_access_service import get_user_agent_access
 
     return await get_user_agent_access(db, user_id)
@@ -397,8 +366,7 @@ async def set_agent_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if not await get_user_by_id(db, user_id):
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    await _get_user_or_404(db, user_id)
     from backend.services.tool_access_service import update_user_agent_access
 
     updated = await update_user_agent_access(db, user_id, body.agents)
@@ -411,8 +379,7 @@ async def get_tool_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if not await get_user_by_id(db, user_id):
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    await _get_user_or_404(db, user_id)
     from backend.services.tool_access_service import get_user_tool_access
 
     return await get_user_tool_access(db, user_id)
@@ -429,8 +396,7 @@ async def set_tool_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if not await get_user_by_id(db, user_id):
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    await _get_user_or_404(db, user_id)
     from backend.services.tool_access_service import update_user_tool_access
 
     updated = await update_user_tool_access(
@@ -445,8 +411,7 @@ async def get_tool_field_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if not await get_user_by_id(db, user_id):
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    await _get_user_or_404(db, user_id)
     from backend.services.tool_access_service import get_user_tool_field_access
 
     return await get_user_tool_field_access(db, user_id)
@@ -463,8 +428,7 @@ async def set_tool_field_access(
     _: Annotated[User, Depends(require_admin)],
     db: Annotated[AsyncSession, Depends(get_db)],
 ):
-    if not await get_user_by_id(db, user_id):
-        raise HTTPException(status_code=404, detail=_USER_NOT_FOUND)
+    await _get_user_or_404(db, user_id)
     from backend.services.tool_access_service import update_user_tool_field_access
 
     updated = await update_user_tool_field_access(
