@@ -45,6 +45,8 @@ class Settings(BaseSettings):
     TRUSTED_PROXY_CIDRS: str = ""
     ENABLE_LIVE_TRADING: bool = False
     APP_TIMEZONE: str = "UTC"
+    # exchange_calendars code used for tickers with no venue suffix.
+    DEFAULT_EXCHANGE_CALENDAR: str = "XNYS"
 
     @model_validator(mode="after")
     def _force_async_db_driver(self) -> "Settings":

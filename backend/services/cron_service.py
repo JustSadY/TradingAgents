@@ -1,6 +1,6 @@
 import logging
 from contextlib import asynccontextmanager
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import Optional
 from zoneinfo import ZoneInfo
 
@@ -13,6 +13,7 @@ from backend.core.database import AsyncSessionLocal, engine
 from backend.models.settings import AppSettings
 from backend.models.user import User
 from backend.services.alert_service import check_price_alerts
+from backend.services.market_calendar_service import market_closed_reason
 from backend.services.performance_service import backfill_returns
 
 _logger = logging.getLogger(__name__)
@@ -183,6 +184,15 @@ class CronService:
 
             trade_date = _trade_date_for_asset("stock")
             username = user.username
+
+            # A holiday scan spends a full analysis run per ticker on quotes
+            # that cannot move, and any signal it produces feeds automation
+            # that could not be filled anyway.
+            closed = market_closed_reason(date.fromisoformat(trade_date), asset_type="stock")
+            if closed:
+                _logger.info("Skipping cron watchlist scan for user=%s: %s", username, closed)
+                return
+
             _logger.info(
                 "User cron watchlist scan started for user=%s (id=%d), date=%s",
                 username, user_id, trade_date,
@@ -261,7 +271,12 @@ async def _run_performance_backfill():
         _logger.exception("Performance backfill error")
 
 async def _run_position_monitor():
-    """Periodically enforce stop-loss / take-profit / liquidation on open positions."""
+    """Periodically enforce stop-loss / take-profit / liquidation on open positions.
+
+    The exchange-holiday gate lives per holding in ``mock_trading_service`` so a
+    crypto position keeps being monitored while its equity neighbours wait for
+    the next session.
+    """
     try:
         async with _job_lock("position_monitor") as acquired:
             if not acquired:

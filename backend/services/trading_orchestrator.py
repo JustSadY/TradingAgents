@@ -14,6 +14,7 @@ from __future__ import annotations
 import json
 import logging
 import math
+from datetime import date, datetime
 from decimal import Decimal
 from types import SimpleNamespace
 
@@ -107,6 +108,24 @@ def _as_mapping(raw) -> dict:
 def _portfolio_decision(row) -> dict:
     """Return the controller-accepted canonical structured decision."""
     return _as_mapping(getattr(row, "portfolio_decision_json", None))
+
+
+def _trade_date(row) -> date | None:
+    """The session an analysis is for, or ``None`` when the row does not say.
+
+    An unknown date is not silently replaced with today's: the exchange gate
+    would then be answering a question about a different session than the one
+    the analysis was run for.
+    """
+    raw = getattr(row, "trade_date", None)
+    if isinstance(raw, datetime):
+        return raw.date()
+    if isinstance(raw, date):
+        return raw
+    try:
+        return date.fromisoformat(str(raw)[:10])
+    except (TypeError, ValueError):
+        return None
 
 
 def _decision_value(row, *keys: str):
@@ -473,6 +492,26 @@ async def place_signal_order(
             ticker,
             persisted_signal,
             signal,
+        )
+
+    # An order sized against a holiday quote is priced off the previous close
+    # and cannot be filled, so no automated buy or sell leaves the building
+    # while the instrument's exchange is shut. Crypto has no closed days and is
+    # never gated here.
+    from backend.services.market_calendar_service import market_closed_reason
+
+    session = _trade_date(row)
+    closed_reason = (
+        market_closed_reason(session, ticker=ticker, asset_type=getattr(row, "asset_type", None))
+        if session is not None
+        else None
+    )
+    if closed_reason:
+        _logger.info("Skipping auto-order for %s: %s", ticker, closed_reason)
+        return _skipped_order(
+            reason_code="market_closed",
+            message=closed_reason,
+            include_skip_result=include_skip_result,
         )
 
     if getattr(settings, "quality_gate_enabled", False):

@@ -47,6 +47,7 @@ dependencies = [
     "setuptools>=80.9.0",
     "typing-extensions>=4.14.0",
     "aiosqlite",
+    "exchange-calendars>=4.5,<6.0",
 ]
 
 [dependency-groups]
