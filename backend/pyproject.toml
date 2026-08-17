@@ -109,7 +109,7 @@ omit = ["backend/tests/*"]
 [tool.pyright]
 pythonVersion = "3.11"
 typeCheckingMode = "basic"
-include = ["core/temporal.py", "schemas", "analysis_runtime", "repositories"]
+include = ["schemas", "analysis_runtime", "repositories", "core", "services", "api"]
 exclude = ["tests", "postgres_tests"]
 extraPaths = [".."]
 reportMissingImports = "warning"
