@@ -59,13 +59,7 @@ def get_user_api_key(user: User, provider: str, fernet: Fernet) -> str | None:
 
 
 def resolve_user_api_key(user: User, provider: str) -> str | None:
-    """Decrypt the user's stored key for ``provider`` using the app Fernet.
-
-    Convenience wrapper over :func:`get_user_api_key` that sources the Fernet
-    from config and never raises — the single home for the per-service
-    "look up this user's provider key" helper that was copied across the
-    daily-summary, report-chat and portfolio-assistant services.
-    """
+    """Decrypt the user's stored key for ``provider`` using the app Fernet."""
     from backend.core.config import get_settings
 
     try:
@@ -127,6 +121,31 @@ def list_user_api_key_providers(user: User, fernet: Fernet) -> list[str]:
             e,
         )
         return []
+
+
+def _app_fernet() -> Fernet:
+    from backend.core.config import get_settings
+
+    return get_settings().get_fernet()
+
+
+def list_stored_api_key_providers(user: User) -> list[str]:
+    """List tenant-managed provider keys using the application encryption key."""
+    return list_user_api_key_providers(user, _app_fernet())
+
+
+async def save_stored_api_key(db: AsyncSession, user: User, provider: str, api_key: str) -> None:
+    """Encrypt and persist a tenant-managed provider key."""
+    set_user_api_key(user, provider, api_key, _app_fernet())
+    await db.flush()
+
+
+async def remove_stored_api_key(db: AsyncSession, user: User, provider: str) -> bool:
+    """Delete a tenant-managed provider key and flush only when it changed."""
+    deleted = delete_user_api_key(user, provider, _app_fernet())
+    if deleted:
+        await db.flush()
+    return deleted
 
 
 async def get_user_or_raise(db: AsyncSession, user_id: int) -> User:
