@@ -1,4 +1,5 @@
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import delete, desc, select
 from sqlalchemy.exc import IntegrityError
@@ -91,6 +92,28 @@ async def reset_simulation_portfolio(
     portfolio.margin_used = Decimal("0.0")
     await db.flush()
     return portfolio
+
+
+def stage_order(db: AsyncSession, **values: Any) -> Order:
+    """Stage an already-authorized order row for the caller's transaction."""
+    order = Order(**values)
+    db.add(order)
+    return order
+
+
+def stage_holding(db: AsyncSession, **values: Any) -> Holding:
+    """Stage an already-computed holding row for the caller's transaction."""
+    holding = Holding(**values)
+    db.add(holding)
+    return holding
+
+
+async def delete_holding_row(db: AsyncSession, holding: Holding) -> None:
+    await db.delete(holding)
+
+
+async def flush_portfolio_changes(db: AsyncSession) -> None:
+    await db.flush()
 
 
 async def get_holding(db: AsyncSession, portfolio_id: int, ticker: str) -> Holding | None:
