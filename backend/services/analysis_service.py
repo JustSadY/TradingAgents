@@ -38,6 +38,7 @@ from backend.services.trading_orchestrator import auto_execute_signals_enabled, 
 from .analysis.emitter import AnalysisEmitter
 from .analysis.orchestrator import run_individual_analysis
 from .analysis.portfolio_orchestrator import run_portfolio_analysis
+from .analysis.task_lifecycle import AnalysisTaskStatus, TerminalCoordinator, TerminalResult
 
 _logger = logging.getLogger(__name__)
 
@@ -45,6 +46,7 @@ _RUNNING_TASKS: dict[str, asyncio.Task] = {}
 _TASK_REGISTRY: dict[str, dict] = {}
 _TASK_OWNERS: dict[str, int | None] = {}
 _HEARTBEAT_TASKS: dict[str, asyncio.Task] = {}
+_TERMINAL_COORDINATOR = TerminalCoordinator()
 _WORKER_ID = f"{socket.gethostname()}:{os.getpid()}"
 
 
@@ -73,9 +75,11 @@ async def register_task_owner(task_id: str, user_id: int | None) -> None:
     _TASK_OWNERS[task_id] = user_id
     await task_store.set_owner(task_id, user_id)
 
+
 async def clear_task_owner(task_id: str) -> None:
     _TASK_OWNERS.pop(task_id, None)
     await task_store.clear_owner(task_id)
+
 
 async def is_task_owner(task_id: str, user_id: int | None, is_admin: bool = False) -> bool:
     """Return True if *user* may subscribe to *task_id*'s event stream.
@@ -91,6 +95,7 @@ async def is_task_owner(task_id: str, user_id: int | None, is_admin: bool = Fals
         owner = await task_store.get_owner(task_id)
     return owner is not None and owner == user_id
 
+
 async def cancel_local_task(task_id: str) -> bool:
     """Cancel ``task_id`` if it is running in THIS process."""
     task = _RUNNING_TASKS.get(task_id)
@@ -99,10 +104,11 @@ async def cancel_local_task(task_id: str) -> bool:
         return True
     return False
 
+
 async def cancel_analysis(task_id: str) -> bool:
     """Cancel a run wherever it is executing.
 
-    Persist intent before the best-effort local/pub-sub signals.  Pub/sub is
+    Persist intent before the best-effort local/pub-sub signals. Pub/sub is
     transient, so a worker that has not started yet must be able to observe
     the request when it begins.
     """
@@ -110,6 +116,7 @@ async def cancel_analysis(task_id: str) -> bool:
     await cancel_local_task(task_id)
     await task_store.publish_cancel(task_id)
     return True
+
 
 async def get_active_tasks_for_user(user_id: int | None) -> list[dict]:
     """Returns a list of active tasks for the given user (all processes)."""
@@ -119,9 +126,11 @@ async def get_active_tasks_for_user(user_id: int | None) -> list[dict]:
         tasks.extend(t for t in await task_store.list_tasks_for_user(user_id) if t["task_id"] not in seen)
     return tasks
 
+
 async def register_queued_task(
     task_id: str, *, ticker: str, trade_date: str, asset_type: str, user_id: int | None
 ) -> None:
+    _TERMINAL_COORDINATOR.reset(task_id)
     meta = {
         "ticker": ticker,
         "trade_date": trade_date,
@@ -131,9 +140,9 @@ async def register_queued_task(
         "status": "queued",
         "retry_count": 0,
     }
-    # In worker mode the web process is not the task owner.  Keeping a local
+    # In worker mode the web process is not the task owner. Keeping a local
     # registry entry there would survive the worker's terminal cleanup and
-    # make completed jobs appear permanently active.  Redis is the shared
+    # make completed jobs appear permanently active. Redis is the shared
     # source of truth until the worker starts and registers locally itself.
     from backend.core.config import get_settings
 
@@ -146,11 +155,11 @@ async def register_queued_task(
 
 async def discard_queued_task(task_id: str, user_id: int | None) -> None:
     """Remove a task registration when dispatch fails before execution."""
-    _TASK_REGISTRY.pop(task_id, None)
-    _TASK_OWNERS.pop(task_id, None)
-    await task_store.clear_meta(task_id, user_id)
-    await task_store.clear_owner(task_id)
-    await task_store.clear_cancel_request(task_id)
+    await terminalize_task(
+        task_id,
+        user_id,
+        TerminalResult(AnalysisTaskStatus.FAILED, reason="dispatch failed before execution"),
+    )
 
 
 async def _heartbeat_loop(task_id: str, user_id: int | None) -> None:
@@ -192,6 +201,7 @@ async def _track_running_task(
     current = asyncio.current_task()
     if current is None:
         return
+    _TERMINAL_COORDINATOR.reset(task_id)
     existing = await task_store.get_meta(task_id) or {}
     meta = {
         "ticker": ticker,
@@ -211,24 +221,51 @@ async def _track_running_task(
         old_heartbeat.cancel()
     _HEARTBEAT_TASKS[task_id] = asyncio.create_task(_heartbeat_loop(task_id, user_id))
 
-async def _clear_terminal_task_state(task_id: str, user_id: int | None) -> None:
-    """Remove tracking only after the runner reached a terminal state."""
-    _RUNNING_TASKS.pop(task_id, None)
-    _TASK_REGISTRY.pop(task_id, None)
-    heartbeat = _HEARTBEAT_TASKS.pop(task_id, None)
-    if heartbeat:
-        heartbeat.cancel()
-    await task_store.clear_meta(task_id, user_id)
-    await clear_task_owner(task_id)
-    await task_store.clear_cancel_request(task_id)
+
+async def terminalize_task(task_id: str, user_id: int | None, result: TerminalResult) -> bool:
+    """Idempotently remove runtime tracking after a product terminal event.
+
+    Product-facing ``complete``/``error`` events are emitted by the caller
+    before this function. Stream closure stays with the caller and happens
+    after cleanup, keeping event -> runtime terminalization -> close ordering.
+    """
+
+    async def cleanup() -> None:
+        _RUNNING_TASKS.pop(task_id, None)
+        _TASK_REGISTRY.pop(task_id, None)
+        heartbeat = _HEARTBEAT_TASKS.pop(task_id, None)
+        if heartbeat:
+            heartbeat.cancel()
+            await asyncio.gather(heartbeat, return_exceptions=True)
+        await task_store.clear_meta(task_id, user_id)
+        await clear_task_owner(task_id)
+        await task_store.clear_cancel_request(task_id)
+
+    won = await _TERMINAL_COORDINATOR.run_once(task_id, result, cleanup)
+    if not won:
+        existing = _TERMINAL_COORDINATOR.result(task_id)
+        if existing is not None and existing != result:
+            _logger.warning(
+                "Ignoring duplicate terminal transition task=%s existing=%s requested=%s",
+                task_id,
+                existing.status,
+                result.status,
+            )
+    return won
+
+
+def get_terminal_result(task_id: str) -> TerminalResult | None:
+    """Return the locally observed terminal result, if it is still in bounded history."""
+    return _TERMINAL_COORDINATOR.result(task_id)
+
 
 async def _emit_cancelled_task(task_id: str, *, close: bool = True) -> None:
     """Tell subscribers about a pre-start or portfolio cancellation.
 
     ``run_analysis_task`` can defer the close while it is unwinding a
-    cancelled database operation.  That preserves the important wire order:
+    cancelled database operation. That preserves the important wire order:
     subscribers receive the terminal ``error`` event before the socket is
-    closed.  Other callers retain the one-shot emit-and-close behaviour.
+    closed. Other callers retain the one-shot emit-and-close behaviour.
     """
     emitter = AnalysisEmitter(task_id)
     try:
@@ -236,6 +273,7 @@ async def _emit_cancelled_task(task_id: str, *, close: bool = True) -> None:
     finally:
         if close:
             await emitter.close()
+
 
 async def _emit_auto_order_result(
     emitter: AnalysisEmitter,
@@ -249,7 +287,7 @@ async def _emit_auto_order_result(
 ) -> None:
     """Emit a post-analysis order outcome without making it a second analysis.
 
-    The report is already complete when this runs.  Keep an execution failure
+    The report is already complete when this runs. Keep an execution failure
     separate from the analysis terminal event: otherwise a valid report looks
     like it either filled an order or failed entirely.
     """
@@ -290,10 +328,11 @@ async def _emit_auto_order_result(
     except Exception:
         _logger.exception("Could not emit auto-order outcome for analysis_id=%s", getattr(row, "id", None))
 
+
 def _snapshot_auto_order_context(row) -> SimpleNamespace:
     """Copy order inputs before committing so expired ORM rows are never read.
 
-    SQLAlchemy may expire ``AnalysisResult`` attributes at commit time.  The
+    SQLAlchemy may expire ``AnalysisResult`` attributes at commit time. The
     automatic order is deliberately a later transaction, therefore it must
     work from plain values rather than accidentally lazy-loading through a
     cancelled or rolled-back session.
@@ -311,6 +350,7 @@ def _snapshot_auto_order_context(row) -> SimpleNamespace:
         final_decision=getattr(row, "final_decision", ""),
     )
 
+
 async def run_analysis(
     ticker: str,
     trade_date: str,
@@ -326,9 +366,9 @@ async def run_analysis(
     """Facade for individual analysis orchestration.
 
     A background runner has work after the graph returns (the final commit and
-    optional signal order).  It passes ``defer_terminal_cleanup=True`` so the
+    optional signal order). It passes ``defer_terminal_cleanup=True`` so the
     task stays cancellable and its WebSocket remains open until that outer
-    runner has emitted/handled the terminal outcome.  Direct callers keep the
+    runner has emitted/handled the terminal outcome. Direct callers keep the
     historical self-contained lifecycle by default.
     """
     import uuid
@@ -338,9 +378,11 @@ async def run_analysis(
 
     user_id = user.id if user else None
     emitter = AnalysisEmitter(task_id)
+    terminal_result = TerminalResult(AnalysisTaskStatus.FAILED, reason="analysis failed")
     try:
         if await task_store.is_cancel_requested(task_id):
             await emitter.emit_error("Analysis cancelled.")
+            terminal_result = TerminalResult(AnalysisTaskStatus.CANCELLED, reason="cancelled before start")
             raise asyncio.CancelledError
 
         await _track_running_task(
@@ -352,16 +394,24 @@ async def run_analysis(
         )
         if await task_store.is_cancel_requested(task_id):
             await emitter.emit_error("Analysis cancelled.")
+            terminal_result = TerminalResult(AnalysisTaskStatus.CANCELLED, reason="cancelled after registration")
             raise asyncio.CancelledError
-        return await run_individual_analysis(ticker, trade_date, asset_type, settings, db, emitter, triggered_by, user)
+        value = await run_individual_analysis(ticker, trade_date, asset_type, settings, db, emitter, triggered_by, user)
+        terminal_result = TerminalResult(AnalysisTaskStatus.COMPLETED)
+        return value
+    except asyncio.CancelledError:
+        terminal_result = TerminalResult(AnalysisTaskStatus.CANCELLED, reason="analysis coroutine cancelled")
+        raise
     except Exception as exc:
+        terminal_result = TerminalResult(AnalysisTaskStatus.FAILED, reason=type(exc).__name__)
         if getattr(emitter, "terminal_event_emitted", False):
             exc._analysis_terminal_event_emitted = True
         raise
     finally:
         if not defer_terminal_cleanup:
-            await _clear_terminal_task_state(task_id, user_id)
+            await terminalize_task(task_id, user_id, terminal_result)
             await emitter.close()
+
 
 async def run_analysis_task(
     ticker: str,
@@ -377,6 +427,7 @@ async def run_analysis_task(
         from backend.core.log_handler import current_user_id
 
         current_user_id.set(user.id)
+    user_id = user.id if user else None
     retry_scheduled = False
     analysis_completed = False
     async with AsyncSessionLocal() as db:
@@ -403,7 +454,11 @@ async def run_analysis_task(
                 await db.rollback()
                 _logger.exception("Could not persist completed analysis task=%s", task_id)
                 await AnalysisEmitter(task_id).emit_error("Analysis could not be saved. Please try again.")
-                await _clear_terminal_task_state(task_id, user.id if user else None)
+                await terminalize_task(
+                    task_id,
+                    user_id,
+                    TerminalResult(AnalysisTaskStatus.FAILED, reason="final analysis commit failed"),
+                )
                 return
             analysis_completed = True
             emitter = AnalysisEmitter(task_id)
@@ -472,7 +527,7 @@ async def run_analysis_task(
                         message="Automatic order execution failed; the analysis remains available.",
                         reason_code="execution_error",
                     )
-            await _clear_terminal_task_state(task_id, user.id if user else None)
+            await terminalize_task(task_id, user_id, TerminalResult(AnalysisTaskStatus.COMPLETED))
         except asyncio.CancelledError:
             _logger.info("Background analysis cancelled task=%s", task_id)
             try:
@@ -480,18 +535,27 @@ async def run_analysis_task(
             except Exception:
                 await db.rollback()
                 _logger.exception("Could not persist cancelled analysis task=%s", task_id)
-            await _clear_terminal_task_state(task_id, user.id if user else None)
+            await terminalize_task(
+                task_id,
+                user_id,
+                TerminalResult(AnalysisTaskStatus.CANCELLED, reason="background task cancelled"),
+            )
             raise
         except Exception as exc:
             if await task_store.is_cancel_requested(task_id):
                 _logger.info("Background analysis stopped during failure cleanup task=%s", task_id)
                 await db.rollback()
                 await _emit_cancelled_task(task_id, close=False)
-                await _clear_terminal_task_state(task_id, user.id if user else None)
+                await terminalize_task(
+                    task_id,
+                    user_id,
+                    TerminalResult(AnalysisTaskStatus.CANCELLED, reason="cancel marker observed during failure cleanup"),
+                )
                 return
             if analysis_completed or getattr(exc, "_analysis_terminal_event_emitted", False):
                 _logger.info("Not retrying analysis with an emitted terminal event task=%s", task_id)
-                await _clear_terminal_task_state(task_id, user.id if user else None)
+                status = AnalysisTaskStatus.COMPLETED if analysis_completed else AnalysisTaskStatus.FAILED
+                await terminalize_task(task_id, user_id, TerminalResult(status, reason=type(exc).__name__))
                 return
             _logger.exception("Background analysis failed")
             try:
@@ -501,15 +565,21 @@ async def run_analysis_task(
             if not retry_scheduled:
                 if await task_store.is_cancel_requested(task_id):
                     await _emit_cancelled_task(task_id, close=False)
+                    terminal_result = TerminalResult(
+                        AnalysisTaskStatus.CANCELLED,
+                        reason="cancel marker observed after retry decision",
+                    )
                 else:
                     await AnalysisEmitter(task_id).emit_error("Analysis failed before completion. Please try again.")
-                await _clear_terminal_task_state(task_id, user.id if user else None)
+                    terminal_result = TerminalResult(AnalysisTaskStatus.FAILED, reason=type(exc).__name__)
+                await terminalize_task(task_id, user_id, terminal_result)
         finally:
             if not retry_scheduled:
                 try:
                     await AnalysisEmitter(task_id).close()
                 except Exception:
                     _logger.debug("Could not close analysis event stream task=%s", task_id, exc_info=True)
+
 
 async def _maybe_retry_analysis(
     ticker: str,
@@ -526,6 +596,7 @@ async def _maybe_retry_analysis(
     """
     return False
 
+
 async def run_portfolio_task(
     tickers: list[str],
     trade_date: str,
@@ -540,10 +611,13 @@ async def run_portfolio_task(
 
         current_user_id.set(user.id)
     user_id = user.id if user else None
+    terminal_result = TerminalResult(AnalysisTaskStatus.COMPLETED)
+    emitter = AnalysisEmitter(task_id) if task_id else None
     try:
         if task_id:
             if await task_store.is_cancel_requested(task_id):
-                await _emit_cancelled_task(task_id)
+                terminal_result = TerminalResult(AnalysisTaskStatus.CANCELLED, reason="cancelled before portfolio start")
+                await _emit_cancelled_task(task_id, close=False)
                 return
             await _track_running_task(
                 task_id,
@@ -570,19 +644,22 @@ async def run_portfolio_task(
             )
             await db.commit()
     except asyncio.CancelledError:
+        terminal_result = TerminalResult(AnalysisTaskStatus.CANCELLED, reason="portfolio task cancelled")
         _logger.info("Portfolio analysis cancelled task=%s", task_id)
         if task_id:
-            await _emit_cancelled_task(task_id)
+            await _emit_cancelled_task(task_id, close=False)
         raise
-    except Exception:
+    except Exception as exc:
+        terminal_result = TerminalResult(AnalysisTaskStatus.FAILED, reason=type(exc).__name__)
         _logger.exception("Portfolio analysis failed")
-        if task_id:
-            emitter = AnalysisEmitter(task_id)
+        if emitter:
             await emitter.emit_error("Portfolio analysis failed")
-            await emitter.close()
     finally:
         if task_id:
-            await _clear_terminal_task_state(task_id, user_id)
+            await terminalize_task(task_id, user_id, terminal_result)
+            if emitter:
+                await emitter.close()
+
 
 async def rollback_and_resume_analysis(
     analysis_id: int,
@@ -686,6 +763,7 @@ async def rollback_and_resume_analysis(
 
             current_user_id.set(current_user.id)
         emitter = AnalysisEmitter(task_id)
+        terminal_result = TerminalResult(AnalysisTaskStatus.COMPLETED)
         try:
             await _track_running_task(
                 task_id,
@@ -724,17 +802,20 @@ async def rollback_and_resume_analysis(
                     await update_analysis_result(session, analysis_id, status="failed")
                     raise
         except asyncio.CancelledError:
+            terminal_result = TerminalResult(AnalysisTaskStatus.CANCELLED, reason="time-travel resume cancelled")
             await emitter.emit_error("Analysis resume was cancelled.")
             raise
-        except Exception:
+        except Exception as exc:
+            terminal_result = TerminalResult(AnalysisTaskStatus.FAILED, reason=type(exc).__name__)
             _logger.exception("Time-travel resume task failed task=%s", task_id)
             await emitter.emit_error("Analysis resume failed before completion.")
         finally:
-            await _clear_terminal_task_state(task_id, resume_user_id)
+            await terminalize_task(task_id, resume_user_id, terminal_result)
             await emitter.close()
 
     task = asyncio.create_task(run_resume())
     _RUNNING_TASKS[task_id] = task
+
 
 async def list_analysis_checkpoints(analysis_id: int, db: AsyncSession, current_user) -> list[dict] | None:
     import os
