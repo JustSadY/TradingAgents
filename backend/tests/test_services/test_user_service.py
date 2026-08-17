@@ -6,10 +6,12 @@ import pytest
 from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from backend.core.constants import PAGE_KEYS, SETTING_KEYS
 from backend.core.password_hashing import verify_password
 from backend.models.user import User
 from backend.services.user_service import (
     CannotDeleteSelfError,
+    UnknownPermissionKeysError,
     UserNotFoundError,
     UserPolicyError,
     UsernameTakenError,
@@ -18,8 +20,16 @@ from backend.services.user_service import (
     delete_managed_user,
     delete_user_api_key,
     encrypt_api_keys,
+    get_effective_page_permissions,
+    get_effective_setting_permissions,
+    get_managed_page_permissions,
     get_user_api_key,
+    list_stored_api_key_providers,
     list_user_api_key_providers,
+    remove_stored_api_key,
+    save_stored_api_key,
+    set_managed_page_permissions,
+    set_managed_setting_permissions,
     set_user_api_key,
     update_managed_user,
     update_profile,
@@ -151,6 +161,26 @@ class TestUserService:
             key = resolve_user_api_key(user, "openai")
             assert key == "sk-resolve"
 
+    def test_list_stored_api_key_providers_owns_fernet_lookup(self):
+        user = User(api_keys_enc=encrypt_api_keys(self.test_keys, self.fernet))
+
+        with patch("backend.core.config.get_settings") as mock_settings:
+            mock_settings.return_value.get_fernet.return_value = self.fernet
+            assert sorted(list_stored_api_key_providers(user)) == ["anthropic", "openai"]
+
+    async def test_save_and_remove_stored_api_key_own_persistence_boundary(
+        self,
+        db: AsyncSession,
+        test_user: User,
+    ) -> None:
+        with patch("backend.core.config.get_settings") as mock_settings:
+            mock_settings.return_value.get_fernet.return_value = self.fernet
+            await save_stored_api_key(db, test_user, "openai", "sk-service")
+            assert decrypt_api_keys(test_user.api_keys_enc, self.fernet)["openai"] == "sk-service"
+
+            assert await remove_stored_api_key(db, test_user, "openai") is True
+            assert test_user.api_keys_enc is None
+
     async def test_update_profile_password_invalidates_old_tokens(
         self,
         db: AsyncSession,
@@ -227,3 +257,40 @@ class TestUserService:
     ) -> None:
         with pytest.raises(CannotDeleteSelfError, match="Cannot delete yourself"):
             await delete_managed_user(db, admin_user, admin_user.id)
+
+    async def test_admin_effective_page_permissions_include_admin_page(
+        self,
+        db: AsyncSession,
+        admin_user: User,
+    ) -> None:
+        assert await get_effective_page_permissions(db, admin_user) == [*PAGE_KEYS, "admin"]
+
+    async def test_admin_effective_setting_permissions_are_all_settings(
+        self,
+        db: AsyncSession,
+        admin_user: User,
+    ) -> None:
+        assert await get_effective_setting_permissions(db, admin_user) == list(SETTING_KEYS)
+
+    async def test_managed_page_permissions_require_existing_user(
+        self,
+        db: AsyncSession,
+    ) -> None:
+        with pytest.raises(UserNotFoundError, match="User not found"):
+            await get_managed_page_permissions(db, 999999)
+
+    async def test_unknown_page_permission_key_is_rejected_in_service(
+        self,
+        db: AsyncSession,
+        test_user: User,
+    ) -> None:
+        with pytest.raises(UnknownPermissionKeysError, match="Unknown page permission keys"):
+            await set_managed_page_permissions(db, test_user.id, {"teleport": True})
+
+    async def test_unknown_setting_permission_key_is_rejected_in_service(
+        self,
+        db: AsyncSession,
+        test_user: User,
+    ) -> None:
+        with pytest.raises(UnknownPermissionKeysError, match="Unknown setting permission keys"):
+            await set_managed_setting_permissions(db, test_user.id, {"teleport": True})
