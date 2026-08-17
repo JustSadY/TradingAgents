@@ -4,8 +4,6 @@ from datetime import UTC, datetime
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
-from sqlalchemy import delete, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.order import Order
@@ -44,14 +42,8 @@ class AnalysisOwnershipError(ValueError):
 
 
 def _opening_commission(holding: Holding) -> Decimal:
-    """Return the unallocated opening commission carried by ``holding``.
-
-    ``getattr`` keeps this read path safe while an older SQLite development
-    database is being upgraded.  Production PostgreSQL schemas gain the
-    non-null column through Alembic before this code is deployed.
-    """
-    value = getattr(holding, "entry_commission", Decimal("0.0"))
-    return value if value is not None else Decimal("0.0")
+    """Return the opening commission carried by the canonical Holding schema."""
+    return holding.entry_commission
 
 
 def _aware_utc(value: datetime | None, fallback: datetime) -> datetime:
@@ -92,7 +84,10 @@ async def get_or_create_sim_portfolio(
     user=None,
     portfolio_id: int | None = None,
 ) -> Portfolio:
-    from backend.repositories.portfolio import get_portfolio_by_id, get_simulation_portfolio
+    from backend.repositories.portfolio import (
+        get_or_create_simulation_portfolio,
+        get_portfolio_by_id,
+    )
 
     user_id = getattr(user, "id", None) if user is not None else None
 
@@ -101,28 +96,11 @@ async def get_or_create_sim_portfolio(
         if portfolio:
             return portfolio
 
-    portfolio = await get_simulation_portfolio(db, user_id=user_id)
-    if portfolio is None:
-        initial_capital_dec = Decimal(str(initial_capital))
-        portfolio = Portfolio(
-            mode="simulation",
-            broker="paper",
-            initial_capital=initial_capital_dec,
-            current_balance=initial_capital_dec,
-            cash_available=initial_capital_dec,
-            status="active",
-            user_id=user_id,
-        )
-        try:
-            db.add(portfolio)
-            await db.flush()
-        except IntegrityError:
-            await db.rollback()
-            portfolio = await get_simulation_portfolio(db, user_id=user_id)
-            if portfolio is None:
-                raise
-        await db.refresh(portfolio, ["holdings"])
-    return portfolio
+    return await get_or_create_simulation_portfolio(
+        db,
+        user_id=user_id,
+        initial_capital=Decimal(str(initial_capital)),
+    )
 
 async def get_portfolio_with_live_prices(
     db: AsyncSession,
@@ -329,7 +307,7 @@ async def execute_order(
 ) -> dict:
     from backend.core.l10n import get_message
     from backend.repositories.analysis import get_analysis_by_id
-    from backend.repositories.portfolio import get_holding
+    from backend.repositories.portfolio import get_holding, lock_portfolio_for_update
     from backend.services.settings_service import get_user_language
 
     if analysis_id is not None and await get_analysis_by_id(db, analysis_id, user=user) is None:
@@ -353,10 +331,7 @@ async def execute_order(
     qty_dec = Decimal(str(quantity))
 
     portfolio = await get_or_create_sim_portfolio(db, user=user, portfolio_id=portfolio_id)
-
-    stmt = select(Portfolio).where(Portfolio.id == portfolio.id).with_for_update()
-    res = await db.execute(stmt, execution_options={"populate_existing": True})
-    portfolio = res.scalar_one()
+    portfolio = await lock_portfolio_for_update(db, portfolio.id)
 
     notional = price * qty_dec
     commission = (notional * _DEFAULT_COMMISSION_RATE).quantize(Decimal("0.0001"))
@@ -444,10 +419,9 @@ async def execute_order(
     }
 
 async def monitor_open_positions(db: AsyncSession) -> list[dict]:
-    result = await db.execute(
-        select(Portfolio).where(Portfolio.mode == "simulation").with_for_update(skip_locked=True)
-    )
-    portfolios = result.scalars().all()
+    from backend.repositories.portfolio import list_simulation_portfolios_for_update
+
+    portfolios = await list_simulation_portfolios_for_update(db)
     closed = []
     for p in portfolios:
         if p.mode != "simulation":
@@ -639,51 +613,16 @@ async def _execute_close_position(
     return realized_pnl, entry_commission, financing_cost
 
 async def reset_portfolio(db: AsyncSession, initial_capital: float = 100_000.0, user=None) -> dict:
-    from backend.repositories.portfolio import get_simulation_portfolio
+    from backend.core.l10n import get_message
+    from backend.repositories.portfolio import reset_simulation_portfolio
+    from backend.services.settings_service import get_user_language
 
     user_id = getattr(user, "id", None) if user is not None else None
-    portfolio = await get_simulation_portfolio(db, user_id=user_id)
-
-    initial_capital_dec = Decimal(str(initial_capital))
-    if portfolio:
-        locked = await db.execute(select(Portfolio).where(Portfolio.id == portfolio.id).with_for_update())
-        portfolio = locked.scalar_one()
-        await db.execute(delete(Order).where(Order.portfolio_id == portfolio.id))
-        await db.execute(delete(Holding).where(Holding.portfolio_id == portfolio.id))
-        portfolio.cash_available = initial_capital_dec
-        portfolio.current_balance = initial_capital_dec
-        portfolio.initial_capital = initial_capital_dec
-        portfolio.margin_used = Decimal("0.0")
-        await db.flush()
-    else:
-        portfolio = Portfolio(
-            mode="simulation",
-            broker="paper",
-            initial_capital=initial_capital_dec,
-            current_balance=initial_capital_dec,
-            cash_available=initial_capital_dec,
-            status="active",
-            user_id=user_id,
-        )
-        try:
-            db.add(portfolio)
-            await db.flush()
-        except IntegrityError:
-            await db.rollback()
-            portfolio = await get_simulation_portfolio(db, user_id=user_id)
-            if portfolio:
-                await db.execute(delete(Order).where(Order.portfolio_id == portfolio.id))
-                await db.execute(delete(Holding).where(Holding.portfolio_id == portfolio.id))
-                portfolio.cash_available = initial_capital_dec
-                portfolio.current_balance = initial_capital_dec
-                portfolio.initial_capital = initial_capital_dec
-                portfolio.margin_used = Decimal("0.0")
-                await db.flush()
-            else:
-                raise
-
-    from backend.core.l10n import get_message
-    from backend.services.settings_service import get_user_language
+    await reset_simulation_portfolio(
+        db,
+        user_id=user_id,
+        initial_capital=Decimal(str(initial_capital)),
+    )
 
     lang = await get_user_language(db, user)
     return {"status": "success", "message": get_message("portfolio_reset_success", lang)}
