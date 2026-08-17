@@ -1,4 +1,7 @@
-from sqlalchemy import desc, select
+from decimal import Decimal
+
+from sqlalchemy import delete, desc, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
@@ -21,6 +24,74 @@ async def get_simulation_portfolio(db: AsyncSession, user_id: int | None = None)
         q = q.where(Portfolio.user_id.is_(None))
     result = await db.execute(q)
     return result.scalar_one_or_none()
+
+
+async def get_or_create_simulation_portfolio(
+    db: AsyncSession,
+    *,
+    user_id: int | None,
+    initial_capital: Decimal,
+) -> Portfolio:
+    """Return the tenant's simulation portfolio, creating it race-safely."""
+    portfolio = await get_simulation_portfolio(db, user_id=user_id)
+    if portfolio is None:
+        try:
+            async with db.begin_nested():
+                portfolio = Portfolio(
+                    mode="simulation",
+                    broker="paper",
+                    initial_capital=initial_capital,
+                    current_balance=initial_capital,
+                    cash_available=initial_capital,
+                    status="active",
+                    user_id=user_id,
+                )
+                db.add(portfolio)
+                await db.flush()
+        except IntegrityError:
+            portfolio = await get_simulation_portfolio(db, user_id=user_id)
+            if portfolio is None:
+                raise
+    await db.refresh(portfolio, ["holdings"])
+    return portfolio
+
+
+async def lock_portfolio_for_update(db: AsyncSession, portfolio_id: int) -> Portfolio:
+    result = await db.execute(
+        select(Portfolio).where(Portfolio.id == portfolio_id).with_for_update(),
+        execution_options={"populate_existing": True},
+    )
+    return result.scalar_one()
+
+
+async def list_simulation_portfolios_for_update(db: AsyncSession) -> list[Portfolio]:
+    result = await db.execute(
+        select(Portfolio).where(Portfolio.mode == "simulation").with_for_update(skip_locked=True)
+    )
+    return list(result.scalars().all())
+
+
+async def reset_simulation_portfolio(
+    db: AsyncSession,
+    *,
+    user_id: int | None,
+    initial_capital: Decimal,
+) -> Portfolio:
+    portfolio = await get_or_create_simulation_portfolio(
+        db,
+        user_id=user_id,
+        initial_capital=initial_capital,
+    )
+    portfolio = await lock_portfolio_for_update(db, portfolio.id)
+    await db.execute(delete(Order).where(Order.portfolio_id == portfolio.id))
+    await db.execute(delete(Holding).where(Holding.portfolio_id == portfolio.id))
+    portfolio.cash_available = initial_capital
+    portfolio.current_balance = initial_capital
+    portfolio.initial_capital = initial_capital
+    portfolio.margin_used = Decimal("0.0")
+    await db.flush()
+    return portfolio
+
 
 async def get_holding(db: AsyncSession, portfolio_id: int, ticker: str) -> Holding | None:
     result = await db.execute(
