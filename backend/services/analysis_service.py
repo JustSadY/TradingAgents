@@ -8,12 +8,10 @@ Responsibilities have been moved to:
 - .tasks: Background extraction and notification tasks
 - .portfolio_orchestrator: Multi-ticker synthesis
 
-DESIGN TARGET (Out-of-Process Scaling):
-Currently, task tracking is managed in-memory via `_RUNNING_TASKS` and `_TASK_REGISTRY`
-under a single Uvicorn process. To support high concurrent LLM runs:
-1. Keep functions inside the `analysis` sub-module (especially orchestrator and persistence) stateless
-   and db-session encapsulated so they can easily be deported to arq / Celery workers.
-2. Rely on DB-driven updates and avoid coupling to local process memory.
+Analysis task state is coordinated through ``backend.analysis_runtime``. Local
+registries only track process-owned asyncio tasks and sockets; shared metadata,
+ownership, cancellation and heartbeat state live behind the runtime backend so
+web and worker processes use the same contract.
 """
 
 from __future__ import annotations
@@ -42,8 +40,6 @@ from .analysis.task_lifecycle import AnalysisTaskStatus, TerminalCoordinator, Te
 
 _logger = logging.getLogger(__name__)
 runtime = get_analysis_runtime()
-# Compatibility alias for existing regression tests during the boundary migration.
-task_store = runtime
 
 _RUNNING_TASKS: dict[str, asyncio.Task] = {}
 _TASK_REGISTRY: dict[str, dict] = {}
