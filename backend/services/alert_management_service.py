@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.alert import PriceAlert
 from backend.models.user import User
-from backend.repositories.alerts import delete_alert_row, get_alert_by_id
+from backend.repositories.alerts import apply_alert_changes, delete_alert_row, get_alert_by_id
 from backend.services.alert_creation_service import rearm_alert_with_guardrails
 
 
@@ -44,10 +44,7 @@ async def update_user_alert(
         await rearm_alert_with_guardrails(db, alert)
         changes.pop("enabled")
 
-    for field, value in changes.items():
-        setattr(alert, field, value)
-    await db.flush()
-    return alert
+    return await apply_alert_changes(db, alert, changes)
 
 
 async def delete_user_alert(db: AsyncSession, *, user: User, alert_id: int) -> bool:
