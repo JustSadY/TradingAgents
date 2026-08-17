@@ -18,7 +18,6 @@ import json
 from datetime import UTC, datetime, time
 from typing import Any
 
-from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.repositories.asset_strategy import (
@@ -27,6 +26,7 @@ from backend.repositories.asset_strategy import (
     get_strategy_version_as_of,
     strategy_state_snapshot,
 )
+from backend.repositories.strategy_context import get_last_accepted_analysis
 
 
 def _as_utc_day_end(trade_date: str | datetime) -> datetime:
@@ -115,36 +115,16 @@ async def _last_accepted_decision(
     recorded_as_of: datetime | None,
 ) -> dict[str, Any] | None:
     """Load the last accepted canonical decision in the same tenant scope."""
-    from backend.models.analysis import AnalysisResult
-
-    row = None
     last_analysis_id = (strategy_snapshot or {}).get("last_analysis_id")
-    if business_as_of is None and recorded_as_of is None and isinstance(last_analysis_id, int):
-        candidate = await db.get(AnalysisResult, last_analysis_id)
-        if candidate is not None and candidate.status == "completed":
-            row = candidate
-
-    if row is None:
-        stmt = (
-            select(AnalysisResult)
-            .where(
-                AnalysisResult.ticker == ticker.upper(),
-                AnalysisResult.asset_type == asset_type.lower(),
-                AnalysisResult.status == "completed",
-                AnalysisResult.learning_eligible.is_(True),
-            )
-            .order_by(AnalysisResult.trade_date.desc(), AnalysisResult.created_at.desc())
-            .limit(1)
-        )
-        if user_id is None:
-            stmt = stmt.where(AnalysisResult.user_id.is_(None))
-        else:
-            stmt = stmt.where(AnalysisResult.user_id == user_id)
-        if business_as_of is not None:
-            stmt = stmt.where(AnalysisResult.trade_date <= business_as_of.date().isoformat())
-        if recorded_as_of is not None:
-            stmt = stmt.where(AnalysisResult.created_at <= recorded_as_of)
-        row = (await db.execute(stmt)).scalar_one_or_none()
+    row = await get_last_accepted_analysis(
+        db,
+        user_id=user_id,
+        ticker=ticker,
+        asset_type=asset_type,
+        last_analysis_id=last_analysis_id if isinstance(last_analysis_id, int) else None,
+        business_as_of=business_as_of,
+        recorded_as_of=recorded_as_of,
+    )
     return _decision_from_analysis(row)
 
 
