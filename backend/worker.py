@@ -42,6 +42,39 @@ async def _mark_analysis_terminal(task_id: str, status: str, user_id: int | None
     except Exception:
         _logger.exception("Could not persist terminal worker state task=%s status=%s", task_id, status)
 
+
+async def _terminalize_worker_failure(
+    task_id: str,
+    user_id: int | None,
+    *,
+    status: str,
+    message: str,
+    persist_analysis_row: bool,
+) -> None:
+    """Emit a terminal worker error once, clean runtime state, then close the stream."""
+    from backend.services.analysis.emitter import AnalysisEmitter
+    from backend.services.analysis.task_lifecycle import AnalysisTaskStatus, TerminalResult
+    from backend.services.analysis_service import get_terminal_result, terminalize_task
+
+    if persist_analysis_row:
+        await _mark_analysis_terminal(task_id, status, user_id)
+
+    if get_terminal_result(task_id) is not None:
+        return
+
+    terminal_status = AnalysisTaskStatus(status)
+    emitter = AnalysisEmitter(task_id)
+    try:
+        await emitter.emit_error(message)
+        await terminalize_task(
+            task_id,
+            user_id,
+            TerminalResult(terminal_status, reason="worker preparation/transport failure"),
+        )
+    finally:
+        await emitter.close()
+
+
 async def run_analysis_job(
     ctx,
     ticker: str,
@@ -61,19 +94,17 @@ async def run_analysis_job(
             user = await db.get(User, user_id) if user_id is not None else None
             if user_id is not None:
                 from backend.core.rls_context import set_user_background_context
+
                 await set_user_background_context(db, user_id)
             if user_id is not None and user is None:
                 _logger.warning("Dropping analysis task=%s: owner user_id=%s no longer exists", task_id, user_id)
-                from backend.core import task_store
-                from backend.services.analysis.emitter import AnalysisEmitter
-
-                emitter = AnalysisEmitter(task_id)
-                await emitter.emit_error("Analysis owner no longer exists")
-                await emitter.close()
-                await task_store.clear_meta(task_id, user_id)
-                await task_store.clear_owner(task_id)
-                await task_store.clear_cancel_request(task_id)
-                await _mark_analysis_terminal(task_id, "failed", user_id)
+                await _terminalize_worker_failure(
+                    task_id,
+                    user_id,
+                    status="failed",
+                    message="Analysis owner no longer exists",
+                    persist_analysis_row=True,
+                )
                 return
             settings = await get_or_create_settings(db, user)
             await db.commit()
@@ -81,33 +112,24 @@ async def run_analysis_job(
         await run_analysis_task(ticker, trade_date, asset_type, settings, task_id, user, triggered_by)
     except asyncio.CancelledError:
         _logger.info("Analysis worker job cancelled task=%s", task_id)
-        from backend.core import task_store
-        from backend.services.analysis.emitter import AnalysisEmitter
-
-        try:
-            emitter = AnalysisEmitter(task_id)
-            await emitter.emit_error("Analysis cancelled.")
-            await emitter.close()
-            await _mark_analysis_terminal(task_id, "cancelled", user_id)
-        finally:
-            await task_store.clear_meta(task_id, user_id)
-            await task_store.clear_owner(task_id)
-            await task_store.clear_cancel_request(task_id)
+        await _terminalize_worker_failure(
+            task_id,
+            user_id,
+            status="cancelled",
+            message="Analysis cancelled.",
+            persist_analysis_row=True,
+        )
         raise
     except Exception:
         _logger.exception("Analysis worker preparation failed task=%s", task_id)
-        from backend.core import task_store
-        from backend.services.analysis.emitter import AnalysisEmitter
+        await _terminalize_worker_failure(
+            task_id,
+            user_id,
+            status="failed",
+            message="Analysis failed before execution. Please try again.",
+            persist_analysis_row=True,
+        )
 
-        emitter = AnalysisEmitter(task_id)
-        try:
-            await emitter.emit_error("Analysis failed before execution. Please try again.")
-            await _mark_analysis_terminal(task_id, "failed", user_id)
-        finally:
-            await emitter.close()
-            await task_store.clear_meta(task_id, user_id)
-            await task_store.clear_owner(task_id)
-            await task_store.clear_cancel_request(task_id)
 
 async def run_portfolio_job(
     ctx, tickers: list[str], trade_date: str, asset_type: str, user_id: int | None, task_id: str
@@ -122,18 +144,17 @@ async def run_portfolio_job(
             user = await db.get(User, user_id) if user_id is not None else None
             if user_id is not None:
                 from backend.core.rls_context import set_user_background_context
+
                 await set_user_background_context(db, user_id)
             if user_id is not None and user is None:
                 _logger.warning("Dropping portfolio task=%s: owner user_id=%s no longer exists", task_id, user_id)
-                from backend.core import task_store
-                from backend.services.analysis.emitter import AnalysisEmitter
-
-                emitter = AnalysisEmitter(task_id)
-                await emitter.emit_error("Analysis owner no longer exists")
-                await emitter.close()
-                await task_store.clear_meta(task_id, user_id)
-                await task_store.clear_owner(task_id)
-                await task_store.clear_cancel_request(task_id)
+                await _terminalize_worker_failure(
+                    task_id,
+                    user_id,
+                    status="failed",
+                    message="Analysis owner no longer exists",
+                    persist_analysis_row=False,
+                )
                 return
             settings = await get_or_create_settings(db, user)
             await db.commit()
@@ -141,31 +162,24 @@ async def run_portfolio_job(
         await run_portfolio_task(tickers, trade_date, asset_type, settings, user, task_id)
     except asyncio.CancelledError:
         _logger.info("Portfolio worker job cancelled task=%s", task_id)
-        from backend.core import task_store
-        from backend.services.analysis.emitter import AnalysisEmitter
-
-        try:
-            emitter = AnalysisEmitter(task_id)
-            await emitter.emit_error("Portfolio analysis cancelled.")
-            await emitter.close()
-        finally:
-            await task_store.clear_meta(task_id, user_id)
-            await task_store.clear_owner(task_id)
-            await task_store.clear_cancel_request(task_id)
+        await _terminalize_worker_failure(
+            task_id,
+            user_id,
+            status="cancelled",
+            message="Portfolio analysis cancelled.",
+            persist_analysis_row=False,
+        )
         raise
     except Exception:
         _logger.exception("Portfolio worker preparation failed task=%s", task_id)
-        from backend.core import task_store
-        from backend.services.analysis.emitter import AnalysisEmitter
+        await _terminalize_worker_failure(
+            task_id,
+            user_id,
+            status="failed",
+            message="Portfolio analysis failed before execution. Please try again.",
+            persist_analysis_row=False,
+        )
 
-        emitter = AnalysisEmitter(task_id)
-        try:
-            await emitter.emit_error("Portfolio analysis failed before execution. Please try again.")
-        finally:
-            await emitter.close()
-            await task_store.clear_meta(task_id, user_id)
-            await task_store.clear_owner(task_id)
-            await task_store.clear_cancel_request(task_id)
 
 async def startup(ctx):
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
@@ -180,6 +194,7 @@ async def startup(ctx):
     ctx["control_listener"] = asyncio.create_task(control_listener(cancel_local_task))
     _logger.info("Analysis worker ready (queue mode).")
 
+
 async def shutdown(ctx):
     listener = ctx.get("control_listener")
     if listener:
@@ -188,10 +203,12 @@ async def shutdown(ctx):
 
     await close_redis()
 
+
 def _redis_settings():
     from arq.connections import RedisSettings
 
     return RedisSettings.from_dsn(get_settings().REDIS_URL or "redis://localhost:6379/0")
+
 
 class WorkerSettings:
     functions = [run_analysis_job, run_portfolio_job]
