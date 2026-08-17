@@ -65,3 +65,46 @@ def test_settings_service_uses_repository_for_app_settings_queries() -> None:
     assert "IntegrityError" not in source
     assert "select(AppSettings" not in source
     assert "backend.repositories.settings" in source
+
+
+def test_analysis_stats_and_calibration_use_repository_queries_only() -> None:
+    backend_root = Path(__file__).resolve().parents[2]
+    stats = (backend_root / "services" / "analysis_stats_service.py").read_text()
+    calibration = (backend_root / "services" / "confidence_calibration_service.py").read_text()
+
+    assert "from sqlalchemy import select" not in stats
+    assert "backend.models.analysis" not in stats
+    assert "DB may be unmigrated" not in stats
+    assert "backend.repositories.analysis_stats" in stats
+
+    assert "from sqlalchemy import select" not in calibration
+    assert "backend.models.analysis" not in calibration
+    assert "chart_annotations" not in calibration
+    assert "backend.repositories.analysis_stats" in calibration
+
+
+def test_runtime_access_and_strategy_context_do_not_own_analysis_or_access_sql() -> None:
+    backend_root = Path(__file__).resolve().parents[2]
+    tool_settings = (backend_root / "services" / "tool_settings_service.py").read_text()
+    strategy_context = (backend_root / "services" / "strategy_context_service.py").read_text()
+
+    assert "from sqlalchemy import select" not in tool_settings
+    assert "UserAgentAccess" not in tool_settings
+    assert "UserToolAccess" not in tool_settings
+    assert "UserToolFieldAccess" not in tool_settings
+    assert "get_user_access_overrides" in tool_settings
+
+    assert "from sqlalchemy import select" not in strategy_context
+    assert "backend.models.analysis" not in strategy_context
+    assert "backend.repositories.strategy_context" in strategy_context
+
+
+def test_memory_service_reads_relational_configuration_via_repositories() -> None:
+    backend_root = Path(__file__).resolve().parents[2]
+    source = (backend_root / "services" / "memory_service.py").read_text()
+
+    assert "from sqlalchemy import select" not in source
+    assert "backend.models.settings" not in source
+    assert "backend.models.user" not in source
+    assert "backend.repositories.settings" in source
+    assert "backend.repositories.users" in source
