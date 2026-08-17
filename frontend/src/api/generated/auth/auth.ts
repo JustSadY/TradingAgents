@@ -6,18 +6,29 @@
  * OpenAPI spec version: 1.0.0
  */
 import {
-  useMutation
+  useMutation,
+  useQuery
 } from '@tanstack/react-query';
 import type {
+  DataTag,
+  DefinedInitialDataOptions,
+  DefinedUseQueryResult,
   MutationFunction,
   QueryClient,
+  QueryFunction,
+  QueryKey,
+  UndefinedInitialDataOptions,
   UseMutationOptions,
-  UseMutationResult
+  UseMutationResult,
+  UseQueryOptions,
+  UseQueryResult
 } from '@tanstack/react-query';
 
 import type {
   HTTPValidationError,
   LoginRequest,
+  SetupRequest,
+  SetupStatusResponse,
   TokenResponse
 } from '../model';
 
@@ -27,6 +38,21 @@ import { customInstance } from '../../mutator';
 type SecondParameter<T extends (...args: never) => unknown> = Parameters<T>[1];
 
 
+
+const withQueryKey = <T extends object, K>(query: T, queryKey: K): T & { queryKey: K } => {
+  const result = { queryKey } as T & { queryKey: K };
+  for (const key of Object.keys(query)) {
+    // The explicit queryKey always wins, matching the previous
+    // `{ ...query, queryKey }` spread where it was set last.
+    if (key === 'queryKey') continue;
+    Object.defineProperty(result, key, {
+      enumerable: true,
+      configurable: true,
+      get: () => (query as Record<string, unknown>)[key],
+    });
+  }
+  return result;
+};
 
 /**
  * @summary Login
@@ -216,3 +242,164 @@ export const useAuthRefresh = <TError = unknown,
       > => {
       return useMutation(getAuthRefreshMutationOptions(options), queryClient);
     }
+    /**
+ * Register the Server Owner on an empty installation and sign it in.
+ *
+ * Closed for good once any account exists — it is a bootstrap route, not a
+ * public sign-up.
+ * @summary Setup
+ */
+export const authSetup = (
+    setupRequest: SetupRequest,
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<TokenResponse>(
+      {url: `/auth/setup`, method: 'POST',
+      headers: {'Content-Type': 'application/json', },
+      data: setupRequest, signal
+    },
+      options);
+    }
+
+
+
+
+export const getAuthSetupMutationOptions = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authSetup>>, TError,{data: SetupRequest}, TContext>, request?: SecondParameter<typeof customInstance>}
+): UseMutationOptions<Awaited<ReturnType<typeof authSetup>>, TError,{data: SetupRequest}, TContext> => {
+
+const mutationKey = ['authSetup'];
+const {mutation: mutationOptions, request: requestOptions} = options ?
+      options.mutation && 'mutationKey' in options.mutation && options.mutation.mutationKey ?
+      options
+      : {...options, mutation: {...options.mutation, mutationKey}}
+      : {mutation: { mutationKey, }, request: undefined};
+
+
+
+
+      const mutationFn: MutationFunction<Awaited<ReturnType<typeof authSetup>>, {data: SetupRequest}> = (props) => {
+          const {data} = props ?? {};
+
+          return  authSetup(data,requestOptions)
+        }
+
+
+
+
+
+
+  return  { mutationFn, ...mutationOptions }}
+
+    export type AuthSetupMutationResult = NonNullable<Awaited<ReturnType<typeof authSetup>>>
+    export type AuthSetupMutationBody = SetupRequest
+    export type AuthSetupMutationError = HTTPValidationError
+
+    /**
+ * @summary Setup
+ */
+export const useAuthSetup = <TError = HTTPValidationError,
+    TContext = unknown>(options?: { mutation?:UseMutationOptions<Awaited<ReturnType<typeof authSetup>>, TError,{data: SetupRequest}, TContext>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient): UseMutationResult<
+        Awaited<ReturnType<typeof authSetup>>,
+        TError,
+        {data: SetupRequest},
+        TContext
+      > => {
+      return useMutation(getAuthSetupMutationOptions(options), queryClient);
+    }
+    /**
+ * Whether the login screen should offer first-run owner registration.
+ * @summary Setup Status
+ */
+export const authSetupStatus = (
+
+ options?: SecondParameter<typeof customInstance>,signal?: AbortSignal
+) => {
+
+
+      return customInstance<SetupStatusResponse>(
+      {url: `/auth/setup-status`, method: 'GET', signal
+    },
+      options);
+    }
+
+
+
+
+export const getAuthSetupStatusQueryKey = () => {
+    return [
+    `/auth/setup-status`
+    ] as const;
+    }
+
+
+export const getAuthSetupStatusQueryOptions = <TData = Awaited<ReturnType<typeof authSetupStatus>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof authSetupStatus>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+) => {
+
+const {query: queryOptions, request: requestOptions} = options ?? {};
+
+  const queryKey =  queryOptions?.queryKey ?? getAuthSetupStatusQueryKey();
+
+
+
+    const queryFn: QueryFunction<Awaited<ReturnType<typeof authSetupStatus>>> = ({ signal }) => authSetupStatus(requestOptions, signal);
+
+
+
+
+
+   return  { queryKey, queryFn, ...queryOptions} as UseQueryOptions<Awaited<ReturnType<typeof authSetupStatus>>, TError, TData> & { queryKey: DataTag<QueryKey, TData, TError> }
+}
+
+export type AuthSetupStatusQueryResult = NonNullable<Awaited<ReturnType<typeof authSetupStatus>>>
+export type AuthSetupStatusQueryError = unknown
+
+
+export function useAuthSetupStatus<TData = Awaited<ReturnType<typeof authSetupStatus>>, TError = unknown>(
+  options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof authSetupStatus>>, TError, TData>> & Pick<
+        DefinedInitialDataOptions<
+          Awaited<ReturnType<typeof authSetupStatus>>,
+          TError,
+          Awaited<ReturnType<typeof authSetupStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAuthSetupStatus<TData = Awaited<ReturnType<typeof authSetupStatus>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof authSetupStatus>>, TError, TData>> & Pick<
+        UndefinedInitialDataOptions<
+          Awaited<ReturnType<typeof authSetupStatus>>,
+          TError,
+          Awaited<ReturnType<typeof authSetupStatus>>
+        > , 'initialData'
+      >, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+export function useAuthSetupStatus<TData = Awaited<ReturnType<typeof authSetupStatus>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof authSetupStatus>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
+/**
+ * @summary Setup Status
+ */
+
+export function useAuthSetupStatus<TData = Awaited<ReturnType<typeof authSetupStatus>>, TError = unknown>(
+  options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof authSetupStatus>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+ , queryClient?: QueryClient
+ ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {
+
+  const queryOptions = getAuthSetupStatusQueryOptions(options)
+
+  const query = useQuery(queryOptions, queryClient) as  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> };
+
+  return withQueryKey(query, queryOptions.queryKey);
+}
+
+
+
+
+
+

@@ -14,4 +14,5 @@ export const AgentSettingFieldMetaType = {
   number: 'number',
   select: 'select',
   textarea: 'textarea',
+  llm_model: 'llm_model',
 } as const;

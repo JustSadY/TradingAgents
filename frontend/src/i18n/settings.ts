@@ -1,7 +1,6 @@
 const translations = {
   en: {
 
-    'settings.llm_model_placeholder': 'e.g. gpt-5.6-luna',
     'settings.loading': 'Loading...',
     'settings.tab_agents': 'AI Configuration',
     'settings.tab_memory': 'Memory',
@@ -72,12 +71,8 @@ const translations = {
     'settings.llm_settings': 'Core Engine Configuration',
     'settings.llm_settings_description': 'Configure LLM models and fallback providers',
     'settings.section_execution_rules': 'Debate & Execution Rules',
-    'settings.section_working_mode': 'Trading Mode Preferences',
     'settings.section_cron': 'Cron / Auto Scan',
     'settings.section_risk': 'Risk & Safety',
-    'settings.section_active_analysts': 'Active Analysts & Models',
-    'settings.section_data_sources': 'Data Sources Routing',
-    'settings.section_engine_routing': 'Engine Routing',
     'settings.section_advanced': 'Admin Engine Routing',
     'settings.section_tools': 'Agent Tools',
     'settings.section_presets': 'Configuration Templates',
@@ -85,9 +80,6 @@ const translations = {
     'settings.section_notifications': 'Personal Webhooks',
 
 
-    'settings.row_mode': 'Mode',
-    'settings.row_active_broker': 'Active Broker',
-    'settings.row_data_source': 'Data Source',
 
 
     'settings.row_active': 'Active',
@@ -101,14 +93,8 @@ const translations = {
     'settings.alert_cooldown_hint': 'Set to 0 to disable the time spacing between equivalent AI alerts from separate analyses.',
 
 
-    'settings.row_deep_think_model': 'Deep Think Model',
-    'settings.row_quick_think_model': 'Quick Think Model',
-    'settings.row_default_model': 'Default Model',
     'settings.analyst_default_provider': 'Default Provider',
     'settings.analyst_default_model': 'Default Model',
-    'settings.analyst_select_model': 'Select Model...',
-    'settings.model_quick_suffix': 'Quick',
-    'settings.model_deep_suffix': 'Deep',
     'settings.custom_model_option': 'Custom model...',
     'settings.custom_model_placeholder': 'Model ID (e.g. gpt-5.6-sol)',
     'settings.model_language_warning': 'This model does not have verified support for the selected output language. Responses may mix languages; verified languages:',
@@ -117,8 +103,6 @@ const translations = {
     'settings.row_parallel_analysts': 'Parallel Analysts',
 
 
-    'settings.custom_model_id': 'Custom model ID',
-    'settings.model_id_placeholder': 'Enter model ID...',
 
 
     'settings.effort_default': 'Default',
@@ -211,24 +195,15 @@ const translations = {
     'settings.row_prefilter_max_win_rate': 'Drop Below Win Rate (%)',
 
 
-    'settings.analysts_loading': 'Loading...',
 
 
-    'settings.data_core_stock': 'Stock Price',
-    'settings.data_technicals': 'Technical Indicators',
-    'settings.data_fundamentals': 'Fundamental Data',
-    'settings.data_news': 'News',
 
 
-    'settings.row_checkpoint': 'Checkpoint (Resume)',
-    'settings.row_news_limit_ticker': 'News Count (Ticker)',
     'settings.row_global_news_limit': 'Global News Count',
     'settings.row_global_news_lookback': 'Global News Lookback (Days)',
     'settings.row_max_recursion': 'Max Recursion Limit',
     'settings.row_benchmark_symbol': 'Benchmark Symbol',
     'settings.benchmark_placeholder': 'Leave empty = auto (SPY)',
-    'settings.row_reddit_enabled': 'Reddit Sentiment Data',
-    'settings.reddit_enabled_hint': 'Use Reddit posts for sentiment analysis',
 
 
     'settings.preset_name_placeholder': 'Template name...',
@@ -279,7 +254,6 @@ const translations = {
   },
   tr: {
 
-    'settings.llm_model_placeholder': 'ör. gpt-5.6-luna',
     'settings.loading': 'Yükleniyor...',
     'settings.tab_agents': 'Yapay Zeka Yapılandırması',
     'settings.tab_memory': 'Bellek',
@@ -350,12 +324,8 @@ const translations = {
     'settings.llm_settings': 'Çekirdek Motor Yapılandırması',
     'settings.llm_settings_description': 'LLM modellerini ve yedek sağlayıcıları yapılandırın',
     'settings.section_execution_rules': 'Tartışma ve Yürütme Kuralları',
-    'settings.section_working_mode': 'İşlem Modu Tercihleri',
     'settings.section_cron': 'Cron / Otomatik Tarama',
     'settings.section_risk': 'Risk ve Güvenlik Limitleri',
-    'settings.section_active_analysts': 'Aktif Analistler & Modeller',
-    'settings.section_data_sources': 'Veri Kaynağı Yönlendirmeleri',
-    'settings.section_engine_routing': 'Motor Yönlendirmeleri',
     'settings.section_advanced': 'Yönetici Motor Yönlendirmeleri',
     'settings.section_tools': 'Ajan Araçları (Tools)',
     'settings.section_presets': 'Ayar Şablonları',
@@ -363,9 +333,6 @@ const translations = {
     'settings.section_notifications': 'Kişisel Webhooklar',
 
 
-    'settings.row_mode': 'Mod',
-    'settings.row_active_broker': 'Aktif Broker',
-    'settings.row_data_source': 'Veri Kaynağı',
 
 
     'settings.row_active': 'Aktif',
@@ -379,14 +346,8 @@ const translations = {
     'settings.alert_cooldown_hint': 'Farklı analizlerden gelen eşdeğer yapay zeka alarmları arasındaki zaman beklemesini kapatmak için 0 girin.',
 
 
-    'settings.row_deep_think_model': 'Derin Düşünce Modeli',
-    'settings.row_quick_think_model': 'Hızlı Düşünce Modeli',
-    'settings.row_default_model': 'Varsayılan Model',
     'settings.analyst_default_provider': 'Varsayılan Sağlayıcı',
     'settings.analyst_default_model': 'Varsayılan Model',
-    'settings.analyst_select_model': 'Model Seçin...',
-    'settings.model_quick_suffix': 'Hızlı',
-    'settings.model_deep_suffix': 'Derin',
     'settings.custom_model_option': 'Özel model...',
     'settings.custom_model_placeholder': 'Model ID (örn: gpt-5.6-sol)',
     'settings.model_language_warning': 'Bu model seçili çıktı dili için doğrulanmış desteğe sahip değil. Yanıtlar karışık dilde gelebilir; doğrulanmış diller:',
@@ -395,8 +356,6 @@ const translations = {
     'settings.row_parallel_analysts': 'Paralel Analist Sayısı',
 
 
-    'settings.custom_model_id': 'Özel model ID',
-    'settings.model_id_placeholder': 'Model ID girin...',
 
 
     'settings.effort_default': 'Varsayılan',
@@ -489,24 +448,15 @@ const translations = {
     'settings.stall_hint': 'Hiçbir düğüm bu süre boyunca çıktı üretmezse WebSocket üzerinden donma uyarısı gönderilir.',
 
 
-    'settings.analysts_loading': 'Yükleniyor...',
 
 
-    'settings.data_core_stock': 'Hisse Fiyatı',
-    'settings.data_technicals': 'Teknik Göstergeler',
-    'settings.data_fundamentals': 'Temel Veriler',
-    'settings.data_news': 'Haber',
 
 
-    'settings.row_checkpoint': 'Checkpoint (Devam Etme)',
-    'settings.row_news_limit_ticker': 'Haber Sayısı (Ticker)',
     'settings.row_global_news_limit': 'Global Haber Sayısı',
     'settings.row_global_news_lookback': 'Global Haber Geriye (Gün)',
     'settings.row_max_recursion': 'Max Recursion Limiti',
     'settings.row_benchmark_symbol': 'Benchmark Sembolü',
     'settings.benchmark_placeholder': 'Boş bırakın = otomatik (SPY)',
-    'settings.row_reddit_enabled': 'Reddit Duygu Verisi',
-    'settings.reddit_enabled_hint': 'Duygu analizi için Reddit gönderilerini kullan',
 
 
 

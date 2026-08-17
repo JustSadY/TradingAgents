@@ -10,6 +10,7 @@ import {
 } from '../../api/generated/settings/settings'
 import { useTranslation } from '../../contexts/LanguageContext'
 import { useMeta, triggerMetaRefetch } from '../../hooks/useMeta'
+import { useLlmCatalog, type LlmCatalog } from '../../hooks/useLlmCatalog'
 import { notify } from '../../utils/notify'
 import type { AgentMeta } from '../../api/generated/model'
 import AppSchemaForm, { legacyFieldsToSchema } from '../ui/AppSchemaForm'
@@ -57,6 +58,7 @@ interface AgentNodeProps {
   settings: AgentSettingsData
   childrenMap: Map<string | null, AgentMeta[]>
   parentDisabled: boolean
+  llmCatalog: LlmCatalog
   translate: (key: string) => string
   onToggle: (key: string, enabled: boolean) => void
   onSettingsChange: (key: string, settings: Record<string, unknown>) => void
@@ -68,6 +70,7 @@ function AgentNode({
   settings,
   childrenMap,
   parentDisabled,
+  llmCatalog,
   translate,
   onToggle,
   onSettingsChange,
@@ -123,6 +126,12 @@ function AgentNode({
                       schema={schema}
                       uiSchema={uiSchema}
                       formData={state.settings}
+                      formContext={{
+                        llmCatalog,
+                        formData: state.settings,
+                        inheritLabel: translate('settings.analyst_default_provider'),
+                        customLabel: translate('settings.custom_model_option'),
+                      }}
                       disabled={!enabled}
                       onChange={next => onSettingsChange(agent.key, next)}
                     />
@@ -140,6 +149,7 @@ function AgentNode({
                       settings={settings}
                       childrenMap={childrenMap}
                       parentDisabled={!enabled}
+                      llmCatalog={llmCatalog}
                       translate={translate}
                       onToggle={onToggle}
                       onSettingsChange={onSettingsChange}
@@ -162,6 +172,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
 }, ref) => {
   const { t } = useTranslation()
   const meta = useMeta()
+  const llmCatalog = useLlmCatalog()
   const [settings, setSettings] = useState<AgentSettingsData | null>(null)
 
   const otherUserId = !serverScope && userId ? userId : 0
@@ -287,6 +298,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
             settings={settings}
             childrenMap={childrenMap}
             parentDisabled={agent.key !== 'portfolio_manager' && !portfolioManagerEnabled}
+            llmCatalog={llmCatalog}
             translate={t}
             onToggle={updateEnabled}
             onSettingsChange={updateSettings}

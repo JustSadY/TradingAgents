@@ -1,10 +1,9 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   useSettingsGetSettings,
   useSettingsUpdateSettings,
   useSettingsGetUserSettingsById,
   useSettingsUpdateUserSettingsById,
-  useSettingsGetLlmCatalog,
   useSettingsGetMemoryStatus,
   useSettingsGetWebhookDeliveries,
   useSettingsTestWebhook,
@@ -35,6 +34,7 @@ import {
 } from 'lucide-react'
 
 import { useMeta, triggerMetaRefetch } from '../hooks/useMeta'
+import { useLlmCatalog, modelsFor, providerOptionsFrom, type LlmModelOption } from '../hooks/useLlmCatalog'
 import { useAuth } from '../contexts/AuthContext'
 import { requestBrowserNotifyPermission, setBrowserNotifyPref, isBrowserNotifyEnabled } from '../utils/browserNotify'
 import { useTranslation } from '../contexts/LanguageContext'
@@ -53,37 +53,9 @@ import type { AgentSettingsPanelHandle } from '../components/settings/AgentSetti
 import type { PersonaRead, SettingsRead } from '../api/generated/model'
 
 type Settings = SettingsRead
-type LlmModelOption = { value: string; label: string; supported_output_languages?: string[] }
-type LlmCatalog = Record<string, { label: string; models: LlmModelOption[] }>
 type FallbackLLMEntry = { provider: string; model: string }
 
 const MAX_FALLBACK_CHAIN_LENGTH = 3
-
-function normalizeLlmCatalog(value: unknown): LlmCatalog {
-  if (typeof value !== 'object' || value === null || Array.isArray(value)) return {}
-  const catalog: LlmCatalog = {}
-  for (const [provider, entry] of Object.entries(value)) {
-    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) continue
-    const rawModels = (entry as Record<string, unknown>).models
-    if (!Array.isArray(rawModels)) continue
-    const models = rawModels.flatMap(model => {
-      if (typeof model !== 'object' || model === null || Array.isArray(model)) return []
-      const option = model as Record<string, unknown>
-      if (typeof option.value !== 'string' || typeof option.label !== 'string') return []
-      const supported_output_languages = Array.isArray(option.supported_output_languages)
-        ? option.supported_output_languages.filter((language): language is string => typeof language === 'string')
-        : undefined
-      return [{ value: option.value, label: option.label, supported_output_languages }]
-    })
-    catalog[provider] = {
-      label: typeof (entry as Record<string, unknown>).label === 'string'
-        ? (entry as Record<string, unknown>).label as string
-        : provider,
-      models,
-    }
-  }
-  return catalog
-}
 
 function lacksVerifiedOutputLanguage(model: LlmModelOption | undefined, language: string): boolean {
   const supported = model?.supported_output_languages
@@ -150,13 +122,9 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   const permsQuery = userId ? otherPermsQuery : ownPermsQuery
   const presets = presetsQuery.data ?? []
   const cronQuery = useCronCronStatus()
-  const catalogQuery = useSettingsGetLlmCatalog()
 
   const cronStatus = cronQuery.data ?? null
-  const llmCatalog = useMemo(
-    () => (catalogQuery.data ? normalizeLlmCatalog(catalogQuery.data) : {}),
-    [catalogQuery.data],
-  )
+  const llmCatalog = useLlmCatalog()
 
   useEffect(() => {
     if (!settingsQuery.data || !permsQuery.isFetched) return
@@ -262,15 +230,16 @@ export default function Settings({ userId }: { userId?: number } = {}) {
   if (!s) return <div className="p-8 text-slate-500 text-xs font-semibold">{t('settings.loading')}</div>
 
   const update = (k: keyof Settings, v: any) => setS(prev => prev ? { ...prev, [k]: v } : prev)
-  const primaryModels = llmCatalog[s.llm_provider]?.models ?? []
+  const primaryModels = modelsFor(llmCatalog, s.llm_provider)
   const primaryUsesCustomModel = !primaryModels.some(model => model.value === s.llm_model)
   const primaryModel = primaryModels.find(model => model.value === s.llm_model)
   const fallbackChain = s.fallback_llm_chain ?? []
   const webhookEvents = s.webhook_events ?? []
-  const metaProviders = Object.entries(meta?.provider_labels ?? {})
-  const providerOptions = metaProviders.length > 0
-    ? metaProviders
-    : Object.entries(llmCatalog).map(([key, entry]) => [key, entry.label] as [string, string])
+  // Providers and models come from the same catalog. Listing providers from
+  // /api/meta's provider_labels while the models beside them came from the
+  // catalog meant a provider present in one and absent from the other left the
+  // model dropdown empty with no way to tell why.
+  const providerOptions = providerOptionsFrom(llmCatalog)
 
   const updateFallbackEntry = (index: number, patch: Partial<FallbackLLMEntry>) => {
     update('fallback_llm_chain', fallbackChain.map((entry, position) => (
@@ -280,7 +249,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
 
   const addFallbackEntry = () => {
     const provider = providerOptions[0]?.[0] ?? s.llm_provider
-    const model = llmCatalog[provider]?.models[0]?.value ?? s.llm_model
+    const model = modelsFor(llmCatalog, provider)[0]?.value ?? s.llm_model
     update('fallback_llm_chain', [...fallbackChain, { provider, model }])
   }
 
@@ -449,7 +418,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                           <p className="text-[10px] text-slate-500 leading-relaxed">{t('settings.fallback_disabled')}</p>
                         )}
                         {fallbackChain.map((entry, index) => {
-                          const models = llmCatalog[entry.provider]?.models ?? []
+                          const models = modelsFor(llmCatalog, entry.provider)
                           const usesCustomModel = !models.some(model => model.value === entry.model)
                           const selectedFallbackModel = models.find(model => model.value === entry.model)
                           return (
@@ -461,7 +430,7 @@ export default function Settings({ userId }: { userId?: number } = {}) {
                                   value={entry.provider}
                                   onChange={e => {
                                     const provider = e.target.value
-                                    const model = llmCatalog[provider]?.models[0]?.value ?? entry.model
+                                    const model = modelsFor(llmCatalog, provider)[0]?.value ?? entry.model
                                     updateFallbackEntry(index, { provider, model })
                                   }}
                                 >

@@ -28,7 +28,10 @@ class SignalMeta(BaseModel):
     tone: str
 
 
-AgentSettingTypeName = Literal["string", "number", "select", "textarea"]
+# "llm_model" is a select whose options depend on the sibling llm_provider
+# value, so the catalog published by /api/settings/llm-catalog fills it in on
+# the client rather than being duplicated into every agent's schema.
+AgentSettingTypeName = Literal["string", "number", "select", "textarea", "llm_model"]
 
 
 class AgentSettingFieldMeta(BaseModel):

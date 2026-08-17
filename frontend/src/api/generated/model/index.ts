@@ -174,6 +174,8 @@ export * from './settingsGetMemoryStatusParams';
 export * from './settingsGetWebhookDeliveriesParams';
 export * from './settingsRead';
 export * from './settingsUpdate';
+export * from './setupRequest';
+export * from './setupStatusResponse';
 export * from './shareCreateResponse';
 export * from './sharedReportResponse';
 export * from './sharedReportResponsePortfolioDecision';
