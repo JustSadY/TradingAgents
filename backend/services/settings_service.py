@@ -23,11 +23,38 @@ from backend.schemas.settings import SettingsRead, SettingsUpdate
 _logger = logging.getLogger(__name__)
 
 
+class SettingsPermissionError(PermissionError):
+    pass
+
+
+async def enforce_settings_update_permissions(db: AsyncSession, user, body: SettingsUpdate) -> None:
+    """Validate which settings sections a non-admin user may mutate."""
+    from backend.models.page_permission import SECTION_FIELDS
+    from backend.repositories.permissions import list_allowed_setting_sections
+
+    allowed_sections = await list_allowed_setting_sections(db, user.id)
+    attempted = body.model_dump(exclude_unset=True)
+
+    if "max_recur_limit" in attempted:
+        raise SettingsPermissionError("Advanced engine settings can only be modified by administrators.")
+
+    mapped_fields = {field for fields in SECTION_FIELDS.values() for field in fields}
+    unmapped = set(attempted) - mapped_fields
+    if unmapped:
+        raise SettingsPermissionError(
+            f"No permission section is configured for settings: {', '.join(sorted(unmapped))}"
+        )
+
+    for section, fields in SECTION_FIELDS.items():
+        if any(field in attempted for field in fields) and section not in allowed_sections:
+            raise SettingsPermissionError(f"You do not have permission to modify settings in section: {section}")
+
+
 def parse_preset_settings_json(settings_json: str) -> SettingsUpdate:
     """Parse a stored preset as a strict, validated ``SettingsUpdate``.
 
     ``SettingsUpdate`` deliberately accepts partial updates, but Pydantic's
-    default extra-field behaviour is permissive.  Check field names first so
+    default extra-field behaviour is permissive. Check field names first so
     an ORM attribute such as ``user_id`` cannot reappear as a mass-assignment
     path through a legacy or manually-created preset.
     """
