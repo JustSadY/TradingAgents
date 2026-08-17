@@ -13,8 +13,6 @@ import logging
 from datetime import UTC, datetime
 
 from pydantic import ValidationError
-from sqlalchemy import select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.settings import AppSettings
@@ -86,23 +84,11 @@ async def get_or_create_settings(
     user=None,
 ) -> AppSettings:
     """Return the settings row for ``user`` (or the global row), creating it lazily."""
-    user_id = getattr(user, "id", None) if user is not None else None
-
     from backend.core.log_redaction import register_sensitive_literal
+    from backend.repositories.settings import get_or_create_app_settings
 
-    where_clause = AppSettings.user_id == user_id if user_id is not None else AppSettings.user_id.is_(None)
-    result = await db.execute(select(AppSettings).where(where_clause).limit(1))
-    settings = result.scalar_one_or_none()
-    if settings is None:
-        try:
-            async with db.begin_nested():
-                created = AppSettings(user_id=user_id)
-                db.add(created)
-                await db.flush()
-            settings = created
-        except IntegrityError:
-            result = await db.execute(select(AppSettings).where(where_clause).limit(1))
-            settings = result.scalar_one()
+    user_id = getattr(user, "id", None) if user is not None else None
+    settings = await get_or_create_app_settings(db, user_id)
 
     if settings.webhook_url:
         register_sensitive_literal(settings.webhook_url)
