@@ -179,6 +179,16 @@ The UI receives the current catalog through:
 GET /api/settings/llm-catalog
 ```
 
+Every provider and model picker in the frontend reads that one catalog through
+`frontend/src/hooks/useLlmCatalog.ts` — the general LLM preferences, the
+fallback chain, and the per-agent AI configuration alike. `/api/meta`'s
+`provider_labels` is metadata, not a second picker source: listing providers
+from it while the models came from the catalog let a provider appear with no
+models behind it. Per-agent model overrides are declared as the `llm_model`
+field type, which the client renders from this catalog filtered by the agent's
+selected provider, with an explicit inherit-the-default option and a custom
+model-id escape hatch.
+
 Registered provider support includes OpenAI, Anthropic Claude, Google Gemini, and NVIDIA NIM/OpenAI-compatible models. Provider-specific reasoning controls are mapped from runtime settings by the LLM client layer.
 
 Provider API keys are stored encrypted in PostgreSQL through application settings. They are not normal backend `.env` configuration.

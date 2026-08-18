@@ -41,10 +41,13 @@ function TestConsumer() {
 }
 
 function renderWithProviders(children: ReactNode) {
-  // Set up a valid non-expired token so AuthContext initializes authenticated
+  // Set up a valid non-expired token so AuthContext initializes authenticated.
+  // Access tokens live in sessionStorage: AuthContext deliberately refuses to
+  // authenticate from localStorage and purges it, so seeding localStorage here
+  // left the provider unauthenticated and the permissions query disabled.
   const payload = { sub: 'testuser', role: 'user', exp: Math.floor(Date.now() / 1000) + 3600 }
   const token = `header.${btoa(JSON.stringify(payload))}.signature`
-  localStorage.setItem('ta_access', token)
+  sessionStorage.setItem('ta_access', token)
   return renderWithQuery(
     <AuthProvider>
       <PermissionsProvider>{children}</PermissionsProvider>
@@ -54,6 +57,7 @@ function renderWithProviders(children: ReactNode) {
 
 beforeEach(() => {
   localStorage.clear()
+  sessionStorage.clear()
   vi.clearAllMocks()
 })
 
@@ -94,7 +98,7 @@ describe('PermissionsContext', () => {
   })
 
   it('returns empty pages when unauthenticated', async () => {
-    localStorage.removeItem('ta_access')
+    sessionStorage.removeItem('ta_access')
     function NoAuthWrapper({ children }: { children: ReactNode }) {
       return (
         <AuthProvider>

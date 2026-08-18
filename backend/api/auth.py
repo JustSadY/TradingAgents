@@ -10,13 +10,18 @@ from backend.core.limiter import limiter
 from backend.core.password_hashing import hash_password, verify_and_update_password
 from backend.core.security import create_access_token
 from backend.repositories.users import get_user_by_username
-from backend.schemas.auth import LoginRequest, TokenResponse
+from backend.schemas.auth import LoginRequest, SetupRequest, SetupStatusResponse, TokenResponse
 from backend.services.auth_session_service import (
     AuthSessionError,
     issue_refresh_session,
     revoke_refresh_token,
     revoke_user_refresh_sessions,
     rotate_refresh_session,
+)
+from backend.services.first_run_service import (
+    SetupAlreadyCompletedError,
+    create_first_owner,
+    owner_setup_required,
 )
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -45,6 +50,46 @@ def _clear_refresh_cookie(response: Response) -> None:
         secure=settings.ENVIRONMENT.strip().lower() == "production",
         samesite="lax",
         path=_REFRESH_COOKIE_PATH,
+    )
+
+
+@router.get("/setup-status", response_model=SetupStatusResponse)
+async def setup_status(db: Annotated[AsyncSession, Depends(get_db)]):
+    """Whether the login screen should offer first-run owner registration."""
+    return SetupStatusResponse(setup_required=await owner_setup_required(db))
+
+
+@router.post("/setup", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
+async def setup(
+    request: Request,
+    response: Response,
+    body: SetupRequest,
+    db: Annotated[AsyncSession, Depends(get_db)],
+):
+    """Register the Server Owner on an empty installation and sign it in.
+
+    Closed for good once any account exists — it is a bootstrap route, not a
+    public sign-up.
+    """
+    try:
+        user = await create_first_owner(
+            username=body.username,
+            password=body.password,
+            email=body.email,
+            display_name=body.display_name,
+        )
+    except SetupAlreadyCompletedError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from None
+
+    refresh_token = await issue_refresh_session(db, user)
+    _set_refresh_cookie(response, refresh_token)
+    return TokenResponse(
+        access_token=create_access_token(
+            user.username,
+            role=user.role,
+            token_version=user.token_version,
+        )
     )
 
 

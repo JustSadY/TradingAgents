@@ -91,18 +91,76 @@ def _close_position_decimal(
     }
     return cash_delta, trade
 
-def _prepare_data(data: pd.DataFrame, strategy_type: str) -> pd.DataFrame:
+# The tunable inputs of each rule-based strategy, and the bounds a search is
+# allowed to explore. Declared here rather than in the optimizer so the
+# simulation stays the single authority on what a strategy actually accepts.
+STRATEGY_PARAM_SPACE: dict[str, dict[str, dict]] = {
+    "macd_crossover": {
+        "macd_fast": {"type": "int", "default": 12, "min": 3, "max": 30},
+        "macd_slow": {"type": "int", "default": 26, "min": 10, "max": 60},
+        "macd_signal": {"type": "int", "default": 9, "min": 3, "max": 20},
+    },
+    "rsi_oversold": {
+        "rsi_period": {"type": "int", "default": 14, "min": 5, "max": 40},
+        "rsi_oversold": {"type": "int", "default": 30, "min": 10, "max": 45},
+        "rsi_overbought": {"type": "int", "default": 70, "min": 55, "max": 90},
+    },
+}
+
+
+def strategy_defaults(strategy_type: str) -> dict:
+    """The parameters a strategy runs with when none are supplied."""
+    return {key: spec["default"] for key, spec in STRATEGY_PARAM_SPACE.get(strategy_type, {}).items()}
+
+
+def normalise_strategy_params(strategy_type: str, params: dict | None) -> dict:
+    """Clamp supplied parameters into the declared space, filling in defaults.
+
+    Optimizers and API callers both hand parameters in, so validation lives
+    here instead of being duplicated (or skipped) at each entry point. Unknown
+    keys are dropped rather than passed to an indicator that would raise.
+    """
+    space = STRATEGY_PARAM_SPACE.get(strategy_type, {})
+    resolved = strategy_defaults(strategy_type)
+    for key, raw in (params or {}).items():
+        spec = space.get(key)
+        if spec is None:
+            continue
+        try:
+            value = int(raw) if spec["type"] == "int" else float(raw)
+        except (TypeError, ValueError):
+            continue
+        resolved[key] = max(spec["min"], min(spec["max"], value))
+
+    # A fast EMA at or above the slow one inverts the crossover's meaning, and
+    # a sampler will happily propose it.
+    if strategy_type == "macd_crossover" and resolved["macd_fast"] >= resolved["macd_slow"]:
+        resolved["macd_slow"] = min(STRATEGY_PARAM_SPACE[strategy_type]["macd_slow"]["max"], resolved["macd_fast"] + 1)
+    if strategy_type == "rsi_oversold" and resolved["rsi_oversold"] >= resolved["rsi_overbought"]:
+        resolved["rsi_overbought"] = min(
+            STRATEGY_PARAM_SPACE[strategy_type]["rsi_overbought"]["max"], resolved["rsi_oversold"] + 1
+        )
+    return resolved
+
+
+def _prepare_data(data: pd.DataFrame, strategy_type: str, params: dict | None = None) -> pd.DataFrame:
     """Sort by date and attach the indicator columns the strategy needs."""
     data["Date"] = pd.to_datetime(data["Date"])
     data = data.sort_values("Date").reset_index(drop=True)
+    resolved = normalise_strategy_params(strategy_type, params)
 
     close_series = data["Close"]
     if strategy_type == "macd_crossover":
-        macd, signal = calculate_macd(close_series)
+        macd, signal = calculate_macd(
+            close_series,
+            fast=resolved["macd_fast"],
+            slow=resolved["macd_slow"],
+            signal=resolved["macd_signal"],
+        )
         data["macd"] = macd
         data["macd_signal"] = signal
     elif strategy_type == "rsi_oversold":
-        data["rsi"] = calculate_rsi(close_series)
+        data["rsi"] = calculate_rsi(close_series, period=resolved["rsi_period"])
     return data
 
 def _generate_signal(
@@ -112,6 +170,7 @@ def _generate_signal(
     analyses_map: dict,
     *,
     consensus_signal_date: str | None = None,
+    params: dict | None = None,
 ):
     """Return ``(signal, rec_stop_loss, rec_take_profit)`` for the current day."""
     signal = None
@@ -132,11 +191,14 @@ def _generate_signal(
             elif curr_macd < curr_signal and prev_macd >= prev_signal:
                 signal = "SELL"
         else:
+            resolved = normalise_strategy_params(strategy_type, params)
+            oversold = resolved["rsi_oversold"]
+            overbought = resolved["rsi_overbought"]
             prev_rsi = data.loc[orig_idx - 1, "rsi"]
             curr_rsi = data.loc[orig_idx, "rsi"]
-            if curr_rsi < 30 and prev_rsi >= 30:
+            if curr_rsi < oversold and prev_rsi >= oversold:
                 signal = "BUY"
-            elif curr_rsi > 70 and prev_rsi <= 70:
+            elif curr_rsi > overbought and prev_rsi <= overbought:
                 signal = "SELL"
     elif strategy_type == "consensus":
         analysis = analyses_map.get(consensus_signal_date) if consensus_signal_date else None
@@ -358,13 +420,15 @@ async def run_backtest_simulation(
     user=None,
     slippage_bps: float | Decimal = _DEFAULT_SLIPPAGE_BPS,
     benchmark_ticker: str | None = "SPY",
+    strategy_params: dict | None = None,
 ) -> dict:
     try:
         data = await asyncio.to_thread(load_ohlcv, ticker, end_date)
         if data.empty or len(data) < 20:
             return {"error": f"Not enough historical price data for {ticker}."}
 
-        data = _prepare_data(data, strategy_type)
+        resolved_params = normalise_strategy_params(strategy_type, strategy_params)
+        data = _prepare_data(data, strategy_type, resolved_params)
 
         start_dt = pd.to_datetime(start_date)
         end_dt = pd.to_datetime(end_date)
@@ -461,6 +525,7 @@ async def run_backtest_simulation(
                         strategy_type,
                         analyses_map,
                         consensus_signal_date=previous_trade_date,
+                        params=resolved_params,
                     )
                 execution_price = open_price if open_price > 0 else close_price
 
@@ -603,6 +668,10 @@ async def run_backtest_simulation(
             "trades": trades,
             "equity_curve": equity_curve,
             "slippage_bps": float(slippage_bps_decimal),
+            # Echoed so a caller can tell which parameters produced this run —
+            # the optimizer clamps out-of-range proposals, so what was asked
+            # for and what ran are not always the same.
+            "strategy_params": resolved_params,
             "benchmark": benchmark,
             "alpha_pct": alpha_pct,
             "consensus_report_stats": consensus_report_stats,

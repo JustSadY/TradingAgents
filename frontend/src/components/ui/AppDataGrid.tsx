@@ -82,6 +82,9 @@ export function AppDataGrid<R extends GridValidRowModel>({
           border: '1px solid',
           borderColor: 'divider',
           borderRadius: 2,
+          // The grid ships its own 14px cell text; matching the theme's control
+          // size keeps a table the same weight as the Tailwind tables beside it.
+          fontSize: 12,
           backgroundColor: 'rgba(15, 23, 42, 0.38)',
           backdropFilter: 'blur(16px)',
           '& .MuiDataGrid-columnHeaders': {
@@ -91,7 +94,8 @@ export function AppDataGrid<R extends GridValidRowModel>({
             fontSize: 10,
             letterSpacing: '.08em',
           },
-          '& .MuiDataGrid-cell': { borderColor: 'rgba(255,255,255,.04)' },
+          '& .MuiDataGrid-cell': { borderColor: 'rgba(255,255,255,.04)', fontSize: 12 },
+          '& .MuiTablePagination-root': { fontSize: 11 },
           '& .MuiDataGrid-row:hover': { backgroundColor: 'rgba(255,255,255,.025)' },
           '& .MuiDataGrid-footerContainer': { borderColor: 'rgba(255,255,255,.04)' },
           ...sx,

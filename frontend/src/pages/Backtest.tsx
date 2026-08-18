@@ -6,6 +6,7 @@ import {
 } from 'lucide-react'
 import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts'
 import { useTranslation } from '../contexts/LanguageContext'
+import OptimizationPanel from '../components/backtest/OptimizationPanel'
 
 interface Trade {
   entry_date: string
@@ -53,6 +54,9 @@ export default function Backtest() {
   })
   const [endDate, setEndDate] = useState(() => new Date().toISOString().split('T')[0])
   const [initialCapital, setInitialCapital] = useState('100000')
+  // Set by the optimizer's "use these parameters" action; empty means the
+  // strategy runs with its shipped defaults, exactly as before.
+  const [strategyParams, setStrategyParams] = useState<Record<string, number> | null>(null)
 
   const [error, setError] = useState<string | null>(null)
 
@@ -88,6 +92,7 @@ export default function Backtest() {
           start_date: startDate,
           end_date: endDate,
           initial_capital: cap,
+          ...(strategyParams ? { strategy_params: strategyParams } : {}),
         },
       },
       {
@@ -120,7 +125,11 @@ export default function Backtest() {
           </div>
           <div>
             <label className="text-[10px] font-bold text-slate-500 mb-1.5 block uppercase tracking-wider">{t('backtest.strategy')}</label>
-            <select className={Input} value={strategy} onChange={e => setStrategy(e.target.value)}>
+            <select
+              className={Input}
+              value={strategy}
+              onChange={e => { setStrategy(e.target.value); setStrategyParams(null) }}
+            >
               <option value="consensus">{t('backtest.consensus')}</option>
               <option value="macd_crossover">{t('backtest.macd')}</option>
               <option value="rsi_oversold">{t('backtest.rsi')}</option>
@@ -151,7 +160,38 @@ export default function Backtest() {
           {loading ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} fill="currentColor" />}
           {loading ? t('backtest.running') : t('backtest.run_btn')}
         </button>
+
+        {strategyParams && (
+          <div className="flex flex-wrap items-center gap-2 border-t border-white/[0.04] pt-3">
+            <span className="text-[9px] font-bold uppercase tracking-wider text-slate-500">
+              {t('backtest.optimize_best_params')}
+            </span>
+            {Object.entries(strategyParams).map(([key, value]) => (
+              <span
+                key={key}
+                className="rounded-lg border border-violet-500/20 bg-violet-500/[0.08] px-2 py-1 text-[10px] font-mono font-semibold text-violet-200"
+              >
+                {key}={String(value)}
+              </span>
+            ))}
+            <button
+              onClick={() => setStrategyParams(null)}
+              className="text-[10px] font-bold text-slate-500 hover:text-slate-300 transition cursor-pointer"
+            >
+              {t('backtest.optimize_clear_params')}
+            </button>
+          </div>
+        )}
       </div>
+
+      <OptimizationPanel
+        ticker={ticker}
+        strategy={strategy}
+        startDate={startDate}
+        endDate={endDate}
+        initialCapital={initialCapital}
+        onApply={setStrategyParams}
+      />
 
       {loading && (
         <div className="glass-panel rounded-2xl p-16 text-center space-y-4">

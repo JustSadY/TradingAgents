@@ -34,6 +34,7 @@ def _liquidation_for_position(
         return liquidation_price_short(quantity, entry_price, margin, maintenance_rate)
     return liquidation_price_long(quantity, borrowed, maintenance_rate)
 
+from backend.services.market_calendar_service import is_trading_day
 from backend.services.market_data_service import get_live_price, get_live_prices_batch
 
 _logger = logging.getLogger(__name__)
@@ -168,14 +169,21 @@ async def get_portfolio_with_live_prices(
         close_status = None
         # Automatic execution is a write concern and requires a fresh quote.
         # Read-only snapshots and stale fallback prices must never close trades.
-        if not read_only and has_fresh_price and is_short:
+        #
+        # A quote also has to come from a session that actually happened. On an
+        # exchange holiday the vendor keeps serving the previous close, which
+        # looks "fresh" here, so without this check the bot would fire
+        # stop-loss and take-profit sells against a price that never traded.
+        # The gate is per holding, so crypto stays monitored around the clock.
+        may_auto_close = has_fresh_price and is_trading_day(now.date(), ticker=h.ticker)
+        if not read_only and may_auto_close and is_short:
             if is_liquidatable_short(price, liq):
                 close_status = "LIQUIDATED"
             elif stop > 0 and price >= stop:
                 close_status = "STOP_LOSS"
             elif target > 0 and price <= target:
                 close_status = "TAKE_PROFIT"
-        elif not read_only and has_fresh_price:
+        elif not read_only and may_auto_close:
             if is_liquidatable_long(price, liq):
                 close_status = "LIQUIDATED"
             elif stop > 0 and price <= stop:

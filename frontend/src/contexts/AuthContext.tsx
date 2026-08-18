@@ -43,6 +43,19 @@ function activateUserScope(username: string) {
 }
 
 let _onForceLogout: (() => void) | null = null
+
+/**
+ * Generation counter for the current authentication attempt.
+ *
+ * Bumped whenever auth state is *established* or torn down, so slow work
+ * started under an earlier generation cannot write over a newer one. It used
+ * to be bumped only by `logout()`, which left this race on a browser's first
+ * visit: `initAuth` runs twice under StrictMode, both refresh calls fail
+ * because there is no cookie yet, the first rejection reveals the login form,
+ * the user signs in — and then the second rejection cleared the session that
+ * login had just established, bouncing them back to the login screen. Signing
+ * in a second time worked only because by then both calls had settled.
+ */
 let _authEpoch = 0
 
 interface JwtPayload {
@@ -62,13 +75,23 @@ function decodeToken(token: string): JwtPayload | null {
   }
 }
 
+export interface SetupPayload {
+  username: string
+  password: string
+  email?: string | null
+  display_name?: string | null
+}
+
 interface AuthContextType {
   user: string | null
   role: string | null
   isAdmin: boolean
   isOwner: boolean
   isAuthenticated: boolean
+  /** True while the installation has no accounts and needs its first owner. */
+  setupRequired: boolean
   login: (username: string, password: string) => Promise<void>
+  completeSetup: (payload: SetupPayload) => Promise<void>
   logout: () => void
   loading: boolean
 }
@@ -78,11 +101,15 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<string | null>(null)
   const [role, setRole] = useState<string | null>(null)
+  const [setupRequired, setSetupRequired] = useState(false)
   const [loading, setLoading] = useState(true)
 
   const applyAccessToken = useCallback((token: string): boolean => {
     const payload = decodeToken(token)
     if (!payload?.sub || payload.exp * 1000 <= Date.now()) return false
+    // A session now exists. Anything still in flight from before this point
+    // belongs to an older generation and must not clear it.
+    _authEpoch += 1
     setAccessToken(token)
     activateUserScope(payload.sub)
     setUser(payload.sub)
@@ -112,7 +139,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         clearLocalAuthState()
       }
     } catch {
+      // A failed restore says nothing about a session established after this
+      // attempt started, so it must not tear one down.
+      if (epoch !== _authEpoch) return
       clearLocalAuthState()
+      // Only an installation with no accounts at all can be set up, so this is
+      // asked once, after a failed session restore, rather than on every load.
+      try {
+        const status = await axios.get('/auth/setup-status')
+        if (epoch === _authEpoch) setSetupRequired(status.data?.setup_required === true)
+      } catch {
+        if (epoch === _authEpoch) setSetupRequired(false)
+      }
     } finally {
       setLoading(false)
     }
@@ -128,6 +166,21 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (typeof token !== 'string' || !applyAccessToken(token)) {
       throw new Error('Sunucu geçerli bir erişim belirteci döndürmedi')
     }
+    setSetupRequired(false)
+  }, [applyAccessToken])
+
+  const completeSetup = useCallback(async (payload: SetupPayload) => {
+    const res = await axios.post('/auth/setup', {
+      username: payload.username,
+      password: payload.password,
+      email: payload.email || null,
+      display_name: payload.display_name || null,
+    })
+    const token = res.data?.access_token
+    if (typeof token !== 'string' || !applyAccessToken(token)) {
+      throw new Error('Sunucu geçerli bir erişim belirteci döndürmedi')
+    }
+    setSetupRequired(false)
   }, [applyAccessToken])
 
   const logout = useCallback(() => {
@@ -154,7 +207,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     isAdmin: role === 'admin' || role === 'owner',
     isOwner: role === 'owner',
     isAuthenticated: !!user,
+    setupRequired,
     login,
+    completeSetup,
     logout,
     loading,
   }

@@ -10,6 +10,7 @@ import {
 } from '../../api/generated/settings/settings'
 import { useTranslation } from '../../contexts/LanguageContext'
 import { useMeta, triggerMetaRefetch } from '../../hooks/useMeta'
+import { useLlmCatalog, type LlmCatalog } from '../../hooks/useLlmCatalog'
 import { notify } from '../../utils/notify'
 import type { AgentMeta } from '../../api/generated/model'
 import AppSchemaForm, { legacyFieldsToSchema } from '../ui/AppSchemaForm'
@@ -30,6 +31,14 @@ interface AgentSettingsData {
 interface AgentSettingsPanelProps {
   userId?: number
   serverScope?: boolean
+  /**
+   * Hide the panel's own save button when the host page already has one.
+   *
+   * The Settings page's Save calls this panel's `save()` through its ref, so
+   * showing both put two save buttons on the same screen doing the same thing.
+   * `ToolSettingsPanel` takes the same prop for the same reason.
+   */
+  hideSaveButton?: boolean
 }
 
 export interface AgentSettingsPanelHandle {
@@ -57,6 +66,7 @@ interface AgentNodeProps {
   settings: AgentSettingsData
   childrenMap: Map<string | null, AgentMeta[]>
   parentDisabled: boolean
+  llmCatalog: LlmCatalog
   translate: (key: string) => string
   onToggle: (key: string, enabled: boolean) => void
   onSettingsChange: (key: string, settings: Record<string, unknown>) => void
@@ -68,6 +78,7 @@ function AgentNode({
   settings,
   childrenMap,
   parentDisabled,
+  llmCatalog,
   translate,
   onToggle,
   onSettingsChange,
@@ -123,6 +134,12 @@ function AgentNode({
                       schema={schema}
                       uiSchema={uiSchema}
                       formData={state.settings}
+                      formContext={{
+                        llmCatalog,
+                        formData: state.settings,
+                        inheritLabel: translate('settings.analyst_default_provider'),
+                        customLabel: translate('settings.custom_model_option'),
+                      }}
                       disabled={!enabled}
                       onChange={next => onSettingsChange(agent.key, next)}
                     />
@@ -140,6 +157,7 @@ function AgentNode({
                       settings={settings}
                       childrenMap={childrenMap}
                       parentDisabled={!enabled}
+                      llmCatalog={llmCatalog}
                       translate={translate}
                       onToggle={onToggle}
                       onSettingsChange={onSettingsChange}
@@ -159,9 +177,11 @@ function AgentNode({
 const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPanelProps>(({
   userId,
   serverScope = false,
+  hideSaveButton = false,
 }, ref) => {
   const { t } = useTranslation()
   const meta = useMeta()
+  const llmCatalog = useLlmCatalog()
   const [settings, setSettings] = useState<AgentSettingsData | null>(null)
 
   const otherUserId = !serverScope && userId ? userId : 0
@@ -259,19 +279,21 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
       <div className="flex justify-between items-center gap-4 bg-white/[0.01] border border-white/[0.04] p-3 rounded-2xl sticky top-0 z-10 backdrop-blur-sm">
         <div>
           <span className="text-[10px] text-slate-500 font-bold uppercase tracking-wider">
-            {serverScope ? 'Global Server Agent Overrides' : 'Personal AI Agent Configuration'}
+            {t(serverScope ? 'settings.server_agent_overrides' : 'settings.personal_agent_config')}
           </span>
           <p className="text-[9px] text-slate-600 mt-0.5">
-            Configure provider, model and temperature per agent. Sub-agents inherit from their parent when not overridden.
+            {t('settings.agent_config_hint')}
           </p>
         </div>
-        <AppButton
-          onClick={() => void save()}
-          disabled={saving}
-          startIcon={saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
-        >
-          {saving ? 'Saving...' : 'Save Agent Settings'}
-        </AppButton>
+        {!hideSaveButton ? (
+          <AppButton
+            onClick={() => void save()}
+            disabled={saving}
+            startIcon={saving ? <Loader2 size={13} className="animate-spin" /> : <Save size={13} />}
+          >
+            {t(saving ? 'settings.saving' : 'settings.save_agents')}
+          </AppButton>
+        ) : null}
       </div>
 
       <div className="text-[10px] text-slate-600 bg-white/[0.01] border border-white/[0.03] rounded-xl px-3 py-2 leading-relaxed">
@@ -287,6 +309,7 @@ const AgentSettingsPanel = forwardRef<AgentSettingsPanelHandle, AgentSettingsPan
             settings={settings}
             childrenMap={childrenMap}
             parentDisabled={agent.key !== 'portfolio_manager' && !portfolioManagerEnabled}
+            llmCatalog={llmCatalog}
             translate={t}
             onToggle={updateEnabled}
             onSettingsChange={updateSettings}

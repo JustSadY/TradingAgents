@@ -223,3 +223,7 @@ __marimo__/
 # TradingAgents — self-update runtime state
 .update.json
 .update.log
+
+# A test or build run started from the repository root (rather than frontend/)
+# drops caches here; frontend/.gitignore does not cover this path.
+node_modules/

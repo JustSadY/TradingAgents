@@ -17,7 +17,7 @@ The installer provisions the supported Python runtime, Node.js 20, PostgreSQL, t
 ### Supported installer variables
 
 ```bash
-sudo APP_PORT=80 ADMIN_USERNAME=manager bash deploy/install.sh
+sudo APP_PORT=80 bash deploy/install.sh
 ```
 
 | Variable | Default | Purpose |
@@ -25,13 +25,11 @@ sudo APP_PORT=80 ADMIN_USERNAME=manager bash deploy/install.sh
 | `APP_PORT` | `8000` | HTTP port used by the FastAPI service. |
 | `SERVICE_NAME` | `tradingagents` | `systemd` service name. |
 | `SERVICE_USER` | invoking user | OS user that runs the application. |
-| `ADMIN_USERNAME` | `admin` | Initial administrator username. |
-| `ADMIN_PASSWORD` | random | Optional initial administrator password. |
 | `NODE_MAJOR` | `20` | Node.js major version installed for frontend builds. |
 | `SKIP_DB` | `0` | Set to `1` when PostgreSQL is managed externally. |
 | `BUILD_FRONTEND` | `1` | Set to `0` for API-only installation. |
 
-After installation, use the URL and administrator credentials printed by the installer. The production frontend is served directly by FastAPI from `frontend/dist`; a separate nginx instance is not required unless you want TLS/domain reverse proxying.
+After installation, open the URL printed by the installer. The first visit serves a one-time setup screen that registers the Server Owner account; no administrator credential is stored in `.env`. The production frontend is served directly by FastAPI from `frontend/dist`; a separate nginx instance is not required unless you want TLS/domain reverse proxying.
 
 ### LLM and data-provider keys
 
@@ -79,7 +77,6 @@ At minimum, review and set the infrastructure values required by Compose and pro
 DB_PASSWORD=<strong-postgres-password>
 SECRET_KEY=<random-secret>
 ENCRYPTION_KEY=<fernet-key>
-ADMIN_PASSWORD_HASH=<argon2-hash>
 ```
 
 `DB_PASSWORD` is required by the current `docker-compose.yml`. `METRICS_TOKEN` is optional; when empty, the backend `/metrics` endpoint stays disabled.

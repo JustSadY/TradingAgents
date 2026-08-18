@@ -22,6 +22,7 @@ from backend.api.market import router as market_router
 from backend.api.meta import router as meta_router
 from backend.api.metrics import router as metrics_router
 from backend.api.news import router as news_router
+from backend.api.optimization import router as optimization_router
 from backend.api.patterns import router as patterns_router
 from backend.api.personas_api import router as personas_api_router
 from backend.api.portfolio import router as portfolio_router
@@ -81,6 +82,7 @@ def _configure_routes(app: FastAPI) -> None:
         earnings_router,
         correlation_router,
         personas_api_router,
+        optimization_router,
         analysis_ws_router,
     ):
         app.include_router(router)

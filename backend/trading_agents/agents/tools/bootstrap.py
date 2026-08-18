@@ -22,4 +22,5 @@ from .builtin import (
     quant,  # noqa: F401
     sentiment,  # noqa: F401
     technical_indicators,  # noqa: F401
+    volatility,  # noqa: F401
 )

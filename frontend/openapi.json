@@ -384,7 +384,8 @@
               "string",
               "number",
               "select",
-              "textarea"
+              "textarea",
+              "llm_model"
             ],
             "title": "Type",
             "type": "string"
@@ -1793,6 +1794,20 @@
             "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
             "title": "Start Date",
             "type": "string"
+          },
+          "strategy_params": {
+            "anyOf": [
+              {
+                "additionalProperties": {
+                  "type": "number"
+                },
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Strategy Params"
           },
           "strategy_type": {
             "pattern": "^(macd_crossover|rsi_oversold|consensus)$",
@@ -3691,6 +3706,310 @@
           "ok"
         ],
         "title": "OkResponse",
+        "type": "object"
+      },
+      "OptimizationCatalog": {
+        "description": "What can be optimized, and against which objectives.",
+        "properties": {
+          "default_trials": {
+            "title": "Default Trials",
+            "type": "integer"
+          },
+          "max_trials": {
+            "title": "Max Trials",
+            "type": "integer"
+          },
+          "objectives": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Objectives",
+            "type": "object"
+          },
+          "strategies": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OptimizationCatalogEntry"
+            },
+            "title": "Strategies",
+            "type": "object"
+          }
+        },
+        "required": [
+          "strategies",
+          "objectives",
+          "max_trials",
+          "default_trials"
+        ],
+        "title": "OptimizationCatalog",
+        "type": "object"
+      },
+      "OptimizationCatalogEntry": {
+        "properties": {
+          "label": {
+            "title": "Label",
+            "type": "string"
+          },
+          "params": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/OptimizationParamSpec"
+            },
+            "title": "Params",
+            "type": "object"
+          }
+        },
+        "required": [
+          "label",
+          "params"
+        ],
+        "title": "OptimizationCatalogEntry",
+        "type": "object"
+      },
+      "OptimizationParamSpec": {
+        "properties": {
+          "default": {
+            "title": "Default",
+            "type": "number"
+          },
+          "max": {
+            "title": "Max",
+            "type": "number"
+          },
+          "min": {
+            "title": "Min",
+            "type": "number"
+          },
+          "type": {
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "default",
+          "min",
+          "max"
+        ],
+        "title": "OptimizationParamSpec",
+        "type": "object"
+      },
+      "OptimizationRequest": {
+        "properties": {
+          "end_date": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "title": "End Date",
+            "type": "string"
+          },
+          "initial_capital": {
+            "default": 100000.0,
+            "exclusiveMinimum": 0.0,
+            "maximum": 10000000.0,
+            "title": "Initial Capital",
+            "type": "number"
+          },
+          "n_trials": {
+            "default": 40,
+            "maximum": 200.0,
+            "minimum": 1.0,
+            "title": "N Trials",
+            "type": "integer"
+          },
+          "objective": {
+            "default": "sharpe_ratio",
+            "pattern": "^(sharpe_ratio|total_return|calmar|win_rate)$",
+            "title": "Objective",
+            "type": "string"
+          },
+          "start_date": {
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}$",
+            "title": "Start Date",
+            "type": "string"
+          },
+          "strategy_type": {
+            "pattern": "^(macd_crossover|rsi_oversold)$",
+            "title": "Strategy Type",
+            "type": "string"
+          },
+          "ticker": {
+            "maxLength": 20,
+            "minLength": 1,
+            "title": "Ticker",
+            "type": "string"
+          }
+        },
+        "required": [
+          "ticker",
+          "strategy_type",
+          "start_date",
+          "end_date"
+        ],
+        "title": "OptimizationRequest",
+        "type": "object"
+      },
+      "OptimizationRunRead": {
+        "properties": {
+          "baseline_metrics": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Metrics"
+          },
+          "baseline_params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Params"
+          },
+          "baseline_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Baseline Value"
+          },
+          "best_metrics": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Metrics"
+          },
+          "best_params": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Params"
+          },
+          "best_value": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Best Value"
+          },
+          "completed_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Completed At"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "end_date": {
+            "title": "End Date",
+            "type": "string"
+          },
+          "error": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error"
+          },
+          "id": {
+            "title": "Id",
+            "type": "integer"
+          },
+          "objective": {
+            "title": "Objective",
+            "type": "string"
+          },
+          "start_date": {
+            "title": "Start Date",
+            "type": "string"
+          },
+          "status": {
+            "title": "Status",
+            "type": "string"
+          },
+          "strategy_type": {
+            "title": "Strategy Type",
+            "type": "string"
+          },
+          "ticker": {
+            "title": "Ticker",
+            "type": "string"
+          },
+          "trials": {
+            "anyOf": [
+              {
+                "items": {
+                  "additionalProperties": true,
+                  "type": "object"
+                },
+                "type": "array"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Trials"
+          },
+          "trials_completed": {
+            "title": "Trials Completed",
+            "type": "integer"
+          },
+          "trials_requested": {
+            "title": "Trials Requested",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "id",
+          "ticker",
+          "strategy_type",
+          "objective",
+          "start_date",
+          "end_date",
+          "trials_requested",
+          "trials_completed",
+          "status",
+          "created_at"
+        ],
+        "title": "OptimizationRunRead",
         "type": "object"
       },
       "OrderRead": {
@@ -6337,6 +6656,67 @@
           }
         },
         "title": "SettingsUpdate",
+        "type": "object"
+      },
+      "SetupRequest": {
+        "description": "First-run owner registration; accepted only while no user exists.",
+        "properties": {
+          "display_name": {
+            "anyOf": [
+              {
+                "maxLength": 100,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Display Name"
+          },
+          "email": {
+            "anyOf": [
+              {
+                "maxLength": 255,
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Email"
+          },
+          "password": {
+            "maxLength": 128,
+            "minLength": 8,
+            "title": "Password",
+            "type": "string"
+          },
+          "username": {
+            "maxLength": 100,
+            "minLength": 3,
+            "title": "Username",
+            "type": "string"
+          }
+        },
+        "required": [
+          "username",
+          "password"
+        ],
+        "title": "SetupRequest",
+        "type": "object"
+      },
+      "SetupStatusResponse": {
+        "description": "Whether the installation still needs its first (owner) account.",
+        "properties": {
+          "setup_required": {
+            "title": "Setup Required",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "setup_required"
+        ],
+        "title": "SetupStatusResponse",
         "type": "object"
       },
       "ShareCreateResponse": {
@@ -10692,6 +11072,213 @@
         ]
       }
     },
+    "/api/optimization": {
+      "get": {
+        "operationId": "optimization_list_runs",
+        "parameters": [
+          {
+            "in": "query",
+            "name": "ticker",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "maxLength": 20,
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Ticker"
+            }
+          },
+          {
+            "in": "query",
+            "name": "limit",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "maximum": 100,
+              "minimum": 1,
+              "title": "Limit",
+              "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "offset",
+            "required": false,
+            "schema": {
+              "default": 0,
+              "minimum": 0,
+              "title": "Offset",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/OptimizationRunRead"
+                  },
+                  "title": "Response Optimization List Runs",
+                  "type": "array"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "List Runs",
+        "tags": [
+          "optimization"
+        ]
+      },
+      "post": {
+        "description": "Search the strategy's parameters and persist the result.\n\nRate limited because one call is tens of backtests; a tight loop here is a\nself-inflicted denial of service on the price-data vendor.",
+        "operationId": "optimization_run_optimization",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OptimizationRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptimizationRunRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "400": {
+            "description": "Optimization could not be run"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Run Optimization",
+        "tags": [
+          "optimization"
+        ]
+      }
+    },
+    "/api/optimization/catalog": {
+      "get": {
+        "description": "What can be optimized, published from the simulation's own parameter space.",
+        "operationId": "optimization_get_catalog",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptimizationCatalog"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Catalog",
+        "tags": [
+          "optimization"
+        ]
+      }
+    },
+    "/api/optimization/{run_id}": {
+      "get": {
+        "operationId": "optimization_get_run",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "run_id",
+            "required": true,
+            "schema": {
+              "title": "Run Id",
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OptimizationRunRead"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "404": {
+            "description": "Optimization run not found"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "OAuth2PasswordBearer": []
+          }
+        ],
+        "summary": "Get Run",
+        "tags": [
+          "optimization"
+        ]
+      }
+    },
     "/api/personas": {
       "get": {
         "operationId": "personas_list_all_personas",
@@ -14346,6 +14933,70 @@
           }
         },
         "summary": "Refresh",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/setup": {
+      "post": {
+        "description": "Register the Server Owner on an empty installation and sign it in.\n\nClosed for good once any account exists \u2014 it is a bootstrap route, not a\npublic sign-up.",
+        "operationId": "auth_setup",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SetupRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "summary": "Setup",
+        "tags": [
+          "auth"
+        ]
+      }
+    },
+    "/auth/setup-status": {
+      "get": {
+        "description": "Whether the login screen should offer first-run owner registration.",
+        "operationId": "auth_setup_status",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SetupStatusResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          }
+        },
+        "summary": "Setup Status",
         "tags": [
           "auth"
         ]

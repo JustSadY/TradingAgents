@@ -9,7 +9,6 @@ from backend.core.database import create_all_tables
 from backend.core.log_handler import db_log_handler
 from backend.services.cron_service import init_cron_service
 from backend.startup.recovery import recover_lost_alerts, recover_stale_analyses, reset_interrupted_update
-from backend.startup.seeds import seed_admin_user
 
 _logger = logging.getLogger(__name__)
 
@@ -41,7 +40,8 @@ async def lifespan(app: FastAPI):
     reset_interrupted_update()
 
     await create_all_tables()
-    await seed_admin_user()
+    # No owner is seeded here. An installation with no users serves the
+    # first-run setup screen, which registers the owner through /auth/setup.
     await recover_stale_analyses()
     await db_log_handler.start()
     await recover_lost_alerts()

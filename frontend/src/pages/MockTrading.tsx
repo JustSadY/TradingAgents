@@ -160,7 +160,7 @@ export default function MockTrading() {
   if (fetchError || !portfolio) {
     return (
       <div className="p-4 md:p-6 space-y-4 max-w-7xl mx-auto">
-        <h2 className="text-xl font-bold text-white tracking-tight">{t('mocktrading.error_title')}</h2>
+        <h2 className="text-xl md:text-2xl font-display font-bold text-white tracking-tight">{t('mocktrading.error_title')}</h2>
         <div className="glass-panel rounded-2xl p-8 flex flex-col items-center gap-4 text-center">
           <AlertCircle size={32} className="text-rose-400" />
           <p className="text-slate-300 text-sm leading-relaxed">{t('mocktrading.error_msg')}</p>

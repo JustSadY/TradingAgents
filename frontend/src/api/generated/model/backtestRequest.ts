@@ -5,6 +5,7 @@
  * AI-powered trading dashboard with simulation and live trading support
  * OpenAPI spec version: 1.0.0
  */
+import type { BacktestRequestStrategyParams } from './backtestRequestStrategyParams';
 
 export interface BacktestRequest {
   benchmark_ticker?: string | null;
@@ -22,6 +23,7 @@ export interface BacktestRequest {
   slippage_bps?: number;
   /** @pattern ^\d{4}-\d{2}-\d{2}$ */
   start_date: string;
+  strategy_params?: BacktestRequestStrategyParams;
   /** @pattern ^(macd_crossover|rsi_oversold|consensus)$ */
   strategy_type: string;
   /**

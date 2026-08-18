@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Box, Checkbox, FormControlLabel, FormGroup, FormHelperText, IconButton, Typography } from '@mui/material'
 import { ArrowDown, ArrowUp, Copy, Plus, Trash2 } from 'lucide-react'
 import Form from '@rjsf/core'
@@ -13,12 +13,27 @@ import type {
   WidgetProps,
 } from '@rjsf/utils'
 import type { AgentSettingFieldMetaType, ToolSettingFieldMetaType } from '../../api/generated/model'
+import { modelsFor, type LlmCatalog } from '../../hooks/useLlmCatalog'
 import { AppButton, AppSelect, AppSwitch, AppTextField, SecretField } from './AppPrimitives'
+
+/**
+ * What an `llm_model` field needs that its own JSON Schema cannot carry: the
+ * shared provider/model catalog and the sibling provider value that filters it.
+ */
+export interface LlmModelFormContext {
+  llmCatalog?: LlmCatalog
+  formData?: Record<string, unknown>
+  /** Sibling field holding the provider; defaults to `llm_provider`. */
+  providerKey?: string
+  inheritLabel?: string
+  customLabel?: string
+}
 
 export interface AppSchemaFormProps {
   schema: RJSFSchema
   uiSchema?: UiSchema
   formData?: Record<string, unknown>
+  formContext?: LlmModelFormContext & Record<string, unknown>
   disabled?: boolean
   readonly?: boolean
   submitLabel?: ReactNode
@@ -148,6 +163,67 @@ function SelectWidget(props: WidgetProps) {
         options={enumOptions.map(option => ({ value: option.value as string | number, label: option.label }))}
         onChange={props.onChange}
       />
+      {help ? <FormHelperText error={Boolean(props.rawErrors?.length)}>{help}</FormHelperText> : null}
+    </Box>
+  )
+}
+
+const CUSTOM_MODEL_VALUE = '__custom__'
+
+/**
+ * A model picker driven by the shared LLM catalog.
+ *
+ * The options depend on a *sibling* field (`llm_provider`), which a static
+ * JSON Schema enum cannot express, so the form passes the catalog and the
+ * current form data through `formContext`. This is what makes a per-agent
+ * model override offer the same list as the general LLM preferences instead of
+ * being a free-text box where a typo is indistinguishable from a real model id.
+ */
+function LlmModelWidget(props: WidgetProps) {
+  const context = (props.registry?.formContext ?? {}) as LlmModelFormContext
+  const catalog = context.llmCatalog ?? {}
+  const provider = context.formData?.[context.providerKey ?? 'llm_provider']
+  const models = modelsFor(catalog, typeof provider === 'string' ? provider : undefined)
+
+  const value = typeof props.value === 'string' ? props.value : ''
+  const known = models.some(model => model.value === value)
+  // An empty value means "inherit the account default", which is a real choice
+  // here and must not be mistaken for an unfilled custom model id. So picking
+  // "Custom" has to be remembered locally: clearing the value to let the user
+  // type would otherwise read back as "inherit" and close the text field.
+  const [customChosen, setCustomChosen] = useState(false)
+  const usesCustom = customChosen || (value !== '' && !known)
+  const help = helperText(props.rawErrors, schemaDescription(props))
+
+  const options = [
+    { value: '', label: context.inheritLabel ?? 'Default' },
+    ...models.map(model => ({ value: model.value, label: model.label })),
+    { value: CUSTOM_MODEL_VALUE, label: context.customLabel ?? 'Custom model…' },
+  ]
+
+  return (
+    <Box sx={{ display: 'grid', gap: 1 }}>
+      <AppSelect
+        id={props.id}
+        label={props.label}
+        value={usesCustom ? CUSTOM_MODEL_VALUE : value}
+        disabled={props.disabled || props.readonly}
+        options={options}
+        onChange={next => {
+          const custom = next === CUSTOM_MODEL_VALUE
+          setCustomChosen(custom)
+          props.onChange(custom ? '' : next)
+        }}
+      />
+      {usesCustom ? (
+        <AppTextField
+          id={`${props.id}-custom`}
+          value={value}
+          disabled={props.disabled}
+          placeholder={props.placeholder}
+          onChange={event => props.onChange(event.target.value)}
+        />
+      ) : null}
       {help ? <FormHelperText error={Boolean(props.rawErrors?.length)}>{help}</FormHelperText> : null}
     </Box>
   )
@@ -335,6 +411,7 @@ const widgets = {
   CheckboxWidget,
   CheckboxesWidget,
   SelectWidget,
+  llmModel: LlmModelWidget,
 }
 
 const templates = {
@@ -354,6 +431,7 @@ export function AppSchemaForm({
   schema,
   uiSchema,
   formData,
+  formContext,
   disabled = false,
   readonly = false,
   submitLabel,
@@ -367,6 +445,9 @@ export function AppSchemaForm({
         uiSchema={uiSchema}
         validator={validator}
         formData={formData}
+        // Kept in sync with formData so a model widget always filters against
+        // the provider currently selected beside it, not the one it mounted with.
+        formContext={{ ...formContext, formData: formContext?.formData ?? formData }}
         disabled={disabled}
         readonly={readonly}
         widgets={widgets}
@@ -403,6 +484,7 @@ export type LegacySchemaFieldType =
   | 'integer'
   | 'enum'
   | 'array'
+  | 'llm_model'
 
 export interface LegacySchemaField {
   key: string
@@ -478,6 +560,9 @@ export function legacyFieldsToSchema(fields: LegacySchemaField[], translate: (ke
     }
     if (field.type === 'textarea') (uiSchema[field.key] ??= {})['ui:widget'] = 'textarea'
     if (field.type === 'secret' || field.type === 'password') (uiSchema[field.key] ??= {})['ui:widget'] = 'password'
+    // The catalog fills the options in at render time, so the schema stays a
+    // plain string and any model id the user types remains valid.
+    if (field.type === 'llm_model') (uiSchema[field.key] ??= {})['ui:widget'] = 'llmModel'
     if (field.required) required.push(field.key)
     properties[field.key] = base
   }

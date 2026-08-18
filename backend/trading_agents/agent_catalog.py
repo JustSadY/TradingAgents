@@ -74,9 +74,12 @@ def get_standard_agent_settings() -> list[AgentSettingField]:
         ),
         AgentSettingField(
             key="llm_model",
-            type="string",
+            # Rendered from the shared LLM catalog and filtered by the provider
+            # picked above, so an agent override offers exactly the models the
+            # general LLM preferences do instead of a free-text box.
+            type="llm_model",
             label_key="Model Name",
-            description_key="Specify the model name (e.g. gpt-5.6-luna or claude-sonnet-5)",
+            description_key="Pick a model from the selected provider, or enter a custom model id",
             placeholder_key="settings.analyst_default_model",
             default="",
             required=False,
