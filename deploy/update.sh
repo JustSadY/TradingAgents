@@ -155,6 +155,14 @@ if ! asuser env "MIGRATION_DATABASE_URL=$MIGRATION_DATABASE_URL" bash -c "cd '$W
     rollback "Database migration failed"
 fi
 
+# LangGraph owns its checkpoint tables and creates them through setup(), which
+# needs CREATE on the schema. The runtime role deliberately has none, so they
+# are provisioned here with the migration credential instead. Idempotent, and
+# required again whenever a LangGraph upgrade adds a checkpoint migration.
+if ! asuser env "MIGRATION_DATABASE_URL=$MIGRATION_DATABASE_URL" bash -c "cd '$WORKTREE' && '$NEW_VENV/bin/python' backend/scripts/provision-checkpoints.py" >>"$LOG" 2>&1; then
+    rollback "LangGraph checkpoint provisioning failed"
+fi
+
 if ! asuser git -C "$PROJECT_ROOT" reset --hard "$TO" >>"$LOG" 2>&1; then
     rollback "Could not switch live checkout to target revision"
 fi

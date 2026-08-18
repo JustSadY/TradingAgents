@@ -304,6 +304,11 @@ set +a
 : "${MIGRATION_DATABASE_URL:?migration URL was not provisioned}"
 info "Applying Alembic migrations with the isolated migration role..."
 PYTHONPATH="$PROJECT_ROOT" "$VENV/bin/alembic" -c "$PROJECT_ROOT/backend/alembic.ini" upgrade head
+# LangGraph creates its checkpoint tables through setup(), which needs CREATE
+# on the schema. The runtime role deliberately has none, so they are
+# provisioned here with the migration credential instead.
+info "Provisioning LangGraph checkpoint tables with the migration role..."
+PYTHONPATH="$PROJECT_ROOT" "$VENV/bin/python" "$PROJECT_ROOT/backend/scripts/provision-checkpoints.py"
 unset MIGRATION_DATABASE_URL
 ok "Database migrations applied; runtime role remains non-owner/NOBYPASSRLS."
 

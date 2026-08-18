@@ -150,3 +150,92 @@ def test_missing_relation_is_recognised_through_the_exception_chain():
     assert cp.is_missing_checkpoint_relation(Undefined()) is True
     assert cp.is_missing_checkpoint_relation(wrapped) is True
     assert cp.is_missing_checkpoint_relation(RuntimeError("unrelated")) is False
+
+
+class _Sqlstate(Exception):
+    """Stands in for a psycopg error, which carries the code as `sqlstate`."""
+
+    def __init__(self, sqlstate: str, message: str = "boom"):
+        super().__init__(message)
+        self.sqlstate = sqlstate
+
+
+class TestPrivilegeHandling:
+    """A hardened deployment's runtime role cannot run LangGraph's setup().
+
+    It is a non-owner with no CREATE on its schema by design, so setup() raises
+    insufficient_privilege. That is only a real failure when the tables are
+    genuinely absent; when they are already provisioned the app must carry on.
+    """
+
+    def test_setup_is_tolerated_when_the_tables_already_exist(self, monkeypatch):
+        saver = _RecordingSaver()
+        saver.setup = lambda: (_ for _ in ()).throw(_Sqlstate("42501"))
+        monkeypatch.setattr(cp, "checkpoint_tables_exist", lambda dsn: True)
+
+        cp._ensure_pg_schema("postgresql://x/db", saver)
+
+        assert cp._schema_is_ready("postgresql://x/db") is True
+
+    def test_a_missing_schema_reports_how_to_provision_it(self, monkeypatch):
+        saver = _RecordingSaver()
+        saver.setup = lambda: (_ for _ in ()).throw(_Sqlstate("42501"))
+        monkeypatch.setattr(cp, "checkpoint_tables_exist", lambda dsn: False)
+
+        with pytest.raises(RuntimeError, match="provision-checkpoints.py"):
+            cp._ensure_pg_schema("postgresql://x/db", saver)
+
+        # A failure must not be cached as ready, or the next call would query
+        # tables that do not exist and report a missing relation instead.
+        assert cp._schema_is_ready("postgresql://x/db") is False
+
+    def test_an_unrelated_setup_failure_still_propagates(self, monkeypatch):
+        saver = _RecordingSaver()
+        saver.setup = lambda: (_ for _ in ()).throw(_Sqlstate("08006", "connection failure"))
+        monkeypatch.setattr(cp, "checkpoint_tables_exist", lambda dsn: True)
+
+        with pytest.raises(_Sqlstate):
+            cp._ensure_pg_schema("postgresql://x/db", saver)
+
+    async def test_the_async_path_applies_the_same_rule(self, monkeypatch):
+        saver = _RecordingSaver()
+
+        async def denied():
+            raise _Sqlstate("42501")
+
+        saver.setup = denied
+
+        async def tables_exist(dsn):
+            return True
+
+        monkeypatch.setattr(cp, "checkpoint_tables_exist_async", tables_exist)
+        await cp._ensure_pg_schema_async("postgresql://x/db", saver)
+        assert cp._schema_is_ready("postgresql://x/db") is True
+
+    async def test_the_async_path_also_refuses_a_missing_schema(self, monkeypatch):
+        saver = _RecordingSaver()
+
+        async def denied():
+            raise _Sqlstate("42501")
+
+        saver.setup = denied
+
+        async def tables_absent(dsn):
+            return False
+
+        monkeypatch.setattr(cp, "checkpoint_tables_exist_async", tables_absent)
+        with pytest.raises(RuntimeError, match="provision-checkpoints.py"):
+            await cp._ensure_pg_schema_async("postgresql://x/db", saver)
+
+    def test_the_message_names_the_cause_and_the_remedy(self):
+        message = cp.PROVISIONING_REQUIRED
+        assert "not allowed to create" in message
+        assert "provision-checkpoints.py" in message
+
+    @pytest.mark.parametrize(
+        ("sqlstate", "expected"),
+        [("42P01", True), ("42501", False), (None, False)],
+    )
+    def test_missing_relation_detection_is_code_based(self, sqlstate, expected):
+        exc = _Sqlstate(sqlstate) if sqlstate else RuntimeError("plain")
+        assert cp.is_missing_checkpoint_relation(exc) is expected

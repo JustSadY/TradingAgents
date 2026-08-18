@@ -158,6 +158,12 @@ process. Checkpoint reads additionally recover once from a genuinely missing
 relation — a dropped or restored database — by clearing readiness and re-running
 setup.
 
+The tables themselves are created by the migration credential, not by the app:
+`setup()` needs CREATE on the schema and the runtime role deliberately has
+none. `backend/scripts/provision-checkpoints.py` does it, and the installer and
+updater call it after Alembic. A privilege error from `setup()` is tolerated
+when the tables already exist and otherwise reports the provisioning command.
+
 Checkpoint state is graph-internal state. Application report/history fields remain in `AnalysisResult`. Retired graph topologies are not valid resumable current checkpoints.
 
 Time-travel/historical work must preserve point-in-time semantics. Business time and recorded/knowledge time are separate concepts; later knowledge must not leak into an earlier replay.

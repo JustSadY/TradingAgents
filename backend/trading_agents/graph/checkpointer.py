@@ -88,6 +88,65 @@ def reset_schema_readiness() -> None:
         _pg_async_setup_locks.clear()
 
 
+_INSUFFICIENT_PRIVILEGE = "42501"
+_UNDEFINED_TABLE = "42P01"
+
+PROVISIONING_REQUIRED = (
+    "The database role this application connects with is not allowed to create "
+    "LangGraph's checkpoint tables, and they do not exist yet. A hardened "
+    "deployment gives the runtime role no CREATE on its schema by design, so "
+    "the tables have to be provisioned once with the migration credential:\n"
+    "    python backend/scripts/provision-checkpoints.py\n"
+    "The Linux installer and updater run this automatically after Alembic."
+)
+
+
+def _sqlstate_matches(exc: BaseException, sqlstate: str) -> bool:
+    """Whether ``exc`` (or what it wraps) carries this PostgreSQL error code."""
+    for error in (exc, exc.__cause__, exc.__context__):
+        if error is None:
+            continue
+        if getattr(error, "sqlstate", None) == sqlstate:
+            return True
+    return False
+
+
+def checkpoint_tables_exist(dsn: str) -> bool:
+    """Whether LangGraph's checkpoint tables are already present.
+
+    Asked on a short-lived connection of its own rather than through the
+    saver, so it cannot be confused by the state of a connection whose last
+    statement just failed.
+    """
+    import psycopg
+
+    with psycopg.connect(dsn) as conn:
+        row = conn.execute("SELECT to_regclass('public.checkpoints')").fetchone()
+        return bool(row and row[0])
+
+
+async def checkpoint_tables_exist_async(dsn: str) -> bool:
+    """Async twin of :func:`checkpoint_tables_exist`."""
+    import psycopg
+
+    async with await psycopg.AsyncConnection.connect(dsn) as conn:
+        cursor = await conn.execute("SELECT to_regclass('public.checkpoints')")
+        row = await cursor.fetchone()
+        return bool(row and row[0])
+
+
+def _is_privilege_error(exc: BaseException) -> bool:
+    """Whether setup() failed because this role may not create the schema.
+
+    ``setup()`` is how LangGraph owns its own tables, but it needs CREATE. In a
+    deployment where the runtime role is deliberately a non-owner, that call
+    fails even when the tables are already there and perfectly usable — so a
+    permission error is only fatal when the tables are genuinely missing. Every
+    other failure is a real one and propagates untouched.
+    """
+    return _sqlstate_matches(exc, _INSUFFICIENT_PRIVILEGE)
+
+
 def _ensure_pg_schema(dsn: str, saver: Any) -> None:
     """Create LangGraph's checkpoint tables once per DSN, blocking other callers."""
     if _schema_is_ready(dsn):
@@ -95,7 +154,16 @@ def _ensure_pg_schema(dsn: str, saver: Any) -> None:
     with _setup_lock(dsn):
         if _schema_is_ready(dsn):
             return
-        saver.setup()
+        try:
+            saver.setup()
+        except Exception as exc:
+            # The probe costs a connection, so it is only worth making once the
+            # error is known to be about privileges.
+            if not _is_privilege_error(exc):
+                raise
+            if not checkpoint_tables_exist(dsn):
+                raise RuntimeError(PROVISIONING_REQUIRED) from exc
+            _logger.debug("Checkpoint tables already provisioned; this role cannot run setup().")
         _mark_schema_ready(dsn)
 
 
@@ -111,7 +179,14 @@ async def _ensure_pg_schema_async(dsn: str, saver: Any) -> None:
     async with _async_setup_lock(dsn):
         if _schema_is_ready(dsn):
             return
-        await saver.setup()
+        try:
+            await saver.setup()
+        except Exception as exc:
+            if not _is_privilege_error(exc):
+                raise
+            if not await checkpoint_tables_exist_async(dsn):
+                raise RuntimeError(PROVISIONING_REQUIRED) from exc
+            _logger.debug("Checkpoint tables already provisioned; this role cannot run setup().")
         _mark_schema_ready(dsn)
 
 
@@ -145,12 +220,7 @@ def is_missing_checkpoint_relation(exc: BaseException) -> bool:
     readiness cache is then a lie, so callers reset it and let setup run again
     instead of failing every checkpoint read for the rest of the process.
     """
-    for error in (exc, exc.__cause__, exc.__context__):
-        if error is None:
-            continue
-        if getattr(error, "sqlstate", None) == "42P01":  # undefined_table
-            return True
-    return False
+    return _sqlstate_matches(exc, _UNDEFINED_TABLE)
 
 
 def checkpoint_step(data_dir: str | Path, ticker: str, date: str, scope: str) -> int | None:

@@ -123,6 +123,30 @@ required for analysis checkpointing. Schema setup is single-flight per DSN and
 only marked done once it has actually completed; see
 `docs/architecture/backend.md` for why.
 
+### Who creates the checkpoint tables
+
+LangGraph creates them through `setup()`, which needs CREATE on the schema. In
+a hardened deployment the application connects with a non-owner, NOBYPASSRLS
+role that deliberately has no such privilege, so **the app cannot bootstrap
+them itself** — `setup()` fails with `permission denied for schema public`.
+
+They are provisioned with the migration credential instead:
+
+```bash
+MIGRATION_DATABASE_URL=... python backend/scripts/provision-checkpoints.py
+```
+
+`deploy/install.sh` and `deploy/update.sh` run this immediately after
+`alembic upgrade head`. Run it again after a LangGraph upgrade that adds a
+checkpoint migration. The tables end up owned by the migrator, so the runtime
+role picks up DML through the default privileges
+`deploy/provision-postgres-roles.sh` grants it.
+
+At runtime a privilege failure from `setup()` is therefore not fatal on its
+own: the checkpointer probes whether the tables exist, continues if they do,
+and otherwise raises an error naming the provisioning command. Every other
+`setup()` failure still propagates.
+
 ## Vector memory: Pinecone and pgvector
 
 Both memory backends remain supported:

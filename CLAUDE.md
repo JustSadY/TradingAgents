@@ -137,6 +137,8 @@ LangGraph checkpoints require PostgreSQL. `backend/trading_agents/graph/checkpoi
 
 LangGraph owns its checkpoint tables. Saver `setup()` is idempotent/version-aware and runs once per DSN per process, so those tables are intentionally outside Alembic. Every application-owned table remains Alembic-managed.
 
+`setup()` needs CREATE on the schema, which the hardened production runtime role does not have. The tables are provisioned with the migration credential by `backend/scripts/provision-checkpoints.py`, which `deploy/install.sh` and `deploy/update.sh` run after Alembic. Do not "fix" a checkpoint permission error by granting CREATE to the runtime role — run the provisioning step, and re-run it after a LangGraph upgrade that adds a checkpoint migration.
+
 Time Travel exposes only checkpoints compatible with the current graph topology. Historical checkpoints containing retired Trader nodes are not resumable.
 
 ---
