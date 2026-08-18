@@ -302,6 +302,12 @@ set -a
 . "$MIGRATION_ENV_FILE"
 set +a
 : "${MIGRATION_DATABASE_URL:?migration URL was not provisioned}"
+# Revision 20260814_0018 refuses to run without pgvector. The locally managed
+# path gets it from provision-postgres-roles.sh; SKIP_DB=1 skips that script
+# entirely, so check here rather than failing halfway through the migration run.
+info "Ensuring the pgvector extension is available..."
+PYTHONPATH="$PROJECT_ROOT" "$VENV/bin/python" "$PROJECT_ROOT/backend/scripts/provision-pgvector.py" \
+    || die "pgvector is not usable by the migration role; the migrations cannot run without it."
 info "Applying Alembic migrations with the isolated migration role..."
 PYTHONPATH="$PROJECT_ROOT" "$VENV/bin/alembic" -c "$PROJECT_ROOT/backend/alembic.ini" upgrade head
 # LangGraph creates its checkpoint tables through setup(), which needs CREATE

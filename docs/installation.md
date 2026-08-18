@@ -29,6 +29,27 @@ sudo APP_PORT=80 bash deploy/install.sh
 | `SKIP_DB` | `0` | Set to `1` when PostgreSQL is managed externally. |
 | `BUILD_FRONTEND` | `1` | Set to `0` for API-only installation. |
 
+### External PostgreSQL (`SKIP_DB=1`)
+
+`SKIP_DB=1` skips `deploy/provision-postgres-roles.sh`, so two things it
+normally does become the operator's responsibility:
+
+- `MIGRATION_DATABASE_URL` must be exported in the installer environment. It is
+  written to `/etc/tradingagents/migration.env` and never stored in `.env`.
+- The `vector` extension must exist, because the migrations require it. Enable
+  it from the provider's extensions UI, or run `CREATE EXTENSION IF NOT EXISTS
+  vector;` as an administrative role. The installer checks this before running
+  Alembic and prints the statement to run if it cannot create it itself.
+
+If the provider installs extensions into a dedicated schema (Supabase uses
+`extensions`), put that schema on the search_path of both roles, or the
+`vector` type will not resolve during migration:
+
+```sql
+ALTER ROLE "<migration_role>" SET search_path = public, extensions;
+ALTER ROLE "<runtime_role>"   SET search_path = public, extensions;
+```
+
 After installation, open the URL printed by the installer. The first visit serves a one-time setup screen that registers the Server Owner account; no administrator credential is stored in `.env`. The production frontend is served directly by FastAPI from `frontend/dist`; a separate nginx instance is not required unless you want TLS/domain reverse proxying.
 
 ### LLM and data-provider keys

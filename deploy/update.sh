@@ -141,6 +141,12 @@ if [ -d "$PROJECT_ROOT/frontend/dist" ]; then
     tar -cf "$OLD_DIST_ARCHIVE" -C "$PROJECT_ROOT/frontend/dist" .
 fi
 
+# Checked before the site goes down: a database without a usable pgvector
+# extension would only fail once migrations were already running.
+if ! asuser env "MIGRATION_DATABASE_URL=$MIGRATION_DATABASE_URL" bash -c "cd '$WORKTREE' && '$NEW_VENV/bin/python' backend/scripts/provision-pgvector.py" >>"$LOG" 2>&1; then
+    fail "pgvector extension is not usable by the migration role; see $LOG"
+fi
+
 log "Preflight passed; stopping web/worker services for migration and release switch"
 if systemctl list-unit-files "$WORKER_SERVICE_NAME.service" --no-legend 2>/dev/null | grep -q "^$WORKER_SERVICE_NAME.service"; then
     systemctl stop "$WORKER_SERVICE_NAME" >>"$LOG" 2>&1 || rollback "Could not stop worker: $WORKER_SERVICE_NAME"

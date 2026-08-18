@@ -47,7 +47,7 @@ sudo APP_PORT=80 bash deploy/install.sh
 | `SERVICE_NAME` | `tradingagents` | The name of the registered systemd service. |
 | `SERVICE_USER` | *Invoking user* | System user that runs the daemon. |
 | `NODE_MAJOR` | `20` | Major Node.js version to install. |
-| `SKIP_DB` | `0` | If set to `1`, skips database setup (use this if using an external database). |
+| `SKIP_DB` | `0` | If set to `1`, skips database setup (use this if using an external database). Requires `MIGRATION_DATABASE_URL` in the installer environment, and a database with the `vector` extension already enabled — see `docs/installation.md`. |
 | `BUILD_FRONTEND` | `1` | If set to `0`, skips React compilation (API-only setup). |
 
 ---
@@ -56,7 +56,7 @@ sudo APP_PORT=80 bash deploy/install.sh
 
 At least one LLM provider key is required to run agent analyses. Keys are **not** stored in `.env` — they are managed in the web dashboard and stored encrypted in the database:
 
-1.  Log in at `http://SERVER_IP:8000` with the admin credentials printed by the installer.
+1.  Open `http://SERVER_IP:8000`. The first visit serves a one-time setup screen that registers the Server Owner account; no administrator credential is stored in `.env` or printed by the installer.
 2.  Open **Settings → Account & API Keys** (per-user keys) or **Admin Panel → Global Settings** (server-wide defaults).
 3.  Enter the provider key(s); they take effect immediately — no service restart required.
 

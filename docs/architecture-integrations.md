@@ -154,8 +154,26 @@ Both memory backends remain supported:
 - Pinecone is retained as a managed vector-memory option.
 - pgvector remains the self-hosted PostgreSQL option.
 
-Alembic owns pgvector extension/table creation; request-time memory operations
-do not perform schema DDL.
+Alembic owns the pgvector *tables*, but not the extension: revision
+`20260814_0018` raises `pgvector extension is not installed` rather than
+creating it, because `CREATE EXTENSION` needs a privilege the migration role
+is not guaranteed to have. Request-time memory operations perform no schema DDL.
+
+The extension is provisioned before migrations run:
+
+- `deploy/provision-postgres-roles.sh` runs `CREATE EXTENSION IF NOT EXISTS
+  vector` for a locally managed database.
+- `backend/scripts/provision-pgvector.py` is the preflight `deploy/install.sh`
+  and `deploy/update.sh` run in every topology, including `SKIP_DB=1`, which
+  skips the role-provisioning script entirely. It creates the extension when
+  the migration credential may, and otherwise stops with the SQL an operator
+  has to run themselves.
+
+It also fails when the extension is installed but the `vector` type does not
+resolve — a managed provider such as Supabase installs extensions into an
+`extensions` schema, which leaves `type "vector" does not exist` two statements
+into the migration unless that schema is on the search_path of both the
+migration and runtime roles.
 
 ## Research/reference packages
 

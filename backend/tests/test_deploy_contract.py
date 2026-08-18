@@ -37,3 +37,22 @@ def test_updater_never_claims_database_schema_rollback() -> None:
 
     assert "schema downgrades are never automated" in updater
     assert "Database schema downgrades are never automated" in readme
+
+
+def test_pgvector_is_checked_before_migrations_run() -> None:
+    """Revision 20260814_0018 raises without the extension, so a missing one
+    must be reported by the preflight rather than mid-migration."""
+    installer = (_repo_root() / "deploy" / "install.sh").read_text()
+
+    check = installer.index("provision-pgvector.py")
+    migrate = installer.index('alembic.ini" upgrade head')
+    assert check < migrate
+
+
+def test_updater_checks_pgvector_before_taking_the_site_down() -> None:
+    updater = (_repo_root() / "deploy" / "update.sh").read_text()
+
+    check = updater.index("provision-pgvector.py")
+    stop = updater.index("stopping web/worker services")
+    migrate = updater.index("alembic' -c backend/alembic.ini upgrade head")
+    assert check < stop < migrate
