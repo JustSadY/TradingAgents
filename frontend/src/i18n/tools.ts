@@ -74,6 +74,14 @@ const toolTranslations = {
     'tools.options_data.label': 'Options Chain Data',
     'tools.options_data.description': 'Pulls open interest, volume ratios, and implied volatility surfaces.',
 
+    'tools.volatility_forecast.label': 'Volatility Forecast (GARCH)',
+    'tools.volatility_forecast.description': 'Forecasts expected volatility, value at risk and expected shortfall over a forward horizon using a GARCH-family model.',
+    'tools.volatility_forecast.default_model': 'Model',
+    'tools.volatility_forecast.default_model_description': 'Asymmetric models let a negative return raise expected volatility more than an equal positive one.',
+    'tools.volatility_forecast.model_garch': 'GARCH(1,1) — symmetric',
+    'tools.volatility_forecast.model_tarch': 'TARCH/GJR — asymmetric',
+    'tools.volatility_forecast.model_egarch': 'EGARCH — asymmetric, log variance',
+    'tools.volatility_forecast.default_horizon_days': 'Forecast horizon (trading days)',
     'tools.quant_data.label': 'Quantitative Anomalies',
     'tools.quant_data.description': 'Examines returns volatility, statistical factor loadings, and returns anomalies.',
 
@@ -177,6 +185,14 @@ const toolTranslations = {
     'tools.options_data.label': 'Opsiyon Zinciri Verileri',
     'tools.options_data.description': 'Açık pozisyon sayısını, hacim oranlarını ve zımni volatilite yüzeylerini çeker.',
 
+    'tools.volatility_forecast.label': 'Volatilite Tahmini (GARCH)',
+    'tools.volatility_forecast.description': 'GARCH ailesinden bir model ile ileriye dönük beklenen volatiliteyi, riske maruz değeri ve beklenen kaybı tahmin eder.',
+    'tools.volatility_forecast.default_model': 'Model',
+    'tools.volatility_forecast.default_model_description': 'Asimetrik modellerde negatif getiri, aynı büyüklükteki pozitif getiriye kıyasla beklenen volatiliteyi daha çok yükseltir.',
+    'tools.volatility_forecast.model_garch': 'GARCH(1,1) — simetrik',
+    'tools.volatility_forecast.model_tarch': 'TARCH/GJR — asimetrik',
+    'tools.volatility_forecast.model_egarch': 'EGARCH — asimetrik, logaritmik varyans',
+    'tools.volatility_forecast.default_horizon_days': 'Tahmin ufku (işlem günü)',
     'tools.quant_data.label': 'Kantitatif Sapmalar',
     'tools.quant_data.description': 'Fiyat getiri volatilitesini, istatistiksel faktör yüklerini ve getiri anomalilerini inceler.',
 
