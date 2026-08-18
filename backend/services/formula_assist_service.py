@@ -47,7 +47,10 @@ DSL rules:
 - Price/volume series: Open, High, Low, Close, Volume
 - Functions (single integer argument only):
   SMA(n), EMA(n), STD(n), RSI(n)   — computed on Close
-  ATR(n), ADX(n)                   — computed on High/Low/Close
+  ATR(n), ADX(n), CCI(n), WILLR(n) — computed on High/Low/Close
+  MFI(n)                           — computed on High/Low/Close/Volume
+  BBL(n), BBM(n), BBU(n)           — Bollinger lower/middle/upper band (2 std)
+  STOCHK(n), STOCHD(n)             — stochastic %K and %D
   MAX(n)  highest High of last n bars, MIN(n) lowest Low of last n bars
   VWAP(n) rolling volume-weighted average price
   VOLSMA(n) average Volume of last n bars
@@ -59,8 +62,9 @@ DSL rules:
 Examples:
 - "distance from the 20 day average in std devs" -> (Close - SMA(20)) / STD(20)
 - "MACD line" -> EMA(12) - EMA(26)
-- "Bollinger %B with 20/2" -> (Close - SMA(20) + 2*STD(20)) / (4*STD(20))
-- "stochastic %K 14" -> (Close - MIN(14)) / (MAX(14) - MIN(14)) * 100
+- "Bollinger %B with 20/2" -> (Close - BBL(20)) / (BBU(20) - BBL(20))
+- "stochastic %K 14" -> STOCHK(14)
+- "how far above the upper Bollinger band" -> Close - BBU(20)
 - "10 day rate of change in percent" -> (Close / SHIFT(10) - 1) * 100
 - "volume vs its 20 day average" -> Volume / VOLSMA(20)
 - "alert me when MACD crosses the signal line" -> UNSUPPORTED
@@ -161,7 +165,10 @@ async def generate_formula(db: AsyncSession, prompt: str, user) -> str:
 
     formula = _extract_formula(llm_text(response))
     if not formula or formula.upper() == "UNSUPPORTED":
-        raise ValueError("That indicator cannot be expressed with the available functions (SMA/EMA/STD/RSI/ADX).")
+        raise ValueError(
+            "That indicator cannot be expressed with the available functions "
+            "(SMA/EMA/STD/RSI/ATR/ADX/CCI/MFI/WILLR/BBL/BBM/BBU/STOCHK/STOCHD/MAX/MIN/VWAP/VOLSMA/SHIFT)."
+        )
     if len(formula) > _MAX_FORMULA_CHARS:
         raise ValueError("Generated formula is too long; try a simpler description.")
 

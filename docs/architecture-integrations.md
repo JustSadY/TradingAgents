@@ -36,15 +36,34 @@ implementation and package-detection fallback are removed.
 
 ## Standard technical indicators: pandas-ta-classic only
 
-EMA, RSI, MACD, ADX, ATR and rolling volume-weighted price calculations are
-provided by `pandas-ta-classic`. The application still owns product-specific
-formula sandboxing and custom chart-pattern algorithms; unused standalone
+`pandas-ta-classic` provides SMA, EMA, RSI, MACD, ADX, ATR, Bollinger Bands,
+the stochastic oscillator, CCI, MFI, Williams %R, OBV and rolling
+volume-weighted price. The application still owns product-specific formula
+sandboxing and custom chart-pattern algorithms; unused standalone
 Ichimoku/Fibonacci display helpers were removed rather than kept as a second
 indicator surface.
 
-The `research` dependency group also contains TA-Lib so package parity checks can
-be run against a second implementation without putting TA-Lib on the production
-runtime path.
+Every wrapper in `services/indicator_service.py` passes `talib=False` and reads
+its result columns by prefix, because pandas-ta embeds parameters in column
+names (`BBU_20_2.0`, `STOCHk_14_3_3`, `CCI_20_0.015`) and the constant in that
+suffix is not always the one that was passed in.
+
+All of them except OBV are also exposed to the sandboxed custom-formula
+language as `NAME(period)` symbols; multi-series indicators get one symbol per
+line (`BBL`/`BBM`/`BBU`, `STOCHK`/`STOCHD`). OBV is cumulative and takes no
+period, so it has no formula symbol. The AI formula assistant's DSL prompt in
+`services/formula_assist_service.py` lists the same set — it must be updated
+whenever a symbol is added, or the assistant will keep hand-rolling an
+approximation of an indicator that now exists.
+
+### Why not TA-Lib
+
+TA-Lib stays in the `research` dependency group as a parity oracle rather than
+the production engine. It is a C library, so promoting it would add a native
+build step to the Docker image and the Linux installer, and it would buy no
+additional coverage: `pandas-ta-classic` already implements every standard
+indicator this project exposes. Parity checks against TA-Lib run through
+`backend.services.research_integrations.talib_standard_indicators`.
 
 ## Checkpoints: PostgreSQL only
 
