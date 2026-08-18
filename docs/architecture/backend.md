@@ -126,6 +126,23 @@ logged), because a calendar problem must not be able to freeze every tenant's
 automation. An analysis row with no parseable `trade_date` is not gated rather
 than being assumed to mean today. Manual, user-initiated analyses are unaffected.
 
+## Strategy optimization
+
+`optimization_runs` records one parameter search: the objective, the trial
+history, the best parameter set, and the baseline the shipped defaults scored
+on the same window. `api/optimization.py` creates the row *before* the search
+starts and marks it failed on any exception, so a row never stays `running`
+after the process has given up on it.
+
+The table was created after the blanket RLS revisions (`20260814_0018`,
+`20260814_0019`), which enumerated the `user_id` tables existing at the time.
+Its own migration therefore enables RLS and creates the tenant policy itself —
+**any new user-scoped table has to do the same**, or it is readable across
+tenants despite having a `user_id`.
+
+Searching is rate limited (6/hour) because one call runs tens of backtests
+against the price-data vendor.
+
 ## Checkpoints and Time Travel
 
 LangGraph checkpoints are PostgreSQL-backed through `backend/trading_agents/graph/checkpointer.py`. There is no pickle/file import path and no SQLite checkpoint fallback.

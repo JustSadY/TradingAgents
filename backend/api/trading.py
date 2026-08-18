@@ -55,6 +55,10 @@ class BacktestRequest(BaseModel):
     initial_capital: float = Field(default=100_000.0, gt=0, le=10_000_000)
     slippage_bps: float = Field(default=5.0, ge=0, le=100)
     benchmark_ticker: str | None = Field(default=None, max_length=20)
+    # Optional strategy tuning, normally supplied by the optimizer. The
+    # simulation clamps these into its declared space, so an arbitrary payload
+    # cannot reach an indicator; unknown keys are dropped.
+    strategy_params: dict[str, float] | None = Field(default=None)
 
     @field_validator("ticker")
     @classmethod
@@ -147,6 +151,7 @@ async def run_backtest(
         user=_,
         slippage_bps=req.slippage_bps,
         benchmark_ticker=benchmark_ticker,
+        strategy_params=req.strategy_params,
     )
     if "error" in res:
         raise HTTPException(status_code=400, detail=res["error"])

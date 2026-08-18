@@ -7,6 +7,7 @@ from .assistant import AssistantMessage, AssistantPendingAction
 from .log import SystemLog
 from .market_summary import MarketDailySummary
 from .news_cache import AnalystReportCache, NewsAnalysisCache, NewsCache
+from .optimization import OptimizationRun
 from .order import Order
 from .page_permission import UserPagePermission, UserSettingPermission
 from .persona import UserPersona
@@ -57,4 +58,5 @@ __all__ = [
     "WebhookDelivery",
     "MarketDailySummary",
     "UserPersona",
+    "OptimizationRun",
 ]

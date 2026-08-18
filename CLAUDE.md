@@ -23,6 +23,7 @@ TradingAgents consists of:
 - FastAPI backend with async SQLAlchemy/`asyncpg` and PostgreSQL.
 - LangGraph multi-agent analysis engine under `backend/trading_agents/`.
 - Optional Redis + `arq` worker for out-of-process analyses.
+- GARCH-family volatility forecasting (`arch`) and Optuna strategy-parameter search.
 - Authenticated WebSocket progress streaming.
 - Encrypted user/provider credentials stored in PostgreSQL.
 - RBAC, per-user settings, tool permissions, scheduling, alerts, paper trading, and optional broker execution.
@@ -120,6 +121,15 @@ Check schema work against migration drift tooling before trusting it:
 MIGRATION_DRIFT_DATABASE_URL=postgresql+asyncpg://postgres@localhost/ta_drift \
     uv run pytest tests/test_core/test_migration_drift.py
 ```
+
+### New user-scoped tables need their own RLS policy
+
+`20260814_0018` and `20260814_0019` enabled row-level security by enumerating
+the tables that carried `user_id` **at the time they ran**. A table added later
+gets nothing from them. Its own migration must enable RLS and create the tenant
+policy, as `20260818_0027` (`optimization_runs`) does — otherwise the table is
+readable across tenants despite having a `user_id`, and ordinary tests on
+SQLite will not notice.
 
 ### LangGraph checkpoints
 
