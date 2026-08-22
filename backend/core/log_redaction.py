@@ -4,8 +4,9 @@ import logging
 import os
 import re
 import traceback
-from collections import OrderedDict
 from threading import RLock
+
+from cachetools import LRUCache
 
 _logger = logging.getLogger(__name__)
 
@@ -17,17 +18,14 @@ _SENSITIVE_ENV_VARS = (
 )
 
 _MAX_DYNAMIC_LITERALS = 1_000
-_DYNAMIC_LITERALS: OrderedDict[str, None] = OrderedDict()
+_DYNAMIC_LITERALS: LRUCache = LRUCache(maxsize=_MAX_DYNAMIC_LITERALS)
 _DYNAMIC_LITERALS_LOCK = RLock()
 
 def register_sensitive_literal(value: str):
     """Add a dynamic value to be masked in logs (e.g. user webhook URLs)."""
     if value and len(value) >= 6:
         with _DYNAMIC_LITERALS_LOCK:
-            _DYNAMIC_LITERALS.pop(value, None)
             _DYNAMIC_LITERALS[value] = None
-            while len(_DYNAMIC_LITERALS) > _MAX_DYNAMIC_LITERALS:
-                _DYNAMIC_LITERALS.popitem(last=False)
 
 def _dynamic_literals_snapshot() -> list[str]:
     """Return a stable longest-first literal list for one redaction pass."""

@@ -33,8 +33,9 @@ import hashlib
 import json
 import logging
 import time
-from collections import OrderedDict
 from typing import Any
+
+from cachetools import TTLCache
 
 from backend.core.redis_bus import EVENTS_CHANNEL, get_redis, redis_enabled, subscribe_loop
 from backend.core.websocket import ws_manager
@@ -63,31 +64,17 @@ def _next_seq(task_id: str) -> int:
     return seq
 
 class _DedupTracker:
-    """Bounded, time-windowed deduplication set.
-
-    Thread-safe for asyncio single-thread usage. Evicts entries older than
-    ``window`` seconds when ``_seen`` exceeds ``maxlen``.
-    """
+    """Bounded, time-windowed deduplication set."""
 
     def __init__(self, window: int = _DEDUP_WINDOW, maxlen: int = _DEDUP_MAX):
-        self._window = window
-        self._maxlen = maxlen
-        self._seen: OrderedDict[str, float] = OrderedDict()
+        self._seen: TTLCache = TTLCache(maxsize=maxlen, ttl=window, timer=time.monotonic)
 
     def seen(self, eid: str) -> bool:
-        now = time.monotonic()
-        self._evict(now)
         if eid in self._seen:
             return True
-        if len(self._seen) >= self._maxlen:
-            self._seen.popitem(last=False)
-        self._seen[eid] = now
+        self._seen[eid] = True
         return False
 
-    def _evict(self, now: float) -> None:
-        cutoff = now - self._window
-        while self._seen and next(iter(self._seen.values())) < cutoff:
-            self._seen.popitem(last=False)
 
 _dedup = _DedupTracker()
 

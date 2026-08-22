@@ -1,11 +1,11 @@
 import asyncio
 import logging
-import time
 from typing import Any
 
 import numpy as np
 import pandas as pd
 import yfinance as yf
+from cachetools import TTLCache
 from tenacity import AsyncRetrying, stop_after_attempt, wait_exponential_jitter
 
 from backend.services.indicator_service import calculate_rsi
@@ -30,8 +30,8 @@ SECTORS: dict[str, str] = {
     "XLC": "Communication",
 }
 
-_cache: dict[str, Any] = {}
 _CACHE_TTL = 1800
+_cache: TTLCache = TTLCache(maxsize=1, ttl=_CACHE_TTL)
 
 def _rsi(prices: list[float], period: int = 14) -> float:
     if len(prices) < period + 1:
@@ -44,10 +44,9 @@ def _rsi(prices: list[float], period: int = 14) -> float:
     return float(value) if not np.isnan(value) else 50.0
 
 async def get_sector_rotation() -> list[dict[str, Any]]:
-    now = time.time()
     cached = _cache.get("sector_rotation")
-    if cached and now - cached["ts"] < _CACHE_TTL:
-        return cached["data"]
+    if cached is not None:
+        return cached
 
     tickers = list(SECTORS.keys())
 
@@ -120,5 +119,5 @@ async def get_sector_rotation() -> list[dict[str, Any]]:
 
     results.sort(key=lambda x: x["momentum_score"], reverse=True)
     if results:
-        _cache["sector_rotation"] = {"ts": now, "data": results}
+        _cache["sector_rotation"] = results
     return results

@@ -85,7 +85,7 @@ class PricingResolution:
 #: The file LiteLLM ships its price table in. Named here rather than reached
 #: through ``import litellm`` for the reasons in the module docstring; a release
 #: that renames it fails ``test_price_table_is_readable``, instead of silently
-#: costing every model at :data:`DEFAULT_CLOUD_PRICING`.
+#: leaving every model unpriced.
 LITELLM_PRICE_FILE = "model_prices_and_context_window_backup.json"
 
 #: This repository's provider keys mapped to the ``litellm_provider`` values

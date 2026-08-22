@@ -21,14 +21,18 @@ from __future__ import annotations
 import asyncio
 import contextvars
 import logging
-import random
 import time
 import traceback
 from collections.abc import Callable
 from typing import Any
 
-from tenacity import AsyncRetrying, RetryCallState, retry_if_exception, stop_after_attempt
-from tenacity.wait import wait_base
+from tenacity import (
+    AsyncRetrying,
+    RetryCallState,
+    retry_if_exception,
+    stop_after_attempt,
+    wait_random_exponential,
+)
 
 # Error classification lives with the LLM clients so there is exactly one
 # taxonomy; re-exported here because callers and tests import it from the
@@ -262,7 +266,7 @@ async def retry_call(
 
     retrying = AsyncRetrying(
         stop=stop_after_attempt(attempts),
-        wait=_ExponentialBackoff(base_delay),
+        wait=wait_random_exponential(multiplier=max(0.0, float(base_delay))),
         retry=retry_if_exception(
             lambda exc: _is_retryable(exc, retry_all=retry_all, retry_timeouts=retry_timeouts)
         ),
@@ -293,30 +297,6 @@ def _is_retryable(exc: BaseException, *, retry_all: bool, retry_timeouts: bool) 
         return False
     return retry_all or is_transient(exc)
 
-
-class _ExponentialBackoff(wait_base):
-    """``base_delay * 2 ** attempt``, spread by full jitter.
-
-    Analysts run concurrently — ``market_intelligence`` gathers teams behind a
-    semaphore and ``agent_qa`` gathers its questions — so a provider rate limit
-    fails many calls within the same instant. On a bare ``base * 2 ** attempt``
-    schedule every one of them then retries at exactly the same offsets, which
-    lands the same burst on the provider again and makes the limit worse.
-
-    Jitter is applied over the whole interval (AWS's "full jitter"): the delay
-    is uniform in ``[0, base * 2 ** attempt]``, which keeps the ceiling growing
-    exponentially while decorrelating the callers. ``base_delay`` of 0 stays
-    exactly 0 so tests and zero-delay callers are unaffected.
-    """
-
-    def __init__(self, base_delay: float) -> None:
-        self.base_delay = max(0.0, float(base_delay))
-
-    def ceiling(self, retry_state: RetryCallState) -> float:
-        return self.base_delay * (2 ** (retry_state.attempt_number - 1))
-
-    def __call__(self, retry_state: RetryCallState) -> float:
-        return random.uniform(0.0, self.ceiling(retry_state))
 
 def _log_retry_metrics(label: str, i: int, attempts: int, delay: float, exc: Exception):
     log_event(
