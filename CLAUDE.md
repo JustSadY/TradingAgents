@@ -248,7 +248,9 @@ GET /api/settings/llm-catalog
 
 Do not scatter provider/model lists across frontend components.
 
-Model cost lookup is owned by `backend/core/model_pricing.py`, which uses LiteLLM's pinned catalog plus explicit overrides/fallback behavior. Do not restore a second hand-maintained pricing table in a service.
+Model cost lookup is owned by `backend/core/model_pricing.py`, and every rate comes from LiteLLM's pinned catalog. There are no hand-written rates: no override table, and no default rate for models the catalog does not list. An unpriced model resolves to `source="unknown"` with `pricing=None`, `estimate_token_cost` returns `None`, and the UI shows no cost rather than a guess — the retired conservative default priced an NVIDIA Nemotron run at roughly four times what the vendor charges.
+
+Do not reintroduce a hand-maintained rate anywhere, including in a frontend component. `Analysis.tsx` used to multiply live token counts by its own hard-coded $5/$15 per-million rates, so the running estimate was more than double the server's figure and changed sharply the moment a run completed. Costs — live and final — are computed server-side and streamed.
 
 ---
 

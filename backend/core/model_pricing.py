@@ -25,10 +25,12 @@ Two deliberate choices:
   the file takes about twelve milliseconds and behaves the same everywhere.
   Freshness comes from bumping the pinned ``litellm`` version, which
   ``uv.lock`` already records.
-* :data:`PRICE_OVERRIDES` holds only what LiteLLM's shipped table does not have
-  or routes to a different vendor. ``test_model_pricing.py`` fails when an
-  override stops being necessary, so the list shrinks as LiteLLM catches up
-  instead of quietly rotting the way the full table did.
+* There are no hand-written rates left at all — not a table, and not a
+  fallback for models the catalogue does not list. A rate this module cannot
+  source from LiteLLM is reported as unknown and the caller shows no cost,
+  because the previous conservative default (USD 2/8 per million) was the
+  wrong answer far more often than it was a useful one: it priced a finished
+  NVIDIA Nemotron run at roughly four times what the vendor charges.
 
 Rates are USD per one million tokens.
 """
@@ -56,24 +58,28 @@ class ModelPricing:
 
 PricingSource = Literal[
     "catalog",
-    "exact",
     "model_id",
-    "provider_fallback",
-    "unknown_provider",
     "local",
+    "unknown",
 ]
 
 
 @dataclass(frozen=True)
 class PricingResolution:
-    """The rate selected for a model and whether it is a fallback estimate."""
+    """The rate selected for a model, or ``None`` when nothing prices it."""
 
-    pricing: ModelPricing
+    pricing: ModelPricing | None
     source: PricingSource
 
     @property
     def is_fallback(self) -> bool:
-        return self.source in {"provider_fallback", "unknown_provider"}
+        """Whether no rate could be sourced, so there is no cost to show.
+
+        The name predates the removal of the conservative default rate and is
+        kept because it is part of the published API schema; it now means
+        "unpriced", not "priced by a guess".
+        """
+        return self.pricing is None
 
 
 #: The file LiteLLM ships its price table in. Named here rather than reached
@@ -97,28 +103,7 @@ PROVIDER_CATALOG_KEYS: dict[str, frozenset[str]] = {
     "nvidia": frozenset({"nvidia_nim"}),
 }
 
-#: Rates LiteLLM's shipped table cannot supply. Each entry needs a reason, and
-#: each is asserted to still be necessary by the test suite.
-PRICE_OVERRIDES: dict[str, dict[str, ModelPricing]] = {
-    "google": {
-        # Newer than the pinned table.
-        "gemini-3.7-flash": ModelPricing(0.75, 3.75),
-        # LiteLLM carries only the dated `-preview` keys for this one, which do
-        # not match the plain ID the registry offers.
-        "gemini-3.1-pro": ModelPricing(2.0, 12.0),
-    },
-    "nvidia": {
-        # LiteLLM's three `nvidia_nim` entries are rerank models. NIM's llama
-        # inference rates are not in the table under any provider we bill.
-        "llama-3.1-70b": ModelPricing(0.35, 0.35),
-        "llama-3.1-405b": ModelPricing(2.0, 2.0),
-        "llama-3.3-70b": ModelPricing(0.35, 0.35),
-    },
-}
-
-KNOWN_CLOUD_PROVIDERS = frozenset(PROVIDER_CATALOG_KEYS)
 LOCAL_PROVIDERS = frozenset({"ollama"})
-DEFAULT_CLOUD_PRICING = ModelPricing(2.0, 8.0)
 ZERO_PRICING = ModelPricing(0.0, 0.0)
 
 _PER_MILLION = 1_000_000
@@ -146,13 +131,13 @@ def _catalog() -> dict[str, dict[str, ModelPricing]]:
     """LiteLLM's table, indexed the way this module asks questions of it.
 
     An unreadable or unrecognisable file degrades to the empty catalogue, which
-    leaves every model on the conservative fallback rather than failing a
-    request. The accompanying test is what makes that loud.
+    leaves every model unpriced rather than failing a request. The accompanying
+    test is what makes that loud.
     """
     try:
         raw = json.loads(litellm_price_file().read_text(encoding="utf-8"))
     except Exception:  # noqa: BLE001 - any failure here means "no catalogue"
-        _logger.exception("Could not read the LiteLLM price table; falling back to estimates")
+        _logger.exception("Could not read the LiteLLM price table; no model can be priced")
         return {}
 
     by_provider: dict[str, dict[str, ModelPricing]] = {provider: {} for provider in PROVIDER_CATALOG_KEYS}
@@ -192,49 +177,38 @@ def _longest_match(rates: dict[str, ModelPricing], model: str) -> ModelPricing |
     return None
 
 
-def _override(provider: str, model: str) -> ModelPricing | None:
-    return _longest_match(PRICE_OVERRIDES.get(provider, {}), model)
-
-
 @lru_cache(maxsize=512)
 def _resolve_normalized(provider: str, model: str) -> PricingResolution:
     if provider in LOCAL_PROVIDERS:
         return PricingResolution(ZERO_PRICING, "local")
 
     if provider:
-        override = _override(provider, model)
-        if override is not None:
-            return PricingResolution(override, "exact")
-
         catalogued = _longest_match(_catalog().get(provider, {}), model)
         if catalogued is not None:
             return PricingResolution(catalogued, "catalog")
 
-        source: PricingSource = "provider_fallback" if provider in KNOWN_CLOUD_PROVIDERS else "unknown_provider"
         _logger.warning(
-            "No LLM price for provider=%r model=%r; using conservative %s estimate",
+            "LiteLLM has no price for provider=%r model=%r; reporting no cost estimate",
             provider,
             model or "(unset)",
-            source,
         )
-        return PricingResolution(DEFAULT_CLOUD_PRICING, source)
+        return PricingResolution(None, "unknown")
 
     # No provider given: accept a model ID only if it means one thing across
-    # every provider, so an ambiguous name is estimated rather than guessed.
+    # every provider, so an ambiguous name stays unpriced rather than guessed.
     candidates = {
         price
         for candidate_provider in PROVIDER_CATALOG_KEYS
-        if (price := _override(candidate_provider, model) or _longest_match(_catalog().get(candidate_provider, {}), model))
-        is not None
+        if (price := _longest_match(_catalog().get(candidate_provider, {}), model)) is not None
     }
     if len(candidates) == 1:
         return PricingResolution(candidates.pop(), "model_id")
 
     _logger.warning(
-        "No provider/exact LLM price for model=%r; using conservative unknown-provider estimate",
+        "LiteLLM has no unambiguous price for model=%r; reporting no cost estimate",
         model or "(unset)",
     )
-    return PricingResolution(DEFAULT_CLOUD_PRICING, "unknown_provider")
+    return PricingResolution(None, "unknown")
 
 
 def resolve_model_pricing(provider: str | None, model: str | None) -> PricingResolution:
@@ -247,9 +221,11 @@ def estimate_token_cost(
     model: str | None,
     tokens_in: int,
     tokens_out: int,
-) -> float:
-    """Estimate USD cost for measured input/output token counts."""
+) -> float | None:
+    """USD cost for measured token counts, or ``None`` if nothing prices it."""
     price = resolve_model_pricing(provider, model).pricing
+    if price is None:
+        return None
     return round(
         (max(0, tokens_in) * price.input_per_million_usd + max(0, tokens_out) * price.output_per_million_usd)
         / _PER_MILLION,
@@ -257,12 +233,14 @@ def estimate_token_cost(
     )
 
 
-def estimate_total_token_cost(provider: str | None, model: str | None, total_tokens: int) -> float:
-    """Estimate a pre-run cost when only a total token estimate is available.
+def estimate_total_token_cost(provider: str | None, model: str | None, total_tokens: int) -> float | None:
+    """Pre-run estimate when only a total token count is available.
 
     The input/output split is unknown before a run, so use the same catalogue's
     blended rate instead of a separate per-1K table.
     """
     price = resolve_model_pricing(provider, model).pricing
+    if price is None:
+        return None
     blended_per_million = (price.input_per_million_usd + price.output_per_million_usd) / 2
     return round(max(0, total_tokens) * blended_per_million / _PER_MILLION, 6)

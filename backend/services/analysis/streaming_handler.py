@@ -7,6 +7,7 @@ from uuid import UUID
 
 from langchain_core.callbacks import AsyncCallbackHandler
 
+from backend.core.model_pricing import estimate_token_cost
 from backend.services.analysis.activity import AnalysisActivityTracker
 from backend.services.analysis.emitter import AnalysisEmitter
 from backend.services.stats_handler import StatsCallbackHandler
@@ -21,6 +22,18 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
         self._activity_tracker = activity_tracker
         self._tool_starts: dict[UUID, float] = {}
         self._stats_handler = StatsCallbackHandler()
+        self._llm_provider: str | None = None
+        self._llm_model: str | None = None
+
+    def set_pricing_context(self, provider: str | None, model: str | None) -> None:
+        """Name the model whose rates price the running total.
+
+        Set once the graph has resolved its provider/model, so the streamed
+        cost and the one persisted at completion come from the same lookup in
+        ``backend.core.model_pricing`` instead of diverging.
+        """
+        self._llm_provider = provider
+        self._llm_model = model
 
     @property
     def llm_calls(self) -> int:
@@ -42,6 +55,14 @@ class TokenStreamingCallbackHandler(AsyncCallbackHandler):
                     "llm_calls": self.llm_calls,
                     "tokens_in": self.tokens_in,
                     "tokens_out": self.tokens_out,
+                    # Priced here rather than in the browser. The page used to
+                    # multiply the live token counts by a pair of hard-coded
+                    # rates that belonged to neither the configured model nor
+                    # this catalogue, so the running figure was more than twice
+                    # the one that appeared the moment the run completed.
+                    "estimated_cost_usd": estimate_token_cost(
+                        self._llm_provider, self._llm_model, self.tokens_in, self.tokens_out
+                    ),
                 }
             )
         except Exception as e:

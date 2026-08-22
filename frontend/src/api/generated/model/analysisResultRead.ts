@@ -23,7 +23,7 @@ export interface AnalysisResultRead {
   degraded?: boolean;
   duration_seconds: number;
   earnings_report: string;
-  estimated_cost_usd?: number;
+  estimated_cost_usd?: number | null;
   failed_agents?: string[] | null;
   final_decision: string;
   fundamentals_report: string;

@@ -105,14 +105,20 @@ def _calc_base(runs: list[object]) -> dict:
 
     durations = [getattr(r, "duration_seconds", None) for r in runs if (getattr(r, "duration_seconds", None) or 0.0) > 0]
     tokens = [((getattr(r, "tokens_in", None) or 0) + (getattr(r, "tokens_out", None) or 0)) for r in runs]
+    # Runs whose model the catalogue does not price are left out of the
+    # average entirely; counting them as zero would drag it down as a fact.
     costs = [
-        estimate_token_cost(
-            getattr(r, "llm_provider", None),
-            getattr(r, "llm_model", None),
-            int(getattr(r, "tokens_in", None) or 0),
-            int(getattr(r, "tokens_out", None) or 0),
-        )
+        cost
         for r in runs
+        if (
+            cost := estimate_token_cost(
+                getattr(r, "llm_provider", None),
+                getattr(r, "llm_model", None),
+                int(getattr(r, "tokens_in", None) or 0),
+                int(getattr(r, "tokens_out", None) or 0),
+            )
+        )
+        is not None
     ]
     graded = [
         r
@@ -125,7 +131,7 @@ def _calc_base(runs: list[object]) -> dict:
         "total": total,
         "avg_duration": round(sum(durations) / len(durations), 1) if durations else 0.0,
         "avg_tokens": int(sum(tokens) / total) if tokens else 0,
-        "avg_cost_usd": round(sum(costs) / total, 4) if costs else 0.0,
+        "avg_cost_usd": round(sum(costs) / len(costs), 4) if costs else 0.0,
         "win_rate": round(wins / len(graded) * 100, 1) if graded else None,
         "total_graded": len(graded),
     }

@@ -372,6 +372,10 @@ async def run_individual_analysis(
             config=config,
             callbacks=[stats_handler, streaming_handler],
         )
+        # The graph resolves the effective provider/model (including fallback
+        # chains), so price the live stream from the same pair the completion
+        # event and the persisted row are priced from.
+        streaming_handler.set_pricing_context(ta.llm_provider, ta.llm_model)
 
         from backend.trading_agents.agents.data.chart_tools import active_run_context
 

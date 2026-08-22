@@ -99,7 +99,8 @@ class AnalysisResultRead(BaseModel):
     tool_calls: int
     tokens_in: int
     tokens_out: int
-    estimated_cost_usd: float = 0.0
+    #: ``None`` when LiteLLM's table prices neither the provider nor the model.
+    estimated_cost_usd: float | None = None
     llm_provider: str | None = None
     llm_model: str | None = None
     preset_name: str | None = None
@@ -231,7 +232,7 @@ class CancelTaskResponse(BaseModel):
 class CostEstimateResponse(BaseModel):
     analyst_count: int
     estimated_tokens: int
-    estimated_cost_usd: float
+    estimated_cost_usd: float | None
     estimated_duration_min: float
     pricing_source: str
     pricing_is_fallback: bool

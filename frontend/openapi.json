@@ -877,9 +877,15 @@
             "type": "string"
           },
           "estimated_cost_usd": {
-            "default": 0.0,
-            "title": "Estimated Cost Usd",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "failed_agents": {
             "anyOf": [
@@ -2280,8 +2286,15 @@
             "type": "integer"
           },
           "estimated_cost_usd": {
-            "title": "Estimated Cost Usd",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "estimated_duration_min": {
             "title": "Estimated Duration Min",
@@ -7487,8 +7500,15 @@
             "type": "integer"
           },
           "estimated_cost_usd": {
-            "title": "Estimated Cost Usd",
-            "type": "number"
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Estimated Cost Usd"
           },
           "model": {
             "title": "Model",
@@ -7501,11 +7521,9 @@
           "pricing_source": {
             "enum": [
               "catalog",
-              "exact",
               "model_id",
-              "provider_fallback",
-              "unknown_provider",
-              "local"
+              "local",
+              "unknown"
             ],
             "title": "Pricing Source",
             "type": "string"

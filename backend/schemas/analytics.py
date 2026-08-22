@@ -20,7 +20,7 @@ class TokenUsageBreakdown(BaseModel):
     tokens_in: int
     tokens_out: int
     analyses: int
-    estimated_cost_usd: float
+    estimated_cost_usd: float | None
     pricing_source: PricingSource
     pricing_is_fallback: bool
 

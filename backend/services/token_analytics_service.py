@@ -29,7 +29,11 @@ async def get_token_analytics(db: AsyncSession, user_id: int) -> dict[str, Any]:
         )
         total_in += ti
         total_out += to
-        total_cost += cost
+        # An unpriced model contributes tokens but no money: adding a zero
+        # would understate the total as confidently as the old default rate
+        # overstated it, so the row is simply not counted toward the sum.
+        if cost is not None:
+            total_cost += cost
 
     daily_rows = await repo.get_daily_token_usage_rows(db, user_id, 30)
     daily = [
@@ -47,6 +51,7 @@ async def get_token_analytics(db: AsyncSession, user_id: int) -> dict[str, Any]:
         "total_tokens_out": int(total_out),
         "total_tokens": int(total_in + total_out),
         "total_cost_usd": round(total_cost, 4),
-        "breakdown": sorted(breakdown, key=lambda x: x["estimated_cost_usd"], reverse=True),
+        # Unpriced rows sort last rather than raising on a None comparison.
+        "breakdown": sorted(breakdown, key=lambda x: x["estimated_cost_usd"] or 0.0, reverse=True),
         "daily": daily,
     }

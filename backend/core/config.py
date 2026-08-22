@@ -41,6 +41,10 @@ class Settings(BaseSettings):
     ANALYSIS_QUEUE_MODE: str = "inline"
     OLLAMA_BASE_URL: str = "http://localhost:11434"
     SYSTEM_LOG_DB_LEVEL: str = "INFO"
+    #: Days of System Logs history to keep. 0 keeps everything, which is what
+    #: the table did before this existed — an analysis writes hundreds of INFO
+    #: rows, so it grew without bound.
+    SYSTEM_LOG_RETENTION_DAYS: int = 14
     TRUST_PROXY_HEADERS: bool = False
     TRUSTED_PROXY_CIDRS: str = ""
     ENABLE_LIVE_TRADING: bool = False

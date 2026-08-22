@@ -12,7 +12,7 @@ import type { TokenUsageBreakdownPricingSource } from './tokenUsageBreakdownPric
  */
 export interface TokenUsageBreakdown {
   analyses: number;
-  estimated_cost_usd: number;
+  estimated_cost_usd: number | null;
   model: string;
   pricing_is_fallback: boolean;
   pricing_source: TokenUsageBreakdownPricingSource;

@@ -362,7 +362,7 @@ export default function Performance() {
                     <ResponsiveChart width="100%" height="100%">
                       <PieChart>
                         <Pie
-                          data={tokenUsage.breakdown.map(b => ({ name: b.provider, value: b.estimated_cost_usd }))}
+                          data={tokenUsage.breakdown.map(b => ({ name: b.provider, value: b.estimated_cost_usd ?? 0 }))}
                           innerRadius={40}
                           outerRadius={65}
                           paddingAngle={4}
@@ -431,7 +431,7 @@ export default function Performance() {
                         <td className="px-4 py-3 text-right text-slate-400">{b.analyses}</td>
                         <td className="px-4 py-3 text-right text-sky-400 font-mono">{b.tokens_in.toLocaleString()}</td>
                         <td className="px-4 py-3 text-right text-violet-400 font-mono">{b.tokens_out.toLocaleString()}</td>
-                        <td className="px-4 py-3 text-right text-emerald-400 font-mono font-bold">${b.estimated_cost_usd.toFixed(4)}</td>
+                        <td className="px-4 py-3 text-right text-emerald-400 font-mono font-bold">{b.estimated_cost_usd == null ? '—' : `$${b.estimated_cost_usd.toFixed(4)}`}</td>
                       </tr>
                     ))}
                   </tbody>

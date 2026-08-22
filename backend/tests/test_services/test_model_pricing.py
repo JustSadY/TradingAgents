@@ -4,10 +4,7 @@ from pathlib import Path
 from types import SimpleNamespace
 
 from backend.core.model_pricing import (
-    DEFAULT_CLOUD_PRICING,
-    PRICE_OVERRIDES,
     _catalog,
-    _longest_match,
     estimate_token_cost,
     estimate_total_token_cost,
     litellm_price_file,
@@ -22,12 +19,12 @@ def test_price_table_is_readable():
     """A moved or renamed LiteLLM price file must fail here, loudly.
 
     Everything downstream degrades quietly: an unreadable table leaves every
-    model on the conservative fallback, which still returns a plausible number
-    on every dashboard. This is the only place that notices.
+    model unpriced, and the pages simply stop showing a cost. This is the only
+    place that notices.
     """
     assert litellm_price_file().is_file(), (
         f"{litellm_price_file()} is missing. LiteLLM likely renamed it; update "
-        "LITELLM_PRICE_FILE rather than leaving every model on the fallback rate."
+        "LITELLM_PRICE_FILE rather than leaving every model unpriced."
     )
 
     catalog = _catalog()
@@ -66,25 +63,16 @@ print("litellm" in sys.modules)
     assert result.stdout.strip() == "False", "resolving a price imported litellm"
 
 
-def test_every_override_is_still_necessary():
-    """An override that LiteLLM has caught up with is one to delete.
+def test_no_rate_is_written_by_hand():
+    """Every rate must come from LiteLLM's shipped table.
 
-    The point of sourcing rates upstream is that the local list shrinks. Without
-    this, an override silently shadows a corrected upstream price forever — the
-    same failure the hand-written catalogue had, just smaller.
+    A local table is what rotted last time: nothing tells anyone a hand-written
+    number has gone stale, and a wrong rate looks exactly like a right one.
     """
-    catalog = _catalog()
-    redundant = []
-    for provider, models in PRICE_OVERRIDES.items():
-        for model, override in models.items():
-            catalogued = _longest_match(catalog.get(provider, {}), model)
-            if catalogued == override:
-                redundant.append(f"{provider}/{model}")
+    import backend.core.model_pricing as pricing
 
-    assert redundant == [], (
-        f"LiteLLM now prices these identically: {redundant}. Delete them from "
-        "PRICE_OVERRIDES so the upstream table stays the source."
-    )
+    assert not hasattr(pricing, "PRICE_OVERRIDES")
+    assert not hasattr(pricing, "DEFAULT_CLOUD_PRICING")
 
 
 def test_catalogued_rate_replaces_a_stale_hand_written_one():
@@ -121,12 +109,12 @@ def test_a_model_name_is_not_priced_from_another_vendors_route():
 
     Matching on the entry's own ``litellm_provider`` rather than on the key
     string is what keeps a cheaper vendor's rate for the same model name out of
-    an NVIDIA estimate.
+    an NVIDIA estimate — the answer is "unpriced", not another vendor's number.
     """
     resolution = resolve_model_pricing("nvidia", "llama-3.3-70b")
 
-    assert resolution.source == "exact"
-    assert resolution.pricing.input_per_million_usd == 0.35
+    assert resolution.source == "unknown"
+    assert resolution.pricing is None
 
 
 def test_pre_run_and_analytics_paths_share_the_same_catalogue():
@@ -150,12 +138,19 @@ def test_pre_run_and_analytics_paths_share_the_same_catalogue():
     assert _calc_base([row])["avg_cost_usd"] == 1.4
 
 
-def test_unknown_cloud_model_is_labelled_as_a_conservative_fallback():
+def test_unknown_model_reports_no_cost_instead_of_a_guess():
+    """The catalogue not knowing a model is not a licence to invent a rate.
+
+    The retired default priced a finished NVIDIA Nemotron run at about four
+    times what the vendor charges, and nothing on the page said so.
+    """
     resolution = resolve_model_pricing("groq", "a-newly-released-model")
 
-    assert resolution.source == "provider_fallback"
+    assert resolution.source == "unknown"
     assert resolution.is_fallback is True
-    assert resolution.pricing == DEFAULT_CLOUD_PRICING
+    assert resolution.pricing is None
+    assert estimate_token_cost("groq", "a-newly-released-model", 1_000_000, 1_000_000) is None
+    assert estimate_total_token_cost("groq", "a-newly-released-model", 1_000_000) is None
 
 
 def test_local_ollama_model_has_no_provider_token_charge():
@@ -166,7 +161,7 @@ def test_local_ollama_model_has_no_provider_token_charge():
     assert estimate_token_cost("ollama", "custom-local-model", 1_000_000, 1_000_000) == 0.0
 
 
-async def test_token_usage_breakdown_exposes_fallback_pricing(monkeypatch):
+async def test_token_usage_breakdown_reports_an_unpriced_model(monkeypatch):
     row = SimpleNamespace(
         llm_provider="groq",
         llm_model="a-newly-released-model",
@@ -186,5 +181,9 @@ async def test_token_usage_breakdown_exposes_fallback_pricing(monkeypatch):
 
     result = await token_analytics_service.get_token_analytics(object(), 1)
 
-    assert result["breakdown"][0]["pricing_source"] == "provider_fallback"
+    assert result["breakdown"][0]["pricing_source"] == "unknown"
     assert result["breakdown"][0]["pricing_is_fallback"] is True
+    assert result["breakdown"][0]["estimated_cost_usd"] is None
+    # Tokens still count; only the money is unknown.
+    assert result["total_tokens"] == 150
+    assert result["total_cost_usd"] == 0.0

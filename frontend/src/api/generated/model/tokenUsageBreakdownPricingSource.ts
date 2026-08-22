@@ -11,9 +11,7 @@ export type TokenUsageBreakdownPricingSource = typeof TokenUsageBreakdownPricing
 
 export const TokenUsageBreakdownPricingSource = {
   catalog: 'catalog',
-  exact: 'exact',
   model_id: 'model_id',
-  provider_fallback: 'provider_fallback',
-  unknown_provider: 'unknown_provider',
   local: 'local',
+  unknown: 'unknown',
 } as const;

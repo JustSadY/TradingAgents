@@ -361,8 +361,18 @@ function RunTab() {
         setActiveSection(prev => prev ?? reportKey)
       } else if (ev.type === 'stats') {
         setStats(prev => {
-          const next = { llmCalls: ev.llm_calls || 0, tokensIn: ev.tokens_in || 0, tokensOut: ev.tokens_out || 0 }
-          if (prev?.llmCalls === next.llmCalls && prev?.tokensIn === next.tokensIn && prev?.tokensOut === next.tokensOut) return prev
+          const next = {
+            llmCalls: ev.llm_calls || 0,
+            tokensIn: ev.tokens_in || 0,
+            tokensOut: ev.tokens_out || 0,
+            estimatedCost: ev.estimated_cost_usd,
+          }
+          if (
+            prev?.llmCalls === next.llmCalls &&
+            prev?.tokensIn === next.tokensIn &&
+            prev?.tokensOut === next.tokensOut &&
+            prev?.estimatedCost === next.estimatedCost
+          ) return prev
           return next
         })
       } else if (ev.type === 'report' && ev.section && ev.content) {
@@ -830,12 +840,15 @@ function RunTab() {
                   <div className="text-center p-2 rounded-xl bg-slate-900/40 border border-white/[0.03]">
                     <span className="text-[9px] text-slate-500 uppercase font-bold tracking-wider block mb-0.5">{t('analysis.cost_est')}</span>
                     <span className="text-sm font-bold text-emerald-400 font-mono">
-                      ${detail?.estimated_cost_usd
-                        ? detail.estimated_cost_usd.toFixed(4)
-                        : stats?.estimatedCost
-                          ? stats.estimatedCost.toFixed(4)
-                          : (((stats?.tokensIn || 0) * 0.000005 + (stats?.tokensOut || 0) * 0.000015).toFixed(4))
-                      }
+                      {/* Every figure here is priced by the server from the
+                          configured model. The page used to fall back to its
+                          own hard-coded $5/$15 per-million rates while a run
+                          was live, which is why the estimate dropped by more
+                          than half the moment the run finished. */}
+                      {(() => {
+                        const cost = detail?.estimated_cost_usd ?? stats?.estimatedCost
+                        return cost == null ? '—' : `$${cost.toFixed(4)}`
+                      })()}
                     </span>
                   </div>
                 </div>

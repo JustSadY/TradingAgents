@@ -40,6 +40,29 @@ async def test_streaming_callback_refreshes_only_its_task_activity_tracker():
     assert tracker.last_activity_at() == 41.0
 
 @pytest.mark.asyncio
+async def test_streamed_stats_are_priced_by_the_server_for_the_configured_model():
+    """The live cost must come from the same lookup the finished run uses.
+
+    The page used to price the running total itself with hard-coded rates, so
+    the estimate changed sharply the moment the run completed and the server's
+    figure replaced it.
+    """
+    from backend.core.model_pricing import estimate_token_cost
+
+    emitter = _Emitter()
+    handler = TokenStreamingCallbackHandler(emitter)
+    handler.set_pricing_context("nvidia", "nvidia/nemotron-3-super-120b-a12b")
+    handler._stats_handler._run_usage[uuid4()] = {"input": 382_153, "output": 39_609}
+
+    await handler._emit_stats()
+
+    stats = emitter.events[-1]
+    assert stats["type"] == "stats"
+    assert stats["estimated_cost_usd"] == estimate_token_cost(
+        "nvidia", "nvidia/nemotron-3-super-120b-a12b", 382_153, 39_609
+    )
+
+@pytest.mark.asyncio
 async def test_heartbeat_stays_running_when_callback_activity_arrives():
     now = [0.0]
     tracker = AnalysisActivityTracker(clock=lambda: now[0])

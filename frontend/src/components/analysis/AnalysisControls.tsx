@@ -30,7 +30,7 @@ interface AnalysisControlsProps {
   handleStop: () => void
   handleClear: () => void
   signal: string | null
-  costEstimate: { estimated_cost_usd: number; estimated_tokens: number; estimated_duration_min: number; analyst_count: number } | null
+  costEstimate: { estimated_cost_usd: number | null; estimated_tokens: number; estimated_duration_min: number; analyst_count: number } | null
   existingId: number | null
   startError?: AnalysisStartError | null
   onSelectTickerSuggestion?: (ticker: string) => void
@@ -119,7 +119,7 @@ export const AnalysisControls: React.FC<AnalysisControlsProps> = ({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 mt-3 border-t border-white/[0.03] pt-2.5">
           {costEstimate && (
             <span className="text-[10px] text-slate-500 font-semibold">
-              ~${(costEstimate.estimated_cost_usd ?? 0).toFixed(3)} · {(costEstimate.estimated_tokens ?? 0).toLocaleString()} tokens · {costEstimate.estimated_duration_min}dk
+              {costEstimate.estimated_cost_usd == null ? '—' : `~$${costEstimate.estimated_cost_usd.toFixed(3)}`} · {(costEstimate.estimated_tokens ?? 0).toLocaleString()} tokens · {costEstimate.estimated_duration_min}dk
             </span>
           )}
           {existingId && (

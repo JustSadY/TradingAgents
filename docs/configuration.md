@@ -173,6 +173,16 @@ similar), which still reach the database at `WARNING` and above. Records
 dropped because the queue is saturated are reported on stderr rather than
 discarded silently.
 
+```ini
+# Days of System Logs history to keep. 0 keeps everything.
+SYSTEM_LOG_RETENTION_DAYS=14
+```
+
+The daily maintenance job (`cleanup_transient_data`) deletes `system_logs` rows
+older than this window, alongside expired/revoked `refresh_sessions` and the
+analyst/news caches. One analysis writes hundreds of INFO rows, so leaving the
+retention at `0` lets the table grow without bound.
+
 ---
 
 ## 🎛️ 8. Platform Runtime Settings

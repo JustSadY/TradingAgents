@@ -8,7 +8,7 @@
 
 export interface CostEstimateResponse {
   analyst_count: number;
-  estimated_cost_usd: number;
+  estimated_cost_usd: number | null;
   estimated_duration_min: number;
   estimated_tokens: number;
   pricing_is_fallback: boolean;
