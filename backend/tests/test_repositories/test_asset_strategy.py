@@ -5,16 +5,24 @@ from sqlalchemy import select
 from sqlalchemy.exc import IntegrityError
 
 from backend.models.analysis import AnalysisResult
-from backend.models.asset_strategy import ASSET_STRATEGY_ACTIVE, AssetStrategy
+from backend.models.asset_strategy import ASSET_STRATEGY_ACTIVE, AssetStrategy, AssetStrategyVersion
 from backend.repositories.asset_strategy import (
     compare_and_swap_asset_strategy,
     create_asset_strategy,
     get_active_asset_strategy,
     get_strategy_version_as_of,
-    list_asset_strategy_versions,
     strategy_state_snapshot,
     touch_asset_strategy_review,
 )
+
+
+async def list_asset_strategy_versions(db, *, strategy_id: int):
+    result = await db.execute(
+        select(AssetStrategyVersion)
+        .where(AssetStrategyVersion.strategy_id == strategy_id)
+        .order_by(AssetStrategyVersion.version)
+    )
+    return list(result.scalars().all())
 
 
 async def test_create_active_strategy_adds_initial_immutable_snapshot(db_session, test_user):

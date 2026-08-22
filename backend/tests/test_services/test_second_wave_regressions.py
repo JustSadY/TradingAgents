@@ -271,22 +271,6 @@ def test_trade_journal_uses_all_in_entry_fee_for_current_closing_orders(
     assert _realized_cost_basis(order) == Decimal(expected_cost)
     assert _realized_pnl_pct(order) == pytest.approx(expected_pct)
 
-def test_signal_actionability_is_single_sourced():
-    """``is_actionable`` and the order path must read one mapping.
-
-    ``place_signal_order`` resolves its side with ``SIGNAL_TO_ACTION``; a second,
-    looser notion of "actionable" anywhere else could admit a signal the order
-    path cannot map, so the predicate is derived from the same constant.
-    """
-    from backend.core.constants import SIGNAL_TO_ACTION
-    from backend.services.trading_orchestrator import is_actionable
-
-    assert SIGNAL_TO_ACTION, "signal mapping must not be empty"
-    for signal in SIGNAL_TO_ACTION:
-        assert is_actionable(signal) is True
-    for signal in (None, "", "Hold", "Neutral", "buy"):
-        assert is_actionable(signal) is False
-
 def test_auto_execution_path_uses_the_orchestrator_helpers():
     """The automatic order path must not re-implement execution gating."""
     from backend.services import analysis_service, trading_orchestrator

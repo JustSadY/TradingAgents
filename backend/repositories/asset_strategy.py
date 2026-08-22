@@ -255,23 +255,6 @@ async def get_asset_strategy_by_id(db: AsyncSession, strategy_id: int) -> AssetS
     return result.scalar_one_or_none()
 
 
-async def list_asset_strategy_versions(
-    db: AsyncSession,
-    *,
-    strategy_id: int,
-    limit: int | None = None,
-) -> list[AssetStrategyVersion]:
-    statement = (
-        select(AssetStrategyVersion)
-        .where(AssetStrategyVersion.strategy_id == strategy_id)
-        .order_by(AssetStrategyVersion.version.asc())
-    )
-    if limit is not None:
-        statement = statement.limit(max(1, limit))
-    result = await db.execute(statement)
-    return list(result.scalars().all())
-
-
 async def list_asset_strategy_versions_for_asset(
     db: AsyncSession,
     *,

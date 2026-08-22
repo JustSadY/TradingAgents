@@ -16,20 +16,8 @@ from pwdlib.hashers.argon2 import Argon2Hasher
 _password_hash = PasswordHash((Argon2Hasher(),))
 
 
-def is_supported_password_hash(value: str) -> bool:
-    """True when *value* is an Argon2 hash this application can verify."""
-    return any(hasher.identify(value) for hasher in _password_hash.hashers)
-
-
 def hash_password(password: str) -> str:
     return _password_hash.hash(password)
-
-
-def verify_password(plain: str, hashed: str) -> bool:
-    try:
-        return _password_hash.verify(plain, hashed)
-    except (UnknownHashError, ValueError, TypeError):
-        return False
 
 
 def verify_and_update_password(plain: str, hashed: str) -> tuple[bool, str | None]:

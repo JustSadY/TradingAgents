@@ -8,7 +8,7 @@ from cryptography.fernet import Fernet, InvalidToken
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.core.constants import PAGE_KEYS, SETTING_KEYS
-from backend.core.password_hashing import verify_password
+from backend.core.password_hashing import verify_and_update_password
 from backend.models.user import User
 from backend.services.user_service import (
     CannotDeleteSelfError,
@@ -198,7 +198,7 @@ class TestUserService:
         )
 
         assert updated.token_version == before_version + 1
-        assert verify_password("new-secure-password", updated.hashed_password)
+        assert verify_and_update_password("new-secure-password", updated.hashed_password)[0]
 
     async def test_create_managed_user_rejects_duplicate_username(
         self,

@@ -7,7 +7,6 @@ from backend.models.user import User
 from backend.repositories.users import (
     create_user_with_permissions,
     email_exists,
-    get_user_by_email,
     get_user_by_id,
     get_user_by_username,
     list_users,
@@ -41,15 +40,6 @@ class TestUserRepository:
 
     async def test_get_user_by_username_not_found(self, db: AsyncSession):
         found = await get_user_by_username(db, "nonexistent")
-        assert found is None
-
-    async def test_get_user_by_email(self, db: AsyncSession, test_user: User):
-        found = await get_user_by_email(db, test_user.email)
-        assert found is not None
-        assert found.id == test_user.id
-
-    async def test_get_user_by_email_not_found(self, db: AsyncSession):
-        found = await get_user_by_email(db, "nonexistent@example.com")
         assert found is None
 
     async def test_get_user_by_id(self, db: AsyncSession, test_user: User):

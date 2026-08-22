@@ -37,10 +37,6 @@ from backend.services.mock_trading_service import get_or_create_sim_portfolio
 _logger = logging.getLogger(__name__)
 
 
-def is_actionable(signal: str | None) -> bool:
-    return signal in SIGNAL_TO_ACTION
-
-
 def auto_execute_signals_enabled(settings) -> bool:
     """Return whether the user deliberately opted into AI signal execution."""
     return bool(settings.auto_execute_signals)

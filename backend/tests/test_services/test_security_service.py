@@ -4,9 +4,7 @@ import pytest
 
 from backend.core.password_hashing import (
     hash_password,
-    is_supported_password_hash,
     verify_and_update_password,
-    verify_password,
 )
 from backend.core.security import (
     create_access_token,
@@ -22,17 +20,6 @@ class TestSecurityService:
         assert hashed != ""
         assert hashed != "testpassword"
 
-    def test_verify_password_correct(self):
-        hashed = hash_password("testpassword")
-        assert verify_password("testpassword", hashed) is True
-
-    def test_verify_password_incorrect(self):
-        hashed = hash_password("testpassword")
-        assert verify_password("wrongpassword", hashed) is False
-
-    def test_verify_password_invalid_hash(self):
-        assert verify_password("test", "not-a-valid-hash") is False
-
     def test_new_passwords_are_hashed_with_argon2(self):
         assert hash_password("testpassword").startswith("$argon2")
 
@@ -42,8 +29,8 @@ class TestSecurityService:
         assert len(password.encode()) == 80
 
         hashed = hash_password(password)
-        assert verify_password(password, hashed) is True
-        assert verify_password("ş" * 39, hashed) is False
+        assert verify_and_update_password(password, hashed)[0] is True
+        assert verify_and_update_password("ş" * 39, hashed)[0] is False
 
     def test_argon2_hash_is_not_needlessly_rehashed(self):
         ok, upgraded = verify_and_update_password("testpassword", hash_password("testpassword"))
@@ -54,21 +41,7 @@ class TestSecurityService:
         assert verify_and_update_password("anything", "not-a-valid-hash") == (False, None)
 
     def test_bcrypt_hash_is_not_supported(self):
-        assert is_supported_password_hash("$2b$12$" + "a" * 53) is False
-        assert verify_password("correctpass", "$2b$12$" + "a" * 53) is False
-
-    @pytest.mark.parametrize(
-        "value,supported",
-        [
-            ("$argon2id$v=19$m=65536,t=3,p=4$c2FsdHNhbHQ$aGFzaGhhc2g", True),
-            ("$2b$12$" + "a" * 53, False),
-            ("plaintext-password", False),
-            ("$unknown$whatever", False),
-            ("", False),
-        ],
-    )
-    def test_is_supported_password_hash(self, value, supported):
-        assert is_supported_password_hash(value) is supported
+        assert verify_and_update_password("correctpass", "$2b$12$" + "a" * 53)[0] is False
 
     def test_create_access_token_default(self):
         token = create_access_token("testuser")

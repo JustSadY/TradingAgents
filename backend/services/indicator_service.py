@@ -207,16 +207,6 @@ def calculate_willr(df: pd.DataFrame, period: int = 14) -> pd.Series:
     return _series(result, df.index, f"WILLR_{period}")
 
 
-def calculate_obv(df: pd.DataFrame) -> pd.Series:
-    """Compute On-Balance Volume with pandas-ta-classic.
-
-    Cumulative by definition, so it takes no period and is not exposed to the
-    custom-formula language, which only accepts ``NAME(period)`` calls.
-    """
-    result = _ta().obv(df["Close"].astype(float), df["Volume"].astype(float), talib=False)
-    return _series(result, df.index, "OBV")
-
-
 _FORMULA_FUNCS: dict = {
     "VOLSMA": lambda df, n: df["Volume"].rolling(window=n).mean(),
     "VWAP": lambda df, n: calculate_vwap(df, n),

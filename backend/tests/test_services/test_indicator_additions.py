@@ -22,7 +22,6 @@ from backend.services.indicator_service import (
     calculate_bbands,
     calculate_cci,
     calculate_mfi,
-    calculate_obv,
     calculate_sma,
     calculate_stoch,
     calculate_willr,
@@ -93,7 +92,6 @@ class TestPackageParity:
             (calculate_cci(ohlcv, 20), ta.cci(high, low, close, length=20, talib=False), "CCI_20"),
             (calculate_mfi(ohlcv, 14), ta.mfi(high, low, close, volume, length=14, talib=False), "MFI_14"),
             (calculate_willr(ohlcv, 14), ta.willr(high, low, close, length=14, talib=False), "WILLR_14"),
-            (calculate_obv(ohlcv), ta.obv(close, volume, talib=False), "OBV"),
         ]
         for produced, expected, name in cases:
             pd.testing.assert_series_equal(
@@ -110,7 +108,6 @@ class TestApplicationInvariants:
             lambda df: calculate_cci(df, 20),
             lambda df: calculate_mfi(df, 14),
             lambda df: calculate_willr(df, 14),
-            lambda df: calculate_obv(df),
             lambda df: calculate_bbands(df["Close"], 20)[2],
             lambda df: calculate_stoch(df)[0],
         ],

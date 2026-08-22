@@ -6,7 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from backend.models.order import Order
 from backend.models.portfolio import Portfolio
-from backend.repositories.trade_note import clear_debrief, get_note, get_notes_for_orders, set_debrief, upsert_note
+from backend.repositories.trade_note import get_note, set_debrief, upsert_note
 
 
 class TestTradeNoteRepository:
@@ -93,33 +93,3 @@ class TestTradeNoteRepository:
         assert note.ai_debrief == "AI debrief without prior note"
         assert note.note == ""
 
-    async def test_clear_debrief(self, db: AsyncSession, test_user):
-        order = (await self._create_orders(db, test_user.id))[0]
-        await upsert_note(db, order_id=order.id, user_id=test_user.id, note="Note")
-        await set_debrief(db, order_id=order.id, user_id=test_user.id, debrief="Some debrief")
-
-        await clear_debrief(db, order_id=order.id, user_id=test_user.id)
-        note = await get_note(db, order_id=order.id, user_id=test_user.id)
-        assert note.ai_debrief is None
-
-    async def test_get_notes_for_orders(self, db: AsyncSession, test_user):
-        first, second = await self._create_orders(db, test_user.id, count=2)
-        await upsert_note(db, order_id=first.id, user_id=test_user.id, note="Order 1 note")
-        await upsert_note(db, order_id=second.id, user_id=test_user.id, note="Order 2 note")
-
-        notes_map = await get_notes_for_orders(db, [first.id, second.id], user_id=test_user.id)
-        assert len(notes_map) == 2
-        assert notes_map[first.id].note == "Order 1 note"
-        assert notes_map[second.id].note == "Order 2 note"
-
-    async def test_get_notes_for_orders_partial(self, db: AsyncSession, test_user):
-        order = (await self._create_orders(db, test_user.id))[0]
-        await upsert_note(db, order_id=order.id, user_id=test_user.id, note="Only order 1")
-
-        notes_map = await get_notes_for_orders(db, [order.id, 999], user_id=test_user.id)
-        assert len(notes_map) == 1
-        assert notes_map[order.id].note == "Only order 1"
-
-    async def test_get_notes_for_orders_empty_list(self, db: AsyncSession, test_user):
-        notes_map = await get_notes_for_orders(db, [], user_id=test_user.id)
-        assert notes_map == {}
