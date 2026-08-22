@@ -6,6 +6,33 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from backend.models.analysis import AnalysisResult
 
 
+async def list_recent_run_token_totals(
+    db: AsyncSession,
+    *,
+    user_id: int,
+    limit: int = 10,
+) -> list[int]:
+    """Total tokens spent by this user's most recent completed analyses.
+
+    The pre-run estimate is built from these rather than from a per-analyst
+    constant: the numbers are the provider's own counts for this account's own
+    configuration, so they track a changed model, analyst set or debate depth
+    on their own instead of being maintained by hand.
+    """
+    query = (
+        select(AnalysisResult.tokens_in, AnalysisResult.tokens_out)
+        .where(
+            AnalysisResult.status == "completed",
+            AnalysisResult.user_id == user_id,
+        )
+        .order_by(AnalysisResult.created_at.desc())
+        .limit(limit)
+    )
+    rows = (await db.execute(query)).all()
+    totals = [int(tokens_in or 0) + int(tokens_out or 0) for tokens_in, tokens_out in rows]
+    return [total for total in totals if total > 0]
+
+
 async def list_completed_analyses_for_stats(
     db: AsyncSession,
     *,

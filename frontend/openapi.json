@@ -2311,6 +2311,14 @@
           "pricing_source": {
             "title": "Pricing Source",
             "type": "string"
+          },
+          "token_estimate_source": {
+            "enum": [
+              "history",
+              "default"
+            ],
+            "title": "Token Estimate Source",
+            "type": "string"
           }
         },
         "required": [
@@ -2319,7 +2327,8 @@
           "estimated_cost_usd",
           "estimated_duration_min",
           "pricing_source",
-          "pricing_is_fallback"
+          "pricing_is_fallback",
+          "token_estimate_source"
         ],
         "title": "CostEstimateResponse",
         "type": "object"

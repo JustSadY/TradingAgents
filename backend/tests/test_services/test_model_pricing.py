@@ -117,6 +117,41 @@ def test_a_model_name_is_not_priced_from_another_vendors_route():
     assert resolution.pricing is None
 
 
+def test_pre_run_estimate_prefers_measured_history_over_the_seed():
+    """The per-analyst constant was out by more than three times in practice.
+
+    One NVDA run reported 421,762 tokens where the seed predicted 125,000, so
+    an account with runs of its own is described by those instead.
+    """
+    seeded = estimate_pre_run_cost("market,news", 1, "gpt-5.6-luna", "openai")
+    assert seeded["estimated_tokens"] == 2 * 8_000 + 5_000
+    assert seeded["token_estimate_source"] == "default"
+
+    measured = estimate_pre_run_cost(
+        "market,news",
+        1,
+        "gpt-5.6-luna",
+        "openai",
+        observed_run_tokens=[400_000, 420_000, 440_000],
+    )
+    assert measured["estimated_tokens"] == 420_000
+    assert measured["token_estimate_source"] == "history"
+
+    # Two runs are not enough to describe an account.
+    too_few = estimate_pre_run_cost(
+        "market,news", 1, "gpt-5.6-luna", "openai", observed_run_tokens=[400_000, 440_000]
+    )
+    assert too_few["token_estimate_source"] == "default"
+
+
+def test_an_unpriced_model_estimates_tokens_without_a_cost():
+    estimate = estimate_pre_run_cost("market,news", 1, "a-newly-released-model", "groq")
+
+    assert estimate["estimated_tokens"] > 0
+    assert estimate["estimated_cost_usd"] is None
+    assert estimate["pricing_is_fallback"] is True
+
+
 def test_pre_run_and_analytics_paths_share_the_same_catalogue():
     estimate = estimate_pre_run_cost("market,news", 1, "gpt-5.6-luna", "openai")
 

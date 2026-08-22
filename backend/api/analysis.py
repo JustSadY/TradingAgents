@@ -249,6 +249,7 @@ async def cost_estimate(
     user: User = Depends(require_page("analysis")),
     db: AsyncSession = Depends(get_db),
 ):
+    from backend.repositories.analysis_stats import list_recent_run_token_totals
     from backend.services.agent_settings_service import get_user_agent_settings
     from backend.services.analysis_stats_service import estimate_cost as _est
     from backend.services.settings_service import get_or_create_settings
@@ -265,7 +266,8 @@ async def cost_estimate(
     analysts_str = ",".join(enabled_analysts)
     debate_rounds = settings.max_debate_rounds or 1
     model = settings.llm_model or "gpt-4o"
-    return _est(analysts_str, debate_rounds, model, settings.llm_provider)
+    observed = await list_recent_run_token_totals(db, user_id=user.id)
+    return _est(analysts_str, debate_rounds, model, settings.llm_provider, observed_run_tokens=observed)
 
 @router.get("/ab-comparison", response_model=list[ABComparisonItem])
 async def get_ab_comparison(

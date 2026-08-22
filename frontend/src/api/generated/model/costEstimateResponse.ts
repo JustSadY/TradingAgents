@@ -5,6 +5,7 @@
  * AI-powered trading dashboard with simulation and live trading support
  * OpenAPI spec version: 1.0.0
  */
+import type { CostEstimateResponseTokenEstimateSource } from './costEstimateResponseTokenEstimateSource';
 
 export interface CostEstimateResponse {
   analyst_count: number;
@@ -13,4 +14,5 @@ export interface CostEstimateResponse {
   estimated_tokens: number;
   pricing_is_fallback: boolean;
   pricing_source: string;
+  token_estimate_source: CostEstimateResponseTokenEstimateSource;
 }

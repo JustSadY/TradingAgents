@@ -1,7 +1,7 @@
 import json
 import logging
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -236,6 +236,9 @@ class CostEstimateResponse(BaseModel):
     estimated_duration_min: float
     pricing_source: str
     pricing_is_fallback: bool
+    #: "history" when the token figure is the median of this account's own
+    #: completed runs, "default" while it has too few to measure.
+    token_estimate_source: Literal["history", "default"]
 
 class ABComparisonItem(BaseModel):
     preset_name: str

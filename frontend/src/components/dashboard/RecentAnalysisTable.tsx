@@ -28,7 +28,7 @@ export function RecentAnalysisTable({ recentAnalysis, t }: RecentAnalysisTablePr
       minWidth: 150,
       flex: 1,
       renderCell: params => (
-        <div className="flex flex-col justify-center h-full">
+        <div className="flex flex-col gap-0.5 leading-tight">
           <span className="font-mono font-bold text-white">{params.row.ticker}</span>
           <span className="text-[10px] text-slate-500">{params.row.trade_date ?? '—'}</span>
         </div>

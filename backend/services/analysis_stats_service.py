@@ -16,21 +16,51 @@ from backend.core.constants import TOKENS_PER_ANALYST as _TOKENS_PER_ANALYST
 from backend.core.model_pricing import estimate_token_cost, estimate_total_token_cost, resolve_model_pricing
 from backend.repositories.analysis_stats import list_completed_analyses_for_stats
 
+#: Below this many completed runs the account's own history is too thin to
+#: describe, so the cold-start seed stands in.
+_MIN_OBSERVED_RUNS = 3
 
-def estimate_cost(analysts: str, debate_rounds: int, model: str, provider: str | None = None) -> dict:
+
+def _expected_run_tokens(analyst_count: int, debate_rounds: int, observed_run_tokens: list[int] | None) -> tuple[int, str]:
+    """Tokens one run is likely to spend, and where that number came from.
+
+    Measured history wins: ``TOKENS_PER_ANALYST`` is a seed for an account with
+    nothing to measure yet, and on a real run it was out by more than three
+    times — one NVDA analysis reported 421,762 tokens against a 125,000
+    estimate. The median (not the mean) keeps one runaway analyst from moving
+    the figure.
+    """
+    observed = sorted(observed_run_tokens or [])
+    if len(observed) >= _MIN_OBSERVED_RUNS:
+        middle = len(observed) // 2
+        median = observed[middle] if len(observed) % 2 else (observed[middle - 1] + observed[middle]) // 2
+        return int(median), "history"
+    return analyst_count * _TOKENS_PER_ANALYST * debate_rounds + 5_000, "default"
+
+
+def estimate_cost(
+    analysts: str,
+    debate_rounds: int,
+    model: str,
+    provider: str | None = None,
+    observed_run_tokens: list[int] | None = None,
+) -> dict:
     """Return a pre-run cost estimate from the canonical model-price catalogue."""
     analyst_list = [a.strip() for a in analysts.split(",") if a.strip()]
     n = len(analyst_list)
-    tokens = n * _TOKENS_PER_ANALYST * debate_rounds + 5_000
+    tokens, token_estimate_source = _expected_run_tokens(n, debate_rounds, observed_run_tokens)
     pricing = resolve_model_pricing(provider, model)
     cost = estimate_total_token_cost(provider, model, tokens)
     return {
         "analyst_count": n,
         "estimated_tokens": tokens,
-        "estimated_cost_usd": round(cost, 4),
+        # `None` when the catalogue does not price the model — the endpoint
+        # reports "no estimate" rather than raising on the rounding.
+        "estimated_cost_usd": None if cost is None else round(cost, 4),
         "estimated_duration_min": round(n * 0.8 * debate_rounds + 1, 1),
         "pricing_source": pricing.source,
         "pricing_is_fallback": pricing.is_fallback,
+        "token_estimate_source": token_estimate_source,
     }
 
 

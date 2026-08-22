@@ -94,7 +94,20 @@ export function AppDataGrid<R extends GridValidRowModel>({
             fontSize: 10,
             letterSpacing: '.08em',
           },
-          '& .MuiDataGrid-cell': { borderColor: 'rgba(255,255,255,.04)', fontSize: 12 },
+          // The grid centres single-line text by setting `line-height` on the
+          // cell to the row height. Anything rendered by `renderCell` inherits
+          // it, so a 10px badge became a 63px box that spilled past the row
+          // rules and a two-line cell was clipped by `overflow: hidden`.
+          // Centring with flexbox instead, and resetting the inherited
+          // line-height, fixes both for every table at once — and does not
+          // break again when a row height changes.
+          '& .MuiDataGrid-cell': {
+            borderColor: 'rgba(255,255,255,.04)',
+            fontSize: 12,
+            display: 'flex',
+            alignItems: 'center',
+            lineHeight: 'normal',
+          },
           '& .MuiTablePagination-root': { fontSize: 11 },
           '& .MuiDataGrid-row:hover': { backgroundColor: 'rgba(255,255,255,.025)' },
           '& .MuiDataGrid-footerContainer': { borderColor: 'rgba(255,255,255,.04)' },
