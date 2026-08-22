@@ -50,8 +50,10 @@ class TestAnalysisAPI:
         assert resp.status_code == 401
 
     async def test_get_latest_analysis_empty(self, auth_client: AsyncClient):
+        # No history is an ordinary state, not an error the browser should log.
         resp = await auth_client.get("/api/analysis/latest")
-        assert resp.status_code == 404
+        assert resp.status_code == 200
+        assert resp.json() is None
 
     async def test_get_latest_analysis_with_data(self, auth_client: AsyncClient, db: AsyncSession, test_user):
         analysis = AnalysisResult(

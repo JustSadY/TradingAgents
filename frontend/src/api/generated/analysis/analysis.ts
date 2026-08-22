@@ -508,6 +508,12 @@ export const useAnalysisClearHistory = <TError = unknown,
       return useMutation(getAnalysisClearHistoryMutationOptions(options), queryClient);
     }
     /**
+ * Bootstrap data for the Analysis page: the newest completed analysis.
+ *
+ * An account that has not finished one yet gets ``null``, not a 404. Having
+ * no history is an ordinary state, and a 404 made every browser log a red
+ * console error on a page that was working exactly as intended — noise no
+ * client-side handler can suppress.
  * @summary Get Latest Analysis
  */
 export const analysisGetLatestAnalysis = (
@@ -516,7 +522,7 @@ export const analysisGetLatestAnalysis = (
 ) => {
 
 
-      return customInstance<AnalysisResultRead>(
+      return customInstance<AnalysisResultRead | null>(
       {url: `/api/analysis/latest`, method: 'GET', signal
     },
       options);
@@ -532,7 +538,7 @@ export const getAnalysisGetLatestAnalysisQueryKey = () => {
     }
 
 
-export const getAnalysisGetLatestAnalysisQueryOptions = <TData = Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError = void>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
+export const getAnalysisGetLatestAnalysisQueryOptions = <TData = Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError = unknown>( options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
 ) => {
 
 const {query: queryOptions, request: requestOptions} = options ?? {};
@@ -551,10 +557,10 @@ const {query: queryOptions, request: requestOptions} = options ?? {};
 }
 
 export type AnalysisGetLatestAnalysisQueryResult = NonNullable<Awaited<ReturnType<typeof analysisGetLatestAnalysis>>>
-export type AnalysisGetLatestAnalysisQueryError = void
+export type AnalysisGetLatestAnalysisQueryError = unknown
 
 
-export function useAnalysisGetLatestAnalysis<TData = Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError = void>(
+export function useAnalysisGetLatestAnalysis<TData = Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError = unknown>(
   options: { query:Partial<UseQueryOptions<Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError, TData>> & Pick<
         DefinedInitialDataOptions<
           Awaited<ReturnType<typeof analysisGetLatestAnalysis>>,
@@ -564,7 +570,7 @@ export function useAnalysisGetLatestAnalysis<TData = Awaited<ReturnType<typeof a
       >, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  DefinedUseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useAnalysisGetLatestAnalysis<TData = Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError = void>(
+export function useAnalysisGetLatestAnalysis<TData = Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError, TData>> & Pick<
         UndefinedInitialDataOptions<
           Awaited<ReturnType<typeof analysisGetLatestAnalysis>>,
@@ -574,7 +580,7 @@ export function useAnalysisGetLatestAnalysis<TData = Awaited<ReturnType<typeof a
       >, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
-export function useAnalysisGetLatestAnalysis<TData = Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError = void>(
+export function useAnalysisGetLatestAnalysis<TData = Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
   ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> }
@@ -582,7 +588,7 @@ export function useAnalysisGetLatestAnalysis<TData = Awaited<ReturnType<typeof a
  * @summary Get Latest Analysis
  */
 
-export function useAnalysisGetLatestAnalysis<TData = Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError = void>(
+export function useAnalysisGetLatestAnalysis<TData = Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError = unknown>(
   options?: { query?:Partial<UseQueryOptions<Awaited<ReturnType<typeof analysisGetLatestAnalysis>>, TError, TData>>, request?: SecondParameter<typeof customInstance>}
  , queryClient?: QueryClient
  ):  UseQueryResult<TData, TError> & { queryKey: DataTag<QueryKey, TData, TError> } {

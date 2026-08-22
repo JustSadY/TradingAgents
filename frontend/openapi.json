@@ -9151,20 +9151,26 @@
     },
     "/api/analysis/latest": {
       "get": {
+        "description": "Bootstrap data for the Analysis page: the newest completed analysis.\n\nAn account that has not finished one yet gets ``null``, not a 404. Having\nno history is an ordinary state, and a 404 made every browser log a red\nconsole error on a page that was working exactly as intended \u2014 noise no\nclient-side handler can suppress.",
         "operationId": "analysis_get_latest_analysis",
         "responses": {
           "200": {
             "content": {
               "application/json": {
                 "schema": {
-                  "$ref": "#/components/schemas/AnalysisResultRead"
+                  "anyOf": [
+                    {
+                      "$ref": "#/components/schemas/AnalysisResultRead"
+                    },
+                    {
+                      "type": "null"
+                    }
+                  ],
+                  "title": "Response Analysis Get Latest Analysis"
                 }
               }
             },
             "description": "Successful Response"
-          },
-          "404": {
-            "description": "No completed analyses"
           }
         },
         "security": [

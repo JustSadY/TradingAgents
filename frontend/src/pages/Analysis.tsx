@@ -205,9 +205,9 @@ function RunTab() {
         })
         setDetail(a)
       }).catch(e => {
-        // 404 is the documented "this account has no completed analysis yet"
-        // answer, not a failure. Logging it made every fresh account open the
-        // page to a console error.
+        // The endpoint answers `null` for an account with no completed
+        // analysis. A 404 only comes from a backend older than that contract,
+        // and still means the same thing rather than a failure worth logging.
         if ((e as { response?: { status?: number } })?.response?.status === 404) return
         console.error('Failed to load latest analysis', e)
       })

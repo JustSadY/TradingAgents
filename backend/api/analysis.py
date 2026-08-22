@@ -144,16 +144,23 @@ async def get_active_tasks(
 
     return await get_active_tasks_for_user(current_user.id)
 
-@router.get("/latest", response_model=AnalysisResultRead, responses={404: {"description": "No completed analyses"}})
+@router.get("/latest", response_model=AnalysisResultRead | None)
 async def get_latest_analysis(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(require_page("analysis")),
 ):
+    """Bootstrap data for the Analysis page: the newest completed analysis.
+
+    An account that has not finished one yet gets ``null``, not a 404. Having
+    no history is an ordinary state, and a 404 made every browser log a red
+    console error on a page that was working exactly as intended — noise no
+    client-side handler can suppress.
+    """
     from backend.repositories.analysis import get_latest_analysis as _repo_latest
 
     row = await _repo_latest(db, user=current_user)
     if row is None:
-        raise HTTPException(status_code=404, detail="No completed analyses found")
+        return None
     from backend.core.model_pricing import estimate_token_cost
 
     row.estimated_cost_usd = estimate_token_cost(
